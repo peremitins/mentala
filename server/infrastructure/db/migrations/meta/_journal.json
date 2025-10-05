@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1759478673595,
+      "tag": "0000_acoustic_klaw",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1759481316284,
+      "tag": "0001_lean_phil_sheldon",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1759499511129,
+      "tag": "0002_uneven_umar",
+      "breakpoints": true
+    }
+  ]
+}

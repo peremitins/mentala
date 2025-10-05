@@ -1,0 +1,91 @@
+Архитектура проекта MentAI
+
+📌 Общий обзор
+• Фронтенд: Nuxt 4 + TypeScript + Pinia + TailwindCSS + shadcn-vue + vue-query.
+• Бэкенд: Nitro (Node.js runtime) + Postgres + Drizzle ORM.
+• Мобильность: Capacitor + Ionic (iOS/Android).
+• Валидация и схемы: Zod (в связке с @vee-validate/zod).
+• Логи и мониторинг: Pino + Sentry.
+• Миграции БД: Drizzle Kit (SQL файлы хранятся для совместимости с будущими системами).
+
+Система проектируется так, чтобы в будущем можно было безболезненно перенести бэкенд на Laravel (PHP), сохранив API-контракты и миграции.
+
+🏗 Каркас приложения (Фронтенд)
+• Layouts:
+• default (со встроенным BottomNav),
+• blank (fullscreen),
+• auth (центрирование форм).
+• Страницы:
+index, onboarding, chat (layout blank), tracker, tasks, profile/\*, billing.
+• Состояния: компонент StateBlock отображает idle/loading/empty/error.
+• Сторы Pinia:
+• ui
+• user
+• chat
+• DTO (Zod): app/shared/dto/index.ts.
+
+⸻
+
+⚙️ Бэкенд (Nitro)
+• Структура:
+
+server/
+├─ config/ # конфигурация (env, keys)
+├─ domain/ # бизнес-логика
+├─ ports/ # контракты интерфейсов
+├─ application/ # сервисы и use-cases
+├─ infrastructure/ # доступ к БД (Drizzle, Postgres)
+├─ interface/ # REST API, контроллеры
+└─ middleware/ # cors, helmet, rate-limit
+
+    •	БД: PostgreSQL
+    •	snake_case для таблиц и полей
+    •	PK: BIGINT AUTO INCREMENT (совместимость с Laravel)
+    •	хранение миграций в SQL
+    •	ORM: Drizzle ORM
+    •	преимущества: типобезопасность, простые миграции, готовые SQL.
+    •	легко заменить на Eloquent (Laravel) при необходимости.
+
+⸻
+
+🔐 Безопасность
+• Хранение паролей: Argon2id (в Node через argon2, в Laravel встроено).
+• Аутентификация: JWT или PASETO v4.
+• Шифрование данных: end-to-end для чатов, ключи разделяются (как в Telegram).
+• Middleware:
+• helmet (защита заголовков),
+• rate-limit (DDOS),
+• cors (ограничение доменов).
+
+⸻
+
+📑 Контракты API
+• Валидация: Zod DTO.
+• Документация: OpenAPI (zod-to-openapi).
+• UI: Swagger / Scalar UI (@scalar/nuxt).
+• SDK для фронта: генерируется из OpenAPI → фронтенд не зависит от конкретного бэкенда.
+
+⸻
+
+📊 Логирование и мониторинг
+• Node.js (Nitro): Pino + Sentry.
+• Laravel (в будущем): Monolog + Sentry.
+• Правила:
+• request_id, user_id, service, env всегда в логах.
+• структура логов совместима между Pino и Monolog.
+
+⸻
+
+🕒 Очереди и фоновые задачи
+• Брокер: Redis.
+• Node.js: BullMQ.
+• Laravel: Horizon.
+• Payload: JSON-структуры, совместимые между системами.
+
+⸻
+
+🚀 Рекомендации для миграции в будущем 1. Использовать pg вместо postgres (шире поддержка). 2. Стандартизировать БД (snake_case, auto-increment PK). 3. Пароли сразу хранить в Argon2id. 4. Контракты API поддерживать в OpenAPI. 5. Все миграции хранить в SQL (чтобы Laravel мог накатывать). 6. Сохранять единый подход к логам.
+
+⸻
+
+✅ Теперь этот architecture.md содержит и UI-правила, и описание фронтенда, и бэкенда, и секцию по безопасности, и дорожку на Laravel.
