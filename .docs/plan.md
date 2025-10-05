@@ -3,12 +3,12 @@
 ### Контекст и цели
 
 - **Цель MVP (2–3 мес)**: Онбординг, чат с ИИ (RU/EN) + TTS/STT, базовый 3D‑аватар, трекер привычек и статистика, SOS‑экран, профиль/приватность, биллинг (web Stripe), рефералы. Производительность P95 < 200 ms на BFF, LCP < 2.5s.
-- **Основание**: требования из `docs/MENTAI_TZ_PRODUCT.md`, `docs/MENTAI_TZ_FRONTEND.md`, `docs/MENTAI_TZ_BACKEND.md`, правила из `docs/ARCH_RULES.md`.
+- **Основание**: требования из `.docs/MENTAI_TZ_PRODUCT.md`, `.docs/MENTAI_TZ_FRONTEND.md`, `.docs/MENTAI_TZ_BACKEND.md`, правила из `.docs/ARCH_RULES.md`.
 - **Принципы**: безопасность по умолчанию, типобезопасность end‑to‑end (Zod DTO), обратимая архитектура (Clean/Hex), fail‑soft UX, a11y.
 
 ### Артефакты и документация
 
-- Поддерживаем в актуальном состоянии: `docs/architecture.md` (диаграммы/модули), `docs/ARCH_RULES.md` (не меняем без отдельного PR), `docs/MENTAI_TZ_*` (источник правды требований).
+- Поддерживаем в актуальном состоянии: `.docs/architecture.md` (диаграммы/модули), `.docs/ARCH_RULES.md` (не меняем без отдельного PR), `.docs/MENTAI_TZ_*` (источник правды требований).
 - Любое изменение контрактов — сначала обновляем `shared/dto/*` (см. ARCH_RULES §13), затем сервер, потом фронт.
 
 ## Этапы реализации (MVP)
@@ -19,7 +19,7 @@
 - Инструменты наблюдаемости: Sentry (client + server), pino логирование на сервере, `X-Request-Id` middleware.
 - CI: lint + typecheck + unit‑tests + build (GitHub Actions/GitLab CI). Кэш зависимостей.
 - Базовые плагины: `app/plugins/*` (i18n, vue-query.client, sentry.client, icons.client, radix-shadcn).
-- Обновление `README.md` и начальное наполнение `docs/architecture.md` (контур).
+- Обновление `README.md` и начальное наполнение `.docs/architecture.md` (контур).
 - DoD: линт/формат on commit, `npm run test` зелёный, сторимоно‑структура заведена, Sentry ключи из `.env` не закоммичены.
 
 ### Этап 1 — Архитектурный каркас и каркас экранов (1 неделя)
@@ -128,4 +128,4 @@
 
 ## Процедура поддержания плана
 
-- Раз в спринт корректируем сроки/объём, фиксируем изменения в `docs/plan.md` и архитектурные — в `docs/architecture.md`.
+- Раз в спринт корректируем сроки/объём, фиксируем изменения в `.docs/plan.md` и архитектурные — в `.docs/architecture.md`.

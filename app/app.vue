@@ -1,7 +1,21 @@
 <template>
   <div>
-    <Test />
+    <NuxtLoadingIndicator />
+    <NuxtLayout>
+      <NuxtPage />
+    </NuxtLayout>
     <NuxtRouteAnnouncer />
-    <NuxtWelcome v-if="false" />
+    <Toaster
+      theme="dark"
+      richColors
+      position="bottom-right"
+      :expand="false"
+      closeButton
+      closeButtonPosition="top-right"
+    />
   </div>
 </template>
+
+<script lang="ts" setup>
+import { Toaster } from 'vue-sonner'
+</script>
