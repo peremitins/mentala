@@ -17,6 +17,10 @@ export default defineNuxtConfig({
   ],
   runtimeConfig: {
     apiBase: process.env.NUXT_PRIVATE_API_BASE || 'http://localhost:3000', // только сервер
+    // HeyGen private config (server-only)
+    heygenApiKey: process.env.NUXT_HEYGEN_API_KEY,
+    heygenBaseUrl: process.env.NUXT_HEYGEN_BASE_URL || 'https://api.heygen.com',
+    heygenAvatarId: process.env.NUXT_HEYGEN_AVATAR_ID || '',
     public: {
       apiBase: process.env.NUXT_PUBLIC_API_BASE || '/api', // доступно на клиенте
     },
