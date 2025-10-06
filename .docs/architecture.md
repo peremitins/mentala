@@ -65,6 +65,13 @@ server/
 • UI: Swagger / Scalar UI (@scalar/nuxt).
 • SDK для фронта: генерируется из OpenAPI → фронтенд не зависит от конкретного бэкенда.
 
+• HeyGen Streaming Avatar (BFF-прокси):
+• Серверные ручки (Nitro): `server/api/heygen/session.post.ts`, `server/api/heygen/speak.post.ts`, `server/api/heygen/close.post.ts`.
+• Назначение: фронт не раскрывает ключ, Nitro проксирует запросы к HeyGen.
+• Конфиг (server-only): `runtimeConfig.heygenApiKey`, `heygenBaseUrl`, `heygenAvatarId` в `nuxt.config.ts`.
+• Клиент: компонент `app/components/HeyGenPlayer.vue` создаёт `RTCPeerConnection`, отправляет SDP-offer в `/api/heygen/session`, принимает SDP-answer и отображает видео; `speak` и `close` через BFF.
+• Безопасность: ключ хранится только на сервере; клиент использует `useAPI`/`$api` с базовым `public.apiBase`.
+
 ⸻
 
 📊 Логирование и мониторинг
