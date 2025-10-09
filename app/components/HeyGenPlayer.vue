@@ -1,3 +1,39 @@
+<template>
+  <div class="flex flex-col gap-3">
+    <div class="flex gap-2">
+      <button
+        class="px-3 py-2 rounded bg-white/10"
+        @click="startSession()"
+        :disabled="isStarting || connected"
+      >
+        Start
+      </button>
+      <button
+        class="px-3 py-2 rounded bg-white/10"
+        @click="() => speak('Привет! Как ты себя чувствуешь сегодня?')"
+        :disabled="!connected || !isStarted"
+      >
+        Speak
+      </button>
+      <button
+        class="px-3 py-2 rounded bg-white/10"
+        @click="stopSession"
+        :disabled="!connected"
+      >
+        Stop
+      </button>
+    </div>
+    <video
+      ref="videoEl"
+      playsinline
+      autoplay
+      :muted="false"
+      class="w-full rounded-xl bg-black/30"
+    />
+    <audio ref="audioEl" autoplay />
+  </div>
+</template>
+
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from 'vue';
 import {
@@ -45,6 +81,7 @@ async function startSession(avatarId?: string) {
     sessionId.value = String(data.session_id);
     livekitUrl.value = String(data.url);
     livekitToken.value = String(data.access_token);
+    (globalThis as any).lastHeygenSessionId = sessionId.value;
 
     // Подключаемся к LiveKit и подписываемся на треки
     room = new Room({});
@@ -120,6 +157,7 @@ async function stopSession() {
     } catch {}
     room = null;
   }
+  (globalThis as any).lastHeygenSessionId = '';
   connected.value = false;
 }
 
@@ -146,42 +184,6 @@ function attachRemoteTrack(
   }
 }
 </script>
-
-<template>
-  <div class="flex flex-col gap-3">
-    <video
-      ref="videoEl"
-      playsinline
-      autoplay
-      :muted="false"
-      class="w-full rounded-xl bg-black/30"
-    />
-    <audio ref="audioEl" autoplay />
-    <div class="flex gap-2">
-      <button
-        class="px-3 py-2 rounded bg-white/10"
-        @click="startSession()"
-        :disabled="isStarting || connected"
-      >
-        Start
-      </button>
-      <button
-        class="px-3 py-2 rounded bg-white/10"
-        @click="() => speak('Привет! Как ты себя чувствуешь сегодня?')"
-        :disabled="!connected || !isStarted"
-      >
-        Speak
-      </button>
-      <button
-        class="px-3 py-2 rounded bg-white/10"
-        @click="stopSession"
-        :disabled="!connected"
-      >
-        Stop
-      </button>
-    </div>
-  </div>
-</template>
 
 <style scoped>
 video {

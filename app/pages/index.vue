@@ -1,12 +1,10 @@
 <template>
   <div class="flex flex-col flex-1 space-y-6 pb-2 relative">
     <section class="absolute w-full h-full grid place-items-center">
-      <div class="w-auto h-full rounded-3xl overflow-hidden shadow-xl">
-        <img
-          src="/avatar.png"
-          alt="assistant"
-          class="w-full h-full object-contain"
-        />
+      <div
+        class="w-auto h-full rounded-3xl overflow-hidden shadow-xl w-full max-w-[480px]"
+      >
+        <HeyGenPlayer />
       </div>
     </section>
 
@@ -29,25 +27,33 @@
       class="glass-deep p-2 mx-2 mt-auto z-100"
       :style="{ borderRadius: `calc(var(--radius-sm))` }"
     >
+      <div class="mt-2 flex items-center gap-3 text-xs opacity-80">
+        <VoiceInput />
+      </div>
       <div class="flex items-center gap-3">
-        <button
-          class="icon-disc flex items-center justify-center cursor-pointer"
-          :style="{ borderRadius: 'var(--radius-icon)' }"
-        >
-          <IconMessage class="w-5 h-5" />
-        </button>
-        <input
-          v-model="draft"
-          @keydown.enter.prevent="onSend"
-          class="flex-1 bg-transparent outline-none placeholder:text-white/60 px-2"
-          placeholder="Type a message..."
+        <TextareaResize
+          v-model.trim="text"
+          :resize="true"
+          :prevent-enter-default="true"
+          @enter-pressed="handleKeydown"
+          :placeholder="'Type a message...'"
         />
         <button
-          @click="onSend"
-          class="icon-disc flex items-center justify-center cursor-pointer"
+          @click="toggleMic"
+          class="icon-disc flex items-center justify-center cursor-pointer flex-none"
           :style="{ borderRadius: 'var(--radius-icon)' }"
         >
-          <IconMic class="w-5 h-5" />
+          <IconMic
+            :class="speechStore.isListening ? 'text-green-500' : 'text-white'"
+            class="w-5 h-5"
+          />
+        </button>
+        <button
+          @click="onSend"
+          class="icon-disc flex items-center justify-center cursor-pointer flex-none"
+          :style="{ borderRadius: 'var(--radius-icon)' }"
+        >
+          <IconSend class="w-5 h-5" />
         </button>
       </div>
     </section>
@@ -56,18 +62,90 @@
 
 <script setup lang="ts">
 import { nextTick, onMounted, watch, ref, computed } from 'vue';
-import { useChatStore } from '~/stores/chat';
+import { useSpeechEngine } from '@/app/composables/useSpeechEngine';
+import { useChatStore } from '@/app/stores/chat';
+import { useSpeechStore } from '@/app/stores/speech';
+
 import IconMic from '~icons/lucide/mic';
+import IconSend from '~icons/lucide/send';
 import IconMessage from '~icons/lucide/message-circle';
 
-const chat = useChatStore();
+const text = ref('');
+// База для наращивания текста во время голосового ввода
+const speechBase = ref('');
+const chat = useChatStore?.() as any;
+const { settings, start, stop, onPartial, onFinal } = useSpeechEngine();
+const speechStore = useSpeechStore();
 
-const draft = ref('');
+onPartial((t) => {
+  if (!speechStore.isListening) return;
+  console.debug('[VoiceInput] partial:', t);
+  const base = speechBase.value.trim();
+  text.value = (base ? base + ' ' : '') + t;
+});
 
-const onSend = () => {
-  if (!draft.value.trim()) return;
-  chat.sendMessage(draft.value);
-  draft.value = '';
+onFinal((t) => {
+  console.debug('[VoiceInput] final:', t);
+  const base = speechBase.value.trim();
+  const merged = ((base ? base + ' ' : '') + t).trim();
+  speechBase.value = merged;
+  text.value = merged;
+  if (settings.value.autoSend && text.value.trim()) emitSend();
+});
+
+async function toggleMic() {
+  if (speechStore.isListening) {
+    await stop();
+    speechStore.isListening = false;
+    return;
+  }
+  await start();
+  speechStore.isListening = true;
+  // фиксируем текущий ввод пользователя, чтобы увеличивать текст, а не затирать
+  speechBase.value = text.value.trim();
+}
+
+const emit = defineEmits<{ (e: 'send', text: string): void }>();
+function emitSend() {
+  if (!text.value.trim()) return;
+  const finalText = text.value.trim();
+  emit('send', finalText);
+  try {
+    chat?.setDraft?.(finalText);
+  } catch {}
+  text.value = '';
+}
+
+function handleKeydown(e: KeyboardEvent) {
+  console.log('handleKeydown', e);
+  if (e.ctrlKey || e.metaKey) {
+    // Ctrl+Enter или Cmd+Enter → добавить перенос строки
+    e.preventDefault();
+    const target = e.target as HTMLTextAreaElement;
+    const start = target.selectionStart;
+    const end = target.selectionEnd;
+    text.value =
+      text.value.substring(0, start) + '\n' + text.value.substring(end);
+    nextTick(() => {
+      target.selectionStart = target.selectionEnd = start + 1;
+    });
+  } else if (!e.shiftKey) {
+    // Просто Enter → отправляем сообщение
+    e.preventDefault();
+    onSend();
+  }
+}
+
+const onSend = async () => {
+  if (!text.value.trim()) return;
+  speechStore.isListening = false;
+  speechBase.value = '';
+  const res = await chat.sendMessage(text.value);
+  console.log('res', res);
+  if (res) {
+    chat.startSession();
+    text.value = '';
+  }
 };
 
 const combinedMessages = computed(() => chat?.messages || []);
@@ -96,6 +174,10 @@ const handleScroll = () => {
 onMounted(async () => {
   await nextTick();
   scrollToBottom('auto'); // на старте — без анимации
+});
+
+onBeforeUnmount(() => {
+  stop();
 });
 
 // когда приходит новое сообщение — скроллим, если пользователь внизу
