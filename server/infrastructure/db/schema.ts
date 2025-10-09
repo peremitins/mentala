@@ -1,29 +1,48 @@
-import { pgTable, serial, text, timestamp, boolean, integer } from 'drizzle-orm/pg-core'
+import {
+  pgTable,
+  serial,
+  text,
+  timestamp,
+  boolean,
+  integer,
+} from 'drizzle-orm/pg-core';
 
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
   email: text('email'),
   name: text('name'),
   passwordHash: text('password_hash'),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-})
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
 
 export const profiles = pgTable('profiles', {
   userId: integer('user_id').notNull(),
   saveHistory: boolean('save_history').default(false).notNull(),
   retentionDays: integer('retention_days').default(0).notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-})
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
 
 export const aiSessions = pgTable('ai_sessions', {
   id: serial('id').primaryKey(),
   userId: integer('user_id').notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
   title: text('title'),
-})
+});
 
 export const aiMessages = pgTable('ai_messages', {
   id: serial('id').primaryKey(),
@@ -31,6 +50,23 @@ export const aiMessages = pgTable('ai_messages', {
   role: text('role').notNull(),
   content: text('content').notNull(),
   tokens: integer('tokens'),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-})
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+// Encrypted session summaries (AES-GCM: iv+tag base64, ct base64)
+export const sessionSummaries = pgTable('session_summaries', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  sessionId: text('session_id').notNull(),
+  model: text('model').notNull(),
+  summaryIv: text('summary_iv').notNull(),
+  summaryCt: text('summary_ct').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
