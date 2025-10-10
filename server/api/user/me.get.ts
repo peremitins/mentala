@@ -1,8 +1,10 @@
-import { defineEventHandler } from 'h3';
-import { getOrSetAnonUserId } from '../../utils/user';
-import { readPrivacy } from '../../utils/storage';
+import { getSessionUser } from '@/server/application/auth/session';
 
-export default defineEventHandler((event) => {
-  const uid = getOrSetAnonUserId(event);
-  return { uid, ...readPrivacy(uid) };
+export default defineEventHandler(async (event) => {
+  const user = await getSessionUser(event);
+  return {
+    user: user
+      ? { id: user.id, email: user.email, name: user.name, locale: user.locale }
+      : null,
+  };
 });

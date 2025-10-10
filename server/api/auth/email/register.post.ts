@@ -1,0 +1,44 @@
+import { createError } from 'h3';
+import { db } from '@/server/infrastructure/db/client';
+import { users } from '@/server/infrastructure/db/schema';
+import { eq } from 'drizzle-orm';
+import { createSession } from '@/server/application/auth/session';
+import argon2 from 'argon2';
+
+export default defineEventHandler(async (event) => {
+  const body = await readBody<{
+    name?: string;
+    email: string;
+    password: string;
+    locale?: string;
+  }>(event as any);
+  if (!body?.email || !body?.password) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Missing email or password',
+    });
+  }
+  const existing = await db
+    .select()
+    .from(users)
+    .where(eq(users.email, body.email))
+    .limit(1);
+  if (existing.length) {
+    throw createError({
+      statusCode: 409,
+      statusMessage: 'Email already registered',
+    });
+  }
+  const hash = await argon2.hash(body.password, { type: argon2.argon2id });
+  const [u] = await db
+    .insert(users)
+    .values({
+      name: body.name ?? null,
+      email: body.email,
+      passwordHash: hash,
+      locale: body.locale ?? null,
+    })
+    .returning();
+  await createSession(event, u.id, body.locale);
+  return { user: { id: u.id, name: u.name, email: u.email, locale: u.locale } };
+});
