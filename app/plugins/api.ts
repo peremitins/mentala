@@ -1,17 +1,10 @@
-import {
-  defineNuxtPlugin,
-  useRuntimeConfig,
-  useRequestHeaders,
-  useCookie,
-  navigateTo,
-} from 'nuxt/app';
-import type { FetchOptions } from 'ofetch';
-// импортируем авто-импортируемый композабл (Nuxt его резолвит из #imports)
+import { defineNuxtPlugin, useRuntimeConfig } from 'nuxt/app';
+
 import { useToast } from '#imports';
 
-export default defineNuxtPlugin((nuxtApp) => {
+export default defineNuxtPlugin(() => {
   const config = useRuntimeConfig();
-
+  const router = useRouter();
   const api = $fetch.create({
     baseURL: (config.public as any).apiBase || '',
     credentials: 'include',
@@ -26,12 +19,10 @@ export default defineNuxtPlugin((nuxtApp) => {
       // Авто‑тост ошибок
       useToast('Ошибка запроса', String(message), 'error');
 
-      // Пример реакции на 401
       if (response?.status === 401) {
-        await nuxtApp.runWithContext(() => navigateTo('/login'));
+        router.push('/auth');
       }
     },
   });
-
   return { provide: { api } };
 });

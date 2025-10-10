@@ -73,7 +73,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import SelectField from '~/components/ui/SelectField.vue';
+import SelectField from '@/app/components/ui/SelectField.vue';
 
 import { SwitchRoot, SwitchThumb } from 'radix-vue';
 

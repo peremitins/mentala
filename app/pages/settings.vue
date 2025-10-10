@@ -19,11 +19,15 @@
         Настройки уведомлений (push/email) появятся здесь.
       </div>
     </section>
+
+    <button @click="auth.logout()">Logout</button>
   </div>
 </template>
 
 <script setup lang="ts">
-import { useChatStore } from '../stores/chat';
+import { useChatStore } from '@/app/stores/chat';
+import { useAuthStore } from '@/app/stores/auth';
+const auth = useAuthStore();
 const chat = useChatStore();
 
 chat.finishAndSave('gpt-4o');

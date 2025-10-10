@@ -1,6 +1,6 @@
 <template>
   <div class="flex flex-col gap-3">
-    <div class="flex gap-2">
+    <div class="fixed flex gap-2 top-0 right-0">
       <button
         class="px-3 py-2 rounded bg-white/10"
         @click="startSession()"

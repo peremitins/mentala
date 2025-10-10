@@ -1,7 +1,5 @@
 <template>
-  <div
-    class="min-h-dvh bg-[radial-gradient(1200px_600px_at_80%_-10%,rgba(99,102,241,0.25),transparent),radial-gradient(800px_400px_at_10%_110%,rgba(56,189,248,0.2),transparent)]"
-  >
+  <div class="min-h-dvh">
     <div
       class="container mx-auto px-4 py-8 flex items-center justify-center min-h-dvh"
     >
@@ -116,9 +114,16 @@
 
             <button
               type="submit"
-              class="w-full py-2.5 rounded-xl bg-white text-black hover:opacity-90 active:opacity-80 transition font-medium"
+              :disabled="loading"
+              class="w-full py-2.5 rounded-xl bg-white text-black hover:opacity-90 active:opacity-80 transition font-medium disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {{ mode === 'signin' ? 'Войти' : 'Создать аккаунт' }}
+              {{
+                loading
+                  ? '...'
+                  : mode === 'signin'
+                    ? 'Войти'
+                    : 'Создать аккаунт'
+              }}
             </button>
           </form>
 
@@ -137,22 +142,6 @@
               class="h-10 rounded-xl bg-white/80 hover:bg-white text-black flex items-center justify-center"
             >
               <GoogleIcon class="w-5 h-5" />
-            </button>
-
-            <!-- 3️⃣ Microsoft -->
-            <button
-              @click="oauth('microsoft')"
-              class="h-10 rounded-xl bg-white/80 hover:bg-white text-black flex items-center justify-center"
-            >
-              <MicrosoftIcon class="w-5 h-5" />
-            </button>
-
-            <!-- 5️⃣ Facebook -->
-            <button
-              @click="oauth('facebook')"
-              class="h-10 rounded-xl bg-[#1877F2] hover:brightness-110 text-white flex items-center justify-center"
-            >
-              <FacebookIcon class="w-5 h-5" />
             </button>
 
             <!-- 7️⃣ VK -->
@@ -195,27 +184,58 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useAuthStore } from '@/app/stores/auth';
 import TelegramIcon from '~icons/mdi/telegram';
 import VkIcon from '~icons/simple-icons/vk';
-import FacebookIcon from '~icons/simple-icons/facebook';
-import MicrosoftIcon from '~icons/simple-icons/microsoft';
 import GoogleIcon from '~icons/logos/google-icon';
 
 definePageMeta({
   layout: 'auth',
 });
 
+const auth = useAuthStore();
+
 const mode = ref<'signin' | 'signup'>('signin');
 const email = ref(''),
   password = ref(''),
   name = ref(''),
   agree = ref(false),
-  remember = ref(true);
+  remember = ref(true),
+  loading = ref(false);
 
-function submit() {
-  // TODO: вызов BFF: /api/auth/email/signin или /api/auth/email/signup
+const langCookie = useCookie<string | null>('mentai.lang', {
+  maxAge: 365 * 24 * 3600,
+  path: '/',
+});
+const locale = computed(() => langCookie.value || 'ru');
+
+async function submit() {
+  try {
+    loading.value = true;
+    if (mode.value === 'signin') {
+      const payload = {
+        email: email.value,
+        password: password.value,
+        locale: locale.value,
+      };
+      await auth.loginEmail(payload);
+    } else {
+      const payload = {
+        email: email.value,
+        password: password.value,
+        name: name.value || undefined,
+        locale: locale.value,
+      };
+      await auth.registerEmail(payload);
+    }
+  } catch (e) {
+    console.error('Auth error', e);
+  } finally {
+    loading.value = false;
+  }
 }
+
 function oauth(provider: string) {
-  window.location.href = `/api/auth/${provider}/start`;
+  auth.oauth(provider, locale.value);
 }
 </script>
