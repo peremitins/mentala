@@ -79,7 +79,7 @@ async function onSubmit() {
   }
   saving.value = true;
   try {
-    const { status } = await useAPI(`/api/users/${id.value}`, {
+    await useAPI(`/api/usesrs/${id.value}`, {
       method: 'PATCH',
       body: {
         email: email.value.trim(),
@@ -88,10 +88,8 @@ async function onSubmit() {
       },
     });
 
-    if (status.value === 'success') {
-      useToast('Готово', 'Пользователь обновлён', 'success');
-      await navigateTo('/users');
-    }
+    useToast('Готово', 'Пользователь обновлён', 'success');
+    await navigateTo('/users');
   } catch (e: any) {
     error.value = e?.data?.message || e?.message || 'Ошибка сохранения';
   } finally {

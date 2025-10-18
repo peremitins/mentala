@@ -85,3 +85,26 @@ export function estimateCostUSD(params: {
   const costOut = (params.tokensOut / 1_000_000) * prices.out;
   return Number((costIn + costOut).toFixed(6));
 }
+
+export function chatStreamViaProvider(params: {
+  provider?: LlmProviderPort['id'];
+  model?: string;
+  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+  options?: {
+    sessionId?: string;
+    temperature?: number;
+    lang?: string;
+    user_locale?: string;
+    user_name?: string;
+  };
+}): AsyncIterable<string> {
+  const provider = getProvider(params.provider);
+  if (!provider.chatStream) {
+    throw new Error(`Provider ${provider.id} does not support streaming`);
+  }
+  return provider.chatStream({
+    messages: params.messages,
+    model: params.model,
+    options: params.options,
+  }) as AsyncIterable<string>;
+}

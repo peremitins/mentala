@@ -11,9 +11,16 @@ export default defineNuxtPlugin(() => {
 
     onRequest({ options }) {},
 
+    onResponse({ response }) {
+      const d = response._data;
+      // Сервер теперь нормализует ошибки, так что успешные ответы просто отдаём дальше
+      return d;
+    },
+
     async onResponseError({ response }) {
+      const payload = response?._data as any;
       const message =
-        (response?._data && (response._data.message || response._data.error)) ||
+        (payload && (payload.message || payload.error)) ||
         `${response?.status} ${response?.statusText || 'Request Error'}`;
 
       // Авто‑тост ошибок

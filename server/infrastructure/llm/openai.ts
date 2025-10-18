@@ -152,9 +152,6 @@ export const openaiProvider: LlmProviderPort = {
           body,
         });
 
-        console.log({ res });
-        console.log({ body });
-
         const content = extractText(res);
 
         if (tryEncrypted) {
@@ -288,6 +285,69 @@ export const openaiProvider: LlmProviderPort = {
       );
     } finally {
       sessionCache.delete(sessionId);
+    }
+  },
+
+  async *chatStream({ messages, model, options }: any): AsyncIterable<string> {
+    const apiKey =
+      process.env.OPENAI_API_KEY || process.env.NUXT_OPENAI_API_KEY;
+    if (!apiKey)
+      throw createError({
+        statusCode: 500,
+        message: 'OPENAI_API_KEY is not set',
+      });
+
+    const usedModel = model || config.llm.openai.defaultModel;
+
+    const systemPrelude = buildChatPrelude({
+      lang: options?.lang ?? 'ru',
+      user_locale: options?.user_locale,
+      user_name: options?.user_name,
+    });
+    const developerStyle = buildDeveloperStylePrompt();
+
+    const input = [
+      {
+        role: 'system',
+        content: [{ type: 'input_text' as const, text: systemPrelude }],
+      },
+      {
+        role: 'developer',
+        content: [{ type: 'input_text' as const, text: developerStyle }],
+      },
+      ...mapToResponsesInput(messages || []),
+    ];
+
+    // dynamic import to avoid hard dep at build
+    const mod: any = await (
+      Function('return import("openai")')() as Promise<any>
+    ).catch(() => null);
+    if (!mod?.default) {
+      throw createError({
+        statusCode: 500,
+        message: 'OpenAI SDK is not available',
+      });
+    }
+    const openai = new mod.default({ apiKey });
+
+    const stream = await openai.responses.stream({
+      model: usedModel,
+      input,
+      temperature: options?.temperature ?? 0.3,
+      max_output_tokens: config.llm.openai.defaultMaxOutputTokens,
+    });
+
+    for await (const ev of stream as any) {
+      if (ev?.type === 'response.output_text.delta' && ev?.delta) {
+        yield String(ev.delta);
+      }
+      if (ev?.type === 'response.completed') break;
+      if (ev?.type === 'response.error') {
+        throw createError({
+          statusCode: 500,
+          message: ev.error?.message || 'Stream error',
+        });
+      }
     }
   },
 };

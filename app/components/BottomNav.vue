@@ -1,6 +1,9 @@
 <template>
-  <nav class="flex-initial inset-x-0 px-2 pb-2">
-    <section class="glass-deep px-4 py-3" :style="{ borderRadius: `calc(var(--radius-sm))` }">
+  <nav class="flex-[0_0_auto] inset-x-0 pb-2">
+    <section
+      class="glass-deep px-4 py-3"
+      :style="{ borderRadius: `calc(var(--radius-sm))` }"
+    >
       <ul class="grid grid-cols-4 gap-2 text-xs">
         <li class="flex flex-col items-center gap-1 w-full">
           <NuxtLink
@@ -17,7 +20,7 @@
             >
               <IconHome class="w-5 h-5" />
             </span>
-            <span class="w-full text-center">Home</span>
+            <span class="w-full text-center">Чат</span>
           </NuxtLink>
         </li>
         <li class="flex flex-col items-center gap-1 w-full">
@@ -35,7 +38,7 @@
             >
               <IconGauge class="w-5 h-5" />
             </span>
-            <span class="w-full text-center">Progress</span>
+            <span class="w-full text-center">Прогресс</span>
           </NuxtLink>
         </li>
         <li class="flex flex-col items-center gap-1 w-full">
@@ -53,7 +56,7 @@
             >
               <IconCheck class="w-5 h-5" />
             </span>
-            <span class="w-full text-center">Activities</span>
+            <span class="w-full text-center">Практики</span>
           </NuxtLink>
         </li>
         <li class="flex flex-col items-center gap-1 w-full">
@@ -71,7 +74,7 @@
             >
               <IconSettings class="w-5 h-5" />
             </span>
-            <span class="w-full text-center">Settings</span>
+            <span class="w-full text-center">Настройки</span>
           </NuxtLink>
         </li>
       </ul>
@@ -80,11 +83,11 @@
 </template>
 
 <script setup lang="ts">
-import IconHome from '~icons/lucide/home'
-import IconGauge from '~icons/lucide/gauge'
-import IconCheck from '~icons/lucide/check'
-import IconSettings from '~icons/lucide/settings'
+import IconHome from '~icons/lucide/home';
+import IconGauge from '~icons/lucide/gauge';
+import IconCheck from '~icons/lucide/check';
+import IconSettings from '~icons/lucide/settings';
 
-const route = useRoute()
-const isActive = (path: string) => route.path === path
+const route = useRoute();
+const isActive = (path: string) => route.path === path;
 </script>
