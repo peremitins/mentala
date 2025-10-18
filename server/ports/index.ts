@@ -10,6 +10,18 @@ export interface LlmProviderPort {
     model?: string;
     options?: { sessionId?: string; temperature?: number };
   }) => Promise<{ role: 'assistant'; content: string; model?: string }>;
+  // Optional streaming interface: yields text deltas
+  chatStream?: (params: {
+    messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+    model?: string;
+    options?: {
+      sessionId?: string;
+      temperature?: number;
+      lang?: string;
+      user_locale?: string;
+      user_name?: string;
+    };
+  }) => AsyncIterable<string>;
   finishSession?: (params: {
     sessionId: string;
     allMessages: Array<{

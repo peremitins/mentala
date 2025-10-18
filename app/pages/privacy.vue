@@ -1,5 +1,5 @@
 <template>
-  <div class="p-2">
+  <div class="">
     <section
       class="glass-deep p-5 space-y-6"
       :style="{ borderRadius: `calc(var(--radius-sm))` }"
@@ -16,20 +16,21 @@
             для контекста и статистики. Можно удалить в любой момент.
           </div>
         </div>
+        {{ auth.user.saveHistory }}
         <SwitchRoot
-          :checked="saveHistoryLocal"
+          v-model:checked="auth.user.saveHistory"
           @update:checked="onSwitchChange"
-          class="w-14 h-8 rounded-full border border-white/15 bg-white/10 backdrop-blur flex items-center px-1 data-[state=checked]:bg-green-500"
+          class="w-12 h-6 rounded-full border border-white/15 bg-white/10 backdrop-blur flex items-center px-1 data-[state=checked]:bg-green-500"
         >
           <SwitchThumb
-            class="w-6 h-6 bg-white rounded-full transition-transform translate-x-0 data-[state=checked]:translate-x-6"
+            class="w-4 h-4 bg-white rounded-full transition-transform translate-x-0 data-[state=checked]:translate-x-6"
           />
         </SwitchRoot>
       </div>
 
       <div class="flex flex-wrap items-center gap-3">
         <SelectField
-          v-model="retention"
+          v-model="auth.user.retentionDays"
           :options="retentionOptions"
           :multiple="false"
           placeholder="Выберите срок хранения"
@@ -72,20 +73,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { useAuthStore } from '@/app/stores/auth';
 import SelectField from '@/app/components/ui/SelectField.vue';
 
 import { SwitchRoot, SwitchThumb } from 'radix-vue';
 
-interface UserResponse {
-  uuid: number;
-  retentionDays: number;
-  saveHistory: boolean;
-}
-
-const { data, refresh } = await useAPI<UserResponse>('/api/user/me');
-
-const retention = ref<number>(data.value?.retentionDays ?? 0);
+const auth = useAuthStore();
 
 const retentionOptions = [
   { value: 0, label: 'Без лимита' },
@@ -94,50 +87,37 @@ const retentionOptions = [
   { value: 365, label: '365 дней' },
 ];
 
-const saveHistoryLocal = ref(false);
-
-watchEffect(() => {
-  saveHistoryLocal.value = !!data.value?.saveHistory;
-});
-
 async function onSwitchChange(v: boolean) {
-  const req = useAPI('/api/user/update', {
+  console.log('saveRetention', auth.user.retentionDays);
+  useAPI('/api/user/update', {
     method: 'PATCH',
     body: { saveHistory: v },
-    server: false,
-    immediate: false,
   });
-  await req.execute();
-  await refresh();
+  await auth.me();
 }
 
 async function saveRetention() {
-  const req = useAPI('/api/user/update', {
+  useAPI('/api/user/update', {
     method: 'PATCH',
-    body: { retentionDays: retention.value },
-    server: false,
-    immediate: false,
+    body: { retentionDays: auth.user.retentionDays },
   });
-  await req.execute();
-  await refresh();
+  await auth.me();
 }
 
 async function clearNow() {
-  const req = useAPI('/api/ai/history/clear', {
+  useAPI('/api/ai/history/clear', {
     method: 'POST',
     server: false,
     immediate: false,
   });
-  await req.execute();
 }
 
 async function deleteAll() {
-  const req = useAPI('/api/user/delete', {
+  useAPI('/api/user/delete', {
     method: 'POST',
     server: false,
     immediate: false,
   });
-  await req.execute();
-  await refresh();
+  await auth.me();
 }
 </script>

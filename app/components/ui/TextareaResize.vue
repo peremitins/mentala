@@ -1,9 +1,7 @@
 <template>
-  <div class="textarea-component w-full">
-    <label v-if="props.label" class="title-normal" :for="props.label">{{
-      props.label
-    }}</label>
-    <div class="textarea-component__wrapper">
+  <div class="w-full">
+    <label v-if="props.label" :for="props.label">{{ props.label }}</label>
+    <div class="">
       <textarea
         ref="textarea"
         :id="props.label"
@@ -22,7 +20,6 @@
         :disabled="props.disabled"
         :placeholder="placeholder"
       />
-      <div class="icon" />
     </div>
   </div>
 </template>

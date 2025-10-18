@@ -1,13 +1,35 @@
 @use './_tokens.scss' as *;
+@use './_var.scss' as *;
 
 html,
 body,
 #__nuxt {
   height: 100%;
-  /* Deep dark with radial glows */
-  background: radial-gradient(1200px 600px at 10% -10%, rgba(56, 189, 248, 0.18), transparent 60%),
-    radial-gradient(1200px 700px at 110% 110%, rgba(99, 102, 241, 0.18), transparent 60%),
-    linear-gradient(180deg, #0b1220 0%, #0b1220 100%);
+}
+
+/* Theme backgrounds */
+:root.theme-dark,
+html.theme-dark,
+body.theme-dark,
+#__nuxt.theme-dark {
+  background: radial-gradient(circle at 20% 20%, #1a1f2c 0%, #0c0e16 80%);
+  color: #e7e8ea;
+}
+
+:root.theme-light,
+html.theme-light,
+body.theme-light,
+#__nuxt.theme-light {
+  background: linear-gradient(135deg, #f5f8ff 0%, #e4ebf8 100%);
+  color: #0a0c13;
+}
+
+:root.theme-gray,
+html.theme-gray,
+body.theme-gray,
+#__nuxt.theme-gray {
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(12px);
   color: #e7e8ea;
 }
 
@@ -23,12 +45,26 @@ a {
 
 /* Deeper glass for panels */
 .glass-deep {
-  border-radius: calc(var(--radius-lg));
-  @apply border border-white/15 backdrop-blur-xl;
-  background: color-mix(in oklab, white 8%, transparent);
+  border-radius: calc(var(--radius-sm));
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
   box-shadow:
-    0 10px 30px rgba(0, 0, 0, 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    inset 1px 1px 0.12px rgba(255, 255, 255, 0.4),
+    1px 1px 3px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(10px);
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+
+  background-clip: padding-box;
+}
+
+.chat-fade {
+  mask-image: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 1) 0%,
+    rgba(0, 0, 0, 1) 0%,
+    rgba(0, 0, 0, 0) 60%,
+    rgba(0, 0, 0, 0) 100%
+  );
 }
 
 /* Chat bubble style */
@@ -36,7 +72,7 @@ a {
   border-radius: calc(var(--radius-md) + 2px);
   @apply border border-white/15 backdrop-blur-xl px-4 py-2;
   background: color-mix(in oklab, white 7%, transparent);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--shadow-sm);
 }
 
 /* Input container */
@@ -45,7 +81,7 @@ a {
   background: color-mix(in oklab, white 6%, transparent);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.05),
-    0 8px 24px rgba(0, 0, 0, 0.35);
+    var(--shadow-md);
 }
 
 .icon-disc {
@@ -54,14 +90,12 @@ a {
   background: color-mix(in oklab, white 7%, transparent);
   width: 44px;
   height: 44px;
-  transition:
-    transform 180ms ease,
-    background 200ms ease,
-    border-color 200ms ease;
+  transition: all 0.3s ease;
 }
 
 .icon-disc-wrapper {
-  &:hover {
+  &:hover,
+  &.router-link-active {
     .icon-disc {
       transform: translateY(-2px);
       background: color-mix(in oklab, white 10%, transparent);
@@ -74,17 +108,9 @@ a {
   background: color-mix(in oklab, white 14%, transparent);
   border-color: color-mix(in oklab, white 28%, transparent);
   box-shadow:
-    0 8px 24px rgba(0, 0, 0, 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
-}
-
-.bubble {
-  transition:
-    transform 180ms ease,
-    background 200ms ease;
-}
-.bubble:hover {
-  transform: translateY(-1px);
+    inset 1px 1px 0.12px rgba(255, 255, 255, 0.4),
+    1px 1px 3px rgba(0, 0, 0, 0.1);
+  background-clip: padding-box;
 }
 
 .glass-input input {
@@ -104,10 +130,9 @@ a[href] {
 
   &:hover {
     color: #00cbf8;
-
-    &:not(a:not(.button-style)) {
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-      background: color-mix(in oklab, white 14%, transparent);
-    }
   }
+}
+
+.router-link-active {
+  color: #00cbf8;
 }

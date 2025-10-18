@@ -1,12 +1,13 @@
 import { defineStore } from 'pinia';
 import { useSpeechStore } from '@/app/stores/speech';
+import { useChatSettingsStore } from '@/app/stores/chatSettings';
 
 export const useChatStore = defineStore('chat', {
   state: () => ({
     messages: [] as Array<{ role: 'user' | 'assistant'; content: string }>,
+    userText: '' as string,
     provider: 'openai' as 'openai' | 'deepseek' | 'yandex',
     sessionId: '' as string,
-    draft: '' as string,
   }),
   actions: {
     startSession(sessionId?: string) {
@@ -15,58 +16,59 @@ export const useChatStore = defineStore('chat', {
     finishSession() {
       this.sessionId = '';
     },
-    setDraft(text: string) {
-      this.draft = text;
-    },
     async sendMessage(text: string) {
       if (!this.sessionId) this.startSession();
+      this.userText = '';
       this.messages.push({ role: 'user', content: text });
       try {
-        const { $api } = useNuxtApp();
-        const speech = useSpeechStore();
-        const res = await $api<{
-          message: { role: 'assistant' | 'user'; content: string };
-          provider?: string;
-          model?: string;
-        }>('/api/chat', {
+        const nuxt = useNuxtApp();
+        // добавляем пустое ответное сообщение, будем наполнять построчно
+        const idx = this.messages.push({ role: 'assistant', content: '' }) - 1;
+
+        // ТОЛЬКО текстовый стрим (без озвучки чанками)
+        const resp = await nuxt.$api('/api/chat/stream', {
           method: 'POST',
           body: {
-            provider: this.provider,
+            provider: 'openai',
             messages: this.messages,
             sessionId: this.sessionId,
           },
-        });
-        const role =
-          res?.message?.role === 'user'
-            ? 'assistant'
-            : res?.message?.role || 'assistant';
-        const content = res?.message?.content || '';
-        this.messages.push({ role, content });
+          responseType: 'stream',
+        } as any);
 
-        // Озвучим ответ через активную сессию HeyGen, если есть
-        try {
-          speech?.setAvatarSpeaking?.(true);
-          const sessionId = (globalThis as any).lastHeygenSessionId as
-            | string
-            | undefined;
-          if (sessionId && content) {
-            await $api('heygen/speak', {
-              method: 'POST',
-              body: {
-                sessionId,
-                text: content,
-                taskMode: 'sync',
-                taskType: 'repeat',
-              },
-            });
+        // resp — ReadableStream (через ofetch). Читаем построчно как SSE
+        const reader = (resp as any).getReader?.();
+        const decoder = new TextDecoder();
+        if (reader) {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value, { stream: true });
+            // SSE формата: "data: {json}\n\n"
+            const lines = chunk.split(/\n\n/);
+            for (const block of lines) {
+              const line = block.trim();
+              if (!line.startsWith('data:')) continue;
+              const jsonText = line.replace(/^data:\s*/, '');
+              if (jsonText === '[DONE]') continue;
+              try {
+                const obj = JSON.parse(jsonText);
+                const delta =
+                  obj?.output_text_delta ||
+                  obj?.delta ||
+                  obj?.response?.output_text ||
+                  '';
+                if (delta) {
+                  const msg = this.messages[idx];
+                  if (msg) msg.content += delta;
+                }
+                // никаких аудио чанков
+              } catch {}
+            }
           }
-        } catch (_) {
-          // без падения UI
-        } finally {
-          speech?.setAvatarSpeaking?.(false);
         }
 
-        return res;
+        return { ok: true } as any;
       } catch (e) {
         this.messages.push({ role: 'assistant', content: 'Ошибка ответа' });
       }

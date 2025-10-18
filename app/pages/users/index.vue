@@ -89,13 +89,11 @@ const removingId = ref<number | null>(null);
 async function removeUser(id: number) {
   removingId.value = id;
   try {
-    const { status } = await useAPI(`/api/users/${id}`, {
+    await useAPI(`/api/users/${id}`, {
       method: 'DELETE',
     });
-    if (status.value === 'success') {
-      users.value = users.value.filter((x) => x.id !== id);
-      useToast('Готово', 'Пользователь удалён', 'success');
-    }
+    users.value = users.value.filter((x) => x.id !== id);
+    useToast('Готово', 'Пользователь удалён', 'success');
   } catch (e) {
   } finally {
     removingId.value = null;

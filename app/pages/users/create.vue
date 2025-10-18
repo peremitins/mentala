@@ -63,7 +63,7 @@ async function onSubmit() {
   }
   saving.value = true;
   try {
-    const { status } = await useAPI('/api/users', {
+    await useAPI('/api/users', {
       method: 'POST',
       body: {
         email: email.value.trim(),
@@ -72,10 +72,8 @@ async function onSubmit() {
       },
     });
 
-    if (status.value === 'success') {
-      useToast('Готово', 'Пользователь добавлен', 'success');
-      await navigateTo('/users');
-    }
+    useToast('Готово', 'Пользователь добавлен', 'success');
+    await navigateTo('/users');
   } catch (e: any) {
     error.value = e?.data?.message || e?.message || 'Ошибка сохранения';
   } finally {
