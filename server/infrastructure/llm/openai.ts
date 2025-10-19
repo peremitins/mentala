@@ -10,6 +10,8 @@ import {
   buildSummaryPrompt,
   buildChatPrelude,
   buildDeveloperStylePrompt,
+  buildSessionMemoryText,
+  buildChatPreludeWithMemory,
 } from '@@/server/application/prompts';
 
 const OPENAI_URL = 'https://api.openai.com/v1/responses';
@@ -102,11 +104,33 @@ export const openaiProvider: LlmProviderPort = {
     // eslint-disable-next-line no-constant-condition
     while (true) {
       try {
-        const systemPrelude = buildChatPrelude({
-          lang: options?.lang ?? 'ru',
-          user_locale: options?.user_locale,
-          user_name: options?.user_name,
-        });
+        // Memory-aware prelude: при повторных — подмешиваем ВСЕ summary
+        const isFirst = Boolean(options?.isFirstSession);
+        const lang = options?.lang ?? 'ru';
+        let sessionMemoryText = '';
+        if (!isFirst && options?.userId != null) {
+          try {
+            const all = await summaryStore.getSummaries(options.userId);
+            sessionMemoryText = buildSessionMemoryText(all, lang);
+          } catch {}
+        }
+
+        // Для повторных сессий исключаем память из system и добавляем её отдельным developer-сообщением ниже
+        const systemPrelude = isFirst
+          ? buildChatPrelude({
+              lang,
+              user_locale: options?.user_locale,
+              user_name: options?.user_name,
+            })
+          : buildChatPreludeWithMemory(
+              {
+                lang,
+                user_locale: options?.user_locale,
+                user_name: options?.user_name,
+              },
+              { isFirstSession: isFirst, sessionMemoryText: '' }
+            );
+
         const developerStyle = buildDeveloperStylePrompt();
 
         // Собираем корректный массив сообщений с валидными типами контента
@@ -119,8 +143,36 @@ export const openaiProvider: LlmProviderPort = {
             role: 'developer',
             content: [{ type: 'input_text' as const, text: developerStyle }],
           },
+          // ПАМЯТЬ ПРОШЛЫХ СЕССИЙ → developer-блок до истории сообщений
+          ...(!isFirst && sessionMemoryText
+            ? [
+                {
+                  role: 'developer' as const,
+                  content: [
+                    {
+                      type: 'input_text' as const,
+                      text: `Справочный контекст прошлых сессий:\n${sessionMemoryText}`,
+                    },
+                  ],
+                },
+              ]
+            : []),
+          ...(options?.userPrompt
+            ? [
+                {
+                  role: 'developer' as const,
+                  content: [
+                    {
+                      type: 'input_text' as const,
+                      text: String(options.userPrompt),
+                    },
+                  ],
+                },
+              ]
+            : []),
           ...mapToResponsesInput(messages || []),
         ];
+        console.log('input', input);
 
         const body: any = {
           model: usedModel,
@@ -299,11 +351,31 @@ export const openaiProvider: LlmProviderPort = {
 
     const usedModel = model || config.llm.openai.defaultModel;
 
-    const systemPrelude = buildChatPrelude({
-      lang: options?.lang ?? 'ru',
-      user_locale: options?.user_locale,
-      user_name: options?.user_name,
-    });
+    const isFirst = Boolean(options?.isFirstSession);
+    const lang = options?.lang ?? 'ru';
+    let sessionMemoryText = '';
+    if (!isFirst && options?.userId != null) {
+      try {
+        const all = await summaryStore.getSummaries(options.userId);
+        sessionMemoryText = buildSessionMemoryText(all, lang);
+      } catch {}
+    }
+
+    const systemPrelude = isFirst
+      ? buildChatPrelude({
+          lang,
+          user_locale: options?.user_locale,
+          user_name: options?.user_name,
+        })
+      : buildChatPreludeWithMemory(
+          {
+            lang,
+            user_locale: options?.user_locale,
+            user_name: options?.user_name,
+          },
+          { isFirstSession: isFirst, sessionMemoryText: '' }
+        );
+
     const developerStyle = buildDeveloperStylePrompt();
 
     const input = [
@@ -315,8 +387,40 @@ export const openaiProvider: LlmProviderPort = {
         role: 'developer',
         content: [{ type: 'input_text' as const, text: developerStyle }],
       },
+      // ПАМЯТЬ ПРОШЛЫХ СЕССИЙ → developer-блок до истории сообщений
+      ...(!isFirst && sessionMemoryText
+        ? [
+            {
+              role: 'developer' as const,
+              content: [
+                {
+                  type: 'input_text' as const,
+                  text: `Справочный контекст прошлых сессий:\n${sessionMemoryText}`,
+                },
+              ],
+            },
+          ]
+        : []),
+      ...(options?.userPrompt
+        ? [
+            {
+              role: 'developer' as const,
+              content: [
+                {
+                  type: 'input_text' as const,
+                  text: String(options.userPrompt),
+                },
+              ],
+            },
+          ]
+        : []),
       ...mapToResponsesInput(messages || []),
     ];
+    console.dir(input, {
+      depth: null, // без ограничения по вложенности
+      maxArrayLength: null, // показывать все элементы
+      colors: true, // для удобства
+    });
 
     // dynamic import to avoid hard dep at build
     const mod: any = await (

@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import { useI18n } from 'vue-i18n';
+import { useChatStore } from '@/app/stores/chat';
 
 interface User {
   user: any | null;
@@ -52,6 +53,10 @@ export const useAuthStore = defineStore('auth', {
       }
     },
     async logout() {
+      try {
+        const chat = useChatStore?.();
+        await chat.finishAndSave();
+      } catch {}
       await useAPI('/api/auth/logout', {
         method: 'POST',
       });

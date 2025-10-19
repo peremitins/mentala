@@ -29,10 +29,6 @@
 </template>
 
 <script setup lang="ts">
-import { useChatStore } from '@/app/stores/chat';
 import { useAuthStore } from '@/app/stores/auth';
 const auth = useAuthStore();
-const chat = useChatStore();
-
-chat.finishAndSave('gpt-4o');
 </script>

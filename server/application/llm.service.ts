@@ -19,7 +19,16 @@ export async function chatViaProvider(params: {
   provider?: LlmProviderPort['id'];
   model?: string;
   messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
-  options?: { sessionId?: string; temperature?: number };
+  options?: {
+    sessionId?: string;
+    temperature?: number;
+    lang?: string;
+    user_locale?: string;
+    user_name?: string;
+    userId?: number | string;
+    isFirstSession?: boolean;
+    userPrompt?: string;
+  };
 }) {
   const provider = getProvider(params.provider);
   return provider.chat({
@@ -96,6 +105,9 @@ export function chatStreamViaProvider(params: {
     lang?: string;
     user_locale?: string;
     user_name?: string;
+    userId?: number | string;
+    isFirstSession?: boolean;
+    userPrompt?: string;
   };
 }): AsyncIterable<string> {
   const provider = getProvider(params.provider);
