@@ -8,7 +8,16 @@ export interface LlmProviderPort {
   chat: (params: {
     messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
     model?: string;
-    options?: { sessionId?: string; temperature?: number };
+    options?: {
+      sessionId?: string;
+      temperature?: number;
+      lang?: string;
+      user_locale?: string;
+      user_name?: string;
+      userId?: number | string;
+      isFirstSession?: boolean;
+      userPrompt?: string;
+    };
   }) => Promise<{ role: 'assistant'; content: string; model?: string }>;
   // Optional streaming interface: yields text deltas
   chatStream?: (params: {
@@ -20,6 +29,9 @@ export interface LlmProviderPort {
       lang?: string;
       user_locale?: string;
       user_name?: string;
+      userId?: number | string;
+      isFirstSession?: boolean;
+      userPrompt?: string;
     };
   }) => AsyncIterable<string>;
   finishSession?: (params: {

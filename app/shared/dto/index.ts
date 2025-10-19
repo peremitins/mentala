@@ -23,6 +23,13 @@ export const ChatRequestDto = z.object({
   provider: z.enum(['openai', 'deepseek', 'yandex']).optional(),
   model: z.string().optional(),
   sessionId: z.string().optional(),
+  // расширенные опции
+  userId: z.union([z.number(), z.string()]).optional(),
+  isFirstSession: z.boolean().optional(),
+  userPrompt: z.string().optional(),
+  lang: z.string().optional(),
+  user_locale: z.string().optional(),
+  user_name: z.string().optional(),
 });
 
 export const ChatResponseDto = z.object({

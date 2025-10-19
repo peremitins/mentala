@@ -1,17 +1,11 @@
 import { randomBytes, createCipheriv, createDecipheriv } from 'node:crypto';
 import { db } from '../infrastructure/db/client';
 import { sessionSummaries } from '../infrastructure/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
 
-const RAW_KEY = Buffer.from(process.env.SUMMARY_AES_KEY || '', 'base64');
-const ENCRYPT_DISABLED =
-  (process.env.SUMMARY_ENCRYPTION_DISABLED ??
-    (process.env.NODE_ENV !== 'production' ? 'true' : 'false')) === 'true';
-if (!RAW_KEY || RAW_KEY.length !== 32) {
-  console.warn(
-    '[summaryStore] WARNING: SUMMARY_AES_KEY not set or invalid length. Generating ephemeral key for dev.'
-  );
-}
+// Упрощаем хранение: сохраняем summary как plaintext в summary_ct без шифрования.
+const RAW_KEY = null as unknown as Buffer;
+const ENCRYPT_DISABLED = true;
 
 function encrypt(plaintext: string): { iv: string; ct: string } {
   const key = RAW_KEY && RAW_KEY.length === 32 ? RAW_KEY : randomBytes(32);
@@ -43,23 +37,12 @@ function decrypt(ivAndTagB64: string, ctB64: string): string {
 export const summaryStore = {
   async save(userId: string, sessionId: string, summaryJson: string) {
     // dev/DEBUG: allow plaintext storage
-    if (ENCRYPT_DISABLED) {
-      await db.insert(sessionSummaries).values({
-        userId: String(userId),
-        sessionId,
-        model: 'openai',
-        summaryIv: '',
-        summaryCt: summaryJson,
-      });
-      return;
-    }
-    const { iv, ct } = encrypt(summaryJson);
     await db.insert(sessionSummaries).values({
       userId: String(userId),
       sessionId,
       model: 'openai',
-      summaryIv: iv,
-      summaryCt: ct,
+      summaryIv: '',
+      summaryCt: summaryJson,
     });
   },
   async loadAllForUser(userId: string): Promise<string[]> {
@@ -69,14 +52,52 @@ export const summaryStore = {
       .where(eq(sessionSummaries.userId, String(userId)));
     const results: string[] = [];
     for (const r of rows) {
-      try {
-        if (ENCRYPT_DISABLED) {
-          results.push(r.summaryCt);
-        } else {
-          results.push(decrypt(r.summaryIv, r.summaryCt));
-        }
-      } catch {}
+      const s = String(r.summaryCt ?? '');
+      results.push(s);
     }
     return results;
   },
+  /**
+   * Возвращает последние summary пользователя, отсортированные по created_at DESC.
+   * Если limit не указан — возвращает все.
+   */
+  async getSummaries(
+    userId: number | string,
+    limit?: number
+  ): Promise<Array<Record<string, any>>> {
+    let rows: any[];
+    if (typeof limit === 'number') {
+      rows = (await db
+        .select()
+        .from(sessionSummaries)
+        .where(eq(sessionSummaries.userId, String(userId)))
+        .orderBy(desc(sessionSummaries.createdAt))
+        .limit(limit as any)) as any[];
+    } else {
+      rows = (await db
+        .select()
+        .from(sessionSummaries)
+        .where(eq(sessionSummaries.userId, String(userId)))
+        .orderBy(desc(sessionSummaries.createdAt))) as any[];
+    }
+
+    const out: Array<Record<string, any>> = [];
+    for (const r of rows as any[]) {
+      try {
+        const jsonStr = String(r.summaryCt ?? '');
+        const obj = JSON.parse(String(jsonStr || '{}')) as Record<string, any>;
+        out.push(obj);
+      } catch {}
+    }
+    return out;
+  },
+  /** Возвращает количество сохраненных summary для пользователя */
+  async countByUser(userId: number | string): Promise<number> {
+    const rows = await db
+      .select({ id: sessionSummaries.id })
+      .from(sessionSummaries)
+      .where(eq(sessionSummaries.userId, String(userId)));
+    return Array.isArray(rows) ? rows.length : 0;
+  },
+  // getAllParsed больше не нужен — используйте getSummaries(userId) без limit
 };

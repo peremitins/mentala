@@ -16,7 +16,15 @@ export default defineEventHandler(async (event) => {
       provider: 'openai',
       model: parsed.model,
       messages: parsed.messages,
-      options: { sessionId: parsed.sessionId },
+      options: {
+        sessionId: parsed.sessionId,
+        lang: (parsed as any)?.lang,
+        user_locale: (parsed as any)?.user_locale,
+        user_name: (parsed as any)?.user_name,
+        userId: uid, // серверный стабильный uid
+        isFirstSession: undefined, // рассчитывается в других местах при стриминге
+        userPrompt: (parsed as any)?.userPrompt,
+      },
     });
     // simple guard: roughly estimate tokens by characters (very rough ~4 chars per token)
     const tokensIn = Math.ceil(

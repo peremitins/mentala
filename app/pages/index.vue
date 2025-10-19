@@ -344,6 +344,32 @@ function handleKeydown(e: KeyboardEvent) {
   }
 }
 
+async function speakLastMessage(content: string) {
+  if (content) {
+    if (chatSettings.avatar && heygen.isConnected) {
+      heygen.speak(content);
+    } else if (chatSettings.voice) {
+      try {
+        const { $api } = useNuxtApp();
+        const buf = (await $api('/api/tts/openai', {
+          method: 'POST',
+          body: { text: content, voice: 'sage', format: 'mp3' },
+          responseType: 'arrayBuffer',
+        } as any)) as ArrayBuffer;
+        const blob = new Blob([new Uint8Array(buf)], {
+          type: 'audio/mpeg',
+        });
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        try {
+          await audio.play();
+        } catch {}
+        audio.onended = () => URL.revokeObjectURL(url);
+      } catch {}
+    }
+  }
+}
+
 const onSend = async () => {
   if (!chat.userText.trim()) return;
   speechStore.isListening = false;
@@ -352,32 +378,15 @@ const onSend = async () => {
 
   if (res) {
     chat.startSession();
+
     // Озвучим последний ответ ассистента через HeyGen или TTS OpenAI
-    const last = [...chat.messages]
-      .reverse()
-      .find((m) => m.role === 'assistant');
-    const content =
-      last && typeof last.content === 'string' ? last.content : '';
-    if (content) {
-      if (chatSettings.avatar && heygen.isConnected) {
-        heygen.speak(content);
-      } else if (chatSettings.voice && process.client) {
-        try {
-          const { $api } = useNuxtApp();
-          const buf = (await $api('/api/tts/openai', {
-            method: 'POST',
-            body: { text: content, voice: 'sage', format: 'mp3' },
-            responseType: 'arrayBuffer',
-          } as any)) as ArrayBuffer;
-          const blob = new Blob([new Uint8Array(buf)], { type: 'audio/mpeg' });
-          const url = URL.createObjectURL(blob);
-          const audio = new Audio(url);
-          try {
-            await audio.play();
-          } catch {}
-          audio.onended = () => URL.revokeObjectURL(url);
-        } catch {}
-      }
+    if (chatSettings.voice === true) {
+      const last = [...chat.messages]
+        .reverse()
+        .find((m) => m.role === 'assistant');
+      const content =
+        last && typeof last.content === 'string' ? last.content : '';
+      speakLastMessage(content);
     }
   }
 };

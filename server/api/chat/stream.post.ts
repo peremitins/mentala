@@ -1,5 +1,7 @@
 import { defineEventHandler, readBody, setHeader } from 'h3';
 import { chatStreamViaProvider } from '@@/server/application/llm.service';
+import { getSessionUser } from '@@/server/application/auth/session';
+import { summaryStore } from '@@/server/utils/summaryStore';
 
 export default defineEventHandler(async (event) => {
   const body = await readBody<{
@@ -10,6 +12,9 @@ export default defineEventHandler(async (event) => {
     lang?: string;
     user_locale?: string;
     user_name?: string;
+    userId?: number | string;
+    isFirstSession?: boolean;
+    userPrompt?: string;
   }>(event);
 
   // Отдаём как SSE
@@ -20,6 +25,12 @@ export default defineEventHandler(async (event) => {
   const res = event.node.res;
 
   try {
+    // Добавляем память только для авторизованных пользователей
+    const sessUser = await getSessionUser(event);
+    const uid = sessUser?.id ? String(sessUser.id) : undefined;
+    const count = uid ? await summaryStore.countByUser(uid) : 0;
+    const serverIsFirst = count === 0;
+
     const stream = chatStreamViaProvider({
       provider: 'openai',
       model: body?.model,
@@ -30,6 +41,9 @@ export default defineEventHandler(async (event) => {
         lang: body?.lang,
         user_locale: body?.user_locale,
         user_name: body?.user_name,
+        userId: uid,
+        isFirstSession: serverIsFirst,
+        userPrompt: body?.userPrompt,
       },
     });
 
