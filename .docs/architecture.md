@@ -22,7 +22,7 @@ index, onboarding, chat (layout blank), tracker, tasks, profile/\*, billing.
 • ui
 • user
 • chat
-• DTO (Zod): app/shared/dto/index.ts.
+• DTO (Zod): shared/dto/index.ts.
 
 ⸻
 

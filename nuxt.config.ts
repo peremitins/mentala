@@ -5,15 +5,35 @@ import tailwindcss from '@tailwindcss/vite';
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
-  srcDir: 'app',
+  srcDir: '',
   alias: {
     '@': fileURLToPath(new URL('./', import.meta.url)),
   },
-  modules: ['@vueuse/nuxt', 'shadcn-nuxt', '@scalar/nuxt', 'vue-sonner/nuxt'],
+  modules: [
+    '@vueuse/nuxt',
+    'shadcn-nuxt',
+    '@scalar/nuxt',
+    'vue-sonner/nuxt',
+    '@nuxtjs/color-mode',
+    'floating-vue/nuxt',
+  ],
   shadcn: {
-    prefix: '',
-    componentDir: '~/components/ui',
+    prefix: 'shadcn',
+    componentDir: '@/app/components/ui/shadcn/',
   },
+  colorMode: {
+    preference: 'system', // default value of $colorMode.preference
+    fallback: 'light', // fallback value if not system preference found
+    hid: 'nuxt-color-mode-script',
+    globalName: '__NUXT_COLOR_MODE__',
+    componentName: 'ColorScheme',
+    classPrefix: '',
+    classSuffix: '',
+    storage: 'localStorage', // or 'sessionStorage' or 'cookie'
+    storageKey: 'nuxt-color-mode',
+    dataValue: 'theme', // data attribute for CSS selectors
+  },
+  app: {},
   css: [
     '~/assets/css/main.scss',
     '~/assets/css/tailwind.css',

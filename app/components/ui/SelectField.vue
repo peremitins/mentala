@@ -6,10 +6,11 @@
     :disabled="disabled"
   >
     <SelectTrigger
-      class="inline-flex min-w-[160px] items-center justify-between rounded-full h-10 px-4 text-sm bg-white/10 border border-white/15 backdrop-blur shadow-[var(--shadow-sm)]"
+      v-bind="$attrs"
+      class="inline-flex w-full min-w-[160px] items-center justify-between rounded-[var(--radius-sm)] h-10 px-4 text-sm bg-white/10 border border-white/15 backdrop-blur shadow-[var(--shadow-sm)]"
     >
       <SelectValue :placeholder="placeholder" />
-      <IconChevronDown class="h-4 w-4" />
+      <IconChevronDown class="h-4 w-4 ml-2" />
     </SelectTrigger>
     <SelectPortal>
       <SelectContent
@@ -18,7 +19,7 @@
         align="start"
         :side-offset="8"
         :collision-padding="12"
-        class="z-50 min-w-[200px] max-h-64 overflow-auto rounded-2xl border border-white/15 bg-white/10 border border-white/15 backdrop-blur shadow-[var(--shadow-sm)] p-1"
+        class="z-50 min-w-[200px] max-h-64 overflow-auto rounded-[var(--radius-sm)] border border-white/15 bg-white/10 border border-white/15 backdrop-blur shadow-[var(--shadow-sm)] p-1"
       >
         <SelectViewport class="p-1">
           <template v-for="(group, gi) in normalizedOptions" :key="gi">
@@ -32,11 +33,11 @@
                 v-for="opt in group.items"
                 :key="String(opt.value)"
                 :value="String(opt.value)"
-                class="text-sm leading-none rounded-[10px] flex items-center h-8 pr-8 pl-4 select-none gap-2 data-[disabled]:opacity-50 data-[disabled]:pointer-events-none data-[highlighted]:outline-none data-[highlighted]:bg-white/10"
+                class="text-sm leading-none rounded-[var(--radius-sm)] flex items-center h-8 pr-8 pl-6 select-none gap-2 data-[disabled]:opacity-50 data-[disabled]:pointer-events-none data-[highlighted]:outline-none data-[highlighted]:bg-white/10"
                 :disabled="opt.disabled"
               >
                 <SelectItemIndicator
-                  class="absolute left-0 w-[25px] inline-flex items-center justify-center"
+                  class="absolute left-2 w-[25px] inline-flex items-center justify-center"
                 >
                   <IconCheck />
                 </SelectItemIndicator>

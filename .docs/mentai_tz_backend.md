@@ -1,17 +1,20 @@
-
 # MentAI — Техническое задание (Backend, Nitro BFF)
 
 ## 1. Роль
+
 BFF на **Nitro (Nuxt 4 server)** — единая точка для фронтенда (Web/PWA/Capacitor). Позже возможно вынесение подсистем (например, биллинг на Laravel).
 
 ## 2. Архитектурный подход
+
 Clean Architecture / Hexagonal внутри `mentai/frontend/server`:
+
 - `domain/` (сущности), `application/` (use‑cases), `ports/` (контракты),
 - `infrastructure/` (ORM/SDK/внешние адаптеры),
 - `interface/http` (Nitro‑роуты) и `webhooks/`,
 - `config/` (env, DI, security, observability).
 
 ## 3. Технологии
+
 - Node 20+, TypeScript, Nitro.
 - Drizzle ORM + Postgres (Neon), Redis (Upstash), BullMQ (очереди).
 - R2 (S3‑совм.) для медиа.
@@ -19,6 +22,7 @@ Clean Architecture / Hexagonal внутри `mentai/frontend/server`:
 - JWT (access/refresh), Zod DTO (общие схемы), Sentry, pino.
 
 ## 4. Структура директорий
+
 ```
 mentai/frontend/server/
 ├─ config/
@@ -32,67 +36,66 @@ mentai/frontend/server/
 ```
 
 ## 5. Конвенции API
-- Base: `/api/*`, JSON. Версионирование через заголовок `X-API-Version: 1` (по мере роста `/api/v1/*`).  
-- Auth: `Authorization: Bearer <jwt>`.  
-- Ошибки: `{ "error": { "code": "E_xxx", "message": "..." } }`.  
-- Пагинация: `?page=1&limit=20` → `{ items, page, limit, total }`.  
-- Идемпотентность: `Idempotency-Key` на чувствительных POST.  
+
+- Base: `/api/*`, JSON. Версионирование через заголовок `X-API-Version: 1` (по мере роста `/api/v1/*`).
+- Auth: `Authorization: Bearer <jwt>`.
+- Ошибки: `{ "error": { "code": "E_xxx", "message": "..." } }`.
+- Пагинация: `?page=1&limit=20` → `{ items, page, limit, total }`.
+- Идемпотентность: `Idempotency-Key` на чувствительных POST.
 - DTO (Zod): общие в `mentai/frontend/shared/dto/*`.
 
 ## 6. Эндпоинты (MVP, кратко)
-**Auth**  
-- `POST /api/auth/register` → `{ userId, token, refreshToken }`  
-- `POST /api/auth/login` → `{ userId, token, refreshToken }`  
-- `POST /api/auth/refresh` → `{ token }`  
+
+**Auth**
+
+- `POST /api/auth/register` → `{ userId, token, refreshToken }`
+- `POST /api/auth/login` → `{ userId, token, refreshToken }`
+- `POST /api/auth/refresh` → `{ token }`
 - `POST /api/auth/logout` → `{ success: true }`
 
-**User**  
-- `GET /api/user/me` → профиль/настройки  
-- `PATCH /api/user/update` → обновление профиля  
-- `GET /api/user/export` → создание job экспорта  
+**User**
+
+- `GET /api/user/me` → профиль/настройки
+- `PATCH /api/user/update` → обновление профиля
+- `GET /api/user/export` → создание job экспорта
 - `POST /api/user/delete` → удаление аккаунта (запрос)
 
-**Habits / Tracker / Tasks**  
-- `POST /api/habits/create`, `GET /api/habits/list`, `PATCH/DELETE /api/habits/:id`  
-- `POST /api/tracker/log`, `GET /api/tracker/stats`  
+**Habits / Tracker / Tasks**
+
+- `POST /api/habits/create`, `GET /api/habits/list`, `PATCH/DELETE /api/habits/:id`
+- `POST /api/tracker/log`, `GET /api/tracker/stats`
 - `GET /api/tasks/today`, `POST /api/tasks/complete`
 
-**AI / Voice / SOS**  
-- `POST /api/ai/chat` → `{ reply, sessionId, safety }`  
-- `POST /api/ai/tts` → `{ audioUrl, jobId }`  
-- `POST /api/ai/stt` → `{ text }`  
+**AI / Voice / SOS**
+
+- `POST /api/ai/chat` → `{ reply, sessionId, safety }`
+- `POST /api/ai/tts` → `{ audioUrl, jobId }`
+- `POST /api/ai/stt` → `{ text }`
 - `GET/POST /api/sos/plan`
 
-**Billing / Referrals**  
-- `GET /api/billing/products`, `POST /api/billing/subscribe`  
-- `POST /api/billing/iap/verify`, `POST /api/billing/stripe/webhook`  
+**Billing / Referrals**
+
+- `GET /api/billing/products`, `POST /api/billing/subscribe`
+- `POST /api/billing/iap/verify`, `POST /api/billing/stripe/webhook`
 - `POST /api/referrals/create`, `GET /api/referrals/stats`, `POST /api/referrals/payouts/request`
 
 ## 7. Безопасность/Приватность
-- Ротация refresh‑токенов; CORS только для доверенных origin; rate‑limit per IP/user.  
-- История чатов по умолчанию **off** (opt‑in), гибкие retention‑периоды.  
-- Аудит действий без содержания сообщений при `saveHistory=false`.  
+
+- Ротация refresh‑токенов; CORS только для доверенных origin; rate‑limit per IP/user.
+- История чатов по умолчанию **off** (opt‑in), гибкие retention‑периоды.
+- Аудит действий без содержания сообщений при `saveHistory=false`.
 - Шифрование в транзите/на диске; хранение данных в регионе.
 
-## 8. ENV (пример)
-```
-NUXT_PRIVATE_DB_URL=postgres://...
-NUXT_PRIVATE_REDIS_URL=rediss://...
-NUXT_PRIVATE_R2_...
-NUXT_PRIVATE_OPENAI_API_KEY=...
-NUXT_PRIVATE_TTS_KEY=...
-NUXT_PRIVATE_STRIPE_SECRET=...
-NUXT_PUBLIC_APP_NAME=MentAI
-NUXT_PUBLIC_DEFAULT_LANG=ru
-```
+## 8. Миграции/Тесты
 
-## 9. Миграции/Тесты
-- Drizzle schema + миграции; Vitest + Supertest (интеграционные) для http‑роутов.  
+- Drizzle schema + миграции; Vitest + Supertest (интеграционные) для http‑роутов.
 - Контрактные тесты на Zod‑DTO (FE/BE).
 
-## 10. Масштабирование
-- Вынос биллинга/сообществ в отдельные сервисы при росте.  
+## 9. Масштабирование
+
+- Вынос биллинга/сообществ в отдельные сервисы при росте.
 - Коммуникация: REST/Webhooks, кэш Redis, трассировка Sentry/OTel.
 
-## 11. SLA
+## 10. SLA
+
 - P95 < 200ms для базовых вызовов, 99.9% uptime, ежедневные бэкапы.

@@ -1,5 +1,8 @@
 <template>
-  <nav class="flex-[0_0_auto] inset-x-0 pb-2">
+  <div
+    v-bind="$attrs"
+    class="flex-[0_0_auto] inset-x-0 pb-2 mt-2 sticky bottom-0"
+  >
     <section
       class="glass-deep px-4 py-3"
       :style="{ borderRadius: `calc(var(--radius-sm))` }"
@@ -79,7 +82,7 @@
         </li>
       </ul>
     </section>
-  </nav>
+  </div>
 </template>
 
 <script setup lang="ts">

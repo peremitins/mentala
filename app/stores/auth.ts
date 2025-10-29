@@ -13,8 +13,10 @@ export const useAuthStore = defineStore('auth', {
       const response: User = await useAPI('/api/user/me', {
         method: 'GET',
       });
-      this.isLoggedIn = true;
+
       this.user = response?.user ?? null;
+      this.isLoggedIn = !!this.user; // Устанавливаем isLoggedIn только если user не null
+
       return this.user;
     },
     async loginEmail(payload: {

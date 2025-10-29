@@ -1,36 +1,14 @@
 @use './_tokens.scss' as *;
 @use './_var.scss' as *;
 
+html {
+  overflow: hidden;
+}
+
 html,
 body,
 #__nuxt {
   height: 100%;
-}
-
-/* Theme backgrounds */
-:root.theme-dark,
-html.theme-dark,
-body.theme-dark,
-#__nuxt.theme-dark {
-  background: radial-gradient(circle at 20% 20%, #1a1f2c 0%, #0c0e16 80%);
-  color: #e7e8ea;
-}
-
-:root.theme-light,
-html.theme-light,
-body.theme-light,
-#__nuxt.theme-light {
-  background: linear-gradient(135deg, #f5f8ff 0%, #e4ebf8 100%);
-  color: #0a0c13;
-}
-
-:root.theme-gray,
-html.theme-gray,
-body.theme-gray,
-#__nuxt.theme-gray {
-  background: rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(12px);
-  color: #e7e8ea;
 }
 
 button,
@@ -40,7 +18,7 @@ a {
 
 .glass {
   border-radius: var(--radius-lg);
-  @apply border border-white/15 bg-white/10 shadow-lg backdrop-blur-md;
+  @apply border border-border/15 bg-background/10 shadow-lg backdrop-blur-md;
 }
 
 /* Deeper glass for panels */
@@ -53,8 +31,9 @@ a {
   backdrop-filter: blur(10px);
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.18);
-
+  background: color-mix(in oklab, var(--color-background) 7%, transparent);
   background-clip: padding-box;
+  // padding: 0 8px;
 }
 
 .chat-fade {
@@ -70,15 +49,15 @@ a {
 /* Chat bubble style */
 .bubble {
   border-radius: calc(var(--radius-md) + 2px);
-  @apply border border-white/15 backdrop-blur-xl px-4 py-2;
-  background: color-mix(in oklab, white 7%, transparent);
+  @apply border border-border/15 backdrop-blur-xl px-4 py-2;
+  background: color-mix(in oklab, var(--color-background) 7%, transparent);
   box-shadow: var(--shadow-sm);
 }
 
 /* Input container */
 .glass-input {
-  @apply rounded-2xl border border-white/15 backdrop-blur-xl;
-  background: color-mix(in oklab, white 6%, transparent);
+  @apply rounded-2xl border border-border/15 backdrop-blur-xl;
+  background: color-mix(in oklab, var(--color-background) 6%, transparent);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.05),
     var(--shadow-md);
@@ -86,8 +65,8 @@ a {
 
 .icon-disc {
   border-radius: var(--radius-icon);
-  @apply border border-white/10 backdrop-blur-xl grid place-items-center;
-  background: color-mix(in oklab, white 7%, transparent);
+  @apply border border-border/10 backdrop-blur-xl grid place-items-center;
+  background: color-mix(in oklab, var(--color-background) 7%, transparent);
   width: 44px;
   height: 44px;
   transition: all 0.3s ease;
@@ -98,15 +77,19 @@ a {
   &.router-link-active {
     .icon-disc {
       transform: translateY(-2px);
-      background: color-mix(in oklab, white 10%, transparent);
-      border-color: color-mix(in oklab, white 20%, transparent);
+      background: color-mix(in oklab, var(--color-background) 10%, transparent);
+      border-color: color-mix(
+        in oklab,
+        var(--color-background) 20%,
+        transparent
+      );
     }
   }
 }
 
 .icon-disc-active {
-  background: color-mix(in oklab, white 14%, transparent);
-  border-color: color-mix(in oklab, white 28%, transparent);
+  background: color-mix(in oklab, var(--color-background) 14%, transparent);
+  border-color: color-mix(in oklab, var(--color-background) 28%, transparent);
   box-shadow:
     inset 1px 1px 0.12px rgba(255, 255, 255, 0.4),
     1px 1px 3px rgba(0, 0, 0, 0.1);
