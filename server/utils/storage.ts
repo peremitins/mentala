@@ -2,7 +2,7 @@
 type Privacy = { saveHistory: boolean; retentionDays: number };
 type ChatSettings = {
   theme: 'dark' | 'light';
-  mode: 'therapy' | 'habits' | 'balance';
+  mode: 'therapy' | 'habits' | 'growth';
   voice: boolean;
   avatar: boolean;
 };

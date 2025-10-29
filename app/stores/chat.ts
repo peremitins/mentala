@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { useSpeechStore } from '@/app/stores/speech';
 import { useChatSettingsStore } from '@/app/stores/chatSettings';
+import { usePromptsStore } from '@/app/stores/prompts';
 
 export const useChatStore = defineStore('chat', {
   state: () => ({
@@ -22,6 +23,14 @@ export const useChatStore = defineStore('chat', {
       this.messages.push({ role: 'user', content: text });
       try {
         const nuxt = useNuxtApp();
+        const settings = useChatSettingsStore();
+        const type =
+          settings.mode === 'habits' ||
+          settings.mode === 'therapy' ||
+          settings.mode === 'growth'
+            ? settings.mode
+            : 'therapy';
+        const userPrompt = settings.activePromptsByType[type]?.content || '';
         // добавляем пустое ответное сообщение, будем наполнять построчно
         const idx = this.messages.push({ role: 'assistant', content: '' }) - 1;
 
@@ -32,6 +41,8 @@ export const useChatStore = defineStore('chat', {
             provider: 'openai',
             messages: this.messages,
             sessionId: this.sessionId,
+            userPrompt,
+            lang: 'ru',
           },
           responseType: 'stream',
         } as any);

@@ -2,16 +2,20 @@ import { defineEventHandler, readBody, setResponseStatus } from 'h3';
 import { estimateCostUSD } from '../../application/llm.service';
 import { config } from '../../config';
 import { z } from 'zod';
-import { ChatRequestDto, ChatResponseDto } from '~/shared/dto';
+import { ChatRequestDto, ChatResponseDto } from '@/shared/dto';
 import { chatViaProvider } from '../../application/llm.service';
-import { getOrSetAnonUserId } from '../../utils/user';
+import { getSessionUser } from '@@/server/application/auth/session';
 
 export default defineEventHandler(async (event) => {
   try {
     const body = await readBody(event);
     const parsed = ChatRequestDto.parse(body);
     // Force OpenAI for now regardless of body.provider
-    const uid = getOrSetAnonUserId(event);
+    const user = await getSessionUser(event);
+    if (!user?.id) {
+      setResponseStatus(event, 401);
+      return { error: true, message: 'Unauthorized' } as const;
+    }
     const result = await chatViaProvider({
       provider: 'openai',
       model: parsed.model,
@@ -21,7 +25,7 @@ export default defineEventHandler(async (event) => {
         lang: (parsed as any)?.lang,
         user_locale: (parsed as any)?.user_locale,
         user_name: (parsed as any)?.user_name,
-        userId: uid, // серверный стабильный uid
+        userId: user.id, // серверный стабильный uid
         isFirstSession: undefined, // рассчитывается в других местах при стриминге
         userPrompt: (parsed as any)?.userPrompt,
       },

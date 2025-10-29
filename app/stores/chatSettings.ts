@@ -4,28 +4,48 @@ export const useChatSettingsStore = defineStore('chatSettings', {
   state: () => ({
     theme: 'dark' as 'dark' | 'light' | 'gray',
     // Режим работы ассистента
-    mode: 'therapy' as 'therapy' | 'habits' | 'balance',
+    mode: 'therapy' as 'therapy' | 'habits' | 'growth',
     // Голос/озвучка ответа ассистента
-    voice: false,
+    voice: true,
     // Визуальный аватар (видео)
-    avatar: false,
+    avatar: true,
+    isFirstSession: false,
+    // Активные промпты по типам
+    activePromptsByType: {
+      habits: null,
+      therapy: null,
+      growth: null,
+    } as Record<'habits' | 'therapy' | 'growth', any>,
   }),
   actions: {
     async getChatSettings() {
-      const data = await $fetch('/api/settings/chat', {
-        method: 'GET',
-      });
-      console.log('settings.value', data);
-      this.$patch(data?.settings ?? null);
-      return this.$state;
+      try {
+        const data = await useAPI('/api/settings/chat', {
+          method: 'GET',
+        });
+
+        this.$patch(data.settings);
+
+        return this.$state;
+      } catch (error) {
+        console.error('Error getting chat settings:', error);
+        throw error;
+      }
     },
     async updateChatSettings(payload: Record<string, any>) {
-      const data = await $fetch('/api/settings/chat', {
-        method: 'PATCH',
-        body: payload,
-      });
-      this.$patch(data?.settings ?? null);
-      return this.$state;
+      try {
+        const data = await useAPI('/api/settings/chat', {
+          method: 'PATCH',
+          body: payload,
+        });
+
+        this.$patch(data.settings);
+
+        return this.$state;
+      } catch (error) {
+        console.error('Error updating chat settings:', error);
+        throw error;
+      }
     },
   },
 });

@@ -1,0 +1,1 @@
+ALTER TABLE "user_prompts" DROP COLUMN "description";

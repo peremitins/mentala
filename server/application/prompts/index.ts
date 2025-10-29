@@ -7,7 +7,6 @@ export interface PromptPack {
   onboarding: PromptTemplate;
   crisisProtocol: PromptTemplate;
   sessionSummaryJson: PromptTemplate; // for finishSession
-  styleRules: PromptTemplate; // developer tone/style
 }
 
 export function renderTemplate(
@@ -52,9 +51,6 @@ export const mentalHealthPack: PromptPack = {
       "tone_prefs": ["short","gentle","nonjudgmental"]
     }
     Пиши только JSON.`,
-
-  styleRules: `
-    - Всегда начинай с приветсвия "Хай {{user_name}}".`,
 };
 
 export function buildSummaryPrompt(vars: { lang: string }) {
@@ -75,10 +71,6 @@ export function buildChatPrelude(vars: {
   ].join('\n\n');
 
   return renderTemplate(parts, vars as any);
-}
-
-export function buildDeveloperStylePrompt() {
-  return mentalHealthPack.styleRules;
 }
 
 /**

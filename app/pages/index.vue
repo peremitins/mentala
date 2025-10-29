@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-col flex-1 h-full space-y-6 pb-2 relative">
+  <div class="flex flex-col flex-1 h-full space-y-6 relative">
     <div class="absolute top-4 right-4 flex flex-col gap-y-3 z-1">
       <PopoverRoot v-model:open="settingsOpen">
         <PopoverTrigger as-child>
@@ -16,9 +16,11 @@
           >
             <div class="flex items-center justify-between gap-0.5 h-10">
               <div class="text-sm opacity-80">Режим</div>
-              <SelectField
+              <Combobox
+                class="max-w-[170px]"
                 v-model="chatSettings.mode"
-                :options="modeOptions"
+                :options="AI_WORK_MODE_OPTIONS"
+                @update:model-value="onModeChange"
                 placeholder="Выберите режим"
               />
             </div>
@@ -52,9 +54,11 @@
 
             <div class="flex items-center justify-between gap-0.5 h-10">
               <div class="text-sm opacity-80">Тема</div>
-              <SelectField
-                v-model="chatSettings.theme"
-                :options="themeOptions"
+
+              <Combobox
+                class="max-w-[170px]"
+                v-model="colorMode.preference"
+                :options="THEME_OPTIONS"
                 placeholder="Тема"
               />
             </div>
@@ -176,12 +180,16 @@ import { useChatStore } from '@/app/stores/chat';
 import { useSpeechStore } from '@/app/stores/speech';
 import { useChatSettingsStore } from '@/app/stores/chatSettings';
 import { useHeygenStore } from '@/app/stores/heygen';
+import {
+  AI_WORK_MODE_OPTIONS,
+  THEME_OPTIONS,
+} from '@/app/constants/select-options';
+import TextareaResize from '@/app/components/ui/TextareaResize.vue';
 
 import IconMic from '~icons/lucide/mic';
 import IconSend from '~icons/lucide/send';
 import IconSettings from '~icons/lucide/settings';
 import IconMessage from '~icons/lucide/message-circle';
-import SelectField from '@/app/components/ui/SelectField.vue';
 import {
   PopoverRoot,
   PopoverTrigger,
@@ -194,6 +202,8 @@ import {
 } from 'radix-vue';
 
 const emit = defineEmits<{ (e: 'send', text: string): void }>();
+
+const colorMode = useColorMode();
 
 // База для наращивания текста во время голосового ввода
 const speechBase = ref('');
@@ -208,18 +218,6 @@ const settingsOpen = ref(false);
 const connected = computed(() => heygen.isConnected);
 const isStarting = computed(() => heygen.isStarting);
 const isStarted = computed(() => heygen.isStarted);
-
-const modeOptions = [
-  { label: '🧠 Психотерапия', value: 'therapy' },
-  { label: '💪 Привычки', value: 'habits' },
-  { label: '🌿 Баланс', value: 'balance' },
-];
-
-const themeOptions = [
-  { label: 'Тёмная', value: 'dark' },
-  { label: 'Светлая', value: 'light' },
-  { label: 'Серая', value: 'gray' },
-];
 
 onPartial((t) => {
   if (!speechStore.isListening) return;
@@ -269,53 +267,6 @@ async function toggleMic() {
   speechStore.isListening = true;
   // фиксируем текущий ввод пользователя, чтобы увеличивать текст, а не затирать
   speechBase.value = chat.userText.trim();
-}
-
-// открытие/закрытие управляет PopoverTrigger
-
-// Применяем тему моментально
-if (process.client) {
-  const applyTheme = (t: 'dark' | 'light' | 'gray') => {
-    const root = document.documentElement;
-    if (!root) return;
-    root.classList.remove('theme-dark', 'theme-light', 'theme-gray', 'dark');
-    switch (t) {
-      case 'dark':
-        root.classList.add('theme-dark', 'dark');
-        break;
-      case 'light':
-        root.classList.add('theme-light');
-        break;
-      case 'gray':
-        root.classList.add('theme-gray');
-        break;
-    }
-  };
-  watch(
-    () => chatSettings?.theme,
-    (t) => applyTheme(t as 'dark' | 'light' | 'gray'),
-    { immediate: true }
-  );
-
-  // Сохраняем выбор темы на бэкенд, избегая первоначального триггера
-  const lastTheme = ref<string | null>(null);
-  watch(
-    () => chatSettings?.theme,
-    async (t) => {
-      if (!t) return;
-      if (lastTheme.value === null) {
-        lastTheme.value = t;
-        return;
-      }
-      if (lastTheme.value !== t) {
-        lastTheme.value = t;
-        try {
-          await chatSettings.updateChatSettings({ theme: t });
-        } catch {}
-      }
-    },
-    { immediate: true }
-  );
 }
 
 function emitSend() {
@@ -449,5 +400,16 @@ watch(
     await nextTick();
     if (stickToBottom.value) scrollToBottom('smooth');
   }
+);
+
+// автосохранение режима AI при изменении
+watch(
+  () => chatSettings.mode,
+  async (newMode) => {
+    if (newMode) {
+      await chatSettings.updateChatSettings({ mode: newMode });
+    }
+  },
+  { immediate: false }
 );
 </script>

@@ -9,7 +9,6 @@ import { summaryStore } from '../../utils/summaryStore';
 import {
   buildSummaryPrompt,
   buildChatPrelude,
-  buildDeveloperStylePrompt,
   buildSessionMemoryText,
   buildChatPreludeWithMemory,
 } from '@@/server/application/prompts';
@@ -131,7 +130,7 @@ export const openaiProvider: LlmProviderPort = {
               { isFirstSession: isFirst, sessionMemoryText: '' }
             );
 
-        const developerStyle = buildDeveloperStylePrompt();
+        const developerStyle = '';
 
         // Собираем корректный массив сообщений с валидными типами контента
         const input = [
@@ -376,7 +375,7 @@ export const openaiProvider: LlmProviderPort = {
           { isFirstSession: isFirst, sessionMemoryText: '' }
         );
 
-    const developerStyle = buildDeveloperStylePrompt();
+    const developerStyle = '';
 
     const input = [
       {

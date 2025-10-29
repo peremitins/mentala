@@ -18,26 +18,36 @@
             <ul class="space-y-2">
               <li
                 v-for="u in users"
+                @click="editUser(u.id)"
                 :key="u.id"
-                class="flex flex-col items-end items-center gap-2 justify-between bg-white/5 border border-white/10 rounded-xl px-3 py-2"
+                class="flex items-center gap-2 justify-between bg-white/5 border border-white/10 rounded-xl px-3 py-2"
               >
                 <div class="flex items-center gap-3 min-w-0 w-full">
-                  <span class="text-white/70 text-xs sm:text-sm shrink-0">{{
-                    u.name
-                  }}</span>
+                  <span class="text-white/70 text-xs sm:text-sm shrink-0">
+                    {{ u.name }}
+                  </span>
                   <span class="truncate">{{ u.email }}</span>
                 </div>
-                <div class="flex items-center gap-2 shrink-0">
-                  <NuxtLink class="glass px-3 py-1" :to="`/users/${u.id}`"
-                    >Редактировать</NuxtLink
+                <div class="flex items-center shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    class="min-w-[44px] min-h-[44px]"
+                    @click="editUser(u.id)"
+                    title="Редактировать"
                   >
-                  <button
-                    class="glass px-3 py-1"
+                    <IconEdit class="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    class="min-w-[44px] min-h-[44px]"
                     @click="removeUser(u.id)"
                     :disabled="removingId === u.id"
+                    title="Удалить"
                   >
-                    Удалить
-                  </button>
+                    <IconTrash2 class="w-4 h-4" />
+                  </Button>
                 </div>
               </li>
             </ul>
@@ -48,17 +58,18 @@
     <!-- Floating add button -->
     <NuxtLink
       to="/users/create"
-      class="fixed right-4 bottom-24 icon-disc grid place-items-center"
-      :style="{ borderRadius: 'var(--radius-icon)' }"
+      class="absolute right-5 bottom-5 grid place-items-center"
       aria-label="Добавить пользователя"
     >
-      <IconPlus class="w-5 h-5" />
+      <IconCirclePlus class="w-5 h-5" />
     </NuxtLink>
   </div>
 </template>
 
 <script setup lang="ts">
-import IconPlus from '~icons/lucide/plus';
+import IconCirclePlus from '~icons/lucide/circle-plus';
+import IconEdit from '~icons/lucide/edit';
+import IconTrash2 from '~icons/lucide/trash-2';
 
 type UserRow = {
   id: number;
@@ -82,6 +93,10 @@ async function fetchUsers() {
   } finally {
     loading.value = false;
   }
+}
+
+function editUser(id: number) {
+  navigateTo(`/users/${id}`);
 }
 
 // Delete

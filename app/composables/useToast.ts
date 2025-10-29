@@ -1,4 +1,4 @@
-import { toast } from 'vue-sonner'
+import { toast } from 'vue-sonner';
 
 export function useToast(
   text: string,
@@ -9,5 +9,5 @@ export function useToast(
   toast[type](text, {
     description,
     duration,
-  })
+  });
 }

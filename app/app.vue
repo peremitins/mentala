@@ -17,5 +17,5 @@
 </template>
 
 <script lang="ts" setup>
-import { Toaster } from 'vue-sonner'
+import { Toaster } from 'vue-sonner';
 </script>

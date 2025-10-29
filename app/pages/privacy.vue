@@ -1,11 +1,10 @@
 <template>
   <div class="">
+    <PageHeader title="Конфиденциальность" :show-back-button="true" />
     <section
       class="glass-deep p-5 space-y-6"
       :style="{ borderRadius: `calc(var(--radius-sm))` }"
     >
-      <h2 class="text-lg font-semibold">Конфиденциальность</h2>
-
       <div
         class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
       >
@@ -56,10 +55,12 @@
           >Скачать архив</a
         >
         <button
-          class="glass px-4 py-2 inline-flex items-center justify-center"
+          class="glass px-4 py-2 inline-flex items-center justify-center gap-2 min-h-[44px]"
           @click="deleteAll"
+          title="Удалить все данные"
         >
-          Удалить все данные
+          <IconTrash2 class="w-4 h-4" />
+          <span>Удалить все данные</span>
         </button>
       </div>
 
@@ -74,9 +75,9 @@
 
 <script setup lang="ts">
 import { useAuthStore } from '@/app/stores/auth';
-import SelectField from '@/app/components/ui/SelectField.vue';
 
 import { SwitchRoot, SwitchThumb } from 'radix-vue';
+import IconTrash2 from '~icons/lucide/trash-2';
 
 const auth = useAuthStore();
 

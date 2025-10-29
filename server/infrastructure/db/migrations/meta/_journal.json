@@ -8,6 +8,41 @@
       "when": 1760011270699,
       "tag": "0000_naive_havok",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1760011270700,
+      "tag": "0001_user_prompts",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1760961019832,
+      "tag": "0002_fix_user_id_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1760961020000,
+      "tag": "0003_revert_user_id_to_integer",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1761213445911,
+      "tag": "0004_productive_terrax",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1761472936810,
+      "tag": "0005_huge_triathlon",
+      "breakpoints": true
     }
   ]
 }

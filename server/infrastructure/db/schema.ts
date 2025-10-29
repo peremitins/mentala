@@ -121,3 +121,22 @@ export const sessions = pgTable('sessions', {
   revokedAt: timestamp('revoked_at', { withTimezone: true }),
   metadata: jsonb('metadata'),
 });
+
+// === User Prompts ===
+export const userPrompts = pgTable('user_prompts', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull(),
+  type: varchar('type', { length: 16 }).notNull(), // habits | therapy | growth
+  title: text('title').notNull(),
+  content: text('content').notNull(),
+  lang: varchar('lang', { length: 8 }).default('ru').notNull(),
+  isActive: boolean('is_active').default(false).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+// Partial unique index will be added via SQL migration (drizzle-kit)

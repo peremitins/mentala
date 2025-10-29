@@ -42,3 +42,42 @@ export type UserDto = z.infer<typeof UserDto>;
 export type ChatMessageDto = z.infer<typeof ChatMessageDto>;
 export type ChatRequestDto = z.infer<typeof ChatRequestDto>;
 export type ChatResponseDto = z.infer<typeof ChatResponseDto>;
+
+// === Prompts DTO ===
+export const PromptTypeEnum = z.enum(['habits', 'therapy', 'growth']);
+export const PromptLangEnum = z.enum(['ru', 'en']);
+
+export const PromptCreateDto = z.object({
+  title: z.string().min(1).max(120),
+  type: PromptTypeEnum,
+  lang: PromptLangEnum.default('ru'),
+  content: z.string().min(20).max(8000),
+  isActive: z.boolean().optional(),
+});
+
+export const PromptUpdateDto = z.object({
+  title: z.string().min(1).max(120).optional(),
+  type: PromptTypeEnum.optional(),
+  lang: PromptLangEnum.optional(),
+  content: z.string().min(20).max(8000).optional(),
+  isActive: z.boolean().optional(),
+});
+
+export const PromptQueryDto = z.object({ type: PromptTypeEnum.optional() });
+
+export const UserPromptDto = z.object({
+  id: z.number(),
+  userId: z.number(), // Integer user ID
+  type: PromptTypeEnum,
+  title: z.string(),
+  content: z.string(),
+  lang: z.string(),
+  isActive: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export type PromptCreateDto = z.infer<typeof PromptCreateDto>;
+export type PromptUpdateDto = z.infer<typeof PromptUpdateDto>;
+export type PromptQueryDto = z.infer<typeof PromptQueryDto>;
+export type UserPromptDto = z.infer<typeof UserPromptDto>;
