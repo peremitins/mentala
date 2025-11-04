@@ -20,7 +20,7 @@ export default defineEventHandler(async (event) => {
   if (!text)
     throw createError({ statusCode: 400, message: 'Text is required' });
 
-  const model = body?.model || 'gpt-4o-mini-tts';
+  const model = body?.model || 'tts-1-hd';
   const voice = body?.voice || 'sage';
   const format = body?.format || 'mp3';
 

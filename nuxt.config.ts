@@ -3,6 +3,7 @@ import Icons from 'unplugin-icons/vite';
 import tailwindcss from '@tailwindcss/vite';
 
 export default defineNuxtConfig({
+  ssr: false,
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
   srcDir: '',
@@ -40,7 +41,7 @@ export default defineNuxtConfig({
     'vue-sonner/style.css',
   ],
   runtimeConfig: {
-    apiBase: process.env.NUXT_PRIVATE_API_BASE || 'http://localhost:3000', // только сервер
+    // apiBase: process.env.NUXT_PRIVATE_API_BASE || 'http://localhost:3000', // только сервер
     heygenApiKey: process.env.NUXT_HEYGEN_API_KEY,
     heygenBaseUrl: process.env.NUXT_HEYGEN_BASE_URL || 'https://api.heygen.com',
     heygenAvatarId: process.env.NUXT_HEYGEN_AVATAR_ID || '',
@@ -51,10 +52,17 @@ export default defineNuxtConfig({
     OAUTH_VK_CLIENT_SECRET: process.env.NUXT_OAUTH_VK_CLIENT_SECRET,
     TELEGRAM_BOT_TOKEN: process.env.NUXT_TELEGRAM_BOT_TOKEN,
     public: {
-      apiBase: process.env.NUXT_PUBLIC_API_BASE || '/api', // доступно на клиенте
+      apiBase: process.env.NUXT_PUBLIC_API_SERVER_URL || '/api', // доступно на клиенте
+      appUrl: process.env.NUXT_PRIVATE_API_BASE || 'http://localhost:3000',
       speechDefaultEngine:
         process.env.NUXT_PUBLIC_SPEECH_DEFAULT_ENGINE || 'auto', // auto | native | webspeech | whisper
     },
+  },
+  nitro: {
+    prerender: {
+      crawlLinks: false,
+    },
+    // host и port настраиваются через флаги --host 0.0.0.0 в package.json
   },
   vite: {
     plugins: [tailwindcss(), Icons({ autoInstall: true })],

@@ -41,7 +41,7 @@ export default defineEventHandler(async (event) => {
       lastLoginAt: new Date(),
     })
     .where(eq(users.id, existing[0].id));
-  await createSession(event, existing[0].id, body.locale);
+  const sessionId = await createSession(event, existing[0].id, body.locale);
   return {
     user: {
       id: existing[0].id,
@@ -49,5 +49,6 @@ export default defineEventHandler(async (event) => {
       name: existing[0].name,
       locale: body.locale ?? existing[0].locale,
     },
+    sessionToken: sessionId, // Для использования в заголовке X-Session-Token если cookie не передается
   };
 });

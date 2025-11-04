@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { setCookie, getCookie, deleteCookie } from 'h3';
+import { setCookie, getCookie, deleteCookie, getHeader } from 'h3';
 import { db } from '@/server/infrastructure/db/client';
 import { sessions, users } from '@/server/infrastructure/db/schema';
 import { and, eq, isNull, gt } from 'drizzle-orm';
@@ -47,10 +47,24 @@ export async function createSession(
       maxAge: 365 * 24 * 60 * 60,
     });
   }
+  // Возвращаем ID сессии для использования в заголовке X-Session-Token
+  // если cookies не передаются (например, cross-domain)
+  return id;
 }
 
 export async function getSessionUser(event: any) {
-  const sid = getCookie(event, SID);
+  // Сначала проверяем cookie (для Web)
+  let sid = getCookie(event, SID);
+
+  // Если cookie нет, проверяем заголовок X-Session-Token
+  // Это fallback для случаев, когда cookies не передаются (например, cross-domain)
+  if (!sid) {
+    const tokenHeader = getHeader(event, 'x-session-token');
+    if (tokenHeader) {
+      sid = tokenHeader.trim();
+    }
+  }
+
   if (!sid) return null;
   const now = new Date();
   const rows = await db

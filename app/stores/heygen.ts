@@ -57,7 +57,7 @@ export const useHeygenStore = defineStore('heygen', {
         speech?.setAvatarSpeaking?.(true);
 
         if (this.sessionId && text) {
-          await useAPI('heygen/speak', {
+          await useAPI('/api/heygen/speak', {
             method: 'POST',
             body: {
               sessionId: this.sessionId,
@@ -77,7 +77,7 @@ export const useHeygenStore = defineStore('heygen', {
       if (this.status !== 'idle') return;
       this.status = 'starting';
       try {
-        const session = await useAPI<any>('/heygen/session', {
+        const session = await useAPI<any>('/api/heygen/session', {
           method: 'POST',
           body: {
             avatarId,
@@ -91,13 +91,28 @@ export const useHeygenStore = defineStore('heygen', {
         });
 
         const data = (session as any)?.data;
-        if (!data?.session_id || !data?.access_token || !data?.url) {
-          throw new Error('HeyGen session response is invalid');
+
+        if (!data) {
+          console.error('[HeyGen] No data in response');
+          throw new Error('HeyGen session response is invalid: no data');
         }
 
-        this.sessionId = String(data.session_id);
-        this.livekitUrl = String(data.url);
-        this.livekitToken = String(data.access_token);
+        if (!data.access_token) {
+          console.error('[HeyGen] Missing access_token');
+          throw new Error(
+            'HeyGen session response is invalid: missing access_token'
+          );
+        }
+
+        if (!data.url) {
+          console.error('[HeyGen] Missing url');
+          throw new Error('HeyGen session response is invalid: missing url');
+        }
+
+        // session_id опционален по API
+        this.sessionId = data.session_id || null;
+        this.livekitUrl = data.url;
+        this.livekitToken = data.access_token;
 
         const LK = await this.ensureLiveKitLoaded();
         if (!LK) throw new Error('LiveKit is unavailable on server');
@@ -121,6 +136,10 @@ export const useHeygenStore = defineStore('heygen', {
             this.videoEl.srcObject = null;
           }
         });
+        room.on('disconnected', () => {
+          console.log('[HeyGen] Room disconnected');
+          this.status = 'idle';
+        });
 
         await room.connect(
           this.livekitUrl as string,
@@ -129,7 +148,7 @@ export const useHeygenStore = defineStore('heygen', {
         this.status = 'connected';
 
         // Включаем стрим у HeyGen
-        await useAPI('/heygen/start', {
+        await useAPI('/api/heygen/start', {
           method: 'POST',
           body: { sessionId: this.sessionId },
         });
@@ -155,7 +174,7 @@ export const useHeygenStore = defineStore('heygen', {
     async stopSession() {
       try {
         if (this.sessionId) {
-          await useAPI('/heygen/stop', {
+          await useAPI('/api/heygen/stop', {
             method: 'POST',
             body: { sessionId: this.sessionId },
           });

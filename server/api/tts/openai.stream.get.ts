@@ -25,7 +25,7 @@ export default defineEventHandler(async (event) => {
   const text = (q?.text || '').toString();
   if (!text)
     throw createError({ statusCode: 400, message: 'Text is required' });
-  const model = (q?.model || 'gpt-4o-mini-tts') as string;
+  const model = (q?.model || 'tts-1-hd') as string;
   const voice = (q?.voice || 'sage') as string;
   const format = (q?.format || 'mp3') as 'mp3' | 'wav' | 'opus';
 

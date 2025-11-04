@@ -27,7 +27,12 @@
       </Tabs>
     </section>
 
-    <button @click="auth.logout()">Logout</button>
+    <div class="flex items-center gap-3">
+      <button @click="auth.logout()">Logout</button>
+      <button class="btn btn-outline" @click="goNotificationsTest">
+        Открыть тест уведомлений
+      </button>
+    </div>
   </div>
 </template>
 
@@ -54,5 +59,9 @@ function onTabChange(newTab: string | number) {
   const tabValue = String(newTab) as SettingsTab;
   tab.value = tabValue;
   router.replace({ query: { ...route.query, tab: tabValue } });
+}
+
+function goNotificationsTest() {
+  router.push('/notifications-test');
 }
 </script>

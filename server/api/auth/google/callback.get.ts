@@ -12,10 +12,7 @@ export default defineEventHandler(async (event) => {
   const clientSecret =
     cfg.OAUTH_GOOGLE_CLIENT_SECRET ||
     process.env.NUXT_OAUTH_GOOGLE_CLIENT_SECRET;
-  const appUrl =
-    cfg.public.appUrl ||
-    process.env.NUXT_PRIVATE_API_BASE ||
-    'http://localhost:3000';
+  const appUrl = cfg.public.appUrl || 'http://localhost:3000';
 
   const { code, state } = getQuery(event);
   const { state: saved, redirect, locale } = consumeOAuthCookies(event);

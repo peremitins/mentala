@@ -4,10 +4,7 @@ export default defineEventHandler(async (event) => {
   const cfg = useRuntimeConfig(event);
   const clientId =
     cfg.OAUTH_VK_CLIENT_ID || process.env.NUXT_OAUTH_VK_CLIENT_ID;
-  const appUrl =
-    cfg.public.appUrl ||
-    process.env.NUXT_PRIVATE_API_BASE ||
-    'http://localhost:3000';
+  const appUrl = cfg.public.appUrl || 'http://localhost:3000';
 
   const query = getQuery(event);
   const redirectUri = String(query.redirect_uri || `${appUrl}`);
