@@ -39,6 +39,9 @@ export default defineEventHandler(async (event) => {
       locale: body.locale ?? null,
     })
     .returning();
-  await createSession(event, u.id, body.locale);
-  return { user: { id: u.id, name: u.name, email: u.email, locale: u.locale } };
+  const sessionId = await createSession(event, u.id, body.locale);
+  return {
+    user: { id: u.id, name: u.name, email: u.email, locale: u.locale },
+    sessionToken: sessionId, // Для использования в заголовке X-Session-Token если cookie не передается
+  };
 });

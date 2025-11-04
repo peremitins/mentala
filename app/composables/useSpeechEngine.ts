@@ -108,8 +108,13 @@ export function useSpeechEngine() {
 
   async function stop() {
     if (!engine) return;
-    await engine.stop();
-    isActive.value = false;
+    try {
+      await engine.stop();
+      isActive.value = false;
+    } catch (error) {
+      console.error('[useSpeechEngine] Error stopping engine:', error);
+      isActive.value = false;
+    }
   }
 
   function onPartial(cb: (t: string) => void) {

@@ -8,7 +8,7 @@ export const useSpeechStore = defineStore('speech', {
       engine: (config.public.speechDefaultEngine as SpeechEngineId) || 'auto',
       autoSend: false,
       language: 'ru-RU',
-      silenceMs: 10000,
+      silenceMs: 7000,
       isListening: false,
       isAvatarSpeaking: false,
     };

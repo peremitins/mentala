@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { useSpeechStore } from '@/app/stores/speech';
 import { useChatSettingsStore } from '@/app/stores/chatSettings';
 import { usePromptsStore } from '@/app/stores/prompts';
+import { nanoid } from 'nanoid';
 
 export const useChatStore = defineStore('chat', {
   state: () => ({
@@ -12,7 +13,7 @@ export const useChatStore = defineStore('chat', {
   }),
   actions: {
     startSession(sessionId?: string) {
-      this.sessionId = sessionId || crypto.randomUUID();
+      this.sessionId = sessionId || nanoid();
     },
     finishSession() {
       this.sessionId = '';

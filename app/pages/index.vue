@@ -20,7 +20,6 @@
                 class="max-w-[170px]"
                 v-model="chatSettings.mode"
                 :options="AI_WORK_MODE_OPTIONS"
-                @update:model-value="onModeChange"
                 placeholder="Выберите режим"
               />
             </div>
@@ -207,6 +206,7 @@ const colorMode = useColorMode();
 
 // База для наращивания текста во время голосового ввода
 const speechBase = ref('');
+const lastPartial = ref(''); // Последний partial для сохранения в базу
 const chat = useChatStore();
 const { settings, start, stop, onPartial, onFinal } = useSpeechEngine();
 const speechStore = useSpeechStore();
@@ -219,19 +219,55 @@ const connected = computed(() => heygen.isConnected);
 const isStarting = computed(() => heygen.isStarting);
 const isStarted = computed(() => heygen.isStarted);
 
+// Отслеживаем ручные изменения текста для синхронизации speechBase
+// Очищаем speechBase если пользователь полностью удалил текст
+const isProcessingVoiceInput = ref(false);
+
 onPartial((t) => {
-  if (!speechStore.isListening) return;
+  isProcessingVoiceInput.value = true;
+  lastPartial.value = t; // Сохраняем последний partial
   const base = speechBase.value.trim();
+  console.log('[onPartial] base:', base, 'partial:', t);
+  // Показываем: база + текущий partial результат
   chat.userText = (base ? base + ' ' : '') + t;
+  nextTick(() => {
+    isProcessingVoiceInput.value = false;
+  });
 });
 
 onFinal((t) => {
+  // Для final результата используем speechBase как базу
+  isProcessingVoiceInput.value = true;
   const base = speechBase.value.trim();
+  console.log('[onFinal] base:', base, 'final:', t);
+  // Объединяем базу с финальным результатом
   const merged = ((base ? base + ' ' : '') + t).trim();
+  // Обновляем speechBase для следующей записи
   speechBase.value = merged;
   chat.userText = merged;
-  if (settings.value.autoSend && chat.userText.trim()) emitSend();
+
+  // stop() уже вызывается в engine.native.ts через событие 'end'
+  // Здесь просто обрабатываем текст и проверяем автоотправку
+
+  if (settings.value.autoSend && chat.userText?.trim()) emitSend();
+
+  nextTick(() => {
+    isProcessingVoiceInput.value = false;
+  });
 });
+
+watch(
+  () => chat.userText,
+  (newText) => {
+    // Пропускаем изменения из-за голосового ввода
+    if (isProcessingVoiceInput.value) return;
+
+    // Если текст стал пустым - очищаем speechBase
+    if (!newText?.trim()) {
+      speechBase.value = '';
+    }
+  }
+);
 
 async function onSwitchChangeVoice(v: boolean) {
   chatSettings.updateChatSettings({ voice: v });
@@ -259,24 +295,36 @@ function speak(text: string) {
 
 async function toggleMic() {
   if (speechStore.isListening) {
+    // Принудительное отключение микрофона
     await stop();
-    speechStore.isListening = false;
+    // Если после остановки текст пустой, очищаем speechBase
+    if (!chat.userText?.trim()) {
+      speechBase.value = '';
+    }
     return;
   }
-  await start();
-  speechStore.isListening = true;
-  // фиксируем текущий ввод пользователя, чтобы увеличивать текст, а не затирать
-  speechBase.value = chat.userText.trim();
+
+  // Запускаем запись - используем текущий текст как базу
+  speechBase.value = chat.userText?.trim() || '';
+
+  try {
+    await start();
+    // start() автоматически установит isListening = true
+  } catch (error) {
+    console.error('[toggleMic] Failed to start:', error);
+    speechStore.isListening = false;
+    speechBase.value = '';
+  }
 }
 
 function emitSend() {
-  if (!chat.userText.trim()) return;
-  const finalText = chat.userText.trim();
+  if (!chat.userText?.trim()) return;
+  const finalText = chat.userText?.trim();
   emit('send', finalText);
 }
 
 function handleKeydown(e: KeyboardEvent) {
-  if (!chat.userText.trim()) return;
+  if (!chat.userText?.trim()) return;
   if (e.ctrlKey || e.metaKey) {
     // Ctrl+Enter или Cmd+Enter → добавить перенос строки
     e.preventDefault();
@@ -322,7 +370,7 @@ async function speakLastMessage(content: string) {
 }
 
 const onSend = async () => {
-  if (!chat.userText.trim()) return;
+  if (!chat.userText?.trim()) return;
   speechStore.isListening = false;
   speechBase.value = '';
   const res = await chat.sendMessage(JSON.parse(JSON.stringify(chat.userText)));

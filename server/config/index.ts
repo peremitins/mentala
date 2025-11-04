@@ -12,8 +12,12 @@ export const config = {
       defaultMaxOutputTokens: 512,
     },
     limits: {
-      maxRequestUSD: Number(process.env.NUXT_BUDGET_REQ_USD || process.env.BUDGET_REQ_USD || 0.02),
-      dailyUSD: Number(process.env.NUXT_BUDGET_DAILY_USD || process.env.BUDGET_DAILY_USD || 0.5),
+      maxRequestUSD: Number(
+        process.env.NUXT_BUDGET_REQ_USD || process.env.BUDGET_REQ_USD || 0.02
+      ),
+      dailyUSD: Number(
+        process.env.NUXT_BUDGET_DAILY_USD || process.env.BUDGET_DAILY_USD || 0.5
+      ),
     },
   },
-}
+};
