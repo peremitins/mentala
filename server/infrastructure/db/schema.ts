@@ -126,7 +126,7 @@ export const sessions = pgTable('sessions', {
 export const userPrompts = pgTable('user_prompts', {
   id: serial('id').primaryKey(),
   userId: integer('user_id').notNull(),
-  type: varchar('type', { length: 16 }).notNull(), // habits | therapy | growth
+  type: varchar('type', { length: 16 }).notNull(), // habits | therapy
   title: text('title').notNull(),
   content: text('content').notNull(),
   lang: varchar('lang', { length: 8 }).default('ru').notNull(),

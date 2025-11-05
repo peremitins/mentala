@@ -4,7 +4,7 @@ export const useChatSettingsStore = defineStore('chatSettings', {
   state: () => ({
     theme: 'dark' as 'dark' | 'light' | 'gray',
     // Режим работы ассистента
-    mode: 'therapy' as 'therapy' | 'habits' | 'growth',
+    mode: 'therapy' as 'therapy' | 'habits',
     // Голос/озвучка ответа ассистента
     voice: true,
     // Визуальный аватар (видео)
@@ -14,8 +14,7 @@ export const useChatSettingsStore = defineStore('chatSettings', {
     activePromptsByType: {
       habits: null,
       therapy: null,
-      growth: null,
-    } as Record<'habits' | 'therapy' | 'growth', any>,
+    } as Record<'habits' | 'therapy', any>,
   }),
   actions: {
     async getChatSettings() {

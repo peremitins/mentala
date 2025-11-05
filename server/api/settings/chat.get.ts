@@ -23,7 +23,6 @@ export default defineEventHandler(async (event) => {
   const activePromptsByType = {
     habits: activePrompts.find((p) => p.type === 'habits') || null,
     therapy: activePrompts.find((p) => p.type === 'therapy') || null,
-    growth: activePrompts.find((p) => p.type === 'growth') || null,
   };
 
   return {
