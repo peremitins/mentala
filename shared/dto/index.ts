@@ -44,7 +44,7 @@ export type ChatRequestDto = z.infer<typeof ChatRequestDto>;
 export type ChatResponseDto = z.infer<typeof ChatResponseDto>;
 
 // === Prompts DTO ===
-export const PromptTypeEnum = z.enum(['habits', 'therapy', 'growth']);
+export const PromptTypeEnum = z.enum(['habits', 'therapy']);
 export const PromptLangEnum = z.enum(['ru', 'en']);
 
 export const PromptCreateDto = z.object({

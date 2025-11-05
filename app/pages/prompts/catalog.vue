@@ -12,9 +12,8 @@
         >
           <TabsList class="w-full justify-start overflow-x-auto">
             <TabsTrigger value="all">Все</TabsTrigger>
-            <TabsTrigger value="therapy">Психотерапия</TabsTrigger>
+            <TabsTrigger value="therapy">Поддержка</TabsTrigger>
             <TabsTrigger value="habits">Привычки</TabsTrigger>
-            <TabsTrigger value="growth">Личный рост</TabsTrigger>
           </TabsList>
         </div>
 
@@ -60,7 +59,7 @@ import type { CatalogItem } from '@/app/lib/promptsCatalog';
 import type { UserPrompt } from '@/app/types';
 
 const prompts = usePromptsStore();
-const flt = ref<'all' | 'habits' | 'therapy' | 'growth'>('all');
+const flt = ref<'all' | 'habits' | 'therapy'>('all');
 
 onMounted(async () => {
   await prompts.fetch();

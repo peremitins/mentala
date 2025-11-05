@@ -4,7 +4,7 @@ import { writeChatSettings } from '@/server/utils/storage';
 
 type Payload = Partial<{
   theme: 'dark' | 'light';
-  mode: 'therapy' | 'habits' | 'growth';
+  mode: 'therapy' | 'habits';
   voice: boolean;
   avatar: boolean;
 }>;

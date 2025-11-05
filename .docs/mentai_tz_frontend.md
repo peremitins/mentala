@@ -36,8 +36,8 @@ mentai/frontend/
 │  │  ├─ index.vue           # главный экран (аватар + чат)
 │  │  ├─ onboarding.vue
 │  │  ├─ chat.vue
-│  │  ├─ tracker.vue
-│  │  ├─ tasks.vue
+│  │  ├─ therapy.vue
+│  │  ├─ habits.vue
 │  │  ├─ sos.vue
 │  │  ├─ profile/
 │  │  │  ├─ index.vue

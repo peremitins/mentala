@@ -26,9 +26,7 @@ export const useChatStore = defineStore('chat', {
         const nuxt = useNuxtApp();
         const settings = useChatSettingsStore();
         const type =
-          settings.mode === 'habits' ||
-          settings.mode === 'therapy' ||
-          settings.mode === 'growth'
+          settings.mode === 'habits' || settings.mode === 'therapy'
             ? settings.mode
             : 'therapy';
         const userPrompt = settings.activePromptsByType[type]?.content || '';

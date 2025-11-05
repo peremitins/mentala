@@ -16,7 +16,7 @@
 • blank (fullscreen),
 • auth (центрирование форм).
 • Страницы:
-index, onboarding, chat (layout blank), tracker, tasks, profile/\*, billing.
+index, onboarding, chat (layout blank), therapy, habits, profile/\*, billing.
 • Состояния: компонент StateBlock отображает idle/loading/empty/error.
 • Сторы Pinia:
 • ui

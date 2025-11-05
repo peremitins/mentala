@@ -129,7 +129,7 @@ const originalData = ref<Partial<UserPrompt>>({});
 const form = reactive({
   id: props.initial?.id as number | undefined,
   title: props.initial?.title || '',
-  type: (props.initial?.type || 'therapy') as 'therapy' | 'habits' | 'growth',
+  type: (props.initial?.type || 'therapy') as 'therapy' | 'habits',
   lang: (props.initial?.lang || 'ru') as 'ru' | 'en',
   content: props.initial?.content || '',
   isActive: Boolean(props.initial?.isActive),

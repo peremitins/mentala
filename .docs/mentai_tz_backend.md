@@ -60,11 +60,10 @@ mentai/frontend/server/
 - `GET /api/user/export` → создание job экспорта
 - `POST /api/user/delete` → удаление аккаунта (запрос)
 
-**Habits / Tracker / Tasks**
+**Habits / Therapy**
 
 - `POST /api/habits/create`, `GET /api/habits/list`, `PATCH/DELETE /api/habits/:id`
-- `POST /api/tracker/log`, `GET /api/tracker/stats`
-- `GET /api/tasks/today`, `POST /api/tasks/complete`
+- `POST /api/therapy/log`, `GET /api/therapy/stats`
 
 **AI / Voice / SOS**
 

@@ -4,10 +4,10 @@
     class="flex-[0_0_auto] inset-x-0 pb-2 mt-2 sticky bottom-0"
   >
     <section
-      class="glass-deep px-4 py-3"
+      class="glass-deep px-0 py-3"
       :style="{ borderRadius: `calc(var(--radius-sm))` }"
     >
-      <ul class="grid grid-cols-4 gap-2 text-xs">
+      <ul class="grid grid-cols-4 gap-1 text-xs">
         <li class="flex flex-col items-center gap-1 w-full">
           <NuxtLink
             to="/"
@@ -28,38 +28,38 @@
         </li>
         <li class="flex flex-col items-center gap-1 w-full">
           <NuxtLink
-            to="/tracker"
+            to="/therapy"
             class="flex flex-col items-center justify-center icon-disc-wrapper"
-            :class="{ 'text-white': isActive('/tracker') }"
+            :class="{ 'text-white': isActive('/therapy') }"
           >
             <span
               :class="[
                 'icon-disc w-12 h-12 flex items-center justify-center',
-                { 'icon-disc-active': isActive('/tracker') },
+                { 'icon-disc-active': isActive('/therapy') },
               ]"
               :style="{ borderRadius: 'var(--radius-icon)' }"
             >
               <IconGauge class="w-5 h-5" />
             </span>
-            <span class="w-full text-center">Прогресс</span>
+            <span class="w-full text-center">Поддержка</span>
           </NuxtLink>
         </li>
         <li class="flex flex-col items-center gap-1 w-full">
           <NuxtLink
-            to="/tasks"
+            to="/habits"
             class="flex flex-col items-center justify-center icon-disc-wrapper"
-            :class="{ 'text-white': isActive('/tasks') }"
+            :class="{ 'text-white': isActive('/habits') }"
           >
             <span
               :class="[
                 'icon-disc w-12 h-12 flex items-center justify-center',
-                { 'icon-disc-active': isActive('/tasks') },
+                { 'icon-disc-active': isActive('/habits') },
               ]"
               :style="{ borderRadius: 'var(--radius-icon)' }"
             >
               <IconCheck class="w-5 h-5" />
             </span>
-            <span class="w-full text-center">Практики</span>
+            <span class="w-full text-center">Привычки</span>
           </NuxtLink>
         </li>
         <li class="flex flex-col items-center gap-1 w-full">
