@@ -1,7 +1,7 @@
 <template>
   <div class="">
-    <h1 class="text-xl font-semibold mb-4">Tracker</h1>
-    <StateBlock state="empty" />
+    <h1 class="text-xl font-semibold mb-4">Habits</h1>
+    <StateBlock state="loading" />
   </div>
 </template>
 
