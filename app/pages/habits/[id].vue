@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useToast } from '@/app/composables/useToast';
 import NotificationPreview from '@/app/components/notifications/NotificationPreview.vue';
 import OverloadBanner from '@/app/components/notifications/OverloadBanner.vue';
@@ -8,6 +8,7 @@ import WeekdaySelector from '@/app/components/WeekdaySelector.vue';
 import TimeRangeSelector from '@/app/components/TimeRangeSelector.vue';
 import TimePicker from '@/app/components/TimePicker.vue';
 import { useTimeSlotControls } from '@/app/composables/useTimeSlotControls';
+import { SliderRange, SliderRoot, SliderThumb, SliderTrack } from 'radix-vue';
 import {
   SUBTYPE_OPTIONS_BUILD,
   SUBTYPE_OPTIONS_QUIT,
@@ -48,6 +49,13 @@ const notificationsStore = useNotificationsStore();
 // Локальные настройки (для habits)
 const enabled = ref(false);
 const timesPerDay = ref(3);
+const timesPerDaySlider = computed({
+  get: () => [timesPerDay.value],
+  set: (value) => {
+    if (!value?.length) return;
+    timesPerDay.value = Math.round(value[0]);
+  },
+});
 const directness = ref<Directness>('moderate');
 const subtype = ref<HabitSubtype>('mixed');
 const timezone = ref('Europe/Moscow');
@@ -334,18 +342,31 @@ function goBack() {
             Частота: {{ timesPerDay }}
             {{ timesPerDay === 1 ? 'раз' : 'раза' }} в день
           </label>
-          <input
-            v-model.number="timesPerDay"
-            type="range"
-            min="1"
-            max="5"
-            step="1"
-            class="w-full"
-          />
+          <div class="px-[8px]">
+            <SliderRoot
+              v-model="timesPerDaySlider"
+              :min="1"
+              :max="5"
+              :step="1"
+              class="relative flex w-full touch-none select-none items-center py-3"
+              aria-label="Частота уведомлений"
+            >
+              <SliderTrack
+                class="relative h-2 w-full grow rounded-full bg-gray-200 dark:bg-gray-700"
+              >
+                <SliderRange
+                  class="absolute h-full rounded-full bg-gradient-to-r from-blue-500 to-purple-500"
+                />
+              </SliderTrack>
+              <SliderThumb
+                class="block h-5 w-5 rounded-full border-2 border-white bg-blue-600 shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-gray-900 dark:focus-visible:ring-offset-gray-900"
+              />
+            </SliderRoot>
+          </div>
           <div class="space-y-1.5">
-            <div class="flex gap-2">
+            <div class="flex justify-between gap-2">
               <template v-for="slot in slotControls" :key="slot.index">
-                <div v-if="slot.isActive" class="flex-1">
+                <div v-if="slot.isActive" class="w-[32px]">
                   <TimePicker
                     :model-value="slot.minutes ?? timeRange.start"
                     label=""
@@ -384,15 +405,17 @@ function goBack() {
                 </div>
                 <div
                   v-else
-                  class="flex flex-1 flex-col items-center gap-1 text-[11px] font-medium text-gray-500 opacity-50"
+                  class="flex w-[32px] flex-col items-center gap-1 text-[11px] font-medium text-gray-500 opacity-50"
                 >
                   <span
                     class="flex h-8 w-8 items-center justify-center rounded-full border border-dashed border-gray-400 text-sm"
                   >
                     {{ slot.number }}
                   </span>
-                  <span class="min-w-[62px] text-center leading-tight">
-                    Не активно
+                  <span
+                    class="min-w-[62px] text-center leading-tight whitespace-nowrap"
+                  >
+                    Пусто
                   </span>
                 </div>
               </template>
