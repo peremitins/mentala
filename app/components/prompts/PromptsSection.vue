@@ -1,17 +1,11 @@
 <template>
   <div class="space-y-4">
     <div class="flex items-center justify-between w-full gap-2">
-      <Combobox
-        class="!max-w-[200px] w-full"
-        :model-value="chatSettings.mode"
-        :options="AI_WORK_MODE_OPTIONS"
-        @update:model-value="handleModeChange"
-      />
       <NuxtLink
         class="underline text-xs opacity-80 whitespace-nowrap"
-        to="/prompts/catalog"
+        :to="`/prompts/catalog?type=${type}`"
       >
-        Каталог
+        Каталог промптов
       </NuxtLink>
     </div>
 
@@ -85,7 +79,7 @@
       class="fixed right-3 bottom-3 grid place-items-center z-10"
       :style="{ borderRadius: 'var(--radius-icon)' }"
       @click="handleAdd"
-      aria-label="Добавить пользователя"
+      aria-label="Добавить промпт"
     >
       <IconCirclePlus class="w-5 h-5" />
     </button>
@@ -103,15 +97,11 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { usePromptsStore } from '@/app/stores/prompts';
-import { useChatSettingsStore } from '@/app/stores/chatSettings';
 import { useToast } from '@/app/composables/useToast';
-import { AI_WORK_MODE_OPTIONS } from '@/app/constants/select-options';
 import { ExpandableText } from '@/app/components/ui/expandable-text';
 import { Label } from 'radix-vue';
-import Combobox from '@/app/components/Combobox.vue';
 import type { UserPrompt } from '@/app/types';
 import IconEdit from '~icons/lucide/edit';
-import IconCopy from '~icons/lucide/copy';
 import IconTrash2 from '~icons/lucide/trash-2';
 import {
   RadioGroup,
@@ -122,17 +112,21 @@ import { Button } from '@/app/components/ui/shadcn/button';
 import PromptEditorModal from '@/app/components/PromptEditorModal.vue';
 import IconCirclePlus from '~icons/lucide/circle-plus';
 
+// Props
+const props = defineProps<{
+  type: 'habits' | 'therapy';
+}>();
+
 const promptsStore = usePromptsStore();
-const chatSettings = useChatSettingsStore();
 const uid = useId();
 
 // Внутреннее состояние для модального окна
 const editorOpen = ref(false);
 const editorItem = ref<Partial<UserPrompt> | null>(null);
 
-// Вычисляемые свойства
+// Фильтруем промпты по типу
 const prompts = computed(() =>
-  promptsStore.items.filter((x) => x.type === chatSettings.mode)
+  promptsStore.items.filter((x) => x.type === props.type)
 );
 
 const activeId = computed(() => {
@@ -144,9 +138,9 @@ const activeId = computed(() => {
       : '';
 });
 
-// Загружаем промпты при монтировании компонента
+// Загружаем промпты при монтировании компонента с фильтром по типу
 onMounted(async () => {
-  await promptsStore.fetch();
+  await promptsStore.fetch(props.type);
 });
 
 // Методы
@@ -169,26 +163,14 @@ async function handleRemove(id: number) {
   }
 }
 
-function handleDuplicate(prompt: UserPrompt) {
-  editorItem.value = {
-    ...prompt,
-    id: undefined,
-    title: `${prompt.title} (копия)`,
-    isActive: false,
-  };
-  editorOpen.value = true;
-}
-
 function handleAdd() {
-  editorItem.value = { type: chatSettings.mode, lang: 'ru' } as any;
+  editorItem.value = { type: props.type, lang: 'ru' } as any;
   editorOpen.value = true;
 }
 
-async function handleModeChange(newMode: string) {
-  await chatSettings.updateChatSettings({ mode: newMode });
-}
-
-function onSaved(item: UserPrompt) {
-  if (item.type !== chatSettings.mode) chatSettings.mode = item.type;
+async function onSaved(item: UserPrompt) {
+  // Промпт сохранён, обновляем список с фильтром по типу
+  // Это важно для мобильных устройств, чтобы синхронизация работала корректно
+  await promptsStore.fetch(props.type);
 }
 </script>

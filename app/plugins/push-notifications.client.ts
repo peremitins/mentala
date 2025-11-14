@@ -4,15 +4,13 @@ import { LocalNotifications } from '@capacitor/local-notifications';
 
 export default defineNuxtPlugin((nuxtApp) => {
   // Работаем только на мобильных платформах
-  if (Capacitor.getPlatform() === 'web') return;
+  const platform = Capacitor.getPlatform();
+  if (platform === 'web') return;
 
+  // TODO: Раскомментировать когда Firebase будет настроен
   // TEMPORARY: Полностью отключаем push уведомления до настройки Firebase
-  // Это предотвратит крэш на устройствах где google-services.json отсутствует
-  // TODO: Включить после добавления google-services.json
-  console.warn(
-    '[PushPlugin] Push notifications temporarily disabled - Firebase not configured'
-  );
-  return;
+  // console.warn('[PushPlugin] Push notifications temporarily disabled - Firebase not configured');
+  // return;
 
   // Создаём канал уведомлений с высоким приоритетом для Android (O+)
   const ensureHighPriorityChannel = async () => {
@@ -30,38 +28,133 @@ export default defineNuxtPlugin((nuxtApp) => {
     } catch {}
   };
 
+  // ==========================================
   // Обработчики Push уведомлений
+  // ==========================================
+
   try {
-    PushNotifications.addListener('registration', (token) => {
-      console.log('Push registration success, token: ' + token.value);
+    // Успешная регистрация токена
+    PushNotifications.addListener('registration', async (token) => {
+      console.log('[PushPlugin] Registration success, token:', token.value);
+
+      // Сохраняем локально
       if (typeof window !== 'undefined') {
         window.localStorage.setItem('pushToken', token.value);
       }
+
+      // Регистрируем на сервере
+      try {
+        await $fetch('/api/notifications/register-token', {
+          method: 'POST',
+          body: {
+            token: token.value,
+            platform: platform === 'ios' ? 'ios' : 'android',
+          },
+        });
+        console.log('[PushPlugin] Token registered on server');
+      } catch (error) {
+        console.error(
+          '[PushPlugin] Failed to register token on server:',
+          error
+        );
+      }
     });
 
+    // Ошибка регистрации
     PushNotifications.addListener('registrationError', (err) => {
-      console.error('Registration error: ', err.error);
+      console.error('[PushPlugin] Registration error:', err.error);
     });
 
+    // Push получен (приложение на переднем плане)
     PushNotifications.addListener(
       'pushNotificationReceived',
       (notification) => {
-        console.log('Push notification received: ', notification);
+        console.log('[PushPlugin] Notification received:', notification);
+        // Здесь можно показать локальное уведомление или обновить UI
       }
     );
 
+    // Клик по уведомлению или нажатие на action
     PushNotifications.addListener(
       'pushNotificationActionPerformed',
-      (action) => {
+      async (action) => {
         console.log(
-          'Push notification action performed',
+          '[PushPlugin] Action performed:',
           action.actionId,
-          action.inputValue
+          action.notification
         );
+
+        const { notification } = action;
+        const data = notification.data;
+
+        // Трекинг взаимодействия
+        if (data?.slotId) {
+          let actionType: 'yes' | 'no' | 'later' | 'dismissed' = 'dismissed';
+
+          // Определяем тип действия
+          if (action.actionId === 'yes') {
+            actionType = 'yes';
+          } else if (action.actionId === 'no') {
+            actionType = 'no';
+          } else if (
+            action.actionId === 'later' ||
+            action.actionId.startsWith('snooze:')
+          ) {
+            actionType = 'later';
+
+            // Если это snooze — отправляем запрос на отложение
+            const duration = action.actionId.replace('snooze:', '') as
+              | '15m'
+              | '1h'
+              | '4h'
+              | 'tomorrow';
+            try {
+              await $fetch('/api/notifications/snooze', {
+                method: 'POST',
+                body: {
+                  kind: data.kind || 'therapy',
+                  duration,
+                  habitId: data.habitId || null,
+                },
+              });
+              console.log('[PushPlugin] Notification snoozed:', duration);
+            } catch (error) {
+              console.error('[PushPlugin] Failed to snooze:', error);
+            }
+          }
+
+          // Отправляем трекинг взаимодействия
+          try {
+            await $fetch('/api/notifications/interaction', {
+              method: 'POST',
+              body: {
+                slotId: data.slotId,
+                action: actionType,
+                at: new Date().toISOString(),
+                meta: {
+                  platform,
+                  actionId: action.actionId,
+                },
+              },
+            });
+            console.log('[PushPlugin] Interaction tracked:', actionType);
+          } catch (error) {
+            console.error('[PushPlugin] Failed to track interaction:', error);
+          }
+        }
+
+        // Deep link навигация
+        if (data?.deepLink) {
+          try {
+            await navigateTo(data.deepLink);
+          } catch (error) {
+            console.error('[PushPlugin] Failed to navigate:', error);
+          }
+        }
       }
     );
   } catch (error) {
-    console.error('Failed to add push listeners:', error);
+    console.error('[PushPlugin] Failed to add push listeners:', error);
   }
 
   // Отложенная инициализация уведомлений после полной загрузки приложения
@@ -101,9 +194,80 @@ export default defineNuxtPlugin((nuxtApp) => {
     }
   };
 
+  // ==========================================
+  // Fallback режим: polling для тестирования без Firebase
+  // Используется только в development, когда Firebase не настроен
+  // ==========================================
+
+  const startDevPolling = () => {
+    console.log('[PushPlugin] Starting fallback polling for notifications');
+    console.log(
+      '[PushPlugin] (Firebase не настроен - используется LocalNotifications)'
+    );
+
+    const checkPending = async () => {
+      try {
+        const pending = await $fetch<any[]>('/api/notifications/pending');
+
+        if (pending && pending.length > 0) {
+          console.log(
+            `[PushPlugin] Found ${pending.length} pending notifications`
+          );
+
+          for (const slot of pending) {
+            const payload = slot.payload;
+
+            // Показываем через LocalNotifications
+            try {
+              await LocalNotifications.schedule({
+                notifications: [
+                  {
+                    id: Math.floor(Math.random() * 2147483647),
+                    title: payload.title || 'MentAI',
+                    body: payload.body || 'Новое уведомление',
+                    sound: 'default',
+                    channelId: 'mentai_high',
+                  },
+                ],
+              });
+
+              console.log(
+                `[PushPlugin] Notification shown: ${payload.body?.substring(0, 50)}...`
+              );
+
+              // Помечаем как доставленное
+              await $fetch('/api/notifications/mark-delivered', {
+                method: 'POST',
+                body: { slotId: slot.id },
+              });
+            } catch (error) {
+              console.error('[PushPlugin] Failed to show notification:', error);
+            }
+          }
+        }
+      } catch (error) {
+        // Игнорируем ошибки (например, если не авторизован)
+      }
+    };
+
+    // Проверяем каждые 15 секунд
+    setInterval(checkPending, 15000);
+
+    // Первая проверка через 5 секунд
+    setTimeout(checkPending, 5000);
+  };
+
   // Используем Nuxt хук для отложенной инициализации после полной загрузки
   nuxtApp.hook('app:mounted', () => {
     console.log('[PushPlugin] App mounted, scheduling notification init in 3s');
     setTimeout(initNotifications, 3000);
+
+    // Fallback polling отключен - используем только реальные FCM push-уведомления
+    // Раскомментируй строку ниже если Firebase не работает и нужен fallback:
+    // startDevPolling();
+
+    console.log(
+      '[PushPlugin] Using FCM push notifications (fallback polling disabled)'
+    );
   });
 });

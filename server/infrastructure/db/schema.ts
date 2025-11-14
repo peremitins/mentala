@@ -139,4 +139,138 @@ export const userPrompts = pgTable('user_prompts', {
     .notNull(),
 });
 
+// === Notifications System ===
+
+// Таблица привычек
+export const habits = pgTable('habits', {
+  id: text('id').primaryKey(),
+  userId: integer('user_id').notNull(),
+  name: varchar('name', { length: 120 }).notNull(),
+  intent: varchar('intent', { length: 10 }).notNull(), // 'build' | 'quit' | 'custom'
+  habitKey: varchar('habit_key', { length: 50 }), // Нормализованный ключ для маппинга на шаблоны (water, smoking, etc.)
+  emoji: varchar('emoji', { length: 8 }),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+// Глобальные настройки пользователя (addressing, tone)
+export const userPreferences = pgTable('user_preferences', {
+  id: text('id').primaryKey(),
+  userId: integer('user_id').notNull().unique(),
+  addressing: varchar('addressing', { length: 20 })
+    .notNull()
+    .default('informal'), // 'informal' | 'formal'
+  tone: varchar('tone', { length: 20 }).notNull().default('neutral'), // 'delicate' | 'neutral' | 'uplifting' | 'resolute' | 'demanding'
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+// Локальные настройки уведомлений (по типу: therapy / habits)
+export const notificationPreferences = pgTable('notification_preferences', {
+  id: text('id').primaryKey(),
+  userId: integer('user_id').notNull(),
+  kind: varchar('kind', { length: 20 }).notNull(), // 'therapy' | 'habits'
+  habitId: varchar('habit_id', { length: 255 }), // Для habits: habitKey (water, smoking, etc.) - НЕ ID привычки!
+  topicKey: varchar('topic_key', { length: 50 }), // Для therapy: topicKey (anxiety, stress, mood, etc.)
+  enabled: boolean('enabled').default(true).notNull(),
+  timesPerDay: integer('times_per_day').notNull(),
+  directness: varchar('directness', { length: 20 }).notNull(), // 'soft' | 'moderate' | 'hard'
+  timezone: varchar('timezone', { length: 100 }).notNull(), // IANA timezone
+  subtype: varchar('subtype', { length: 20 }).default('mixed'), // 'reminder' | 'informational' | 'motivational' | 'mixed' (для habits, по умолчанию 'mixed')
+  activeDays: jsonb('active_days')
+    .$type<number[]>()
+    .notNull()
+    .default([0, 1, 2, 3, 4, 5, 6]), // Дни недели (0 = Воскресенье, 1 = Понедельник, ..., 6 = Суббота)
+  customSlotTimes: jsonb('custom_slot_times').$type<(number | null)[] | null>(),
+  timeRangeStart: integer('time_range_start').notNull().default(540), // Начало временного окна в минутах от начала дня (09:00)
+  timeRangeEnd: integer('time_range_end').notNull().default(1350), // Конец временного окна в минутах от начала дня (22:30)
+  meta: jsonb('meta'), // Дополнительные параметры (techniques, goalType и т.д.)
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+// Запланированные слоты уведомлений
+export const notificationSlots = pgTable('notification_slots', {
+  id: text('id').primaryKey(),
+  userId: integer('user_id').notNull(),
+  kind: varchar('kind', { length: 20 }).notNull(), // 'therapy' | 'habits'
+  habitId: varchar('habit_id', { length: 255 }), // Для habits: habitKey (water, smoking, etc.) для фильтрации шаблонов
+  topicKey: varchar('topic_key', { length: 50 }), // Для therapy: topicKey (anxiety, stress, mood, etc.)
+  scheduledAt: timestamp('scheduled_at', { withTimezone: true }).notNull(), // UTC с джиттером
+  payload: jsonb('payload').notNull(), // { title, body, templateId, action, deepLink, ... }
+  templateId: varchar('template_id', { length: 255 }),
+  status: varchar('status', { length: 20 }).notNull().default('planned'), // planned | sent | skipped | failed
+  snoozedUntil: timestamp('snoozed_until', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+// Регистрация FCM токенов устройств
+export const userDevices = pgTable('user_devices', {
+  id: text('id').primaryKey(),
+  userId: integer('user_id').notNull(),
+  token: text('token').notNull().unique(), // FCM token
+  platform: varchar('platform', { length: 20 }).notNull(), // 'ios' | 'android' | 'web'
+  lastSeen: timestamp('last_seen', { withTimezone: true }).defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+// Факты взаимодействия с уведомлениями
+export const notificationInteractions = pgTable('notification_interactions', {
+  id: text('id').primaryKey(),
+  slotId: text('slot_id').notNull(),
+  userId: integer('user_id').notNull(),
+  action: varchar('action', { length: 20 }).notNull(), // 'yes' | 'no' | 'later' | 'dismissed' | 'unanswered'
+  actionAt: timestamp('action_at', { withTimezone: true }).defaultNow(),
+  meta: jsonb('meta'),
+  kind: varchar('kind', { length: 20 }).notNull(), // 'therapy' | 'habits'
+  type: varchar('type', { length: 50 }), // breath_cue | grounding | body_scan | ...
+  metric: varchar('metric', { length: 50 }), // steps | training | breath | ...
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+// Дневная агрегация метрик
+export const dailyAdherence = pgTable('daily_adherence', {
+  id: text('id').primaryKey(),
+  userId: integer('user_id').notNull(),
+  date: varchar('date', { length: 10 }).notNull(), // 'YYYY-MM-DD'
+  kind: varchar('kind', { length: 20 }).notNull(), // 'therapy' | 'habits'
+  asked: integer('asked').notNull().default(0),
+  yes: integer('yes').notNull().default(0),
+  no: integer('no').notNull().default(0),
+  later: integer('later').notNull().default(0),
+  dismissed: integer('dismissed').notNull().default(0),
+  unanswered: integer('unanswered').notNull().default(0),
+  completionRate: varchar('completion_rate', { length: 10 })
+    .notNull()
+    .default('0.0'), // Храним как строку для точности
+  streak: integer('streak').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
 // Partial unique index will be added via SQL migration (drizzle-kit)

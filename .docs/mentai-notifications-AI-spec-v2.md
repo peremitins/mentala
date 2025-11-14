@@ -6,7 +6,7 @@ _Версия_: 2.2 • _Дата_: 2025-11-05
 
 Создать персональные push-уведомления в двух разделах приложения:
 
-- **Поддержка** (therapy) — эмоциональные и дыхательные напоминания.
+- **Терапия** (therapy) — эмоциональные и дыхательные напоминания.
 - **Привычки** (habits) — формирование и отслеживание пользовательских привычек.
 
 Каждое уведомление настраивается по частоте, тону и стилю подачи. Система автоматически распределяет время уведомлений с джиттером. Предусмотрен Snooze и dev-превью.
@@ -38,7 +38,7 @@ _Версия_: 2.2 • _Дата_: 2025-11-05
 
 ### Локальные настройки (по типу уведомлений)
 
-Каждый раздел (Поддержка и Привычки) имеет свои настройки:
+Каждый раздел (Терапия и Привычки) имеет свои настройки:
 
 - `enabled: boolean` — вкл/выкл уведомлений для типа.
 - `frequency: { mode: 'per_day', timesPerDay: number }` — количество уведомлений в день (1–5, конфигурируемо до 8).
@@ -48,7 +48,7 @@ _Версия_: 2.2 • _Дата_: 2025-11-05
 
 **Где настраиваются:**
 
-- Поддержка: на странице раздела "Поддержка" (`/therapy` или `/support/notifications`).
+- Терапия: на странице раздела "Терапия" (`/therapy` или `/support/notifications`).
 - Привычки: на странице раздела "Привычки" (`/habits/notifications`), возможно индивидуально для каждой привычки.
 
 **Валидация:**
@@ -111,9 +111,11 @@ _Версия_: 2.2 • _Дата_: 2025-11-05
 
 ---
 
-## 4) Типы шаблонов
+## 4) Типы шаблонов и Therapy Topics
 
 ### Для Поддержки (therapy)
+
+**Техники (типы шаблонов):**
 
 - **breath_cue** — дыхание 4‑7‑8 или box‑breathing (30–60 сек).
 - **grounding** — 5‑4‑3‑2‑1, «3 вещи вокруг», тактильный якорь.
@@ -121,6 +123,25 @@ _Версия_: 2.2 • _Дата_: 2025-11-05
 - **reframe** — автоматическая мысль → альтернативная интерпретация.
 - **mi_prompt** — открытый вопрос (мотивационное интервьюирование).
 - **sos** — быстрый вызов SOS‑карты при высокой тревоге.
+
+**Therapy Topics (темы терапии):**
+
+Пользователь может выбрать одну или несколько тем, актуальных для его текущего состояния. Каждая тема имеет свой набор уведомлений:
+
+| №   | Key          | Название             | Описание                                          |
+| --- | ------------ | -------------------- | ------------------------------------------------- |
+| 1   | `anxiety`    | Тревога и паника     | Снижение тревожности, восстановление безопасности |
+| 2   | `stress`     | Стресс и выгорание   | Снятие перенапряжения, отдых                      |
+| 3   | `mood`       | Низкое настроение    | Повышение энергии, активация                      |
+| 4   | `sleep`      | Сон и восстановление | Помощь при засыпании, режим                       |
+| 5   | `anger`      | Раздражительность    | Управление импульсами                             |
+| 6   | `selfesteem` | Самооценка           | Снижение самокритики                              |
+| 7   | `focus`      | Прокрастинация       | Повышение концентрации                            |
+| 8   | `relations`  | Отношения и границы  | Поддержка в конфликтах                            |
+| 9   | `grief`      | Потери и горе        | Помощь при утрате                                 |
+| 10  | `sos`        | Экстренная поддержка | Быстрая стабилизация                              |
+
+**Примечание:** Темы хранятся как статичный справочник в коде (`app/lib/therapyCatalog.ts`), а настройки уведомлений для каждой темы — в `notification_preferences` через поле `topicKey`.
 
 ### Для Привычек (habits)
 
@@ -365,10 +386,12 @@ export const notificationPreferences = pgTable('notification_preferences', {
   userId: integer('user_id').notNull(),
   kind: varchar('kind', { length: 20 }).notNull(), // 'therapy' | 'habits'
   habitId: varchar('habit_id', { length: 255 }), // опционально, для habits: идентификатор конкретной привычки (FK → habits.id)
+  topicKey: varchar('topic_key', { length: 50 }), // опционально, для therapy: ключ темы поддержки ('anxiety' | 'stress' | 'mood' | ...)
   enabled: boolean('enabled').default(true).notNull(),
   timesPerDay: integer('times_per_day').notNull(),
   directness: varchar('directness', { length: 20 }).notNull(), // 'soft' | 'moderate' | 'hard'
   timezone: varchar('timezone', { length: 100 }).notNull(), // IANA timezone, например "Europe/Moscow"
+  meta: jsonb('meta'), // опционально: дополнительные параметры (techniques и др.)
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull(),
@@ -383,6 +406,7 @@ export const notificationSlots = pgTable('notification_slots', {
   userId: integer('user_id').notNull(),
   kind: varchar('kind', { length: 20 }).notNull(), // 'therapy' | 'habits'
   habitId: varchar('habit_id', { length: 255 }), // опционально, для habits: идентификатор конкретной привычки (FK → habits.id)
+  topicKey: varchar('topic_key', { length: 50 }), // опционально, для therapy: ключ темы поддержки ('anxiety' | 'stress' | 'mood' | ...)
   scheduledAt: timestamp('scheduled_at', { withTimezone: true }).notNull(), // UTC с применённым джиттером
   payload: jsonb('payload').notNull(), // { title, body, templateId, action, deepLink, ... }
   templateId: varchar('template_id', { length: 255 }),
@@ -463,16 +487,25 @@ CREATE UNIQUE INDEX "user_preferences_user_id_idx"
   ON "user_preferences" ("user_id");
 
 -- NotificationPreferences: уникальность зависит от kind
--- Для therapy: один набор настроек на пользователя (userId + kind, без habitId)
-CREATE UNIQUE INDEX "notification_preferences_user_id_kind_no_habit_idx"
+-- Для therapy без topicKey: общие настройки (userId + kind, без habitId и topicKey)
+CREATE UNIQUE INDEX "notification_preferences_user_therapy_general"
   ON "notification_preferences" ("user_id", "kind")
-  WHERE habit_id IS NULL;
--- Для habits: одна запись на привычку (userId + kind + habitId)
-CREATE UNIQUE INDEX "notification_preferences_user_id_kind_habit_idx"
+  WHERE kind = 'therapy' AND topic_key IS NULL AND habit_id IS NULL;
+-- Для therapy с topicKey: per-topic настройки (userId + kind + topicKey)
+CREATE UNIQUE INDEX "notification_preferences_user_therapy_topic"
+  ON "notification_preferences" ("user_id", "kind", "topic_key")
+  WHERE kind = 'therapy' AND topic_key IS NOT NULL;
+-- Для habits: per-habit настройки (userId + kind + habitId)
+CREATE UNIQUE INDEX "notification_preferences_user_habits"
   ON "notification_preferences" ("user_id", "kind", "habit_id")
-  WHERE habit_id IS NOT NULL;
+  WHERE kind = 'habits' AND habit_id IS NOT NULL;
+-- Общий индекс по userId
 CREATE INDEX "notification_preferences_user_id_idx"
   ON "notification_preferences" ("user_id");
+-- Индекс по topicKey для быстрой выборки
+CREATE INDEX "notification_preferences_topic_key_idx"
+  ON "notification_preferences" ("topic_key")
+  WHERE topic_key IS NOT NULL;
 
 -- NotificationSlots: индексы для выборки по пользователю и времени
 CREATE INDEX "notification_slots_user_id_kind_status_idx"
@@ -482,6 +515,9 @@ CREATE INDEX "notification_slots_user_id_scheduled_at_idx"
 CREATE INDEX "notification_slots_habit_id_idx"
   ON "notification_slots" ("habit_id")
   WHERE habit_id IS NOT NULL;
+CREATE INDEX "notification_slots_topic_key_idx"
+  ON "notification_slots" ("topic_key")
+  WHERE topic_key IS NOT NULL;
 
 -- UserDevices: индекс по userId (unique на token уже есть через constraint)
 CREATE INDEX "user_devices_user_id_idx"
@@ -678,14 +714,14 @@ CREATE INDEX "daily_adherence_user_id_kind_date_idx"
 Эти параметры влияют на стиль общения и аватара во всём приложении.
 ```
 
-#### 2. Настройки уведомлений для раздела "Поддержка" (`/therapy` или `/support/notifications`)
+#### 2. Настройки уведомлений для раздела "Терапия" (`/therapy` или `/support/notifications`)
 
 - `SettingsNotificationsTherapy.vue` — компонент настроек для Поддержки.
 
 **Форма настроек:**
 
 ```
-Поддержка
+Терапия (страница therapy.vue )
 ──────────────────────────────
 
 [ Вкл уведомления ] ⟶ toggle
@@ -717,7 +753,7 @@ CREATE INDEX "daily_adherence_user_id_kind_date_idx"
 **Схема интерфейса:**
 
 ```
-Привычки
+Привычки (страница habits.vue)
 
 + Добавить привычку
 

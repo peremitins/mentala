@@ -41,7 +41,7 @@
             >
               <IconGauge class="w-5 h-5" />
             </span>
-            <span class="w-full text-center">Поддержка</span>
+            <span class="w-full text-center">Терапия</span>
           </NuxtLink>
         </li>
         <li class="flex flex-col items-center gap-1 w-full">

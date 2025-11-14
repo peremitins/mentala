@@ -65,6 +65,16 @@ server/
 • UI: Swagger / Scalar UI (@scalar/nuxt).
 • SDK для фронта: генерируется из OpenAPI → фронтенд не зависит от конкретного бэкенда.
 
+⸻
+
+🔔 Настройки уведомлений
+• Таблица `notification_preferences` хранит `active_days`, `time_range_start/end` и `custom_slot_times`.
+• `custom_slot_times` — массив длиной до 5 значений (в минутах, 0–1439). `null` означает автоматическое распределение и теперь безопасно передаётся/сохраняется как `null` без 400 от API.
+• API `/api/notifications/prefs` поддерживает CRUD этих полей, принимает `subtype = mixed` для привычек и отдаёт то же значение; на уровне БД обновлённое ограничение `notification_prefs_subtype_check` теперь тоже разрешает `mixed`.
+• Фронт использует `WeekdaySelector`, `TimeRangeSelector`, а также кликабельные чипы под слайдером частоты для точного времени.
+• Планировщик (`scheduler.service.ts`) при генерации слотов даёт приоритет кастомным временам, остальное распределяет равномерно внутри выбранного окна.
+• UI (habits и therapy) отражает вручную заданные слоты: под слайдером частоты отображается интерактивный список слотов с тайм-пикерами; компонент TimePicker использует Radix ScrollArea без `overflow-hidden`, поэтому свайпы/прокрутка работают нативно, а кнопки синхронно центрируют выбранное значение.
+
 • HeyGen Streaming Avatar (BFF-прокси):
 • Серверные ручки (Nitro): `server/api/heygen/session.post.ts`, `server/api/heygen/speak.post.ts`, `server/api/heygen/close.post.ts`.
 • Назначение: фронт не раскрывает ключ, Nitro проксирует запросы к HeyGen.

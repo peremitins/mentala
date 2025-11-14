@@ -21,7 +21,7 @@
           <div class="text-sm opacity-80">Тип</div>
 
           <Combobox
-            v-model="chatSettings.mode"
+            v-model="form.type"
             :options="AI_WORK_MODE_OPTIONS"
             placeholder="Выберите режим"
           />
@@ -254,7 +254,6 @@ async function onSave() {
   if (form.content.trim().length < 20 || form.content.length > 8000) {
     return useToast('Ошибка', 'Текст 20..8000 символов', 'error');
   }
-  await prompts.fetch();
 
   try {
     let saved: UserPrompt;
@@ -275,8 +274,11 @@ async function onSave() {
         isActive: form.isActive,
       });
     }
+
+    // Эмитим событие с сохранённым промптом
     emit('saved', saved);
     emit('close');
+
     if (form.isActive) {
       useToast(
         'Активный промпт обновлён',

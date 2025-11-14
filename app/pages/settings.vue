@@ -7,22 +7,22 @@
       :style="{ borderRadius: `calc(var(--radius-sm))` }"
     >
       <Tabs :model-value="tab" @update:model-value="onTabChange" class="w-full">
-        <TabsList class="">
+        <TabsList class="grid grid-cols-3">
           <TabsTrigger class="" value="general">Общие</TabsTrigger>
-          <TabsTrigger class="" value="prompts">Промпты</TabsTrigger>
           <TabsTrigger class="" value="notifications">Уведомления</TabsTrigger>
+          <TabsTrigger class="" value="user">Пользователь</TabsTrigger>
         </TabsList>
 
         <TabsContent value="general" class="space-y-3">
           <SettingsGeneral />
         </TabsContent>
 
-        <TabsContent value="prompts" class="space-y-4">
-          <SettingsPrompts />
-        </TabsContent>
-
         <TabsContent value="notifications" class="space-y-4">
           <SettingsNotifications />
+        </TabsContent>
+
+        <TabsContent value="user" class="space-y-4">
+          <SettingsUser />
         </TabsContent>
       </Tabs>
     </section>
@@ -46,8 +46,8 @@ import {
   TabsTrigger,
 } from '@/app/components/ui/shadcn/tabs';
 import SettingsGeneral from '@/app/components/settings/SettingsGeneral.vue';
-import SettingsPrompts from '@/app/components/settings/SettingsPrompts.vue';
 import SettingsNotifications from '@/app/components/settings/SettingsNotifications.vue';
+import SettingsUser from '@/app/components/settings/SettingsUser.vue';
 
 const auth = useAuthStore();
 const route = useRoute();

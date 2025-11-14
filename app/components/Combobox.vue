@@ -75,6 +75,7 @@ const props = withDefaults(
     search?: boolean;
     placeholder?: string;
     searchPlaceholder?: string;
+    allowDeselect?: boolean; // Разрешить сброс значения при повторном клике
   }>(),
   {
     modelValue: '',
@@ -82,6 +83,7 @@ const props = withDefaults(
     placeholder: 'Выберите тип',
     searchPlaceholder: 'Поиск...',
     options: () => [],
+    allowDeselect: false, // По умолчанию не разрешаем сброс
   }
 );
 
@@ -103,8 +105,19 @@ const selectedOption = computed<Option | undefined>(() =>
 );
 
 function onSelect(o: Option) {
-  const next = props.modelValue === o.value ? '' : o.value;
-  emit('update:modelValue', next);
+  // Если кликнули на уже выбранную опцию
+  if (props.modelValue === o.value) {
+    // Разрешаем сброс только если allowDeselect = true
+    if (props.allowDeselect) {
+      emit('update:modelValue', '');
+    }
+    // В любом случае закрываем меню
+    open.value = false;
+    return;
+  }
+
+  // Выбираем новую опцию
+  emit('update:modelValue', o.value);
   open.value = false;
 }
 </script>
