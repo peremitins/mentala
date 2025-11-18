@@ -1,27 +1,25 @@
-import { eslintPatch } from '@rushstack/eslint-patch/modern-module-resolution';
+require('@rushstack/eslint-patch/modern-module-resolution');
 
-eslintPatch();
-
-export default {
+module.exports = {
   root: true,
   parser: 'vue-eslint-parser',
   parserOptions: {
     parser: '@typescript-eslint/parser',
     ecmaVersion: 'latest',
     sourceType: 'module',
-    project: './tsconfig.json',
     extraFileExtensions: ['.vue'],
   },
-  plugins: ['@typescript-eslint'],
+  plugins: ['@typescript-eslint', 'prettier'],
   extends: [
     'plugin:vue/vue3-essential',
     'eslint:recommended',
-    '@vue/eslint-config-prettier',
     'plugin:@typescript-eslint/recommended',
+    'prettier',
   ],
   rules: {
     'vue/multi-word-component-names': 'off',
     'vue/attribute-hyphenation': ['error', 'always'],
+    'prettier/prettier': 'warn',
   },
   globals: {
     APP_VERSION: 'readonly',
@@ -46,5 +44,12 @@ export default {
       },
     },
   ],
-  ignorePatterns: ['.eslintrc.js', '*.js', '*.vue', '*.ts'],
+  ignorePatterns: [
+    '.eslintrc.cjs',
+    'node_modules',
+    '.nuxt',
+    'dist',
+    '.output',
+    'android',
+  ],
 };

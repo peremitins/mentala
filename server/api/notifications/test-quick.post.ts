@@ -9,7 +9,11 @@ import {
 import { db } from '@/server/infrastructure/db/client';
 import { getSessionUser } from '@/server/application/auth/session';
 import { getNotificationText } from '@/app/lib/notificationTemplates';
-import type { NotificationPayload } from '@/shared/dto/notifications';
+import type {
+  NotificationPayload,
+  NotificationPreferenceMeta,
+} from '@/shared/dto/notifications';
+import { pickCustomTextFromMeta } from '@/shared/utils/notificationText';
 
 /**
  * POST /api/notifications/test-quick
@@ -80,6 +84,8 @@ export default defineEventHandler(
 
     const directness =
       (localPrefs?.directness as 'soft' | 'moderate' | 'hard') ?? 'moderate';
+    const preferenceMeta =
+      (localPrefs?.meta as NotificationPreferenceMeta | null) ?? null;
 
     console.log('[test-quick] Settings:', {
       userId,
@@ -89,20 +95,29 @@ export default defineEventHandler(
       directness,
     });
 
+    const customText =
+      body.kind === 'habits' || body.kind === 'therapy'
+        ? pickCustomTextFromMeta(preferenceMeta, user?.name, 0)
+        : null;
+
     // Генерируем текст уведомления с fallback логикой
     // tone больше не используется в фильтрации шаблонов
-    const text = getNotificationText(
-      body.kind,
-      addressing,
-      directness,
-      undefined // userName
-    );
+    const text =
+      customText ||
+      getNotificationText(
+        body.kind,
+        addressing,
+        directness,
+        user?.name ?? undefined
+      );
 
     console.log(`[TEST-QUICK NOTIFICATION] notificationText: ${text}`);
 
     // Для payload нам всё равно нужен templateId, используем дефолтный
     // tone больше не используется, убираем из templateId
-    const templateId = `${body.kind}_${directness}`;
+    const templateId = customText
+      ? 'custom_user_text'
+      : `${body.kind}_${directness}`;
 
     // Проверяем наличие устройств у пользователя
     const devices = await db

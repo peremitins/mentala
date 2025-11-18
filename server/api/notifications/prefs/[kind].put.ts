@@ -6,6 +6,11 @@ import type {
   HabitSubtype,
   NotificationPreferencesDto,
   UpdateNotificationPreferencesDto,
+  NotificationPreferenceMeta,
+} from '@/shared/dto/notifications';
+import {
+  MAX_CUSTOM_NOTIFICATION_TEXTS,
+  MAX_NOTIFICATION_TEXT_LENGTH,
 } from '@/shared/dto/notifications';
 import { getSessionUser } from '@/server/application/auth/session';
 import { regenerateSlotsForSource } from '@/server/application/notifications/scheduler.service';
@@ -43,6 +48,60 @@ const HABIT_SUBTYPES: HabitSubtype[] = [
   'motivational',
   'mixed',
 ];
+
+function sanitizeCustomTextsInput(
+  input: string[] | null | undefined
+): string[] | null {
+  if (input === undefined || input === null) {
+    return null;
+  }
+
+  if (!Array.isArray(input)) {
+    throw createError({
+      statusCode: 400,
+      message: 'customTexts must be an array of strings or null',
+    });
+  }
+
+  const cleaned: string[] = [];
+
+  for (const raw of input) {
+    if (typeof raw !== 'string') {
+      throw createError({
+        statusCode: 400,
+        message: 'customTexts must contain only strings',
+      });
+    }
+
+    const trimmed = raw.trim();
+    if (!trimmed) {
+      continue;
+    }
+
+    if (trimmed.length > MAX_NOTIFICATION_TEXT_LENGTH) {
+      throw createError({
+        statusCode: 400,
+        message: `Текст уведомления не должен превышать ${MAX_NOTIFICATION_TEXT_LENGTH} символов`,
+      });
+    }
+
+    cleaned.push(trimmed);
+
+    if (cleaned.length > MAX_CUSTOM_NOTIFICATION_TEXTS) {
+      throw createError({
+        statusCode: 400,
+        message: `Можно сохранить не более ${MAX_CUSTOM_NOTIFICATION_TEXTS} текстов`,
+      });
+    }
+  }
+
+  return cleaned.length ? cleaned : null;
+}
+
+function hasCustomTextsUpdate(meta?: NotificationPreferenceMeta | null) {
+  if (!meta) return false;
+  return Object.prototype.hasOwnProperty.call(meta, 'customTexts');
+}
 
 export default defineEventHandler(
   async (event): Promise<NotificationPreferencesDto> => {
@@ -254,6 +313,21 @@ export default defineEventHandler(
             ? body.subtype
             : (existing.subtype as HabitSubtype | null)
           : null;
+      const existingMeta =
+        (existing.meta as NotificationPreferenceMeta | null) ?? null;
+      const shouldUpdateMeta =
+        (kind === 'habits' || kind === 'therapy') &&
+        hasCustomTextsUpdate(body.meta ?? null);
+      let nextMeta: NotificationPreferenceMeta | null | undefined = undefined;
+
+      if (shouldUpdateMeta) {
+        const sanitizedCustomTexts = sanitizeCustomTextsInput(
+          body.meta?.customTexts ?? null
+        );
+        nextMeta = sanitizedCustomTexts
+          ? { customTexts: sanitizedCustomTexts }
+          : null;
+      }
 
       // Обновляем существующие
       const [updated] = await db
@@ -268,7 +342,7 @@ export default defineEventHandler(
           timeRangeStart: body.timeRangeStart ?? existing.timeRangeStart,
           timeRangeEnd: body.timeRangeEnd ?? existing.timeRangeEnd,
           customSlotTimes: nextCustomSlotTimes,
-          meta: body.meta !== undefined ? body.meta : existing.meta,
+          ...(nextMeta !== undefined ? { meta: nextMeta } : {}),
           updatedAt: new Date(),
         })
         .where(eq(notificationPreferences.id, existing.id))
@@ -305,7 +379,7 @@ export default defineEventHandler(
           (updated.customSlotTimes as (number | null)[] | null) ?? null,
         timeRangeStart: updated.timeRangeStart,
         timeRangeEnd: updated.timeRangeEnd,
-        meta: updated.meta as Record<string, any> | null,
+        meta: (updated.meta as NotificationPreferenceMeta | null) ?? null,
         createdAt: updated.createdAt.toISOString(),
         updatedAt: updated.updatedAt.toISOString(),
       };
@@ -321,6 +395,15 @@ export default defineEventHandler(
       );
       const initialSubtype =
         kind === 'habits' ? (body.subtype ?? 'mixed') : null;
+      const initialMeta =
+        kind === 'habits' || kind === 'therapy'
+          ? (() => {
+              const sanitized = sanitizeCustomTextsInput(
+                body.meta?.customTexts ?? null
+              );
+              return sanitized ? { customTexts: sanitized } : null;
+            })()
+          : null;
       const [created] = await db
         .insert(notificationPreferences)
         .values({
@@ -338,7 +421,7 @@ export default defineEventHandler(
           timeRangeStart: body.timeRangeStart ?? 540, // 09:00
           timeRangeEnd: body.timeRangeEnd ?? 1350, // 22:30
           customSlotTimes: initialCustomSlotTimes,
-          meta: body.meta ?? null,
+          meta: initialMeta,
         })
         .returning();
 
@@ -373,7 +456,7 @@ export default defineEventHandler(
           (created.customSlotTimes as (number | null)[] | null) ?? null,
         timeRangeStart: created.timeRangeStart,
         timeRangeEnd: created.timeRangeEnd,
-        meta: created.meta as Record<string, any> | null,
+        meta: (created.meta as NotificationPreferenceMeta | null) ?? null,
         createdAt: created.createdAt.toISOString(),
         updatedAt: created.updatedAt.toISOString(),
       };

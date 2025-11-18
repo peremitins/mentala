@@ -9,6 +9,7 @@ import {
   type Directness,
   type HabitSubtype,
 } from '@/app/lib/notificationTemplates';
+import { formatNotificationTextWithName } from '@/shared/utils/notificationText';
 
 const props = defineProps<{
   kind: NotificationKind;
@@ -19,6 +20,7 @@ const props = defineProps<{
   habitId?: string;
   subtype?: HabitSubtype;
   userName?: string;
+  customTexts?: string[];
 }>();
 
 // Используем composable для определения режима разработки
@@ -29,6 +31,15 @@ const previewText = ref('');
 const templateId = ref('');
 
 function updatePreview(useFirstTemplate = false) {
+  if (props.customTexts?.length) {
+    previewText.value = formatNotificationTextWithName(
+      props.customTexts[0],
+      props.userName
+    );
+    templateId.value = 'custom_user_text';
+    return;
+  }
+
   // tone больше не используется в фильтрации шаблонов
   // В production всегда используем первый шаблон (useFirst = true)
   const template = findTemplate(props.kind, {
@@ -64,6 +75,7 @@ watch(
     props.topicKey,
     props.habitId,
     props.subtype,
+    props.customTexts,
   ],
   () => {
     // В production всегда используем первый шаблон

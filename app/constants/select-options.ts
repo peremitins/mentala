@@ -6,7 +6,6 @@ export const AI_WORK_MODE_OPTIONS = [
 export const INTENT_OPTIONS = [
   { label: 'Привить привычку', value: 'build' },
   { label: 'Отказаться от привычки', value: 'quit' },
-  { label: 'Своя привычка', value: 'custom' },
 ];
 
 // Опции для привычек QUIT (избавиться от привычки)

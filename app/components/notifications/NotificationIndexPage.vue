@@ -18,6 +18,7 @@ export interface NotificationIndexItem {
   emoji: string;
   gradientClass: string;
   payload?: unknown;
+  canDelete?: boolean;
 }
 
 const props = withDefaults(
@@ -34,13 +35,14 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   (e: 'select', item: NotificationIndexItem): void;
+  (e: 'remove', item: NotificationIndexItem): void;
 }>();
 
 const route = useRoute();
 const router = useRouter();
 const activeTab = ref<string>((route.query.tab as string) || 'notifications');
-const selectedIntent = ref<'build' | 'quit' | 'custom'>
-  ((route.query.intent as 'build' | 'quit' | 'custom') || 'build');
+const initialIntent = route.query.intent === 'quit' ? 'quit' : 'build';
+const selectedIntent = ref<'build' | 'quit'>(initialIntent);
 
 watch(activeTab, (newTab) => {
   router.replace({ query: { ...route.query, tab: newTab } });
@@ -60,18 +62,26 @@ const visibleItems = computed(() => {
   }
 
   const intentValue = selectedIntent.value || 'build';
-  if (intentValue === 'custom') {
-    return [];
-  }
-
   return props.items.filter((item) => {
-    const payload = item.payload as { intent?: 'build' | 'quit' } | undefined;
+    const payload = item.payload as
+      | {
+          intent?: 'build' | 'quit';
+          action?: string;
+        }
+      | undefined;
+    if (payload?.action === 'create-habit') {
+      return true;
+    }
     return payload?.intent === intentValue;
   });
 });
 
 function handleSelect(item: NotificationIndexItem) {
   emit('select', item);
+}
+
+function handleRemove(item: NotificationIndexItem) {
+  emit('remove', item);
 }
 </script>
 
@@ -147,8 +157,29 @@ function handleSelect(item: NotificationIndexItem) {
               </div>
 
               <div
-                class="flex h-8 w-8 flex-shrink-0 items-center justify-center text-gray-400 transition-all duration-300 group-hover:translate-x-1 group-hover:text-blue-600 dark:group-hover:text-blue-400"
+                class="flex h-8 w-16 flex-shrink-0 items-center justify-center text-gray-400 transition-all duration-300 group-hover:translate-x-1 group-hover:text-blue-600 dark:group-hover:text-blue-400"
               >
+                <button
+                  v-if="item.canDelete"
+                  type="button"
+                  class="rounded-full p-1 text-gray-400 hover:text-red-500 hover:bg-red-500/10 transition z-10"
+                  title="Удалить привычку"
+                  @click.stop="handleRemove(item)"
+                >
+                  <svg
+                    class="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M3 6h18M9 6V4h6v2m-7 4v8m4-8v8m-7 8h12a2 2 0 002-2V6H5v12a2 2 0 002 2z"
+                    />
+                  </svg>
+                </button>
                 <svg
                   class="h-5 w-5"
                   fill="none"

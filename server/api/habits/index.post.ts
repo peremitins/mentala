@@ -35,6 +35,8 @@ export default defineEventHandler(async (event): Promise<HabitDto> => {
     });
   }
 
+  const description = body.description?.trim() || null;
+
   const [created] = await db
     .insert(habits)
     .values({
@@ -44,6 +46,7 @@ export default defineEventHandler(async (event): Promise<HabitDto> => {
       intent: body.intent,
       habitKey: body.habitKey ?? null,
       emoji: body.emoji ?? null,
+      description,
     })
     .returning();
 
@@ -53,6 +56,7 @@ export default defineEventHandler(async (event): Promise<HabitDto> => {
     intent: created.intent as 'build' | 'quit' | 'custom',
     habitKey: created.habitKey ?? null,
     emoji: created.emoji ?? null,
+    description: created.description ?? null,
     createdAt: created.createdAt.toISOString(),
     updatedAt: created.updatedAt.toISOString(),
   };

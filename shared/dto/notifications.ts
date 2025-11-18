@@ -7,6 +7,9 @@
 // Базовые типы
 // ==========================================
 
+export const MAX_NOTIFICATION_TEXT_LENGTH = 178;
+export const MAX_CUSTOM_NOTIFICATION_TEXTS = 100;
+
 export type NotificationKind = 'therapy' | 'habits';
 export type Addressing = 'informal' | 'formal';
 export type Tone =
@@ -65,7 +68,7 @@ export interface NotificationPreferencesDto {
   customSlotTimes?: (number | null)[] | null; // Индивидуальные времена слотов (0-1439 минут) для каждого уведомления
   timeRangeStart: number; // Начало временного окна в минутах от начала дня (0-1439)
   timeRangeEnd: number; // Конец временного окна в минутах от начала дня (0-1439)
-  meta?: Record<string, any> | null; // Дополнительные параметры (techniques и т.д.)
+  meta?: NotificationPreferenceMeta | null; // Дополнительные параметры (customTexts и т.д.)
   createdAt: string;
   updatedAt: string;
 }
@@ -82,7 +85,7 @@ export interface UpdateNotificationPreferencesDto {
   customSlotTimes?: (number | null)[] | null; // Пользовательские времена слотов (0-1439 минут)
   timeRangeStart?: number; // Начало временного окна в минутах от начала дня (0-1439)
   timeRangeEnd?: number; // Конец временного окна в минутах от начала дня (0-1439)
-  meta?: Record<string, any> | null;
+  meta?: NotificationPreferenceMeta | null;
 }
 
 // ==========================================
@@ -95,6 +98,7 @@ export interface HabitDto {
   intent: HabitIntent;
   habitKey?: string | null; // Нормализованный ключ для маппинга на шаблоны
   emoji?: string | null;
+  description?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -104,6 +108,7 @@ export interface CreateHabitDto {
   intent: HabitIntent;
   habitKey?: string; // Опционально, для каталога
   emoji?: string;
+  description?: string;
 }
 
 export interface UpdateHabitDto {
@@ -111,6 +116,36 @@ export interface UpdateHabitDto {
   intent?: HabitIntent;
   habitKey?: string;
   emoji?: string;
+  description?: string | null;
+}
+
+export interface NotificationPreferenceMeta {
+  customTexts?: string[];
+}
+
+// ==========================================
+// Пользовательские темы терапии
+// ==========================================
+
+export interface TherapyTopicDto {
+  id: string;
+  name: string;
+  description?: string | null;
+  emoji?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateTherapyTopicDto {
+  name: string;
+  description?: string;
+  emoji?: string;
+}
+
+export interface UpdateTherapyTopicDto {
+  name?: string;
+  description?: string | null;
+  emoji?: string | null;
 }
 
 // ==========================================

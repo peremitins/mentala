@@ -64,6 +64,10 @@ export default defineEventHandler(async (event): Promise<HabitDto> => {
       intent: body.intent ?? existing.intent,
       habitKey: body.habitKey !== undefined ? body.habitKey : existing.habitKey,
       emoji: body.emoji !== undefined ? body.emoji : existing.emoji,
+      description:
+        body.description !== undefined
+          ? body.description?.trim() || null
+          : existing.description,
       updatedAt: new Date(),
     })
     .where(eq(habits.id, id))
@@ -75,6 +79,7 @@ export default defineEventHandler(async (event): Promise<HabitDto> => {
     intent: updated.intent as 'build' | 'quit' | 'custom',
     habitKey: updated.habitKey ?? null,
     emoji: updated.emoji ?? null,
+    description: updated.description ?? null,
     createdAt: updated.createdAt.toISOString(),
     updatedAt: updated.updatedAt.toISOString(),
   };

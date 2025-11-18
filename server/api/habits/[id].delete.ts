@@ -1,5 +1,9 @@
 import { eq, and } from 'drizzle-orm';
-import { habits } from '@/server/infrastructure/db/schema';
+import {
+  habits,
+  notificationPreferences,
+  notificationSlots,
+} from '@/server/infrastructure/db/schema';
 import { db } from '@/server/infrastructure/db/client';
 import { getSessionUser } from '@/server/application/auth/session';
 
@@ -40,9 +44,29 @@ export default defineEventHandler(
       });
     }
 
+    // Удаляем связанные настройки и запланированные слоты
+    await db
+      .delete(notificationPreferences)
+      .where(
+        and(
+          eq(notificationPreferences.userId, userId),
+          eq(notificationPreferences.kind, 'habits'),
+          eq(notificationPreferences.habitId, existing.id)
+        )
+      );
+
+    await db
+      .delete(notificationSlots)
+      .where(
+        and(
+          eq(notificationSlots.userId, userId),
+          eq(notificationSlots.kind, 'habits'),
+          eq(notificationSlots.status, 'planned'),
+          eq(notificationSlots.habitId, existing.id)
+        )
+      );
+
     // Удаляем привычку
-    // FK constraints автоматически удалят связанные notification_preferences (CASCADE)
-    // и установят NULL в notification_slots (SET NULL)
     await db.delete(habits).where(eq(habits.id, id));
 
     return { success: true };

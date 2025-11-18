@@ -1,7 +1,10 @@
 import { eq } from 'drizzle-orm';
 import { notificationPreferences } from '@/server/infrastructure/db/schema';
 import { db } from '@/server/infrastructure/db/client';
-import type { NotificationPreferencesDto } from '@/shared/dto/notifications';
+import type {
+  NotificationPreferenceMeta,
+  NotificationPreferencesDto,
+} from '@/shared/dto/notifications';
 import { getSessionUser } from '@/server/application/auth/session';
 
 /**
@@ -43,7 +46,7 @@ export default defineEventHandler(
       customSlotTimes: (p.customSlotTimes as (number | null)[] | null) ?? null,
       timeRangeStart: p.timeRangeStart,
       timeRangeEnd: p.timeRangeEnd,
-      meta: p.meta as Record<string, any> | null,
+      meta: (p.meta as NotificationPreferenceMeta | null) ?? null,
       createdAt: p.createdAt.toISOString(),
       updatedAt: p.updatedAt.toISOString(),
     }));

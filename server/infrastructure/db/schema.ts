@@ -149,6 +149,22 @@ export const habits = pgTable('habits', {
   intent: varchar('intent', { length: 10 }).notNull(), // 'build' | 'quit' | 'custom'
   habitKey: varchar('habit_key', { length: 50 }), // Нормализованный ключ для маппинга на шаблоны (water, smoking, etc.)
   emoji: varchar('emoji', { length: 8 }),
+  description: text('description'),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+// Пользовательские темы терапии
+export const therapyTopicsCustom = pgTable('therapy_topics_custom', {
+  id: text('id').primaryKey(),
+  userId: integer('user_id').notNull(),
+  name: varchar('name', { length: 120 }).notNull(),
+  description: text('description'),
+  emoji: varchar('emoji', { length: 8 }),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull(),

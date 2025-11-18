@@ -16,13 +16,18 @@ import {
   notificationSlots,
   userPreferences,
   habits,
+  users,
 } from '@/server/infrastructure/db/schema';
 import {
   findTemplate,
   getTemplateText,
   type NotificationKind,
 } from '@/app/lib/notificationTemplates';
-import type { NotificationPayload } from '@/shared/dto/notifications';
+import type {
+  NotificationPayload,
+  NotificationPreferenceMeta,
+} from '@/shared/dto/notifications';
+import { pickCustomTextFromMeta } from '@/shared/utils/notificationText';
 
 // ==========================================
 // Конфигурация планировщика
@@ -153,6 +158,12 @@ export async function generateAllSlotsForUser(userId: number): Promise<void> {
     .limit(1);
 
   const addressing = globalPrefs?.addressing || 'informal';
+  const [userRecord] = await db
+    .select({ name: users.name })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  const userName = userRecord?.name ?? null;
   const tone = globalPrefs?.tone || 'neutral';
 
   // 5. Получаем историю использованных шаблонов ПЕРЕД удалением слотов
@@ -231,6 +242,8 @@ export async function generateAllSlotsForUser(userId: number): Promise<void> {
   console.log(
     `[Scheduler] Generated ${slotAssignments.length} slots for ${allPrefs.length} sources`
   );
+
+  const customTextIndexes = new Map<string, number>();
 
   // 8. Создаём слоты в БД (история уже получена в шаге 5)
   for (const { scheduledAt, pref } of slotAssignments) {
@@ -317,67 +330,86 @@ export async function generateAllSlotsForUser(userId: number): Promise<void> {
     excludedTemplatesMap.set(excludeKey, excludeTemplateIdsSet);
     const excludeTemplateIds = Array.from(excludeTemplateIdsSet);
 
-    console.log(
-      `[Scheduler] Looking for template: kind=${pref.kind}, intent=${intent}, habitKey=${habitKey || 'NULL'}, subtype=${actualSubtype}`
-    );
+    const prefMeta = (pref.meta as NotificationPreferenceMeta | null) ?? null;
+    const prefKey = pref.id;
+    const currentIndex = customTextIndexes.get(prefKey) ?? 0;
+    const customText =
+      pref.kind === 'habits' || pref.kind === 'therapy'
+        ? pickCustomTextFromMeta(prefMeta, userName, currentIndex)
+        : null;
 
-    // Подбираем случайный шаблон с учётом истории
-    // addressing и tone больше не используются в фильтрации, берутся из БД для выбора текста
-    let template = findTemplate(pref.kind as NotificationKind, {
-      topicKey: pref.topicKey ?? undefined,
-      intent, // Передаем intent из БД (build/quit/custom)
-      habitKey: habitKey as any, // Передаем habitKey из БД (water, smoking и т.д.)
-      subtype: actualSubtype as
-        | 'reminder'
-        | 'informational'
-        | 'motivational'
-        | undefined,
-      excludeTemplateIds, // Исключаем недавно использованные
-    });
+    if (customText) {
+      customTextIndexes.set(prefKey, currentIndex + 1);
+    }
 
-    // Fallback для habits: если шаблон не найден с выбранным subtype, пробуем другие
-    if (!template && pref.kind === 'habits' && actualSubtype) {
-      const fallbackSubtypes: Array<
-        'reminder' | 'informational' | 'motivational'
-      > =
-        actualSubtype === 'reminder'
-          ? ['informational', 'motivational']
-          : actualSubtype === 'informational'
-            ? ['reminder', 'motivational']
-            : ['reminder', 'informational'];
+    let templateIdForSlot = 'custom_user_text';
+    let text = customText;
+    let template: ReturnType<typeof findTemplate> | null = null;
 
-      for (const fallbackSubtype of fallbackSubtypes) {
-        template = findTemplate(pref.kind as NotificationKind, {
-          topicKey: pref.topicKey ?? undefined,
-          intent,
-          habitKey: habitKey as any,
-          subtype: fallbackSubtype,
-          excludeTemplateIds,
-        });
-        if (template) {
-          console.log(
-            `[Scheduler] ⚠️ Template not found with subtype=${actualSubtype}, using ${fallbackSubtype} instead`
-          );
-          break;
+    if (!text) {
+      console.log(
+        `[Scheduler] Looking for template: kind=${pref.kind}, intent=${intent}, habitKey=${habitKey || 'NULL'}, subtype=${actualSubtype}`
+      );
+
+      // Подбираем случайный шаблон с учётом истории
+      // addressing и tone больше не используются в фильтрации, берутся из БД для выбора текста
+      template = findTemplate(pref.kind as NotificationKind, {
+        topicKey: pref.topicKey ?? undefined,
+        intent, // Передаем intent из БД (build/quit/custom)
+        habitKey: habitKey as any, // Передаем habitKey из БД (water, smoking и т.д.)
+        subtype: actualSubtype as
+          | 'reminder'
+          | 'informational'
+          | 'motivational'
+          | undefined,
+        excludeTemplateIds, // Исключаем недавно использованные
+      });
+
+      // Fallback для habits: если шаблон не найден с выбранным subtype, пробуем другие
+      if (!template && pref.kind === 'habits' && actualSubtype) {
+        const fallbackSubtypes: Array<
+          'reminder' | 'informational' | 'motivational'
+        > =
+          actualSubtype === 'reminder'
+            ? ['informational', 'motivational']
+            : actualSubtype === 'informational'
+              ? ['reminder', 'motivational']
+              : ['reminder', 'informational'];
+
+        for (const fallbackSubtype of fallbackSubtypes) {
+          template = findTemplate(pref.kind as NotificationKind, {
+            topicKey: pref.topicKey ?? undefined,
+            intent,
+            habitKey: habitKey as any,
+            subtype: fallbackSubtype,
+            excludeTemplateIds,
+          });
+          if (template) {
+            console.log(
+              `[Scheduler] ⚠️ Template not found with subtype=${actualSubtype}, using ${fallbackSubtype} instead`
+            );
+            break;
+          }
         }
       }
-    }
 
-    if (!template) {
-      console.warn(
-        `[Scheduler] No template found for user ${userId}, kind: ${pref.kind}, topicKey: ${pref.topicKey}, habitId: ${pref.habitId}, directness: ${pref.directness}`
+      if (!template) {
+        console.warn(
+          `[Scheduler] No template found for user ${userId}, kind: ${pref.kind}, topicKey: ${pref.topicKey}, habitId: ${pref.habitId}, directness: ${pref.directness}`
+        );
+        continue;
+      }
+
+      excludeTemplateIdsSet.add(template.id);
+      templateIdForSlot = template.id;
+
+      text = getTemplateText(
+        template,
+        addressing as any,
+        pref.directness as any,
+        userName ?? undefined
       );
-      continue;
     }
-
-    excludeTemplateIdsSet.add(template.id);
-
-    const text = getTemplateText(
-      template,
-      addressing as any,
-      pref.directness as any,
-      undefined // TODO: получить имя пользователя
-    );
 
     // В dev mode добавляем развёрнутую метку для тестирования
     const isDevelopment = process.env.NODE_ENV !== 'production';
@@ -397,7 +429,7 @@ export async function generateAllSlotsForUser(userId: number): Promise<void> {
     const payload: NotificationPayload = {
       title: 'Mentai: время паузы',
       body: `${devPrefix}${text}`,
-      templateId: template.id,
+      templateId: templateIdForSlot,
       action: 'open',
       deepLink: pref.kind === 'therapy' ? '/support' : '/habits',
       data: {
@@ -423,7 +455,7 @@ export async function generateAllSlotsForUser(userId: number): Promise<void> {
       topicKey: pref.topicKey ?? null,
       scheduledAt,
       payload,
-      templateId: template.id,
+      templateId: templateIdForSlot,
       status: 'planned',
     });
   }
@@ -628,6 +660,12 @@ export async function generateSlotsForUser(
   const addressing = globalPrefs?.addressing || 'informal';
   const tone = globalPrefs?.tone || 'neutral';
   const directness = prefs.directness;
+  const [userRecord] = await db
+    .select({ name: users.name })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  const userName = userRecord?.name ?? null;
 
   // 3. Удаляем старые запланированные слоты с учётом habitId/topicKey
   const now = new Date();
@@ -710,36 +748,54 @@ export async function generateSlotsForUser(
   );
 
   // 6. Создаём слоты в БД
+  let customTextIndex = 0;
   for (const scheduledAt of slots) {
-    // Подбираем случайный шаблон
-    // addressing и tone больше не используются в фильтрации, берутся из БД для выбора текста
-    const template = findTemplate(kind, {
-      topicKey,
-      intent, // Передаем intent из БД (build/quit/custom)
-      habitKey: habitKey as any, // Передаем habitKey из БД (water, smoking и т.д.)
-      subtype: prefs.subtype as
-        | 'reminder'
-        | 'informational'
-        | 'motivational'
-        | undefined,
-    });
-
-    if (!template) {
-      console.warn(`[Scheduler] No template found for user ${userId}`);
-      continue;
+    const prefMeta = (prefs.meta as NotificationPreferenceMeta | null) ?? null;
+    const customText =
+      kind === 'habits' || kind === 'therapy'
+        ? pickCustomTextFromMeta(prefMeta, userName, customTextIndex)
+        : null;
+    if (customText) {
+      customTextIndex += 1;
     }
 
-    const text = getTemplateText(
-      template,
-      addressing as any,
-      directness as any,
-      undefined // TODO: получить имя пользователя
-    );
+    let templateIdForSlot = 'custom_user_text';
+    let text = customText;
+    let template: ReturnType<typeof findTemplate> | null = null;
+
+    if (!text) {
+      // Подбираем случайный шаблон
+      // addressing и tone больше не используются в фильтрации, берутся из БД для выбора текста
+      template = findTemplate(kind, {
+        topicKey,
+        intent, // Передаем intent из БД (build/quit/custom)
+        habitKey: habitKey as any, // Передаем habitKey из БД (water, smoking и т.д.)
+        subtype: prefs.subtype as
+          | 'reminder'
+          | 'informational'
+          | 'motivational'
+          | undefined,
+      });
+
+      if (!template) {
+        console.warn(`[Scheduler] No template found for user ${userId}`);
+        continue;
+      }
+
+      templateIdForSlot = template.id;
+
+      text = getTemplateText(
+        template,
+        addressing as any,
+        directness as any,
+        userName ?? undefined
+      );
+    }
 
     const payload: NotificationPayload = {
       title: 'Mentai: время паузы',
       body: text,
-      templateId: template.id,
+      templateId: templateIdForSlot,
       action: 'open',
       deepLink: kind === 'therapy' ? '/support' : '/habits',
       data: {
@@ -761,7 +817,7 @@ export async function generateSlotsForUser(
       topicKey: topicKey ?? null,
       scheduledAt,
       payload,
-      templateId: template.id,
+      templateId: templateIdForSlot,
       status: 'planned',
     });
   }
@@ -1153,6 +1209,12 @@ export async function regenerateSlotsForSource(
     .limit(1);
 
   const addressing = globalPrefs?.addressing || 'informal';
+  const [userRecord] = await db
+    .select({ name: users.name })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  const userName = userRecord?.name ?? null;
 
   // Генерируем временные метки для нового источника
   const timezone = sourcePref.timezone || 'Europe/Moscow';
@@ -1219,57 +1281,75 @@ export async function regenerateSlotsForSource(
   }
 
   // Создаём новые слоты для этого источника
+  let customTextIndex = 0;
   for (const scheduledAt of newSlotTimes) {
-    let template = findTemplate(kind as NotificationKind, {
-      topicKey: topicKey ?? undefined,
-      intent,
-      habitKey: habitKey as any,
-      subtype: actualSubtype as
-        | 'reminder'
-        | 'informational'
-        | 'motivational'
-        | undefined,
-      excludeTemplateIds: Array.from(excludeTemplateIdsSet),
-    });
+    const prefMeta =
+      (sourcePref.meta as NotificationPreferenceMeta | null) ?? null;
+    const customText =
+      kind === 'habits' || kind === 'therapy'
+        ? pickCustomTextFromMeta(prefMeta, userName, customTextIndex)
+        : null;
+    if (customText) {
+      customTextIndex += 1;
+    }
 
-    // Fallback для habits
-    if (!template && kind === 'habits' && actualSubtype) {
-      const fallbackSubtypes: Array<
-        'reminder' | 'informational' | 'motivational'
-      > =
-        actualSubtype === 'reminder'
-          ? ['informational', 'motivational']
-          : actualSubtype === 'informational'
-            ? ['reminder', 'motivational']
-            : ['reminder', 'informational'];
+    let templateIdForSlot = 'custom_user_text';
+    let text = customText;
+    let template: ReturnType<typeof findTemplate> | null = null;
 
-      for (const fallbackSubtype of fallbackSubtypes) {
-        template = findTemplate(kind as NotificationKind, {
-          topicKey: topicKey ?? undefined,
-          intent,
-          habitKey: habitKey as any,
-          subtype: fallbackSubtype,
-          excludeTemplateIds: Array.from(excludeTemplateIdsSet),
-        });
-        if (template) break;
+    if (!text) {
+      template = findTemplate(kind as NotificationKind, {
+        topicKey: topicKey ?? undefined,
+        intent,
+        habitKey: habitKey as any,
+        subtype: actualSubtype as
+          | 'reminder'
+          | 'informational'
+          | 'motivational'
+          | undefined,
+        excludeTemplateIds: Array.from(excludeTemplateIdsSet),
+      });
+
+      // Fallback для habits
+      if (!template && kind === 'habits' && actualSubtype) {
+        const fallbackSubtypes: Array<
+          'reminder' | 'informational' | 'motivational'
+        > =
+          actualSubtype === 'reminder'
+            ? ['informational', 'motivational']
+            : actualSubtype === 'informational'
+              ? ['reminder', 'motivational']
+              : ['reminder', 'informational'];
+
+        for (const fallbackSubtype of fallbackSubtypes) {
+          template = findTemplate(kind as NotificationKind, {
+            topicKey: topicKey ?? undefined,
+            intent,
+            habitKey: habitKey as any,
+            subtype: fallbackSubtype,
+            excludeTemplateIds: Array.from(excludeTemplateIdsSet),
+          });
+          if (template) break;
+        }
       }
-    }
 
-    if (!template) {
-      console.warn(
-        `[Scheduler] No template found for source: user ${userId}, kind: ${kind}`
+      if (!template) {
+        console.warn(
+          `[Scheduler] No template found for source: user ${userId}, kind: ${kind}`
+        );
+        continue;
+      }
+
+      excludeTemplateIdsSet.add(template.id);
+      templateIdForSlot = template.id;
+
+      text = getTemplateText(
+        template,
+        addressing as any,
+        sourcePref.directness as any,
+        userName ?? undefined
       );
-      continue;
     }
-
-    excludeTemplateIdsSet.add(template.id);
-
-    const text = getTemplateText(
-      template,
-      addressing as any,
-      sourcePref.directness as any,
-      undefined
-    );
 
     const isDevelopment = process.env.NODE_ENV !== 'production';
     let devPrefix = '';
@@ -1285,7 +1365,7 @@ export async function regenerateSlotsForSource(
     const payload: NotificationPayload = {
       title: 'Mentai: время паузы',
       body: `${devPrefix}${text}`,
-      templateId: template.id,
+      templateId: templateIdForSlot,
       action: 'open',
       deepLink: kind === 'therapy' ? '/support' : '/habits',
       data: {
@@ -1311,7 +1391,7 @@ export async function regenerateSlotsForSource(
       topicKey: topicKey ?? null,
       scheduledAt,
       payload,
-      templateId: template.id,
+      templateId: templateIdForSlot,
       status: 'planned',
     });
   }

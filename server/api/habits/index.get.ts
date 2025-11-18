@@ -30,6 +30,7 @@ export default defineEventHandler(async (event): Promise<HabitDto[]> => {
     intent: h.intent as 'build' | 'quit' | 'custom',
     habitKey: h.habitKey ?? null,
     emoji: h.emoji ?? null,
+    description: h.description ?? null,
     createdAt: h.createdAt.toISOString(),
     updatedAt: h.updatedAt.toISOString(),
   }));
