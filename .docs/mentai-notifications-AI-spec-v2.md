@@ -42,9 +42,9 @@ _Версия_: 2.2 • _Дата_: 2025-11-05
 
 - `enabled: boolean` — вкл/выкл уведомлений для типа.
 - `frequency: { mode: 'per_day', timesPerDay: number }` — количество уведомлений в день (1–5, конфигурируемо до 8).
-- `directness: 'soft' | 'moderate' | 'hard'` — **стиль подачи** (см. раздел 3).
+- `directness: 'soft' | 'moderate' | 'hard'` — **Стиль уведомлений** (см. раздел 3).
 - `timezone: string` — IANA TZ. Автоопределение на устройствах и в браузере; храним на бэке.
-- `habitId?: string` — опционально, для привычек: идентификатор конкретной привычки (если настройки индивидуальны для каждой привычки).
+- `entityKey?: string` — опционально, для привычек или терапии: идентификатор конкретной сущности (если настройки индивидуальны для каждой сущности).
 
 **Где настраиваются:**
 
@@ -92,22 +92,22 @@ _Версия_: 2.2 • _Дата_: 2025-11-05
 
 ---
 
-## 3) Стиль подачи (directness)
+## 3) Стиль уведомлений (directness)
 
-**В UI отображается как:** "Стиль подачи" или "Стиль напоминаний".
+**В UI отображается как:** "Стиль уведомлений" или "Стиль напоминаний".
 
 **Описание:** Определяет, насколько прямо формулируются уведомления — от мягких до директивных. Влияет только на тексты уведомлений конкретного раздела.
 
 **Варианты:**
 
-- **soft — Мягко**: поддержка, без давления.  
+- **soft — Поддерживающий**: поддержка, без давления.  
   Пример: «Сделай короткую паузу и три дыхания.»
-- **moderate — Умеренно**: конкретнее, но корректно.  
+- **moderate — Сдержанный**: Корректные, нейтральные формулировки без лишних эмоций.  
   Пример: «Пора сделать 3 цикла дыхания 4-7-8.»
-- **hard — Жёстко**: максимальная директивность, без грубости.  
+- **hard — Требовательный**: Прямые, настойчивые сообщения для тех, кому важен чёткий фокус.  
   Пример: «Сейчас пауза. Сделай 3 цикла 4-7-8.»
 
-**Примечание:** В API и базе данных поле называется `directness`, но в UI отображается как "Стиль подачи" для лучшего понимания пользователем.
+**Примечание:** В API и базе данных поле называется `directness`, но в UI отображается как "Стиль уведомлений" для лучшего понимания пользователем.
 
 ---
 
@@ -141,7 +141,7 @@ _Версия_: 2.2 • _Дата_: 2025-11-05
 | 9   | `grief`      | Потери и горе        | Помощь при утрате                                 |
 | 10  | `sos`        | Экстренная поддержка | Быстрая стабилизация                              |
 
-**Примечание:** Темы хранятся как статичный справочник в коде (`app/lib/therapyCatalog.ts`), а настройки уведомлений для каждой темы — в `notification_preferences` через поле `topicKey`.
+**Примечание:** Темы хранятся как статичный справочник в коде (`app/lib/therapyCatalog.ts`), а настройки уведомлений для каждой темы — в `notification_preferences` через поле `entityKey`.
 
 ### Для Привычек (habits)
 
@@ -243,8 +243,8 @@ _Версия_: 2.2 • _Дата_: 2025-11-05
 
 **Заметки:**
 
-- Связка с уведомлениями — через `notification_preferences.habitId`.
-- При удалении привычки: будущие `notification_slots` по `habitId` помечать как `skipped` или удалять (по политике проекта).
+- Связка с уведомлениями — через `notification_preferences.entityKey`.
+- При удалении привычки: будущие `notification_slots` по `entityKey` помечать как `skipped` или удалять (по политике проекта).
 - Категории: `'health' | 'quit' | 'productivity' | 'custom'`.
 
 ---
@@ -287,7 +287,7 @@ _Версия_: 2.2 • _Дата_: 2025-11-05
   "frequency": { "mode": "per_day", "timesPerDay": 3 },
   "directness": "moderate",
   "timezone": "Europe/Moscow",
-  "habitId": "habit_123" // опционально, только для habits
+  "entityKey": "habit_123" // опционально, для идентификации сущности
 }
 ```
 
@@ -304,16 +304,15 @@ _Версия_: 2.2 • _Дата_: 2025-11-05
 - `POST /api/notifications/snooze` — отложить ближайшее уведомление:
 
 ```json
-{ "kind": "therapy", "duration": "15m", "habitId": null }
+{ "kind": "therapy", "duration": "15m", "entityKey": null }
 ```
 
 Доступные значения `duration`: `"15m"`, `"1h"`, `"4h"`, `"tomorrow"`.
 
-#### Per-habit поведение
+#### Поведение при отложении уведомлений
 
-- Если указан `habitId`, откладывается ближайший слот **именно этой привычки** (`kind="habits"` + `habitId`).
-- Если `habitId` не указан и `kind="habits"`, откладывается ближайший слот по приоритету среди всех активных привычек пользователя.
-- Для `kind="therapy"` `habitId` всегда `null`.
+- Если указан `entityKey`, откладывается ближайший слот **именно этой сущности** (`kind` + `entityKey`).
+- Если `entityKey` не указан, откладывается ближайший слот по приоритету среди всех активных сущностей пользователя данного типа.
 
 - `POST /api/notifications/register-token` — регистрация/обновление FCM токена устройства:
 
@@ -385,8 +384,7 @@ export const notificationPreferences = pgTable('notification_preferences', {
   id: text('id').primaryKey(),
   userId: integer('user_id').notNull(),
   kind: varchar('kind', { length: 20 }).notNull(), // 'therapy' | 'habits'
-  habitId: varchar('habit_id', { length: 255 }), // опционально, для habits: идентификатор конкретной привычки (FK → habits.id)
-  topicKey: varchar('topic_key', { length: 50 }), // опционально, для therapy: ключ темы поддержки ('anxiety' | 'stress' | 'mood' | ...)
+  entityKey: varchar('entity_key', { length: 255 }), // опционально, для идентификации сущности
   enabled: boolean('enabled').default(true).notNull(),
   timesPerDay: integer('times_per_day').notNull(),
   directness: varchar('directness', { length: 20 }).notNull(), // 'soft' | 'moderate' | 'hard'
@@ -405,8 +403,7 @@ export const notificationSlots = pgTable('notification_slots', {
   id: text('id').primaryKey(),
   userId: integer('user_id').notNull(),
   kind: varchar('kind', { length: 20 }).notNull(), // 'therapy' | 'habits'
-  habitId: varchar('habit_id', { length: 255 }), // опционально, для habits: идентификатор конкретной привычки (FK → habits.id)
-  topicKey: varchar('topic_key', { length: 50 }), // опционально, для therapy: ключ темы поддержки ('anxiety' | 'stress' | 'mood' | ...)
+  entityKey: varchar('entity_key', { length: 255 }), // опционально, для идентификации сущности
   scheduledAt: timestamp('scheduled_at', { withTimezone: true }).notNull(), // UTC с применённым джиттером
   payload: jsonb('payload').notNull(), // { title, body, templateId, action, deepLink, ... }
   templateId: varchar('template_id', { length: 255 }),
@@ -487,51 +484,43 @@ CREATE UNIQUE INDEX "user_preferences_user_id_idx"
   ON "user_preferences" ("user_id");
 
 -- NotificationPreferences: уникальность зависит от kind
--- Для therapy без topicKey: общие настройки (userId + kind, без habitId и topicKey)
-CREATE UNIQUE INDEX "notification_preferences_user_therapy_general"
+-- Для общих настроек: (userId + kind, без entityKey)
+CREATE UNIQUE INDEX "notification_preferences_user_kind_general"
   ON "notification_preferences" ("user_id", "kind")
-  WHERE kind = 'therapy' AND topic_key IS NULL AND habit_id IS NULL;
--- Для therapy с topicKey: per-topic настройки (userId + kind + topicKey)
-CREATE UNIQUE INDEX "notification_preferences_user_therapy_topic"
-  ON "notification_preferences" ("user_id", "kind", "topic_key")
-  WHERE kind = 'therapy' AND topic_key IS NOT NULL;
--- Для habits: per-habit настройки (userId + kind + habitId)
-CREATE UNIQUE INDEX "notification_preferences_user_habits"
-  ON "notification_preferences" ("user_id", "kind", "habit_id")
-  WHERE kind = 'habits' AND habit_id IS NOT NULL;
+  WHERE kind = 'therapy' AND entity_key IS NULL;
+-- Для per-entity настроек: (userId + kind + entityKey)
+CREATE UNIQUE INDEX "notification_preferences_user_kind_entity"
+  ON "notification_preferences" ("user_id", "kind", "entity_key")
+  WHERE entity_key IS NOT NULL;
 -- Общий индекс по userId
 CREATE INDEX "notification_preferences_user_id_idx"
   ON "notification_preferences" ("user_id");
--- Индекс по topicKey для быстрой выборки
-CREATE INDEX "notification_preferences_topic_key_idx"
-  ON "notification_preferences" ("topic_key")
-  WHERE topic_key IS NOT NULL;
+-- Индекс по entityKey для быстрой выборки
+CREATE INDEX "notification_preferences_entity_key_idx"
+  ON "notification_preferences" ("entity_key")
+  WHERE entity_key IS NOT NULL;
 
 -- NotificationSlots: индексы для выборки по пользователю и времени
 CREATE INDEX "notification_slots_user_id_kind_status_idx"
   ON "notification_slots" ("user_id", "kind", "status");
 CREATE INDEX "notification_slots_user_id_scheduled_at_idx"
   ON "notification_slots" ("user_id", "scheduled_at");
-CREATE INDEX "notification_slots_habit_id_idx"
-  ON "notification_slots" ("habit_id")
-  WHERE habit_id IS NOT NULL;
-CREATE INDEX "notification_slots_topic_key_idx"
-  ON "notification_slots" ("topic_key")
-  WHERE topic_key IS NOT NULL;
+CREATE INDEX "notification_slots_entity_key_idx"
+  ON "notification_slots" ("entity_key")
+  WHERE entity_key IS NOT NULL;
 
 -- UserDevices: индекс по userId (unique на token уже есть через constraint)
 CREATE INDEX "user_devices_user_id_idx"
   ON "user_devices" ("user_id");
 
 -- FK-constraints (целостность данных)
-ALTER TABLE "notification_preferences"
-  ADD CONSTRAINT "notification_preferences_habit_fk"
-  FOREIGN KEY ("habit_id") REFERENCES "habits" ("id")
-  ON DELETE CASCADE;
+-- Примечание: entityKey может ссылаться на разные таблицы в зависимости от kind
+-- Для habits: может быть FK к habits.id или slug
+-- Для therapy: ключ темы из справочника
 
 ALTER TABLE "notification_slots"
   ADD CONSTRAINT "notification_slots_habit_fk"
-  FOREIGN KEY ("habit_id") REFERENCES "habits" ("id")
+  -- Примечание: entityKey может ссылаться на разные таблицы в зависимости от kind
   ON DELETE SET NULL;
 
 -- Если в проекте есть таблица users, раскомментируйте:
@@ -568,7 +557,7 @@ CREATE INDEX "daily_adherence_user_id_kind_date_idx"
 
 - При включении уведомлений (`enabled: true`) для типа `kind`.
 - При изменении настроек (`PUT /api/notifications/prefs/:kind`).
-- Для `habits`: при создании/обновлении/удалении привычки — пересчитать будущие слоты только для затронутой привычки (`habitId`).
+- Для `habits`: при создании/обновлении/удалении привычки — пересчитать будущие слоты только для затронутой привычки (`entityKey`).
 - Ночной cron (00:30 UTC) — докидывание горизонта на следующие 7 дней.
 
 ### Горизонт планирования
@@ -581,14 +570,14 @@ CREATE INDEX "daily_adherence_user_id_kind_date_idx"
 - **Окно бодрствования**: фиксированное **09:00–22:30** локальной TZ пользователя (в MVP).
 - Равномерное распределение `timesPerDay` по дню в окне бодрствования.
 - Скрытый **джиттер** `±randomizeWindowMin` (10–20 минут) — только на бэке (не в UI).
-- Воркер каждые N минут (например, каждые 5 минут) извлекает «due»‑слоты (`scheduledAt <= now()`, `status = "planned"`), получает глобальные настройки (`addressing`, `tone`) из `user_preferences` и локальные настройки (`directness`) из `notification_preferences` **по связке (kind [, habitId])**, подбирает шаблон по комбинации `addressing + tone + directness (+ type)`, подставляет плейсхолдеры и отправляет через FCM.
+- Воркер каждые N минут (например, каждые 5 минут) извлекает «due»‑слоты (`scheduledAt <= now()`, `status = "planned"`), получает глобальные настройки (`addressing`, `tone`) из `user_preferences` и локальные настройки (`directness`) из `notification_preferences` **по связке (kind [, entityKey])**, подбирает шаблон по комбинации `addressing + tone + directness (+ type)`, подставляет плейсхолдеры и отправляет через FCM.
 
 **Идея генерации расписания:**
 
 Генерация расписания выполняется по каждой активной записи `notification_preferences`:
 
-- Для `therapy`: ровно одна запись (без `habitId`).
-- Для `habits`: одна запись на каждую активную привычку (с `habitId`).
+- Для `therapy`: ровно одна запись (без `entityKey`) или одна на каждую тему (с `entityKey`).
+- Для `habits`: одна запись на каждую активную привычку (с `entityKey`).
 
 #### Правила TZ/DST (часовые пояса и переходы)
 
@@ -657,14 +646,14 @@ CREATE INDEX "daily_adherence_user_id_kind_date_idx"
 ### Схема принятия решений (упрощённо)
 
 1. Сгенерировать `timesPerDay` для каждой активной записи `notification_preferences` в локальной TZ (равномерно):
-   - Для `therapy`: одна запись (без `habitId`).
-   - Для `habits`: одна запись на каждую активную привычку (с `habitId`).
+   - Для `therapy`: одна запись (без `entityKey`) или одна на каждую тему (с `entityKey`).
+   - Для `habits`: одна запись на каждую активную привычку (с `entityKey`).
 2. Склеить все слоты → отсортировать по времени.
 3. Пройти слева направо и:
    - если нарушается **минимальный шаг** или **лимит/час** → отложить менее приоритетный слот на ближайшее допустимое окно;
    - если превышается **глобальный лимит/день** → отбросить лишние слоты по приоритету (или перенести в дайджест вечером).
 4. Применить **джиттер** к каждому финальному слоту.
-5. Для каждого слота подобрать текст по комбинации: глобальные настройки (`addressing`, `tone` из `user_preferences`) + локальные настройки (`directness` из `notification_preferences` для соответствующего `kind` [, `habitId`]).
+5. Для каждого слота подобрать текст по комбинации: глобальные настройки (`addressing`, `tone` из `user_preferences`) + локальные настройки (`directness` из `notification_preferences` для соответствующего `kind` [, `entityKey`]).
 6. Отправить push через FCM (каждое уведомление отдельно, без слияния).
 
 ### Визуальная схема (ASCII)
@@ -729,8 +718,8 @@ CREATE INDEX "daily_adherence_user_id_kind_date_idx"
 Частота: 3 раза в день
 [ 1 2 3 4 5 ] (слайдер/степпер)
 
-Стиль подачи:
-( ) Мягко (●) Умеренно ( ) Жёстко
+Стиль уведомлений:
+( ) Поддерживающий (●) Сдержанный ( ) Требовательный
 
 ──────────────────────────────
 
@@ -760,14 +749,14 @@ CREATE INDEX "daily_adherence_user_id_kind_date_idx"
 ┌─────────────────────────────┐
 │ 🚭 Бросить курить    [Вкл] │
 │ Частота: 2 раза/день         │
-│ Стиль подачи: Умеренно       │
+│ Стиль уведомлений: Сдержанный       │
 │ [Превью уведомления]         │
 └─────────────────────────────┘
 
 ┌─────────────────────────────┐
 │ 💧 Пить больше воды  [Вкл] │
 │ Частота: 3 раза/день         │
-│ Стиль подачи: Мягко          │
+│ Стиль уведомлений: Поддерживающий          │
 │ [Превью уведомления]         │
 └─────────────────────────────┘
 ```
@@ -778,8 +767,8 @@ CREATE INDEX "daily_adherence_user_id_kind_date_idx"
   - название,
   - категория (здоровье / отказ / продуктивность),
   - желаемая частота,
-  - стиль подачи.
-- Для каждой привычки создаётся запись в `notificationPreferences` с `kind="habits"` и уникальным `habitId`.
+  - Стиль уведомлений.
+- Для каждой привычки создаётся запись в `notificationPreferences` с `kind="habits"` и уникальным `entityKey`.
 
 **Технологии:**
 
@@ -862,7 +851,7 @@ CREATE INDEX "daily_adherence_user_id_kind_date_idx"
 
 ### 7. Пограничные случаи и правила
 
-- Если пользователь «отклонил все уведомления с вопросами» → в `daily_adherence.no`/`dismissed` будет высокий показатель, мотивация мягко подсказывает снизить частоту или сменить стиль подачи (`directness`).
+- Если пользователь «отклонил все уведомления с вопросами» → в `daily_adherence.no`/`dismissed` будет высокий показатель, мотивация мягко подсказывает снизить частоту или сменить Стиль уведомлений (`directness`).
 - Если **ни одного взаимодействия** → `unanswered` растёт, рекомендуем включить баннер‑подсказку «разрешить уведомления» и проверить системные настройки.
 - Snooze не считается «yes», пока фактической отметки нет; если по итогам дня нет взаимодействия после snooze → это `unanswered`.
 - Часть уведомлений может быть **информационной** (без вопроса); такие слоты помечаем `payload.isQuestion=false` и **не учитываем в asked**.
@@ -923,7 +912,7 @@ await admin.messaging().send(message);
 **Примечания:**
 
 - Приоритет и TTL для быстрой и своевременной доставки.
-- Именование `collapse-id` / `collapseKey`: для `therapy` используем форму `"therapy_<type>"`, для `habits` — `"habit_<habitId>"`.
+- Именование `collapse-id` / `collapseKey`: для `therapy` используем форму `"therapy_<entityKey>"`, для `habits` — `"habit_<entityKey>"`.
 - Не дублируем одни и те же поля уведомления на верхнем уровне и в платформах: заголовок/тело задаём на верхнем уровне `notification`, платформенные параметры (`channelId`, `clickAction`, `apns.headers`) указываем только в соответствующих секциях `android`/`apns`.
 - `apns-collapse-id` для сжатия уведомлений одного типа.
 - `data.action` может быть `open` или `snooze:15m|1h|4h|tomorrow`.
@@ -967,7 +956,7 @@ await admin.messaging().send(message);
 2. Если не найдено — ищем с теми же `addressing`, но `tone = "neutral"` и `directness = "moderate"`.
 3. Если всё ещё не найдено — логируем ошибку и используем дефолтный текст: `"Время сделать паузу и восстановить дыхание."`
 
-**Примечание:** В API и базе данных поле `directness` соответствует UI-полю «Стиль подачи». Возможные значения: `soft | moderate | hard`. Влияет на текст уведомления, но не на тон и обращение (которые берутся из глобальных настроек).
+**Примечание:** В API и базе данных поле `directness` соответствует UI-полю «Стиль уведомлений». Возможные значения: `soft | moderate | hard`. Влияет на текст уведомления, но не на тон и обращение (которые берутся из глобальных настроек).
 
 ---
 
@@ -1024,7 +1013,7 @@ CREATE TABLE IF NOT EXISTS "user_preferences" (
 
 **Метрики (time-series):**
 
-- `slot_planned`, `slot_sent`, `slot_failed`, `slot_skipped` (labels: `kind`, `habitId?`, `templateId`)
+- `slot_planned`, `slot_sent`, `slot_failed`, `slot_skipped` (labels: `kind`, `entityKey?`, `templateId`)
 - `interaction_yes`, `interaction_no`, `interaction_later`, `interaction_dismissed`, `interaction_unanswered`
 - `delivery_latency_ms` — время от `scheduledAt` до фактической доставки (по client callback или серверному timestamp)
 - `tokens_active_per_user` — количество активных устройств на пользователя
@@ -1032,7 +1021,7 @@ CREATE TABLE IF NOT EXISTS "user_preferences" (
 
 **Логи/трассировка:**
 
-- Логируем ошибки FCM/APNs с кодами, payload-id, userId, habitId (если есть).
+- Логируем ошибки FCM/APNs с кодами, payload-id, userId, entityKey (если есть).
 - Трассируем ключевые шаги воркера: fetch due → render payload → send → result.
 
 **Алерты (SLO):**

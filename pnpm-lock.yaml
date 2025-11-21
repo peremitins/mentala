@@ -125,6 +125,9 @@ importers:
       shadcn-vue:
         specifier: ^2.2.0
         version: 2.2.0(eslint@8.57.1)(typescript@5.6.3)(vue@3.5.22(typescript@5.6.3))
+      slugify:
+        specifier: ^1.6.6
+        version: 1.6.6
       tailwindcss:
         specifier: ^4.1.13
         version: 4.1.13
@@ -7655,6 +7658,10 @@ packages:
 
   slow-redact@0.3.0:
     resolution: {integrity: sha512-cf723wn9JeRIYP9tdtd86GuqoR5937u64Io+CYjlm2i7jvu7g0H+Cp0l0ShAf/4ZL+ISUTVT+8Qzz7RZmp9FjA==}
+
+  slugify@1.6.6:
+    resolution: {integrity: sha512-h+z7HKHYXj6wJU+AnS/+IH8Uh9fdcX1Lrhg1/VMdf9PwoBQXFcXiAdsy2tSK0P6gKwJLXp02r90ahUCqHk9rrw==}
+    engines: {node: '>=8.0.0'}
 
   smob@1.5.0:
     resolution: {integrity: sha512-g6T+p7QO8npa+/hNx9ohv1E5pVCmWrVCUzUXJyLdMmftX6ER0oiWY/w9knEonLpnOp6b6FenKnMfR8gqwWdwig==}
@@ -17672,6 +17679,8 @@ snapshots:
       is-fullwidth-code-point: 5.1.0
 
   slow-redact@0.3.0: {}
+
+  slugify@1.6.6: {}
 
   smob@1.5.0: {}
 

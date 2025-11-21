@@ -9,14 +9,15 @@
 
 ## 🚀 Быстрый старт
 
-### 1. Применить миграцию БД
+### 1. Применить миграции БД
 
 ```bash
 # Если используете Drizzle Kit
 npm run db:push
 
-# Или применить SQL миграцию напрямую
-psql -d mentai -f server/infrastructure/db/migrations/0007_add_topic_key_support.sql
+# Или применить SQL миграции напрямую
+psql -d mentai -f server/infrastructure/db/migrations/0021_refactor_generationMode_to_textSource.sql
+psql -d mentai -f server/infrastructure/db/migrations/0022_refactor_habitId_topicKey_to_entityKey.sql
 ```
 
 ### 2. Запустить проект
@@ -46,14 +47,15 @@ server/
 │   ├── therapy/
 │   │   └── topics.get.ts                # GET /api/therapy/topics (НОВОЕ)
 │   └── notifications/prefs/
-│       ├── [kind].get.ts                # ОБНОВЛЕНО: поддержка ?habitId / ?topicKey
-│       └── [kind].put.ts                # ОБНОВЛЕНО: сохранение с habitId/topicKey
+│       ├── [kind].get.ts                # ОБНОВЛЕНО: поддержка ?entityKey
+│       └── [kind].put.ts                # ОБНОВЛЕНО: сохранение с entityKey
 ├── application/notifications/
-│   └── scheduler.service.ts             # ОБНОВЛЕНО: генерация слотов с habitId/topicKey
+│   └── scheduler.service.ts             # ОБНОВЛЕНО: генерация слотов с entityKey
 └── infrastructure/db/
-    ├── schema.ts                         # ОБНОВЛЕНО: добавлены topicKey, meta
+    ├── schema.ts                         # Схема БД с entityKey и textSource
     └── migrations/
-        └── 0007_add_topic_key_support.sql # НОВОЕ
+        ├── 0021_refactor_generationMode_to_textSource.sql
+        └── 0022_refactor_habitId_topicKey_to_entityKey.sql
 ```
 
 ### Frontend
@@ -66,7 +68,6 @@ app/
 ├── components/
 │   ├── notifications/                    # НОВОЕ: общие компоненты
 │   │   ├── NotificationPreview.vue      # Превью с кнопкой 🎲
-│   │   ├── DirectnessSelector.vue       # Мягко/Умеренно/Жёстко
 │   │   ├── FrequencyStepper.vue         # Слайдер 1-5 раз/день
 │   │   └── NotificationToggle.vue       # Вкл/Выкл
 │   └── habits/                           # НОВОЕ: компоненты привычек
@@ -85,29 +86,23 @@ app/
 ### Shared
 
 ```
-shared/dto/notifications.ts              # ОБНОВЛЕНО: добавлены topicKey, meta
+shared/dto/notifications.ts              # DTO с entityKey и textSource
 ```
 
 ## 🔑 Ключевые изменения
 
 ### 1. Единая таблица `notification_preferences`
 
-До:
-
 ```sql
--- Только kind и habitId
-notification_preferences (kind, habitId, ...)
-```
-
-После:
-
-```sql
--- Добавлены topicKey и meta
 notification_preferences (
   kind,           -- 'therapy' | 'habits'
-  habitId,        -- для habits (per-habit)
-  topicKey,       -- для therapy (per-topic) ← НОВОЕ
-  meta,           -- JSONB для доп. параметров ← НОВОЕ
+  entityKey,      -- единое поле для идентификации сущности
+  textSource,     -- 'templates' | 'ai' | 'hybrid'
+  meta,           -- JSONB для доп. параметров (customTexts и т.д.)
+  enabled,        -- включены ли уведомления
+  timesPerDay,    -- количество уведомлений в день
+  directness,     -- 'soft' | 'moderate' | 'hard'
+  timezone,       -- IANA timezone
   ...
 )
 ```
@@ -115,21 +110,26 @@ notification_preferences (
 ### 2. API endpoints с query параметрами
 
 ```typescript
-// Habits (per-habit настройки)
-GET /api/notifications/prefs/habits?habitId=habit_123
+// Habits (настройки для конкретной привычки)
+GET /api/notifications/prefs/habits?entityKey=habit_123
 
-// Therapy Topics (per-topic настройки)
-GET /api/notifications/prefs/therapy?topicKey=anxiety
+// Therapy Topics (настройки для конкретной темы)
+GET /api/notifications/prefs/therapy?entityKey=anxiety
 ```
 
-### 3. Scheduler с habitId/topicKey
+### 3. Scheduler с entityKey
 
 ```typescript
-// Было
-generateSlotsForUser(userId, kind)
+generateSlotsForUser(userId, kind, { entityKey? })
+```
 
-// Стало
-generateSlotsForUser(userId, kind, { habitId?, topicKey? })
+### 4. Режимы генерации текстов (textSource)
+
+```typescript
+// textSource: 'templates' | 'ai' | 'hybrid'
+// - templates: готовые шаблоны или пользовательские тексты
+// - ai: AI-генерированные тексты
+// - hybrid: чередование пользовательских и AI-текстов
 ```
 
 ## 🎨 UI особенности
@@ -184,30 +184,28 @@ open http://localhost:3000/therapy
 ### 3. Проверка слотов в БД
 
 ```sql
--- Проверить, что слоты создались с habitId
+-- Проверить, что слоты создались с entityKey
 SELECT * FROM notification_slots
-WHERE habit_id IS NOT NULL
+WHERE entity_key IS NOT NULL
 ORDER BY scheduled_at DESC
 LIMIT 10;
 
--- Проверить, что слоты создались с topicKey
+-- Проверить слоты для конкретной сущности
 SELECT * FROM notification_slots
-WHERE topic_key IS NOT NULL
-ORDER BY scheduled_at DESC
-LIMIT 10;
+WHERE entity_key = 'your-entity-key'
+ORDER BY scheduled_at DESC;
 ```
 
 ## 📝 Примечания
 
 ### Индексы
 
-Миграция создаёт следующие индексы:
+Миграции создают следующие индексы:
 
-- `notification_preferences_topic_key_idx` — для быстрого поиска по topicKey
-- `notification_slots_topic_key_idx` — для быстрого поиска слотов
-- `notification_preferences_user_therapy_topic` — уникальность (userId + kind + topicKey)
-- `notification_preferences_user_therapy_general` — уникальность общих настроек
-- `notification_preferences_user_habits` — уникальность (userId + kind + habitId)
+- `notification_preferences_entity_key_idx` — для быстрого поиска по entityKey
+- `notification_slots_entity_key_idx` — для быстрого поиска слотов
+- `notification_preferences_user_kind_entity` — уникальность (userId + kind + entityKey)
+- `ai_generated_notification_texts_entity_key_idx` — для быстрого поиска AI-текстов по entityKey
 
 ### Производительность
 
@@ -217,19 +215,24 @@ LIMIT 10;
 
 ## 🐛 Troubleshooting
 
-### Ошибка: "column topic_key does not exist"
+### Ошибка: "column entity_key does not exist"
 
-**Решение:** Примените миграцию БД
+**Решение:** Примените миграции БД
 
 ```bash
+# Применить все миграции
 npm run db:push
+
+# Или вручную применить необходимые миграции
+psql -d mentai -f server/infrastructure/db/migrations/0021_refactor_generationMode_to_textSource.sql
+psql -d mentai -f server/infrastructure/db/migrations/0022_refactor_habitId_topicKey_to_entityKey.sql
 ```
 
 ### Ошибка: "No template found"
 
 **Причина:** Нет шаблонов с нужными параметрами
 
-**Решение:** Добавьте больше шаблонов в `app/lib/notificationTemplates.ts` или проверьте фильтрацию по `topic`/`category`
+**Решение:** Добавьте больше шаблонов в `app/lib/notificationTemplates.ts` или проверьте фильтрацию по `entityKey` и другим параметрам
 
 ### UI компоненты не отображаются
 
@@ -253,6 +256,11 @@ npm run dev
 
 ---
 
-_Версия:_ 2.3  
-_Дата:_ 2025-11-06  
+_Версия:_ 2.5  
+_Дата:_ 2025-01-XX  
 _Статус:_ Production Ready ✅
+
+**Текущая архитектура:**
+
+- Используется единое поле `entityKey` для идентификации сущностей
+- Режимы генерации текстов: `textSource` (`templates`/`ai`/`hybrid`)

@@ -84,7 +84,8 @@ export const openaiProvider: LlmProviderPort = {
       });
 
     const usedModel = model || config.llm.openai.defaultModel;
-    const maxTokens = config.llm.openai.defaultMaxOutputTokens;
+    const maxTokens =
+      options?.maxOutputTokens || config.llm.openai.defaultMaxOutputTokens;
 
     let attempt = 0;
     const maxRetries = 5;
@@ -349,6 +350,8 @@ export const openaiProvider: LlmProviderPort = {
       });
 
     const usedModel = model || config.llm.openai.defaultModel;
+    const maxOutputTokens =
+      options?.maxOutputTokens || config.llm.openai.defaultMaxOutputTokens;
 
     const isFirst = Boolean(options?.isFirstSession);
     const lang = options?.lang ?? 'ru';
@@ -437,7 +440,7 @@ export const openaiProvider: LlmProviderPort = {
       model: usedModel,
       input,
       temperature: options?.temperature ?? 0.3,
-      max_output_tokens: config.llm.openai.defaultMaxOutputTokens,
+      max_output_tokens: maxOutputTokens,
     });
 
     for await (const ev of stream as any) {

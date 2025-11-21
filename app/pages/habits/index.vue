@@ -40,8 +40,10 @@ const baseHabitItems = computed(() =>
 const customHabitItems = computed(() =>
   userHabits.value.map((habit) => {
     const normalizedIntent = habit.intent === 'quit' ? 'quit' : 'build';
+    // ВАЖНО: Используем slug для читаемого URL, если он есть
+    const identifier = habit.slug || habit.id;
     return {
-      id: habit.id,
+      id: identifier, // Используем slug для читаемого URL
       name: habit.name,
       description: habit.description || 'Персональная привычка',
       emoji: habit.emoji || '✨',
@@ -101,14 +103,19 @@ function handleGoalSelect(item: NotificationIndexItem) {
   }
 
   if ('id' in payload) {
-    navigateTo(`/habits/${payload.id}?intent=${payload.intent || 'build'}`);
+    // Используем slug, если есть, иначе id (для обратной совместимости)
+    const identifier =
+      'slug' in payload && payload.slug ? payload.slug : payload.id;
+    navigateTo(`/habits/${identifier}?intent=${payload.intent || 'build'}`);
   }
 }
 
 function handleHabitCreated(payload: HabitDto | TherapyTopicDto) {
   const habit = payload as HabitDto;
   createModalOpen.value = false;
-  navigateTo(`/habits/${habit.id}?intent=${habit.intent || 'build'}`);
+  // Используем slug, если есть, иначе id (для обратной совместимости)
+  const identifier = habit.slug || habit.id;
+  navigateTo(`/habits/${identifier}?intent=${habit.intent || 'build'}`);
 }
 
 function handleHabitDelete(item: NotificationIndexItem) {
@@ -143,7 +150,7 @@ async function confirmDeleteHabit() {
 <template>
   <div class="h-full flex flex-col">
     <NotificationIndexPage
-      title="Привычки"
+      title="📋&nbsp;&nbsp;Привычки"
       description="Здесь вы найдёте готовые привычки и сможете добавить свои, чтобы получать именно те уведомления, которые вам подходят"
       mentai-mode="habits"
       :items="habitItems"

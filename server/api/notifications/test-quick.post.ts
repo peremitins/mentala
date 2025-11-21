@@ -155,7 +155,7 @@ export default defineEventHandler(
         id: slotId,
         userId,
         kind: body.kind,
-        habitId: null,
+        entityKey: null,
         scheduledAt,
         payload,
         templateId: templateId,

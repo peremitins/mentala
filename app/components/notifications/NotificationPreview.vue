@@ -16,11 +16,11 @@ const props = defineProps<{
   addressing: Addressing;
   tone: Tone;
   directness: Directness;
-  topicKey?: string;
-  habitId?: string;
+  entityKey?: string;
   subtype?: HabitSubtype;
   userName?: string;
   customTexts?: string[];
+  isAiGenerated?: boolean;
 }>();
 
 // Используем composable для определения режима разработки
@@ -31,7 +31,7 @@ const previewText = ref('');
 const templateId = ref('');
 
 function updatePreview(useFirstTemplate = false) {
-  if (props.customTexts?.length) {
+  if (props.customTexts?.length && props.customTexts[0]) {
     previewText.value = formatNotificationTextWithName(
       props.customTexts[0],
       props.userName
@@ -43,8 +43,7 @@ function updatePreview(useFirstTemplate = false) {
   // tone больше не используется в фильтрации шаблонов
   // В production всегда используем первый шаблон (useFirst = true)
   const template = findTemplate(props.kind, {
-    topicKey: props.topicKey,
-    habitId: props.habitId,
+    entityKey: props.entityKey,
     subtype: props.subtype,
     useFirst: useFirstTemplate || !isDevelopment.value,
   });
@@ -72,8 +71,7 @@ watch(
     props.addressing,
     props.tone,
     props.directness,
-    props.topicKey,
-    props.habitId,
+    props.entityKey,
     props.subtype,
     props.customTexts,
   ],
@@ -135,6 +133,13 @@ function refreshPreview() {
         <div
           class="mb-3 text-base leading-relaxed text-gray-900 dark:text-gray-100"
         >
+          <span
+            v-if="isAiGenerated"
+            class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs font-medium mr-2"
+          >
+            <span>✨</span>
+            <span>AI</span>
+          </span>
           {{ previewText }}
         </div>
 

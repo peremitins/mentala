@@ -11,6 +11,8 @@ export interface LlmProviderPort {
     options?: {
       sessionId?: string;
       temperature?: number;
+      maxOutputTokens?: number; // Для Responses API
+      scenario?: 'chat' | 'notifications'; // Сценарий использования
       lang?: string;
       user_locale?: string;
       user_name?: string;
@@ -26,6 +28,8 @@ export interface LlmProviderPort {
     options?: {
       sessionId?: string;
       temperature?: number;
+      maxOutputTokens?: number; // Для Responses API
+      scenario?: 'chat' | 'notifications'; // Сценарий использования
       lang?: string;
       user_locale?: string;
       user_name?: string;

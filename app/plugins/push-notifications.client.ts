@@ -114,7 +114,7 @@ export default defineNuxtPlugin((nuxtApp) => {
                 body: {
                   kind: data.kind || 'therapy',
                   duration,
-                  habitId: data.habitId || null,
+                  entityKey: data.entityKey || null,
                 },
               });
               console.log('[PushPlugin] Notification snoozed:', duration);

@@ -3525,8 +3525,8 @@ export const FALLBACK_TEXT = 'Время сделать паузу и восст
 
 /**
  * Подбор шаблона по параметрам
- * @param kind - тип уведомления (therapy | habits)
- * @param options - опциональные параметры фильтрации (topicKey, intent, habitKey, subtype)
+ * @param kind - фокус уведомления (therapy | habits)
+ * @param options - опциональные параметры фильтрации (entityKey, intent, habitKey, subtype)
  * @returns случайный подходящий шаблон или null
  *
  * Примечание: addressing и tone берутся из БД (userPreferences) и используются только в getTemplateText для выбора текста
@@ -3534,34 +3534,39 @@ export const FALLBACK_TEXT = 'Время сделать паузу и восст
 export function findTemplate(
   kind: NotificationKind,
   options?: {
-    topicKey?: string;
-    habitId?: string;
+    entityKey?: string; // Унифицированное поле для идентификации сущности (для therapy используется для фильтрации по topic, для habits = habitKey)
     type?: TherapyType | HabitsType;
     intent?: HabitIntent;
-    habitKey?: HabitKey;
+    habitKey?: HabitKey; // Для обратной совместимости (если передан, имеет приоритет над entityKey для habits)
     subtype?: HabitSubtype;
     excludeTemplateIds?: string[];
     useFirst?: boolean; // Если true, возвращает первый шаблон вместо случайного (для production)
+    templateIndex?: number; // Индекс для детерминированного выбора шаблона (вместо случайного)
   }
 ): NotificationTemplate | null {
   const {
-    topicKey,
+    entityKey,
     type,
     intent,
     habitKey: habitKeyParam,
-    habitId,
     subtype,
     excludeTemplateIds,
     useFirst = false,
+    templateIndex,
   } = options || {};
-  // Используем habitKey, если передан, иначе fallback на habitId (для обратной совместимости)
-  const habitKey = habitKeyParam || habitId;
+
+  // Для habits: используем habitKey из параметров или entityKey
+  const habitKey = habitKeyParam || (kind === 'habits' ? entityKey : undefined);
+  // Для therapy: используем entityKey напрямую (раньше это было topicKey)
+  const entityKeyForTopic = kind === 'therapy' ? entityKey : undefined;
+
   console.log('[findTemplate] Searching:', {
     kind,
+    entityKey,
     habitKey,
     intent,
     subtype,
-    topicKey,
+    entityKeyForTopic,
   });
 
   const templates = notificationTemplates.filter((t) => {
@@ -3573,8 +3578,9 @@ export function findTemplate(
     const matchDirectness =
       subtype === 'informational' ? t.directness.includes('universal') : true; // Для reminder/motivational не фильтруем по directness
 
-    // Фильтруем по topicKey (для therapy)
-    const matchTopic = !topicKey || !t.topic || t.topic === topicKey;
+    // Фильтруем по entityKey для therapy
+    const matchTopic =
+      !entityKeyForTopic || !t.topic || t.topic === entityKeyForTopic;
 
     // Для habits: приоритет новым полям (intent, habitKey, subtype)
     let matchHabit = true;
@@ -3671,9 +3677,17 @@ export function findTemplate(
     return null;
   }
 
-  // Возвращаем случайный шаблон из подходящих (или первый, если useFirst = true)
+  // Возвращаем шаблон из подходящих:
+  // - Если useFirst = true, возвращаем первый
+  // - Если templateIndex передан, используем его для детерминированного выбора
+  // - Иначе используем случайный выбор (для обратной совместимости)
   if (useFirst) {
     return templates[0] ?? null;
+  }
+  if (templateIndex !== undefined && templateIndex !== null) {
+    // Детерминированный выбор на основе индекса
+    const index = templateIndex % templates.length;
+    return templates[index] ?? null;
   }
   return templates[Math.floor(Math.random() * templates.length)] ?? null;
 }
@@ -3682,7 +3696,7 @@ export function findTemplate(
  * Получить текст шаблона с подстановкой плейсхолдеров
  * @param template - шаблон
  * @param addressing - обращение
- * @param directness - стиль подачи
+ * @param directness - Стиль уведомлений
  * @param userName - имя пользователя (для подстановки {name})
  * @returns итоговый текст уведомления
  */
@@ -3729,11 +3743,11 @@ export function getTemplateText(
 
 /**
  * Получить текст уведомления с fallback-логикой
- * @param kind - тип уведомления
+ * @param kind - фокус уведомления
  * @param addressing - обращение (из БД: userPreferences.addressing)
- * @param directness - стиль подачи (из настроек: notificationPreferences.directness)
+ * @param directness - Стиль уведомлений (из настроек: notificationPreferences.directness)
  * @param userName - имя пользователя
- * @param options - опциональные параметры (topicKey, intent, habitKey, subtype)
+ * @param options - опциональные параметры (entityKey, intent, habitKey, subtype)
  * @returns итоговый текст уведомления
  */
 export function getNotificationText(
@@ -3742,7 +3756,7 @@ export function getNotificationText(
   directness: Directness,
   userName?: string,
   options?: {
-    topicKey?: string;
+    entityKey?: string; // Унифицированное поле для идентификации сущности
     intent?: HabitIntent;
     habitKey?: HabitKey;
     subtype?: HabitSubtype;

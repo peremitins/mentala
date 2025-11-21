@@ -25,9 +25,8 @@ export const useNotificationsStore = defineStore('notifications', {
           // Пропускаем выключенные
           if (!p.enabled) return false;
 
-          // Игнорируем legacy данные (therapy без topicKey, habits без habitId)
-          if (p.kind === 'therapy' && !p.topicKey) return false;
-          if (p.kind === 'habits' && !p.habitId) return false;
+          // Игнорируем legacy данные (без entityKey)
+          if (!p.entityKey) return false;
 
           return true;
         })
@@ -42,23 +41,19 @@ export const useNotificationsStore = defineStore('notifications', {
     },
 
     /**
-     * Получает preference по kind + habitId/topicKey
+     * Получает preference по kind + entityKey
      */
     getPreference:
       (state) =>
       (
         kind: 'therapy' | 'habits',
-        options?: { habitId?: string; topicKey?: string }
+        options?: { entityKey?: string }
       ): NotificationPreferencesDto | undefined => {
         return state.preferences.find((p) => {
           if (p.kind !== kind) return false;
 
-          if (kind === 'habits' && options?.habitId) {
-            return p.habitId === options.habitId;
-          }
-
-          if (kind === 'therapy' && options?.topicKey) {
-            return p.topicKey === options.topicKey;
+          if (options?.entityKey) {
+            return p.entityKey === options.entityKey;
           }
 
           return true;

@@ -34,7 +34,19 @@ export default defineNuxtConfig({
     storageKey: 'nuxt-color-mode',
     dataValue: 'theme', // data attribute for CSS selectors
   },
-  app: {},
+  app: {
+    head: {
+      viewport:
+        'width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover',
+      meta: [
+        {
+          name: 'viewport',
+          content:
+            'width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover',
+        },
+      ],
+    },
+  },
   css: [
     '~/assets/css/main.scss',
     '~/assets/css/tailwind.css',
@@ -67,6 +79,21 @@ export default defineNuxtConfig({
     // host и port настраиваются через флаги --host 0.0.0.0 в package.json
   },
   vite: {
-    plugins: [tailwindcss(), Icons({ autoInstall: true })],
+    plugins: [
+      tailwindcss(),
+      Icons({ autoInstall: true }),
+      // Плагин для замены Vue DevTools API на заглушку
+      {
+        name: 'replace-vue-devtools',
+        resolveId(id) {
+          if (id === '@vue/devtools-api' || id.includes('@vue/devtools-api')) {
+            return fileURLToPath(
+              new URL('./app/utils/devtools-stub.ts', import.meta.url)
+            );
+          }
+          return null;
+        },
+      },
+    ],
   },
 });

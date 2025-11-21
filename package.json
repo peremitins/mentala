@@ -61,6 +61,7 @@
     "pino": "^9.12.0",
     "reka-ui": "^2.6.0",
     "shadcn-vue": "^2.2.0",
+    "slugify": "^1.6.6",
     "tailwindcss": "^4.1.13",
     "vee-validate": "^4.15.1",
     "vue": "^3.5.21",

@@ -2,9 +2,11 @@
 import NotificationSettingsPage from '@/app/components/notifications/NotificationSettingsPage.vue';
 
 const route = useRoute();
-const habitId = route.params.id as string;
+const entityKey = route.params.id as string;
 </script>
 
 <template>
-  <NotificationSettingsPage mentai-mode="habits" :entity-key="habitId" />
+  <div class="h-full flex flex-col">
+    <NotificationSettingsPage mentai-mode="habits" :entity-key="entityKey" />
+  </div>
 </template>

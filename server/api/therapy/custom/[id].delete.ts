@@ -1,4 +1,4 @@
-import { eq, and } from 'drizzle-orm';
+import { eq, and, or } from 'drizzle-orm';
 import {
   notificationPreferences,
   notificationSlots,
@@ -29,17 +29,41 @@ export default defineEventHandler(async (event) => {
     });
   }
 
+  // Проверяем, существует ли тема (для получения slug)
+  const [existing] = await db
+    .select()
+    .from(therapyTopicsCustom)
+    .where(
+      and(
+        eq(therapyTopicsCustom.id, id),
+        eq(therapyTopicsCustom.userId, userId)
+      )
+    )
+    .limit(1);
+
+  if (!existing) {
+    throw createError({
+      statusCode: 404,
+      message: 'Topic not found',
+    });
+  }
+
   // Удаляем связанные настройки и запланированные уведомления
+  // ВАЖНО: Ищем preferences по ID и slug, т.к. в БД может быть сохранен slug
   await db
     .delete(notificationPreferences)
     .where(
       and(
         eq(notificationPreferences.userId, userId),
         eq(notificationPreferences.kind, 'therapy'),
-        eq(notificationPreferences.topicKey, id)
+        or(
+          eq(notificationPreferences.entityKey, existing.id),
+          eq(notificationPreferences.entityKey, existing.slug || '')
+        )
       )
     );
 
+  // ВАЖНО: Удаляем слоты по ID и slug, т.к. в БД может быть сохранен slug
   await db
     .delete(notificationSlots)
     .where(
@@ -47,21 +71,22 @@ export default defineEventHandler(async (event) => {
         eq(notificationSlots.userId, userId),
         eq(notificationSlots.kind, 'therapy'),
         eq(notificationSlots.status, 'planned'),
-        eq(notificationSlots.topicKey, id)
+        or(
+          eq(notificationSlots.entityKey, existing.id),
+          eq(notificationSlots.entityKey, existing.slug || '')
+        )
       )
     );
 
-  const deleted = await db
+  // Удаляем тему (existing уже проверен выше)
+  await db
     .delete(therapyTopicsCustom)
-    .where(and(eq(therapyTopicsCustom.id, id), eq(therapyTopicsCustom.userId, userId)))
-    .returning();
-
-  if (!deleted.length) {
-    throw createError({
-      statusCode: 404,
-      message: 'Topic not found',
-    });
-  }
+    .where(
+      and(
+        eq(therapyTopicsCustom.id, id),
+        eq(therapyTopicsCustom.userId, userId)
+      )
+    );
 
   return { success: true };
 });

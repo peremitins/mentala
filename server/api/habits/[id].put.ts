@@ -3,6 +3,7 @@ import { habits } from '@/server/infrastructure/db/schema';
 import { db } from '@/server/infrastructure/db/client';
 import type { HabitDto, UpdateHabitDto } from '@/shared/dto/notifications';
 import { getSessionUser } from '@/server/application/auth/session';
+import { generateSlug } from '@/server/utils/slug';
 
 /**
  * PUT /api/habits/:id
@@ -57,12 +58,26 @@ export default defineEventHandler(async (event): Promise<HabitDto> => {
     });
   }
 
+  // Обновляем slug, если изменилось название
+  let slug = existing.slug;
+  if (body.name !== undefined && body.name.trim() !== existing.name) {
+    const existingHabits = await db
+      .select({ slug: habits.slug })
+      .from(habits)
+      .where(eq(habits.userId, userId));
+    const existingSlugs = existingHabits
+      .map((h) => h.slug)
+      .filter((s): s is string => s !== null && s !== existing.slug);
+    slug = generateSlug(body.name.trim(), existingSlugs);
+  }
+
   const [updated] = await db
     .update(habits)
     .set({
       name: body.name?.trim() ?? existing.name,
       intent: body.intent ?? existing.intent,
       habitKey: body.habitKey !== undefined ? body.habitKey : existing.habitKey,
+      slug,
       emoji: body.emoji !== undefined ? body.emoji : existing.emoji,
       description:
         body.description !== undefined
@@ -73,11 +88,16 @@ export default defineEventHandler(async (event): Promise<HabitDto> => {
     .where(eq(habits.id, id))
     .returning();
 
+  // Примечание: Пересоздание AI-текстов при изменении названия/описания
+  // происходит автоматически в prefs/[kind].put.ts при следующем сохранении настроек,
+  // так как хеш конфигурации изменится (entityName/entityDescription входят в хеш)
+
   return {
     id: updated.id,
     name: updated.name,
     intent: updated.intent as 'build' | 'quit' | 'custom',
     habitKey: updated.habitKey ?? null,
+    slug: updated.slug ?? null,
     emoji: updated.emoji ?? null,
     description: updated.description ?? null,
     createdAt: updated.createdAt.toISOString(),

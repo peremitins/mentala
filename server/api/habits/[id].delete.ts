@@ -1,4 +1,4 @@
-import { eq, and } from 'drizzle-orm';
+import { eq, and, or } from 'drizzle-orm';
 import {
   habits,
   notificationPreferences,
@@ -45,16 +45,21 @@ export default defineEventHandler(
     }
 
     // Удаляем связанные настройки и запланированные слоты
+    // ВАЖНО: Ищем preferences по ID и slug, т.к. в БД может быть сохранен slug
     await db
       .delete(notificationPreferences)
       .where(
         and(
           eq(notificationPreferences.userId, userId),
           eq(notificationPreferences.kind, 'habits'),
-          eq(notificationPreferences.habitId, existing.id)
+          or(
+            eq(notificationPreferences.entityKey, existing.id),
+            eq(notificationPreferences.entityKey, existing.slug || '')
+          )
         )
       );
 
+    // ВАЖНО: Удаляем слоты по ID и slug, т.к. в БД может быть сохранен slug
     await db
       .delete(notificationSlots)
       .where(
@@ -62,7 +67,10 @@ export default defineEventHandler(
           eq(notificationSlots.userId, userId),
           eq(notificationSlots.kind, 'habits'),
           eq(notificationSlots.status, 'planned'),
-          eq(notificationSlots.habitId, existing.id)
+          or(
+            eq(notificationSlots.entityKey, existing.id),
+            eq(notificationSlots.entityKey, existing.slug || '')
+          )
         )
       );
 

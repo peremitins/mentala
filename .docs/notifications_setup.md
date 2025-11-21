@@ -39,13 +39,14 @@
 
 - `habits` — привычки пользователя
 - `user_preferences` — глобальные настройки (addressing, tone)
-- `notification_preferences` — локальные настройки по типу (с поддержкой habitId и topicKey)
-- `notification_slots` — запланированные слоты уведомлений (с поддержкой habitId и topicKey)
+- `notification_preferences` — локальные настройки по типу (с поддержкой `entityKey` - унифицированное поле для идентификации сущности)
+- `notification_slots` — запланированные слоты уведомлений (с поддержкой `entityKey`)
+- `ai_generated_notification_texts` — AI-генерированные тексты (с поддержкой `entityKey`)
 - `user_devices` — FCM токены устройств
 - `notification_interactions` — трекинг взаимодействий
 - `daily_adherence` — дневная агрегация метрик
 
-**Примечание:** Support Topics (темы поддержки) хранятся как статичный справочник в коде, а их настройки — в `notification_preferences` через поле `topicKey`.
+**Примечание:** Support Topics (темы поддержки) хранятся как статичный справочник в коде, а их настройки — в `notification_preferences` через поле `entityKey`.
 
 **Миграции:**
 
@@ -57,7 +58,10 @@ pnpm db:generate
 pnpm db:migrate
 ```
 
-Миграция `0006_add_notifications_system.sql` уже создана и включает все таблицы, индексы и constraints.
+**Важные миграции:**
+
+- `0021_refactor_generationMode_to_textSource.sql` — настройка поля `textSource`
+- `0022_refactor_habitId_topicKey_to_entityKey.sql` — настройка поля `entityKey`
 
 ### 2. API Endpoints
 
@@ -112,7 +116,7 @@ pnpm db:migrate
 **Функции:**
 
 - `generateSlotsForUser(userId, kind, options?)` — генерирует слоты на 7 дней
-  - `options` может содержать `habitId` или `topicKey` для per-habit/per-topic генерации
+  - `options` может содержать `entityKey` для per-entity генерации
 - `regenerateAllSlots()` — пересоздаёт слоты для всех пользователей
 - `triggerSlotRegeneration(userId, kind, options?)` — триггер при изменении настроек
 
@@ -153,7 +157,7 @@ pnpm db:migrate
 - `/settings` → `SettingsGeneral.vue` (глобальные настройки)
 - `/therapy` → `SettingsNotificationsTherapy.vue` (настройки therapy, общие)
 - `/support` → Picker тем + список активных тем (в разработке)
-- `/support/:topicKey` → Настройка конкретной темы поддержки (в разработке)
+- `/support/:key` → Настройка конкретной темы поддержки (в разработке)
 - `/habits` → Picker целей + список активных привычек (в разработке)
 - `/habits/:id` → Настройка конкретной привычки (в разработке)
 
@@ -254,7 +258,7 @@ pnpm preview
 
 - **Включить уведомления**: toggle
 - **Частота**: 1-5 раз в день (слайдер)
-- **Стиль подачи**: мягко / умеренно / жёстко
+- **Стиль уведомлений**: Поддерживающий / Сдержанный / Требовательный
 
 Превью уведомления обновляется автоматически при изменении параметров.
 
@@ -282,11 +286,11 @@ pnpm preview
 В MVP реализовано:
 
 - ✅ База данных (таблицы, индексы, constraints)
-  - ✅ Добавлена поддержка `topicKey` в `notification_preferences` и `notification_slots`
+  - ✅ Добавлена поддержка `entityKey` в `notification_preferences` и `notification_slots`
 - ✅ API эндпоинты (настройки, привычки, токены, snooze, трекинг)
 - ✅ Каталог шаблонов (therapy типы с addressing/tone/directness)
 - ✅ Планировщик слотов (генерация на 7 дней с джиттером)
-  - ✅ Поддержка per-habit и per-topic генерации
+  - ✅ Поддержка генерации для конкретных сущностей через entityKey
 - ✅ Воркер отправки (обработка due-слотов каждые 5 минут)
 - ✅ UI компоненты (глобальные и локальные настройки, превью)
 - ✅ Capacitor интеграция (регистрация токенов, обработка уведомлений, snooze)

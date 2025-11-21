@@ -10,6 +10,8 @@ import { getSessionUser } from '@/server/application/auth/session';
 /**
  * GET /api/notifications/prefs
  * Получить все локальные настройки уведомлений пользователя
+ * ВАЖНО: Возвращаем ВСЕ настройки (включая неактивные), так как фронтенд сам фильтрует по enabled
+ * для подсчета общего количества активных уведомлений.
  */
 export default defineEventHandler(
   async (event): Promise<NotificationPreferencesDto[]> => {
@@ -31,8 +33,7 @@ export default defineEventHandler(
       id: p.id,
       userId: p.userId,
       kind: p.kind as 'therapy' | 'habits',
-      habitId: p.habitId ?? null,
-      topicKey: p.topicKey ?? null,
+      entityKey: p.entityKey ?? null,
       enabled: p.enabled,
       timesPerDay: p.timesPerDay,
       directness: p.directness as 'soft' | 'moderate' | 'hard',

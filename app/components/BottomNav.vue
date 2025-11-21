@@ -1,8 +1,5 @@
 <template>
-  <div
-    v-bind="$attrs"
-    class="flex-[0_0_auto] inset-x-0 pb-2 mt-2 sticky bottom-0"
-  >
+  <div v-bind="$attrs" class="flex-[0_0_auto] inset-x-0 mt-2 sticky bottom-0">
     <section
       class="glass-deep px-0 py-3"
       :style="{ borderRadius: `calc(var(--radius-sm))` }"
@@ -21,7 +18,7 @@
               ]"
               :style="{ borderRadius: 'var(--radius-icon)' }"
             >
-              <IconHome class="w-5 h-5" />
+              <IconMessageCircleHeart class="w-5 h-5" />
             </span>
             <span class="w-full text-center">Чат</span>
           </NuxtLink>
@@ -39,7 +36,7 @@
               ]"
               :style="{ borderRadius: 'var(--radius-icon)' }"
             >
-              <IconGauge class="w-5 h-5" />
+              <IconBrain class="w-5 h-5" />
             </span>
             <span class="w-full text-center">Терапия</span>
           </NuxtLink>
@@ -57,7 +54,7 @@
               ]"
               :style="{ borderRadius: 'var(--radius-icon)' }"
             >
-              <IconCheck class="w-5 h-5" />
+              <IconListCheck class="w-5 h-5" />
             </span>
             <span class="w-full text-center">Привычки</span>
           </NuxtLink>
@@ -86,9 +83,9 @@
 </template>
 
 <script setup lang="ts">
-import IconHome from '~icons/lucide/home';
-import IconGauge from '~icons/lucide/gauge';
-import IconCheck from '~icons/lucide/check';
+import IconMessageCircleHeart from '~icons/lucide/message-circle-heart';
+import IconBrain from '~icons/lucide/brain';
+import IconListCheck from '~icons/lucide/list-check';
 import IconSettings from '~icons/lucide/settings';
 
 const route = useRoute();

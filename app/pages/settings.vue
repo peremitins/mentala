@@ -1,6 +1,6 @@
 <template>
-  <div class="glass-deep px-2 space-y-6 h-full overflow-y-auto">
-    <PageHeader title="Настройки" />
+  <div class="space-y-6 h-dvh overflow-y-auto">
+    <PageHeader title="⚙️&nbsp;&nbsp;Настройки" />
 
     <section
       class="space-y-3"

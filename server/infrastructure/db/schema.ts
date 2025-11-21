@@ -8,6 +8,7 @@ import {
   varchar,
   uuid,
   jsonb,
+  numeric,
 } from 'drizzle-orm/pg-core';
 
 export const users = pgTable('users', {
@@ -148,6 +149,7 @@ export const habits = pgTable('habits', {
   name: varchar('name', { length: 120 }).notNull(),
   intent: varchar('intent', { length: 10 }).notNull(), // 'build' | 'quit' | 'custom'
   habitKey: varchar('habit_key', { length: 50 }), // Нормализованный ключ для маппинга на шаблоны (water, smoking, etc.)
+  slug: varchar('slug', { length: 255 }), // URL-friendly идентификатор
   emoji: varchar('emoji', { length: 8 }),
   description: text('description'),
   createdAt: timestamp('created_at', { withTimezone: true })
@@ -163,6 +165,7 @@ export const therapyTopicsCustom = pgTable('therapy_topics_custom', {
   id: text('id').primaryKey(),
   userId: integer('user_id').notNull(),
   name: varchar('name', { length: 120 }).notNull(),
+  slug: varchar('slug', { length: 255 }), // URL-friendly идентификатор
   description: text('description'),
   emoji: varchar('emoji', { length: 8 }),
   createdAt: timestamp('created_at', { withTimezone: true })
@@ -194,8 +197,7 @@ export const notificationPreferences = pgTable('notification_preferences', {
   id: text('id').primaryKey(),
   userId: integer('user_id').notNull(),
   kind: varchar('kind', { length: 20 }).notNull(), // 'therapy' | 'habits'
-  habitId: varchar('habit_id', { length: 255 }), // Для habits: habitKey (water, smoking, etc.) - НЕ ID привычки!
-  topicKey: varchar('topic_key', { length: 50 }), // Для therapy: topicKey (anxiety, stress, mood, etc.)
+  entityKey: varchar('entity_key', { length: 255 }), // Единое поле для идентификации источника (может быть ID, slug или ключ шаблона)
   enabled: boolean('enabled').default(true).notNull(),
   timesPerDay: integer('times_per_day').notNull(),
   directness: varchar('directness', { length: 20 }).notNull(), // 'soft' | 'moderate' | 'hard'
@@ -222,8 +224,7 @@ export const notificationSlots = pgTable('notification_slots', {
   id: text('id').primaryKey(),
   userId: integer('user_id').notNull(),
   kind: varchar('kind', { length: 20 }).notNull(), // 'therapy' | 'habits'
-  habitId: varchar('habit_id', { length: 255 }), // Для habits: habitKey (water, smoking, etc.) для фильтрации шаблонов
-  topicKey: varchar('topic_key', { length: 50 }), // Для therapy: topicKey (anxiety, stress, mood, etc.)
+  entityKey: varchar('entity_key', { length: 255 }), // Единое поле для идентификации источника (может быть ID, slug или ключ шаблона)
   scheduledAt: timestamp('scheduled_at', { withTimezone: true }).notNull(), // UTC с джиттером
   payload: jsonb('payload').notNull(), // { title, body, templateId, action, deepLink, ... }
   templateId: varchar('template_id', { length: 255 }),
@@ -290,3 +291,29 @@ export const dailyAdherence = pgTable('daily_adherence', {
 });
 
 // Partial unique index will be added via SQL migration (drizzle-kit)
+
+// AI-сгенерированные тексты уведомлений
+export const aiGeneratedNotificationTexts = pgTable(
+  'ai_generated_notification_texts',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id').notNull(),
+    kind: varchar('kind', { length: 20 }).notNull(), // 'habits' | 'therapy'
+    entityKey: varchar('entity_key', { length: 255 }).notNull(), // Единое поле для идентификации источника (может быть ID, slug или ключ шаблона)
+    preferenceId: text('preference_id').notNull(), // FK к notification_preferences.id
+    textSource: varchar('text_source', { length: 20 }).notNull(), // 'ai' | 'hybrid' (только для AI-текстов)
+    texts: jsonb('texts').notNull(), // массив сгенерированных текстов (до 100)
+    generationConfigHash: text('generation_config_hash').notNull(), // хеш настроек, влияющих на генерацию
+    provider: varchar('provider', { length: 50 }).notNull(), // 'openai' | 'deepseek' | 'groq' | ...
+    model: varchar('model', { length: 100 }), // модель, использованная для генерации
+    tokensUsed: integer('tokens_used'), // количество токенов
+    costUsd: numeric('cost_usd', { precision: 10, scale: 6 }), // стоимость генерации
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }), // опционально: срок действия кеша
+  }
+);

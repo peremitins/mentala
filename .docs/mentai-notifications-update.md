@@ -47,7 +47,7 @@ _Статус_: Спецификация для реализации
 
 ### Решение: Единая таблица настроек
 
-Используем **существующую** `notification_preferences` с расширением для поддержки per-topic и per-habit настроек.
+Используем **существующую** `notification_preferences` с поддержкой настроек для конкретных сущностей через поле `entityKey`.
 
 ```typescript
 notification_preferences {
@@ -55,20 +55,18 @@ notification_preferences {
   userId: integer
   kind: 'therapy' | 'habits'
 
-  // Для per-habit настроек
-  habitId: string | null          // FK → habits.id
-
-  // Для per-topic настроек (НОВОЕ)
-  topicKey: string | null         // 'anxiety' | 'stress' | 'mood' | ...
+  // Унифицированное поле для идентификации сущности
+  entityKey: string | null        // Для habits: ID/slug привычки, для therapy: ключ темы
 
   enabled: boolean
   timesPerDay: integer (1-5)
   directness: 'soft' | 'moderate' | 'hard'
   timezone: string (IANA)
   subtype: 'reminder' | 'informational' | 'motivational' | 'mixed' | null  // Для habits, по умолчанию 'mixed'
+  textSource: 'templates' | 'ai' | 'hybrid'  // Способ создания текстов
 
   // Дополнительные параметры (опционально)
-  meta: jsonb | null              // { techniques: [...], goalType: '...' }
+  meta: jsonb | null              // { customTexts: [...], techniques: [...], goalType: '...' }
 
   createdAt: timestamp
   updatedAt: timestamp
@@ -78,64 +76,24 @@ notification_preferences {
 ### Преимущества
 
 ✅ **Единая логика** — scheduler, delivery, interactions работают одинаково  
-✅ **Минимум миграций** — только добавляем `topicKey`, не создаём новые таблицы  
+✅ **Упрощение кода** — единое поле `entityKey` для идентификации сущностей  
+✅ **Унификация режимов** — единое поле `textSource` для режимов генерации  
 ✅ **Симметричный UX** — habits и support имеют идентичную структуру интерфейса  
 ✅ **Масштабируемость** — легко добавить новые темы или типы привычек  
 ✅ **Простота поддержки** — одна кодовая база для обеих систем
 
 ---
 
-## 📦 Миграция БД
+## 📦 Миграции БД
 
-### SQL-скрипт
+**Применить миграции:**
 
-```sql
--- ==========================================
--- Добавляем topicKey в notification_preferences
--- ==========================================
-
-ALTER TABLE notification_preferences
-  ADD COLUMN topic_key VARCHAR(50);
-
--- ==========================================
--- Добавляем topicKey в notification_slots
--- ==========================================
-
-ALTER TABLE notification_slots
-  ADD COLUMN topic_key VARCHAR(50);
-
--- ==========================================
--- Индексы для эффективных запросов
--- ==========================================
-
--- Для per-topic выборки
-CREATE INDEX notification_preferences_topic_key_idx
-  ON notification_preferences(topic_key)
-  WHERE topic_key IS NOT NULL;
-
-CREATE INDEX notification_slots_topic_key_idx
-  ON notification_slots(topic_key)
-  WHERE topic_key IS NOT NULL;
-
--- ==========================================
--- Уникальные индексы (гарантия целостности)
--- ==========================================
-
--- Для therapy с topicKey: (userId + kind + topicKey) уникальны
-CREATE UNIQUE INDEX notification_preferences_user_therapy_topic
-  ON notification_preferences(user_id, kind, topic_key)
-  WHERE kind = 'therapy' AND topic_key IS NOT NULL;
-
--- Для therapy без topicKey: (userId + kind) уникальны (общий режим)
-CREATE UNIQUE INDEX notification_preferences_user_therapy_general
-  ON notification_preferences(user_id, kind)
-  WHERE kind = 'therapy' AND topic_key IS NULL AND habit_id IS NULL;
-
--- Для habits: (userId + kind + habitId) уникальны (уже есть в spec v2)
-CREATE UNIQUE INDEX notification_preferences_user_habits
-  ON notification_preferences(user_id, kind, habit_id)
-  WHERE kind = 'habits' AND habit_id IS NOT NULL;
+```bash
+psql -d mentai -f server/infrastructure/db/migrations/0021_refactor_generationMode_to_textSource.sql
+psql -d mentai -f server/infrastructure/db/migrations/0022_refactor_habitId_topicKey_to_entityKey.sql
 ```
+
+Миграции настраивают структуру БД с полями `entityKey` и `textSource`.
 
 ---
 
@@ -188,16 +146,16 @@ Mentai помогает формировать полезные привычки
 │  [—•———○———○———○———○]                                   │
 │   1    2    3    4    5                                  │
 │                                                           │
-│  Стиль подачи                                            │
+│  Стиль уведомлений                                            │
 │  ┌─────────────────────────────────────────────────┐    │
-│  │ ○ Мягко                                         │    │
-│  │   Поддержка, без давления                       │    │
+│  │ ○ Поддерживающий                                         │    │
+│  │   Тёплый, мягкий стиль без давления                       │    │
 │  ├─────────────────────────────────────────────────┤    │
-│  │ ● Умеренно                                      │    │
-│  │   Конкретнее, но корректно                      │    │
+│  │ ● Сдержанный                                      │    │
+│  │   Корректные, нейтральные формулировки без лишних эмоций                      │    │
 │  ├─────────────────────────────────────────────────┤    │
-│  │ ○ Жёстко                                        │    │
-│  │   Максимальная директивность                    │    │
+│  │ ○ Требовательный                                        │    │
+│  │   Прямые, настойчивые сообщения для тех, кому важен чёткий фокус                    │    │
 │  └─────────────────────────────────────────────────┘    │
 │                                                           │
 │  Превью уведомления                        [🎲 обновить]│
@@ -240,12 +198,12 @@ habits {
 
 notification_preferences {
   kind: 'habits'
-  habitId: 'habit_123'            // FK → habits.id
-  topicKey: null                  // для habits всегда null
+  entityKey: 'habit_123'          // ID или slug привычки
   enabled: true
   timesPerDay: 3
   directness: 'moderate'
   timezone: 'Europe/Moscow'
+  textSource: 'templates'         // 'templates' | 'ai' | 'hybrid'
   meta: null                      // можно использовать позже
 }
 ```
@@ -287,16 +245,17 @@ Response: { success: boolean }
 // Настройки уведомлений для привычки
 // ==========================================
 
-GET /api/notifications/prefs/habits?habitId=:id
+GET /api/notifications/prefs/habits?entityKey=:id
 Response: NotificationPreferencesDto
 
 PUT /api/notifications/prefs/habits
 Body: {
-  habitId: string,
+  entityKey: string,
   enabled: boolean,
   timesPerDay: number,
   directness: 'soft' | 'moderate' | 'hard',
-  timezone: string
+  timezone: string,
+  textSource?: 'templates' | 'ai' | 'hybrid'
 }
 Response: NotificationPreferencesDto
 ```
@@ -369,7 +328,7 @@ Mentai предоставляет поддержку по 10 тематичес�
 ```
 
 ┌─────────────────────────────────────────────────────────┐
-│ /support/:topicKey (pages/support/[key].vue) │
+│ /support/:key (pages/support/[key].vue) │
 ├─────────────────────────────────────────────────────────┤
 │ 😰 Тревога и паника │
 │ Помогаем успокоиться и восстановить чувство │
@@ -381,16 +340,16 @@ Mentai предоставляет поддержку по 10 тематичес�
 │ [—•———•———•———○———○] │
 │ 1 2 3 4 5 │
 │ │
-│ Стиль подачи │
+│ Стиль уведомлений │
 │ ┌─────────────────────────────────────────────────┐ │
-│ │ ○ Мягко │ │
-│ │ Поддержка, без давления │ │
+│ │ ○ Поддерживающий │ │
+│ │ Тёплый, мягкий стиль без давления │ │
 │ ├─────────────────────────────────────────────────┤ │
-│ │ ● Умеренно │ │
-│ │ Конкретнее, но корректно │ │
+│ │ ● Сдержанный │ │
+│ │ Корректные, нейтральные формулировки без лишних эмоций │ │
 │ ├─────────────────────────────────────────────────┤ │
-│ │ ○ Жёстко │ │
-│ │ Максимальная директивность │ │
+│ │ ○ Требовательный │ │
+│ │ Прямые, настойчивые сообщения для тех, кому важен чёткий фокус │ │
 │ └─────────────────────────────────────────────────┘ │
 │ │
 │ Превью уведомления [🎲 обновить]│
@@ -440,12 +399,12 @@ export const THERAPY_TOPICS = [
 
 notification_preferences {
   kind: 'therapy'
-  habitId: null                   // для therapy всегда null
-  topicKey: 'anxiety'             // НОВОЕ: ссылка на тему
+  entityKey: 'anxiety'            // Ключ темы
   enabled: true
   timesPerDay: 3
   directness: 'moderate'
   timezone: 'Europe/Moscow'
+  textSource: 'templates'         // 'templates' | 'ai' | 'hybrid'
 
   // Опционально: выбор техник (MVP - используем все техники темы)
   meta: { techniques: ['breath', 'grounding', 'reframe'] }
@@ -477,17 +436,18 @@ Response: TherapyTopic[]
 // Настройки уведомлений для темы
 // ==========================================
 
-GET /api/notifications/prefs/therapy?topicKey=anxiety
+GET /api/notifications/prefs/therapy?entityKey=anxiety
 Response: NotificationPreferencesDto
 
 PUT /api/notifications/prefs/therapy
 Body: {
-  topicKey: string,
+  entityKey: string,
   enabled: boolean,
   timesPerDay: number,
   directness: 'soft' | 'moderate' | 'hard',
   timezone: string,
-  meta?: { techniques?: string[] }  // опционально
+  textSource?: 'templates' | 'ai' | 'hybrid',
+  meta?: { techniques?: string[], customTexts?: string[] }  // опционально
 }
 Response: NotificationPreferencesDto
 ```
@@ -577,69 +537,32 @@ export type TherapyType = 'breath_cue' | 'grounding' | 'body_scan' | 'reframe' |
 ### Изменения в `server/application/notifications/scheduler.service.ts`
 
 ```typescript
-// ==========================================
-// БЫЛО: генерация без учёта habitId/topicKey
-// ==========================================
-
-export async function generateSlotsForUser(
-  userId: number,
-  kind: NotificationKind
-): Promise<void> {
-  // Получал настройки только по kind
-  const [prefs] = await db
-    .select()
-    .from(notificationPreferences)
-    .where(
-      and(
-        eq(notificationPreferences.userId, userId),
-        eq(notificationPreferences.kind, kind),
-        isNull(notificationPreferences.habitId)
-      )
-    );
-
-  // ...
-}
-
-// ==========================================
-// СТАЛО: генерация с учётом habitId/topicKey
-// ==========================================
-
 export async function generateSlotsForUser(
   userId: number,
   kind: NotificationKind,
   options?: {
-    habitId?: string | null;
-    topicKey?: string | null;
+    entityKey?: string | null;
   }
 ): Promise<void> {
-  const { habitId, topicKey } = options || {};
+  const { entityKey } = options || {};
 
   console.log(
     `[Scheduler] Generating slots for user ${userId}, kind: ${kind}`,
-    habitId ? `, habitId: ${habitId}` : '',
-    topicKey ? `, topicKey: ${topicKey}` : ''
+    entityKey ? `, entityKey: ${entityKey}` : ''
   );
 
-  // 1. Получаем настройки с учётом habitId/topicKey
+  // 1. Получаем настройки с учётом entityKey
   let query = db
     .select()
     .from(notificationPreferences)
     .where(eq(notificationPreferences.userId, userId));
 
-  if (kind === 'habits' && habitId) {
-    // Per-habit настройки
-    query = query.where(eq(notificationPreferences.habitId, habitId));
-  } else if (kind === 'therapy' && topicKey) {
-    // Per-topic настройки
-    query = query.where(eq(notificationPreferences.topicKey, topicKey));
+  if (entityKey) {
+    // Per-entity настройки
+    query = query.where(eq(notificationPreferences.entityKey, entityKey));
   } else {
-    // Общие настройки (без habitId/topicKey)
-    query = query.where(
-      and(
-        isNull(notificationPreferences.habitId),
-        isNull(notificationPreferences.topicKey)
-      )
-    );
+    // Общие настройки (без entityKey)
+    query = query.where(isNull(notificationPreferences.entityKey));
   }
 
   const [prefs] = await query.limit(1);
@@ -656,7 +579,7 @@ export async function generateSlotsForUser(
     .where(eq(userPreferences.userId, userId))
     .limit(1);
 
-  const addressing = globalPrefs?.addressing || 'informal'; // Используется только для выбора текста (informal/formal)
+  const addressing = globalPrefs?.addressing || 'informal';
   const directness = prefs.directness;
 
   // 3. Удаляем старые запланированные слоты
@@ -672,11 +595,8 @@ export async function generateSlotsForUser(
       )
     );
 
-  if (habitId) {
-    deleteQuery = deleteQuery.where(eq(notificationSlots.habitId, habitId));
-  }
-  if (topicKey) {
-    deleteQuery = deleteQuery.where(eq(notificationSlots.topicKey, topicKey));
+  if (entityKey) {
+    deleteQuery = deleteQuery.where(eq(notificationSlots.entityKey, entityKey));
   }
 
   await deleteQuery;
@@ -690,11 +610,9 @@ export async function generateSlotsForUser(
 
   // 5. Создаём слоты в БД
   for (const scheduledAt of slots) {
-    // Подбираем случайный шаблон с учётом topicKey/habitId
-    // addressing и tone больше не используются в фильтрации, берутся из БД для выбора текста
+    // Подбираем шаблон или используем AI/пользовательские тексты в зависимости от textSource
     const template = findTemplate(kind, {
-      topicKey: topicKey || undefined,
-      habitId: habitId || undefined,
+      entityKey: entityKey || undefined,
     });
 
     if (!template) {
@@ -717,8 +635,7 @@ export async function generateSlotsForUser(
       deepLink: kind === 'therapy' ? '/support' : '/habits',
       data: {
         kind,
-        habitId: habitId || undefined,
-        topicKey: topicKey || undefined,
+        entityKey: entityKey || undefined,
         slotId: '', // будет переопределено ниже
       },
     };
@@ -730,8 +647,7 @@ export async function generateSlotsForUser(
       id: slotId,
       userId,
       kind,
-      habitId: habitId || null,
-      topicKey: topicKey || null, // НОВОЕ
+      entityKey: entityKey || null,
       scheduledAt,
       payload,
       templateId: template.id,
@@ -757,8 +673,7 @@ export async function regenerateAllSlots(): Promise<void> {
   for (const pref of activePrefs) {
     try {
       await generateSlotsForUser(pref.userId, pref.kind as NotificationKind, {
-        habitId: pref.habitId,
-        topicKey: pref.topicKey,
+        entityKey: pref.entityKey,
       });
     } catch (error) {
       console.error(
@@ -775,36 +690,32 @@ export async function regenerateAllSlots(): Promise<void> {
 ### Обновления в `app/lib/notificationTemplates.ts`
 
 ```typescript
-// ==========================================
-// Обновляем функцию поиска шаблонов
-// ==========================================
-
 export function findTemplate(
   kind: NotificationKind,
   options?: {
-    topicKey?: string;
-    habitId?: string;
+    entityKey?: string; // Унифицированное поле для идентификации сущности
     type?: TherapyType | HabitsType;
     intent?: HabitIntent;
     habitKey?: HabitKey;
     subtype?: HabitSubtype;
   }
 ): NotificationTemplate | null {
-  const { topicKey, habitId, type, intent, habitKey, subtype } = options || {};
+  const { entityKey, type, intent, habitKey, subtype } = options || {};
 
   const templates = kind === 'therapy' ? therapyTemplates : habitsTemplates;
 
-  // Фильтруем по topicKey (для therapy)
+  // Фильтруем по entityKey (для therapy = topic, для habits = habitKey)
   let filtered = templates;
-  if (topicKey) {
-    filtered = filtered.filter((t) => 'topic' in t && t.topic === topicKey);
+  if (entityKey) {
+    if (kind === 'therapy') {
+      filtered = filtered.filter((t) => 'topic' in t && t.topic === entityKey);
+    } else if (kind === 'habits') {
+      filtered = filtered.filter((t) => t.habitKey === entityKey);
+    }
   }
 
-  // Фильтруем по habitKey, intent, subtype (для habits)
+  // Фильтруем по intent, subtype (для habits)
   if (kind === 'habits') {
-    if (habitKey) {
-      filtered = filtered.filter((t) => t.habitKey === habitKey);
-    }
     if (intent) {
       filtered = filtered.filter((t) => t.intent === intent);
     }
@@ -850,7 +761,6 @@ app/components/
 │
 └─ notifications/
    ├─ NotificationPreview.vue        # Превью с кнопкой 🎲
-   ├─ DirectnessSelector.vue         # Мягко / Умеренно / Жёстко
    ├─ FrequencyStepper.vue           # 1-5 раз/день (слайдер)
    └─ NotificationToggle.vue         # Включить/выключить
 ```
@@ -886,8 +796,7 @@ const props = defineProps<{
   kind: NotificationKind;
   addressing: Addressing; // Из БД для выбора текста (informal/formal)
   directness: Directness;
-  topicKey?: string;
-  habitId?: string;
+  entityKey?: string; // Унифицированное поле для идентификации сущности
   subtype?: HabitSubtype;
   userName?: string;
 }>();
@@ -898,8 +807,7 @@ const templateId = ref('');
 function updatePreview() {
   // tone больше не используется в фильтрации шаблонов
   const template = findTemplate(props.kind, {
-    topicKey: props.topicKey,
-    habitId: props.habitId,
+    entityKey: props.entityKey,
     subtype: props.subtype,
   });
 
@@ -920,13 +828,7 @@ function updatePreview() {
 
 // Обновляем превью при изменении параметров
 watch(
-  () => [
-    props.addressing,
-    props.directness,
-    props.topicKey,
-    props.habitId,
-    props.subtype,
-  ],
+  () => [props.addressing, props.directness, props.entityKey, props.subtype],
   () => updatePreview(),
   { immediate: true }
 );
@@ -972,14 +874,14 @@ function refreshPreview() {
 **Оценка:** 2-3 недели
 
 - [x] БД: таблица `habits` (уже есть)
-- [ ] БД: миграция для добавления `topicKey` в `notification_preferences` и `notification_slots`
+- [x] БД: миграция для добавления `entityKey` в `notification_preferences` и `notification_slots`
 - [ ] API: CRUD `/api/habits`
   - `GET /api/habits` ✅
   - `POST /api/habits` ✅
   - `GET /api/habits/:id` ✅
   - `PUT /api/habits/:id` ✅
   - `DELETE /api/habits/:id` ✅
-- [ ] API: обновить `/api/notifications/prefs/habits` для поддержки `habitId`
+- [x] API: обновить `/api/notifications/prefs/habits` для поддержки `entityKey`
 - [ ] UI: Компоненты
   - `HabitGoalPicker.vue` — выбор цели
   - `HabitCard.vue` — карточка привычки
@@ -993,7 +895,7 @@ function refreshPreview() {
   - `water` — 5-6 шаблонов
   - `sleep` — 5-6 шаблонов
   - `training` — 5-6 шаблонов
-- [ ] Scheduler: обновить для поддержки `habitId`
+- [x] Scheduler: обновить для поддержки `entityKey`
 - [ ] Тестирование: создать привычку → настроить → проверить слоты
 
 ### Phase 2: Support Topics
@@ -1001,7 +903,7 @@ function refreshPreview() {
 **Оценка:** 2-3 недели
 
 - [ ] API: `GET /api/support/topics` (статичный список)
-- [ ] API: обновить `/api/notifications/prefs/therapy` для поддержки `topicKey`
+- [x] API: обновить `/api/notifications/prefs/therapy` для поддержки `entityKey`
 - [ ] UI: Компоненты
   - `SupportTopicsPicker.vue` — выбор темы
   - `SupportTopicCard.vue` — карточка темы
@@ -1021,7 +923,7 @@ function refreshPreview() {
   - `relations` — 6-8 шаблонов
   - `grief` — 6-8 шаблонов
   - `sos` — 5-6 шаблонов
-- [ ] Scheduler: обновить для поддержки `topicKey`
+- [x] Scheduler: обновить для поддержки `entityKey`
 - [ ] Тестирование: выбрать тему → настроить → проверить слоты
 
 ### Phase 3: UX Improvements
@@ -1041,13 +943,13 @@ function refreshPreview() {
 **Оценка:** 3-4 недели
 
 - [ ] Таблица `habit_logs` для чек-инов
-  - Поля: id, user_id, habit_id, date, status ('yes'|'no'|'skip')
+  - Поля: id, user_id, entity_key, date, status ('yes'|'no'|'skip')
   - API: `POST /api/habits/:id/log`, `GET /api/habits/:id/logs`
   - UI: кнопки "Да / Нет / Пропустить" на карточке привычки
 - [ ] Подсчёт streak (серия дней без пропусков)
   - Отображение на карточке: "Стрик: 5 дней 🔥"
 - [ ] Таблица `support_logs` для отметок состояния (опционально)
-  - Поля: id, user_id, topic_key, date, value (0-3 уровень)
+  - Поля: id, user_id, entity_key, date, value (0-3 уровень)
   - API: `POST /api/support/:key/log`, `GET /api/support/:key/logs`
 - [ ] Выбор техник в UI для каждой темы
   - Чекбоксы: [ ] Дыхание [ ] Grounding [ ] Рефрейминг
@@ -1066,7 +968,7 @@ function refreshPreview() {
 - ✅ Scheduler работает с habits и support одинаково
 - ✅ API симметричны по структуре
 - ✅ Каталог шаблонов покрывает все темы и типы привычек
-- ✅ Слоты генерируются корректно для per-habit и per-topic
+- ✅ Слоты генерируются корректно для конкретных сущностей через entityKey
 
 ### UX метрики
 
@@ -1089,7 +991,7 @@ function refreshPreview() {
 ## ✨ Ключевые преимущества решения
 
 1. **Единая архитектура** — habits и support работают на одной логике
-2. **Минимум миграций** — только добавляем `topicKey`, не создаём новые таблицы
+2. **Упрощение кода** — единое поле `entityKey` для идентификации сущностей
 3. **Симметричный UX** — пользователь видит одинаковый интерфейс
 4. **Масштабируемость** — легко добавить новые темы или типы привычек
 5. **Простота поддержки** — одна кодовая база для scheduler, delivery, interactions
@@ -1100,7 +1002,7 @@ function refreshPreview() {
 ## 📝 Следующие шаги
 
 1. **Согласовать** этот документ с командой
-2. **Создать** миграцию БД для добавления `topicKey`
+2. **Применить** миграции БД для настройки `entityKey` и `textSource`
 3. **Начать Phase 1** (Habits) — создать UI компоненты и API endpoints
 4. **Расширить каталог** шаблонов для habits (quit/smoking, water, sleep, training)
 5. **Протестировать** end-to-end flow: создать привычку → настроить → проверить уведомления

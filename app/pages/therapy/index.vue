@@ -31,15 +31,19 @@ if (!therapyStore.topics.length) {
 const { topics: userTopics } = storeToRefs(therapyStore);
 
 const customTopicItems = computed<NotificationIndexItem[]>(() =>
-  userTopics.value.map((topic) => ({
-    id: topic.id,
-    name: topic.name,
-    description: topic.description || 'Персональная тема',
-    emoji: topic.emoji || '💬',
-    gradientClass: 'from-gray-500 to-gray-700',
-    payload: { ...topic, type: 'custom' },
-    canDelete: true,
-  }))
+  userTopics.value.map((topic) => {
+    // ВАЖНО: Используем slug для читаемого URL, если он есть
+    const identifier = topic.slug || topic.id;
+    return {
+      id: identifier, // Используем slug для читаемого URL
+      name: topic.name,
+      description: topic.description || 'Персональная тема',
+      emoji: topic.emoji || '💬',
+      gradientClass: 'from-gray-500 to-gray-700',
+      payload: { ...topic, type: 'custom' },
+      canDelete: true,
+    };
+  })
 );
 
 const baseTopicItems = computed<NotificationIndexItem[]>(() =>
@@ -74,18 +78,22 @@ const pendingDeleteItem = ref<NotificationIndexItem | null>(null);
 
 function handleTopicSelect(item: NotificationIndexItem) {
   const payload = item.payload as
-    | { action?: string; type?: string }
+    | { action?: string; type?: string; slug?: string | null }
     | undefined;
   if (payload?.action === 'create-topic') {
     createModalOpen.value = true;
     return;
   }
-  navigateTo(`/therapy/${item.id}`);
+  // Используем slug, если есть, иначе id (для обратной совместимости)
+  const identifier = payload?.slug || item.id;
+  navigateTo(`/therapy/${identifier}`);
 }
 
 function handleTopicCreated(topic: TherapyTopicDto) {
   createModalOpen.value = false;
-  navigateTo(`/therapy/${topic.id}`);
+  // Используем slug, если есть, иначе id (для обратной совместимости)
+  const identifier = topic.slug || topic.id;
+  navigateTo(`/therapy/${identifier}`);
 }
 
 function handleTopicRemove(item: NotificationIndexItem) {
@@ -96,12 +104,26 @@ function handleTopicRemove(item: NotificationIndexItem) {
 async function confirmDeleteTopic() {
   const item = pendingDeleteItem.value;
   if (!item) return;
-  const topic = userTopics.value.find((t) => t.id === item.id);
-  if (!topic) return;
+  // ВАЖНО: Ищем тему по id или slug, т.к. item.id может быть slug
+  const topic = userTopics.value.find(
+    (t) => t.id === item.id || t.slug === item.id
+  );
+  if (!topic) {
+    console.error('[Therapy] Topic not found for deletion:', item.id);
+    useToast('Тема не найдена', 'error');
+    pendingDeleteItem.value = null;
+    return;
+  }
   try {
+    // ВАЖНО: Используем реальный ID из БД для удаления, а не slug
     await therapyStore.remove(topic.id);
     useToast('Тема удалена', 'success');
-    if (pendingDeleteItem.value?.id === topic.id) {
+    // Проверяем, находимся ли мы на странице удаленной темы
+    const currentRoute = useRoute();
+    if (
+      currentRoute.params.id === item.id ||
+      currentRoute.params.id === topic.slug
+    ) {
       navigateTo('/therapy');
     }
   } catch (error: any) {
@@ -116,7 +138,7 @@ async function confirmDeleteTopic() {
 <template>
   <div class="h-full flex flex-col">
     <NotificationIndexPage
-      title="Терапия"
+      title="🧠&nbsp;&nbsp;Терапия"
       description="Здесь вы найдёте готовые темы поддержки и сможете добавить свои, чтобы получать именно те уведомления, которые вам подходят"
       mentai-mode="therapy"
       :items="topicItems"

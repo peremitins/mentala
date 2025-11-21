@@ -12,7 +12,10 @@ import { useTimeSlotControls } from '@/app/composables/useTimeSlotControls';
 import {
   SUBTYPE_OPTIONS_BUILD,
   SUBTYPE_OPTIONS_QUIT,
+  TEXT_SOURCE_OPTIONS,
 } from '@/app/constants/select-options';
+import ToggleGroup from '@/app/components/ui/toggle-group/ToggleGroup.vue';
+import ToggleGroupItem from '@/app/components/ui/toggle-group/ToggleGroupItem.vue';
 import { useNotificationsStore } from '@/app/stores/notifications';
 import { useUserHabitsStore } from '@/app/stores/userHabits';
 import { useTherapyTopicsStore } from '@/app/stores/therapyTopics';
@@ -169,6 +172,7 @@ const loading = ref(false);
 const addressing = ref<Addressing>('informal');
 const tone = ref<Tone>('neutral');
 const customTexts = ref<string[]>(['']);
+const textSource = ref<'templates' | 'ai' | 'hybrid'>('templates');
 const canAddCustomText = computed(
   () => customTexts.value.length < MAX_CUSTOM_NOTIFICATION_TEXTS
 );
@@ -186,9 +190,31 @@ const hasCustomTextError = computed(() =>
   customTextErrors.value.some((msg) => Boolean(msg))
 );
 const hasCustomTexts = computed(() => normalizedCustomTexts.value.length > 0);
-const canSubmitCustomTexts = computed(
-  () => hasCustomTexts.value && !hasCustomTextError.value
-);
+const canSubmitCustomTexts = computed(() => {
+  // Для режимов templates и hybrid требуется хотя бы один текст
+  if (isCustomEntity.value) {
+    const source = textSource.value;
+    if (source === 'templates' || source === 'hybrid') {
+      return hasCustomTexts.value && !hasCustomTextError.value;
+    }
+    // Для режима ai тексты не требуются
+    return true;
+  }
+  return hasCustomTexts.value && !hasCustomTextError.value;
+});
+
+// Условное отображение секции текстов для кастомных
+const showCustomTextsSection = computed(() => {
+  if (!isCustomEntity.value) return false;
+  const source = textSource.value;
+  return source === 'templates' || source === 'hybrid';
+});
+
+// Условное отображение информационного блока про AI
+const showAiInfo = computed(() => {
+  const source = textSource.value;
+  return source === 'ai' || source === 'hybrid';
+});
 
 const isCustomEntity = computed(() =>
   isHabits.value ? isCustomHabit.value : isCustomTherapy.value
@@ -256,52 +282,12 @@ function startEditTitle() {
 }
 
 function cancelTitleEdit() {
+  // Восстанавливаем исходное значение
+  const target = isHabits.value ? customHabit.value : customTherapy.value;
+  if (target) {
+    titleDraft.value = target.name;
+  }
   isEditingTitle.value = false;
-  titleDraft.value = '';
-}
-
-async function saveTitleEdit() {
-  if (!canEditCustomEntity.value) return;
-  const newName = titleDraft.value.trim();
-  if (!newName) {
-    useToast(
-      isHabits.value ? 'Введите название привычки' : 'Введите название темы',
-      'error'
-    );
-    return;
-  }
-  inlineTitleLoading.value = true;
-  try {
-    const { $api } = useNuxtApp();
-    if (isHabits.value && customHabit.value) {
-      const updated = await $api<HabitDto>(
-        `/api/habits/${customHabit.value.id}`,
-        {
-          method: 'PUT',
-          body: { name: newName },
-        }
-      );
-      customHabit.value = updated;
-      userHabitsStore.updateLocal(updated);
-    } else if (!isHabits.value && customTherapy.value) {
-      const updated = await $api<TherapyTopicDto>(
-        `/api/therapy/custom/${customTherapy.value.id}`,
-        {
-          method: 'PUT',
-          body: { name: newName },
-        }
-      );
-      customTherapy.value = updated;
-      therapyTopicsStore.updateLocal(updated);
-    }
-    useToast('Название обновлено', 'success');
-    isEditingTitle.value = false;
-  } catch (error: any) {
-    console.error('[NotificationSettings] Failed to update title:', error);
-    useToast(error?.message || 'Не удалось обновить название', 'error');
-  } finally {
-    inlineTitleLoading.value = false;
-  }
 }
 
 function startEditSubtitle() {
@@ -316,48 +302,12 @@ function startEditSubtitle() {
 }
 
 function cancelSubtitleEdit() {
-  isEditingSubtitle.value = false;
-  subtitleDraft.value = '';
-}
-
-async function saveSubtitleEdit() {
-  if (!canEditCustomEntity.value) return;
-  inlineSubtitleLoading.value = true;
-  try {
-    const nextDescription = subtitleDraft.value.trim();
-    const { $api } = useNuxtApp();
-    if (isHabits.value && customHabit.value) {
-      const updated = await $api<HabitDto>(
-        `/api/habits/${customHabit.value.id}`,
-        {
-          method: 'PUT',
-          body: { description: nextDescription || null },
-        }
-      );
-      customHabit.value = updated;
-      userHabitsStore.updateLocal(updated);
-    } else if (!isHabits.value && customTherapy.value) {
-      const updated = await $api<TherapyTopicDto>(
-        `/api/therapy/custom/${customTherapy.value.id}`,
-        {
-          method: 'PUT',
-          body: { description: nextDescription || null },
-        }
-      );
-      customTherapy.value = updated;
-      therapyTopicsStore.updateLocal(updated);
-    }
-    useToast('Описание обновлено', 'success');
-    isEditingSubtitle.value = false;
-  } catch (error: any) {
-    console.error(
-      '[NotificationSettings] Failed to update description:',
-      error
-    );
-    useToast(error?.message || 'Не удалось обновить описание', 'error');
-  } finally {
-    inlineSubtitleLoading.value = false;
+  // Восстанавливаем исходное значение
+  const target = isHabits.value ? customHabit.value : customTherapy.value;
+  if (target) {
+    subtitleDraft.value = target.description ?? '';
   }
+  isEditingSubtitle.value = false;
 }
 
 watch(isCustomEntity, (value) => {
@@ -369,10 +319,33 @@ watch(isCustomEntity, (value) => {
 
 const initialStateSignature = ref('');
 
+// Исходные значения названия и описания для отслеживания изменений
+const initialEntityName = ref<string>('');
+const initialEntityDescription = ref<string | null>(null);
+
 function computeStateSignature() {
   const hasManualSlotsLocal = customSlotTimes.value.some(
     (value) => value !== null
   );
+
+  // Получаем текущие значения названия и описания
+  // Если идет редактирование, используем draft значения, иначе - сохраненные
+  const currentName = isEditingTitle.value
+    ? titleDraft.value.trim()
+    : isHabits.value
+      ? customHabit.value?.name || catalogHabit.value?.name || ''
+      : customTherapy.value?.name || catalogTherapy.value?.name || '';
+
+  const currentDescription = isEditingSubtitle.value
+    ? subtitleDraft.value.trim() || null
+    : isHabits.value
+      ? customHabit.value?.description ||
+        catalogHabit.value?.description ||
+        null
+      : customTherapy.value?.description ||
+        catalogTherapy.value?.description ||
+        null;
+
   return JSON.stringify({
     enabled: enabled.value,
     timesPerDay: timesPerDay.value,
@@ -392,6 +365,11 @@ function computeStateSignature() {
         : subtype.value
       : null,
     customTexts: isCustomEntity.value ? normalizedCustomTexts.value : null,
+    textSource: textSource.value,
+    // Добавляем название и описание для отслеживания изменений
+    // Сравниваем с исходными значениями
+    entityName: currentName,
+    entityDescription: currentDescription || null,
   });
 }
 
@@ -403,27 +381,27 @@ const isDirty = computed(() => {
 });
 
 const isSaveDisabled = computed(
-  () =>
-    loading.value ||
-    !isDirty.value ||
-    (isCustomEntity.value && !canSubmitCustomTexts.value)
+  () => loading.value || !isDirty.value
+  // Убрали проверку canSubmitCustomTexts - разрешаем сохранять настройки без текстов
+  // Пользователь может добавить тексты позже
 );
 
 const directnessOptions = [
   {
     value: 'soft' as Directness,
-    label: 'Мягко',
-    description: 'Поддержка, без давления',
+    label: 'Поддерживающий',
+    description: 'Тёплый, мягкий стиль без давления',
   },
   {
     value: 'moderate' as Directness,
-    label: 'Умеренно',
-    description: 'Конкретнее, но корректно',
+    label: 'Сдержанный',
+    description: 'Корректные, нейтральные формулировки без лишних эмоций',
   },
   {
     value: 'hard' as Directness,
-    label: 'Жёстко',
-    description: 'Максимальная директивность',
+    label: 'Требовательный',
+    description:
+      'Прямые, настойчивые сообщения для тех, кому важен чёткий фокус',
   },
 ];
 
@@ -442,32 +420,104 @@ const previewKey = computed(() => {
 });
 
 const currentTotalPerDay = computed(() => {
+  // ВАЖНО: Фильтруем только активные (enabled: true) настройки
   const otherPreferences = notificationsStore.preferences.filter((p) => {
+    // Пропускаем неактивные настройки
     if (!p.enabled) return false;
-    if (p.kind === 'therapy' && !p.topicKey) return false;
-    if (p.kind === 'habits' && !p.habitId) return false;
 
-    if (
-      isHabits.value &&
-      p.kind === 'habits' &&
-      p.habitId === props.entityKey
-    ) {
-      return false;
-    }
-    if (
-      !isHabits.value &&
-      p.kind === 'therapy' &&
-      p.topicKey === props.entityKey
-    ) {
+    // Игнорируем legacy данные (без entityKey)
+    if (!p.entityKey) return false;
+
+    // Исключаем текущую настройку (чтобы не считать её дважды)
+    if (p.entityKey === props.entityKey) {
       return false;
     }
     return true;
   });
 
-  let total = otherPreferences.reduce((sum, p) => sum + p.timesPerDay, 0);
+  // Суммируем только активные настройки с валидными значениями
+  // Максимальное разумное значение timesPerDay (например, 30 уведомлений в день)
+  const MAX_REASONABLE_TIMES_PER_DAY = 30;
+
+  let total = otherPreferences.reduce((sum, p) => {
+    // Дополнительная проверка на всякий случай
+    if (!p.enabled) return sum;
+    // Проверяем, что timesPerDay - валидное положительное число
+    const times = Number(p.timesPerDay);
+    if (isNaN(times) || times < 0) {
+      console.warn(
+        `[NotificationSettings] Invalid timesPerDay for preference ${p.id}:`,
+        p.timesPerDay
+      );
+      return sum;
+    }
+    // Проверяем на разумное значение (защита от некорректных данных)
+    if (times > MAX_REASONABLE_TIMES_PER_DAY) {
+      console.warn(
+        `[NotificationSettings] Unreasonably high timesPerDay for preference ${p.id}:`,
+        `${times} (max reasonable: ${MAX_REASONABLE_TIMES_PER_DAY}), skipping`
+      );
+      return sum;
+    }
+    return sum + times;
+  }, 0);
+
+  // Добавляем текущую настройку, используя локальные значения (то, что пользователь видит)
+  // ВАЖНО: otherPreferences уже исключает текущую настройку, поэтому мы добавляем её отдельно
+  // Используем enabled.value и timesPerDay.value для отображения актуального состояния
+  // Счетчик обновляется динамически через computed, но учитывает только включенные уведомления
   if (enabled.value) {
-    total += timesPerDay.value;
+    const currentTimes = Number(timesPerDay.value);
+    if (
+      !isNaN(currentTimes) &&
+      currentTimes >= 0 &&
+      currentTimes <= MAX_REASONABLE_TIMES_PER_DAY
+    ) {
+      total += currentTimes;
+    }
   }
+
+  // Логирование для отладки (только в dev режиме)
+  if (process.dev) {
+    const otherTotal = otherPreferences.reduce((s, p) => {
+      const times = Number(p.timesPerDay);
+      return s + (isNaN(times) || times < 0 ? 0 : times);
+    }, 0);
+
+    // Детальная разбивка по каждой настройке
+    const preferencesBreakdown = otherPreferences.map((p) => {
+      const times = Number(p.timesPerDay);
+      const isValid = !isNaN(times) && times >= 0;
+      return {
+        id: p.id,
+        kind: p.kind,
+        entityKey: p.entityKey,
+        enabled: p.enabled,
+        timesPerDay: p.timesPerDay,
+        timesPerDayNumber: times,
+        isValid,
+        contribution: isValid ? times : 0,
+      };
+    });
+
+    // Сортируем по вкладу (от большего к меньшему)
+    preferencesBreakdown.sort((a, b) => b.contribution - a.contribution);
+
+    console.log(`[NotificationSettings] currentTotalPerDay calculation:`, {
+      allPreferencesCount: notificationsStore.preferences.length,
+      enabledPreferencesCount: notificationsStore.preferences.filter(
+        (p) => p.enabled
+      ).length,
+      otherPreferencesCount: otherPreferences.length,
+      otherPreferencesTotal: otherTotal,
+      currentEnabled: enabled.value,
+      currentTimesPerDay: timesPerDay.value,
+      finalTotal: total,
+      breakdown: preferencesBreakdown,
+      topContributors: preferencesBreakdown.slice(0, 10), // Топ-10 вкладчиков
+    });
+  }
+
   return total;
 });
 
@@ -479,14 +529,31 @@ onMounted(async () => {
     const globalPrefs = await $api<UserPreferencesDto>(
       '/api/settings/preferences'
     );
+
+    // Сохраняем исходные значения названия и описания
+    if (isHabits.value) {
+      initialEntityName.value =
+        customHabit.value?.name || catalogHabit.value?.name || '';
+      initialEntityDescription.value =
+        customHabit.value?.description ||
+        catalogHabit.value?.description ||
+        null;
+    } else {
+      initialEntityName.value =
+        customTherapy.value?.name || catalogTherapy.value?.name || '';
+      initialEntityDescription.value =
+        customTherapy.value?.description ||
+        catalogTherapy.value?.description ||
+        null;
+    }
     if (globalPrefs) {
       addressing.value = globalPrefs.addressing;
       tone.value = globalPrefs.tone;
     }
 
     const prefsUrl = isHabits.value
-      ? `/api/notifications/prefs/habits?habitId=${props.entityKey}`
-      : `/api/notifications/prefs/therapy?topicKey=${props.entityKey}`;
+      ? `/api/notifications/prefs/habits?entityKey=${props.entityKey}`
+      : `/api/notifications/prefs/therapy?entityKey=${props.entityKey}`;
 
     const pref = await $api<NotificationPreferencesDto | null>(prefsUrl);
 
@@ -508,9 +575,15 @@ onMounted(async () => {
         const storedTexts = pref.meta?.customTexts ?? null;
         customTexts.value =
           storedTexts && storedTexts.length ? [...storedTexts] : [''];
+        textSource.value = pref.meta?.textSource ?? 'templates';
+      } else {
+        textSource.value = pref.meta?.textSource ?? 'templates';
       }
     } else if (isCustomEntity.value) {
       customTexts.value = [''];
+      textSource.value = 'templates';
+    } else {
+      textSource.value = 'templates';
     }
     initialStateSignature.value = computeStateSignature();
   } catch (error) {
@@ -523,12 +596,61 @@ onMounted(async () => {
 });
 
 async function saveSettings() {
-  if (isCustomEntity.value && !canSubmitCustomTexts.value) {
-    useToast('Добавьте хотя бы один корректный текст уведомления', 'error');
-    return;
-  }
+  // Убрали проверку canSubmitCustomTexts - разрешаем сохранять настройки без текстов
+  // Пользователь может добавить тексты позже
   loading.value = true;
   try {
+    const { $api } = useNuxtApp();
+
+    // Определяем изменения названия и описания
+    let nameChanged = false;
+    let descriptionChanged = false;
+    let newName: string | undefined = undefined;
+    let newDescription: string | null | undefined = undefined;
+
+    if (canEditCustomEntity.value) {
+      // Проверяем изменения названия
+      if (isEditingTitle.value) {
+        const nameDraft = titleDraft.value.trim();
+        const currentName = isHabits.value
+          ? customHabit.value?.name || ''
+          : customTherapy.value?.name || '';
+
+        if (nameDraft && nameDraft !== currentName) {
+          newName = nameDraft;
+          nameChanged = true;
+        } else if (!nameDraft) {
+          useToast(
+            isHabits.value
+              ? 'Введите название привычки'
+              : 'Введите название темы',
+            'error'
+          );
+          loading.value = false;
+          return;
+        }
+        isEditingTitle.value = false;
+      }
+
+      // Проверяем изменения описания
+      if (isEditingSubtitle.value) {
+        const descriptionDraft = subtitleDraft.value.trim();
+        const currentDescription = isHabits.value
+          ? customHabit.value?.description || null
+          : customTherapy.value?.description || null;
+
+        const descriptionDraftNormalized = descriptionDraft || null;
+        if (descriptionDraftNormalized !== currentDescription) {
+          newDescription = descriptionDraftNormalized;
+          descriptionChanged = true;
+        }
+        isEditingSubtitle.value = false;
+      }
+    }
+
+    // Сохраняем настройки уведомлений вместе с названием и описанием в одном запросе
+    // При изменении названия/описания AI-тексты пересоздадутся автоматически
+    // через prefs/[kind].put.ts, так как хеш конфигурации изменится
     const hasManualSlots = customSlotTimes.value.some(
       (value) => value !== null
     );
@@ -544,39 +666,122 @@ async function saveSettings() {
       customSlotTimes: hasManualSlots ? customSlotTimes.value : null,
     } satisfies Partial<UpdateNotificationPreferencesDto>;
 
-    const updateData: UpdateNotificationPreferencesDto = isHabits.value
-      ? {
-          ...baseData,
-          habitId: props.entityKey,
-          subtype: isCustomHabit.value ? null : subtype.value,
-          ...(isCustomHabit.value && {
-            meta: {
-              customTexts: normalizedCustomTexts.value,
-            },
+    const updateData: UpdateNotificationPreferencesDto = {
+      ...baseData,
+      entityKey: props.entityKey,
+      ...(isHabits.value
+        ? {
+            subtype: isCustomHabit.value ? null : subtype.value,
+            ...(isCustomHabit.value
+              ? {
+                  meta: {
+                    // Для режима AI не отправляем customTexts (или отправляем пустой массив)
+
+                    customTexts:
+                      textSource.value === 'ai'
+                        ? []
+                        : normalizedCustomTexts.value,
+                    textSource: textSource.value,
+                  },
+                }
+              : {
+                  meta: {
+                    textSource: textSource.value,
+                  },
+                }),
+          }
+        : {
+            ...(isCustomTherapy.value
+              ? {
+                  meta: {
+                    // Для режима AI не отправляем customTexts (или отправляем пустой массив)
+
+                    customTexts:
+                      textSource.value === 'ai'
+                        ? []
+                        : normalizedCustomTexts.value,
+                    textSource: textSource.value,
+                  },
+                }
+              : {
+                  meta: {
+                    textSource: textSource.value,
+                  },
+                }),
           }),
-        }
-      : {
-          ...baseData,
-          topicKey: props.entityKey,
-          ...(isCustomTherapy.value && {
-            meta: {
-              customTexts: normalizedCustomTexts.value,
-            },
-          }),
-        };
+      // Добавляем название и описание, если они изменены
+      ...(nameChanged && newName !== undefined ? { name: newName } : {}),
+      ...(descriptionChanged && newDescription !== undefined
+        ? { description: newDescription }
+        : {}),
+    };
 
     const prefsUrl = isHabits.value
       ? '/api/notifications/prefs/habits'
       : '/api/notifications/prefs/therapy';
 
-    const { $api } = useNuxtApp();
     const updated = await $api<NotificationPreferencesDto>(prefsUrl, {
       method: 'PUT',
       body: updateData,
     });
 
     notificationsStore.updateLocal(updated);
-    useToast('Настройки сохранены', 'success');
+
+    // Обновляем локальные данные привычки/терапии, если изменились название/описание
+    // ВАЖНО: Название и описание уже обновлены в БД через prefs/[kind].put.ts
+    // Обновляем локальные данные напрямую, без дополнительных запросов
+    if (nameChanged || descriptionChanged) {
+      if (isHabits.value && customHabit.value) {
+        // Обновляем локальные данные напрямую
+        if (newName !== undefined) {
+          customHabit.value.name = newName;
+        }
+        if (newDescription !== undefined) {
+          customHabit.value.description = newDescription;
+        }
+        userHabitsStore.updateLocal(customHabit.value);
+        initialEntityName.value = customHabit.value.name;
+        initialEntityDescription.value = customHabit.value.description || null;
+      } else if (!isHabits.value && customTherapy.value) {
+        // Обновляем локальные данные напрямую
+        if (newName !== undefined) {
+          customTherapy.value.name = newName;
+        }
+        if (newDescription !== undefined) {
+          customTherapy.value.description = newDescription;
+        }
+        therapyTopicsStore.updateLocal(customTherapy.value);
+        initialEntityName.value = customTherapy.value.name;
+        initialEntityDescription.value =
+          customTherapy.value.description || null;
+      }
+    }
+
+    // Формируем сообщение об успехе
+    const successMessages = [];
+    if (nameChanged) successMessages.push('название');
+    if (descriptionChanged) successMessages.push('описание');
+    if (nameChanged || descriptionChanged) {
+      successMessages.push('настройки');
+    } else {
+      successMessages.push('настройки');
+    }
+
+    useToast(
+      'Сохранено',
+      successMessages.join(', ') + ' успешно сохранены',
+      'success'
+    );
+
+    // Обновляем исходные значения и сигнатуру состояния
+    if (isHabits.value && customHabit.value) {
+      initialEntityName.value = customHabit.value.name;
+      initialEntityDescription.value = customHabit.value.description || null;
+    } else if (!isHabits.value && customTherapy.value) {
+      initialEntityName.value = customTherapy.value.name;
+      initialEntityDescription.value = customTherapy.value.description || null;
+    }
+
     initialStateSignature.value = computeStateSignature();
   } catch (err) {
     console.error('[Client] Failed to save preferences:', err);
@@ -586,38 +791,8 @@ async function saveSettings() {
   }
 }
 
-async function sendQuickTest() {
-  try {
-    const { $api } = useNuxtApp();
-    const response = await $api<{
-      success: boolean;
-      slotId: string;
-      scheduledAt: string;
-      message: string;
-    }>('/api/notifications/test-quick', {
-      method: 'POST',
-      body: { kind: props.mentaiMode },
-    });
-
-    if (response?.success) {
-      useToast(
-        response.message ||
-          'Тестовое уведомление запланировано через 1 минуту!',
-        'success'
-      );
-    } else {
-      useToast('Ошибка при создании тестового уведомления', 'error');
-    }
-  } catch (error: any) {
-    console.error('Failed to schedule quick test:', error);
-    useToast(
-      error?.message || 'Ошибка при создании тестового уведомления',
-      'error'
-    );
-  }
-}
-
 function goBack() {
+  console.log('goBack');
   if (isHabits.value) {
     const intentFromQuery = route.query.intent as
       | 'build'
@@ -642,106 +817,63 @@ const descriptionText = computed(() => {
   }
   return therapyEntity.value?.description || descriptionPlaceholder.value;
 });
-
-const previewSubtitle = computed(() =>
-  isHabits.value ? 'Уведомления: Привычки' : 'Уведомления: Поддержка'
-);
 </script>
 
 <template>
-  <div class="glass-deep px-2 space-y-6 h-full overflow-y-auto">
-    <div class="flex items-center gap-3">
-      <button
-        type="button"
-        class="flex h-10 w-10 items-center justify-center rounded-xl text-gray-600 transition-colors hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
-        @click="goBack"
-      >
-        <svg
-          class="h-5 w-5"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M10 19l-7-7m0 0l7-7m-7 7h18"
-          />
-        </svg>
-      </button>
-
-      <div class="flex items-center gap-3 flex-1">
-        <div
-          class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br text-2xl shadow-sm"
-          :class="headerGradient"
-        >
-          {{ entityEmoji }}
-        </div>
-        <div class="flex-1 min-w-0 space-y-1.5">
-          <div class="flex items-center gap-2">
-            <template v-if="isEditingTitle">
-              <input
-                ref="titleInputRef"
-                v-model="titleDraft"
-                type="text"
-                class="flex-1 rounded-lg border border-gray-300 px-3 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900/60 dark:text-gray-100"
-                maxlength="120"
-                @keydown.enter.prevent="saveTitleEdit"
-                @keydown.esc.prevent="cancelTitleEdit"
-              />
-              <div class="flex items-center gap-1">
+  <div class="space-y-6 h-full overflow-y-auto rounded-sm pb-[100px]">
+    <PageHeader :title="entityName" :show-back-button="true" @go-back="goBack">
+      <template #custom>
+        <div class="flex items-center gap-2 flex-1 overflow-hidden">
+          <div class="flex flex-shrink-0 items-center justify-center text-2xl">
+            {{ entityEmoji }}
+          </div>
+          <div class="flex-1 min-w-0 space-y-1.5">
+            <div class="flex items-center gap-2">
+              <template v-if="isEditingTitle">
+                <input
+                  ref="titleInputRef"
+                  v-model="titleDraft"
+                  type="text"
+                  class="flex-1 rounded-lg border border-gray-300 px-3 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900/60 dark:text-gray-100"
+                  maxlength="120"
+                  @keydown.esc.prevent="cancelTitleEdit"
+                />
+              </template>
+              <template v-else>
+                <h1
+                  class="text-xl font-bold text-gray-900 dark:text-gray-100 w-full truncate"
+                >
+                  {{ entityName }}
+                </h1>
                 <button
+                  v-if="canEditCustomEntity"
                   type="button"
-                  class="rounded-lg bg-blue-600 px-2 py-1 text-white text-xs disabled:opacity-50"
-                  :disabled="inlineTitleLoading"
-                  @click="saveTitleEdit"
+                  class="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 transition"
+                  @click="startEditTitle"
+                  aria-label="Редактировать название"
                 >
-                  ✓
+                  <svg
+                    class="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 013.536 3.536L6.5 20.5 3 21l.5-3.5L16.732 3.732z"
+                    />
+                  </svg>
                 </button>
-                <button
-                  type="button"
-                  class="rounded-lg border border-gray-300 px-2 py-1 text-xs text-gray-600 dark:border-gray-600 dark:text-gray-300"
-                  @click="cancelTitleEdit"
-                >
-                  ✕
-                </button>
-              </div>
-            </template>
-            <template v-else>
-              <h1
-                class="text-xl font-bold text-gray-900 dark:text-gray-100 truncate"
-              >
-                {{ entityName }}
-              </h1>
-              <button
-                v-if="canEditCustomEntity"
-                type="button"
-                class="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 transition"
-                @click="startEditTitle"
-                aria-label="Редактировать название"
-              >
-                <svg
-                  class="h-4 w-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 013.536 3.536L6.5 20.5 3 21l.5-3.5L16.732 3.732z"
-                  />
-                </svg>
-              </button>
-            </template>
+              </template>
+            </div>
           </div>
         </div>
-      </div>
-    </div>
+      </template>
+    </PageHeader>
 
-    <div class="px-2">
+    <div class="">
       <div v-if="isEditingSubtitle" class="space-y-2">
         <textarea
           ref="subtitleInputRef"
@@ -751,23 +883,6 @@ const previewSubtitle = computed(() =>
           placeholder="Добавьте описание"
           @keydown.esc.prevent="cancelSubtitleEdit"
         />
-        <div class="flex items-center gap-2">
-          <button
-            type="button"
-            class="rounded-lg bg-blue-600 px-3 py-1.5 text-white text-xs font-medium disabled:opacity-50"
-            :disabled="inlineSubtitleLoading"
-            @click="saveSubtitleEdit"
-          >
-            Сохранить
-          </button>
-          <button
-            type="button"
-            class="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 dark:border-gray-600 dark:text-gray-300"
-            @click="cancelSubtitleEdit"
-          >
-            Отмена
-          </button>
-        </div>
       </div>
       <div
         v-else
@@ -802,9 +917,9 @@ const previewSubtitle = computed(() =>
       </div>
     </div>
 
-    <div class="px-2 space-y-6">
+    <div class="space-y-6">
       <div class="flex items-center justify-between">
-        <h3 class="text-base font-semibold">{{ previewSubtitle }}</h3>
+        <h3 class="text-base font-semibold">{{ 'Уведомления' }}</h3>
         <button
           type="button"
           :class="[
@@ -931,8 +1046,123 @@ const previewSubtitle = computed(() =>
 
         <OverloadBanner :total-per-day="currentTotalPerDay" />
 
+        <div v-if="isHabits && !isCustomHabit" class="space-y-2">
+          <label class="text-sm font-medium">Фокус уведомлений</label>
+          <Combobox
+            v-model="subtype"
+            :options="subtypeOptions"
+            placeholder="Выберите тип"
+            class="max-w-[258px]"
+          />
+          <p
+            v-if="
+              subtypeOptions.find((opt) => opt.value === subtype)?.description
+            "
+            class="text-xs text-muted-foreground mt-1"
+          >
+            {{
+              subtypeOptions.find((opt) => opt.value === subtype)?.description
+            }}
+          </p>
+        </div>
+
         <div
-          v-if="isCustomEntity"
+          v-if="(!isHabits || subtype !== 'informational') && !isCustomHabit"
+          class="space-y-2"
+        >
+          <label class="text-sm font-medium">Стиль уведомлений</label>
+          <div class="grid gap-2">
+            <button
+              v-for="option in directnessOptions"
+              :key="option.value"
+              type="button"
+              :class="[
+                'flex flex-col items-start rounded-lg border p-3 text-left transition-colors',
+                directness === option.value
+                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-900'
+                  : 'border-gray-300 bg-white hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:hover:bg-gray-700',
+              ]"
+              @click="directness = option.value"
+            >
+              <span class="text-sm font-medium">{{ option.label }}</span>
+              <span class="text-xs text-gray-600 dark:text-gray-400">
+                {{ option.description }}
+              </span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Способ создания уведомлений  -->
+        <div class="space-y-2 mb-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                Способ создания
+              </p>
+              <p class="text-xs text-gray-500 dark:text-gray-400">
+                Выберите способ создания текстов уведомлений
+              </p>
+            </div>
+          </div>
+
+          <ToggleGroup
+            v-model="textSource"
+            type="single"
+            class="inline-flex w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-1"
+          >
+            <ToggleGroupItem
+              value="templates"
+              class="flex-1 rounded-md px-3 py-2 text-sm font-medium transition-all data-[state=on]:bg-white data-[state=on]:shadow-sm data-[state=on]:text-blue-600 dark:data-[state=on]:bg-gray-700 dark:data-[state=on]:text-blue-400"
+            >
+              ✍️ Шаблоны
+            </ToggleGroupItem>
+            <ToggleGroupItem
+              value="ai"
+              class="flex-1 rounded-md px-3 py-2 text-sm font-medium transition-all data-[state=on]:bg-white data-[state=on]:shadow-sm data-[state=on]:text-blue-600 dark:data-[state=on]:bg-gray-700 dark:data-[state=on]:text-blue-400"
+            >
+              ✨ ИИ
+            </ToggleGroupItem>
+            <ToggleGroupItem
+              value="hybrid"
+              class="flex-1 rounded-md px-3 py-2 text-sm font-medium transition-all data-[state=on]:bg-white data-[state=on]:shadow-sm data-[state=on]:text-blue-600 dark:data-[state=on]:bg-gray-700 dark:data-[state=on]:text-blue-400"
+            >
+              🔀 Гибридный
+            </ToggleGroupItem>
+          </ToggleGroup>
+        </div>
+
+        <!-- Информационный блок про AI -->
+        <div
+          v-if="showAiInfo"
+          class="rounded-xl border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/30 p-4"
+        >
+          <div class="flex items-start gap-3">
+            <span class="text-2xl">✨</span>
+            <div class="flex-1">
+              <p
+                class="text-sm font-semibold text-purple-900 dark:text-purple-100"
+              >
+                Генерация через ИИ
+              </p>
+              <p class="text-xs text-purple-700 dark:text-purple-300 mt-1">
+                <template v-if="textSource">
+                  <template v-if="textSource === 'ai'">
+                    Тексты уведомлений будут генерироваться ИИ с учетом всех
+                    параметров настроек (фокус, стиль, обращение).
+                  </template>
+                  <template v-else-if="textSource === 'hybrid'">
+                    Тексты уведомлений будут чередоваться: часть будет взята из
+                    готовых шаблонов, часть создаст ИИ с учётом всех параметров
+                    настроек.
+                  </template>
+                </template>
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div
+          v-if="isCustomEntity && showCustomTextsSection"
           class="space-y-3 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 p-4 bg-white/70 dark:bg-gray-900/50 transition-all"
         >
           <div class="flex items-center justify-between gap-3 flex-wrap">
@@ -1029,52 +1259,6 @@ const previewSubtitle = computed(() =>
           </p>
         </div>
 
-        <div v-if="isHabits && !isCustomHabit" class="space-y-2">
-          <label class="text-sm font-medium">Тип уведомления</label>
-          <Combobox
-            v-model="subtype"
-            :options="subtypeOptions"
-            placeholder="Выберите тип"
-            class="max-w-[200px]"
-          />
-          <p
-            v-if="
-              subtypeOptions.find((opt) => opt.value === subtype)?.description
-            "
-            class="text-xs text-muted-foreground mt-1"
-          >
-            {{
-              subtypeOptions.find((opt) => opt.value === subtype)?.description
-            }}
-          </p>
-        </div>
-
-        <div
-          v-if="(!isHabits || subtype !== 'informational') && !isCustomHabit"
-          class="space-y-2"
-        >
-          <label class="text-sm font-medium">Стиль подачи</label>
-          <div class="grid gap-2">
-            <button
-              v-for="option in directnessOptions"
-              :key="option.value"
-              type="button"
-              :class="[
-                'flex flex-col items-start rounded-lg border p-3 text-left transition-colors',
-                directness === option.value
-                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-900'
-                  : 'border-gray-300 bg-white hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:hover:bg-gray-700',
-              ]"
-              @click="directness = option.value"
-            >
-              <span class="text-sm font-medium">{{ option.label }}</span>
-              <span class="text-xs text-gray-600 dark:text-gray-400">
-                {{ option.description }}
-              </span>
-            </button>
-          </div>
-        </div>
-
         <div class="space-y-2">
           <NotificationPreview
             v-if="isHabits"
@@ -1083,7 +1267,7 @@ const previewSubtitle = computed(() =>
             :addressing="addressing"
             :tone="tone"
             :directness="directness"
-            :habit-id="entityKey"
+            :entity-key="entityKey"
             :subtype="subtype"
             :custom-texts="isCustomEntity ? normalizedCustomTexts : undefined"
           />
@@ -1094,7 +1278,7 @@ const previewSubtitle = computed(() =>
             :addressing="addressing"
             :tone="tone"
             :directness="directness"
-            :topic-key="entityKey"
+            :entity-key="entityKey"
           />
         </div>
       </div>
@@ -1108,19 +1292,7 @@ const previewSubtitle = computed(() =>
         >
           {{ loading ? 'Сохранение...' : 'Сохранить' }}
         </button>
-        <button
-          type="button"
-          class="w-full rounded-xl bg-green-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-green-500 dark:hover:bg-green-600"
-          :disabled="loading"
-          @click="sendQuickTest"
-        >
-          <span>▲ Тест через 1 мин</span>
-        </button>
       </div>
-
-      <p class="text-xs text-gray-500 dark:text-gray-400 text-center">
-        Уведомления распределяются равномерно в течение дня (09:00–22:30)
-      </p>
     </div>
   </div>
 </template>

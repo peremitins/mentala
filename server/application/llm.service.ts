@@ -22,6 +22,8 @@ export async function chatViaProvider(params: {
   options?: {
     sessionId?: string;
     temperature?: number;
+    maxOutputTokens?: number; // Для Responses API
+    scenario?: 'chat' | 'notifications'; // Сценарий использования
     lang?: string;
     user_locale?: string;
     user_name?: string;
@@ -31,10 +33,25 @@ export async function chatViaProvider(params: {
   };
 }) {
   const provider = getProvider(params.provider);
+
+  // Если указан scenario, используем настройки из конфига
+  let temperature = params.options?.temperature;
+  let maxOutputTokens = params.options?.maxOutputTokens;
+
+  if (params.options?.scenario && !temperature) {
+    const scenarioConfig = config.llm.openai.settings[params.options.scenario];
+    temperature = scenarioConfig.temperature;
+    maxOutputTokens = maxOutputTokens || scenarioConfig.maxOutputTokens;
+  }
+
   return provider.chat({
     messages: params.messages,
     model: params.model,
-    options: params.options,
+    options: {
+      ...params.options,
+      temperature,
+      maxOutputTokens,
+    },
   });
 }
 
@@ -102,6 +119,8 @@ export function chatStreamViaProvider(params: {
   options?: {
     sessionId?: string;
     temperature?: number;
+    maxOutputTokens?: number; // Для Responses API
+    scenario?: 'chat' | 'notifications'; // Сценарий использования
     lang?: string;
     user_locale?: string;
     user_name?: string;
@@ -114,9 +133,24 @@ export function chatStreamViaProvider(params: {
   if (!provider.chatStream) {
     throw new Error(`Provider ${provider.id} does not support streaming`);
   }
+
+  // Если указан scenario, используем настройки из конфига
+  let temperature = params.options?.temperature;
+  let maxOutputTokens = params.options?.maxOutputTokens;
+
+  if (params.options?.scenario && !temperature) {
+    const scenarioConfig = config.llm.openai.settings[params.options.scenario];
+    temperature = scenarioConfig.temperature;
+    maxOutputTokens = maxOutputTokens || scenarioConfig.maxOutputTokens;
+  }
+
   return provider.chatStream({
     messages: params.messages,
     model: params.model,
-    options: params.options,
+    options: {
+      ...params.options,
+      temperature,
+      maxOutputTokens,
+    },
   }) as AsyncIterable<string>;
 }

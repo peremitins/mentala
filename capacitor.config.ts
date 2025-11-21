@@ -34,6 +34,14 @@ const config: CapacitorConfig = {
       splashFullScreen: true,
       splashImmersive: true,
     },
+    StatusBar: {
+      backgroundColor: '#000000',
+      style: 'dark',
+      // На Android: НЕ используем overlay, чтобы статус-бар не накладывался
+      // Высоту статус-бара получаем программно и добавляем padding
+      overlaysWebView: false,
+      androidOverlaysWebView: false,
+    },
     PushNotifications: {
       presentationOptions: ['badge', 'sound', 'alert'],
     },

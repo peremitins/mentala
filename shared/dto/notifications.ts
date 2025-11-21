@@ -57,8 +57,7 @@ export interface NotificationPreferencesDto {
   id: string;
   userId: number;
   kind: NotificationKind;
-  habitId?: string | null;
-  topicKey?: string | null; // Для therapy: anxiety, stress, mood, etc.
+  entityKey?: string | null; // Единое поле для идентификации источника (может быть ID, slug или ключ шаблона)
   enabled: boolean;
   timesPerDay: number;
   directness: Directness;
@@ -78,14 +77,16 @@ export interface UpdateNotificationPreferencesDto {
   timesPerDay?: number;
   directness?: Directness;
   timezone?: string;
-  habitId?: string | null;
-  topicKey?: string | null;
+  entityKey?: string | null; // Единое поле для идентификации источника (может быть ID, slug или ключ шаблона)
   subtype?: HabitSubtype | null;
   activeDays?: number[]; // Дни недели (0 = Воскресенье, 1 = Понедельник, ..., 6 = Суббота)
   customSlotTimes?: (number | null)[] | null; // Пользовательские времена слотов (0-1439 минут)
   timeRangeStart?: number; // Начало временного окна в минутах от начала дня (0-1439)
   timeRangeEnd?: number; // Конец временного окна в минутах от начала дня (0-1439)
   meta?: NotificationPreferenceMeta | null;
+  // Поля для обновления названия и описания кастомных привычек/терапии
+  name?: string; // Новое название (только для кастомных привычек/терапии)
+  description?: string | null; // Новое описание (только для кастомных привычек/терапии)
 }
 
 // ==========================================
@@ -97,6 +98,7 @@ export interface HabitDto {
   name: string;
   intent: HabitIntent;
   habitKey?: string | null; // Нормализованный ключ для маппинга на шаблоны
+  slug?: string | null; // URL-friendly идентификатор
   emoji?: string | null;
   description?: string | null;
   createdAt: string;
@@ -121,6 +123,8 @@ export interface UpdateHabitDto {
 
 export interface NotificationPreferenceMeta {
   customTexts?: string[];
+  // Единое поле для всех типов сущностей (кастомные и шаблоны)
+  textSource?: 'templates' | 'ai' | 'hybrid';
 }
 
 // ==========================================
@@ -130,6 +134,7 @@ export interface NotificationPreferenceMeta {
 export interface TherapyTopicDto {
   id: string;
   name: string;
+  slug?: string | null; // URL-friendly идентификатор
   description?: string | null;
   emoji?: string | null;
   createdAt: string;
@@ -175,8 +180,7 @@ export interface NotificationSlotDto {
   id: string;
   userId: number;
   kind: NotificationKind;
-  habitId?: string | null;
-  topicKey?: string | null; // Для therapy: anxiety, stress, mood, etc.
+  entityKey?: string | null; // Единое поле для идентификации источника (может быть ID, slug или ключ шаблона)
   scheduledAt: string;
   payload: NotificationPayload;
   templateId?: string | null;
@@ -225,7 +229,7 @@ export interface CreateInteractionDto {
 export interface SnoozeRequestDto {
   kind: NotificationKind;
   duration: SnoozeDuration;
-  habitId?: string | null;
+  entityKey?: string | null;
 }
 
 // ==========================================
@@ -234,7 +238,7 @@ export interface SnoozeRequestDto {
 
 export interface TestNotificationDto {
   kind: NotificationKind;
-  habitId?: string | null;
+  entityKey?: string | null; // Единое поле для идентификации источника
 }
 
 // ==========================================

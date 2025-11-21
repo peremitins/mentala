@@ -98,15 +98,10 @@ export function initializeFirebase(): void {
  */
 function generateCollapseKey(payload: NotificationPayload): string {
   const kind = payload.data?.kind;
-  const habitId = payload.data?.habitId;
-  const topicKey = payload.data?.topicKey;
+  const entityKey = payload.data?.entityKey;
 
-  if (kind === 'habits' && habitId) {
-    return `habit_${habitId}`;
-  }
-
-  if (kind === 'therapy' && topicKey) {
-    return `therapy_${topicKey}`;
+  if (kind && entityKey) {
+    return `${kind}_${entityKey}`;
   }
 
   // Fallback: по типу или общий
@@ -148,7 +143,7 @@ export async function sendFCMNotification(
     }
 
     // Формируем collapse key для группировки уведомлений
-    // Для habits: habit_{habitId}, для therapy: therapy_{topicKey} или therapy
+    // Для habits: habits_{entityKey}, для therapy: therapy_{entityKey} или therapy
     const collapseKey = generateCollapseKey(payload);
 
     const message: admin.messaging.Message = {

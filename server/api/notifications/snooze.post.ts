@@ -73,11 +73,11 @@ export default defineEventHandler(
       gt(notificationSlots.scheduledAt, now),
     ];
 
-    // Если указан habitId, фильтруем по нему
-    if (body.habitId) {
-      conditions.push(eq(notificationSlots.habitId, body.habitId));
-    } else if (body.kind === 'therapy') {
-      conditions.push(isNull(notificationSlots.habitId));
+    // Если указан entityKey, фильтруем по нему
+    if (body.entityKey) {
+      conditions.push(eq(notificationSlots.entityKey, body.entityKey));
+    } else {
+      conditions.push(isNull(notificationSlots.entityKey));
     }
 
     const [nearestSlot] = await db

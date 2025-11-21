@@ -68,7 +68,7 @@ export function useNotificationsSettings() {
 
   const fetchNotificationPreferences = async (
     kind: NotificationKind,
-    options?: { habitId?: string; topicKey?: string }
+    options?: { entityKey?: string }
   ): Promise<NotificationPreferencesDto | null> => {
     try {
       loading.value = true;
@@ -76,11 +76,8 @@ export function useNotificationsSettings() {
       const { $api } = useNuxtApp();
       let url = `/api/notifications/prefs/${kind}`;
       const params = new URLSearchParams();
-      if (options?.habitId) {
-        params.append('habitId', options.habitId);
-      }
-      if (options?.topicKey) {
-        params.append('topicKey', options.topicKey);
+      if (options?.entityKey) {
+        params.append('entityKey', options.entityKey);
       }
       if (params.toString()) {
         url += `?${params.toString()}`;

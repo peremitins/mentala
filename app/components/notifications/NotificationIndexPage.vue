@@ -10,6 +10,7 @@ import {
 } from '@/app/components/ui/shadcn/tabs';
 import Combobox from '@/app/components/Combobox.vue';
 import { INTENT_OPTIONS } from '@/app/constants/select-options';
+import IconTrash from '~icons/lucide/trash';
 
 export interface NotificationIndexItem {
   id: string;
@@ -86,10 +87,10 @@ function handleRemove(item: NotificationIndexItem) {
 </script>
 
 <template>
-  <div class="glass-deep px-2 space-y-6 h-full overflow-y-auto">
+  <div class="space-y-6 h-full overflow-y-auto rounded-sm">
     <PageHeader :title="title" />
 
-    <Tabs v-model="activeTab" class="w-full">
+    <Tabs v-model="activeTab" class="w-full pb-[100px]">
       <TabsList class="w-full grid grid-cols-2">
         <TabsTrigger value="notifications">Уведомления</TabsTrigger>
         <TabsTrigger value="prompts">Промпты</TabsTrigger>
@@ -111,7 +112,7 @@ function handleRemove(item: NotificationIndexItem) {
           />
         </div>
 
-        <div class="px-2 space-y-2">
+        <div class="space-y-2">
           <button
             v-for="item in visibleItems"
             :key="item.id"
@@ -166,19 +167,7 @@ function handleRemove(item: NotificationIndexItem) {
                   title="Удалить привычку"
                   @click.stop="handleRemove(item)"
                 >
-                  <svg
-                    class="h-4 w-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M3 6h18M9 6V4h6v2m-7 4v8m4-8v8m-7 8h12a2 2 0 002-2V6H5v12a2 2 0 002 2z"
-                    />
-                  </svg>
+                  <IconTrash class="h-4 w-4" />
                 </button>
                 <svg
                   class="h-5 w-5"

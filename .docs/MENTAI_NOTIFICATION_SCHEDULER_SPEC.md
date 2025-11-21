@@ -57,7 +57,7 @@ CREATE INDEX habits_habit_key_idx
 
 #### Таблица `notification_preferences`
 
-- Добавляем `subtype VARCHAR(20)` — тип уведомления: `'reminder' | 'informational' | 'motivational'`
+- Добавляем `subtype VARCHAR(20)` — фокус уведомления: `'reminder' | 'informational' | 'motivational'`
   - `reminder` — напоминание: "Сделал ли ты X? Если нет, сделай"
   - `informational` — информационное (объединяет информационные и предупреждающие): факты о вреде/пользе, предупреждения
   - `motivational` — мотивационное: ободряющие сообщения
@@ -82,9 +82,9 @@ CREATE INDEX notification_prefs_subtype_idx
 Индексы (SQL миграции):
 
 ```sql
-CREATE UNIQUE INDEX IF NOT EXISTS notification_prefs_user_kind_habit_uidx
-  ON notification_preferences (user_id, kind, habit_id)
-  WHERE habit_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS notification_prefs_user_kind_entity_uidx
+  ON notification_preferences (user_id, kind, entity_key)
+  WHERE entity_key IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS notification_slots_due_idx
   ON notification_slots (user_id, scheduled_at)
@@ -94,7 +94,7 @@ CREATE INDEX IF NOT EXISTS notification_slots_due_idx
 ### 2.2 API (префикс `/api/notifications/`)
 
 - `GET /prefs/habits` → все prefs пользователя по привычкам
-- `PUT /prefs/habits/:habitId`
+- `PUT /prefs/habits` (с `entityKey` в body)
   ```json
   {
     "enabled": true,
@@ -103,7 +103,7 @@ CREATE INDEX IF NOT EXISTS notification_slots_due_idx
     "subtype": "reminder"
   }
   ```
-- `POST /test` (dev/stage) → `{ "kind": "habits", "habitId": "water" }`
+- `POST /test` (dev/stage) → `{ "kind": "habits", "entityKey": "water" }`
 
 Каталог на фронте (TS-модуль), при необходимости можно добавить:
 
@@ -143,8 +143,8 @@ CREATE INDEX IF NOT EXISTS notification_slots_due_idx
 ## 5) Планировщик и отправка
 
 - Слоты генерируются на 7 дней вперёд.
-- Для каждой привычки (`habit_id`) создаются свои уведомления.
-- Используются настройки пользователя (частота, стиль подачи, тип уведомления).
+- Для каждой сущности (`entityKey`) создаются свои уведомления.
+- Используются настройки пользователя (частота, Стиль уведомлений, фокус уведомления).
 - Распределение по дню — равномерное с джиттером ±15 мин.
 - Snooze и оркестрация работают аналогично типу `therapy`.
 - При выборе шаблона учитываются: `intent`, `habitKey`, `subtype`, `addressing`, `tone`, `directness`.
@@ -153,7 +153,7 @@ CREATE INDEX IF NOT EXISTS notification_slots_due_idx
 
 ## 6) Наблюдаемость (Observability)
 
-- Логировать каждое сгенерированное уведомление (userId, habitId, intent, habitKey, subtype, scheduledAt, templateId).
+- Логировать каждое сгенерированное уведомление (userId, entityKey, intent, habitKey, subtype, scheduledAt, templateId).
 - Метрики: количество сгенерированных слотов, доля отправленных, snoozed, отклонённых.
 - Отдельный dashboard (Grafana/Metabase).
 
@@ -201,7 +201,7 @@ export const INTENT_OPTIONS = [
   class="max-w-[170px]"
   v-model="subtype"
   :options="SUBTYPE_OPTIONS"
-  placeholder="Тип уведомления"
+  placeholder="Фокус уведомлений"
 />
 ```
 
@@ -209,9 +209,9 @@ export const INTENT_OPTIONS = [
 
 ```typescript
 export const SUBTYPE_OPTIONS = [
-  { label: 'Напоминание', value: 'reminder' },
-  { label: 'Информационное', value: 'informational' },
-  { label: 'Мотивационное', value: 'motivational' },
+  { label: 'Напоминание о действии', value: 'reminder' },
+  { label: 'Полезные факты', value: 'informational' },
+  { label: 'Поддержка и мотивация', value: 'motivational' },
 ];
 ```
 
