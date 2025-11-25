@@ -30,7 +30,11 @@ export const useSpeechStore = defineStore('speech', {
       this.isListening = v;
     },
     setAvatarSpeaking(v: boolean) {
-      this.isAvatarSpeaking = v;
+      try {
+        this.isAvatarSpeaking = v;
+      } catch (e) {
+        console.error('[SpeechStore] Error setting isAvatarSpeaking:', e);
+      }
     },
   },
 });

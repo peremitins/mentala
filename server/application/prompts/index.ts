@@ -79,7 +79,8 @@ export function buildChatPrelude(vars: {
  */
 export function buildSessionMemoryText(
   summaries: Array<Record<string, any>>,
-  lang: string = 'ru'
+  lang: string = 'ru',
+  maxSummaryLength: number = 1000 // Максимальная длина каждого summary (truncation: "auto" обработает превышение)
 ): string {
   if (!Array.isArray(summaries) || summaries.length === 0) return '';
   const header = `Краткий контекст прошлых бесед (без PII, ${lang}).
@@ -90,7 +91,12 @@ export function buildSessionMemoryText(
     const n = i + 1;
     const topics = Array.isArray(s?.topics) ? String(s.topics.join(', ')) : '';
     const step = s?.agreed_next_step ? String(s.agreed_next_step) : '';
-    const overview = s?.summary_detailed ? String(s.summary_detailed) : '';
+    let overview = s?.summary_detailed ? String(s.summary_detailed) : '';
+    // Мягкое ограничение: обрезаем только очень длинные summary
+    // truncation: "auto" в OpenAI API обработает превышение контекста автоматически
+    if (overview.length > maxSummaryLength) {
+      overview = overview.substring(0, maxSummaryLength) + '...';
+    }
     const risk = s?.risk_flag ? String(s.risk_flag) : '';
     const parts = [
       topics ? `темы: ${topics}` : '',
@@ -102,11 +108,6 @@ export function buildSessionMemoryText(
       overview ? `обзор: ${overview}` : ''
     }`;
     lines.push(line);
-    console.dir(lines.join('\n'), {
-      depth: null,
-      maxArrayLength: null,
-      colors: true,
-    });
   });
   return lines.join('\n');
 }
@@ -135,4 +136,97 @@ export function buildChatPreludeWithMemory(
     .join('\n\n');
 
   return renderTemplate(parts, vars as any);
+}
+
+/**
+ * Формирует промпт для стартового приветствия ассистента при выборе режима на welcome-экране.
+ * @param options - Параметры для формирования промпта
+ * @returns Строка с промптом для модели
+ */
+export function buildWelcomePrompt(options: {
+  mode: 'therapy' | 'habits' | 'talk';
+  isFirstSession: boolean;
+  sessionMemoryText?: string;
+  lang?: string;
+  user_locale?: string;
+  user_name?: string;
+  welcomePromptContent?: string; // Содержимое промпта из БД
+}): string {
+  const lang = options.lang || 'ru';
+  const isFirst = options.isFirstSession;
+  const mode = options.mode;
+  const sessionMemoryText = options.sessionMemoryText || '';
+
+  // Если есть пользовательский промпт из БД, используем его как основу
+  if (options.welcomePromptContent) {
+    let prompt = options.welcomePromptContent;
+
+    // Заменяем плейсхолдеры
+    prompt = prompt.replace(/{{user_name}}/g, options.user_name || '');
+    prompt = prompt.replace(/{{user_locale}}/g, options.user_locale || '');
+    prompt = prompt.replace(/{{lang}}/g, lang);
+    prompt = prompt.replace(/{{mode}}/g, mode);
+
+    // Если это не первая сессия и есть контекст памяти, добавляем его
+    if (!isFirst && sessionMemoryText) {
+      prompt =
+        prompt + '\n\n--- Контекст прошлых бесед ---\n' + sessionMemoryText;
+    }
+
+    // Добавляем инструкцию о генерации первого сообщения
+    prompt =
+      prompt +
+      '\n\nВАЖНО: Твое сообщение будет ПЕРВЫМ в диалоге. Сгенерируй короткое приветственное сообщение (2-3 предложения) и задай один открытый вопрос для начала диалога. НЕ используй форматирование вроде "**" или "---". Просто текст.';
+
+    return prompt;
+  }
+
+  // Дефолтные промпты для каждого режима
+  const modeDescriptions: Record<string, { first: string; repeat: string }> = {
+    therapy: {
+      first:
+        'Пользователь выбрал режим "Терапия" для обсуждения эмоций, тревоги и стресса. Это его первая сессия в приложении. Сделай короткое, тёплое приветствие (2-3 предложения), представься и объясни, чем ты можешь помочь в режиме терапии. Заверши одним открытым вопросом, чтобы начать диалог. Не упоминай прошлые разговоры, так как их нет.',
+      repeat:
+        'Пользователь выбрал режим "Терапия" для обсуждения эмоций, тревоги и стресса. Это не первая сессия — у вас есть контекст прошлых бесед.\n\n--- Контекст прошлых сессий ---\n{{sessionMemoryText}}\n\nСделай короткое, тёплое приветствие (2-3 предложения), которое:\n- Показывает, что ты помнишь основные темы прошлых бесед (без дословного цитирования)\n- Мягко предлагает либо вернуться к предыдущим темам, либо перейти к новым\n- Завершается одним открытым вопросом для начала диалога',
+    },
+    habits: {
+      first:
+        'Пользователь выбрал режим "Привычки" для поддержки формирования или отказа от привычек. Это его первая сессия в приложении. Сделай короткое, тёплое приветствие (2-3 предложения), представься и объясни, чем ты можешь помочь в работе с привычками. Заверши одним открытым вопросом, чтобы начать диалог. Не упоминай прошлые разговоры, так как их нет.',
+      repeat:
+        'Пользователь выбрал режим "Привычки" для поддержки формирования или отказа от привычек. Это не первая сессия — у вас есть контекст прошлых бесед.\n\n--- Контекст прошлых сессий ---\n{{sessionMemoryText}}\n\nСделай короткое, тёплое приветствие (2-3 предложения), которое:\n- Показывает, что ты помнишь основные темы прошлых бесед (без дословного цитирования)\n- Мягко предлагает либо вернуться к предыдущим темам, либо перейти к новым\n- Завершается одним открытым вопросом для начала диалога',
+    },
+    talk: {
+      first:
+        'Пользователь выбрал свободный диалог без жёсткой темы для эмоциональной разгрузки и общения. Это его первая сессия в приложении. Сделай короткое, тёплое приветствие (2-3 предложения), представься и предложи пообщаться на любые темы. Заверши одним открытым вопросом, чтобы начать диалог. Не упоминай прошлые разговоры, так как их нет.',
+      repeat:
+        'Пользователь выбрал свободный диалог без жёсткой темы для эмоциональной разгрузки и общения. Это не первая сессия — у вас есть контекст прошлых бесед.\n\n--- Контекст прошлых сессий ---\n{{sessionMemoryText}}\n\nСделай короткое, тёплое приветствие (2-3 предложения), которое:\n- Показывает, что ты помнишь основные темы прошлых бесед (без дословного цитирования)\n- Мягко предлагает либо вернуться к предыдущим темам, либо перейти к новым\n- Завершается одним открытым вопросом для начала диалога',
+    },
+  };
+
+  const template = isFirst
+    ? modeDescriptions[mode]?.first || modeDescriptions.therapy.first
+    : modeDescriptions[mode]?.repeat || modeDescriptions.therapy.repeat;
+
+  let prompt = template;
+
+  // Заменяем плейсхолдеры
+  prompt = prompt.replace(/{{user_name}}/g, options.user_name || '');
+  prompt = prompt.replace(/{{user_locale}}/g, options.user_locale || '');
+  prompt = prompt.replace(/{{lang}}/g, lang);
+
+  if (!isFirst && sessionMemoryText) {
+    prompt = prompt.replace(/{{sessionMemoryText}}/g, sessionMemoryText);
+  } else {
+    prompt = prompt.replace(
+      /--- Контекст прошлых сессий ---\n{{sessionMemoryText}}/g,
+      ''
+    );
+  }
+
+  // Добавляем инструкцию о генерации первого сообщения
+  prompt =
+    prompt +
+    '\n\nВАЖНО: Твое сообщение будет ПЕРВЫМ в диалоге. Сгенерируй короткое приветственное сообщение (2-3 предложения) и задай один открытый вопрос для начала диалога. НЕ используй форматирование вроде "**" или "---". Просто текст.';
+
+  return prompt;
 }

@@ -1,1 +1,1 @@
-export type SettingsTab = 'general' | 'prompts' | 'notifications';
+export type SettingsTab = 'general' | 'notifications' | 'user';

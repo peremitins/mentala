@@ -57,12 +57,24 @@ export async function getSessionUser(event: any) {
   let sid = getCookie(event, SID);
 
   // Если cookie нет, проверяем заголовок X-Session-Token
-  // Это fallback для случаев, когда cookies не передаются (например, cross-domain)
+  // Это fallback для случаев, когда cookies не передаются (например, cross-domain или Capacitor)
   if (!sid) {
     const tokenHeader = getHeader(event, 'x-session-token');
     if (tokenHeader) {
       sid = tokenHeader.trim();
     }
+  }
+
+  // Логирование для отладки на мобильных устройствах
+  const userAgent = getHeader(event, 'user-agent') || '';
+  const isMobile = /Mobile|Android|iPhone|iPad/i.test(userAgent);
+  if (isMobile && !sid) {
+    console.log(
+      '[Session] Mobile request without session token - cookies:',
+      !!getCookie(event, SID),
+      'header:',
+      !!getHeader(event, 'x-session-token')
+    );
   }
 
   if (!sid) return null;

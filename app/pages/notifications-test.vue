@@ -1,6 +1,10 @@
 <template>
   <div class="glass-deep px-4 py-6 space-y-6 h-full overflow-y-auto">
-    <PageHeader title="Тест уведомлений" :show-back-button="true" />
+    <PageHeader
+      title="Тест уведомлений"
+      :show-back-button="true"
+      @go-back="goBack"
+    />
 
     <div class="space-y-4">
       <!-- Статус -->
@@ -120,7 +124,7 @@ async function checkStatus() {
   const perms = await notifications.checkPermissions();
   permissions.value = perms;
   addLog(`Push: ${perms.push}, Local: ${perms.local}`);
-  useToast('Статус обновлён', 'Разрешения проверены', 'success');
+  useToast('Статус обновлён', 'Разрешения проверены');
 }
 
 async function sendTestNotification() {
@@ -132,10 +136,10 @@ async function sendTestNotification() {
 
   if (success) {
     addLog('Уведомление успешно отправлено');
-    useToast('Успешно', 'Уведомление отправлено', 'success');
+    useToast('Успешно', 'Уведомление отправлено');
   } else {
     addLog('Ошибка отправки уведомления');
-    useToast('Ошибка', 'Не удалось отправить уведомление', 'error');
+    useToast('Ошибка', 'Не удалось отправить уведомление');
   }
 }
 
@@ -153,10 +157,10 @@ async function sendScheduledNotification() {
 
   if (success) {
     addLog('Уведомление успешно запланировано');
-    useToast('Запланировано', 'Уведомление придет через 5 секунд', 'success');
+    useToast('Запланировано', 'Уведомление придет через 5 секунд');
   } else {
     addLog('Ошибка планирования уведомления');
-    useToast('Ошибка', 'Не удалось запланировать уведомление', 'error');
+    useToast('Ошибка', 'Не удалось запланировать уведомление');
   }
 }
 
@@ -167,10 +171,10 @@ async function getPushTokenTest() {
   if (token) {
     pushToken.value = token;
     addLog(`Push токен получен: ${token.substring(0, 20)}...`);
-    useToast('Токен получен', 'Push токен сохранён', 'success');
+    useToast('Токен получен', 'Push токен сохранён');
   } else {
     addLog('Токен еще не доступен. Проверьте логи для registration события.');
-    useToast('Внимание', 'Токен будет доступен после регистрации', 'warning');
+    useToast('Внимание', 'Токен будет доступен после регистрации');
   }
 }
 
@@ -178,7 +182,11 @@ async function cancelAll() {
   addLog('Отмена всех уведомлений...');
   await notifications.cancelAll();
   addLog('Все уведомления отменены');
-  useToast('Отменено', 'Все уведомления отменены', 'success');
+  useToast('Отменено', 'Все уведомления отменены');
+}
+
+function goBack() {
+  navigateTo('/settings');
 }
 
 // Проверка статуса при загрузке
@@ -196,9 +204,3 @@ onMounted(async () => {
   }
 });
 </script>
-
-
-
-
-
-

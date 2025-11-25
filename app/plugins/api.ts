@@ -123,7 +123,7 @@ export default defineNuxtPlugin(() => {
         `${response?.status || 'Network'} ${response?.statusText || 'Request Error'}`;
 
       // Авто‑тост ошибок
-      useToast('Ошибка запроса', String(message), 'error');
+      useToast('Ошибка запроса', String(message));
 
       if (response?.status === 401) {
         // Очищаем токен при 401 ошибке (неавторизован)

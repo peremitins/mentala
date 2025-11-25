@@ -6,11 +6,15 @@ import { createError } from 'h3';
 import type { LlmProviderPort } from '../../ports';
 import { config } from '../../config';
 import { summaryStore } from '../../utils/summaryStore';
+import { responseIdStore } from '../../utils/responseIdStore';
+import { readChatSettings } from '../../utils/storage';
+import { welcomePromptStore } from '../../utils/welcomePromptStore';
 import {
   buildSummaryPrompt,
   buildChatPrelude,
   buildSessionMemoryText,
   buildChatPreludeWithMemory,
+  buildWelcomePrompt,
 } from '@@/server/application/prompts';
 
 const OPENAI_URL = 'https://api.openai.com/v1/responses';
@@ -84,7 +88,8 @@ export const openaiProvider: LlmProviderPort = {
       });
 
     const usedModel = model || config.llm.openai.defaultModel;
-    const maxTokens = config.llm.openai.defaultMaxOutputTokens;
+    const maxTokens =
+      options?.maxOutputTokens || config.llm.openai.defaultMaxOutputTokens;
 
     let attempt = 0;
     const maxRetries = 5;
@@ -103,16 +108,67 @@ export const openaiProvider: LlmProviderPort = {
     // eslint-disable-next-line no-constant-condition
     while (true) {
       try {
-        // Memory-aware prelude: при повторных — подмешиваем ВСЕ summary
-        const isFirst = Boolean(options?.isFirstSession);
-        const lang = options?.lang ?? 'ru';
-        let sessionMemoryText = '';
-        if (!isFirst && options?.userId != null) {
+        // Получаем настройки пользователя для управления памятью
+        const chatSettings = options?.userId
+          ? await readChatSettings(String(options.userId))
+          : null;
+        const enablePreviousResponseId =
+          chatSettings?.enablePreviousResponseId ?? true;
+        const enableSummary = chatSettings?.enableSummary ?? true;
+        // Получаем последний валидный response_id (если включено)
+        let previousResponseId: string | undefined;
+        if (enablePreviousResponseId && options?.userId) {
           try {
-            const all = await summaryStore.getSummaries(options.userId);
-            sessionMemoryText = buildSessionMemoryText(all, lang);
+            const lastResponse = await responseIdStore.getLastValid(
+              String(options.userId)
+            );
+            if (lastResponse) {
+              const isValid = responseIdStore.isResponseValid(
+                lastResponse.expiresAt
+              );
+              if (isValid) {
+                previousResponseId = lastResponse.responseId;
+              }
+            }
+          } catch (err) {
+            console.error(
+              '[OpenAI chat()] ❌ Failed to get previous_response_id:',
+              err
+            );
+          }
+        }
+
+        // Memory-aware prelude: при повторных — подмешиваем summary (если включено)
+        // Важно: isFirst должен учитывать не только summary, но и previous_response_id
+        // Если хотя бы один механизм памяти включен и есть данные - это не первая сессия
+        const hasSummary = enableSummary && options?.userId != null;
+        const hasPreviousResponseId =
+          enablePreviousResponseId && previousResponseId;
+
+        // Определяем isFirst: это первая сессия только если НЕТ ни summary, ни previous_response_id
+        let sessionMemoryText = '';
+        let isFirst = Boolean(options?.isFirstSession);
+
+        if (hasSummary && options?.userId != null) {
+          try {
+            const all = await summaryStore.getSummaries(options.userId, 10); // Лимит последних 10
+            if (all && all.length > 0) {
+              sessionMemoryText = buildSessionMemoryText(
+                all,
+                options?.lang ?? 'ru'
+                // Не передаем maxSummaryLength - truncation: "auto" обработает превышение контекста
+              );
+              isFirst = false; // Если есть summary - это не первая сессия
+            }
           } catch {}
         }
+
+        // Если есть previous_response_id - это точно не первая сессия
+        if (hasPreviousResponseId) {
+          isFirst = false;
+        }
+
+        const lang = options?.lang ?? 'ru';
 
         // Для повторных сессий исключаем память из system и добавляем её отдельным developer-сообщением ниже
         const systemPrelude = isFirst
@@ -127,7 +183,7 @@ export const openaiProvider: LlmProviderPort = {
                 user_locale: options?.user_locale,
                 user_name: options?.user_name,
               },
-              { isFirstSession: isFirst, sessionMemoryText: '' }
+              { isFirstSession: isFirst, sessionMemoryText: sessionMemoryText }
             );
 
         const developerStyle = '';
@@ -171,17 +227,26 @@ export const openaiProvider: LlmProviderPort = {
             : []),
           ...mapToResponsesInput(messages || []),
         ];
-        console.log('input', input);
-
         const body: any = {
           model: usedModel,
           input,
           max_output_tokens: maxTokens,
           temperature: options?.temperature ?? 0.3,
-          store: false,
+          // store должен быть true только если включена память через previous_response_id
+          store: enablePreviousResponseId,
           metadata: { app: 'mentai', feature: 'psych_support' },
           text: {}, // при необходимости можно добавить text.format с json_schema
+          // ВАЖНО: truncation: "auto" автоматически усекает контекст, если его размер превышает
+          // допустимый лимит. Это позволяет использовать previous_response_id даже для длинных диалогов.
+          truncation: 'auto',
         };
+
+        // Добавляем previous_response_id только если включено и есть валидный
+        // Это позволяет модели помнить контекст предыдущих бесед для лучшего пользовательского опыта
+        if (enablePreviousResponseId && previousResponseId) {
+          body.previous_response_id = previousResponseId;
+          body.store = true; // Принудительно устанавливаем store: true при использовании previous_response_id
+        }
 
         if (tryEncrypted) {
           body.include = ['reasoning.encrypted_content'];
@@ -204,6 +269,28 @@ export const openaiProvider: LlmProviderPort = {
         });
 
         const content = extractText(res);
+
+        // Сохраняем response_id для следующего запроса (если включено)
+        // В Responses API response_id может быть в res.id или в другом месте
+        // Проверяем несколько возможных мест расположения response_id
+        const responseId =
+          res?.id ||
+          res?.response?.id ||
+          res?.response_id ||
+          (res?.output?.[0] as any)?.id;
+
+        if (enablePreviousResponseId && options?.userId) {
+          if (responseId) {
+            try {
+              await responseIdStore.save(String(options.userId), responseId);
+            } catch (err) {
+              console.error(
+                '[OpenAI chat()] ❌ Failed to save response_id:',
+                err
+              );
+            }
+          }
+        }
 
         if (tryEncrypted) {
           const encryptedBlob =
@@ -268,7 +355,25 @@ export const openaiProvider: LlmProviderPort = {
   },
 
   async finishSession({ sessionId, allMessages, userId, model }: any) {
-    if (!sessionId) return;
+    if (!sessionId || !userId) {
+      return;
+    }
+
+    // Проверяем настройки пользователя
+    const chatSettings = await readChatSettings(String(userId));
+    const enableSummary = chatSettings?.enableSummary ?? true;
+
+    // Создаем summary только если включено
+    if (!enableSummary) {
+      sessionCache.delete(sessionId);
+      return;
+    }
+
+    // Проверяем, что есть сообщения для создания summary
+    if (!allMessages || allMessages.length === 0) {
+      sessionCache.delete(sessionId);
+      return;
+    }
 
     const apiKey =
       process.env.OPENAI_API_KEY || process.env.NUXT_OPENAI_API_KEY;
@@ -304,7 +409,7 @@ export const openaiProvider: LlmProviderPort = {
     const body: any = {
       model: usedModel,
       input,
-      store: false,
+      store: false, // Для finishSession всегда false
       include: [],
       text: {},
       max_output_tokens: 600,
@@ -327,8 +432,10 @@ export const openaiProvider: LlmProviderPort = {
 
       const raw = extractText(res);
       const normalized = parseStrictJson(raw);
+
       await summaryStore.save(userId, sessionId, JSON.stringify(normalized));
-    } catch {
+    } catch (error) {
+      // Сохраняем пустой summary в случае ошибки
       await summaryStore.save(
         userId,
         sessionId,
@@ -348,18 +455,239 @@ export const openaiProvider: LlmProviderPort = {
         message: 'OPENAI_API_KEY is not set',
       });
 
-    const usedModel = model || config.llm.openai.defaultModel;
-
-    const isFirst = Boolean(options?.isFirstSession);
-    const lang = options?.lang ?? 'ru';
-    let sessionMemoryText = '';
-    if (!isFirst && options?.userId != null) {
+    // Получаем настройки пользователя для управления памятью
+    const chatSettings = options?.userId
+      ? await readChatSettings(String(options.userId))
+      : null;
+    const enablePreviousResponseId =
+      chatSettings?.enablePreviousResponseId ?? true;
+    const enableSummary = chatSettings?.enableSummary ?? true;
+    // ВАЖНО: Получаем последний валидный response_id ДО проверки welcome start
+    // Это нужно для правильной работы памяти
+    let previousResponseId: string | undefined;
+    if (options?.userId) {
       try {
-        const all = await summaryStore.getSummaries(options.userId);
-        sessionMemoryText = buildSessionMemoryText(all, lang);
+        const lastResponse = await responseIdStore.getLastValid(
+          String(options.userId)
+        );
+        if (lastResponse) {
+          const isValid = responseIdStore.isResponseValid(
+            lastResponse.expiresAt
+          );
+
+          if (isValid) {
+            previousResponseId = lastResponse.responseId;
+          }
+        }
+      } catch (err) {
+        console.error(
+          '[OpenAI Stream] ❌ Failed to get previous_response_id:',
+          err
+        );
+      }
+    }
+
+    const usedModel = model || config.llm.openai.defaultModel;
+    const maxOutputTokens =
+      options?.maxOutputTokens || config.llm.openai.defaultMaxOutputTokens;
+
+    // Проверяем, является ли это стартом с welcome-экрана (messages пустой и есть mode)
+    const isWelcomeStart = (messages?.length || 0) === 0 && options?.mode;
+
+    // Важно: isFirst должен учитывать не только summary, но и previous_response_id
+    // Если хотя бы один механизм памяти включен и есть данные - это не первая сессия
+    const hasSummary = enableSummary && options?.userId != null;
+    const hasPreviousResponseId =
+      enablePreviousResponseId && previousResponseId;
+
+    let sessionMemoryText = '';
+    let isFirst = Boolean(options?.isFirstSession);
+
+    if (hasSummary && options?.userId != null) {
+      try {
+        const all = await summaryStore.getSummaries(options.userId, 10); // Лимит последних 10
+        if (all && all.length > 0) {
+          sessionMemoryText = buildSessionMemoryText(
+            all,
+            options?.lang ?? 'ru'
+          );
+          isFirst = false; // Если есть summary - это не первая сессия
+        }
       } catch {}
     }
 
+    // Если есть previous_response_id - это точно не первая сессия
+    if (hasPreviousResponseId) {
+      isFirst = false;
+    }
+
+    const lang = options?.lang ?? 'ru';
+
+    // ОБРАБОТКА СТАРТА С WELCOME-ЭКРАНА
+    if (isWelcomeStart) {
+      // Загружаем welcome-промпт из БД (или используем дефолтный)
+      let welcomePromptContent: string | null = null;
+      if (options.userId) {
+        try {
+          welcomePromptContent = await welcomePromptStore.get(
+            options.userId,
+            options.mode as 'therapy' | 'habits' | 'talk',
+            isFirst,
+            lang
+          );
+        } catch (err) {
+          console.error('[OpenAI Stream] Failed to load welcome prompt:', err);
+        }
+      }
+
+      // Если промпт не найден для пользователя, пробуем дефолтный
+      if (!welcomePromptContent) {
+        try {
+          welcomePromptContent = await welcomePromptStore.getDefault(
+            options.mode as 'therapy' | 'habits' | 'talk',
+            isFirst,
+            lang
+          );
+        } catch (err) {
+          console.error(
+            '[OpenAI Stream] Failed to load default welcome prompt:',
+            err
+          );
+        }
+      }
+
+      // Формируем стартовый промпт
+      const welcomePrompt = buildWelcomePrompt({
+        mode: options.mode as 'therapy' | 'habits' | 'talk',
+        isFirstSession: isFirst,
+        sessionMemoryText: sessionMemoryText,
+        lang,
+        user_locale: options?.user_locale,
+        user_name: options?.user_name,
+        welcomePromptContent: welcomePromptContent || undefined,
+      });
+
+      // System промпт для старта
+      const systemPrelude = isFirst
+        ? buildChatPrelude({
+            lang,
+            user_locale: options?.user_locale,
+            user_name: options?.user_name,
+          })
+        : buildChatPreludeWithMemory(
+            {
+              lang,
+              user_locale: options?.user_locale,
+              user_name: options?.user_name,
+            },
+            { isFirstSession: isFirst, sessionMemoryText: sessionMemoryText }
+          );
+
+      // Для welcome-старта формируем input БЕЗ messages (они пустые)
+      const input = [
+        {
+          role: 'system',
+          content: [{ type: 'input_text' as const, text: systemPrelude }],
+        },
+        {
+          role: 'developer',
+          content: [{ type: 'input_text' as const, text: welcomePrompt }],
+        },
+        // НЕ добавляем messages - они пустые для welcome-старта!
+      ];
+
+      // dynamic import to avoid hard dep at build
+      const mod: any = await (
+        Function('return import("openai")')() as Promise<any>
+      ).catch(() => null);
+      if (!mod?.default) {
+        throw createError({
+          statusCode: 500,
+          message: 'OpenAI SDK is not available',
+        });
+      }
+      const openai = new mod.default({ apiKey });
+
+      const streamOptions: any = {
+        model: usedModel,
+        input,
+        temperature: options?.temperature ?? 0.3,
+        max_output_tokens: 400, // Ограничение для стартового сообщения (2-3 предложения)
+        // store должен быть true только если включена память через previous_response_id
+        store: enablePreviousResponseId,
+        // ВАЖНО: truncation: "auto" автоматически усекает контекст, если его размер превышает
+        // допустимый лимит. Это позволяет использовать previous_response_id даже для длинных диалогов,
+        // сохраняя начало и конец беседы, удаляя избыточные части из середины.
+        truncation: 'auto',
+      };
+
+      // Используем previous_response_id для сохранения контекста предыдущих бесед
+      if (enablePreviousResponseId && previousResponseId) {
+        streamOptions.previous_response_id = previousResponseId;
+        streamOptions.store = true;
+      }
+
+      const stream = await openai.responses.stream(streamOptions);
+
+      let responseId: string | undefined;
+      let deltaCount = 0;
+      let hasError = false;
+
+      try {
+        for await (const ev of stream as any) {
+          if (ev?.type === 'response.output_text.delta' && ev?.delta) {
+            deltaCount++;
+            yield String(ev.delta);
+          }
+          if (ev?.type === 'response.completed') {
+            responseId =
+              ev?.response?.id ||
+              ev?.id ||
+              ev?.response_id ||
+              (ev?.response as any)?.id;
+            break;
+          }
+          if (ev?.type === 'response.error') {
+            hasError = true;
+            console.error(
+              '[OpenAI Stream] Stream error event:',
+              'userId:',
+              options?.userId,
+              'error:',
+              ev.error?.message || 'Unknown error'
+            );
+            throw createError({
+              statusCode: 500,
+              message: ev.error?.message || 'Stream error',
+            });
+          }
+        }
+      } catch (streamError: any) {
+        console.error(
+          '[OpenAI Stream] Error in welcome stream loop:',
+          'userId:',
+          options?.userId,
+          'deltaCount:',
+          deltaCount,
+          'error:',
+          streamError?.message || String(streamError)
+        );
+        throw streamError;
+      }
+
+      // Сохраняем response_id для следующего запроса (если включено)
+      if (enablePreviousResponseId && options?.userId && responseId) {
+        try {
+          await responseIdStore.save(String(options.userId), responseId);
+        } catch (err) {
+          console.error('[OpenAI Stream] ❌ Failed to save response_id:', err);
+        }
+      }
+
+      return; // Выходим из функции после welcome-старта
+    }
+
+    // ОБЫЧНЫЙ РЕЖИМ ДИАЛОГА (messages не пустые или нет mode)
     const systemPrelude = isFirst
       ? buildChatPrelude({
           lang,
@@ -372,7 +700,7 @@ export const openaiProvider: LlmProviderPort = {
             user_locale: options?.user_locale,
             user_name: options?.user_name,
           },
-          { isFirstSession: isFirst, sessionMemoryText: '' }
+          { isFirstSession: isFirst, sessionMemoryText: sessionMemoryText }
         );
 
     const developerStyle = '';
@@ -415,11 +743,10 @@ export const openaiProvider: LlmProviderPort = {
         : []),
       ...mapToResponsesInput(messages || []),
     ];
-    console.dir(input, {
-      depth: null, // без ограничения по вложенности
-      maxArrayLength: null, // показывать все элементы
-      colors: true, // для удобства
-    });
+
+    // ВАЖНО: Когда используется previous_response_id, OpenAI восстанавливает контекст из предыдущего ответа.
+    // Но мы все равно должны передавать ВСЕ сообщения текущей сессии (не только новые).
+    // Проблема: после перезагрузки страницы messages содержит только новые сообщения.
 
     // dynamic import to avoid hard dep at build
     const mod: any = await (
@@ -433,23 +760,60 @@ export const openaiProvider: LlmProviderPort = {
     }
     const openai = new mod.default({ apiKey });
 
-    const stream = await openai.responses.stream({
+    const streamOptions: any = {
       model: usedModel,
       input,
       temperature: options?.temperature ?? 0.3,
-      max_output_tokens: config.llm.openai.defaultMaxOutputTokens,
-    });
+      max_output_tokens: maxOutputTokens,
+      // store должен быть true только если включена память через previous_response_id
+      store: enablePreviousResponseId,
+      // ВАЖНО: truncation: "auto" автоматически усекает контекст, если его размер превышает
+      // допустимый лимит. Это позволяет использовать previous_response_id даже для длинных диалогов,
+      // сохраняя начало и конец беседы, удаляя избыточные части из середины.
+      truncation: 'auto',
+    };
+
+    // Добавляем previous_response_id только если включено и есть валидный
+    // Это позволяет модели помнить контекст предыдущих бесед для лучшего пользовательского опыта
+    if (enablePreviousResponseId && previousResponseId) {
+      streamOptions.previous_response_id = previousResponseId;
+      streamOptions.store = true; // Принудительно устанавливаем store: true при использовании previous_response_id
+    }
+
+    const stream = await openai.responses.stream(streamOptions);
+
+    let responseId: string | undefined;
 
     for await (const ev of stream as any) {
       if (ev?.type === 'response.output_text.delta' && ev?.delta) {
         yield String(ev.delta);
       }
-      if (ev?.type === 'response.completed') break;
+      if (ev?.type === 'response.completed') {
+        // Сохраняем response_id из завершенного ответа
+        // В Responses API stream response_id может быть в разных местах
+        responseId =
+          ev?.response?.id ||
+          ev?.id ||
+          ev?.response_id ||
+          (ev?.response as any)?.id;
+        break;
+      }
       if (ev?.type === 'response.error') {
         throw createError({
           statusCode: 500,
           message: ev.error?.message || 'Stream error',
         });
+      }
+    }
+
+    // Сохраняем response_id для следующего запроса (если включено)
+    if (enablePreviousResponseId && options?.userId) {
+      if (responseId) {
+        try {
+          await responseIdStore.save(String(options.userId), responseId);
+        } catch (err) {
+          console.error('[OpenAI Stream] ❌ Failed to save response_id:', err);
+        }
       }
     }
   },

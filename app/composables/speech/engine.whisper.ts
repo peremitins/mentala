@@ -20,6 +20,15 @@ export function createWhisperEngine(): SpeechEngine {
     if (speechStore.isListening) return;
     silenceMs = opts?.silenceMs ?? silenceMs;
 
+    // Проверяем доступность API
+    if (
+      typeof navigator === 'undefined' ||
+      !navigator.mediaDevices ||
+      !navigator.mediaDevices.getUserMedia
+    ) {
+      throw new Error('MediaDevices API not available');
+    }
+
     mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     mediaRecorder = new MediaRecorder(mediaStream, { mimeType: 'audio/webm' });
     chunks = [];
@@ -69,7 +78,11 @@ export function createWhisperEngine(): SpeechEngine {
       finalCb = cb;
     },
     isAvailable() {
-      return !!navigator.mediaDevices;
+      return !!(
+        typeof navigator !== 'undefined' &&
+        navigator.mediaDevices &&
+        navigator.mediaDevices.getUserMedia
+      );
     },
   };
 }

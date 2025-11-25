@@ -21,7 +21,7 @@
           <div class="text-sm opacity-80">Тип</div>
 
           <Combobox
-            v-model="chatSettings.mode"
+            v-model="form.type"
             :options="AI_WORK_MODE_OPTIONS"
             placeholder="Выберите режим"
           />
@@ -249,12 +249,11 @@ function confirmClose() {
 async function onSave() {
   // Валидация и лимит 10
   if (form.title.trim().length < 1 || form.title.length > 120) {
-    return useToast('Ошибка', 'Название 1..120 символов', 'error');
+    return useToast('Ошибка', 'Название 1..120 символов');
   }
   if (form.content.trim().length < 20 || form.content.length > 8000) {
-    return useToast('Ошибка', 'Текст 20..8000 символов', 'error');
+    return useToast('Ошибка', 'Текст 20..8000 символов');
   }
-  await prompts.fetch();
 
   try {
     let saved: UserPrompt;
@@ -275,19 +274,18 @@ async function onSave() {
         isActive: form.isActive,
       });
     }
+
+    // Эмитим событие с сохранённым промптом
     emit('saved', saved);
     emit('close');
+
     if (form.isActive) {
-      useToast(
-        'Активный промпт обновлён',
-        `Выбран тип: ${form.type}`,
-        'success'
-      );
+      useToast('Активный промпт обновлён', `Выбран тип: ${form.type}`);
     } else {
-      useToast('Сохранено', 'Промпт сохранён', 'success');
+      useToast('Сохранено', 'Промпт сохранён');
     }
   } catch (e: any) {
-    useToast('Ошибка', String(e?.message || 'Не удалось сохранить'), 'error');
+    useToast('Ошибка', String(e?.message || 'Не удалось сохранить'));
   }
 }
 </script>

@@ -7,6 +7,8 @@ type Payload = Partial<{
   mode: 'therapy' | 'habits';
   voice: boolean;
   avatar: boolean;
+  enablePreviousResponseId: boolean;
+  enableSummary: boolean;
 }>;
 
 export default defineEventHandler(async (event) => {
@@ -16,6 +18,6 @@ export default defineEventHandler(async (event) => {
   }
   const uid = Number(sessUser.id);
   const body = await readBody<Payload>(event);
-  const next = writeChatSettings(String(uid), body || {});
+  const next = await writeChatSettings(String(uid), body || {});
   return { settings: next };
 });

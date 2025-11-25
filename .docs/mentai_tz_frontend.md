@@ -102,7 +102,68 @@ mentai/frontend/
 - Capacitor: доступ к пушам/хаптике/файлам/предпочтениям.
 - Ionic Vue: точечное использование (например, ion‑tabs), если ускоряет UX.
 
-## 10. Качество / CI/CD
+## 10. Кроссплатформенность и совместимость
+
+### 10.1. Поддерживаемые платформы
+
+Весь код должен работать на всех устройствах и браузерах, включая:
+
+- **Web**: современные браузеры (Chrome, Firefox, Safari, Edge) последних версий
+- **iOS**: iOS 13+ (iPhone и iPad)
+- **Android**: Android 8.0+ (API level 26+)
+
+### 10.2. Требования к коду
+
+- **Универсальность API**: избегать использования платформо-специфичных API без проверки доступности
+- **Проверка доступности**: перед использованием браузерных API (например, `navigator.clipboard`, `window.addEventListener`, `document.body`) необходимо проверять их наличие через `typeof` или `isDocumentAvailable()`
+- **Capacitor-обёртки**: для нативных функций использовать Capacitor plugins (`@capacitor/clipboard`, `@capacitor/preferences`, `@capacitor/push-notifications` и т.д.)
+- **VueUse composables**: предпочтительно использовать `@vueuse/core` для кросс-браузерных решений (`useClipboard`, `useResizeObserver`, `useElementSize` и т.д.)
+- **Fallback-механизмы**: для критичных функций предусматривать fallback на альтернативные методы (например, `document.execCommand('copy')` как fallback для Clipboard API)
+
+### 10.3. Асинхронные операции
+
+Для всех асинхронных операций использовать **async/await** вместо цепочек `.then()/.catch()`:
+
+- **Запросы к API**: все HTTP-запросы через `async/await`
+- **Работа с Capacitor**: все вызовы нативных плагинов через `async/await`
+- **Обработка ошибок**: использовать `try/catch` блоки для обработки ошибок
+- **Параллельные запросы**: использовать `Promise.all()` или `Promise.allSettled()` для параллельных операций
+- **Composables**: все composables, выполняющие асинхронные операции, должны возвращать Promise и использовать `async/await` внутри
+
+**Примеры:**
+
+```typescript
+// ✅ Правильно
+async function fetchData() {
+  try {
+    const response = await $api.get('/endpoint');
+    return response.data;
+  } catch (error) {
+    console.error('Error:', error);
+    throw error;
+  }
+}
+
+// ❌ Неправильно
+function fetchData() {
+  return $api
+    .get('/endpoint')
+    .then((response) => response.data)
+    .catch((error) => {
+      console.error('Error:', error);
+      throw error;
+    });
+}
+```
+
+### 10.4. Тестирование на платформах
+
+- **Web**: тестирование в основных браузерах (Chrome, Firefox, Safari, Edge)
+- **iOS**: тестирование на реальных устройствах и симуляторах
+- **Android**: тестирование на реальных устройствах и эмуляторах
+- **Responsive**: проверка адаптивности на различных размерах экранов
+
+## 11. Качество / CI/CD
 
 - ESLint + Prettier + prettier‑plugin‑tailwindcss.
 - Husky + lint-staged (на `pre-commit`).
@@ -110,13 +171,13 @@ mentai/frontend/
 - Sentry для ошибок (client + server).
 - Storybook — каталог UI, визуальные регресс‑снапшоты (этап 2).
 
-## 11. Performance
+## 12. Performance
 
 - Бюджеты: LCP < 2.5s, TTI < 3s на mid‑девайсах.
 - Code‑splitting страниц/компонентов; lazy‑загрузка 3D и TTS.
 - Оптимизация изображений (nuxt/image или внешняя CDN).
 
-## 12. Definition of Done (MVP)
+## 13. Definition of Done (MVP)
 
 - Соответствие UX‑гайдам (glass + a11y).
 - Покрытие типов (TS no‑any).

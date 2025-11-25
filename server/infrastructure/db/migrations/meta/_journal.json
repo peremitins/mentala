@@ -43,6 +43,27 @@
       "when": 1761472936810,
       "tag": "0005_huge_triathlon",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1762361155683,
+      "tag": "0006_strong_marten_broadcloak",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1762361155684,
+      "tag": "0007_add_topic_key_support",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1762361155685,
+      "tag": "0008_restructure_habits",
+      "breakpoints": true
     }
   ]
 }

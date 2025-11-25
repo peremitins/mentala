@@ -1,25 +1,32 @@
 <template>
-  <div class="sticky top-0 z-50 bg-background/95 backdrop-blur-md">
-    <div class="flex items-center mb-2 h-10">
+  <div class="glass-deep sticky top-0 flex min-h-[50px] items-center py-2 z-50">
+    <div class="flex items-center w-full">
       <Button
         v-if="props.showBackButton"
+        class="h-8 w-8 flex-shrink-0"
         variant="ghost"
         size="icon"
-        @click="goBack"
+        @click="handleGoBack"
       >
-        <IconArroeLeft />
+        <IconChevronLeft />
       </Button>
-      <h1 class="text-lg font-bold">
+
+      <div v-if="$slots.custom" class="overflow-hidden w-full pr-2">
+        <slot name="custom" />
+      </div>
+      <h1
+        v-else
+        class="text-xl font-bold text-gray-900 dark:text-gray-100 w-full truncate"
+        :class="{ 'px-4': !props.showBackButton }"
+      >
         {{ props.title }}
       </h1>
     </div>
-
-    <Separator />
   </div>
 </template>
 
 <script lang="ts" setup>
-import IconArroeLeft from '~icons/lucide/arrow-left';
+import IconChevronLeft from '~icons/lucide/chevron-left';
 
 interface Props {
   title: string;
@@ -30,9 +37,11 @@ const props = withDefaults(defineProps<Props>(), {
   showBackButton: false,
 });
 
-const router = useRouter();
+const emit = defineEmits<{
+  (e: 'go-back'): void;
+}>();
 
-const goBack = () => {
-  router.back();
+const handleGoBack = () => {
+  emit('go-back');
 };
 </script>

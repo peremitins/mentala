@@ -33,7 +33,13 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick, computed, watch } from 'vue';
+import { useResizeObserver } from '@vueuse/core';
 import IconChevronDown from '~icons/lucide/chevron-down';
+import {
+  isDocumentAvailable,
+  safeAppendToBody,
+  safeRemoveFromBody,
+} from '@/app/utils/document';
 
 interface Props {
   text: string;
@@ -65,7 +71,7 @@ const containerStyle = computed(() => {
 });
 
 async function checkOverflow() {
-  if (!textElement.value || typeof document === 'undefined') return;
+  if (!textElement.value || !isDocumentAvailable()) return;
 
   await nextTick();
 
@@ -77,7 +83,8 @@ async function checkOverflow() {
   tempElement.style.maxHeight = 'none';
   tempElement.style.width = textElement.value.offsetWidth + 'px';
 
-  document.body.appendChild(tempElement);
+  // Безопасное добавление элемента
+  if (!safeAppendToBody(tempElement)) return;
 
   // Получаем полную высоту текста
   const fullHeight = tempElement.scrollHeight;
@@ -85,8 +92,8 @@ async function checkOverflow() {
     parseFloat(getComputedStyle(textElement.value).lineHeight) || 16;
   const targetHeight = lineHeight * props.maxLines;
 
-  // Удаляем временный элемент
-  document.body.removeChild(tempElement);
+  // Безопасное удаление элемента
+  safeRemoveFromBody(tempElement);
 
   maxHeight.value = fullHeight;
   collapsedHeight.value = targetHeight;
@@ -109,17 +116,12 @@ watch(
   }
 );
 
-// Проверяем при изменении размера окна
-if (typeof window !== 'undefined') {
-  window.addEventListener('resize', () => {
-    nextTick(() => {
-      checkOverflow();
-    });
+// Используем useResizeObserver из VueUse для отслеживания изменений размера
+useResizeObserver(textContainer, () => {
+  nextTick(() => {
+    checkOverflow();
   });
-}
-
-// Используем ResizeObserver для более точного отслеживания изменений
-let resizeObserver: ResizeObserver | null = null;
+});
 
 onMounted(async () => {
   // Проверяем, что мы в браузере
@@ -130,24 +132,6 @@ onMounted(async () => {
   setTimeout(() => {
     checkOverflow();
   }, 100);
-
-  if ('ResizeObserver' in window) {
-    resizeObserver = new ResizeObserver(() => {
-      nextTick(() => {
-        checkOverflow();
-      });
-    });
-
-    if (textContainer.value) {
-      resizeObserver.observe(textContainer.value);
-    }
-  }
-});
-
-onUnmounted(() => {
-  if (resizeObserver) {
-    resizeObserver.disconnect();
-  }
 });
 </script>
 

@@ -9,10 +9,12 @@
           :aria-expanded="open"
           class="w-full justify-between"
         >
-          <span v-if="selectedOption" class="flex gap-2 truncate">
+          <span v-if="selectedOption?.label" class="flex gap-2 truncate">
             <span class="font-medium truncate" v-html="selectedOption.label" />
           </span>
-          <span v-else class="text-muted-foreground">Выберите опцию</span>
+          <span v-else class="text-muted-foreground">{{
+            placeholder || 'Выберите опцию'
+          }}</span>
 
           <IconChevronsUpDown
             class="size-4 shrink-0 text-muted-foreground/80"
@@ -75,6 +77,7 @@ const props = withDefaults(
     search?: boolean;
     placeholder?: string;
     searchPlaceholder?: string;
+    allowDeselect?: boolean; // Разрешить сброс значения при повторном клике
   }>(),
   {
     modelValue: '',
@@ -82,6 +85,7 @@ const props = withDefaults(
     placeholder: 'Выберите тип',
     searchPlaceholder: 'Поиск...',
     options: () => [],
+    allowDeselect: false, // По умолчанию не разрешаем сброс
   }
 );
 
@@ -98,13 +102,25 @@ const filtered = computed<Option[]>(() => {
   return normalized.value.filter((o) => o.label.toLowerCase().includes(q));
 });
 
-const selectedOption = computed<Option | undefined>(() =>
-  normalized.value.find((o) => o.value === props.modelValue)
-);
+const selectedOption = computed<Option | undefined>(() => {
+  if (!props.modelValue) return undefined;
+  return normalized.value.find((o) => o.value === props.modelValue);
+});
 
 function onSelect(o: Option) {
-  const next = props.modelValue === o.value ? '' : o.value;
-  emit('update:modelValue', next);
+  // Если кликнули на уже выбранную опцию
+  if (props.modelValue === o.value) {
+    // Разрешаем сброс только если allowDeselect = true
+    if (props.allowDeselect) {
+      emit('update:modelValue', '');
+    }
+    // В любом случае закрываем меню
+    open.value = false;
+    return;
+  }
+
+  // Выбираем новую опцию
+  emit('update:modelValue', o.value);
   open.value = false;
 }
 </script>
