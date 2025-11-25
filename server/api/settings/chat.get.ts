@@ -11,7 +11,7 @@ export default defineEventHandler(async (event) => {
     return { error: true, message: 'Unauthorized' } as const;
   }
   const uid = Number(sessUser.id);
-  const settings = readChatSettings(String(uid));
+  const settings = await readChatSettings(String(uid));
   const count = await summaryStore.countByUser(uid);
 
   // Загружаем активные промпты для всех типов

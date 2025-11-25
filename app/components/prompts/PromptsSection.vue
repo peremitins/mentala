@@ -148,7 +148,7 @@ async function handleActivate(id: number) {
   const p = promptsStore.items.find((x) => x.id === id);
   if (!p || id === Number(activeId.value)) return;
   await promptsStore.activate(id);
-  if (p) useToast('Активный промпт обновлён', `Тип: ${p.type}`, 'success');
+  if (p) useToast('Активный промпт обновлён', `Тип: ${p.type}`);
 }
 
 function handleEdit(prompt: UserPrompt) {
@@ -159,7 +159,7 @@ function handleEdit(prompt: UserPrompt) {
 async function handleRemove(id: number) {
   const res = await promptsStore.remove(id);
   if (res) {
-    useToast('Готово', 'Промпт удалён', 'success');
+    useToast('Готово', 'Промпт удалён');
   }
 }
 

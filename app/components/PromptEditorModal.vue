@@ -249,10 +249,10 @@ function confirmClose() {
 async function onSave() {
   // Валидация и лимит 10
   if (form.title.trim().length < 1 || form.title.length > 120) {
-    return useToast('Ошибка', 'Название 1..120 символов', 'error');
+    return useToast('Ошибка', 'Название 1..120 символов');
   }
   if (form.content.trim().length < 20 || form.content.length > 8000) {
-    return useToast('Ошибка', 'Текст 20..8000 символов', 'error');
+    return useToast('Ошибка', 'Текст 20..8000 символов');
   }
 
   try {
@@ -280,16 +280,12 @@ async function onSave() {
     emit('close');
 
     if (form.isActive) {
-      useToast(
-        'Активный промпт обновлён',
-        `Выбран тип: ${form.type}`,
-        'success'
-      );
+      useToast('Активный промпт обновлён', `Выбран тип: ${form.type}`);
     } else {
-      useToast('Сохранено', 'Промпт сохранён', 'success');
+      useToast('Сохранено', 'Промпт сохранён');
     }
   } catch (e: any) {
-    useToast('Ошибка', String(e?.message || 'Не удалось сохранить'), 'error');
+    useToast('Ошибка', String(e?.message || 'Не удалось сохранить'));
   }
 }
 </script>

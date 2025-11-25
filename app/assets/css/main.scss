@@ -54,6 +54,46 @@ a {
   );
 }
 
+/* Fade transitions */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+/* Welcome screen animations */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.4s ease-out;
+}
+
+.animate-slide-up {
+  animation: slide-up 0.5s ease-out;
+}
+
 /* Chat bubble style */
 .bubble {
   border-radius: calc(var(--radius-md) + 2px);

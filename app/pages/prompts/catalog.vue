@@ -2,12 +2,12 @@
   <div class="glass-deep h-full overflow-y-auto">
     <PageHeader title="Каталог промптов" :show-back-button="true" />
     <div class="space-y-4 px-4 py-4">
-          <CatalogPromptsList
+      <CatalogPromptsList
         :categories="filteredCategories"
-            :is-already-added="isAlreadyAdded"
-            @copy="handleCopy"
-            @add="handleAdd"
-          />
+        :is-already-added="isAlreadyAdded"
+        @copy="handleCopy"
+        @add="handleAdd"
+      />
     </div>
   </div>
 </template>
@@ -18,6 +18,7 @@ import { promptsCatalog } from '@/app/lib/promptsCatalog';
 import { usePromptsStore } from '@/app/stores/prompts';
 import { useToast } from '@/app/composables/useToast';
 import CatalogPromptsList from '@/app/components/prompts/CatalogPromptsList.vue';
+import { useCopyToClipboard } from '@/app/composables/useCopyToClipboard';
 import type { CatalogItem } from '@/app/lib/promptsCatalog';
 import type { UserPrompt } from '@/app/types';
 
@@ -36,7 +37,7 @@ const filteredCategories = computed(() => {
     // Если нет контекста, показываем все
     return promptsCatalog.categories;
   }
-  
+
   return promptsCatalog.categories.filter(
     (cat) => cat.type === contextType.value
   );
@@ -54,8 +55,10 @@ const isAlreadyAdded = (catalogItem: CatalogItem) => {
   });
 };
 
-function handleCopy(text: string) {
-  navigator.clipboard.writeText(text);
+const { copy } = useCopyToClipboard();
+
+async function handleCopy(text: string) {
+  await copy(text);
 }
 
 function handleAdd(item: CatalogItem) {

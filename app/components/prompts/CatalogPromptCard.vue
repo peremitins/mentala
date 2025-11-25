@@ -49,7 +49,6 @@ import { Separator } from '@/app/components/ui/shadcn/separator';
 import { Button } from '@/app/components/ui/shadcn/button';
 import IconPlus from '~icons/lucide/circle-plus';
 import IconCopy from '~icons/lucide/copy';
-import { useToast } from '@/app/composables/useToast';
 
 const props = defineProps<{
   item: CatalogItem;
@@ -61,11 +60,8 @@ const emit = defineEmits<{
   (e: 'add', item: CatalogItem): void;
 }>();
 
-function handleCopy() {
-  navigator.clipboard.writeText(props.item.content).then(() => {
-    emit('copy', props.item.content);
-    useToast('Скопировано', 'Текст промпта в буфере', 'success');
-  });
+async function handleCopy() {
+  emit('copy', props.item.content);
 }
 
 function handleAdd() {

@@ -9,10 +9,12 @@
           :aria-expanded="open"
           class="w-full justify-between"
         >
-          <span v-if="selectedOption" class="flex gap-2 truncate">
+          <span v-if="selectedOption?.label" class="flex gap-2 truncate">
             <span class="font-medium truncate" v-html="selectedOption.label" />
           </span>
-          <span v-else class="text-muted-foreground">Выберите опцию</span>
+          <span v-else class="text-muted-foreground">{{
+            placeholder || 'Выберите опцию'
+          }}</span>
 
           <IconChevronsUpDown
             class="size-4 shrink-0 text-muted-foreground/80"
@@ -100,9 +102,10 @@ const filtered = computed<Option[]>(() => {
   return normalized.value.filter((o) => o.label.toLowerCase().includes(q));
 });
 
-const selectedOption = computed<Option | undefined>(() =>
-  normalized.value.find((o) => o.value === props.modelValue)
-);
+const selectedOption = computed<Option | undefined>(() => {
+  if (!props.modelValue) return undefined;
+  return normalized.value.find((o) => o.value === props.modelValue);
+});
 
 function onSelect(o: Option) {
   // Если кликнули на уже выбранную опцию

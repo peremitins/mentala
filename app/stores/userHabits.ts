@@ -15,7 +15,8 @@ export const useUserHabitsStore = defineStore('user-habits', {
     error: null,
   }),
   getters: {
-    byId: (state) => (id: string) => state.habits.find((habit) => habit.id === id),
+    byId: (state) => (id: string) =>
+      state.habits.find((habit) => habit.id === id),
   },
   actions: {
     async fetchAll() {
@@ -44,7 +45,7 @@ export const useUserHabitsStore = defineStore('user-habits', {
         return habit;
       } catch (error: any) {
         console.error('[userHabits] create error:', error);
-        useToast(error?.message || 'Не удалось создать привычку', 'error');
+        useToast(error?.message || 'Не удалось создать привычку');
         throw error;
       }
     },
@@ -61,7 +62,7 @@ export const useUserHabitsStore = defineStore('user-habits', {
         this.habits = this.habits.filter((habit) => habit.id !== id);
       } catch (error: any) {
         console.error('[userHabits] remove error:', error);
-        useToast(error?.message || 'Не удалось удалить привычку', 'error');
+        useToast(error?.message || 'Не удалось удалить привычку');
         throw error;
       }
     },

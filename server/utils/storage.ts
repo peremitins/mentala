@@ -1,62 +1,112 @@
-// Simple in-memory storage per user (dev). Replace with Postgres/Redis later.
-type Privacy = { saveHistory: boolean; retentionDays: number };
+// Chat settings stored in PostgreSQL database
+import { db } from '@@/server/infrastructure/db/client';
+import { chatSettings } from '@@/server/infrastructure/db/schema';
+import { eq } from 'drizzle-orm';
+
 type ChatSettings = {
   theme: 'dark' | 'light';
   mode: 'therapy' | 'habits';
   voice: boolean;
   avatar: boolean;
+  enablePreviousResponseId: boolean;
+  enableSummary: boolean;
 };
-const privacyByUser = new Map<string, Privacy>();
-const chatSettingsByUser = new Map<string, ChatSettings>();
-const historyByUser = new Map<
-  string,
-  Array<{ role: 'user' | 'assistant'; content: string; ts: number }>
->();
 
-export function readPrivacy(uid: string): Privacy {
-  return privacyByUser.get(uid) || { saveHistory: false, retentionDays: 0 };
-}
-export function writePrivacy(uid: string, patch: Partial<Privacy>) {
-  const prev = readPrivacy(uid);
-  const next = { ...prev, ...patch };
-  privacyByUser.set(uid, next);
-  return next;
-}
+const DEFAULT_SETTINGS: ChatSettings = {
+  theme: 'dark',
+  mode: 'therapy',
+  voice: true,
+  avatar: true,
+  enablePreviousResponseId: true,
+  enableSummary: true,
+};
 
-export function readChatSettings(uid: string): ChatSettings {
-  return (
-    chatSettingsByUser.get(uid) || {
-      theme: 'dark',
-      mode: 'therapy',
-      voice: true,
-      avatar: true,
+export async function readChatSettings(uid: string): Promise<ChatSettings> {
+  const userId = Number(uid);
+  if (isNaN(userId)) {
+    return DEFAULT_SETTINGS;
+  }
+
+  try {
+    const result = await db
+      .select()
+      .from(chatSettings)
+      .where(eq(chatSettings.userId, userId))
+      .limit(1);
+
+    if (result.length === 0) {
+      return DEFAULT_SETTINGS;
     }
-  );
-}
-export function writeChatSettings(uid: string, patch: Partial<ChatSettings>) {
-  const prev = readChatSettings(uid);
-  const next = { ...prev, ...patch };
-  chatSettingsByUser.set(uid, next);
-  return next;
+
+    const row = result[0];
+    return {
+      theme: (row.theme as 'dark' | 'light') || 'dark',
+      mode: (row.mode as 'therapy' | 'habits') || 'therapy',
+      voice: row.voice ?? true,
+      avatar: row.avatar ?? true,
+      enablePreviousResponseId: row.enablePreviousResponseId ?? true,
+      enableSummary: row.enableSummary ?? true,
+    };
+  } catch (error) {
+    console.error('[Storage] Error reading chat settings:', error);
+    return DEFAULT_SETTINGS;
+  }
 }
 
-export function appendHistory(
+export async function writeChatSettings(
   uid: string,
-  role: 'user' | 'assistant',
-  content: string
-) {
-  const arr = historyByUser.get(uid) || [];
-  arr.push({ role, content, ts: Date.now() });
-  historyByUser.set(uid, arr);
+  patch: Partial<ChatSettings>
+): Promise<ChatSettings> {
+  const userId = Number(uid);
+  if (isNaN(userId)) {
+    throw new Error('Invalid user ID');
+  }
+
+  try {
+    const prev = await readChatSettings(uid);
+    const next = { ...prev, ...patch };
+
+    await db
+      .insert(chatSettings)
+      .values({
+        userId,
+        theme: next.theme,
+        mode: next.mode,
+        voice: next.voice,
+        avatar: next.avatar,
+        enablePreviousResponseId: next.enablePreviousResponseId,
+        enableSummary: next.enableSummary,
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: chatSettings.userId,
+        set: {
+          theme: next.theme,
+          mode: next.mode,
+          voice: next.voice,
+          avatar: next.avatar,
+          enablePreviousResponseId: next.enablePreviousResponseId,
+          enableSummary: next.enableSummary,
+          updatedAt: new Date(),
+        },
+      });
+
+    return next;
+  } catch (error) {
+    console.error('[Storage] Error writing chat settings:', error);
+    throw error;
+  }
 }
-export function clearHistory(uid: string) {
-  historyByUser.delete(uid);
-}
-export function exportHistory(uid: string) {
-  return historyByUser.get(uid) || [];
-}
-export function deleteAll(uid: string) {
-  privacyByUser.delete(uid);
-  historyByUser.delete(uid);
-  chatSettingsByUser.delete(uid);
+
+export async function deleteAll(uid: string): Promise<void> {
+  const userId = Number(uid);
+  if (isNaN(userId)) {
+    return;
+  }
+
+  try {
+    await db.delete(chatSettings).where(eq(chatSettings.userId, userId));
+  } catch (error) {
+    console.error('[Storage] Error deleting chat settings:', error);
+  }
 }

@@ -32,6 +32,7 @@ export const users = pgTable('users', {
 
 export const profiles = pgTable('profiles', {
   userId: integer('user_id').notNull(),
+  // DEPRECATED: Эти поля больше не используются, можно удалить в будущей миграции
   saveHistory: boolean('save_history').default(false).notNull(),
   retentionDays: integer('retention_days').default(0).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true })
@@ -81,6 +82,16 @@ export const sessionSummaries = pgTable('session_summaries', {
     .notNull(),
 });
 
+// User response IDs for previous_response_id support
+export const userResponseIds = pgTable('user_response_ids', {
+  userId: text('user_id').primaryKey(),
+  responseId: text('response_id').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+});
+
 // OAuth accounts
 export const oauthAccounts = pgTable('oauth_accounts', {
   id: serial('id').primaryKey(),
@@ -127,11 +138,29 @@ export const sessions = pgTable('sessions', {
 export const userPrompts = pgTable('user_prompts', {
   id: serial('id').primaryKey(),
   userId: integer('user_id').notNull(),
-  type: varchar('type', { length: 16 }).notNull(), // habits | therapy
+  type: varchar('type', { length: 16 }).notNull(), // habits | therapy | talk
   title: text('title').notNull(),
   content: text('content').notNull(),
   lang: varchar('lang', { length: 8 }).default('ru').notNull(),
   isActive: boolean('is_active').default(false).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+// === Welcome Prompts ===
+// Стартовые промпты для приветствия ассистента при выборе режима на welcome-экране
+export const welcomePrompts = pgTable('welcome_prompts', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull(),
+  mode: varchar('mode', { length: 16 }).notNull(), // therapy | habits | talk
+  isFirstSession: boolean('is_first_session').default(true).notNull(),
+  content: text('content').notNull(),
+  lang: varchar('lang', { length: 8 }).default('ru').notNull(),
+  isActive: boolean('is_active').default(true).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull(),
@@ -184,6 +213,25 @@ export const userPreferences = pgTable('user_preferences', {
     .notNull()
     .default('informal'), // 'informal' | 'formal'
   tone: varchar('tone', { length: 20 }).notNull().default('neutral'), // 'delicate' | 'neutral' | 'uplifting' | 'resolute' | 'demanding'
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+// Настройки чата (theme, mode, voice, avatar, enablePreviousResponseId, enableSummary)
+export const chatSettings = pgTable('chat_settings', {
+  userId: integer('user_id').primaryKey().notNull(),
+  theme: varchar('theme', { length: 10 }).notNull().default('dark'), // 'dark' | 'light' | 'gray'
+  mode: varchar('mode', { length: 20 }).notNull().default('therapy'), // 'therapy' | 'habits'
+  voice: boolean('voice').notNull().default(true),
+  avatar: boolean('avatar').notNull().default(true),
+  enablePreviousResponseId: boolean('enable_previous_response_id')
+    .notNull()
+    .default(true),
+  enableSummary: boolean('enable_summary').notNull().default(true),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull(),

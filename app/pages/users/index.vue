@@ -108,7 +108,7 @@ async function removeUser(id: number) {
       method: 'DELETE',
     });
     users.value = users.value.filter((x) => x.id !== id);
-    useToast('Готово', 'Пользователь удалён', 'success');
+    useToast('Готово', 'Пользователь удалён');
   } catch (e) {
   } finally {
     removingId.value = null;

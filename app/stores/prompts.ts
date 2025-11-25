@@ -86,7 +86,10 @@ export const usePromptsStore = defineStore('prompts', {
 
           // Обновим активные промпты в chatSettings
           const chatSettings = useChatSettingsStore();
-          chatSettings.activePromptsByType[type] = res.item;
+          // Проверяем, что type это 'habits' или 'therapy' (talk не хранится в activePromptsByType)
+          if (type === 'habits' || type === 'therapy') {
+            chatSettings.activePromptsByType[type] = res.item;
+          }
         }
         return res?.item as UserPrompt;
       } catch (error) {

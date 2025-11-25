@@ -1,6 +1,11 @@
 import { defineStore } from 'pinia';
 import { Capacitor } from '@capacitor/core';
 import { useChatStore } from '@/app/stores/chat';
+import { useChatSettingsStore } from '@/app/stores/chatSettings';
+import { useSpeechStore } from '@/app/stores/speech';
+import { useHeygenStore } from '@/app/stores/heygen';
+import { useTTS } from '@/app/composables/useTTS';
+import { useSpeechEngine } from '@/app/composables/useSpeechEngine';
 
 const SESSION_TOKEN_KEY = 'mentai.session.token';
 
@@ -88,20 +93,97 @@ export const useAuthStore = defineStore('auth', {
         this.loading = false;
       }
     },
-    async logout() {
+    /**
+     * Останавливает все активные запросы и озвучки
+     */
+    async _stopAllActiveRequests() {
       try {
-        const chat = useChatStore?.();
-        await chat.finishAndSave();
-      } catch {}
+        // 1. Останавливаем TTS озвучку
+        const { stop: stopTTS } = useTTS();
+        stopTTS();
+
+        // 2. Останавливаем chat stream запросы
+        const chat = useChatStore();
+        chat.stopChatStream();
+
+        // 3. Останавливаем HeyGen сессию
+        const heygen = useHeygenStore();
+        if (heygen.isConnected || heygen.isStarting) {
+          heygen.stopSession();
+        }
+
+        // 4. Останавливаем микрофон, если активен
+        const speechStore = useSpeechStore();
+        if (speechStore.isListening) {
+          const { stop: stopSpeech } = useSpeechEngine();
+          await stopSpeech();
+        }
+      } catch (err) {
+        console.error('[Auth Store] Error stopping active requests:', err);
+      }
+    },
+
+    /**
+     * Сохраняет текущую сессию чата в фоне (не блокирует выполнение)
+     */
+    _saveSessionInBackground() {
+      const chat = useChatStore();
+      if (chat.sessionId && chat.messages && chat.messages.length > 0) {
+        void chat.finishAndSave().catch((err) => {
+          console.error('[Auth Store] Background finishAndSave failed:', err);
+        });
+      }
+    },
+
+    /**
+     * Сбрасывает состояние всех stores
+     */
+    _resetAllStores() {
+      const chat = useChatStore();
+      chat.$reset();
+      useChatSettingsStore().$reset();
+      useSpeechStore().$reset();
+    },
+
+    /**
+     * Очищает токен сессии из localStorage
+     */
+    _clearSessionToken() {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem(SESSION_TOKEN_KEY);
+      }
+    },
+
+    /**
+     * Сбрасывает состояние auth store
+     */
+    _resetAuthState() {
+      this.user = null;
+      this.isLoggedIn = false;
+    },
+
+    async logout() {
+      // 1. Останавливаем все активные запросы и озвучки
+      await this._stopAllActiveRequests();
+
+      // 2. Сохраняем текущую сессию в фоне (не блокируем logout)
+      this._saveSessionInBackground();
+
+      // 3. Сбрасываем все stores
+      this._resetAllStores();
+
+      // 4. Выполняем запрос на разлогин
       await useAPI('/api/auth/logout', {
         method: 'POST',
       });
-      // Очищаем токен из localStorage для Capacitor
-      if (typeof window !== 'undefined' && Capacitor.isNativePlatform()) {
-        localStorage.removeItem(SESSION_TOKEN_KEY);
-      }
-      this.user = null;
-      this.isLoggedIn = false;
+
+      // 5. Очищаем токен из localStorage
+      this._clearSessionToken();
+
+      // 6. Сбрасываем состояние auth store
+      this._resetAuthState();
+
+      // 7. Переходим на страницу авторизации
       navigateTo('/auth');
     },
     oauth(provider: string, locale?: string) {

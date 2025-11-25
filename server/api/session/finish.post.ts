@@ -20,14 +20,27 @@ export default defineEventHandler(async (event) => {
 
   // Сохраняем summary только для авторизованных пользователей (числовой id)
   const sessUser = await getSessionUser(event);
+
+  // Запускаем finishSession в фоне, не блокируем ответ
   if (sessUser?.id) {
-    await openaiProvider.finishSession?.({
-      sessionId: body.sessionId,
-      allMessages: body.messages || [],
-      userId: String(sessUser.id),
-      model: body.model,
-    });
+    // Не ждем завершения - запускаем асинхронно в фоне
+    void (async () => {
+      try {
+        await openaiProvider.finishSession?.({
+          sessionId: body.sessionId,
+          allMessages: body.messages || [],
+          userId: String(sessUser.id),
+          model: body.model,
+        });
+      } catch (error) {
+        console.error(
+          '[Session Finish API] Error in finishSession (background):',
+          error
+        );
+      }
+    })();
   }
 
+  // Возвращаем ответ сразу, не дожидаясь завершения summary
   return { ok: true };
 });

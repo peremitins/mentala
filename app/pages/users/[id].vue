@@ -88,7 +88,7 @@ async function onSubmit() {
       },
     });
 
-    useToast('Готово', 'Пользователь обновлён', 'success');
+    useToast('Готово', 'Пользователь обновлён');
     await navigateTo('/users');
   } catch (e: any) {
     error.value = e?.data?.message || e?.message || 'Ошибка сохранения';

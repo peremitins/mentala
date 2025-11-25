@@ -2,13 +2,15 @@
   <div>
     <NuxtLoadingIndicator />
     <NuxtLayout>
-      <NuxtPage />
+      <KeepAlive>
+        <NuxtPage />
+      </KeepAlive>
     </NuxtLayout>
     <NuxtRouteAnnouncer />
     <Toaster
       theme="dark"
       richColors
-      position="bottom-right"
+      position="top-right"
       :expand="false"
       closeButton
       closeButtonPosition="top-right"

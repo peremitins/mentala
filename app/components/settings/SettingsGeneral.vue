@@ -121,9 +121,9 @@ async function saveGlobalPreferences() {
   savingGlobal.value = false;
 
   if (result) {
-    useToast('Настройки сохранены', 'success');
+    useToast('Настройки сохранены');
   } else {
-    useToast('Ошибка при сохранении', 'error');
+    useToast('Ошибка при сохранении');
   }
 }
 </script>

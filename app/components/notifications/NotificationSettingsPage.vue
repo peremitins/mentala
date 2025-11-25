@@ -623,8 +623,7 @@ async function saveSettings() {
           useToast(
             isHabits.value
               ? 'Введите название привычки'
-              : 'Введите название темы',
-            'error'
+              : 'Введите название темы'
           );
           loading.value = false;
           return;
@@ -767,11 +766,7 @@ async function saveSettings() {
       successMessages.push('настройки');
     }
 
-    useToast(
-      'Сохранено',
-      successMessages.join(', ') + ' успешно сохранены',
-      'success'
-    );
+    useToast('Сохранено', successMessages.join(', ') + ' успешно сохранены');
 
     // Обновляем исходные значения и сигнатуру состояния
     if (isHabits.value && customHabit.value) {
@@ -785,7 +780,7 @@ async function saveSettings() {
     initialStateSignature.value = computeStateSignature();
   } catch (err) {
     console.error('[Client] Failed to save preferences:', err);
-    useToast('Ошибка при сохранении', 'error');
+    useToast('Ошибка при сохранении');
   } finally {
     loading.value = false;
   }

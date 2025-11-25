@@ -2,6 +2,8 @@ import { defineEventHandler, readBody, setHeader } from 'h3';
 import { chatStreamViaProvider } from '@@/server/application/llm.service';
 import { getSessionUser } from '@@/server/application/auth/session';
 import { summaryStore } from '@@/server/utils/summaryStore';
+import { responseIdStore } from '@/server/utils/responseIdStore';
+import { readChatSettings } from '@/server/utils/storage';
 
 export default defineEventHandler(async (event) => {
   const body = await readBody<{
@@ -15,6 +17,7 @@ export default defineEventHandler(async (event) => {
     userId?: number | string;
     isFirstSession?: boolean;
     userPrompt?: string;
+    mode?: 'therapy' | 'habits' | 'talk'; // Режим для старта с welcome-экрана
   }>(event);
 
   // Отдаём как SSE
@@ -28,8 +31,57 @@ export default defineEventHandler(async (event) => {
     // Добавляем память только для авторизованных пользователей
     const sessUser = await getSessionUser(event);
     const uid = sessUser?.id ? String(sessUser.id) : undefined;
-    const count = uid ? await summaryStore.countByUser(uid) : 0;
-    const serverIsFirst = count === 0;
+
+    // Определяем isFirstSession: это первая сессия только если НЕТ ни summary, ни previous_response_id
+    let serverIsFirst = true;
+
+    if (uid) {
+      // Проверяем настройки пользователя
+      const chatSettings = await readChatSettings(String(uid));
+      const enablePreviousResponseId =
+        chatSettings?.enablePreviousResponseId ?? true;
+      const enableSummary = chatSettings?.enableSummary ?? true;
+
+      // Проверяем summary
+      if (enableSummary) {
+        const count = await summaryStore.countByUser(uid);
+        if (count > 0) {
+          serverIsFirst = false;
+          console.log(
+            '[Stream API] Found summary for user:',
+            uid,
+            'count:',
+            count
+          );
+        }
+      }
+
+      // Проверяем previous_response_id (важно для памяти OpenAI)
+      if (enablePreviousResponseId && serverIsFirst) {
+        try {
+          const lastResponse = await responseIdStore.getLastValid(uid);
+          if (
+            lastResponse &&
+            responseIdStore.isResponseValid(lastResponse.expiresAt)
+          ) {
+            serverIsFirst = false;
+            console.log(
+              '[Stream API] Found valid previous_response_id for user:',
+              uid,
+              'responseId:',
+              lastResponse.responseId
+            );
+          }
+        } catch (err) {
+          console.error(
+            '[Stream API] Failed to check previous_response_id:',
+            err
+          );
+        }
+      }
+    }
+
+    console.log('[Stream API] User:', uid, 'isFirstSession:', serverIsFirst);
 
     const stream = chatStreamViaProvider({
       provider: 'openai',
@@ -44,6 +96,7 @@ export default defineEventHandler(async (event) => {
         userId: uid,
         isFirstSession: serverIsFirst,
         userPrompt: body?.userPrompt,
+        mode: body?.mode, // Режим для старта с welcome-экрана
       },
     });
 

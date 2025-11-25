@@ -4,17 +4,22 @@ export const useChatSettingsStore = defineStore('chatSettings', {
   state: () => ({
     theme: 'dark' as 'dark' | 'light' | 'gray',
     // Режим работы ассистента
-    mode: 'therapy' as 'therapy' | 'habits',
+    mode: 'therapy' as 'therapy' | 'habits' | 'talk',
     // Голос/озвучка ответа ассистента
     voice: true,
     // Визуальный аватар (видео)
     avatar: true,
+    // Оптимизация контекста (previous_response_id)
+    enablePreviousResponseId: true,
+    // Долгосрочная память (Summary)
+    enableSummary: true,
     isFirstSession: false,
     // Активные промпты по типам
+    // Примечание: 'talk' не хранится отдельно, мапится на 'therapy'
     activePromptsByType: {
       habits: null,
       therapy: null,
-    } as Record<'habits' | 'therapy', any>,
+    } as Record<'habits' | 'therapy', any | null>,
   }),
   actions: {
     async getChatSettings() {
@@ -23,7 +28,17 @@ export const useChatSettingsStore = defineStore('chatSettings', {
           method: 'GET',
         });
 
-        this.$patch(data.settings);
+        // Безопасно применяем патч, сохраняя структуру activePromptsByType
+        if (data?.settings) {
+          this.$patch({
+            ...data.settings,
+            // Убеждаемся, что activePromptsByType всегда имеет правильную структуру
+            activePromptsByType: {
+              habits: data.settings.activePromptsByType?.habits || null,
+              therapy: data.settings.activePromptsByType?.therapy || null,
+            },
+          });
+        }
 
         return this.$state;
       } catch (error) {
@@ -38,7 +53,23 @@ export const useChatSettingsStore = defineStore('chatSettings', {
           body: payload,
         });
 
-        this.$patch(data.settings);
+        // Безопасно применяем патч, сохраняя структуру activePromptsByType
+        if (data?.settings) {
+          this.$patch({
+            ...data.settings,
+            // Убеждаемся, что activePromptsByType всегда имеет правильную структуру
+            activePromptsByType: {
+              habits:
+                data.settings.activePromptsByType?.habits ||
+                this.activePromptsByType?.habits ||
+                null,
+              therapy:
+                data.settings.activePromptsByType?.therapy ||
+                this.activePromptsByType?.therapy ||
+                null,
+            },
+          });
+        }
 
         return this.$state;
       } catch (error) {

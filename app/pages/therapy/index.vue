@@ -110,14 +110,14 @@ async function confirmDeleteTopic() {
   );
   if (!topic) {
     console.error('[Therapy] Topic not found for deletion:', item.id);
-    useToast('Тема не найдена', 'error');
+    useToast('Тема не найдена');
     pendingDeleteItem.value = null;
     return;
   }
   try {
     // ВАЖНО: Используем реальный ID из БД для удаления, а не slug
     await therapyStore.remove(topic.id);
-    useToast('Тема удалена', 'success');
+    useToast('Тема удалена');
     // Проверяем, находимся ли мы на странице удаленной темы
     const currentRoute = useRoute();
     if (
@@ -128,7 +128,7 @@ async function confirmDeleteTopic() {
     }
   } catch (error: any) {
     console.error('[Therapy] Failed to delete topic:', error);
-    useToast(error?.message || 'Не удалось удалить тему', 'error');
+    useToast(error?.message || 'Не удалось удалить тему');
   } finally {
     pendingDeleteItem.value = null;
   }

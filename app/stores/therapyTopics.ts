@@ -49,7 +49,7 @@ export const useTherapyTopicsStore = defineStore('therapy-topics', {
         return topic;
       } catch (error: any) {
         console.error('[therapyTopics] create error:', error);
-        useToast(error?.message || 'Не удалось создать тему', 'error');
+        useToast(error?.message || 'Не удалось создать тему');
         throw error;
       }
     },
@@ -67,7 +67,7 @@ export const useTherapyTopicsStore = defineStore('therapy-topics', {
         return updated;
       } catch (error: any) {
         console.error('[therapyTopics] update error:', error);
-        useToast(error?.message || 'Не удалось обновить тему', 'error');
+        useToast(error?.message || 'Не удалось обновить тему');
         throw error;
       }
     },
@@ -78,7 +78,7 @@ export const useTherapyTopicsStore = defineStore('therapy-topics', {
         this.topics = this.topics.filter((topic) => topic.id !== id);
       } catch (error: any) {
         console.error('[therapyTopics] remove error:', error);
-        useToast(error?.message || 'Не удалось удалить тему', 'error');
+        useToast(error?.message || 'Не удалось удалить тему');
         throw error;
       }
     },

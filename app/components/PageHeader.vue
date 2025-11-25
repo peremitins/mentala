@@ -1,6 +1,6 @@
 <template>
   <div class="glass-deep sticky top-0 flex min-h-[50px] items-center py-2 z-50">
-    <div class="flex items-center">
+    <div class="flex items-center w-full">
       <Button
         v-if="props.showBackButton"
         class="h-8 w-8 flex-shrink-0"
@@ -11,12 +11,13 @@
         <IconChevronLeft />
       </Button>
 
-      <div v-if="$slots.custom" class="overflow-hidden">
+      <div v-if="$slots.custom" class="overflow-hidden w-full pr-2">
         <slot name="custom" />
       </div>
       <h1
         v-else
-        class="text-xl font-bold text-gray-900 dark:text-gray-100 w-full truncate px-4"
+        class="text-xl font-bold text-gray-900 dark:text-gray-100 w-full truncate"
+        :class="{ 'px-4': !props.showBackButton }"
       >
         {{ props.title }}
       </h1>

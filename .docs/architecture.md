@@ -96,11 +96,10 @@ server/
 • Удаление кастомной темы через UI очищает локальный store и оставляет пользователя на списке (navigateTo `/therapy`), а отдельная кнопка корзины выровнена с arrow-иконкой в NotificationIndexPage, чтобы список для therapy/habits выглядел единообразно.
 
 • HeyGen Streaming Avatar (BFF-прокси):
-• Серверные ручки (Nitro): `server/api/heygen/session.post.ts`, `server/api/heygen/speak.post.ts`, `server/api/heygen/close.post.ts`.
-• Назначение: фронт не раскрывает ключ, Nitro проксирует запросы к HeyGen.
+• Nitro-ручки: `server/api/heygen/session.post.ts` (streaming.new v2 → LiveKit url/token/session_id), `start.post.ts`, `stop.post.ts`, `speak.post.ts`, `close.post.ts` — фронт не видит приватный ключ.
 • Конфиг (server-only): `runtimeConfig.heygenApiKey`, `heygenBaseUrl`, `heygenAvatarId` в `nuxt.config.ts`.
-• Клиент: компонент `app/components/HeyGenPlayer.vue` создаёт `RTCPeerConnection`, отправляет SDP-offer в `/api/heygen/session`, принимает SDP-answer и отображает видео; `speak` и `close` через BFF.
-• Безопасность: ключ хранится только на сервере; клиент использует `useAPI`/`$api` с базовым `public.apiBase`.
+• Клиент: `useHeygenStore` создаёт сессию и подключается к LiveKit через `livekit-client`, треки крепятся в `HeyGenPlayer` к `video/audio` ref. LiveKit Room и DOM-узлы держим вне Pinia state (`markRaw` переменная), чтобы Vue devtools/SSR сериализация не падала на `constructor.name` внутри LiveKit.
+• Безопасность: ключ хранится только на сервере; клиент использует `useAPI`/`$api` с базовым `public.apiBase`, токен/URL очищаются при stop/unmount.
 
 ⸻
 
@@ -126,12 +125,16 @@ server/
 ⸻
 
 📋 Связанные документы
-• `.docs/tz_notifications_improvements.md` - ТЗ по улучшениям системы уведомлений (slug, режимы генерации, метка AI)
+• `.docs/notifications.md` - Полная документация по системе уведомлений (архитектура, API, настройка, тестирование)
 • `.docs/mentai_tz_product.md` - Общие требования к продукту
 • `.docs/mentai_tz_frontend.md` - Требования к фронтенду
 • `.docs/mentai_tz_backend.md` - Требования к бэкенду
 • `.docs/security_requirements.md` - Требования к безопасности
 
 ⸻
+
+Весь код должен работать на всех устройствах и браузерах, включая web, iOS и Android.
+
+Для ассинхронных операций использовать async/await.
 
 ✅ Теперь этот architecture.md содержит и UI-правила, и описание фронтенда, и бэкенда, и секцию по безопасности, и дорожку на Laravel.

@@ -133,13 +133,13 @@ async function confirmDeleteHabit() {
   deletingId.value = habit.id;
   try {
     await userHabitsStore.remove(habit.id);
-    useToast('Привычка удалена', 'success');
+    useToast('Привычка удалена');
     if (route.params.id === habit.id) {
       navigateTo('/habits');
     }
   } catch (error: any) {
     console.error('[Habits] Failed to delete habit:', error);
-    useToast(error?.message || 'Не удалось удалить привычку', 'error');
+    useToast(error?.message || 'Не удалось удалить привычку');
   } finally {
     deletingId.value = null;
     pendingDeleteItem.value = null;

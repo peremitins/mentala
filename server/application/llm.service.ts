@@ -127,6 +127,7 @@ export function chatStreamViaProvider(params: {
     userId?: number | string;
     isFirstSession?: boolean;
     userPrompt?: string;
+    mode?: 'therapy' | 'habits' | 'talk'; // Режим для старта с welcome-экрана
   };
 }): AsyncIterable<string> {
   const provider = getProvider(params.provider);
