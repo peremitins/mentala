@@ -7,15 +7,11 @@
     <div class="space-y-2 max-w-[70ch]">
       <div class="flex items-center justify-between">
         <div class="font-medium">Память ИИ</div>
-        <SwitchRoot
+        <Switch
           v-model:checked="chatSettings.enablePreviousResponseId"
           @update:checked="onPreviousResponseIdChange"
-          class="w-12 h-6 rounded-full border border-white/15 bg-white/10 backdrop-blur flex items-center px-1 data-[state=checked]:bg-green-500 flex-shrink-0"
-        >
-          <SwitchThumb
-            class="w-4 h-4 bg-white rounded-full transition-transform translate-x-0 data-[state=checked]:translate-x-6"
-          />
-        </SwitchRoot>
+          class="flex-shrink-0"
+        />
       </div>
       <div class="relative">
         <Transition name="fade" mode="out-in">
@@ -43,21 +39,17 @@
       </div>
     </div>
 
-    <hr class="border-white/10" />
+    <hr class="border-border/60" />
 
     <!-- Долгосрочная память (Summary) -->
     <div class="space-y-2 max-w-[70ch]">
       <div class="flex items-center justify-between">
         <div class="font-medium">Память в приложении</div>
-        <SwitchRoot
+        <Switch
           v-model:checked="chatSettings.enableSummary"
           @update:checked="onSummaryChange"
-          class="w-12 h-6 rounded-full border border-white/15 bg-white/10 backdrop-blur flex items-center px-1 data-[state=checked]:bg-green-500 flex-shrink-0"
-        >
-          <SwitchThumb
-            class="w-4 h-4 bg-white rounded-full transition-transform translate-x-0 data-[state=checked]:translate-x-6"
-          />
-        </SwitchRoot>
+          class="flex-shrink-0"
+        />
       </div>
       <div class="relative">
         <Transition name="fade" mode="out-in">
@@ -100,9 +92,9 @@
 
 <script setup lang="ts">
 import { onMounted } from 'vue';
-import { SwitchRoot, SwitchThumb } from 'radix-vue';
 import { useChatSettingsStore } from '@/app/stores/chatSettings';
 import { useToast } from '@/app/composables/useToast';
+import { Switch } from '@/app/components/ui/shadcn/switch';
 
 const chatSettings = useChatSettingsStore();
 

@@ -2,7 +2,7 @@
   <div class="flex flex-col gap-3">
     <div class="flex flex-wrap items-center gap-2">
       <select
-        class="px-2 py-1 rounded bg-white/10"
+        class="px-2 py-1 rounded bg-muted"
         v-model="speech.engine"
         @change="(e: any) => setEngine(e.target.value)"
       >

@@ -9,7 +9,7 @@
     <div class="space-y-2">
       <ExpandableText
         :text="item.content"
-        class="text-sm text-gray-300"
+        class="text-sm text-muted-foreground"
         :max-lines="3"
       />
     </div>

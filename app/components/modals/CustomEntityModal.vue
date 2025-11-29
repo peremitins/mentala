@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, ref, watch, nextTick } from 'vue';
 import {
   Dialog,
   DialogContent,
@@ -7,7 +7,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/app/components/ui/dialog';
-import SelectField from '@/app/components/ui/SelectField.vue';
+import { Input } from '@/app/components/ui/shadcn/input';
+import TextareaResize from '@/app/components/ui/TextareaResize.vue';
+import { Button } from '@/app/components/ui/button';
+import ToggleGroup from '@/app/components/ui/toggle-group/ToggleGroup.vue';
+import ToggleGroupItem from '@/app/components/ui/toggle-group/ToggleGroupItem.vue';
 import type {
   HabitDto,
   HabitIntent,
@@ -74,6 +78,7 @@ const defaultIntentValue = computed<HabitIntent>(
 
 const intent = ref<HabitIntent>(defaultIntentValue.value);
 const loading = ref(false);
+const nameInputRef = ref<InstanceType<typeof Input> | null>(null);
 
 const { handleSubmit: handleFormSubmit, resetForm: resetVeeForm } = useForm({
   validationSchema: formSchema,
@@ -185,6 +190,11 @@ watch(
   (value) => {
     if (!value) {
       resetForm();
+    } else {
+      // Фокусируемся на поле ввода имени при открытии модалки
+      nextTick(() => {
+        nameInputRef.value?.focus();
+      });
     }
   }
 );
@@ -226,44 +236,63 @@ const handleSubmit = handleFormSubmit(async (values) => {
 <template>
   <Dialog :open="open" @update:open="emit('update:open', $event)">
     <DialogContent
-      class="sm:max-w-lg border-none bg-white/85 dark:bg-gray-900/85 backdrop-blur-xl shadow-2xl data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:fade-in data-[state=closed]:fade-out data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95"
+      class="border border-border bg-card backdrop-blur-xl shadow-2xl data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:fade-in data-[state=closed]:fade-out data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95"
     >
       <DialogHeader>
-        <DialogTitle class="text-xl font-semibold">
+        <DialogTitle
+          class="text-lg sm:text-xl font-semibold text-card-foreground"
+        >
           {{ headerTitle }}
         </DialogTitle>
-        <DialogDescription class="text-sm text-gray-500 dark:text-gray-400">
+        <DialogDescription class="text-xs sm:text-sm text-muted-foreground">
           {{ headerSubtitle }}
         </DialogDescription>
       </DialogHeader>
 
-      <form class="space-y-5" @submit.prevent="handleSubmit">
+      <form
+        class="space-y-4 sm:space-y-5 overflow-auto"
+        @submit.prevent="handleSubmit"
+      >
         <div v-if="showIntentSelector" class="flex flex-col gap-2">
-          <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+          <label class="text-xs sm:text-sm font-medium text-foreground">
             Тип привычки
           </label>
-          <SelectField
-            v-model="intent"
-            :options="intentOptions"
-            placeholder="Выберите тип"
-            class="w-full"
-          />
+          <ToggleGroup
+            :model-value="intent || ''"
+            type="single"
+            class="inline-flex w-full rounded-lg border border-border-secondary bg-card p-1 gap-2 overflow-auto"
+            @update:model-value="
+              (value) => {
+                if (value && typeof value === 'string')
+                  intent = value as HabitIntent;
+              }
+            "
+          >
+            <ToggleGroupItem
+              v-for="option in intentOptions"
+              :key="option.value"
+              :value="option.value"
+              class="flex-1 rounded-lg px-2 py-2 text-xs xs:text-sm whitespace-nowrap font-medium transition-all"
+            >
+              {{ option.label }}
+            </ToggleGroupItem>
+          </ToggleGroup>
         </div>
 
         <div
           v-if="showHero && heroTitle"
-          class="flex items-center gap-4 p-3 rounded-2xl bg-gradient-to-r from-purple-100/80 to-blue-100/80 dark:from-purple-900/30 dark:to-blue-900/30 transition-all duration-300"
+          class="flex items-start gap-2 sm:gap-4 p-2.5 sm:p-3 rounded-xl sm:rounded-2xl border border-primary bg-button-active-soft transition-all duration-300"
         >
           <div
-            class="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/80 dark:bg-white/10 text-2xl shadow-md transition-transform duration-300"
+            class="flex items-start rounded-2xl text-2xl transition-transform duration-300"
           >
             {{ emoji?.trim() || defaultEmojiValue }}
           </div>
           <div class="space-y-1">
-            <p class="text-base font-semibold text-gray-900 dark:text-gray-100">
+            <p class="text-base font-semibold text-foreground">
               {{ heroTitle }}
             </p>
-            <p class="text-sm text-gray-600 dark:text-gray-400">
+            <p class="text-sm text-muted-foreground">
               {{ heroSubtitle }}
             </p>
           </div>
@@ -271,40 +300,41 @@ const handleSubmit = handleFormSubmit(async (values) => {
 
         <div class="flex flex-col gap-2">
           <div
-            class="flex items-end gap-3"
+            class="flex items-end gap-2 sm:gap-3"
             :class="showIntentSelector ? '' : 'pt-1'"
           >
-            <div class="flex flex-col gap-1 w-[60px]">
-              <label
-                class="text-sm font-medium text-gray-700 dark:text-gray-300"
-              >
+            <div class="flex flex-col gap-1 w-[50px] sm:w-[60px] shrink-0">
+              <label class="text-xs sm:text-sm font-medium text-foreground">
                 Эмодзи
               </label>
-              <input
+              <Input
                 v-model="emoji"
                 type="text"
-                maxlength="4"
-                class="rounded-xl border border-gray-200 bg-white/90 px-2 py-2 text-base text-center focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all dark:border-gray-700 dark:bg-gray-800/60 dark:text-white"
+                :maxlength="4"
                 :placeholder="emojiPlaceholder"
+                class="text-sm sm:text-base text-center h-9 sm:h-10"
+                :show-clear-button="false"
               />
             </div>
-            <div class="flex-1 flex flex-col gap-1">
-              <label
-                class="text-sm font-medium text-gray-700 dark:text-gray-300"
-              >
+            <div class="flex-1 flex flex-col gap-1 min-w-0">
+              <label class="text-xs sm:text-sm font-medium text-foreground">
                 Название
               </label>
-              <input
-                v-focus
-                v-model="name"
+              <Input
+                ref="nameInputRef"
+                :model-value="String(name ?? '')"
+                @update:model-value="
+                  (v) => {
+                    name = v as string;
+                    setNameTouched(true);
+                  }
+                "
                 type="text"
                 :class="[
-                  'w-full rounded-xl border bg-white/90 px-4 py-2.5 text-sm transition-all focus:ring-2 dark:bg-gray-800/60 dark:text-white',
                   nameMeta.touched && nameError
-                    ? 'border-red-400 focus:border-red-500 focus:ring-red-300 dark:border-red-500'
-                    : 'border-gray-200 focus:border-purple-500 focus:ring-purple-200 dark:border-gray-700',
+                    ? 'border-destructive focus:border-destructive'
+                    : '',
                 ]"
-                @input="setNameTouched(true)"
                 @blur="handleNameBlur"
                 :maxlength="props.mentaiMode === 'habits' ? 60 : 80"
                 :placeholder="namePlaceholder"
@@ -314,32 +344,35 @@ const handleSubmit = handleFormSubmit(async (values) => {
         </div>
 
         <div class="flex flex-col gap-2">
-          <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+          <label class="text-xs sm:text-sm font-medium text-foreground">
             Описание
           </label>
-          <textarea
+          <TextareaResize
             v-model="description"
-            rows="3"
-            class="w-full rounded-xl border border-gray-200 bg-white/90 px-4 py-2.5 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all dark:border-gray-700 dark:bg-gray-800/60 dark:text-white"
+            variant="form"
+            :min-height="'80px'"
+            :max-height="'200px'"
             :placeholder="descriptionPlaceholder"
           />
         </div>
 
         <div class="flex flex-col gap-3 pt-2">
-          <button
+          <Button
             type="submit"
-            class="inline-flex items-center justify-center rounded-2xl bg-gradient-to-r from-blue-600 to-purple-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-500/30 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl disabled:opacity-50 disabled:translate-y-0"
+            variant="default"
             :disabled="isSubmitDisabled"
+            class="w-full"
           >
             {{ loading ? 'Создаём...' : submitLabel }}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            class="text-sm font-medium text-gray-600 transition hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
+            variant="ghost"
+            class="w-full text-sm"
             @click="close"
           >
             Отменить
-          </button>
+          </Button>
         </div>
       </form>
     </DialogContent>

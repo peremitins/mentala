@@ -3,66 +3,29 @@
     <!-- Глобальные настройки уведомлений -->
     <section class="space-y-4">
       <!-- Обращение -->
-      <div class="space-y-2">
-        <label class="text-sm font-medium">Обращение</label>
-        <div class="flex gap-3">
-          <button
-            type="button"
-            :class="[
-              'flex-1 rounded-lg border px-4 py-2 text-sm transition-colors',
-              addressing === 'informal'
-                ? 'border-blue-500 bg-blue-50 text-blue-900 dark:bg-blue-900 dark:text-blue-100'
-                : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700',
-            ]"
-            @click="addressing = 'informal'"
-          >
-            ты
-          </button>
-          <button
-            type="button"
-            :class="[
-              'flex-1 rounded-lg border px-4 py-2 text-sm transition-colors',
-              addressing === 'formal'
-                ? 'border-blue-500 bg-blue-50 text-blue-900 dark:bg-blue-900 dark:text-blue-100'
-                : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700',
-            ]"
-            @click="addressing = 'formal'"
-          >
-            Вы
-          </button>
-        </div>
-      </div>
+      <ToggleButtonGroup
+        v-model="addressing"
+        :options="addressingOptions"
+        label="Обращение"
+        layout="flex"
+        size="sm"
+        item-max-width="200px"
+      />
 
       <!-- Тон общения -->
-      <div class="space-y-2">
-        <label class="text-sm font-medium">Тон общения</label>
-        <div class="grid grid-cols-2 gap-2 md:grid-cols-5">
-          <button
-            v-for="toneOption in toneOptions"
-            :key="toneOption.value"
-            type="button"
-            :class="[
-              'rounded-lg border px-3 py-2 text-xs transition-colors',
-              tone === toneOption.value
-                ? 'border-blue-500 bg-blue-50 text-blue-900 dark:bg-blue-900 dark:text-blue-100'
-                : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700',
-            ]"
-            @click="tone = toneOption.value"
-          >
-            {{ toneOption.label }}
-          </button>
-        </div>
-      </div>
-
-      <p class="text-xs text-gray-500 dark:text-gray-400">
-        Эти параметры влияют на стиль общения AI-ассистента, аватара и текст
-        всех уведомлений.
-      </p>
+      <ToggleButtonGroup
+        v-model="tone"
+        :options="toneOptions"
+        label="Тон общения"
+        size="sm"
+        description="Эти параметры влияют на стиль общения AI-ассистента, аватара и текст всех уведомлений."
+        item-max-width="200px"
+      />
 
       <!-- Кнопка сохранения -->
       <button
         type="button"
-        class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+        class="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
         :disabled="savingGlobal"
         @click="saveGlobalPreferences"
       >
@@ -70,11 +33,14 @@
       </button>
     </section>
 
-    <hr class="border-gray-200 dark:border-gray-700" />
+    <hr class="border-border" />
 
     <!-- Остальные настройки -->
     <section class="space-y-3">
-      <NuxtLink class="underline opacity-90" to="/privacy">
+      <NuxtLink
+        class="underline text-foreground hover:text-primary"
+        to="/privacy"
+      >
         Конфиденциальность
       </NuxtLink>
       <VoiceInput />
@@ -84,6 +50,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import ToggleButtonGroup from '@/app/components/ui/ToggleButtonGroup.vue';
 import VoiceInput from '@/app/components/VoiceInput.vue';
 import { useNotificationsSettings } from '@/app/composables/useNotificationsSettings';
 import { useToast } from '@/app/composables/useToast';
@@ -95,6 +62,11 @@ const { fetchGlobalPreferences, updateGlobalPreferences } =
 const addressing = ref<Addressing>('informal');
 const tone = ref<Tone>('neutral');
 const savingGlobal = ref(false);
+
+const addressingOptions = [
+  { value: 'informal' as Addressing, label: 'ты' },
+  { value: 'formal' as Addressing, label: 'Вы' },
+];
 
 const toneOptions = [
   { value: 'delicate' as Tone, label: 'Деликатный' },

@@ -72,10 +72,10 @@ function formatTime(minutes: number): string {
 <template>
   <div class="space-y-3">
     <div>
-      <h3 class="text-sm font-medium text-gray-900 dark:text-gray-100">
+      <h3 class="text-sm font-medium text-foreground">
         Время получения уведомлений
       </h3>
-      <p class="mt-1 text-xs text-gray-600 dark:text-gray-400">
+      <p class="mt-1 text-xs text-muted-foreground">
         Уведомления будут приходить только в выбранный промежуток времени и
         равномерно распределяться внутри него
       </p>
@@ -87,26 +87,6 @@ function formatTime(minutes: number): string {
 
       <!-- End Time Picker -->
       <TimePicker v-model="endTime" label="Конец" />
-    </div>
-
-    <!-- Информация о диапазоне -->
-    <div
-      class="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800"
-    >
-      <div class="flex items-center gap-2">
-        <span class="font-medium text-gray-900 dark:text-gray-100">
-          {{ formatTime(modelValue.start) }} — {{ formatTime(modelValue.end) }}
-        </span>
-        <span
-          v-if="crossesMidnight"
-          class="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900 dark:text-blue-300"
-        >
-          через полночь
-        </span>
-      </div>
-      <span class="text-gray-600 dark:text-gray-400">
-        {{ duration }}
-      </span>
     </div>
   </div>
 </template>

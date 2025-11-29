@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick, watch } from 'vue';
+import { onClickOutside } from '@vueuse/core';
 import { SliderRange, SliderRoot, SliderThumb, SliderTrack } from 'radix-vue';
 import { useToast } from '@/app/composables/useToast';
 import NotificationPreview from '@/app/components/notifications/NotificationPreview.vue';
@@ -16,6 +17,10 @@ import {
 } from '@/app/constants/select-options';
 import ToggleGroup from '@/app/components/ui/toggle-group/ToggleGroup.vue';
 import ToggleGroupItem from '@/app/components/ui/toggle-group/ToggleGroupItem.vue';
+import { Input } from '@/app/components/ui/shadcn/input';
+import InputComponent from '@/app/components/ui/shadcn/input/Input.vue';
+import TextareaResize from '@/app/components/ui/TextareaResize.vue';
+import { Switch } from '@/app/components/ui/shadcn/switch';
 import { useNotificationsStore } from '@/app/stores/notifications';
 import { useUserHabitsStore } from '@/app/stores/userHabits';
 import { useTherapyTopicsStore } from '@/app/stores/therapyTopics';
@@ -108,11 +113,17 @@ const resolvedIntentForFilters = computed(() => {
   const raw = entityIntent.value || 'build';
   return raw === 'custom' ? 'build' : raw;
 });
-const entityName = computed(() =>
-  isHabits.value
+const entityName = computed(() => {
+  // При редактировании показываем значение из titleDraft
+  if (isEditingTitle.value && titleDraft.value) {
+    return titleDraft.value.trim();
+  }
+
+  // Иначе используем сохраненное значение из сущности
+  return isHabits.value
     ? (habitEntity.value?.name ?? 'Привычка')
-    : (therapyEntity.value?.name ?? 'Тема поддержки')
-);
+    : (therapyEntity.value?.name ?? 'Тема поддержки');
+});
 const entityEmoji = computed(() =>
   isHabits.value
     ? (habitEntity.value?.emoji ?? '✨')
@@ -229,8 +240,10 @@ const isEditingTitle = ref(false);
 const isEditingSubtitle = ref(false);
 const titleDraft = ref('');
 const subtitleDraft = ref('');
-const titleInputRef = ref<HTMLInputElement | null>(null);
-const subtitleInputRef = ref<HTMLTextAreaElement | null>(null);
+const titleInputRef = ref<InstanceType<typeof InputComponent> | null>(null);
+const titleInputContainerRef = ref<HTMLElement | null>(null);
+const subtitleInputRef = ref<InstanceType<typeof TextareaResize> | null>(null);
+const subtitleInputContainerRef = ref<HTMLElement | null>(null);
 const inlineTitleLoading = ref(false);
 const inlineSubtitleLoading = ref(false);
 
@@ -290,14 +303,43 @@ function cancelTitleEdit() {
   isEditingTitle.value = false;
 }
 
+function finishTitleEdit() {
+  // Сохраняем введенное значение в реальную сущность для отображения
+  // Это позволяет показывать обновленное имя даже после выхода из режима редактирования
+  const trimmedName = titleDraft.value.trim();
+  if (trimmedName && canEditCustomEntity.value) {
+    const target = isHabits.value ? customHabit.value : customTherapy.value;
+    if (target) {
+      target.name = trimmedName;
+    }
+  }
+  // Выходим из режима редактирования
+  isEditingTitle.value = false;
+}
+
+// Обработка клика вне инпута при редактировании заголовка
+onClickOutside(titleInputContainerRef, () => {
+  if (isEditingTitle.value) {
+    finishTitleEdit();
+  }
+});
+
+// Обработка клика вне textarea при редактировании описания
+onClickOutside(subtitleInputContainerRef, () => {
+  if (isEditingSubtitle.value) {
+    finishSubtitleEdit();
+  }
+});
+
 function startEditSubtitle() {
   if (!canEditCustomEntity.value) return;
   const target = isHabits.value ? customHabit.value : customTherapy.value;
   if (!target) return;
-  subtitleDraft.value = target.description ?? '';
+  // Инициализируем с текущим описанием или пустой строкой (не null)
+  subtitleDraft.value = target.description || '';
   isEditingSubtitle.value = true;
   nextTick(() => {
-    subtitleInputRef.value?.focus();
+    subtitleInputRef.value?.textarea?.focus();
   });
 }
 
@@ -307,6 +349,22 @@ function cancelSubtitleEdit() {
   if (target) {
     subtitleDraft.value = target.description ?? '';
   }
+  isEditingSubtitle.value = false;
+}
+
+function finishSubtitleEdit() {
+  // Сохраняем введенное значение в реальную сущность для отображения
+  // Это позволяет показывать обновленное описание даже после выхода из режима редактирования
+  const trimmedDescription =
+    (subtitleDraft.value != null ? String(subtitleDraft.value).trim() : null) ||
+    null;
+  if (canEditCustomEntity.value) {
+    const target = isHabits.value ? customHabit.value : customTherapy.value;
+    if (target) {
+      target.description = trimmedDescription;
+    }
+  }
+  // Выходим из режима редактирования
   isEditingSubtitle.value = false;
 }
 
@@ -337,7 +395,9 @@ function computeStateSignature() {
       : customTherapy.value?.name || catalogTherapy.value?.name || '';
 
   const currentDescription = isEditingSubtitle.value
-    ? subtitleDraft.value.trim() || null
+    ? (subtitleDraft.value != null
+        ? String(subtitleDraft.value).trim()
+        : null) || null
     : isHabits.value
       ? customHabit.value?.description ||
         catalogHabit.value?.description ||
@@ -389,7 +449,7 @@ const isSaveDisabled = computed(
 const directnessOptions = [
   {
     value: 'soft' as Directness,
-    label: 'Поддерживающий',
+    label: 'Мягкий',
     description: 'Тёплый, мягкий стиль без давления',
   },
   {
@@ -399,7 +459,7 @@ const directnessOptions = [
   },
   {
     value: 'hard' as Directness,
-    label: 'Требовательный',
+    label: 'Строгий',
     description:
       'Прямые, настойчивые сообщения для тех, кому важен чёткий фокус',
   },
@@ -409,6 +469,15 @@ const subtypeOptions = computed(() => {
   if (!isHabits.value) return [];
   const intent = resolvedIntentForFilters.value ?? 'build';
   return intent === 'quit' ? SUBTYPE_OPTIONS_QUIT : SUBTYPE_OPTIONS_BUILD;
+});
+
+const selectedDirectnessOption = computed(() =>
+  directnessOptions.find((opt) => opt.value === directness.value)
+);
+
+const selectedSubtypeOption = computed(() => {
+  if (!subtype.value) return null;
+  return subtypeOptions.value.find((opt) => opt.value === subtype.value);
 });
 
 const previewKey = computed(() => {
@@ -609,17 +678,31 @@ async function saveSettings() {
     let newDescription: string | null | undefined = undefined;
 
     if (canEditCustomEntity.value) {
-      // Проверяем изменения названия
-      if (isEditingTitle.value) {
-        const nameDraft = titleDraft.value.trim();
-        const currentName = isHabits.value
-          ? customHabit.value?.name || ''
-          : customTherapy.value?.name || '';
+      const target = isHabits.value ? customHabit.value : customTherapy.value;
 
-        if (nameDraft && nameDraft !== currentName) {
-          newName = nameDraft;
+      // Проверяем изменения названия
+      // Проверяем независимо от того, активно ли редактирование,
+      // так как пользователь мог выйти из режима редактирования через ESC или клик вне
+      if (target) {
+        // Получаем текущее значение из titleDraft (если было редактирование)
+        // или из самой сущности (если редактирование уже завершено и значение обновлено)
+        const currentNameFromDraft = titleDraft.value?.trim() || '';
+        const currentNameFromEntity = target.name || '';
+
+        // Используем значение из draft, если оно есть и не пустое, иначе из сущности
+        const nameToCheck = currentNameFromDraft || currentNameFromEntity;
+
+        // Сравниваем с исходным значением при загрузке страницы
+        const originalName = initialEntityName.value || '';
+
+        // Проверяем, изменилось ли название по сравнению с исходным
+        if (nameToCheck && nameToCheck !== originalName) {
+          newName = nameToCheck;
           nameChanged = true;
-        } else if (!nameDraft) {
+          // Обновляем локальное значение для отображения
+          target.name = nameToCheck;
+        } else if (!nameToCheck) {
+          // Если поле пустое - показываем ошибку
           useToast(
             isHabits.value
               ? 'Введите название привычки'
@@ -628,21 +711,45 @@ async function saveSettings() {
           loading.value = false;
           return;
         }
+      }
+
+      // Выходим из режима редактирования после проверки
+      if (isEditingTitle.value) {
         isEditingTitle.value = false;
       }
 
       // Проверяем изменения описания
-      if (isEditingSubtitle.value) {
-        const descriptionDraft = subtitleDraft.value.trim();
-        const currentDescription = isHabits.value
-          ? customHabit.value?.description || null
-          : customTherapy.value?.description || null;
+      // Проверяем независимо от того, активно ли редактирование,
+      // так как пользователь мог выйти из режима редактирования через ESC или клик вне
+      if (target) {
+        // Получаем текущее значение из subtitleDraft (если было редактирование)
+        // или из самой сущности (если редактирование уже завершено и значение обновлено)
+        const descriptionFromDraft =
+          (subtitleDraft.value != null
+            ? String(subtitleDraft.value).trim()
+            : null) || null;
+        const descriptionFromEntity = target.description || null;
 
-        const descriptionDraftNormalized = descriptionDraft || null;
-        if (descriptionDraftNormalized !== currentDescription) {
-          newDescription = descriptionDraftNormalized;
+        // Используем значение из draft, если оно есть, иначе из сущности
+        const descriptionToCheck =
+          descriptionFromDraft ?? descriptionFromEntity;
+
+        // Сравниваем с исходным значением при загрузке страницы
+        const originalDescription = initialEntityDescription.value;
+
+        // Проверяем, изменилось ли описание по сравнению с исходным
+        if (descriptionToCheck !== originalDescription) {
+          newDescription = descriptionToCheck;
           descriptionChanged = true;
+          // Убеждаемся, что локальное значение обновлено
+          if (target.description !== descriptionToCheck) {
+            target.description = descriptionToCheck;
+          }
         }
+      }
+
+      // Выходим из режима редактирования после проверки
+      if (isEditingSubtitle.value) {
         isEditingSubtitle.value = false;
       }
     }
@@ -823,27 +930,26 @@ const descriptionText = computed(() => {
             {{ entityEmoji }}
           </div>
           <div class="flex-1 min-w-0 space-y-1.5">
-            <div class="flex items-center gap-2">
+            <div ref="titleInputContainerRef" class="flex items-center gap-2">
               <template v-if="isEditingTitle">
-                <input
+                <Input
                   ref="titleInputRef"
                   v-model="titleDraft"
                   type="text"
-                  class="flex-1 rounded-lg border border-gray-300 px-3 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900/60 dark:text-gray-100"
-                  maxlength="120"
-                  @keydown.esc.prevent="cancelTitleEdit"
+                  class="flex-1 h-8"
+                  :maxlength="120"
+                  :show-clear-button="true"
+                  @keydown.esc.prevent="finishTitleEdit"
                 />
               </template>
               <template v-else>
-                <h1
-                  class="text-xl font-bold text-gray-900 dark:text-gray-100 w-full truncate"
-                >
+                <h1 class="text-xl font-bold text-foreground w-full truncate">
                   {{ entityName }}
                 </h1>
                 <button
                   v-if="canEditCustomEntity"
                   type="button"
-                  class="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 transition"
+                  class="text-muted-foreground hover:text-foreground transition"
                   @click="startEditTitle"
                   aria-label="Редактировать название"
                 >
@@ -869,29 +975,31 @@ const descriptionText = computed(() => {
     </PageHeader>
 
     <div class="">
-      <div v-if="isEditingSubtitle" class="space-y-2">
-        <textarea
+      <div
+        ref="subtitleInputContainerRef"
+        v-if="isEditingSubtitle"
+        class="space-y-2"
+      >
+        <TextareaResize
           ref="subtitleInputRef"
           v-model="subtitleDraft"
-          rows="3"
-          class="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900/60 dark:text-gray-100"
-          placeholder="Добавьте описание"
-          @keydown.esc.prevent="cancelSubtitleEdit"
+          variant="form"
+          :placeholder="descriptionPlaceholder"
+          @esc-pressed="finishSubtitleEdit"
         />
       </div>
       <div
         v-else
-        class="flex items-start gap-3 rounded-2xl bg-gray-50/80 p-3 dark:bg-gray-900/60"
+        class="flex items-start gap-3 rounded-2xl bg-button-active-soft px-3 py-2 border border-primary"
       >
         <p
-          class="text-sm text-gray-700 dark:text-gray-300 flex-1 leading-relaxed"
-        >
-          {{ descriptionText }}
-        </p>
+          class="text-sm text-surface-raised-foreground flex-1 border-2 border-transparent"
+          v-html="descriptionText"
+        />
         <button
           v-if="canEditCustomEntity"
           type="button"
-          class="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 transition mt-1"
+          class="text-muted-foreground hover:text-foreground transition mt-1"
           @click="startEditSubtitle"
           aria-label="Редактировать описание"
         >
@@ -915,21 +1023,7 @@ const descriptionText = computed(() => {
     <div class="space-y-6">
       <div class="flex items-center justify-between">
         <h3 class="text-base font-semibold">{{ 'Уведомления' }}</h3>
-        <button
-          type="button"
-          :class="[
-            'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-            enabled ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600',
-          ]"
-          @click="enabled = !enabled"
-        >
-          <span
-            :class="[
-              'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
-              enabled ? 'translate-x-6' : 'translate-x-1',
-            ]"
-          />
-        </button>
+        <Switch v-model:checked="enabled" />
       </div>
 
       <div class="space-y-4">
@@ -951,14 +1045,14 @@ const descriptionText = computed(() => {
               aria-label="Частота уведомлений"
             >
               <SliderTrack
-                class="relative h-2 w-full grow rounded-full bg-gray-200 dark:bg-gray-700"
+                class="relative h-2 w-full grow rounded-full bg-muted"
               >
                 <SliderRange
-                  class="absolute h-full rounded-full bg-gradient-to-r from-blue-500 to-purple-500"
+                  class="absolute h-full rounded-full bg-gradient-to-r from-primary to-primary"
                 />
               </SliderTrack>
               <SliderThumb
-                class="block h-5 w-5 rounded-full border-2 border-white bg-blue-600 shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-gray-900 dark:focus-visible:ring-offset-gray-900"
+                class="block h-5 w-5 rounded-full border-2 border-background bg-primary shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               />
             </SliderRoot>
           </div>
@@ -985,8 +1079,8 @@ const descriptionText = computed(() => {
                           :class="[
                             'flex h-8 w-8 items-center justify-center rounded-full border text-sm transition-colors',
                             slot.isManual
-                              ? 'border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-900 dark:text-blue-200'
-                              : 'border-gray-300 bg-white text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200',
+                              ? 'border-surface-raised-foreground bg-button-active-soft text-surface-raised-foreground'
+                              : 'border-surface-raised-inactive-border bg-card text-surface-inactive-foreground ',
                           ]"
                         >
                           {{ slot.number }}
@@ -995,8 +1089,8 @@ const descriptionText = computed(() => {
                           :class="[
                             'text-center leading-tight text-[10px]',
                             slot.isManual
-                              ? 'text-gray-900 dark:text-gray-100'
-                              : 'text-gray-500 dark:text-gray-400',
+                              ? 'text-surface-raised-foreground'
+                              : 'text-surface-inactive-foreground',
                           ]"
                         >
                           {{ slot.isManual ? formattedTime : 'Авто' }}
@@ -1007,10 +1101,10 @@ const descriptionText = computed(() => {
                 </div>
                 <div
                   v-else
-                  class="flex flex-col items-center gap-1 text-[10px] font-medium text-gray-500 opacity-50 w-[32px] flex-shrink-0"
+                  class="flex flex-col items-center gap-1 text-[10px] font-medium text-muted-foreground opacity-50 w-[32px] flex-shrink-0"
                 >
                   <span
-                    class="flex h-8 w-8 items-center justify-center rounded-full border border-dashed border-gray-400 text-sm"
+                    class="flex h-8 w-8 items-center justify-center rounded-full border border-dashed border-border text-sm"
                   >
                     {{ slot.number }}
                   </span>
@@ -1021,7 +1115,7 @@ const descriptionText = computed(() => {
               </template>
             </div>
             <div
-              class="flex items-center justify-between text-[11px] text-gray-600 dark:text-gray-400"
+              class="flex items-center justify-between text-[11px] text-muted-foreground"
             >
               <span>
                 Точное время уведомлений: по умолчанию равномерно, но можно
@@ -1030,7 +1124,7 @@ const descriptionText = computed(() => {
               <button
                 v-if="hasCustomTimes"
                 type="button"
-                class="text-blue-600 hover:text-blue-500 dark:text-blue-400"
+                class="text-primary"
                 @click="resetAllSlotTimes"
               >
                 Сбросить
@@ -1041,60 +1135,137 @@ const descriptionText = computed(() => {
 
         <OverloadBanner :total-per-day="currentTotalPerDay" />
 
-        <div v-if="isHabits && !isCustomHabit" class="space-y-2">
-          <label class="text-sm font-medium">Фокус уведомлений</label>
-          <Combobox
-            v-model="subtype"
-            :options="subtypeOptions"
-            placeholder="Выберите тип"
-            class="max-w-[258px]"
-          />
-          <p
-            v-if="
-              subtypeOptions.find((opt) => opt.value === subtype)?.description
+        <!-- Фокус уведомлений -->
+        <div v-if="isHabits && !isCustomHabit" class="space-y-2 mb-2">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm font-semibold text-foreground">
+                Фокус уведомлений
+              </p>
+              <p class="text-xs text-muted-foreground">
+                Выберите фокус и тип уведомлений
+              </p>
+            </div>
+          </div>
+
+          <ToggleGroup
+            :model-value="subtype || ''"
+            type="single"
+            class="inline-flex w-full rounded-lg border border-border-secondary bg-card p-1 gap-2 overflow-auto"
+            @update:model-value="
+              (value) => {
+                if (value && typeof value === 'string')
+                  subtype = value as HabitSubtype;
+              }
             "
-            class="text-xs text-muted-foreground mt-1"
           >
-            {{
-              subtypeOptions.find((opt) => opt.value === subtype)?.description
-            }}
-          </p>
+            <ToggleGroupItem
+              v-for="option in subtypeOptions"
+              :key="option.value"
+              :value="option.value"
+              class="flex-1 rounded-lg px-2 py-2 text-xs xs:text-sm whitespace-nowrap font-medium transition-all"
+            >
+              {{ option.icon }}&nbsp;{{ option.label }}
+            </ToggleGroupItem>
+          </ToggleGroup>
         </div>
 
+        <!-- Информационный блок про фокус уведомлений -->
+        <div
+          v-if="isHabits && !isCustomHabit && selectedSubtypeOption"
+          class="rounded-xl border border-primary bg-button-active-soft p-4"
+        >
+          <div class="flex items-baseline gap-3">
+            <span class="">{{ selectedSubtypeOption.icon }}</span>
+            <div class="flex-1">
+              <p class="text-sm font-semibold text-surface-raised-foreground">
+                {{ selectedSubtypeOption.label }}
+              </p>
+              <p class="text-xs text-surface-raised-subtitle mt-1">
+                {{ selectedSubtypeOption.description }}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Стиль уведомлений -->
         <div
           v-if="(!isHabits || subtype !== 'informational') && !isCustomHabit"
-          class="space-y-2"
+          class="space-y-2 mb-2"
         >
-          <label class="text-sm font-medium">Стиль уведомлений</label>
-          <div class="grid gap-2">
-            <button
-              v-for="option in directnessOptions"
-              :key="option.value"
-              type="button"
-              :class="[
-                'flex flex-col items-start rounded-lg border p-3 text-left transition-colors',
-                directness === option.value
-                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-900'
-                  : 'border-gray-300 bg-white hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:hover:bg-gray-700',
-              ]"
-              @click="directness = option.value"
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm font-semibold text-foreground">
+                Стиль уведомлений
+              </p>
+              <p class="text-xs text-muted-foreground">
+                Выберите стиль общения в уведомлениях
+              </p>
+            </div>
+          </div>
+
+          <ToggleGroup
+            :model-value="directness"
+            type="single"
+            class="inline-flex w-full rounded-lg border border-border-secondary bg-card p-1 gap-2 overflow-auto"
+            @update:model-value="
+              (value) => {
+                if (value && typeof value === 'string')
+                  directness = value as Directness;
+              }
+            "
+          >
+            <ToggleGroupItem
+              value="soft"
+              class="flex-1 rounded-lg px-2 py-2 text-xs xs:text-sm whitespace-nowrap font-medium transition-all"
             >
-              <span class="text-sm font-medium">{{ option.label }}</span>
-              <span class="text-xs text-gray-600 dark:text-gray-400">
-                {{ option.description }}
-              </span>
-            </button>
+              😊 Мягкий
+            </ToggleGroupItem>
+            <ToggleGroupItem
+              value="moderate"
+              class="flex-1 rounded-lg px-2 py-2 text-xs xs:text-sm whitespace-nowrap font-medium transition-all"
+            >
+              😐 Сдержанный
+            </ToggleGroupItem>
+            <ToggleGroupItem
+              value="hard"
+              class="flex-1 rounded-lg px-2 py-2 text-xs xs:text-sm whitespace-nowrap font-medium transition-all"
+            >
+              😑 Строгий
+            </ToggleGroupItem>
+          </ToggleGroup>
+        </div>
+
+        <!-- Информационный блок про стиль уведомлений -->
+        <div
+          v-if="
+            (!isHabits || subtype !== 'informational') &&
+            !isCustomHabit &&
+            selectedDirectnessOption
+          "
+          class="rounded-xl border border-primary bg-button-active-soft p-4"
+        >
+          <div class="flex items-baseline gap-3">
+            <span class="">💬</span>
+            <div class="flex-1">
+              <p class="text-sm font-semibold text-surface-raised-foreground">
+                {{ selectedDirectnessOption.label }}
+              </p>
+              <p class="text-xs text-surface-raised-subtitle mt-1">
+                {{ selectedDirectnessOption.description }}
+              </p>
+            </div>
           </div>
         </div>
 
         <!-- Способ создания уведомлений  -->
-        <div class="space-y-2 mb-4">
+        <div class="space-y-2 mb-2">
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-sm font-semibold text-gray-900 dark:text-gray-100">
+              <p class="text-sm font-semibold text-foreground">
                 Способ создания
               </p>
-              <p class="text-xs text-gray-500 dark:text-gray-400">
+              <p class="text-xs text-muted-foreground">
                 Выберите способ создания текстов уведомлений
               </p>
             </div>
@@ -1103,54 +1274,82 @@ const descriptionText = computed(() => {
           <ToggleGroup
             v-model="textSource"
             type="single"
-            class="inline-flex w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-1"
+            class="inline-flex w-full rounded-lg border border-border-secondary bg-card p-1 gap-2 overflow-auto"
           >
             <ToggleGroupItem
               value="templates"
-              class="flex-1 rounded-md px-3 py-2 text-sm font-medium transition-all data-[state=on]:bg-white data-[state=on]:shadow-sm data-[state=on]:text-blue-600 dark:data-[state=on]:bg-gray-700 dark:data-[state=on]:text-blue-400"
+              class="flex-1 rounded-lg px-3 py-2 text-xs xs:text-sm whitespace-nowrap font-medium transition-all"
             >
               ✍️ Шаблоны
             </ToggleGroupItem>
             <ToggleGroupItem
               value="ai"
-              class="flex-1 rounded-md px-3 py-2 text-sm font-medium transition-all data-[state=on]:bg-white data-[state=on]:shadow-sm data-[state=on]:text-blue-600 dark:data-[state=on]:bg-gray-700 dark:data-[state=on]:text-blue-400"
+              class="flex-1 rounded-lg px-3 py-2 text-xs xs:text-sm whitespace-nowrap font-medium transition-all"
             >
               ✨ ИИ
             </ToggleGroupItem>
             <ToggleGroupItem
               value="hybrid"
-              class="flex-1 rounded-md px-3 py-2 text-sm font-medium transition-all data-[state=on]:bg-white data-[state=on]:shadow-sm data-[state=on]:text-blue-600 dark:data-[state=on]:bg-gray-700 dark:data-[state=on]:text-blue-400"
+              class="flex-1 rounded-lg px-3 py-2 text-xs xs:text-sm whitespace-nowrap font-medium transition-all"
             >
               🔀 Гибридный
             </ToggleGroupItem>
           </ToggleGroup>
         </div>
 
-        <!-- Информационный блок про AI -->
+        <!-- Информационный блок для Шаблонов -->
         <div
-          v-if="showAiInfo"
-          class="rounded-xl border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/30 p-4"
+          v-if="textSource === 'templates'"
+          class="rounded-xl border border-primary bg-button-active-soft p-4"
         >
-          <div class="flex items-start gap-3">
-            <span class="text-2xl">✨</span>
+          <div class="flex items-baseline gap-3">
+            <span class="">✍️</span>
             <div class="flex-1">
-              <p
-                class="text-sm font-semibold text-purple-900 dark:text-purple-100"
-              >
+              <p class="text-sm font-semibold text-surface-raised-foreground">
+                Использование шаблонов
+              </p>
+              <p class="text-xs text-surface-raised-subtitle mt-1">
+                Тексты уведомлений будут браться из готовых шаблонов с учетом
+                всех параметров настроек (фокус, стиль, обращение).
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Информационный блок для ИИ -->
+        <div
+          v-if="textSource === 'ai'"
+          class="rounded-xl border border-primary bg-button-active-soft p-4"
+        >
+          <div class="flex items-baseline gap-3">
+            <span class="">✨</span>
+            <div class="flex-1">
+              <p class="text-sm font-semibold text-surface-raised-foreground">
                 Генерация через ИИ
               </p>
-              <p class="text-xs text-purple-700 dark:text-purple-300 mt-1">
-                <template v-if="textSource">
-                  <template v-if="textSource === 'ai'">
-                    Тексты уведомлений будут генерироваться ИИ с учетом всех
-                    параметров настроек (фокус, стиль, обращение).
-                  </template>
-                  <template v-else-if="textSource === 'hybrid'">
-                    Тексты уведомлений будут чередоваться: часть будет взята из
-                    готовых шаблонов, часть создаст ИИ с учётом всех параметров
-                    настроек.
-                  </template>
-                </template>
+              <p class="text-xs text-surface-raised-subtitle mt-1">
+                Тексты уведомлений будут генерироваться ИИ с учетом всех
+                параметров настроек (фокус, стиль, обращение).
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Информационный блок для Гибридного режима -->
+        <div
+          v-if="textSource === 'hybrid'"
+          class="rounded-xl border border-primary bg-button-active-soft p-4"
+        >
+          <div class="flex items-baseline gap-3">
+            <span class="">🔀</span>
+            <div class="flex-1">
+              <p class="text-sm font-semibold text-surface-raised-foreground">
+                Гибридный режим
+              </p>
+              <p class="text-xs text-surface-raised-subtitle mt-1">
+                Тексты уведомлений будут чередоваться: часть будет взята из
+                готовых шаблонов, часть создаст ИИ с учётом всех параметров
+                настроек.
               </p>
             </div>
           </div>
@@ -1158,14 +1357,14 @@ const descriptionText = computed(() => {
 
         <div
           v-if="isCustomEntity && showCustomTextsSection"
-          class="space-y-3 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 p-4 bg-white/70 dark:bg-gray-900/50 transition-all"
+          class="space-y-3 rounded-2xl border border-dashed border-primary bg-button-active-soft p-4 transition-all"
         >
           <div class="flex items-center justify-between gap-3 flex-wrap">
             <div>
-              <p class="text-sm font-semibold text-gray-900 dark:text-gray-100">
+              <p class="text-sm font-semibold text-foreground">
                 Тексты уведомлений
               </p>
-              <p class="text-xs text-gray-500 dark:text-gray-400">
+              <p class="text-xs text-muted-foreground">
                 До {{ MAX_CUSTOM_NOTIFICATION_TEXTS }} вариантов, максимум
                 {{ MAX_NOTIFICATION_TEXT_LENGTH }} символов. Можно использовать
                 {`{name}`}
@@ -1173,7 +1372,7 @@ const descriptionText = computed(() => {
             </div>
             <button
               type="button"
-              class="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold border border-blue-200 text-blue-600 hover:bg-blue-50 disabled:opacity-30"
+              class="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold border border-primary/30 text-primary hover:bg-primary/10 disabled:opacity-30"
               :disabled="!canAddCustomText"
               @click="addCustomText"
             >
@@ -1185,12 +1384,12 @@ const descriptionText = computed(() => {
             <div
               v-for="(text, index) in customTexts"
               :key="`custom-text-${index}`"
-              class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white/90 dark:bg-gray-900/50 p-3 shadow-sm transition-all"
+              class="rounded-xl border border-border bg-card/90 p-3 shadow-sm transition-all"
             >
               <textarea
                 v-model="customTexts[index]"
                 rows="3"
-                class="w-full rounded-lg border border-transparent bg-transparent px-2 py-1.5 text-sm focus:border-blue-400 focus:outline-none focus:ring-0 dark:text-gray-100"
+                class="w-full rounded-lg border border-transparent bg-transparent px-2 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-0 text-foreground"
                 :maxlength="MAX_NOTIFICATION_TEXT_LENGTH"
                 placeholder="Например: «{name}, сделай вдох и выпей стакан воды»"
               />
@@ -1199,8 +1398,8 @@ const descriptionText = computed(() => {
                   <span
                     :class="[
                       customTextErrors[index]
-                        ? 'text-red-500'
-                        : 'text-gray-500 dark:text-gray-400',
+                        ? 'text-destructive'
+                        : 'text-muted-foreground',
                     ]"
                   >
                     {{
@@ -1210,12 +1409,12 @@ const descriptionText = computed(() => {
                   </span>
                   <div
                     v-if="customTexts.length > 1"
-                    class="flex items-center gap-1 text-gray-400"
+                    class="flex items-center gap-1 text-muted-foreground"
                   >
                     <button
                       type="button"
                       :class="[
-                        'p-1 rounded-md border border-transparent hover:border-gray-300 hover:text-gray-700 dark:hover:text-gray-200 transition',
+                        'p-1 rounded-md border border-transparent hover:border-border hover:text-foreground transition',
                         index === 0 ? 'opacity-40 cursor-not-allowed' : '',
                       ]"
                       :disabled="index === 0"
@@ -1226,7 +1425,7 @@ const descriptionText = computed(() => {
                     <button
                       type="button"
                       :class="[
-                        'p-1 rounded-md border border-transparent hover:border-gray-300 hover:text-gray-700 dark:hover:text-gray-200 transition',
+                        'p-1 rounded-md border border-transparent hover:border-border hover:text-foreground transition',
                         index === customTexts.length - 1
                           ? 'opacity-40 cursor-not-allowed'
                           : '',
@@ -1240,7 +1439,7 @@ const descriptionText = computed(() => {
                 </div>
                 <button
                   type="button"
-                  class="text-gray-500 hover:text-red-500 transition text-xs"
+                  class="text-muted-foreground hover:text-destructive transition text-xs"
                   @click="removeCustomText(index)"
                 >
                   Удалить
@@ -1249,7 +1448,10 @@ const descriptionText = computed(() => {
             </div>
           </TransitionGroup>
 
-          <p v-if="!hasCustomTexts" class="text-xs text-red-500 font-medium">
+          <p
+            v-if="!hasCustomTexts"
+            class="text-xs text-destructive font-medium"
+          >
             Добавьте хотя бы один текст
           </p>
         </div>
@@ -1281,7 +1483,7 @@ const descriptionText = computed(() => {
       <div class="flex flex-col gap-3">
         <button
           type="button"
-          class="rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+          class="rounded-xl px-4 py-3 text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
           :disabled="isSaveDisabled"
           @click="saveSettings"
         >

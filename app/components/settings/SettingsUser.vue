@@ -1,61 +1,56 @@
 <template>
   <div class="space-y-6">
     <section class="space-y-4">
-      <div v-if="loading" class="text-sm text-gray-500 dark:text-gray-400">
+      <div v-if="loading" class="text-sm text-muted-foreground">
         Загрузка...
       </div>
 
       <div v-else-if="user" class="space-y-4">
         <!-- ID -->
         <div class="space-y-2">
-          <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
-            ID
-          </label>
-          <div
-            class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-          >
-            {{ user.id }}
-          </div>
+          <label class="text-sm font-medium text-foreground"> ID </label>
+          <Input
+            :model-value="String(user.id)"
+            disabled
+            :show-clear-button="false"
+          />
         </div>
 
         <!-- Email -->
         <div class="space-y-2">
-          <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
-            Email
-          </label>
-          <div
-            class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-          >
-            {{ user.email || 'Не указан' }}
-          </div>
+          <label class="text-sm font-medium text-foreground"> Email </label>
+          <Input
+            :model-value="user.email || 'Не указан'"
+            type="email"
+            disabled
+            :show-clear-button="false"
+          />
         </div>
 
         <!-- Name -->
         <div class="space-y-2">
-          <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
-            Имя
-          </label>
-          <div
-            class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-          >
-            {{ user.name || 'Не указано' }}
-          </div>
+          <label class="text-sm font-medium text-foreground"> Имя </label>
+          <Input
+            :model-value="user.name || 'Не указано'"
+            type="text"
+            disabled
+            :show-clear-button="false"
+          />
         </div>
 
         <!-- Locale -->
         <div class="space-y-2">
-          <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
-            Локаль
-          </label>
-          <div
-            class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-          >
-            {{ user.locale || 'Не указана' }}
-          </div>
+          <label class="text-sm font-medium text-foreground"> Локаль </label>
+          <Input
+            :model-value="user.locale || 'Не указана'"
+            type="text"
+            disabled
+            :show-clear-button="false"
+          />
         </div>
       </div>
 
-      <div v-else class="text-sm text-red-500 dark:text-red-400">
+      <div v-else class="text-sm text-destructive">
         Не удалось загрузить информацию о пользователе
       </div>
     </section>
@@ -65,6 +60,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useAuthStore } from '@/app/stores/auth';
+import { Input } from '@/app/components/ui/shadcn/input';
 
 const auth = useAuthStore();
 const user = ref<any>(null);

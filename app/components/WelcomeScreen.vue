@@ -4,8 +4,8 @@
   >
     <!-- Приветственный блок -->
     <div class="text-center space-y-2 animate-fade-in">
-      <h1 class="text-3xl font-bold text-white">Привет!</h1>
-      <p class="text-lg text-white/80">О чём поговорим сейчас?</p>
+      <h1 class="text-3xl font-bold text-foreground">Привет!</h1>
+      <p class="text-lg text-muted-foreground">О чём поговорим сейчас?</p>
     </div>
 
     <!-- Плитки действий -->
@@ -13,17 +13,17 @@
       <!-- Терапия -->
       <button
         @click="handleSelect('therapy')"
-        class="w-full glass-deep rounded-[22px] p-4 flex items-center gap-4 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group animate-slide-up"
+        class="w-full glass-deep bg-card rounded-[22px] p-4 flex items-center gap-4 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group animate-slide-up"
         style="animation-delay: 0.1s; animation-fill-mode: both"
       >
         <div
           class="w-12 h-12 rounded-xl bg-gradient-to-br from-pink-500 to-rose-500 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform"
         >
-          <IconBrain class="w-6 h-6 text-white" />
+          <IconBrain class="w-6 h-6 text-primary-foreground" />
         </div>
         <div class="flex-1 text-left">
-          <div class="text-lg font-semibold text-white mb-1">Терапия</div>
-          <div class="text-sm text-white/70">
+          <div class="text-lg font-semibold text-foreground mb-1">Терапия</div>
+          <div class="text-sm text-muted-foreground">
             Обсудить эмоции, тревогу, стресс
           </div>
         </div>
@@ -38,11 +38,11 @@
         <div
           class="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform"
         >
-          <IconListChecks class="w-6 h-6 text-white" />
+          <IconListChecks class="w-6 h-6 text-primary-foreground" />
         </div>
         <div class="flex-1 text-left">
-          <div class="text-lg font-semibold text-white mb-1">Привычки</div>
-          <div class="text-sm text-white/70">
+          <div class="text-lg font-semibold text-foreground mb-1">Привычки</div>
+          <div class="text-sm text-muted-foreground">
             Поддержка, напоминания, прогресс
           </div>
         </div>
@@ -57,13 +57,13 @@
         <div
           class="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform"
         >
-          <IconMessageCircle class="w-6 h-6 text-white" />
+          <IconMessageCircle class="w-6 h-6 text-primary-foreground" />
         </div>
         <div class="flex-1 text-left">
-          <div class="text-lg font-semibold text-white mb-1">
+          <div class="text-lg font-semibold text-foreground mb-1">
             Просто поговорить
           </div>
-          <div class="text-sm text-white/70">Свободный диалог</div>
+          <div class="text-sm text-muted-foreground">Свободный диалог</div>
         </div>
       </button>
     </div>

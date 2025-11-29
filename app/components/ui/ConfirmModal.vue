@@ -52,7 +52,7 @@ defineExpose({
     <AlertDialogTrigger as-child>
       <slot name="trigger" />
     </AlertDialogTrigger>
-    <AlertDialogContent class="bg-white dark:bg-gray-900/95">
+    <AlertDialogContent class="bg-popover">
       <AlertDialogHeader>
         <AlertDialogTitle>{{ title }}</AlertDialogTitle>
         <AlertDialogDescription v-if="subtitle">
@@ -61,7 +61,9 @@ defineExpose({
       </AlertDialogHeader>
       <AlertDialogFooter>
         <AlertDialogCancel>{{ cancelLabel }}</AlertDialogCancel>
-        <AlertDialogAction @click="handleConfirm">{{ confirmLabel }}</AlertDialogAction>
+        <AlertDialogAction @click="handleConfirm">{{
+          confirmLabel
+        }}</AlertDialogAction>
       </AlertDialogFooter>
     </AlertDialogContent>
   </AlertDialog>

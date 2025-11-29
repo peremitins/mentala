@@ -1,8 +1,21 @@
-@use './_tokens.scss' as *;
-@use './_var.scss' as *;
+// body {
+//   background: linear-gradient(-45deg, #0b3360, #18151f, #05242f, #23d5ab);
+//   background-size: 400% 400%;
+//   animation: gradient 40s ease infinite;
+//   height: 100vh;
+// }
 
-html {
-}
+// @keyframes gradient {
+//   0% {
+//     background-position: 0% 50%;
+//   }
+//   50% {
+//     background-position: 100% 50%;
+//   }
+//   100% {
+//     background-position: 0% 50%;
+//   }
+// }
 
 html,
 body,
@@ -32,7 +45,20 @@ a {
 
 /* Deeper glass for panels */
 .glass-deep {
-  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+  /* Стили для светлой темы */
+  box-shadow:
+    inset 0 1px 2px rgba(255, 255, 255, 0.8),
+    0 2px 8px rgba(0, 0, 0, 0.06),
+    0 4px 16px rgba(0, 0, 0, 0.04);
+  backdrop-filter: blur(10px);
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: color-mix(in oklab, var(--color-background) 7%, transparent);
+  background-clip: padding-box;
+}
+
+/* Стили для темной темы */
+.dark .glass-deep {
   box-shadow:
     inset 1px 1px 0.12px rgba(255, 255, 255, 0.4),
     1px 1px 3px rgba(0, 0, 0, 0.1);
@@ -41,7 +67,6 @@ a {
   border: 1px solid rgba(255, 255, 255, 0.18);
   background: color-mix(in oklab, var(--color-background) 7%, transparent);
   background-clip: padding-box;
-  // padding: 0 8px;
 }
 
 .chat-fade {
@@ -98,26 +123,27 @@ a {
 .bubble {
   border-radius: calc(var(--radius-md) + 2px);
   @apply border border-border/15 backdrop-blur-xl px-4 py-2;
-  background: color-mix(in oklab, var(--color-background) 7%, transparent);
+  background: hsl(var(--card) / 0.9);
   box-shadow: var(--shadow-sm);
 }
 
-/* Input container */
-.glass-input {
-  @apply rounded-2xl border border-border/15 backdrop-blur-xl;
-  background: color-mix(in oklab, var(--color-background) 6%, transparent);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.05),
-    var(--shadow-md);
+.dark .bubble {
+  background: hsl(var(--background) / 0.07);
 }
+
+/* Input container */
 
 .icon-disc {
   border-radius: var(--radius-icon);
   @apply border border-border/10 backdrop-blur-xl grid place-items-center;
-  background: color-mix(in oklab, var(--color-background) 7%, transparent);
+  background: hsl(var(--card) / 0.85);
   width: 44px;
   height: 44px;
   transition: all 0.3s ease;
+}
+
+.dark .icon-disc {
+  background: hsl(var(--background) / 0.07);
 }
 
 .icon-disc-wrapper {
@@ -125,31 +151,36 @@ a {
   &.router-link-active {
     .icon-disc {
       transform: translateY(-2px);
-      background: color-mix(in oklab, var(--color-background) 10%, transparent);
-      border-color: color-mix(
-        in oklab,
-        var(--color-background) 20%,
-        transparent
-      );
+      background: hsl(var(--card) / 0.95);
+      border-color: hsl(var(--border));
+      box-shadow: var(--shadow-md);
+    }
+  }
+}
+
+.dark .icon-disc-wrapper {
+  &:hover,
+  &.router-link-active {
+    .icon-disc {
+      background: hsl(var(--background) / 0.1);
+      border-color: hsl(var(--background) / 0.2);
     }
   }
 }
 
 .icon-disc-active {
-  background: color-mix(in oklab, var(--color-background) 14%, transparent);
-  border-color: color-mix(in oklab, var(--color-background) 28%, transparent);
-  box-shadow:
-    inset 1px 1px 0.12px rgba(255, 255, 255, 0.4),
-    1px 1px 3px rgba(0, 0, 0, 0.1);
+  background: hsl(var(--card) / 1);
+  border-color: hsl(var(--border));
+  box-shadow: var(--shadow-sm);
   background-clip: padding-box;
 }
 
-.glass-input input {
-  height: 44px;
-}
-.glass-input .icon-disc {
-  width: 40px;
-  height: 40px;
+.dark .icon-disc-active {
+  background: hsl(var(--background) / 0.14);
+  border-color: hsl(var(--background) / 0.28);
+  box-shadow:
+    inset 1px 1px 0.12px rgba(255, 255, 255, 0.4),
+    1px 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 /* Global hover rules for buttons/links (excluding bottom nav) */
@@ -158,12 +189,11 @@ button,
 .btn,
 a[href] {
   transition: all 0.5s ease;
-
-  &:hover {
-    // color: #00cbf8;
-  }
 }
 
 .router-link-active {
-  color: #00cbf8;
+  // color: #00cbf8 !important;
+  span {
+    color: hsl(var(--primary));
+  }
 }

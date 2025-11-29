@@ -498,9 +498,9 @@ function buildNotificationSystemPrompt(params: {
   };
 
   const directnessMap: Record<Directness, string> = {
-    soft: 'Поддерживающий',
+    soft: 'Мягкий',
     moderate: 'Сдержанный',
-    hard: 'Требовательный',
+    hard: 'Строгий',
   };
 
   const subtypeMap: Record<HabitSubtype, string> = {

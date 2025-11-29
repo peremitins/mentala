@@ -246,10 +246,7 @@ onUnmounted(() => {
 
 <template>
   <div class="space-y-1.5">
-    <label
-      v-if="label"
-      class="text-sm font-medium text-gray-900 dark:text-gray-100"
-    >
+    <label v-if="label" class="block text-sm font-medium text-foreground mb-1">
       {{ label }}
     </label>
 
@@ -269,13 +266,11 @@ onUnmounted(() => {
       <PopoverContent class="w-auto p-0" align="start">
         <div class="flex items-center">
           <!-- Часы -->
-          <div
-            class="flex flex-col items-center border-r border-gray-200 dark:border-gray-700"
-          >
+          <div class="flex flex-col items-center border-r border-border">
             <!-- Кнопка вверх для часов (уменьшаем) -->
             <button
               type="button"
-              class="flex h-10 w-16 items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800"
+              class="flex h-10 w-16 items-center justify-center hover:bg-muted transition-colors"
               @click="decrementHours"
             >
               <IconChevronUp class="h-4 w-4" />
@@ -295,8 +290,8 @@ onUnmounted(() => {
                     :class="[
                       'flex h-10 w-full items-center justify-center text-sm transition-colors',
                       hour === hours
-                        ? 'bg-blue-500 font-semibold text-white'
-                        : 'hover:bg-gray-100 dark:hover:bg-gray-800',
+                        ? 'bg-primary font-semibold text-primary-foreground'
+                        : 'hover:bg-muted',
                     ]"
                     @click="
                       updateTime(hour, minutes);
@@ -312,7 +307,7 @@ onUnmounted(() => {
             <!-- Кнопка вниз для часов (увеличиваем) -->
             <button
               type="button"
-              class="flex h-10 w-16 items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800"
+              class="flex h-10 w-16 items-center justify-center hover:bg-muted transition-colors"
               @click="incrementHours"
             >
               <IconChevronDown class="h-4 w-4" />
@@ -324,7 +319,7 @@ onUnmounted(() => {
             <!-- Кнопка вверх для минут (уменьшаем) -->
             <button
               type="button"
-              class="flex h-10 w-16 items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800"
+              class="flex h-10 w-16 items-center justify-center hover:bg-muted transition-colors"
               @click="decrementMinutes"
             >
               <IconChevronUp class="h-4 w-4" />
@@ -344,8 +339,8 @@ onUnmounted(() => {
                     :class="[
                       'flex h-10 w-full items-center justify-center text-sm transition-colors',
                       minute === minutes
-                        ? 'bg-blue-500 font-semibold text-white'
-                        : 'hover:bg-gray-100 dark:hover:bg-gray-800',
+                        ? 'bg-primary font-semibold text-primary-foreground'
+                        : 'hover:bg-muted',
                     ]"
                     @click="
                       updateTime(hours, minute);
@@ -361,7 +356,7 @@ onUnmounted(() => {
             <!-- Кнопка вниз для минут (увеличиваем) -->
             <button
               type="button"
-              class="flex h-10 w-16 items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800"
+              class="flex h-10 w-16 items-center justify-center hover:bg-muted transition-colors"
               @click="incrementMinutes"
             >
               <IconChevronDown class="h-4 w-4" />

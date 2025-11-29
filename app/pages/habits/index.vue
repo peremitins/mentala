@@ -148,7 +148,7 @@ async function confirmDeleteHabit() {
 </script>
 
 <template>
-  <div class="h-full flex flex-col">
+  <div class="h-full flex flex-col z-0">
     <NotificationIndexPage
       title="📋&nbsp;&nbsp;Привычки"
       description="Здесь вы найдёте готовые привычки и сможете добавить свои, чтобы получать именно те уведомления, которые вам подходят"

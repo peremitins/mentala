@@ -24,7 +24,7 @@
       <div
         v-for="prompt in prompts"
         :key="prompt.id"
-        class="border-input [:has([data-state=checked])]:border-primary/50 relative flex items-center justify-between gap-2 rounded-md border p-2 shadow-xs outline-none bg-white/5"
+        class="border-input [:has([data-state=checked])]:border-primary/50 relative flex items-center justify-between gap-2 rounded-md border p-2 shadow-xs outline-none bg-card"
       >
         <div class="flex gap-2 w-full">
           <div class="flex items-start">
@@ -64,7 +64,7 @@
                 size="sm"
                 @click="handleRemove(prompt.id)"
                 title="Удалить"
-                class="p-3 min-w-[44px] min-h-[44px] text-red-300 hover:text-red-200"
+                class="p-3 min-w-[44px] min-h-[44px] text-destructive hover:text-destructive/80"
               >
                 <IconTrash2 class="w-4 h-4" />
               </Button>

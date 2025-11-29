@@ -2,7 +2,7 @@ import { defineStore } from 'pinia';
 
 export const useChatSettingsStore = defineStore('chatSettings', {
   state: () => ({
-    theme: 'dark' as 'dark' | 'light' | 'gray',
+    theme: 'dark' as 'dark' | 'light',
     // Режим работы ассистента
     mode: 'therapy' as 'therapy' | 'habits' | 'talk',
     // Голос/озвучка ответа ассистента
