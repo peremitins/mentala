@@ -9,7 +9,7 @@
           <NuxtLink
             to="/"
             class="flex flex-col items-center justify-center icon-disc-wrapper"
-            :class="{ 'text-white': isActive('/') }"
+            :class="{ 'text-foreground': isActive('/') }"
           >
             <span
               :class="[
@@ -20,14 +20,14 @@
             >
               <IconMessageCircleHeart class="w-5 h-5" />
             </span>
-            <span class="w-full text-center">Чат</span>
+            <span class="w-full text-center text-foreground">Чат</span>
           </NuxtLink>
         </li>
         <li class="flex flex-col items-center gap-1 w-full">
           <NuxtLink
             to="/therapy"
             class="flex flex-col items-center justify-center icon-disc-wrapper"
-            :class="{ 'text-white': isActive('/therapy') }"
+            :class="{ 'text-foreground': isActive('/therapy') }"
           >
             <span
               :class="[
@@ -38,14 +38,14 @@
             >
               <IconBrain class="w-5 h-5" />
             </span>
-            <span class="w-full text-center">Терапия</span>
+            <span class="w-full text-center text-foreground">Терапия</span>
           </NuxtLink>
         </li>
         <li class="flex flex-col items-center gap-1 w-full">
           <NuxtLink
             to="/habits"
             class="flex flex-col items-center justify-center icon-disc-wrapper"
-            :class="{ 'text-white': isActive('/habits') }"
+            :class="{ 'text-foreground': isActive('/habits') }"
           >
             <span
               :class="[
@@ -56,14 +56,14 @@
             >
               <IconListCheck class="w-5 h-5" />
             </span>
-            <span class="w-full text-center">Привычки</span>
+            <span class="w-full text-center text-foreground">Привычки</span>
           </NuxtLink>
         </li>
         <li class="flex flex-col items-center gap-1 w-full">
           <NuxtLink
             to="/settings"
             class="flex flex-col items-center justify-center icon-disc-wrapper"
-            :class="{ 'text-white': isActive('/settings') }"
+            :class="{ 'text-foreground': isActive('/settings') }"
           >
             <span
               :class="[
@@ -74,7 +74,7 @@
             >
               <IconSettings class="w-5 h-5" />
             </span>
-            <span class="w-full text-center">Настройки</span>
+            <span class="w-full text-center text-foreground">Настройки</span>
           </NuxtLink>
         </li>
       </ul>

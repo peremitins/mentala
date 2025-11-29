@@ -93,14 +93,12 @@ function refreshPreview() {
 <template>
   <div class="space-y-3">
     <div class="flex items-center justify-between">
-      <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">
-        Превью уведомления
-      </h3>
+      <h3 class="text-sm font-medium text-foreground">Превью уведомления</h3>
       <!-- Кнопка "Обновить" только в development режиме -->
       <button
         v-if="isDevelopment"
         type="button"
-        class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-blue-600 transition-all hover:bg-blue-50 hover:text-blue-700 dark:text-blue-400 dark:hover:bg-blue-950/30"
+        class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-primary transition-all"
         @click="refreshPreview"
       >
         <span class="text-base">🎲</span>
@@ -109,47 +107,38 @@ function refreshPreview() {
     </div>
 
     <div
-      class="group relative overflow-hidden rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition-all duration-300 hover:shadow-md dark:border-gray-700 dark:bg-gray-800"
+      class="group relative overflow-hidden rounded-xl border border-primary bg-button-active-soft p-5 shadow-sm transition-all duration-300 hover:shadow-md"
     >
       <!-- Фоновый градиент -->
       <div
-        class="absolute inset-0 bg-gradient-to-br from-blue-50/50 via-transparent to-purple-50/50 opacity-0 transition-opacity duration-300 group-hover:opacity-100 dark:from-blue-950/20 dark:to-purple-950/20"
+        class="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-primary/10 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
       />
 
       <div class="relative">
         <!-- Иконка и заголовок -->
         <div class="mb-3 flex items-center gap-2">
           <div
-            class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-purple-500 text-white shadow-sm"
+            class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary text-primary-foreground shadow-sm"
           >
             <span class="text-sm">M</span>
           </div>
-          <div class="text-xs font-semibold text-gray-600 dark:text-gray-400">
+          <div class="text-xs font-semibold text-surface-raised-foreground">
             Mentai
           </div>
         </div>
 
         <!-- Текст уведомления -->
         <div
-          class="mb-3 text-base leading-relaxed text-gray-900 dark:text-gray-100"
+          class="mb-3 text-base leading-relaxed text-surface-raised-subtitle"
         >
           <span
             v-if="isAiGenerated"
-            class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs font-medium mr-2"
+            class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-button-active-soft text-surface-raised-subtitle text-xs font-medium mr-2"
           >
             <span>✨</span>
             <span>AI</span>
           </span>
           {{ previewText }}
-        </div>
-
-        <!-- Метаинформация - только в development -->
-        <div
-          v-if="isDevelopment"
-          class="flex items-center justify-between text-xs text-gray-500"
-        >
-          <span>ID: {{ templateId }}</span>
-          <span class="opacity-60">Сейчас</span>
         </div>
       </div>
     </div>

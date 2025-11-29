@@ -17,7 +17,7 @@
     <button
       v-if="hasOverflow"
       @click="toggleExpanded"
-      class="relative mt-1 text-xs text-blue-400 flex items-center gap-1 outline-none rounded-none px-1 py-0.5"
+      class="relative mt-1 text-xs text-primary flex items-center gap-1 outline-none rounded-none px-1 py-0.5"
       :aria-expanded="isExpanded"
       :aria-controls="id"
     >

@@ -61,6 +61,20 @@
 import { ref, computed } from 'vue';
 import IconChevronsUpDown from '~icons/lucide/chevrons-up-down';
 import IconCheck from '~icons/lucide/check';
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from '@/app/components/ui/shadcn/popover';
+import {
+  Command,
+  CommandInput,
+  CommandList,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+} from '@/app/components/ui/shadcn/command';
+import { Button } from '@/app/components/ui/button';
 
 const id = `combobox-option-${Math.random().toString(36).slice(2, 9)}`;
 

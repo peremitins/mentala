@@ -224,7 +224,7 @@ export const userPreferences = pgTable('user_preferences', {
 // Настройки чата (theme, mode, voice, avatar, enablePreviousResponseId, enableSummary)
 export const chatSettings = pgTable('chat_settings', {
   userId: integer('user_id').primaryKey().notNull(),
-  theme: varchar('theme', { length: 10 }).notNull().default('dark'), // 'dark' | 'light' | 'gray'
+  theme: varchar('theme', { length: 10 }).notNull().default('dark'), // 'dark' | 'light'
   mode: varchar('mode', { length: 20 }).notNull().default('therapy'), // 'therapy' | 'habits'
   voice: boolean('voice').notNull().default(true),
   avatar: boolean('avatar').notNull().default(true),

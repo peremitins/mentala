@@ -1,7 +1,7 @@
 <template>
   <div class="flex flex-1 relative overflow-hidden p-2">
     <section
-      class="flex-auto glass-deep p-2"
+      class="flex-auto"
       :style="{ borderRadius: `calc(var(--radius-sm))` }"
     >
       <h2 class="text-lg font-semibold mb-4">Пользователи</h2>
@@ -9,10 +9,15 @@
       <!-- Scroll area for list only -->
       <div class="relative" :style="{ height: 'calc(100dvh - 210px)' }">
         <div class="absolute inset-0 overflow-y-auto pr-1 pb-28">
-          <div v-if="loading" class="opacity-70 p-2">Загрузка…</div>
-          <div v-else-if="error" class="text-red-400 p-2">{{ error }}</div>
+          <div v-if="loading" class="opacity-70 p-2 text-muted-foreground">
+            Загрузка…
+          </div>
+          <div v-else-if="error" class="text-destructive p-2">{{ error }}</div>
           <div v-else>
-            <div v-if="!users.length" class="opacity-70 p-2">
+            <div
+              v-if="!users.length"
+              class="opacity-70 p-2 text-muted-foreground"
+            >
               Пока нет пользователей
             </div>
             <ul class="space-y-2">
@@ -20,13 +25,15 @@
                 v-for="u in users"
                 @click="editUser(u.id)"
                 :key="u.id"
-                class="flex items-center gap-2 justify-between bg-white/5 border border-white/10 rounded-xl px-3 py-2"
+                class="flex items-center gap-2 justify-between bg-card border border-border rounded-xl px-3 py-2 hover:bg-accent transition-colors cursor-pointer"
               >
                 <div class="flex items-center gap-3 min-w-0 w-full">
-                  <span class="text-white/70 text-xs sm:text-sm shrink-0">
+                  <span
+                    class="text-muted-foreground text-xs sm:text-sm shrink-0"
+                  >
                     {{ u.name }}
                   </span>
-                  <span class="truncate">{{ u.email }}</span>
+                  <span class="truncate text-foreground">{{ u.email }}</span>
                 </div>
                 <div class="flex items-center shrink-0">
                   <Button
@@ -56,13 +63,17 @@
       </div>
     </section>
     <!-- Floating add button -->
-    <NuxtLink
-      to="/users/create"
-      class="absolute right-5 bottom-5 grid place-items-center"
+    <Button
+      as-child
+      variant="outline"
+      size="icon"
+      class="absolute right-5 bottom-5"
       aria-label="Добавить пользователя"
     >
-      <IconCirclePlus class="w-5 h-5" />
-    </NuxtLink>
+      <NuxtLink to="/users/create">
+        <IconCirclePlus class="w-5 h-5" />
+      </NuxtLink>
+    </Button>
   </div>
 </template>
 
@@ -70,6 +81,7 @@
 import IconCirclePlus from '~icons/lucide/circle-plus';
 import IconEdit from '~icons/lucide/edit';
 import IconTrash2 from '~icons/lucide/trash-2';
+import { Button } from '@/app/components/ui/button';
 
 type UserRow = {
   id: number;

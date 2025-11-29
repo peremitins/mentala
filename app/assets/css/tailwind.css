@@ -3,56 +3,128 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
+    /* === Радиусы === */
+    --radius-sm: 10px;
+    --radius-md: 16px;
+    --radius-lg: 24px;
+    --radius-icon: 14px;
+    --radius: 0.5rem; /* для совместимости с Tailwind */
 
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
+    /* === Тени (светлая тема) === */
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
+      0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1),
+      0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1),
+      0 10px 10px -5px rgba(0, 0, 0, 0.04);
+
+    /* === Overlay === */
+    --overlay: 0 0% 0%;
+    --overlay-opacity: 80%;
+
+    /* === Базовые цвета === */
+    --background: 0 0% 100%;
+    --foreground: 222.2 47.4% 11.2%;
+
+    /* === Поверхности === */
+    --card: 204 38% 98%;
+    --card-foreground: 222.2 47.4% 11.2%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
+    --popover-foreground: 222.2 47.4% 11.2%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
+    --surface-subtle: 270 80% 98%;
+    --surface-subtle-foreground: 270 80% 98%;
 
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
+    --surface-raised: 270 80% 96%;
+    --surface-raised-foreground: color-mix(
+      in hsl,
+      hsl(var(--primary)) 100%,
+      transparent
+    );
+    --surface-raised-subtitle: color-mix(
+      in hsl,
+      hsl(var(--primary)) 90%,
+      white
+    );
+    --surface-inactive-foreground: 222 16% 40%;
+    --surface-raised-border: 275 25% 85%;
+    --surface-raised-inactive-border: 215 16% 34%;
 
-    --primary: 240 5.9% 10%;
-    --primary-foreground: 0 0% 98%;
+    /* === Семантические цвета === */
+    --primary: 270 80% 64%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222 28% 25%;
 
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
 
     --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
+    --destructive-foreground: 210 40% 98%;
 
-    --ring: 240 10% 3.9%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
 
-    --radius: 0.5rem;
+    /* === Границы и инпуты === */
+    --border: 214.3 31.8% 91.4%;
+    --border-secondary: 275 25% 85%;
+    --input: 214.3 31.8% 91.4%;
+
+    /* === Состояния === */
+    --inactive: 215 30% 17%;
+    --inactive-foreground: 222.2 47.4% 11.2%;
+
+    --button-active-soft: 270 80% 96%;
+
+    --ring: 188 100% 49%;
   }
 
   .dark {
+    /* === Тени (темная тема) === */
+    --shadow-sm: 0 2px 24px rgba(0, 0, 0, 0.35);
+    --shadow-md: 0 4px 24px rgba(0, 0, 0, 0.35);
+    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.35);
+    --shadow-xl: 0 12px 24px rgba(0, 0, 0, 0.35);
+
+    /* === Overlay === */
+    --overlay: 0 0% 0%;
+    --overlay-opacity: 80%;
+
+    /* === Базовые цвета === */
     --background: 240 10% 3.9%;
     --foreground: 0 0% 98%;
 
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
+    /* === Поверхности === */
+    --card: 220 16% 18%;
+    --card-foreground: 0 0% 98%;
 
     --popover: 240 10% 3.9%;
     --popover-foreground: 0 0% 98%;
 
-    --card: 240 10% 3.9%;
-    --card-foreground: 0 0% 98%;
+    --surface-subtle: 226 30% 9%;
+    --surface-subtle-foreground: 226 30% 9%;
 
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
+    --surface-raised: 274 59% 13%;
+    --surface-raised-foreground: color-mix(
+      in hsl,
+      hsl(var(--primary)) 100%,
+      transparent
+    );
+    --surface-raised-subtitle: color-mix(
+      in hsl,
+      hsl(var(--primary)) 80%,
+      white
+    );
+    --surface-inactive-foreground: 222 16% 40%;
+    --surface-raised-border: 275 84% 38%;
+    --surface-raised-inactive-border: 215 16% 34%;
 
-    --primary: 0 0% 98%;
-    --primary-foreground: 240 5.9% 10%;
+    /* === Семантические цвета === */
+    --primary: 270 90% 70%;
+    --primary-foreground: 0 0% 98%;
 
     --secondary: 240 3.7% 15.9%;
     --secondary-foreground: 0 0% 98%;
@@ -63,57 +135,59 @@
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
 
-    --ring: 240 4.9% 83.9%;
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
+
+    /* === Границы и инпуты === */
+    --border: 240 4% 26%;
+    --border-secondary: 217 21% 27%;
+    --input: 240 3.7% 15.9%;
+
+    /* === Состояния === */
+    --inactive: 215 30% 17%;
+    --inactive-foreground: 0 0% 88%;
+
+    --button-active-soft: 217 21% 27%;
+
+    --ring: 188 100% 55%;
   }
 
-  .gray {
-    --background: 0 0% 19.4%;
-    --foreground: 0 0% 98%;
-
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-
-    --popover: 240 10% 3.9%;
-    --popover-foreground: 0 0% 98%;
-
-    --card: 240 10% 3.9%;
-    --card-foreground: 0 0% 98%;
-
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-
-    --primary: 0 0% 98%;
-    --primary-foreground: 240 5.9% 10%;
-
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
-
-    --accent: 240 3.7% 15.9%;
-    --accent-foreground: 0 0% 98%;
-
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-
-    --ring: 240 4.9% 83.9%;
+  /* === Color scheme для браузеров === */
+  :root {
+    color-scheme: light dark;
   }
 }
 
 @theme {
+  /* === Breakpoints === */
+  --breakpoint-xxs: 375px;
+  --breakpoint-xs: 480px;
+  --breakpoint-3xl: 1600px;
+
+  /* === Цвета из базовых переменных === */
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
 
-  --color-muted: hsl(var(--muted));
-  --color-muted-foreground: hsl(var(--muted-foreground));
+  /* === Поверхности === */
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
 
   --color-popover: hsl(var(--popover));
   --color-popover-foreground: hsl(var(--popover-foreground));
 
-  --color-card: hsl(var(--card));
-  --color-card-foreground: hsl(var(--card-foreground));
+  --color-surface-subtle: hsl(var(--surface-subtle));
+  --color-surface-subtle-foreground: hsl(var(--surface-subtle-foreground));
 
-  --color-border: hsl(var(--border));
-  --color-input: hsl(var(--input));
+  --color-surface-raised: hsl(var(--surface-raised));
+  --color-surface-raised-foreground: var(--surface-raised-foreground);
+  --color-surface-raised-subtitle: var(--surface-raised-subtitle);
+  --color-surface-inactive-foreground: hsl(var(--surface-inactive-foreground));
+  --color-surface-raised-border: hsl(var(--surface-raised-border));
+  --color-surface-raised-inactive-border: hsl(
+    var(--surface-raised-inactive-border)
+  );
 
+  /* === Семантические цвета === */
   --color-primary: hsl(var(--primary));
   --color-primary-foreground: hsl(var(--primary-foreground));
 
@@ -126,8 +200,26 @@
   --color-destructive: hsl(var(--destructive));
   --color-destructive-foreground: hsl(var(--destructive-foreground));
 
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+
+  /* === Границы и инпуты === */
+  --color-border: hsl(var(--border));
+  --color-border-secondary: hsl(var(--border-secondary));
+  --color-input: hsl(var(--input));
+
+  /* === Состояния === */
+  --color-inactive: hsl(var(--inactive));
+  --color-inactive-foreground: hsl(var(--inactive-foreground));
+
+  --color-button-active-soft: hsl(var(--button-active-soft));
+
   --color-ring: hsl(var(--ring));
 
+  /* === Overlay === */
+  --color-overlay: hsl(var(--overlay) / var(--overlay-opacity));
+
+  /* === Радиусы === */
   --radius: var(--radius);
 }
 

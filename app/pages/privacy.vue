@@ -12,7 +12,7 @@
       <!-- Настройки памяти AI -->
       <MemorySettings />
 
-      <hr class="border-white/10" />
+      <hr class="border-border/60" />
 
       <div class="flex flex-wrap gap-3">
         <button

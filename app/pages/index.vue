@@ -5,10 +5,7 @@
       <template #custom>
         <div class="flex items-center justify-between w-full">
           <div class="flex items-center gap-2 px-4">
-            <!-- <IconMessageCircleHeart
-              class="w-5 h-5 text-gray-900 dark:text-gray-100"
-            /> -->
-            <h1 class="text-xl font-bold text-gray-900 dark:text-gray-100">
+            <h1 class="text-xl font-bold text-foreground">
               💞&nbsp;&nbsp;Ассистент
             </h1>
           </div>
@@ -28,7 +25,7 @@
                   class="z-50 min-w-[260px] rounded-3xl glass-deep p-3 space-y-4"
                 >
                   <div class="flex items-center justify-between gap-0.5 h-10">
-                    <div class="text-sm opacity-80">Режим</div>
+                    <div class="text-sm text-foreground">Режим</div>
                     <Combobox
                       class="max-w-[170px]"
                       v-model="displayMode"
@@ -38,34 +35,24 @@
                   </div>
 
                   <div class="flex items-center justify-between h-10">
-                    <div class="text-sm">Голос</div>
+                    <div class="text-sm text-foreground">Голос</div>
 
-                    <SwitchRoot
+                    <Switch
                       v-model:checked="chatSettings.voice"
                       @update:checked="onSwitchChangeVoice"
-                      class="w-12 h-6 rounded-full border border-white/15 bg-white/10 backdrop-blur flex items-center px-1 data-[state=checked]:bg-green-500"
-                    >
-                      <SwitchThumb
-                        class="w-4 h-4 bg-white rounded-full transition-transform translate-x-0 data-[state=checked]:translate-x-6"
-                      />
-                    </SwitchRoot>
+                    />
                   </div>
 
                   <div class="flex items-center justify-between h-10">
-                    <div class="text-sm">Аватар</div>
-                    <SwitchRoot
+                    <div class="text-sm text-foreground">Аватар</div>
+                    <Switch
                       v-model:checked="chatSettings.avatar"
                       @update:checked="onSwitchChangeAvatar"
-                      class="w-12 h-6 rounded-full border border-white/15 bg-white/10 backdrop-blur flex items-center px-1 data-[state=checked]:bg-green-500"
-                    >
-                      <SwitchThumb
-                        class="w-4 h-4 bg-white rounded-full transition-transform translate-x-0 data-[state=checked]:translate-x-6"
-                      />
-                    </SwitchRoot>
+                    />
                   </div>
 
                   <div class="flex items-center justify-between gap-0.5 h-10">
-                    <div class="text-sm opacity-80">Тема</div>
+                    <div class="text-sm text-foreground">Тема</div>
 
                     <Combobox
                       class="max-w-[170px]"
@@ -115,7 +102,9 @@
                 class="relative w-full h-full overflow-hidden max-w-[480px]"
               >
                 <div class="w-full h-full grid place-items-center">
-                  <div class="text-sm text-gray-500">Аватар не включен</div>
+                  <div class="text-sm text-muted-foreground">
+                    Аватар не включен
+                  </div>
                 </div>
               </div>
             </section>
@@ -155,7 +144,7 @@
                 :style="{ borderRadius: 'var(--radius-icon)' }"
               >
                 <IconMic
-                  :class="speechStore.isListening ? 'text-green-500' : ''"
+                  :class="speechStore.isListening ? 'text-primary' : ''"
                   class="w-5 h-5"
                 />
               </button>
@@ -206,9 +195,8 @@ import {
   PopoverContent,
   RadioGroupRoot,
   RadioGroupItem,
-  SwitchRoot,
-  SwitchThumb,
 } from 'radix-vue';
+import { Switch } from '@/app/components/ui/shadcn/switch';
 import PageHeader from '@/app/components/PageHeader.vue';
 import WelcomeScreen from '@/app/components/WelcomeScreen.vue';
 import AvatarVoiceControls from '@/app/components/AvatarVoiceControls.vue';

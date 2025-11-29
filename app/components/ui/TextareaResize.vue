@@ -6,12 +6,27 @@
         ref="textarea"
         :id="props.label"
         v-bind="$attrs"
-        class="textarea-styled w-full px-3 py-2"
+        :class="
+          cn(
+            'w-full resize-none overflow-y-auto',
+            'placeholder:text-muted-foreground',
+            'disabled:cursor-not-allowed disabled:opacity-50 placeholder:text-sm text-sm ',
+            props.variant === 'form'
+              ? [
+                  'rounded-2xl border-2 border-border bg-card px-3 py-2 text-sm',
+                  'ring-offset-background',
+                  'focus-visible:outline-none focus:border-primary',
+                  'transition-colors',
+                ]
+              : 'textarea-styled px-3 py-2',
+            props.class
+          )
+        "
         :style="{
           'min-height': minHeight,
           'max-height': maxHeight,
         }"
-        :value="modelValue"
+        :value="displayValue"
         @input="handler"
         @keydown="handleKeydown"
         :lang="'ru-RU'"
@@ -24,10 +39,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch, nextTick } from 'vue';
+import { ref, onMounted, watch, nextTick, computed } from 'vue';
 import type { Ref } from 'vue';
 import { throttle } from 'lodash';
 import { isDocumentAvailable } from '@/app/utils/document';
+import { cn } from '@/app/lib/utils';
 
 interface Props {
   maxHeight?: string;
@@ -39,6 +55,8 @@ interface Props {
   label?: string;
   disabled?: boolean;
   preventEnterDefault?: boolean;
+  variant?: 'form' | 'chat';
+  class?: string;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -46,11 +64,17 @@ const props = withDefaults(defineProps<Props>(), {
   disabled: false,
   preventEnterDefault: false,
   maxHeight: '150px',
+  variant: 'chat',
 });
 
 const emit = defineEmits(['update:modelValue', 'enter-pressed', 'esc-pressed']);
 
 const textarea: Ref<HTMLTextAreaElement | null> = ref(null);
+
+// Нормализуем значение для отображения: null/undefined -> пустая строка
+const displayValue = computed(() => {
+  return props.modelValue ?? '';
+});
 
 // Функция для прокрутки textarea вниз
 const scrollToBottom = () => {
@@ -77,10 +101,23 @@ const handleKeydown = (event: KeyboardEvent) => {
 
   // Handle Enter key
   if (event.key === 'Enter') {
+    if (!props.preventEnterDefault) {
+      nextTick(() => {
+        requestAnimationFrame(() => {
+          nextTick(() => {
+            adjustHeight();
+            scrollToBottom();
+          });
+        });
+      });
+      return;
+    }
     if (!event.ctrlKey && !event.shiftKey) {
+      console.log('Enter key pressed');
       event.preventDefault();
       emit('enter-pressed', event);
     } else if (event.ctrlKey || event.shiftKey) {
+      console.log('Ctrl + Enter or Shift + Enter key pressed');
       // Если Ctrl + Enter или Shift + Enter, вставляем перенос строки вручную
       // event.preventDefault();
       // adjustHeight будет вызван через watch на modelValue после обновления значения
@@ -190,7 +227,7 @@ onMounted(() => {
   border-radius: 6px;
 
   /* Glassmorphism эффект */
-  background: color-mix(in oklab, var(--color-background) 8%, transparent);
+  background: hsl(var(--background) / 0.08);
   backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.15);
 
@@ -216,11 +253,11 @@ onMounted(() => {
 
 /* Состояние фокуса */
 .textarea-styled:focus {
-  border-color: hsla(var(--accent), 0.6);
-  background: color-mix(in oklab, var(--color-background) 12%, transparent);
+  border-color: hsl(var(--accent) / 0.6);
+  background: hsl(var(--background) / 0.12);
   box-shadow:
     inset 0 1px 2px rgba(255, 255, 255, 0.15),
-    0 0 0 3px hsla(var(--accent), 0.12),
+    0 0 0 3px hsl(var(--accent) / 0.12),
     0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
@@ -228,6 +265,6 @@ onMounted(() => {
 .textarea-styled:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-  background: color-mix(in oklab, var(--color-background) 5%, transparent);
+  background: hsl(var(--background) / 0.05);
 }
 </style>

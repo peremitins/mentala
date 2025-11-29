@@ -51,7 +51,7 @@ export const PromptCreateDto = z.object({
   title: z.string().min(1).max(120),
   type: PromptTypeEnum,
   lang: PromptLangEnum.default('ru'),
-  content: z.string().min(20).max(8000),
+  content: z.string().min(1).max(8000),
   isActive: z.boolean().optional(),
 });
 
@@ -59,7 +59,7 @@ export const PromptUpdateDto = z.object({
   title: z.string().min(1).max(120).optional(),
   type: PromptTypeEnum.optional(),
   lang: PromptLangEnum.optional(),
-  content: z.string().min(20).max(8000).optional(),
+  content: z.string().max(8000).optional(),
   isActive: z.boolean().optional(),
 });
 

@@ -1,45 +1,53 @@
 <template>
   <div class="flex flex-1 relative overflow-hidden p-2">
-    <section
-      class="glass-deep p-2"
-      :style="{ borderRadius: `calc(var(--radius-sm))` }"
-    >
+    <section class="w-full" :style="{ borderRadius: `calc(var(--radius-sm))` }">
       <h2 class="text-lg font-semibold mb-4">Добавить пользователя</h2>
 
       <form class="space-y-3" @submit.prevent="onSubmit">
-        <input
+        <Input
           v-model="email"
+          type="email"
           placeholder="email@example.com"
-          class="w-full bg-transparent border border-white/15 rounded-md px-3 py-2 outline-none placeholder:text-white/60"
+          :show-clear-button="false"
         />
-        <input
+        <Input
           v-model="name"
+          type="text"
           placeholder="Имя (опционально)"
-          class="w-full bg-transparent border border-white/15 rounded-md px-3 py-2 outline-none placeholder:text-white/60"
+          :show-clear-button="false"
         />
-        <input
+        <Input
           v-model="password"
           type="password"
           placeholder="Пароль (мин. 6)"
-          class="w-full bg-transparent border border-white/15 rounded-md px-3 py-2 outline-none placeholder:text-white/60"
+          :show-clear-button="false"
         />
-        <input
+        <Input
           v-model="confirm"
           type="password"
           placeholder="Подтверждение пароля"
-          class="w-full bg-transparent border border-white/15 rounded-md px-3 py-2 outline-none placeholder:text-white/60"
+          :show-clear-button="false"
         />
         <div class="flex items-center gap-2">
-          <button class="glass px-4 py-2" :disabled="saving">Сохранить</button>
-          <NuxtLink class="glass px-4 py-2" to="/users">Отмена</NuxtLink>
+          <Button type="submit" variant="outline" :disabled="saving">
+            Сохранить
+          </Button>
+          <Button as-child variant="outline">
+            <NuxtLink to="/users">Отмена</NuxtLink>
+          </Button>
         </div>
-        <div v-if="error" class="text-red-400 text-sm">{{ error }}</div>
+        <div v-if="error" class="text-destructive text-sm">
+          {{ error }}
+        </div>
       </form>
     </section>
   </div>
 </template>
 
 <script setup lang="ts">
+import { Input } from '@/app/components/ui/shadcn/input';
+import { Button } from '@/app/components/ui/button';
+
 const email = ref('');
 const name = ref('');
 const password = ref('');

@@ -16,7 +16,7 @@
       </div>
       <h1
         v-else
-        class="text-xl font-bold text-gray-900 dark:text-gray-100 w-full truncate"
+        class="text-xl font-bold text-foreground w-full truncate"
         :class="{ 'px-4': !props.showBackButton }"
       >
         {{ props.title }}

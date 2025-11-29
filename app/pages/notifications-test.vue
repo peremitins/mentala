@@ -8,7 +8,7 @@
 
     <div class="space-y-4">
       <!-- Статус -->
-      <div class="p-4 bg-white/5 rounded-lg">
+      <div class="p-4 bg-card rounded-lg">
         <h3 class="text-lg font-semibold mb-3">Статус</h3>
         <div class="space-y-2 text-sm">
           <div>
@@ -18,7 +18,7 @@
             Уведомления доступны:
             <span
               :class="
-                notifications.isAvailable ? 'text-green-400' : 'text-red-400'
+                notifications.isAvailable ? 'text-primary' : 'text-destructive'
               "
             >
               {{ notifications.isAvailable ? 'Да' : 'Нет' }}
@@ -88,10 +88,14 @@
       </div>
 
       <!-- Логи -->
-      <div class="p-4 bg-white/5 rounded-lg">
+      <div class="p-4 bg-card rounded-lg">
         <h3 class="text-lg font-semibold mb-3">Логи</h3>
         <div class="space-y-1 text-xs font-mono max-h-40 overflow-y-auto">
-          <div v-for="(log, index) in logs" :key="index" class="text-gray-400">
+          <div
+            v-for="(log, index) in logs"
+            :key="index"
+            class="text-muted-foreground"
+          >
             {{ log }}
           </div>
         </div>

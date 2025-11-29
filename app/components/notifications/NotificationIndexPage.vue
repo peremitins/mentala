@@ -98,7 +98,7 @@ function handleRemove(item: NotificationIndexItem) {
 
       <TabsContent value="notifications" class="space-y-4 mt-4">
         <div class="px-2">
-          <p class="text-sm text-gray-600 dark:text-gray-400">
+          <p class="text-sm text-muted-foreground">
             {{ description }}
           </p>
         </div>
@@ -117,18 +117,13 @@ function handleRemove(item: NotificationIndexItem) {
             v-for="item in visibleItems"
             :key="item.id"
             type="button"
-            class="group relative w-full overflow-hidden rounded-xl border-2 bg-white p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md dark:bg-gray-800"
-            :class="
-              hoveredId === item.id
-                ? 'border-blue-500 dark:border-blue-600'
-                : 'border-gray-200 hover:border-blue-300 dark:border-gray-700 dark:hover:border-blue-700'
-            "
+            class="group relative w-full overflow-hidden rounded-xl border-2 border-border bg-card p-4 text-left transition-all duration-200 hover:border-primary/50 hover:-translate-y-0.5 hover:shadow-lg"
             @mouseenter="hoveredId = item.id"
             @mouseleave="hoveredId = null"
             @click="handleSelect(item)"
           >
             <div
-              class="absolute right-0 top-0 h-24 w-24 opacity-5 transition-opacity duration-300 group-hover:opacity-10"
+              class="absolute right-0 top-0 h-24 w-24 opacity-10 transition-opacity duration-300 group-hover:opacity-20"
             >
               <div
                 class="h-full w-full rounded-full bg-gradient-to-br blur-xl"
@@ -147,23 +142,23 @@ function handleRemove(item: NotificationIndexItem) {
 
                 <div class="flex-1 min-w-0">
                   <h3
-                    class="text-base font-semibold text-gray-900 dark:text-gray-100 truncate"
+                    class="text-base font-semibold text-card-foreground truncate"
                   >
                     {{ item.name }}
                   </h3>
-                  <p class="text-xs text-gray-600 dark:text-gray-400 truncate">
+                  <p class="text-xs text-muted-foreground truncate">
                     {{ item.description }}
                   </p>
                 </div>
               </div>
 
               <div
-                class="flex h-8 w-16 flex-shrink-0 items-center justify-center text-gray-400 transition-all duration-300 group-hover:translate-x-1 group-hover:text-blue-600 dark:group-hover:text-blue-400"
+                class="flex h-8 w-16 flex-shrink-0 items-center justify-end text-muted-foreground transition-all duration-300 group-hover:translate-x-1 group-hover:text-primary group-hover:border-primary"
               >
                 <button
                   v-if="item.canDelete"
                   type="button"
-                  class="rounded-full p-1 text-gray-400 hover:text-red-500 hover:bg-red-500/10 transition z-10"
+                  class="rounded-full p-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition z-10"
                   title="Удалить привычку"
                   @click.stop="handleRemove(item)"
                 >

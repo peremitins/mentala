@@ -11,19 +11,25 @@ export const INTENT_OPTIONS = [
 // Опции для привычек QUIT (избавиться от привычки)
 export const SUBTYPE_OPTIONS_QUIT = [
   {
-    label: 'Смешанные уведомления',
+    label: 'Смешанные',
+    icon: '🔀',
+    title: 'Смешанные уведомления',
     value: 'mixed',
     description:
       'Чередование разных типов сообщений, которые создают естественный поток и не перегружают одним форматом',
   },
   {
-    label: 'Полезные факты',
+    label: 'Факты',
+    icon: '📘',
+    title: 'Полезные факты',
     value: 'informational',
     description:
       'Короткие, понятные факты и объяснения о влиянии привычек и внутренних процессов на здоровье и самочувствие',
   },
   {
-    label: 'Поддержка и мотивация',
+    label: 'Поддержка',
+    icon: '🤝',
+    title: 'Поддержка и мотивация',
     value: 'motivational',
     description:
       'Фразы, помогающие чувствовать поддержку, оставаться мотивированным и продолжать движение вперёд',
@@ -34,7 +40,9 @@ export const SUBTYPE_OPTIONS_QUIT = [
 export const SUBTYPE_OPTIONS_BUILD = [
   ...SUBTYPE_OPTIONS_QUIT,
   {
-    label: 'Напоминание о действии',
+    label: 'Напоминание',
+    icon: '🔔',
+    title: 'Напоминание о действии',
     value: 'reminder',
     description:
       'Короткие, конкретные сигналы сделать шаг или практику: выполнить упражнение, технику, действие из привычки или терапии',
@@ -48,7 +56,6 @@ export const THEME_OPTIONS = [
   { label: 'Системная', value: 'system' },
   { label: 'Тёмная', value: 'dark' },
   { label: 'Светлая', value: 'light' },
-  { label: 'Серая', value: 'gray' },
 ];
 
 // Опции для источника текстов уведомлений (для готовых шаблонов)

@@ -1,7 +1,7 @@
 <template>
   <Dialog :open="open" @update:open="onOpenChange">
     <DialogContent
-      class="w-[640px] max-w-[95vw] bg-background border-border gray:bg-neutral-800 gray:border-neutral-700"
+      class="w-[640px] max-w-[95vw] bg-background border-border rounded-lg"
     >
       <DialogHeader>
         <DialogTitle class="text-base font-semibold">
@@ -10,57 +10,55 @@
       </DialogHeader>
 
       <div class="space-y-4">
-        <div class="grid grid-cols-2 gap-2">
-          <label class="text-xs opacity-80"
-            >Название
-            <input
+        <div class="flex items-start justify-between gap-4">
+          <div class="flex-1 space-y-1">
+            <div class="flex items-center justify-between">
+              <label class="text-xs text-foreground opacity-90">Название</label>
+              <span class="text-[10px] text-muted-foreground opacity-70">
+                {{ form.title.length }}/120
+              </span>
+            </div>
+            <Input
               v-model="form.title"
-              class="w-full mt-1 px-2 py-1 rounded-md bg-background border border-input gray:bg-neutral-700 gray:border-neutral-600"
+              :maxlength="120"
+              :show-clear-button="true"
             />
-          </label>
-          <div class="text-sm opacity-80">Тип</div>
-
-          <Combobox
-            v-model="form.type"
-            :options="AI_WORK_MODE_OPTIONS"
-            placeholder="Выберите режим"
-          />
-          <label class="flex items-center gap-2 text-xs opacity-80 mt-auto">
-            <input type="checkbox" v-model="form.isActive" /> Сделать активным
+          </div>
+          <label
+            class="flex items-center gap-2 text-xs text-foreground opacity-90 pt-6 cursor-pointer"
+          >
+            <Checkbox v-model:checked="form.isActive" id="isActive" />
+            Сделать активным
           </label>
         </div>
 
         <div class="space-y-1">
           <div class="flex items-center justify-between">
-            <div class="text-xs opacity-80">Текст промпта</div>
-            <div class="text-[10px] opacity-60">Подсветка</div>
+            <div class="text-xs text-foreground opacity-90">Текст промпта</div>
+            <span class="text-[10px] text-muted-foreground opacity-70">
+              {{ (form.content || '').length }}/8000
+            </span>
           </div>
-          <textarea
+          <TextareaResize
             v-model="form.content"
-            rows="10"
-            class="w-full bg-background border border-input rounded-md p-2 text-sm whitespace-pre-wrap gray:bg-neutral-700 gray:border-neutral-600"
-            @input="highlight"
+            variant="form"
+            :max-height="'300px'"
+            :min-height="'120px'"
             ref="textareaRef"
           />
-        </div>
-
-        <div class="flex items-center justify-between text-xs">
-          <div class="opacity-70">{{ lengthInfo }}</div>
         </div>
       </div>
 
       <DialogFooter class="flex gap-2">
         <Button variant="outline" @click="onCancel"> Отмена </Button>
-        <Button @click="onSave"> Сохранить </Button>
+        <Button type="button" @click="onSave"> Сохранить </Button>
       </DialogFooter>
     </DialogContent>
   </Dialog>
 
   <!-- Модалка подтверждения при закрытии с изменениями -->
   <AlertDialog :open="showConfirmDialog" @update:open="setShowConfirmDialog">
-    <AlertDialogContent
-      class="bg-background border-border gray:bg-neutral-800 gray:border-neutral-700"
-    >
+    <AlertDialogContent class="bg-background border-border">
       <AlertDialogHeader>
         <AlertDialogTitle>Есть несохраненные изменения</AlertDialogTitle>
         <AlertDialogDescription>
@@ -83,10 +81,12 @@
 <script setup lang="ts">
 import { usePromptsStore } from '@/app/stores/prompts';
 import type { UserPrompt } from '@/app/types';
-import { AI_WORK_MODE_OPTIONS } from '@/app/constants/select-options';
 import { useToast } from '@/app/composables/useToast';
-import Combobox from '@/app/components/Combobox.vue';
 import { useChatSettingsStore } from '@/app/stores/chatSettings';
+import { Input } from '@/app/components/ui/shadcn/input';
+import TextareaResize from '@/app/components/ui/TextareaResize.vue';
+import { Checkbox } from '@/app/components/ui/shadcn/checkbox';
+import { nextTick } from 'vue';
 import {
   Dialog,
   DialogContent,
@@ -126,21 +126,42 @@ const pendingClose = ref(false);
 // Исходные данные для сравнения
 const originalData = ref<Partial<UserPrompt>>({});
 
+// Определяем тип автоматически из роутера или из initial
+const route = useRoute();
+const promptType = computed(() => {
+  // Если тип есть в initial, используем его
+  if (props.initial?.type) {
+    return props.initial.type as 'therapy' | 'habits';
+  }
+  // Иначе определяем из роутера
+  if (route.path.includes('/therapy')) {
+    return 'therapy';
+  }
+  if (route.path.includes('/habits')) {
+    return 'habits';
+  }
+  // По умолчанию therapy
+  return 'therapy';
+});
+
 const form = reactive({
   id: props.initial?.id as number | undefined,
   title: props.initial?.title || '',
-  type: (props.initial?.type || 'therapy') as 'therapy' | 'habits',
+  type: (props.initial?.type || promptType.value) as 'therapy' | 'habits',
   lang: (props.initial?.lang || 'ru') as 'ru' | 'en',
-  content: props.initial?.content || '',
+  content: props.initial?.content || ('' as string),
   isActive: Boolean(props.initial?.isActive),
 });
 
-const textareaRef = ref<HTMLTextAreaElement | null>(null);
-const highlighted = ref('');
+// Убеждаемся, что тип установлен при инициализации
+// Используем nextTick, чтобы убедиться, что promptType вычислен
+nextTick(() => {
+  if (!props.initial?.type && !form.type) {
+    form.type = promptType.value;
+  }
+});
 
-const lengthInfo = computed(
-  () => `${form.title.length}/120 • ${form.content.length}/8000`
-);
+const textareaRef = ref<InstanceType<typeof TextareaResize> | null>(null);
 
 // Проверка на наличие изменений
 const hasChanges = computed(() => {
@@ -156,7 +177,7 @@ const hasChanges = computed(() => {
   return (
     form.title !== (originalData.value.title || '') ||
     form.content !== (originalData.value.content || '') ||
-    form.type !== (originalData.value.type || 'therapy') ||
+    form.type !== (originalData.value.type || promptType.value) ||
     form.lang !== (originalData.value.lang || 'ru') ||
     form.isActive !== Boolean(originalData.value.isActive)
   );
@@ -176,18 +197,33 @@ function saveOriginalData() {
 watch(
   () => props.initial,
   (v) => {
+    const initialType = (v?.type || promptType.value) as 'therapy' | 'habits';
     Object.assign(form, {
       id: (v as any)?.id,
       title: v?.title || '',
-      type: ((v?.type as any) || 'therapy') as any,
+      type: initialType,
       lang: ((v?.lang as any) || 'ru') as any,
-      content: v?.content || '',
+      content: v?.content || ('' as string),
       isActive: Boolean(v?.isActive),
     });
+    // Убеждаемся, что тип установлен для нового промпта
+    if (!v?.id) {
+      form.type = initialType;
+    }
     saveOriginalData();
-    highlight();
   },
   { immediate: true }
+);
+
+// Обновляем тип при изменении роутера
+watch(
+  () => promptType.value,
+  (newType) => {
+    if (!props.initial?.id && !form.id) {
+      // Только для новых промптов
+      form.type = newType;
+    }
+  }
 );
 
 // Отслеживание изменений в форме
@@ -198,15 +234,6 @@ watch(
   },
   { deep: true }
 );
-
-function highlight() {
-  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
-  const html = esc(form.content).replace(
-    /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g,
-    '<span class="text-emerald-400">{{$1}}</span>'
-  );
-  highlighted.value = html;
-}
 
 function onOpenChange(open: boolean) {
   if (!open) {
@@ -247,32 +274,46 @@ function confirmClose() {
 }
 
 async function onSave() {
-  // Валидация и лимит 10
-  if (form.title.trim().length < 1 || form.title.length > 120) {
+  // Валидация
+  const titleTrimmed = (form.title || '').trim();
+  const contentTrimmed = (form.content || '').trim();
+
+  if (titleTrimmed.length < 1 || titleTrimmed.length > 120) {
     return useToast('Ошибка', 'Название 1..120 символов');
   }
-  if (form.content.trim().length < 20 || form.content.length > 8000) {
-    return useToast('Ошибка', 'Текст 20..8000 символов');
+  if (contentTrimmed.length === 0) {
+    return useToast('Ошибка', 'Текст промпта обязателен');
+  }
+  if (contentTrimmed.length > 8000) {
+    return useToast('Ошибка', 'Текст не должен превышать 8000 символов');
+  }
+
+  // Убеждаемся, что тип установлен
+  const promptTypeValue = form.type || promptType.value;
+
+  // Проверяем, что тип валидный
+  if (promptTypeValue !== 'therapy' && promptTypeValue !== 'habits') {
+    return useToast('Ошибка', 'Неверный тип промпта');
   }
 
   try {
     let saved: UserPrompt;
     if (isEdit.value && form.id) {
       saved = await prompts.update(form.id, {
-        title: form.title,
-        type: form.type,
+        title: titleTrimmed,
+        type: promptTypeValue,
         lang: form.lang,
-        content: form.content,
+        content: contentTrimmed,
         isActive: form.isActive,
       } as any);
     } else {
       saved = await prompts.create({
-        title: form.title,
-        type: form.type,
-        lang: form.lang,
-        content: form.content,
-        isActive: form.isActive,
-      });
+        title: titleTrimmed,
+        type: promptTypeValue,
+        lang: form.lang || 'ru',
+        content: contentTrimmed,
+        isActive: form.isActive || false,
+      } as any);
     }
 
     // Эмитим событие с сохранённым промптом
@@ -280,12 +321,14 @@ async function onSave() {
     emit('close');
 
     if (form.isActive) {
-      useToast('Активный промпт обновлён', `Выбран тип: ${form.type}`);
+      useToast('Активный промпт обновлён', 'Промпт успешно обновлён');
     } else {
       useToast('Сохранено', 'Промпт сохранён');
     }
   } catch (e: any) {
-    useToast('Ошибка', String(e?.message || 'Не удалось сохранить'));
+    const errorMessage =
+      e?.message || e?.response?.data?.message || 'Не удалось сохранить';
+    useToast('Ошибка', errorMessage);
   }
 }
 </script>
