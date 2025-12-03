@@ -26,6 +26,9 @@ logs
 # Firebase credentials (НЕ коммитить!)
 *firebase-adminsdk*.json
 
+# Cursor MCP configuration (содержит секреты)
+.cursor/mcp.json
+
 # Capacitor
 /android/
 /ios/
