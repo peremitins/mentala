@@ -27,7 +27,6 @@ export default defineEventHandler(async (event): Promise<TherapyTopicDto[]> => {
   return topics.map((topic) => ({
     id: topic.id,
     name: topic.name,
-    slug: topic.slug ?? null, // ВАЖНО: Возвращаем slug для читаемых URL
     description: topic.description ?? null,
     emoji: topic.emoji ?? null,
     createdAt: topic.createdAt.toISOString(),

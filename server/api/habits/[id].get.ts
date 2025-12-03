@@ -1,4 +1,4 @@
-import { eq, and, or } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { habits } from '@/server/infrastructure/db/schema';
 import { db } from '@/server/infrastructure/db/client';
 import type { HabitDto } from '@/shared/dto/notifications';
@@ -6,7 +6,7 @@ import { getSessionUser } from '@/server/application/auth/session';
 
 /**
  * GET /api/habits/:id
- * Получить конкретную привычку по slug или id (для обратной совместимости)
+ * Получить конкретную привычку по ID
  */
 export default defineEventHandler(async (event): Promise<HabitDto> => {
   const user = await getSessionUser(event);
@@ -18,24 +18,19 @@ export default defineEventHandler(async (event): Promise<HabitDto> => {
   }
   const userId = user.id;
 
-  const identifier = getRouterParam(event, 'id');
-  if (!identifier) {
+  const id = getRouterParam(event, 'id');
+  if (!id) {
     throw createError({
       statusCode: 400,
-      message: 'Habit identifier is required',
+      message: 'Habit ID is required',
     });
   }
 
-  // Ищем по slug или id (для обратной совместимости)
+  // Ищем только по ID
   const [habit] = await db
     .select()
     .from(habits)
-    .where(
-      and(
-        or(eq(habits.id, identifier), eq(habits.slug, identifier)),
-        eq(habits.userId, userId)
-      )
-    )
+    .where(and(eq(habits.id, id), eq(habits.userId, userId)))
     .limit(1);
 
   if (!habit) {
@@ -50,7 +45,6 @@ export default defineEventHandler(async (event): Promise<HabitDto> => {
     name: habit.name,
     intent: habit.intent as 'build' | 'quit' | 'custom',
     habitKey: habit.habitKey ?? null,
-    slug: habit.slug ?? null,
     emoji: habit.emoji ?? null,
     description: habit.description ?? null,
     createdAt: habit.createdAt.toISOString(),

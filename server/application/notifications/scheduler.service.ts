@@ -18,6 +18,8 @@ import {
   habits,
   therapyTopicsCustom,
   users,
+  aiNotificationTextUsage,
+  aiGeneratedNotificationTexts,
 } from '@/server/infrastructure/db/schema';
 import {
   findTemplate,
@@ -27,18 +29,46 @@ import {
 import type {
   NotificationPayload,
   NotificationPreferenceMeta,
+  NotificationSubtype,
 } from '@/shared/dto/notifications';
 import {
   pickCustomTextFromMeta,
   formatNotificationTextWithName,
 } from '@/shared/utils/notificationText';
-import { loadAiGeneratedTexts } from '@/server/application/notifications/ai-generation.service';
+import {
+  loadAiGeneratedTexts,
+  loadAiGeneratedTextsWithId,
+  getUsedTextIndices,
+  getUsedTextHashes,
+  hashNotificationText,
+  checkAndRefillTextPool,
+  type PoolStatus,
+} from '@/server/application/notifications/ai-generation.service';
 import { computeGenerationConfigHash } from '@/server/utils/notification-ai-config-hash';
 import { findHabitByKey } from '@/app/lib/habitsCatalog';
 
 // ==========================================
 // Конфигурация планировщика
 // ==========================================
+
+// Флаг для детального логирования (можно включить через DEBUG_NOTIFICATIONS=true)
+const DEBUG_NOTIFICATIONS = process.env.DEBUG_NOTIFICATIONS === 'true';
+
+// Защита от одновременных вызовов regenerateSlotsForSource для одного источника
+// Ключ: `${userId}:${kind}:${entityKey || 'null'}`
+// Значение: Promise<void> - промис выполняющейся операции
+const activeRegenerations = new Map<string, Promise<void>>();
+
+/**
+ * Получает ключ для отслеживания активных регенераций
+ */
+function getRegenerationKey(
+  userId: number,
+  kind: NotificationKind,
+  entityKey?: string
+): string {
+  return `${userId}:${kind}:${entityKey || 'null'}`;
+}
 
 const SCHEDULE_CONFIG = {
   horizonDays: 1, // Генерируем слоты на 1 день вперёд
@@ -84,6 +114,10 @@ async function getRecentlyUsedTemplateIds(
     eq(notificationSlots.userId, userId),
     eq(notificationSlots.kind, kind),
     gte(notificationSlots.scheduledAt, lookbackDate),
+    or(
+      eq(notificationSlots.status, 'sent'),
+      eq(notificationSlots.status, 'planned')
+    ),
   ];
 
   // Фильтруем по entityKey для более точного отслеживания
@@ -194,144 +228,6 @@ export async function generateAllSlotsForUser(userId: number): Promise<void> {
   );
 }
 
-/**
- * Генерирует глобальное расписание временных меток
- * с равномерным распределением по дню
- * @param totalPerDay - общее количество уведомлений в день
- * @param timezone - IANA timezone пользователя
- * @param days - количество дней вперёд
- * @param activeDays - массив активных дней недели (0 = Воскресенье, 1 = Понедельник, ..., 6 = Суббота)
- * @param timeRangeStart - начало временного окна в минутах (по умолчанию 540 = 09:00)
- * @param timeRangeEnd - конец временного окна в минутах (по умолчанию 1350 = 22:30)
- * @returns массив дат (UTC) для слотов
- */
-function generateGlobalSlotTimes(
-  totalPerDay: number,
-  timezone: string,
-  days: number,
-  activeDays: number[] = [0, 1, 2, 3, 4, 5, 6],
-  timeRangeStart: number = 540,
-  timeRangeEnd: number = 1350,
-  customSlotTimes: (number | null)[] | null = null
-): Date[] {
-  const slots: Date[] = [];
-  const now = new Date();
-  if (totalPerDay <= 0) {
-    return slots;
-  }
-
-  for (let d = 0; d < days; d++) {
-    const date = new Date(now);
-    date.setDate(date.getDate() + d);
-
-    // Проверяем, активен ли этот день недели
-    const dayOfWeek = date.getDay(); // 0 = Воскресенье, 1 = Понедельник, ..., 6 = Суббота
-    if (!activeDays.includes(dayOfWeek)) {
-      continue; // Пропускаем этот день
-    }
-
-    // Вычисляем длительность окна
-    let windowDuration: number;
-    const crossesMidnight = timeRangeStart > timeRangeEnd;
-
-    if (!crossesMidnight) {
-      // Обычный диапазон внутри суток
-      windowDuration = timeRangeEnd - timeRangeStart;
-    } else {
-      // Диапазон через полночь
-      windowDuration = 1440 - timeRangeStart + timeRangeEnd;
-    }
-
-    // Минимальный шаг с учётом minGap
-    const minGap = SCHEDULE_CONFIG.minGapMinutes;
-    const requiredTime = totalPerDay * minGap;
-
-    if (requiredTime > windowDuration) {
-      console.warn(
-        `[Scheduler] Warning: ${totalPerDay} notifications need ${requiredTime} min, but window is ${windowDuration} min`
-      );
-    }
-
-    const manualTimes = Array.isArray(customSlotTimes) ? customSlotTimes : [];
-
-    for (let i = 0; i < totalPerDay; i++) {
-      const manualValue = manualTimes[i];
-      let slotMinutes: number;
-
-      if (manualValue !== null && manualValue !== undefined) {
-        // Приоритет: если задано ручное время, используем его
-        slotMinutes = manualValue;
-      } else {
-        // Автоматическое равномерное распределение времени
-        // Равномерно распределяем уведомления по всему диапазону
-        // НЕ привязываем первое к началу и последнее к концу
-        const step = windowDuration / (totalPerDay + 1); // Шаг между уведомлениями
-        // Начинаем с небольшого отступа от начала, чтобы не было навязчивости
-        slotMinutes = timeRangeStart + step * (i + 1);
-
-        // Нормализуем для диапазона через полночь
-        if (crossesMidnight && slotMinutes >= 1440) {
-          slotMinutes = slotMinutes % 1440;
-        }
-
-        // Применяем джиттер ко всем уведомлениям (кроме ручных) для естественности
-        // Это предотвращает навязчивость и делает распределение более естественным
-        const jitter = (Math.random() * 2 - 1) * SCHEDULE_CONFIG.jitterMinutes;
-        slotMinutes += jitter;
-
-        // Нормализуем время с учетом перехода через полночь
-        slotMinutes = Math.round(slotMinutes);
-
-        // Если диапазон через полночь, нормализуем минуты
-        if (slotMinutes >= 1440) {
-          slotMinutes = slotMinutes % 1440;
-        }
-        if (slotMinutes < 0) {
-          slotMinutes = (slotMinutes % 1440) + 1440;
-        }
-
-        // ВАЖНО: Ограничиваем временным окном - не выходим за границы диапазона
-        if (!crossesMidnight) {
-          // Обычный диапазон: ограничиваем между start и end
-          slotMinutes = Math.max(
-            timeRangeStart,
-            Math.min(timeRangeEnd, slotMinutes)
-          );
-        } else {
-          // Диапазон через полночь: разрешены значения >= start ИЛИ <= end
-          if (slotMinutes < timeRangeStart && slotMinutes > timeRangeEnd) {
-            // Попали в запрещенный промежуток - сдвигаем к ближайшей границе
-            const distToStart = (timeRangeStart - slotMinutes + 1440) % 1440;
-            const distToEnd = (slotMinutes - timeRangeEnd + 1440) % 1440;
-            slotMinutes =
-              distToStart < distToEnd ? timeRangeStart : timeRangeEnd;
-          }
-        }
-      }
-
-      const slotHour = Math.floor(slotMinutes / 60);
-      const slotMin = slotMinutes % 60;
-
-      // Создаём дату в локальном времени пользователя
-      // TODO: использовать библиотеку типа date-fns-tz для правильной работы с TZ
-      const slot = new Date(date);
-      slot.setHours(slotHour, slotMin, 0, 0);
-
-      // Если диапазон через полночь и время раньше полудня, добавляем день
-      if (crossesMidnight && slotMinutes < timeRangeEnd) {
-        slot.setDate(slot.getDate() + 1);
-      }
-
-      // Пропускаем слоты в прошлом
-      if (slot > now) {
-        slots.push(slot);
-      }
-    }
-  }
-
-  return slots;
-}
-
 // ==========================================
 // Генерация слотов для конкретного источника (legacy, используется для совместимости)
 // ==========================================
@@ -420,18 +316,18 @@ export async function generateSlotsForUser(
 
   await db.delete(notificationSlots).where(and(...deleteConditions));
 
-  // 4. Получаем habitKey и intent
-  let habitKey: string | undefined;
-  let intent: 'build' | 'quit' | 'custom' | undefined;
+  // 4. Получаем intent и entityDisplayName
+  let intent: 'build' | 'quit' | undefined;
+  let entityDisplayName: string | null = null; // Читаемое название для удобства разработчиков
 
   if (kind === 'habits' && entityKey) {
-    // Сначала проверяем, является ли entityKey кастомной привычкой (поиск по id или slug)
+    // Проверяем, является ли entityKey кастомной привычкой (ID в БД)
     const [customHabit] = await db
       .select()
       .from(habits)
       .where(
         and(
-          or(eq(habits.id, entityKey), eq(habits.slug, entityKey)),
+          eq(habits.id, entityKey), // Для кастомных сущностей entityKey = ID
           eq(habits.userId, userId)
         )
       )
@@ -439,31 +335,47 @@ export async function generateSlotsForUser(
 
     if (customHabit) {
       // Это кастомная привычка пользователя
-      habitKey = customHabit.habitKey || customHabit.id;
-      intent = customHabit.intent as 'build' | 'quit' | 'custom';
+      intent =
+        customHabit.intent === 'build' || customHabit.intent === 'quit'
+          ? customHabit.intent
+          : 'build'; // Fallback на 'build' если intent неожиданный
+      entityDisplayName = customHabit.name;
       console.log(
-        `[generateSlotsForUser] ✅ Found custom habit: habitKey="${habitKey}", intent=${intent} (name: "${customHabit.name}")`
+        `[generateSlotsForUser] ✅ Found custom habit: entityKey="${entityKey}", intent=${intent} (name: "${customHabit.name}")`
       );
     } else {
       // Это готовый шаблон (water, meditation, nutrition и т.д.)
-      // Используем entityKey как habitKey
-      habitKey = entityKey;
-
       // Пробуем найти в каталоге привычек (единый источник истины)
-      const catalogHabit = findHabitByKey(habitKey);
+      const catalogHabit = findHabitByKey(entityKey);
       if (catalogHabit) {
         intent = catalogHabit.intent;
+        entityDisplayName = catalogHabit.name;
         console.log(
-          `[generateSlotsForUser] ✅ Found in catalog: habitKey="${habitKey}", intent=${intent} (name: "${catalogHabit.name}")`
+          `[generateSlotsForUser] ✅ Found in catalog: entityKey="${entityKey}", intent=${intent} (name: "${catalogHabit.name}")`
         );
       } else {
-        // Не найдено в каталоге - значит это кастомная привычка без записи в БД
-        // или шаблонная без шаблонов
-        intent = 'custom';
+        // Не найдено в каталоге - это несуществующий шаблон
+        // Не устанавливаем intent, чтобы не фильтровать шаблоны
+        intent = undefined;
         console.log(
-          `[generateSlotsForUser] ⚠️ HabitKey="${habitKey}" not found in catalog, using intent=custom`
+          `[generateSlotsForUser] ⚠️ EntityKey="${entityKey}" not found in catalog, intent will be undefined`
         );
       }
+    }
+  } else if (kind === 'therapy' && entityKey) {
+    // Для терапии также определяем entityDisplayName
+    const [customTopic] = await db
+      .select()
+      .from(therapyTopicsCustom)
+      .where(
+        and(
+          eq(therapyTopicsCustom.id, entityKey),
+          eq(therapyTopicsCustom.userId, userId)
+        )
+      )
+      .limit(1);
+    if (customTopic) {
+      entityDisplayName = customTopic.name;
     }
   }
 
@@ -503,19 +415,15 @@ export async function generateSlotsForUser(
       // Подбираем случайный шаблон
       // addressing и tone больше не используются в фильтрации, берутся из БД для выбора текста
       template = findTemplate(kind, {
-        entityKey:
-          kind === 'therapy' ? entityKey : (habitKey as any) || entityKey,
-        intent, // Передаем intent из БД (build/quit/custom)
-        habitKey: kind === 'habits' ? (habitKey as any) : undefined, // Для обратной совместимости
-        subtype: prefs.subtype as
-          | 'reminder'
-          | 'informational'
-          | 'motivational'
-          | undefined,
+        entityKey: entityKey, // Универсальный идентификатор
+        intent, // Только для habits (build/quit)
+        subtype: prefs.subtype as NotificationSubtype | undefined,
       });
 
       if (!template) {
-        console.warn(`[Scheduler] No template found for user ${userId}`);
+        console.warn(
+          `[Scheduler] ❌ No template found for user ${userId}, kind=${kind}, entityKey=${entityKey || 'none'}, subtype=${prefs.subtype || 'none'}, intent=${intent || 'none'}`
+        );
         continue;
       }
 
@@ -538,6 +446,7 @@ export async function generateSlotsForUser(
       data: {
         kind,
         entityKey: entityKey ?? null,
+        entityDisplayName: entityDisplayName ?? undefined, // Читаемое название для удобства разработчиков
         slotId: nanoid(), // будет переопределено ниже
       },
     };
@@ -549,10 +458,8 @@ export async function generateSlotsForUser(
       id: slotId,
       userId,
       kind,
-      entityKey:
-        kind === 'habits'
-          ? (habitKey ?? entityKey ?? null)
-          : (entityKey ?? null), // Сохраняем entityKey (для habits - habitKey, для therapy - entityKey)
+      entityKey: entityKey ?? null, // Универсальный идентификатор сущности
+      entityDisplayName: entityDisplayName, // Читаемое название для удобства разработчиков
       scheduledAt,
       payload,
       templateId: templateIdForSlot,
@@ -759,6 +666,8 @@ export async function needsSlotRegeneration(userId: number): Promise<boolean> {
 
   // Если есть ночной режим, проверяем, прошло ли уже час после окончания диапазона
   if (hasNightMode && latestRangeEnd > 0) {
+    // TODO: Учесть таймзону пользователя (user.timezone) для корректной работы night mode
+    // Сейчас используется локальное время сервера, что может привести к рассинхрону
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
     const generationTime = latestRangeEnd + 60; // Через час после окончания (в минутах)
 
@@ -909,8 +818,6 @@ async function preventSimultaneousNotifications(userId: number): Promise<void> {
 
   // Создаем карту диапазонов для быстрого доступа
   // Ключ: kind:entityKey, значение: {start, end, crossesMidnight}
-  // ВАЖНО: В слотах entityKey могут быть в формате slug, а в preferences - в формате ID
-  // Поэтому создаем карту с несколькими ключами для каждого источника
   const rangeMap = new Map<
     string,
     { start: number; end: number; crossesMidnight: boolean }
@@ -918,31 +825,14 @@ async function preventSimultaneousNotifications(userId: number): Promise<void> {
 
   // Получаем все привычки и темы пользователя одним запросом для оптимизации
   const userHabits = await db
-    .select({ id: habits.id, slug: habits.slug })
+    .select({ id: habits.id })
     .from(habits)
     .where(eq(habits.userId, userId));
 
   const userTopics = await db
-    .select({ id: therapyTopicsCustom.id, slug: therapyTopicsCustom.slug })
+    .select({ id: therapyTopicsCustom.id })
     .from(therapyTopicsCustom)
     .where(eq(therapyTopicsCustom.userId, userId));
-
-  // Создаем карты для быстрого поиска slug по ID
-  const habitSlugMap = new Map<string, string>();
-  for (const habit of userHabits) {
-    if (habit.slug && habit.slug !== habit.id) {
-      habitSlugMap.set(habit.id, habit.slug);
-      habitSlugMap.set(habit.slug, habit.slug); // Также добавляем slug -> slug для удобства
-    }
-  }
-
-  const topicSlugMap = new Map<string, string>();
-  for (const topic of userTopics) {
-    if (topic.slug && topic.slug !== topic.id) {
-      topicSlugMap.set(topic.id, topic.slug);
-      topicSlugMap.set(topic.slug, topic.slug); // Также добавляем slug -> slug для удобства
-    }
-  }
 
   // Заполняем карту диапазонов
   for (const pref of allPrefs) {
@@ -957,24 +847,6 @@ async function preventSimultaneousNotifications(userId: number): Promise<void> {
     // Добавляем основной ключ
     const mainKey = `${pref.kind}:${pref.entityKey || 'null'}`;
     rangeMap.set(mainKey, range);
-
-    // Для привычек: добавляем ключ с slug, если он отличается от ID
-    if (pref.kind === 'habits' && pref.entityKey) {
-      const slug = habitSlugMap.get(pref.entityKey);
-      if (slug && slug !== pref.entityKey) {
-        const slugKey = `${pref.kind}:${slug}`;
-        rangeMap.set(slugKey, range);
-      }
-    }
-
-    // Для терапии: добавляем ключ с slug, если он отличается от ID
-    if (pref.kind === 'therapy' && pref.entityKey) {
-      const slug = topicSlugMap.get(pref.entityKey);
-      if (slug && slug !== pref.entityKey) {
-        const slugKey = `${pref.kind}:${slug}`;
-        rangeMap.set(slugKey, range);
-      }
-    }
   }
 
   let shiftedCount = 0;
@@ -1182,1439 +1054,1654 @@ export async function regenerateSlotsForSource(
   }
 ): Promise<void> {
   const { entityKey } = options || {};
+  const regenerationKey = getRegenerationKey(userId, kind, entityKey);
 
-  console.log(`[Scheduler] ========== REGENERATING SLOTS ==========`);
-  console.log(
-    `[Scheduler] Regenerating slots for source: user ${userId}, kind: ${kind}, entityKey: ${entityKey || 'none'} (should be readable)`
-  );
-
-  // Проверяем, что источник существует
-  // ВАЖНО: Ищем preferences по ID и slug одновременно, так как в БД может быть сохранен slug
-  const conditions = [
-    eq(notificationPreferences.userId, userId),
-    eq(notificationPreferences.kind, kind),
-  ];
-
-  if (entityKey) {
-    // Для кастомных сущностей ищем по ID и slug одновременно
-    if (kind === 'habits') {
-      const [habit] = await db
-        .select({ id: habits.id, slug: habits.slug })
-        .from(habits)
-        .where(
-          and(
-            or(eq(habits.id, entityKey), eq(habits.slug, entityKey)),
-            eq(habits.userId, userId)
-          )
-        )
-        .limit(1);
-
-      if (habit) {
-        const habitSlug = habit.slug;
-        if (
-          habitSlug &&
-          typeof habitSlug === 'string' &&
-          habitSlug !== habit.id
-        ) {
-          // Если slug отличается от id, ищем по обоим
-          conditions.push(
-            or(
-              eq(notificationPreferences.entityKey, habit.id),
-              eq(notificationPreferences.entityKey, habitSlug)
-            )!
-          );
-        } else {
-          // Если slug совпадает с id или отсутствует, ищем только по id
-          conditions.push(eq(notificationPreferences.entityKey, habit.id));
-        }
-      } else {
-        // Готовый шаблон - ищем по entityKey как есть
-        conditions.push(eq(notificationPreferences.entityKey, entityKey));
-      }
-    } else if (kind === 'therapy') {
-      const [topic] = await db
-        .select({ id: therapyTopicsCustom.id, slug: therapyTopicsCustom.slug })
-        .from(therapyTopicsCustom)
-        .where(
-          and(
-            or(
-              eq(therapyTopicsCustom.id, entityKey),
-              eq(therapyTopicsCustom.slug, entityKey)
-            ),
-            eq(therapyTopicsCustom.userId, userId)
-          )
-        )
-        .limit(1);
-
-      if (topic) {
-        const topicSlug = topic.slug;
-        if (
-          topicSlug &&
-          typeof topicSlug === 'string' &&
-          topicSlug !== topic.id
-        ) {
-          // Если slug отличается от id, ищем по обоим
-          conditions.push(
-            or(
-              eq(notificationPreferences.entityKey, topic.id),
-              eq(notificationPreferences.entityKey, topicSlug)
-            )!
-          );
-        } else {
-          // Если slug совпадает с id или отсутствует, ищем только по id
-          conditions.push(eq(notificationPreferences.entityKey, topic.id));
-        }
-      } else {
-        // Готовый шаблон - ищем по entityKey как есть
-        conditions.push(eq(notificationPreferences.entityKey, entityKey));
-      }
-    } else {
-      // Для других типов ищем по entityKey как есть
-      conditions.push(eq(notificationPreferences.entityKey, entityKey));
-    }
-  } else {
-    // Общие настройки (без entityKey)
-    conditions.push(isNull(notificationPreferences.entityKey));
-  }
-
-  const [sourcePref] = await db
-    .select()
-    .from(notificationPreferences)
-    .where(and(...conditions))
-    .limit(1);
-
-  if (!sourcePref) {
-    console.warn(
-      `[Scheduler] ❌ Source not found for user ${userId}, kind: ${kind}, entityKey: ${entityKey || 'none'}. Conditions: ${JSON.stringify(conditions.map((c) => c.toString()))}`
+  // Проверяем, не выполняется ли уже регенерация для этого источника
+  const existingRegeneration = activeRegenerations.get(regenerationKey);
+  if (existingRegeneration) {
+    console.log(
+      `[Scheduler] ⏳ Regeneration already in progress for source: user ${userId}, kind: ${kind}, entityKey: ${entityKey || 'none'}. Waiting for completion...`
     );
-    return;
-  }
-
-  console.log(
-    `[Scheduler] ✅ Found source preference: id=${sourcePref.id}, entityKey=${sourcePref.entityKey || 'none'}, enabled=${sourcePref.enabled}, meta=${JSON.stringify(sourcePref.meta)}`
-  );
-
-  // Получаем историю использованных шаблонов ДО удаления слотов
-  // Это шаблоны, которые уже были использованы в отправленных слотах
-  // ВАЖНО: Увеличиваем lookbackDays до 60 дней и limit до 500, чтобы учесть все отправленные слоты
-  const recentlyUsedTemplateIds = await getRecentlyUsedTemplateIds(
-    userId,
-    kind,
-    {
-      entityKey: entityKey ?? null,
-    },
-    60 // Увеличиваем период до 60 дней для более полного отслеживания
-  );
-
-  // Отслеживаем использованные шаблоны в рамках ТЕКУЩЕЙ генерации слотов
-  // Это предотвращает дублирование текстов в соседних слотах
-  const usedTemplatesInCurrentGeneration = new Set<string>(
-    recentlyUsedTemplateIds
-  );
-
-  // ВАЖНО: Также отслеживаем использованные ТЕКСТЫ (не только templateId)
-  // Это предотвращает дублирование одинаковых текстов из разных шаблонов
-  const usedTextsInCurrentGeneration = new Set<string>();
-
-  console.log(
-    `[Scheduler] 📋 Recently used templates: ${recentlyUsedTemplateIds.length} templates, usedTemplatesInCurrentGeneration size: ${usedTemplatesInCurrentGeneration.size}`
-  );
-
-  const now = new Date();
-
-  // Удаляем только слоты для этого источника
-  // ВАЖНО: Ищем слоты по ID и slug одновременно, так как entityKey может быть как ID, так и slug
-  // КРИТИЧЕСКИ ВАЖНО: Удаляем ТОЛЬКО слоты со статусом 'planned' и scheduledAt > now
-  // Отправленные слоты (status: 'sent') НИКОГДА не должны удаляться или изменяться
-  const deleteConditions = [
-    eq(notificationSlots.userId, userId),
-    eq(notificationSlots.kind, kind),
-    eq(notificationSlots.status, 'planned'), // ТОЛЬКО planned, НЕ sent!
-    gt(notificationSlots.scheduledAt, now), // ТОЛЬКО будущие слоты
-  ];
-
-  if (entityKey) {
-    // Для кастомных сущностей ищем по ID и slug одновременно
-    if (kind === 'habits') {
-      const [habit] = await db
-        .select({ id: habits.id, slug: habits.slug })
-        .from(habits)
-        .where(
-          and(
-            or(eq(habits.id, entityKey), eq(habits.slug, entityKey)),
-            eq(habits.userId, userId)
-          )
-        )
-        .limit(1);
-
-      if (habit) {
-        // Найдена кастомная привычка - удаляем слоты по ID и slug
-        const habitSlug = habit.slug;
-        if (
-          habitSlug &&
-          typeof habitSlug === 'string' &&
-          habitSlug !== habit.id
-        ) {
-          // Если slug отличается от id, удаляем по обоим
-          deleteConditions.push(
-            or(
-              eq(notificationSlots.entityKey, habit.id),
-              eq(notificationSlots.entityKey, habitSlug)
-            )!
-          );
-        } else {
-          // Если slug совпадает с id или отсутствует, удаляем только по id
-          deleteConditions.push(eq(notificationSlots.entityKey, habit.id));
-        }
-      } else {
-        // Готовый шаблон - удаляем по entityKey как есть
-        deleteConditions.push(eq(notificationSlots.entityKey, entityKey));
-      }
-    } else if (kind === 'therapy') {
-      const [topic] = await db
-        .select({ id: therapyTopicsCustom.id, slug: therapyTopicsCustom.slug })
-        .from(therapyTopicsCustom)
-        .where(
-          and(
-            or(
-              eq(therapyTopicsCustom.id, entityKey),
-              eq(therapyTopicsCustom.slug, entityKey)
-            ),
-            eq(therapyTopicsCustom.userId, userId)
-          )
-        )
-        .limit(1);
-
-      if (topic) {
-        // Найдена кастомная тема - удаляем слоты по ID и slug
-        const topicSlug = topic.slug;
-        if (
-          topicSlug &&
-          typeof topicSlug === 'string' &&
-          topicSlug !== topic.id
-        ) {
-          // Если slug отличается от id, удаляем по обоим
-          deleteConditions.push(
-            or(
-              eq(notificationSlots.entityKey, topic.id),
-              eq(notificationSlots.entityKey, topicSlug)
-            )!
-          );
-        } else {
-          // Если slug совпадает с id или отсутствует, удаляем только по id
-          deleteConditions.push(eq(notificationSlots.entityKey, topic.id));
-        }
-      } else {
-        // Готовый шаблон - удаляем по entityKey как есть
-        deleteConditions.push(eq(notificationSlots.entityKey, entityKey));
-      }
-    } else {
-      // Для других типов удаляем по entityKey как есть
-      deleteConditions.push(eq(notificationSlots.entityKey, entityKey));
+    // Ждем завершения существующей операции
+    try {
+      await existingRegeneration;
+      console.log(
+        `[Scheduler] ✅ Previous regeneration completed, skipping duplicate call: user ${userId}, kind: ${kind}, entityKey: ${entityKey || 'none'}`
+      );
+      return;
+    } catch (error) {
+      // Если предыдущая операция завершилась с ошибкой, продолжаем
+      console.warn(
+        `[Scheduler] ⚠️ Previous regeneration failed, starting new one: user ${userId}, kind: ${kind}, entityKey: ${entityKey || 'none'}`,
+        error
+      );
     }
-  } else {
-    deleteConditions.push(isNull(notificationSlots.entityKey));
   }
 
-  // ВАЖНО: Проверяем сколько отправленных слотов есть для этого источника (для логирования)
-  const [sentSlotsCheck] = await db
-    .select({ count: count() })
-    .from(notificationSlots)
-    .where(
-      and(
+  // Создаем новую операцию регенерации
+  const regenerationPromise: Promise<void> = (async () => {
+    try {
+      if (DEBUG_NOTIFICATIONS) {
+        console.log(`[Scheduler] ========== REGENERATING SLOTS ==========`);
+      }
+      console.log(
+        `[Scheduler] Regenerating slots for source: user ${userId}, kind: ${kind}, entityKey: ${entityKey || 'none'} (should be readable)`
+      );
+
+      // Проверяем, что источник существует
+      const conditions = [
+        eq(notificationPreferences.userId, userId),
+        eq(notificationPreferences.kind, kind),
+      ];
+
+      if (entityKey) {
+        // Для кастомных сущностей ищем по ID
+        if (kind === 'habits') {
+          const [habit] = await db
+            .select({ id: habits.id })
+            .from(habits)
+            .where(
+              and(
+                eq(habits.id, entityKey), // Для кастомных сущностей entityKey = ID
+                eq(habits.userId, userId)
+              )
+            )
+            .limit(1);
+
+          if (habit) {
+            // Для кастомных сущностей entityKey = ID
+            conditions.push(eq(notificationPreferences.entityKey, habit.id));
+          } else {
+            // Готовый шаблон - ищем по entityKey как есть
+            conditions.push(eq(notificationPreferences.entityKey, entityKey));
+          }
+        } else if (kind === 'therapy') {
+          const [topic] = await db
+            .select({
+              id: therapyTopicsCustom.id,
+            })
+            .from(therapyTopicsCustom)
+            .where(
+              and(
+                eq(therapyTopicsCustom.id, entityKey), // Для кастомных сущностей entityKey = ID
+                eq(therapyTopicsCustom.userId, userId)
+              )
+            )
+            .limit(1);
+
+          if (topic) {
+            // Для кастомных сущностей entityKey = ID
+            conditions.push(eq(notificationPreferences.entityKey, topic.id));
+          } else {
+            // Готовый шаблон - ищем по entityKey как есть
+            conditions.push(eq(notificationPreferences.entityKey, entityKey));
+          }
+        } else {
+          // Для других типов ищем по entityKey как есть
+          conditions.push(eq(notificationPreferences.entityKey, entityKey));
+        }
+      } else {
+        // Общие настройки (без entityKey)
+        conditions.push(isNull(notificationPreferences.entityKey));
+      }
+
+      const [sourcePref] = await db
+        .select()
+        .from(notificationPreferences)
+        .where(and(...conditions))
+        .limit(1);
+
+      if (!sourcePref) {
+        console.warn(
+          `[Scheduler] ❌ Source not found for user ${userId}, kind: ${kind}, entityKey: ${entityKey || 'none'}. Conditions: ${JSON.stringify(conditions.map((c) => c.toString()))}`
+        );
+        return;
+      }
+
+      console.log(
+        `[Scheduler] ✅ Found source preference: id=${sourcePref.id}, entityKey=${sourcePref.entityKey || 'none'}, enabled=${sourcePref.enabled}, meta=${JSON.stringify(sourcePref.meta)}`
+      );
+
+      // Получаем историю использованных шаблонов ДО удаления слотов
+      // Это шаблоны, которые уже были использованы в отправленных слотах
+      // ВАЖНО: Увеличиваем lookbackDays до 60 дней и limit до 500, чтобы учесть все отправленные слоты
+      const recentlyUsedTemplateIds = await getRecentlyUsedTemplateIds(
+        userId,
+        kind,
+        {
+          entityKey: entityKey ?? null,
+        },
+        60 // Увеличиваем период до 60 дней для более полного отслеживания
+      );
+
+      // Отслеживаем использованные шаблоны в рамках ТЕКУЩЕЙ генерации слотов
+      // Это предотвращает дублирование текстов в соседних слотах
+      const usedTemplatesInCurrentGeneration = new Set<string>(
+        recentlyUsedTemplateIds
+      );
+
+      // ВАЖНО: Также отслеживаем использованные ТЕКСТЫ (не только templateId)
+      // Это предотвращает дублирование одинаковых текстов из разных шаблонов
+      const usedTextsInCurrentGeneration = new Set<string>();
+
+      console.log(
+        `[Scheduler] 📋 Recently used templates: ${recentlyUsedTemplateIds.length} templates, usedTemplatesInCurrentGeneration size: ${usedTemplatesInCurrentGeneration.size}`
+      );
+
+      const now = new Date();
+
+      // Удаляем только слоты для этого источника
+      // КРИТИЧЕСКИ ВАЖНО: Удаляем ТОЛЬКО слоты со статусом 'planned' и scheduledAt > now
+      // Отправленные слоты (status: 'sent') НИКОГДА не должны удаляться или изменяться
+      const deleteConditions = [
         eq(notificationSlots.userId, userId),
         eq(notificationSlots.kind, kind),
-        eq(notificationSlots.status, 'sent')
-      )
-    );
-
-  const deletedResult = await db
-    .delete(notificationSlots)
-    .where(and(...deleteConditions));
-  const deletedCount = deletedResult.rowCount || 0;
-
-  console.log(
-    `[Scheduler] Removed ${deletedCount} old PLANNED slots for source: user ${userId}, kind: ${kind}, entityKey: ${entityKey || 'none'}`
-  );
-  console.log(
-    `[Scheduler] ✅ Sent slots preserved: ${sentSlotsCheck?.count || 0} sent slots for this source were NOT affected (as expected)`
-  );
-
-  // Если источник отключен, просто удаляем его слоты (уже удалили выше)
-  if (!sourcePref.enabled) {
-    console.log(
-      `[Scheduler] Source disabled, no new slots created: user ${userId}, kind: ${kind}`
-    );
-    return;
-  }
-
-  // Получаем все активные preferences для расчета общего количества уведомлений
-  const allPrefs = await db
-    .select()
-    .from(notificationPreferences)
-    .where(
-      and(
-        eq(notificationPreferences.userId, userId),
-        eq(notificationPreferences.enabled, true)
-      )
-    );
-
-  if (allPrefs.length === 0) {
-    console.log(`[Scheduler] No active preferences for user ${userId}`);
-    return;
-  }
-
-  // Получаем глобальные настройки пользователя
-  const [globalPrefs] = await db
-    .select()
-    .from(userPreferences)
-    .where(eq(userPreferences.userId, userId))
-    .limit(1);
-
-  const addressing = globalPrefs?.addressing || 'informal';
-  const [userRecord] = await db
-    .select({ name: users.name })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
-  const userName = userRecord?.name ?? null;
-
-  // Генерируем временные метки для нового источника
-  const timezone = sourcePref.timezone || 'Europe/Moscow';
-  const activeDays = (sourcePref.activeDays as number[]) ?? [
-    0, 1, 2, 3, 4, 5, 6,
-  ];
-  const timeRangeStart = sourcePref.timeRangeStart ?? 540; // 09:00
-  const timeRangeEnd = sourcePref.timeRangeEnd ?? 1350; // 22:30
-  const customSlotTimes =
-    (sourcePref.customSlotTimes as (number | null)[] | null) ?? null;
-  let newSlotTimes = generateSlotTimes(
-    sourcePref.timesPerDay,
-    timezone,
-    SCHEDULE_CONFIG.horizonDays,
-    activeDays,
-    timeRangeStart,
-    timeRangeEnd,
-    customSlotTimes
-  );
-
-  // ВАЖНО: Сортируем слоты по времени для детерминированного порядка
-  // Это обеспечит одинаковый slotIndex для одного и того же времени при каждой регенерации
-  newSlotTimes.sort((a, b) => a.getTime() - b.getTime());
-
-  console.log(
-    `[Scheduler] Generated ${newSlotTimes.length} time slots for regeneration: user ${userId}, kind: ${kind}, timesPerDay: ${sourcePref.timesPerDay}, timezone: ${timezone}, activeDays: ${activeDays.join(',')}, timeRange: ${timeRangeStart}-${timeRangeEnd}`
-  );
-
-  if (newSlotTimes.length === 0) {
-    console.warn(
-      `[Scheduler] ⚠️ No time slots generated! This might be due to invalid time range or active days. user ${userId}, kind: ${kind}`
-    );
-    return;
-  }
-
-  // Получаем habitKey и intent для этого источника
-  // ВАЖНО: Для кастомных привычек используем slug для entityKey в слотах (читаемый URL)
-  let habitKey: string | undefined;
-  let intent: 'build' | 'quit' | 'custom' | undefined;
-  let normalizedEntityKeyForSlot: string | null = null; // Для сохранения в notification_slots (читаемый slug)
-  let isCustomHabit = false; // Флаг: найдена ли привычка в таблице habits (кастомная привычка)
-
-  if (kind === 'habits' && entityKey) {
-    // Сначала проверяем, является ли entityKey кастомной привычкой (поиск по id или slug)
-    const [customHabit] = await db
-      .select()
-      .from(habits)
-      .where(
-        and(
-          or(eq(habits.id, entityKey), eq(habits.slug, entityKey)),
-          eq(habits.userId, userId)
-        )
-      )
-      .limit(1);
-
-    if (customHabit) {
-      // Это кастомная привычка пользователя
-      isCustomHabit = true; // ВАЖНО: Устанавливаем флаг
-      habitKey = customHabit.habitKey || customHabit.id;
-      intent = customHabit.intent as 'build' | 'quit' | 'custom';
-      // ВАЖНО: Для кастомных привычек используем slug для entityKey в слотах (читаемый URL)
-      normalizedEntityKeyForSlot = customHabit.slug || customHabit.id;
-      console.log(
-        `[regenerateSlotsForSource] ✅ Found custom habit: habitKey="${habitKey}", intent=${intent}, slug="${customHabit.slug}", normalizedEntityKeyForSlot="${normalizedEntityKeyForSlot}" (name: "${customHabit.name}")`
-      );
-    } else {
-      // Это готовый шаблон (water, meditation, nutrition и т.д.)
-      // Используем entityKey как habitKey
-      isCustomHabit = false; // ВАЖНО: Это шаблон, не кастомная привычка
-      habitKey = entityKey;
-      normalizedEntityKeyForSlot = entityKey; // Для шаблонов entityKey уже читаемый
-
-      // Пробуем найти в каталоге привычек (единый источник истины)
-      const catalogHabit = findHabitByKey(habitKey);
-      if (catalogHabit) {
-        intent = catalogHabit.intent;
-        console.log(
-          `[regenerateSlotsForSource] ✅ Found in catalog: habitKey="${habitKey}", intent=${intent} (name: "${catalogHabit.name}")`
-        );
-      } else {
-        // Не найдено в каталоге - значит это кастомная привычка без записи в БД
-        // или шаблонная без шаблонов
-        intent = 'custom';
-        console.log(
-          `[regenerateSlotsForSource] ⚠️ HabitKey="${habitKey}" not found in catalog, using intent=custom`
-        );
-      }
-    }
-  }
-
-  // Определяем фактический subtype
-  // Для кастомных привычек subtype всегда null, не обрабатываем его
-  let actualSubtype = sourcePref.subtype;
-
-  console.log(
-    `[Scheduler] 🔍 Subtype determination: sourcePref.subtype=${sourcePref.subtype}, initial actualSubtype=${actualSubtype}, kind=${kind}, entityKey=${entityKey || 'none'}`
-  );
-
-  // Для терапии определяем, кастомная ли это тема
-  let isCustomTherapy = false;
-  if (kind === 'therapy' && entityKey) {
-    const [topic] = await db
-      .select()
-      .from(therapyTopicsCustom)
-      .where(
-        and(
-          or(
-            eq(therapyTopicsCustom.id, entityKey),
-            eq(therapyTopicsCustom.slug, entityKey)
-          ),
-          eq(therapyTopicsCustom.userId, userId)
-        )
-      )
-      .limit(1);
-    isCustomTherapy = !!topic;
-    if (topic) {
-      // ВАЖНО: Для кастомной терапии используем slug для entityKey в слотах (читаемый URL)
-      normalizedEntityKeyForSlot = topic.slug || topic.id;
-    } else {
-      // Готовый шаблон - entityKey уже читаемый
-      normalizedEntityKeyForSlot = entityKey;
-    }
-  } else if (kind === 'therapy' && !entityKey) {
-    // Общие настройки для терапии
-    normalizedEntityKeyForSlot = null;
-  }
-
-  // ВАЖНО: Для детерминированного выбора subtype при 'mixed' используем дату и userId
-  // Это обеспечит одинаковый выбор при каждой регенерации для одного пользователя
-  if (!isCustomHabit) {
-    // Для готовых шаблонов обрабатываем 'mixed' и fallback для quit-привычек
-    if (sourcePref.subtype === 'mixed') {
-      const subtypes: Array<'reminder' | 'informational' | 'motivational'> = [
-        'reminder',
-        'informational',
-        'motivational',
+        eq(notificationSlots.status, 'planned'), // ТОЛЬКО planned, НЕ sent!
+        gt(notificationSlots.scheduledAt, now), // ТОЛЬКО будущие слоты
       ];
-      // Детерминированный выбор на основе userId и даты (для стабильности)
-      const now = new Date();
-      const dayOfYear = Math.floor(
-        (now.getTime() - new Date(now.getFullYear(), 0, 0).getTime()) /
-          (1000 * 60 * 60 * 24)
-      );
-      const deterministicIndex = (userId + dayOfYear) % subtypes.length;
-      actualSubtype = subtypes[deterministicIndex];
+
+      if (entityKey) {
+        // Для кастомных сущностей ищем по ID
+        if (kind === 'habits') {
+          const [habit] = await db
+            .select({ id: habits.id })
+            .from(habits)
+            .where(
+              and(
+                eq(habits.id, entityKey), // Для кастомных сущностей entityKey = ID
+                eq(habits.userId, userId)
+              )
+            )
+            .limit(1);
+
+          if (habit) {
+            // Для кастомных сущностей entityKey = ID
+            deleteConditions.push(eq(notificationSlots.entityKey, habit.id));
+          } else {
+            // Готовый шаблон - удаляем по entityKey как есть
+            deleteConditions.push(eq(notificationSlots.entityKey, entityKey));
+          }
+        } else if (kind === 'therapy') {
+          const [topic] = await db
+            .select({
+              id: therapyTopicsCustom.id,
+            })
+            .from(therapyTopicsCustom)
+            .where(
+              and(
+                eq(therapyTopicsCustom.id, entityKey), // Для кастомных сущностей entityKey = ID
+                eq(therapyTopicsCustom.userId, userId)
+              )
+            )
+            .limit(1);
+
+          if (topic) {
+            // Найдена кастомная тема - удаляем слоты по ID
+            deleteConditions.push(eq(notificationSlots.entityKey, topic.id));
+          } else {
+            // Готовый шаблон - удаляем по entityKey как есть
+            deleteConditions.push(eq(notificationSlots.entityKey, entityKey));
+          }
+        } else {
+          // Для других типов удаляем по entityKey как есть
+          deleteConditions.push(eq(notificationSlots.entityKey, entityKey));
+        }
+      } else {
+        deleteConditions.push(isNull(notificationSlots.entityKey));
+      }
+
+      // ВАЖНО: Проверяем сколько отправленных слотов есть для этого источника (для логирования)
+      const sentSlotsCheckConditions = [
+        eq(notificationSlots.userId, userId),
+        eq(notificationSlots.kind, kind),
+        eq(notificationSlots.status, 'sent'),
+      ];
+
+      // Добавляем фильтр по entityKey (такой же, как в deleteConditions)
+      if (entityKey) {
+        if (kind === 'habits') {
+          const [habit] = await db
+            .select({ id: habits.id })
+            .from(habits)
+            .where(
+              and(
+                eq(habits.id, entityKey), // Для кастомных сущностей entityKey = ID
+                eq(habits.userId, userId)
+              )
+            )
+            .limit(1);
+
+          if (habit) {
+            // Для кастомных сущностей entityKey = ID
+            sentSlotsCheckConditions.push(
+              eq(notificationSlots.entityKey, habit.id)
+            );
+          } else {
+            // Готовый шаблон - ищем по entityKey как есть
+            sentSlotsCheckConditions.push(
+              eq(notificationSlots.entityKey, entityKey)
+            );
+          }
+        } else if (kind === 'therapy') {
+          const [topic] = await db
+            .select({
+              id: therapyTopicsCustom.id,
+            })
+            .from(therapyTopicsCustom)
+            .where(
+              and(
+                eq(therapyTopicsCustom.id, entityKey), // Для кастомных сущностей entityKey = ID
+                eq(therapyTopicsCustom.userId, userId)
+              )
+            )
+            .limit(1);
+
+          if (topic) {
+            // Ищем только по ID
+            sentSlotsCheckConditions.push(
+              eq(notificationSlots.entityKey, topic.id)
+            );
+          } else {
+            // Готовый шаблон - ищем по entityKey как есть
+            sentSlotsCheckConditions.push(
+              eq(notificationSlots.entityKey, entityKey)
+            );
+          }
+        } else {
+          // Для других типов ищем по entityKey как есть
+          sentSlotsCheckConditions.push(
+            eq(notificationSlots.entityKey, entityKey)
+          );
+        }
+      } else {
+        sentSlotsCheckConditions.push(isNull(notificationSlots.entityKey));
+      }
+
+      const [sentSlotsCheck] = await db
+        .select({ count: count() })
+        .from(notificationSlots)
+        .where(and(...sentSlotsCheckConditions));
+
+      const deletedResult = await db
+        .delete(notificationSlots)
+        .where(and(...deleteConditions));
+      const deletedCount = deletedResult.rowCount || 0;
+
       console.log(
-        `[Scheduler] 🔍 Deterministic subtype selection for 'mixed': userId=${userId}, dayOfYear=${dayOfYear}, selected=${actualSubtype}, kind=${kind}, entityKey=${entityKey || 'none'}`
+        `[Scheduler] Removed ${deletedCount} old PLANNED slots for source: user ${userId}, kind: ${kind}, entityKey: ${entityKey || 'none'}`
       );
-    }
-
-    if (
-      kind === 'habits' &&
-      intent === 'quit' &&
-      actualSubtype === 'reminder'
-    ) {
-      // Детерминированный выбор для quit-привычек
-      const now = new Date();
-      const dayOfYear = Math.floor(
-        (now.getTime() - new Date(now.getFullYear(), 0, 0).getTime()) /
-          (1000 * 60 * 60 * 24)
-      );
-      const deterministicChoice = (userId + dayOfYear) % 2;
-      actualSubtype =
-        deterministicChoice === 0 ? 'informational' : 'motivational';
       console.log(
-        `[Scheduler] Deterministic subtype selection for quit habit: userId=${userId}, dayOfYear=${dayOfYear}, selected=${actualSubtype}`
+        `[Scheduler] ✅ Sent slots preserved: ${sentSlotsCheck?.count || 0} sent slots for this source were NOT affected (as expected)`
       );
-    }
-  }
-  // Для кастомных привычек actualSubtype остается null
 
-  // Загружаем глобальные настройки пользователя для хеширования
-  const [userPrefs] = await db
-    .select()
-    .from(userPreferences)
-    .where(eq(userPreferences.userId, userId))
-    .limit(1);
+      // Если источник отключен, просто удаляем его слоты (уже удалили выше)
+      if (!sourcePref.enabled) {
+        console.log(
+          `[Scheduler] Source disabled, no new slots created: user ${userId}, kind: ${kind}`
+        );
+        return;
+      }
 
-  const tone = (userPrefs?.tone as any) || 'neutral';
-  const addressingForHash = (userPrefs?.addressing as any) || 'informal';
-
-  // Загружаем данные о сущности для хеширования (если нужно)
-  let entityName = '';
-  let entityDescription: string | null = null;
-
-  if (kind === 'habits' && entityKey) {
-    const [habit] = await db
-      .select()
-      .from(habits)
-      .where(
-        and(
-          or(eq(habits.id, entityKey), eq(habits.slug, entityKey)),
-          eq(habits.userId, userId)
-        )
-      )
-      .limit(1);
-    if (habit) {
-      // Кастомная привычка
-      entityName = habit.name;
-      entityDescription = habit.description;
-      console.log(
-        `[Scheduler] Found custom habit for entityName: id=${habit.id}, slug=${habit.slug}, name="${habit.name}", entityKey param=${entityKey}`
-      );
-    } else {
-      // Готовый шаблон привычки (water, meditation, training и т.д.)
-      entityName = entityKey;
-      entityDescription = null;
-      console.log(
-        `[Scheduler] Template habit: entityKey=${entityKey} (using as entityName)`
-      );
-    }
-  } else if (kind === 'therapy' && entityKey) {
-    // Для терапии загружаем из therapyTopicsCustom если это кастомная тема
-    const [topic] = await db
-      .select()
-      .from(therapyTopicsCustom)
-      .where(
-        and(
-          or(
-            eq(therapyTopicsCustom.id, entityKey),
-            eq(therapyTopicsCustom.slug, entityKey)
-          ),
-          eq(therapyTopicsCustom.userId, userId)
-        )
-      )
-      .limit(1);
-    if (topic) {
-      entityName = topic.name;
-      entityDescription = topic.description;
-    } else {
-      // Для готовых шаблонов используем entityKey как имя
-      entityName = entityKey;
-    }
-  }
-
-  // Определяем режим генерации
-  const prefMeta =
-    (sourcePref.meta as NotificationPreferenceMeta | null) ?? null;
-  // Единое поле textSource для всех типов сущностей (кастомные и шаблоны)
-  const isCustomEntity = isCustomHabit || isCustomTherapy;
-
-  // Проверяем, что prefMeta существует и содержит нужные поля
-  let textSource: 'templates' | 'ai' | 'hybrid' | undefined = undefined;
-
-  if (prefMeta && typeof prefMeta === 'object' && 'textSource' in prefMeta) {
-    textSource = prefMeta.textSource as
-      | 'templates'
-      | 'ai'
-      | 'hybrid'
-      | undefined;
-  }
-
-  // Если textSource не определен, используем 'templates' по умолчанию
-  if (!textSource) {
-    textSource = 'templates';
-  }
-
-  // ВАЖНО: Логируем для диагностики
-  console.log(
-    `[Scheduler] Meta extraction: prefMeta=${JSON.stringify(prefMeta)}, prefMeta type=${typeof prefMeta}, isCustomEntity=${isCustomEntity}, isCustomHabit=${isCustomHabit}, isCustomTherapy=${isCustomTherapy}, textSource=${textSource}`
-  );
-
-  // ВАЖНО: Дополнительная проверка - если prefMeta не распарсился, логируем предупреждение
-  if (
-    !prefMeta &&
-    (isCustomEntity ||
-      (kind === 'habits' && entityKey) ||
-      (kind === 'therapy' && entityKey))
-  ) {
-    console.warn(
-      `[Scheduler] ⚠️ WARNING: prefMeta is null/undefined but entity might need it! user ${userId}, kind: ${kind}, isCustomEntity: ${isCustomEntity}, sourcePref.meta raw: ${JSON.stringify(sourcePref.meta)}`
-    );
-  }
-
-  // Логируем для отладки
-  console.log(`[Scheduler] ========== REGENERATING SLOTS ==========`);
-  console.log(
-    `[Scheduler] Regenerating slots: user ${userId}, kind: ${kind}, isCustomEntity: ${isCustomEntity}, isCustomHabit: ${isCustomHabit}, isCustomTherapy: ${isCustomTherapy}, intent: ${intent}, textSource: ${textSource}, entityKey: ${entityKey || 'none'} (should be readable), meta: ${JSON.stringify(prefMeta)}`
-  );
-
-  // Загружаем AI-тексты если нужно (один раз для всех слотов)
-  let aiTexts: string[] | null = null;
-  console.log(
-    `[Scheduler] 🔍 Checking if AI texts should be loaded: textSource=${textSource}, entityName="${entityName}", isCustomEntity=${isCustomEntity}`
-  );
-
-  if ((textSource === 'ai' || textSource === 'hybrid') && entityName) {
-    const effectiveTextSource: 'ai' | 'hybrid' =
-      textSource === 'ai' ? 'ai' : 'hybrid';
-
-    console.log(
-      `[Scheduler] 🔍 AI texts loading condition met: effectiveTextSource=${effectiveTextSource}, entityName="${entityName}"`
-    );
-
-    // Для хеша используем subtype из настроек
-    // Для кастомных привычек subtype всегда null
-    // Для готовых шаблонов может быть 'mixed', 'reminder', 'informational', 'motivational'
-    // Это важно, чтобы хеш был стабильным и совпадал с хешем в API endpoint
-    // actualSubtype используется только для выбора шаблонов, но не для хеша
-    const subtypeForHash = isCustomEntity
-      ? null
-      : (sourcePref.subtype as
-          | 'reminder'
-          | 'informational'
-          | 'motivational'
-          | 'mixed'
-          | null);
-
-    const configHash = computeGenerationConfigHash({
-      entityName,
-      entityDescription,
-      tone,
-      addressing: addressingForHash,
-      directness: sourcePref.directness as 'soft' | 'moderate' | 'hard',
-      subtype: subtypeForHash,
-      textSource: effectiveTextSource,
-      kind: kind as 'habits' | 'therapy',
-    });
-
-    console.log(
-      `[Scheduler] 🔍 Computed config hash: ${configHash.substring(0, 8)}..., entityName: ${entityName}, entityDescription: ${entityDescription || 'null'}, directness: ${sourcePref.directness}, subtypeForHash: ${subtypeForHash}, actualSubtype: ${actualSubtype}, textSource: ${effectiveTextSource}, kind: ${kind}, preferenceId: ${sourcePref.id}, isCustomEntity: ${isCustomEntity}, isCustomHabit: ${isCustomHabit}, isCustomTherapy: ${isCustomTherapy}`
-    );
-
-    console.log(
-      `[Scheduler] 🔍 Loading AI texts: userId=${userId}, preferenceId=${sourcePref.id}, configHash=${configHash.substring(0, 8)}..., entityName="${entityName}", entityDescription="${entityDescription || 'null'}"`
-    );
-
-    // ВАЖНО: Проверяем, что все параметры правильные перед загрузкой
-    if (!entityName) {
-      console.error(
-        `[Scheduler] ❌ ERROR: entityName is empty! Cannot load AI texts. userId=${userId}, preferenceId=${sourcePref.id}, kind=${kind}, entityKey=${entityKey || 'none'}, isCustomHabit=${isCustomHabit}, isCustomTherapy=${isCustomTherapy}`
-      );
-    }
-
-    aiTexts = await loadAiGeneratedTexts(userId, sourcePref.id, configHash);
-
-    // ВАЖНО: Если AI-тексты не найдены, проверяем, может ли быть проблема с configHash
-    if (!aiTexts || aiTexts.length === 0) {
-      console.warn(
-        `[Scheduler] ⚠️ AI texts not found. Checking if there are any AI texts for this preference with different hash...`
-      );
-      // Проверяем, есть ли вообще AI-тексты для этого preferenceId
-      const { db } = await import('@/server/infrastructure/db/client');
-      const { aiGeneratedNotificationTexts } = await import(
-        '@/server/infrastructure/db/schema'
-      );
-      const { eq, and } = await import('drizzle-orm');
-      const allAiTexts = await db
+      // Получаем все активные preferences для расчета общего количества уведомлений
+      const allPrefs = await db
         .select()
-        .from(aiGeneratedNotificationTexts)
+        .from(notificationPreferences)
         .where(
           and(
-            eq(aiGeneratedNotificationTexts.userId, userId),
-            eq(aiGeneratedNotificationTexts.preferenceId, sourcePref.id)
+            eq(notificationPreferences.userId, userId),
+            eq(notificationPreferences.enabled, true)
           )
         );
-      if (allAiTexts.length > 0) {
-        console.warn(
-          `[Scheduler] ⚠️ Found ${allAiTexts.length} AI text record(s) for this preference, but with different hash(es): ${allAiTexts.map((r) => r.generationConfigHash?.substring(0, 8) || 'no hash').join(', ')}. Current hash: ${configHash.substring(0, 8)}...`
-        );
-        console.warn(
-          `[Scheduler] ⚠️ This suggests that configHash mismatch! Check entityName, entityDescription, directness, subtype, textSource, kind.`
-        );
-      } else {
-        console.warn(
-          `[Scheduler] ⚠️ No AI texts found at all for this preference. AI texts may not have been generated yet.`
-        );
+
+      if (allPrefs.length === 0) {
+        console.log(`[Scheduler] No active preferences for user ${userId}`);
+        return;
       }
-    }
 
-    // Логируем для отладки
-    if (aiTexts && aiTexts.length > 0) {
+      // Получаем глобальные настройки пользователя
+      const [globalPrefs] = await db
+        .select()
+        .from(userPreferences)
+        .where(eq(userPreferences.userId, userId))
+        .limit(1);
+
+      const addressing = globalPrefs?.addressing || 'informal';
+      const [userRecord] = await db
+        .select({ name: users.name })
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+      const userName = userRecord?.name ?? null;
+
+      // Генерируем временные метки для нового источника
+      const timezone = sourcePref.timezone || 'Europe/Moscow';
+      const activeDays = (sourcePref.activeDays as number[]) ?? [
+        0, 1, 2, 3, 4, 5, 6,
+      ];
+      const timeRangeStart = sourcePref.timeRangeStart ?? 540; // 09:00
+      const timeRangeEnd = sourcePref.timeRangeEnd ?? 1350; // 22:30
+      const customSlotTimes =
+        (sourcePref.customSlotTimes as (number | null)[] | null) ?? null;
+      let newSlotTimes = generateSlotTimes(
+        sourcePref.timesPerDay,
+        timezone,
+        SCHEDULE_CONFIG.horizonDays,
+        activeDays,
+        timeRangeStart,
+        timeRangeEnd,
+        customSlotTimes
+      );
+
+      // ВАЖНО: Сортируем слоты по времени для детерминированного порядка
+      // Это обеспечит одинаковый slotIndex для одного и того же времени при каждой регенерации
+      newSlotTimes.sort((a, b) => a.getTime() - b.getTime());
+
       console.log(
-        `[Scheduler] ✅ Loaded ${aiTexts.length} AI texts for user ${userId}, preferenceId: ${sourcePref.id}, configHash: ${configHash.substring(0, 8)}..., kind: ${kind}, entityName: ${entityName}`
+        `[Scheduler] Generated ${newSlotTimes.length} time slots for regeneration: user ${userId}, kind: ${kind}, timesPerDay: ${sourcePref.timesPerDay}, timezone: ${timezone}, activeDays: ${activeDays.join(',')}, timeRange: ${timeRangeStart}-${timeRangeEnd}`
       );
-      console.log(
-        `[Scheduler] ✅ First 3 AI texts: ${aiTexts
-          .slice(0, 3)
-          .map((t) => `"${t.substring(0, 30)}..."`)
-          .join(', ')}`
-      );
-    } else {
-      console.warn(
-        `[Scheduler] ⚠️ No AI texts found for user ${userId}, preferenceId: ${sourcePref.id}, configHash: ${configHash.substring(0, 8)}..., textSource: ${textSource}, entityName: ${entityName}, kind: ${kind}, entityKey: ${entityKey || 'none'}`
-      );
-      console.warn(
-        `[Scheduler] ⚠️ This might mean AI texts were not generated yet. Check if generateNotificationTexts was called.`
-      );
-    }
-  } else {
-    console.log(
-      `[Scheduler] 🔍 AI texts NOT loaded: textSource=${textSource}, entityName="${entityName}", condition check: textSource in ['ai','hybrid']=${textSource === 'ai' || textSource === 'hybrid'}, entityName exists=${!!entityName}`
-    );
-  }
 
-  // Создаём новые слоты для этого источника
-  // ВАЖНО: Отслеживаем использованные тексты в рамках текущей генерации для предотвращения дублирования
-  let customTextIndex = 0;
-  let aiTextIndex = 0;
-  let slotsCreated = 0;
-  let slotsSkipped = 0;
-  let slotIndex = 0; // Индекс слота для детерминированного чередования в гибридном режиме
+      if (newSlotTimes.length === 0) {
+        console.warn(
+          `[Scheduler] ⚠️ No time slots generated! This might be due to invalid time range or active days. user ${userId}, kind: ${kind}`
+        );
+        return;
+      }
 
-  // Отслеживаем использованные AI-тексты и customTexts в рамках текущей генерации
-  // Это предотвращает повторение текстов, пока не будут использованы все доступные
-  const usedAiTextIndices = new Set<number>();
-  const usedCustomTextIndices = new Set<number>();
-  console.log(`[Scheduler] ========== STARTING SLOT CREATION ==========`);
-  console.log(
-    `[Scheduler] Starting slot creation loop: ${newSlotTimes.length} time slots, isCustomEntity: ${isCustomEntity}, textSource: ${textSource}, customTexts count: ${prefMeta?.customTexts?.length || 0}, aiTexts count: ${aiTexts?.length || 0}`
-  );
-  console.log(
-    `[Scheduler] 🔍 AI texts status: ${aiTexts ? `LOADED [${aiTexts.length} texts]` : 'NOT LOADED (null)'}`
-  );
-  if (prefMeta?.customTexts) {
-    console.log(
-      `[Scheduler] 🔍 Custom texts: ${prefMeta.customTexts.length} texts available`
-    );
-  }
-  for (const scheduledAt of newSlotTimes) {
-    slotIndex += 1;
-    console.log(
-      `[Scheduler] ========== PROCESSING SLOT ${slotIndex}/${newSlotTimes.length} ==========`
-    );
-    const customText =
-      kind === 'habits' || kind === 'therapy'
-        ? pickCustomTextFromMeta(prefMeta, userName, customTextIndex)
-        : null;
-    console.log(
-      `[Scheduler] Processing slot ${slotsCreated + slotsSkipped + 1}/${newSlotTimes.length}: scheduledAt=${scheduledAt.toISOString()}, customText=${customText ? `"${customText.substring(0, 20)}..."` : 'null'}, isCustomEntity=${isCustomEntity}, textSource=${textSource}`
-    );
+      // Получаем intent для этого источника
+      // ВАЖНО: entityKey содержит ID для кастомных сущностей, ключ шаблона для шаблонных
+      let intent: 'build' | 'quit' | undefined;
+      let isCustomEntity = false; // Флаг: найдена ли сущность в БД (кастомная)
+      let normalizedEntityKeyForSlot: string | null = null; // Для сохранения в notification_slots (ID для кастомных, ключ для шаблонных)
 
-    let templateIdForSlot = 'custom_user_text';
-    let text: string | null = null; // Начинаем с null, устанавливаем в зависимости от режима
-    let template: ReturnType<typeof findTemplate> | null = null;
+      if (kind === 'habits' && entityKey) {
+        // Для кастомных сущностей entityKey = ID
+        const [customHabit] = await db
+          .select()
+          .from(habits)
+          .where(and(eq(habits.id, entityKey), eq(habits.userId, userId)))
+          .limit(1);
 
-    // Логика выбора текста с учетом режима генерации
-    // Для кастомных сущностей (привычки и терапия)
-    if (isCustomEntity) {
-      // Приоритет: AI > Hybrid > Templates
-      // Если textSource не определен, используем templates по умолчанию
+        if (customHabit) {
+          // Это кастомная привычка пользователя
+          isCustomEntity = true;
+          normalizedEntityKeyForSlot = customHabit.id; // ID для кастомных
+          // Кастомные привычки могут иметь intent 'build' или 'quit'
+          intent =
+            customHabit.intent === 'build' || customHabit.intent === 'quit'
+              ? customHabit.intent
+              : 'build'; // Fallback на 'build' если intent неожиданный
+          console.log(
+            `[regenerateSlotsForSource] ✅ Found custom habit: entityKey="${entityKey}", intent=${intent} (name: "${customHabit.name}")`
+          );
+        } else {
+          // Это готовый шаблон (water, meditation, nutrition и т.д.)
+          isCustomEntity = false;
+          normalizedEntityKeyForSlot = entityKey; // Для шаблонов entityKey = ключ шаблона
 
-      if (textSource === 'ai') {
-        // Режим AI - используем только AI-тексты, игнорируем customTexts
-        if (aiTexts && aiTexts.length > 0) {
-          // ВАЖНО: Проверяем использованные тексты, чтобы избежать дублирования
-          let attempts = 0;
-          let candidateText: string | null = null;
-
-          while (attempts < aiTexts.length && !candidateText) {
-            const rawAiText = aiTexts[aiTextIndex % aiTexts.length];
-            candidateText = formatNotificationTextWithName(rawAiText, userName);
-            aiTextIndex += 1;
-            attempts += 1;
-
-            // Если текст уже использован, пробуем следующий
-            if (usedTextsInCurrentGeneration.has(candidateText)) {
-              console.warn(
-                `[Scheduler] ⚠️ AI text already used, trying next: text="${candidateText.substring(0, 50)}..."`
-              );
-              candidateText = null;
-            }
-          }
-
-          if (candidateText) {
-            text = candidateText;
-            usedTextsInCurrentGeneration.add(text);
-            templateIdForSlot = 'ai_generated';
+          // Пробуем найти в каталоге привычек (единый источник истины)
+          const catalogHabit = findHabitByKey(entityKey);
+          if (catalogHabit) {
+            intent = catalogHabit.intent;
             console.log(
-              `[Scheduler] ✅ Using AI text (AI mode, ignoring customTexts): user ${userId}, kind: ${kind}, text="${text.substring(0, 50)}..."`
+              `[regenerateSlotsForSource] ✅ Found in catalog: entityKey="${entityKey}", intent=${intent} (name: "${catalogHabit.name}")`
             );
           } else {
-            console.warn(
-              `[Scheduler] ❌ All AI texts already used, skipping slot: user ${userId}, kind: ${kind}, entityKey: ${entityKey || 'none'}`
+            // Не найдено в каталоге - это несуществующий шаблон
+            // Не устанавливаем intent, чтобы не фильтровать шаблоны
+            intent = undefined;
+            console.log(
+              `[regenerateSlotsForSource] ⚠️ EntityKey="${entityKey}" not found in catalog, intent will be undefined`
             );
-            slotsSkipped += 1;
-            continue;
           }
-        } else {
-          console.warn(
-            `[Scheduler] ❌ No AI texts found for custom entity in AI mode: user ${userId}, kind: ${kind}, entityKey: ${entityKey || 'none'}`
-          );
-          slotsSkipped += 1;
-          continue;
         }
-      } else if (textSource === 'hybrid') {
-        // Гибридный режим - чередуем customTexts и AI детерминированно
-        // Проверяем наличие обоих источников
-        const hasCustomTexts = customText !== null;
-        const hasAiTexts = aiTexts && aiTexts.length > 0;
+      } else if (kind === 'therapy' && entityKey) {
+        // Для терапии проверяем, кастомная ли это тема
+        const [customTopic] = await db
+          .select()
+          .from(therapyTopicsCustom)
+          .where(
+            and(
+              eq(therapyTopicsCustom.id, entityKey),
+              eq(therapyTopicsCustom.userId, userId)
+            )
+          )
+          .limit(1);
+        isCustomEntity = !!customTopic;
+        if (customTopic) {
+          normalizedEntityKeyForSlot = customTopic.id; // ID для кастомных
+        } else {
+          normalizedEntityKeyForSlot = entityKey; // Для шаблонов entityKey = ключ шаблона
+        }
+      } else if (kind === 'habits' && !entityKey) {
+        // Общие настройки для привычек
+        normalizedEntityKeyForSlot = null;
+      }
+
+      // Определяем фактический subtype
+      // Для кастомных привычек subtype всегда null, не обрабатываем его
+      let actualSubtype = sourcePref.subtype;
+
+      console.log(
+        `[Scheduler] 🔍 Subtype determination: sourcePref.subtype=${sourcePref.subtype}, initial actualSubtype=${actualSubtype}, kind=${kind}, entityKey=${entityKey || 'none'}`
+      );
+
+      // normalizedEntityKeyForSlot уже определен выше при определении isCustomEntity
+
+      // ВАЖНО: Для детерминированного выбора subtype при 'mixed' используем дату и userId
+      // Это обеспечит одинаковый выбор при каждой регенерации для одного пользователя
+      if (!isCustomEntity) {
+        // Для готовых шаблонов обрабатываем 'mixed' и fallback для quit-привычек
+        if (sourcePref.subtype === 'mixed') {
+          const subtypes: Array<'reminder' | 'informational' | 'motivational'> =
+            ['reminder', 'informational', 'motivational'];
+          // Детерминированный выбор на основе userId и даты (для стабильности)
+          const now = new Date();
+          const dayOfYear = Math.floor(
+            (now.getTime() - new Date(now.getFullYear(), 0, 0).getTime()) /
+              (1000 * 60 * 60 * 24)
+          );
+          const deterministicIndex = (userId + dayOfYear) % subtypes.length;
+          actualSubtype = subtypes[deterministicIndex];
+          console.log(
+            `[Scheduler] 🔍 Deterministic subtype selection for 'mixed': userId=${userId}, dayOfYear=${dayOfYear}, selected=${actualSubtype}, kind=${kind}, entityKey=${entityKey || 'none'}`
+          );
+        }
+
+        if (
+          kind === 'habits' &&
+          intent === 'quit' &&
+          actualSubtype === 'reminder'
+        ) {
+          // Детерминированный выбор для quit-привычек
+          const now = new Date();
+          const dayOfYear = Math.floor(
+            (now.getTime() - new Date(now.getFullYear(), 0, 0).getTime()) /
+              (1000 * 60 * 60 * 24)
+          );
+          const deterministicChoice = (userId + dayOfYear) % 2;
+          actualSubtype =
+            deterministicChoice === 0 ? 'informational' : 'motivational';
+          console.log(
+            `[Scheduler] Deterministic subtype selection for quit habit: userId=${userId}, dayOfYear=${dayOfYear}, selected=${actualSubtype}`
+          );
+        }
+      }
+      // Для кастомных привычек actualSubtype остается null
+
+      // Загружаем глобальные настройки пользователя для хеширования
+      const [userPrefs] = await db
+        .select()
+        .from(userPreferences)
+        .where(eq(userPreferences.userId, userId))
+        .limit(1);
+
+      const tone = (userPrefs?.tone as any) || 'neutral';
+      const addressingForHash = (userPrefs?.addressing as any) || 'informal';
+
+      // Загружаем данные о сущности для хеширования (если нужно)
+      let entityName = '';
+      let entityDescription: string | null = null;
+
+      if (kind === 'habits' && entityKey) {
+        const [habit] = await db
+          .select()
+          .from(habits)
+          .where(
+            and(
+              eq(habits.id, entityKey), // Для кастомных сущностей entityKey = ID
+              eq(habits.userId, userId)
+            )
+          )
+          .limit(1);
+        if (habit) {
+          // Кастомная привычка
+          entityName = habit.name;
+          entityDescription = habit.description;
+          console.log(
+            `[Scheduler] Found custom habit for entityName: id=${habit.id}, name="${habit.name}", entityKey param=${entityKey}`
+          );
+        } else {
+          // Готовый шаблон привычки (water, meditation, training и т.д.)
+          // ВАЖНО: Используем читаемое название из каталога, чтобы хеш совпадал с генерацией
+          const catalogHabit = findHabitByKey(entityKey);
+          if (catalogHabit) {
+            entityName = catalogHabit.name;
+            entityDescription = catalogHabit.description || null;
+            console.log(
+              `[Scheduler] Template habit: entityKey=${entityKey}, name="${catalogHabit.name}" (from catalog)`
+            );
+          } else {
+            // Fallback: если не найден в каталоге, используем entityKey
+            entityName = entityKey;
+            entityDescription = null;
+            console.log(
+              `[Scheduler] Template habit: entityKey=${entityKey} (not found in catalog, using as entityName)`
+            );
+          }
+        }
+      } else if (kind === 'therapy' && entityKey) {
+        // Для терапии загружаем из therapyTopicsCustom если это кастомная тема
+        const [topic] = await db
+          .select()
+          .from(therapyTopicsCustom)
+          .where(
+            and(
+              eq(therapyTopicsCustom.id, entityKey),
+              eq(therapyTopicsCustom.userId, userId)
+            )
+          )
+          .limit(1);
+        if (topic) {
+          entityName = topic.name;
+          entityDescription = topic.description;
+        } else {
+          // Для готовых шаблонов используем entityKey как имя
+          entityName = entityKey;
+        }
+      }
+
+      // Определяем режим генерации
+      const prefMeta =
+        (sourcePref.meta as NotificationPreferenceMeta | null) ?? null;
+      // isCustomEntity уже определен выше
+
+      // Проверяем, что prefMeta существует и содержит нужные поля
+      let textSource: 'templates' | 'ai' | 'hybrid' | undefined = undefined;
+
+      if (
+        prefMeta &&
+        typeof prefMeta === 'object' &&
+        'textSource' in prefMeta
+      ) {
+        textSource = prefMeta.textSource as
+          | 'templates'
+          | 'ai'
+          | 'hybrid'
+          | undefined;
+      }
+
+      // Если textSource не определен, используем 'templates' по умолчанию
+      if (!textSource) {
+        textSource = 'templates';
+      }
+
+      // ВАЖНО: Логируем для диагностики
+      console.log(
+        `[Scheduler] Meta extraction: prefMeta=${JSON.stringify(prefMeta)}, prefMeta type=${typeof prefMeta}, isCustomEntity=${isCustomEntity}, textSource=${textSource}`
+      );
+
+      // ВАЖНО: Дополнительная проверка - если prefMeta не распарсился, логируем предупреждение
+      if (
+        !prefMeta &&
+        (isCustomEntity ||
+          (kind === 'habits' && entityKey) ||
+          (kind === 'therapy' && entityKey))
+      ) {
+        console.warn(
+          `[Scheduler] ⚠️ WARNING: prefMeta is null/undefined but entity might need it! user ${userId}, kind: ${kind}, isCustomEntity: ${isCustomEntity}, sourcePref.meta raw: ${JSON.stringify(sourcePref.meta)}`
+        );
+      }
+
+      // Логируем для отладки
+      if (DEBUG_NOTIFICATIONS) {
+        console.log(`[Scheduler] ========== REGENERATING SLOTS ==========`);
+      }
+      console.log(
+        `[Scheduler] Regenerating slots: user ${userId}, kind: ${kind}, isCustomEntity: ${isCustomEntity}, intent: ${intent}, textSource: ${textSource}, entityKey: ${entityKey || 'none'} (should be readable), meta: ${JSON.stringify(prefMeta)}`
+      );
+
+      // Загружаем AI-тексты если нужно (один раз для всех слотов)
+      let aiTexts: string[] | null = null;
+      let configHash: string | null = null; // Объявляем configHash вне блока для доступности
+      console.log(
+        `[Scheduler] 🔍 Checking if AI texts should be loaded: textSource=${textSource}, entityName="${entityName}", isCustomEntity=${isCustomEntity}`
+      );
+
+      if ((textSource === 'ai' || textSource === 'hybrid') && entityName) {
+        const effectiveTextSource: 'ai' | 'hybrid' =
+          textSource === 'ai' ? 'ai' : 'hybrid';
 
         console.log(
-          `[Scheduler] 🔍 HYBRID MODE - Slot ${slotIndex}: hasCustomTexts=${hasCustomTexts}, hasAiTexts=${hasAiTexts}, aiTexts=${aiTexts ? `[${aiTexts.length} texts]` : 'null'}, customText=${customText ? `"${customText.substring(0, 30)}..."` : 'null'}`
+          `[Scheduler] 🔍 AI texts loading condition met: effectiveTextSource=${effectiveTextSource}, entityName="${entityName}"`
         );
 
-        if (!hasCustomTexts && !hasAiTexts) {
-          // Если нет ни customTexts, ни AI-текстов - пропускаем
-          console.warn(
-            `[Scheduler] ❌ No texts available in hybrid mode: user ${userId}, kind: ${kind}, slot ${slotIndex}`
-          );
-          slotsSkipped += 1;
-          continue;
-        }
-
-        // Детерминированное чередование: четные слоты - AI, нечетные - customTexts
-        // Если одного из источников нет, используем только доступный
-        if (!hasCustomTexts && aiTexts) {
-          // Только AI-тексты
-          // ВАЖНО: Проверяем использованные тексты, чтобы избежать дублирования
-          let attempts = 0;
-          let candidateText: string | null = null;
-
-          while (attempts < aiTexts.length && !candidateText) {
-            const rawAiText = aiTexts[aiTextIndex % aiTexts.length];
-            candidateText = formatNotificationTextWithName(rawAiText, userName);
-            aiTextIndex += 1;
-            attempts += 1;
-
-            // Если текст уже использован, пробуем следующий
-            if (usedTextsInCurrentGeneration.has(candidateText)) {
-              console.warn(
-                `[Scheduler] ⚠️ AI text already used, trying next: text="${candidateText.substring(0, 50)}..."`
-              );
-              candidateText = null;
-            }
-          }
-
-          if (candidateText) {
-            text = candidateText;
-            usedTextsInCurrentGeneration.add(text);
-            templateIdForSlot = 'ai_generated';
-            console.log(
-              `[Scheduler] ✅ Using AI text (hybrid mode, no customTexts, slot ${slotIndex}): user ${userId}, kind: ${kind}, text="${text.substring(0, 50)}..."`
-            );
-          } else {
-            console.warn(
-              `[Scheduler] ❌ All AI texts already used, skipping slot: user ${userId}, kind: ${kind}, slot ${slotIndex}`
-            );
-            slotsSkipped += 1;
-            continue;
-          }
-        } else if (!hasAiTexts) {
-          // Только customTexts
-          // ВАЖНО: Проверяем использованные тексты, чтобы избежать дублирования
-          if (customText && usedTextsInCurrentGeneration.has(customText)) {
-            console.warn(
-              `[Scheduler] ⚠️ Custom text already used, skipping slot: user ${userId}, kind: ${kind}, slot ${slotIndex}, text="${customText.substring(0, 50)}..."`
-            );
-            slotsSkipped += 1;
-            continue;
-          }
-
-          text = customText;
-          if (text) {
-            usedTextsInCurrentGeneration.add(text);
-          }
-          customTextIndex += 1;
-          templateIdForSlot = 'custom_user_text';
-          console.log(
-            `[Scheduler] ✅ Using custom text (hybrid mode, no AI texts, slot ${slotIndex}): user ${userId}, kind: ${kind}, text="${text ? text.substring(0, 50) : 'null'}..."`
-          );
-        } else if (aiTexts) {
-          // Оба источника доступны - чередуем детерминированно
-          const isEvenSlot = slotIndex % 2 === 0;
-          console.log(
-            `[Scheduler] 🔍 HYBRID MODE - Slot ${slotIndex}: isEvenSlot=${isEvenSlot}, will use ${isEvenSlot ? 'AI' : 'customText'}`
-          );
-
-          if (isEvenSlot) {
-            // Четные слоты - AI
-            // ВАЖНО: Проверяем использованные тексты, чтобы избежать дублирования
-            let attempts = 0;
-            let candidateText: string | null = null;
-
-            while (attempts < aiTexts.length && !candidateText) {
-              const rawAiText = aiTexts[aiTextIndex % aiTexts.length];
-              candidateText = formatNotificationTextWithName(
-                rawAiText,
-                userName
-              );
-              aiTextIndex += 1;
-              attempts += 1;
-
-              // Если текст уже использован, пробуем следующий
-              if (usedTextsInCurrentGeneration.has(candidateText)) {
-                console.warn(
-                  `[Scheduler] ⚠️ AI text already used, trying next: text="${candidateText.substring(0, 50)}..."`
-                );
-                candidateText = null;
-              }
-            }
-
-            if (candidateText) {
-              text = candidateText;
-              usedTextsInCurrentGeneration.add(text);
-              templateIdForSlot = 'ai_generated';
-              console.log(
-                `[Scheduler] ✅ Using AI text (hybrid mode, slot ${slotIndex}, even): user ${userId}, kind: ${kind}, text="${text.substring(0, 50)}...", aiTextIndex=${aiTextIndex - 1}`
-              );
-            } else {
-              console.warn(
-                `[Scheduler] ❌ All AI texts already used, skipping slot: user ${userId}, kind: ${kind}, slot ${slotIndex}`
-              );
-              slotsSkipped += 1;
-              continue;
-            }
-          } else {
-            // Нечетные слоты - customTexts
-            // ВАЖНО: Проверяем использованные тексты, чтобы избежать дублирования
-            if (customText && usedTextsInCurrentGeneration.has(customText)) {
-              console.warn(
-                `[Scheduler] ⚠️ Custom text already used, skipping slot: user ${userId}, kind: ${kind}, slot ${slotIndex}, text="${customText.substring(0, 50)}..."`
-              );
-              slotsSkipped += 1;
-              continue;
-            }
-
-            text = customText;
-            if (text) {
-              usedTextsInCurrentGeneration.add(text);
-            }
-            customTextIndex += 1;
-            templateIdForSlot = 'custom_user_text';
-            console.log(
-              `[Scheduler] ✅ Using custom text (hybrid mode, slot ${slotIndex}, odd): user ${userId}, kind: ${kind}, text="${text ? text.substring(0, 50) : 'null'}...", customTextIndex=${customTextIndex - 1}`
-            );
-          }
-        } else {
-          console.error(
-            `[Scheduler] ❌ ERROR: Both sources should be available but aiTexts is null! slot ${slotIndex}, hasCustomTexts=${hasCustomTexts}, hasAiTexts=${hasAiTexts}`
-          );
-          slotsSkipped += 1;
-          continue;
-        }
-      } else {
-        // Режим templates или undefined - используем только customTexts
-        if (customText) {
-          // ВАЖНО: Проверяем использованные тексты, чтобы избежать дублирования
-          if (usedTextsInCurrentGeneration.has(customText)) {
-            console.warn(
-              `[Scheduler] ⚠️ Custom text already used, skipping slot: user ${userId}, kind: ${kind}, slot ${slotIndex}, text="${customText.substring(0, 50)}..."`
-            );
-            slotsSkipped += 1;
-            continue;
-          }
-
-          text = customText;
-          usedTextsInCurrentGeneration.add(text);
-          customTextIndex += 1; // ВАЖНО: Увеличиваем индекс для чередования текстов
-          templateIdForSlot = 'custom_user_text';
-          console.log(
-            `[Scheduler] ✅ Using custom text (templates mode, slot ${slotIndex}): user ${userId}, kind: ${kind}, text="${text.substring(0, 30)}...", customTextIndex=${customTextIndex - 1}`
-          );
-        } else {
-          console.warn(
-            `[Scheduler] ❌ No custom text found for custom entity: user ${userId}, kind: ${kind}, entityKey: ${entityKey || 'none'}, prefMeta: ${JSON.stringify(prefMeta)}, customTexts: ${prefMeta?.customTexts?.length || 0}`
-          );
-          slotsSkipped += 1;
-          continue;
-        }
-      }
-
-      // Если все еще нет текста - пропускаем
-      if (!text) {
-        console.warn(
-          `[Scheduler] ❌ No text found for custom entity after all checks: user ${userId}, kind: ${kind}, entityKey: ${entityKey || 'none'}`
-        );
-        slotsSkipped += 1;
-        continue;
-      }
-    }
-    // Для готовых шаблонов (привычки и терапия)
-    else {
-      // Если textSource не определен, используем шаблоны по умолчанию (обратная совместимость)
-      const useTemplates =
-        !textSource || textSource === 'templates' || textSource === 'hybrid';
-      const useAi = textSource === 'ai' || textSource === 'hybrid';
-
-      // Приоритет: если textSource === 'ai', используем только AI (игнорируем customText)
-      // Если textSource === 'hybrid', чередуем шаблоны и AI
-      // Если textSource === 'templates' или undefined, используем шаблоны
-
-      if (textSource === 'ai') {
-        // Режим AI - используем только AI-тексты
-        if (aiTexts && aiTexts.length > 0) {
-          const rawAiText = aiTexts[aiTextIndex % aiTexts.length];
-          // ВАЖНО: Заменяем {name} на имя пользователя в AI-текстах
-          text = formatNotificationTextWithName(rawAiText, userName);
-          aiTextIndex += 1;
-          templateIdForSlot = 'ai_generated';
-          console.log(
-            `[Scheduler] Using AI text (AI mode): user ${userId}, kind: ${kind}`
-          );
-        } else {
-          // AI-тексты еще не готовы - пропускаем слот с предупреждением
-          // Тексты будут сгенерированы асинхронно, слоты можно будет создать позже
-          console.warn(
-            `[Scheduler] AI texts not ready yet, skipping slot (will be generated asynchronously): user ${userId}, kind: ${kind}, preferenceId: ${sourcePref.id}`
-          );
-          continue;
-        }
-      } else if (textSource === 'hybrid') {
-        // Гибридный режим - чередуем шаблоны и AI детерминированно
-        const hasAiTexts = aiTexts && aiTexts.length > 0;
-
-        console.log(
-          `[Scheduler] 🔍 HYBRID MODE (template) - Slot ${slotIndex}: hasAiTexts=${hasAiTexts}, aiTexts=${aiTexts ? `[${aiTexts.length} texts]` : 'null'}, slotIndex % 2 = ${slotIndex % 2}`
-        );
-
-        // Детерминированное чередование: четные слоты - AI, нечетные - шаблоны
-        if (hasAiTexts && aiTexts && slotIndex % 2 === 0) {
-          // Четные слоты - AI
-          // ВАЖНО: Проверяем использованные тексты, чтобы избежать дублирования
-          let attempts = 0;
-          let candidateText: string | null = null;
-
-          while (attempts < aiTexts.length && !candidateText) {
-            const rawAiText = aiTexts[aiTextIndex % aiTexts.length];
-            candidateText = formatNotificationTextWithName(rawAiText, userName);
-            aiTextIndex += 1;
-            attempts += 1;
-
-            // Если текст уже использован, пробуем следующий
-            if (usedTextsInCurrentGeneration.has(candidateText)) {
-              console.warn(
-                `[Scheduler] ⚠️ AI text already used, trying next: text="${candidateText.substring(0, 50)}..."`
-              );
-              candidateText = null;
-            }
-          }
-
-          if (candidateText) {
-            text = candidateText;
-            usedTextsInCurrentGeneration.add(text);
-            templateIdForSlot = 'ai_generated';
-            console.log(
-              `[Scheduler] ✅ Using AI text (hybrid mode, template, slot ${slotIndex}, even): user ${userId}, kind: ${kind}, text="${text.substring(0, 50)}...", aiTextIndex=${aiTextIndex - 1}`
-            );
-          } else {
-            console.warn(
-              `[Scheduler] ❌ All AI texts already used, skipping slot: user ${userId}, kind: ${kind}, slot ${slotIndex}`
-            );
-            slotsSkipped += 1;
-            continue;
-          }
-        } else {
-          // Нечетные слоты или нет AI-текстов - используем шаблоны
-          if (!text) {
-            // ВАЖНО: Для детерминированного выбора используем scheduledAt и userId
-            // Это обеспечит одинаковый выбор шаблона при каждой регенерации для одного и того же времени
-            // Используем хеш от scheduledAt и userId для стабильности
-            const timeHash = scheduledAt.getTime();
-            const deterministicTemplateIndex = (timeHash + userId) % 1000000;
-
-            console.log(
-              `[Scheduler] 🔍 Deterministic template selection: scheduledAt=${scheduledAt.toISOString()}, timeHash=${timeHash}, userId=${userId}, templateIndex=${deterministicTemplateIndex}, actualSubtype=${actualSubtype}`
-            );
-
-            // Пробуем найти шаблон с детерминированным выбором
-            // ВАЖНО: Всегда используем excludeTemplateIds для предотвращения дублирования
-            // Если все шаблоны использованы, findTemplate автоматически сбросит список и начнет заново
-            template = findTemplate(kind as NotificationKind, {
-              entityKey:
-                kind === 'therapy' ? entityKey : (habitKey as any) || entityKey,
-              intent,
-              habitKey: habitKey as any, // Для обратной совместимости
-              subtype: actualSubtype as
-                | 'reminder'
-                | 'informational'
-                | 'motivational'
-                | undefined,
-              excludeTemplateIds: Array.from(usedTemplatesInCurrentGeneration), // ВСЕГДА используем исключения для предотвращения дублирования
-              templateIndex: deterministicTemplateIndex, // Детерминированный выбор на основе времени
-            });
-
-            // Fallback для habits
-            if (!template && kind === 'habits' && actualSubtype) {
-              const fallbackSubtypes: Array<
-                'reminder' | 'informational' | 'motivational'
-              > =
-                actualSubtype === 'reminder'
-                  ? ['informational', 'motivational']
-                  : actualSubtype === 'informational'
-                    ? ['reminder', 'motivational']
-                    : ['reminder', 'informational'];
-
-              for (const fallbackSubtype of fallbackSubtypes) {
-                const timeHash = scheduledAt.getTime();
-                const deterministicTemplateIndex =
-                  (timeHash + userId) % 1000000;
-                template = findTemplate(kind as NotificationKind, {
-                  entityKey: (habitKey as any) || entityKey, // Для habits используем habitKey или entityKey
-                  intent,
-                  habitKey: habitKey as any, // Для обратной совместимости
-                  subtype: fallbackSubtype,
-                  excludeTemplateIds: Array.from(
-                    usedTemplatesInCurrentGeneration
-                  ), // ВСЕГДА используем исключения для предотвращения дублирования
-                  templateIndex: deterministicTemplateIndex, // Детерминированный выбор на основе времени
-                });
-                if (template) break;
-              }
-            }
-
-            if (template) {
-              // Получаем текст шаблона
-              const candidateText = getTemplateText(
-                template,
-                addressing as any,
-                sourcePref.directness as any,
-                userName ?? undefined
-              );
-
-              // ВАЖНО: Проверяем, не использовался ли этот текст недавно
-              // Это предотвращает дублирование одинаковых текстов в соседних слотах
-              if (usedTextsInCurrentGeneration.has(candidateText)) {
-                console.warn(
-                  `[Scheduler] ⚠️ Text already used, trying another template: templateId="${template.id}", text="${candidateText.substring(0, 50)}..."`
-                );
-
-                // Исключаем этот шаблон и пробуем найти другой
-                usedTemplatesInCurrentGeneration.add(template.id);
-                template = findTemplate(kind as NotificationKind, {
-                  entityKey:
-                    kind === 'therapy'
-                      ? entityKey
-                      : (habitKey as any) || entityKey,
-                  intent,
-                  habitKey: habitKey as any,
-                  subtype: actualSubtype as
-                    | 'reminder'
-                    | 'informational'
-                    | 'motivational'
-                    | undefined,
-                  excludeTemplateIds: Array.from(
-                    usedTemplatesInCurrentGeneration
-                  ),
-                  templateIndex: deterministicTemplateIndex + 1, // Пробуем следующий индекс
-                });
-
-                if (template) {
-                  // Пробуем новый шаблон
-                  const newCandidateText = getTemplateText(
-                    template,
-                    addressing as any,
-                    sourcePref.directness as any,
-                    userName ?? undefined
-                  );
-
-                  // Если новый текст тоже использован, пропускаем этот слот
-                  if (usedTextsInCurrentGeneration.has(newCandidateText)) {
-                    console.warn(
-                      `[Scheduler] ⚠️ Alternative template text also used, skipping slot: templateId="${template.id}"`
-                    );
-                    slotsSkipped += 1;
-                    continue;
-                  }
-
-                  text = newCandidateText;
-                  usedTemplatesInCurrentGeneration.add(template.id);
-                  usedTextsInCurrentGeneration.add(text);
-                  templateIdForSlot = template.id;
-                  console.log(
-                    `[Scheduler] ✅ Using alternative template text (hybrid mode, slot ${slotIndex}): user ${userId}, kind: ${kind}, templateId="${template.id}"`
-                  );
-                } else {
-                  // Если альтернативный шаблон не найден, пропускаем слот
-                  console.warn(
-                    `[Scheduler] ⚠️ No alternative template found, skipping slot: user ${userId}, kind: ${kind}`
-                  );
-                  slotsSkipped += 1;
-                  continue;
-                }
-              } else {
-                // Текст не использован - используем его
-                usedTemplatesInCurrentGeneration.add(template.id);
-                usedTextsInCurrentGeneration.add(candidateText);
-                templateIdForSlot = template.id;
-                text = candidateText;
-                console.log(
-                  `[Scheduler] ✅ Using template text (hybrid mode, slot ${slotIndex}): user ${userId}, kind: ${kind}, templateId="${template.id}"`
-                );
-              }
-            }
-          }
-        }
-      } else {
-        // Режим templates или undefined - используем шаблоны
-        if (!text) {
-          // ВАЖНО: Для детерминированного выбора используем scheduledAt и userId
-          // Это обеспечит одинаковый выбор шаблона при каждой регенерации для одного и того же времени
-          const timeHash = scheduledAt.getTime();
-          const deterministicTemplateIndex = (timeHash + userId) % 1000000;
-
-          console.log(
-            `[Scheduler] 🔍 Deterministic template selection: scheduledAt=${scheduledAt.toISOString()}, timeHash=${timeHash}, userId=${userId}, templateIndex=${deterministicTemplateIndex}, actualSubtype=${actualSubtype}`
-          );
-
-          // ВАЖНО: Всегда используем excludeTemplateIds для предотвращения дублирования
-          // Если все шаблоны использованы, findTemplate автоматически сбросит список и начнет заново
-          template = findTemplate(kind as NotificationKind, {
-            entityKey:
-              kind === 'therapy' ? entityKey : (habitKey as any) || entityKey,
-            intent,
-            habitKey: habitKey as any, // Для обратной совместимости
-            subtype: actualSubtype as
+        // Для хеша используем subtype из настроек
+        // Для кастомных привычек subtype всегда null
+        // Для готовых шаблонов может быть 'mixed', 'reminder', 'informational', 'motivational'
+        // Это важно, чтобы хеш был стабильным и совпадал с хешем в API endpoint
+        // actualSubtype используется только для выбора шаблонов, но не для хеша
+        const subtypeForHash = isCustomEntity
+          ? null
+          : (sourcePref.subtype as
               | 'reminder'
               | 'informational'
               | 'motivational'
-              | undefined,
-            excludeTemplateIds: Array.from(usedTemplatesInCurrentGeneration), // ВСЕГДА используем исключения для предотвращения дублирования
-            templateIndex: deterministicTemplateIndex, // Детерминированный выбор на основе времени
-          });
+              | 'mixed'
+              | null);
 
-          // Fallback для habits
-          if (!template && kind === 'habits' && actualSubtype) {
-            const fallbackSubtypes: Array<
-              'reminder' | 'informational' | 'motivational'
-            > =
-              actualSubtype === 'reminder'
-                ? ['informational', 'motivational']
-                : actualSubtype === 'informational'
-                  ? ['reminder', 'motivational']
-                  : ['reminder', 'informational'];
+        configHash = computeGenerationConfigHash({
+          entityName,
+          entityDescription,
+          tone,
+          addressing: addressingForHash,
+          directness: sourcePref.directness as 'soft' | 'moderate' | 'hard',
+          subtype: subtypeForHash,
+          textSource: effectiveTextSource,
+          kind: kind as 'habits' | 'therapy',
+        });
 
-            for (const fallbackSubtype of fallbackSubtypes) {
-              const timeHash = scheduledAt.getTime();
-              const deterministicTemplateIndex = (timeHash + userId) % 1000000;
-              template = findTemplate(kind as NotificationKind, {
-                entityKey: (habitKey as any) || entityKey, // Для habits используем habitKey или entityKey
-                intent,
-                habitKey: habitKey as any, // Для обратной совместимости
-                subtype: fallbackSubtype,
-                excludeTemplateIds: Array.from(
-                  usedTemplatesInCurrentGeneration
-                ), // ВСЕГДА используем исключения для предотвращения дублирования
-                templateIndex: deterministicTemplateIndex, // Детерминированный выбор на основе времени
-              });
-              if (template) break;
-            }
+        console.log(
+          `[Scheduler] 🔍 Computed config hash: ${configHash.substring(0, 8)}..., entityName: ${entityName}, entityDescription: ${entityDescription || 'null'}, directness: ${sourcePref.directness}, subtypeForHash: ${subtypeForHash}, actualSubtype: ${actualSubtype}, textSource: ${effectiveTextSource}, kind: ${kind}, preferenceId: ${sourcePref.id}, isCustomEntity: ${isCustomEntity}`
+        );
+
+        console.log(
+          `[Scheduler] 🔍 Loading AI texts: userId=${userId}, preferenceId=${sourcePref.id}, configHash=${configHash.substring(0, 8)}..., entityName="${entityName}", entityDescription="${entityDescription || 'null'}"`
+        );
+
+        // ВАЖНО: Проверяем, что все параметры правильные перед загрузкой
+        if (!entityName) {
+          console.error(
+            `[Scheduler] ❌ ERROR: entityName is empty! Cannot load AI texts. userId=${userId}, preferenceId=${sourcePref.id}, kind=${kind}, entityKey=${entityKey || 'none'}, isCustomEntity=${isCustomEntity}`
+          );
+        }
+
+        aiTexts = await loadAiGeneratedTexts(userId, sourcePref.id, configHash);
+
+        // ВАЖНО: Если AI-тексты не найдены, проверяем, может ли быть проблема с configHash
+        if (!aiTexts || aiTexts.length === 0) {
+          console.warn(
+            `[Scheduler] ⚠️ AI texts not found. Checking if there are any AI texts for this preference with different hash...`
+          );
+          // Проверяем, есть ли вообще AI-тексты для этого preferenceId
+          const allAiTexts = await db
+            .select()
+            .from(aiGeneratedNotificationTexts)
+            .where(
+              and(
+                eq(aiGeneratedNotificationTexts.userId, userId),
+                eq(aiGeneratedNotificationTexts.preferenceId, sourcePref.id)
+              )
+            );
+          if (allAiTexts.length > 0) {
+            console.warn(
+              `[Scheduler] ⚠️ Found ${allAiTexts.length} AI text record(s) for this preference, but with different hash(es): ${allAiTexts.map((r) => r.generationConfigHash?.substring(0, 8) || 'no hash').join(', ')}. Current hash: ${configHash.substring(0, 8)}...`
+            );
+            console.warn(
+              `[Scheduler] ⚠️ This suggests that configHash mismatch! Check entityName, entityDescription, directness, subtype, textSource, kind.`
+            );
+          } else {
+            console.warn(
+              `[Scheduler] ⚠️ No AI texts found at all for this preference. AI texts may not have been generated yet.`
+            );
           }
+        }
 
-          if (template) {
-            // Получаем текст шаблона
-            const candidateText = getTemplateText(
-              template,
-              addressing as any,
-              sourcePref.directness as any,
-              userName ?? undefined
+        // Логируем для отладки
+        if (aiTexts && aiTexts.length > 0) {
+          console.log(
+            `[Scheduler] ✅ Loaded ${aiTexts.length} AI texts for user ${userId}, preferenceId: ${sourcePref.id}, configHash: ${configHash.substring(0, 8)}..., kind: ${kind}, entityName: ${entityName}`
+          );
+          console.log(
+            `[Scheduler] ✅ First 3 AI texts: ${aiTexts
+              .slice(0, 3)
+              .map((t) => `"${t.substring(0, 30)}..."`)
+              .join(', ')}`
+          );
+
+          // Проверяем статус пула текстов (только логирование, без запуска догенерации)
+          try {
+            const textsPerDay = sourcePref.timesPerDay || 3;
+            const poolStatus = await checkAndRefillTextPool(
+              userId,
+              sourcePref.id,
+              configHash,
+              textsPerDay
             );
 
-            // ВАЖНО: Проверяем, не использовался ли этот текст недавно
-            // Это предотвращает дублирование одинаковых текстов в соседних слотах
-            if (usedTextsInCurrentGeneration.has(candidateText)) {
+            console.log(
+              `[Scheduler] 📊 Pool status: ${poolStatus.availableTexts}/${poolStatus.totalTexts} available, ${poolStatus.daysRemaining} days remaining, used: ${poolStatus.usedTexts}`
+            );
+
+            if (poolStatus.needsRefill) {
               console.warn(
-                `[Scheduler] ⚠️ Text already used, trying another template: templateId="${template.id}", text="${candidateText.substring(0, 50)}..."`
+                `[Scheduler] ⚠️ Pool needs refill (${poolStatus.daysRemaining} days left), but skipping auto-refill. Worker will handle it.`
+              );
+            }
+          } catch (error) {
+            console.error(`[Scheduler] ❌ Error checking pool status:`, error);
+            // Не прерываем выполнение, так как это только проверка
+          }
+        } else {
+          console.warn(
+            `[Scheduler] ⚠️ No AI texts found for user ${userId}, preferenceId: ${sourcePref.id}, configHash: ${configHash.substring(0, 8)}..., textSource: ${textSource}, entityName: ${entityName}, kind: ${kind}, entityKey: ${entityKey || 'none'}`
+          );
+          console.warn(
+            `[Scheduler] ⚠️ This might mean AI texts were not generated yet. Check if generateNotificationTexts was called.`
+          );
+        }
+      } else {
+        console.log(
+          `[Scheduler] 🔍 AI texts NOT loaded: textSource=${textSource}, entityName="${entityName}", condition check: textSource in ['ai','hybrid']=${textSource === 'ai' || textSource === 'hybrid'}, entityName exists=${!!entityName}`
+        );
+      }
+
+      // Создаём новые слоты для этого источника
+      // ВАЖНО: Отслеживаем использованные тексты как в БД, так и в рамках текущей генерации
+      let customTextIndex = 0;
+      let aiTextIndex = 0;
+      let slotsCreated = 0;
+      let slotsSkipped = 0;
+      let slotIndex = 0; // Индекс слота для детерминированного чередования в гибридном режиме
+
+      // Загружаем использованные индексы и хеши из БД (для предотвращения повторений между генерациями)
+      let aiTextRecordId: number | null = null;
+      let usedAiTextIndicesFromDb = new Set<number>();
+      let usedAiTextHashesFromDb = new Set<string>();
+      if (
+        aiTexts &&
+        aiTexts.length > 0 &&
+        (textSource === 'ai' || textSource === 'hybrid') &&
+        configHash
+      ) {
+        const aiTextRecord = await loadAiGeneratedTextsWithId(
+          userId,
+          sourcePref.id,
+          configHash
+        );
+        if (aiTextRecord) {
+          aiTextRecordId = aiTextRecord.id;
+          usedAiTextIndicesFromDb = await getUsedTextIndices(aiTextRecord.id);
+          usedAiTextHashesFromDb = await getUsedTextHashes(aiTextRecord.id);
+          console.log(
+            `[Scheduler] 📊 Loaded ${usedAiTextIndicesFromDb.size} used text indices and ${usedAiTextHashesFromDb.size} used text hashes from DB for aiTextId=${aiTextRecord.id}`
+          );
+        }
+      }
+
+      // Отслеживаем использованные AI-тексты и customTexts в рамках текущей генерации
+      // Это предотвращает повторение текстов, пока не будут использованы все доступные
+      // Объединяем с индексами и хешами из БД
+      const usedAiTextIndices = new Set<number>(usedAiTextIndicesFromDb);
+      const usedAiTextHashes = new Set<string>(usedAiTextHashesFromDb); // Хеши для проверки дубликатов по содержимому
+      const usedCustomTextIndices = new Set<number>();
+
+      /**
+       * Вспомогательная функция для применения AI-текста к слоту
+       * Обновляет все необходимые структуры данных и возвращает true при успехе
+       */
+      function tryUseAiText(
+        aiTexts: string[],
+        slotIndex: number,
+        reason: string
+      ): boolean {
+        const selectedText = selectUnusedAiText(
+          aiTexts,
+          usedAiTextIndices,
+          usedAiTextHashes,
+          usedTextsInCurrentGeneration
+        );
+
+        if (selectedText) {
+          text = formatNotificationTextWithName(selectedText.text, userName);
+          selectedAiTextIndex = selectedText.index;
+          usedAiTextIndices.add(selectedText.index);
+          const textHash = hashNotificationText(selectedText.text);
+          usedAiTextHashes.add(textHash);
+          usedTextsInCurrentGeneration.add(selectedText.text);
+          templateIdForSlot = 'ai_generated';
+          console.log(
+            `[Scheduler] ✅ Using AI text (${reason}, slot ${slotIndex}): user ${userId}, kind: ${kind}, index: ${selectedText.index}, text="${text.substring(0, 50)}..."`
+          );
+          return true;
+        } else {
+          console.warn(
+            `[Scheduler] ❌ All AI texts already used, skipping slot: user ${userId}, kind: ${kind}, slot ${slotIndex}`
+          );
+          return false;
+        }
+      }
+
+      /**
+       * Выбирает неиспользованный AI-текст из пула по индексу и хешу
+       * Использует комбинированный подход для максимальной надежности
+       * @param aiTexts - массив AI-текстов
+       * @param usedIndices - Set использованных индексов
+       * @param usedHashes - Set использованных хешей текстов (для проверки дубликатов по содержимому)
+       * @param usedTexts - Set использованных текстов (для проверки дубликатов, опционально)
+       * @param startIndex - индекс для начала поиска (для последовательного обхода)
+       * @returns объект с текстом и индексом, или null если все использованы
+       */
+      function selectUnusedAiText(
+        aiTexts: string[],
+        usedIndices: Set<number>,
+        usedHashes: Set<string>,
+        usedTexts: Set<string>,
+        startIndex: number = 0
+      ): { text: string; index: number } | null {
+        // Получаем доступные индексы (не использованные по индексу)
+        const availableIndices = aiTexts
+          .map((_, index) => index)
+          .filter((index) => !usedIndices.has(index));
+
+        if (availableIndices.length === 0) {
+          return null;
+        }
+
+        // Перемешиваем для случайного выбора, но с проверкой хеша и текста на дубликаты
+        const shuffled = [...availableIndices].sort(() => Math.random() - 0.5);
+
+        // Ищем первый доступный текст, который не был использован по хешу
+        // Хеш вычисляется от исходного текста (rawText), чтобы имя пользователя не влияло на проверку дубликатов
+        for (const index of shuffled) {
+          const rawText = aiTexts[index];
+
+          // Вычисляем хеш от исходного текста для проверки дубликатов
+          // Это важно: имя пользователя - переменная часть, не должна влиять на проверку
+          const textHash = hashNotificationText(rawText);
+
+          // Проверяем по хешу (основная защита - устойчив к форматированию)
+          // И по тексту (дополнительная защита)
+          if (!usedHashes.has(textHash) && !usedTexts.has(rawText)) {
+            return {
+              text: rawText,
+              index: index,
+            };
+          }
+        }
+
+        // Если все доступные тексты уже использованы (дубликаты в массиве), возвращаем null
+        // Это предотвратит создание слота с дубликатом
+        console.warn(
+          `[Scheduler] ⚠️ All available texts are duplicates (by hash or text), cannot select unique text`
+        );
+        return null;
+      }
+
+      if (DEBUG_NOTIFICATIONS) {
+        console.log(`[Scheduler] ========== STARTING SLOT CREATION ==========`);
+        console.log(
+          `[Scheduler] Starting slot creation loop: ${newSlotTimes.length} time slots, isCustomEntity: ${isCustomEntity}, textSource: ${textSource}, customTexts count: ${prefMeta?.customTexts?.length || 0}, aiTexts count: ${aiTexts?.length || 0}`
+        );
+      }
+      console.log(
+        `[Scheduler] 🔍 AI texts status: ${aiTexts ? `LOADED [${aiTexts.length} texts]` : 'NOT LOADED (null)'}`
+      );
+      if (prefMeta?.customTexts) {
+        console.log(
+          `[Scheduler] 🔍 Custom texts: ${prefMeta.customTexts.length} texts available`
+        );
+      }
+
+      // Переменные для использования в цикле и в функции tryUseAiText
+      let templateIdForSlot: string = 'custom_user_text';
+      let text: string | null = null;
+      let template: ReturnType<typeof findTemplate> | null = null;
+      let selectedAiTextIndex: number | null = null;
+
+      for (const scheduledAt of newSlotTimes) {
+        slotIndex += 1;
+        console.log(
+          `[Scheduler] ========== PROCESSING SLOT ${slotIndex}/${newSlotTimes.length} ==========`
+        );
+        const customText =
+          kind === 'habits' || kind === 'therapy'
+            ? pickCustomTextFromMeta(prefMeta, userName, customTextIndex)
+            : null;
+        console.log(
+          `[Scheduler] Processing slot ${slotsCreated + slotsSkipped + 1}/${newSlotTimes.length}: scheduledAt=${scheduledAt.toISOString()}, customText=${customText ? `"${customText.substring(0, 20)}..."` : 'null'}, isCustomEntity=${isCustomEntity}, textSource=${textSource}`
+        );
+
+        // Сбрасываем переменные для новой итерации
+        templateIdForSlot = 'custom_user_text';
+        text = null;
+        template = null;
+        selectedAiTextIndex = null;
+
+        // Логика выбора текста с учетом режима генерации
+        // Для кастомных сущностей (привычки и терапия)
+        if (isCustomEntity) {
+          // Приоритет: AI > Hybrid > Templates
+          // Если textSource не определен, используем templates по умолчанию
+
+          if (textSource === 'ai') {
+            // Режим AI - используем только AI-тексты, игнорируем customTexts
+            if (aiTexts && aiTexts.length > 0) {
+              // ВАЖНО: Используем комбинированный подход: проверка по индексу, хешу и тексту
+              const selectedText = selectUnusedAiText(
+                aiTexts,
+                usedAiTextIndices,
+                usedAiTextHashes,
+                usedTextsInCurrentGeneration
               );
 
-              // Исключаем этот шаблон и пробуем найти другой
-              usedTemplatesInCurrentGeneration.add(template.id);
-              const timeHash = scheduledAt.getTime();
-              const alternativeTemplateIndex =
-                (timeHash + userId + 1) % 1000000;
-              template = findTemplate(kind as NotificationKind, {
-                entityKey:
-                  kind === 'therapy'
-                    ? entityKey
-                    : (habitKey as any) || entityKey,
-                intent,
-                habitKey: habitKey as any,
-                subtype: actualSubtype as
-                  | 'reminder'
-                  | 'informational'
-                  | 'motivational'
-                  | undefined,
-                excludeTemplateIds: Array.from(
-                  usedTemplatesInCurrentGeneration
-                ),
-                templateIndex: alternativeTemplateIndex,
-              });
-
-              if (template) {
-                // Пробуем новый шаблон
-                const newCandidateText = getTemplateText(
-                  template,
-                  addressing as any,
-                  sourcePref.directness as any,
-                  userName ?? undefined
+              if (selectedText) {
+                text = formatNotificationTextWithName(
+                  selectedText.text,
+                  userName
                 );
-
-                // Если новый текст тоже использован, пропускаем этот слот
-                if (usedTextsInCurrentGeneration.has(newCandidateText)) {
-                  console.warn(
-                    `[Scheduler] ⚠️ Alternative template text also used, skipping slot: templateId="${template.id}"`
-                  );
-                  slotsSkipped += 1;
-                  continue;
-                }
-
-                text = newCandidateText;
-                usedTemplatesInCurrentGeneration.add(template.id);
-                usedTextsInCurrentGeneration.add(text);
-                templateIdForSlot = template.id;
+                selectedAiTextIndex = selectedText.index;
+                usedAiTextIndices.add(selectedText.index);
+                // ВАЖНО: Добавляем хеш и текст в Sets для проверки дубликатов
+                // Хеш вычисляем от исходного текста (rawText), чтобы имя пользователя не влияло
+                const textHash = hashNotificationText(selectedText.text);
+                usedAiTextHashes.add(textHash);
+                usedTextsInCurrentGeneration.add(selectedText.text);
+                templateIdForSlot = 'ai_generated';
                 console.log(
-                  `[Scheduler] ✅ Using alternative template text (templates mode): user ${userId}, kind: ${kind}, templateId="${template.id}"`
+                  `[Scheduler] ✅ Using AI text (AI mode, ignoring customTexts): user ${userId}, kind: ${kind}, index: ${selectedText.index}, text="${text.substring(0, 50)}..."`
                 );
               } else {
-                // Если альтернативный шаблон не найден, пропускаем слот
                 console.warn(
-                  `[Scheduler] ⚠️ No alternative template found, skipping slot: user ${userId}, kind: ${kind}`
+                  `[Scheduler] ❌ All AI texts already used, skipping slot: user ${userId}, kind: ${kind}, entityKey: ${entityKey || 'none'}`
                 );
                 slotsSkipped += 1;
                 continue;
               }
             } else {
-              // Текст не использован - используем его
-              usedTemplatesInCurrentGeneration.add(template.id);
-              usedTextsInCurrentGeneration.add(candidateText);
-              templateIdForSlot = template.id;
-              text = candidateText;
-              console.log(
-                `[Scheduler] ✅ Using template text (templates mode): user ${userId}, kind: ${kind}, templateId="${template.id}"`
+              console.warn(
+                `[Scheduler] ❌ No AI texts found for custom entity in AI mode: user ${userId}, kind: ${kind}, entityKey: ${entityKey || 'none'}`
               );
+              slotsSkipped += 1;
+              continue;
+            }
+          } else if (textSource === 'hybrid') {
+            // Гибридный режим - чередуем customTexts и AI детерминированно
+            // Проверяем наличие обоих источников
+            const hasCustomTexts = customText !== null;
+            const hasAiTexts = aiTexts && aiTexts.length > 0;
+
+            console.log(
+              `[Scheduler] 🔍 HYBRID MODE - Slot ${slotIndex}: hasCustomTexts=${hasCustomTexts}, hasAiTexts=${hasAiTexts}, aiTexts=${aiTexts ? `[${aiTexts.length} texts]` : 'null'}, customText=${customText ? `"${customText.substring(0, 30)}..."` : 'null'}`
+            );
+
+            if (!hasCustomTexts && !hasAiTexts) {
+              // Если нет ни customTexts, ни AI-текстов - пропускаем
+              console.warn(
+                `[Scheduler] ❌ No texts available in hybrid mode: user ${userId}, kind: ${kind}, slot ${slotIndex}`
+              );
+              slotsSkipped += 1;
+              continue;
+            }
+
+            // Детерминированное чередование: четные слоты - AI, нечетные - customTexts
+            // Если одного из источников нет, используем только доступный
+            if (!hasCustomTexts && aiTexts) {
+              // Только AI-тексты
+              // ВАЖНО: Используем комбинированный подход: проверка по индексу, хешу и тексту
+              const selectedText = selectUnusedAiText(
+                aiTexts,
+                usedAiTextIndices,
+                usedAiTextHashes,
+                usedTextsInCurrentGeneration
+              );
+
+              if (selectedText) {
+                text = formatNotificationTextWithName(
+                  selectedText.text,
+                  userName
+                );
+                selectedAiTextIndex = selectedText.index;
+                usedAiTextIndices.add(selectedText.index);
+                // ВАЖНО: Добавляем хеш и текст в Sets для проверки дубликатов
+                // Хеш вычисляем от исходного текста (rawText), чтобы имя пользователя не влияло
+                const textHash = hashNotificationText(selectedText.text);
+                usedAiTextHashes.add(textHash);
+                usedTextsInCurrentGeneration.add(selectedText.text);
+                templateIdForSlot = 'ai_generated';
+                console.log(
+                  `[Scheduler] ✅ Using AI text (hybrid mode, no customTexts, slot ${slotIndex}): user ${userId}, kind: ${kind}, index: ${selectedText.index}, text="${text.substring(0, 50)}..."`
+                );
+              } else {
+                console.warn(
+                  `[Scheduler] ❌ All AI texts already used, skipping slot: user ${userId}, kind: ${kind}, slot ${slotIndex}`
+                );
+                slotsSkipped += 1;
+                continue;
+              }
+            } else if (!hasAiTexts) {
+              // Только customTexts
+              // ВАЖНО: Проверяем использованные тексты, чтобы избежать дублирования
+              if (customText && usedTextsInCurrentGeneration.has(customText)) {
+                console.warn(
+                  `[Scheduler] ⚠️ Custom text already used, skipping slot: user ${userId}, kind: ${kind}, slot ${slotIndex}, text="${customText.substring(0, 50)}..."`
+                );
+                slotsSkipped += 1;
+                continue;
+              }
+
+              text = customText;
+              if (text) {
+                usedTextsInCurrentGeneration.add(text);
+              }
+              customTextIndex += 1;
+              templateIdForSlot = 'custom_user_text';
+              console.log(
+                `[Scheduler] ✅ Using custom text (hybrid mode, no AI texts, slot ${slotIndex}): user ${userId}, kind: ${kind}, text="${text ? text.substring(0, 50) : 'null'}..."`
+              );
+            } else if (aiTexts) {
+              // Оба источника доступны - чередуем детерминированно
+              const isEvenSlot = slotIndex % 2 === 0;
+              console.log(
+                `[Scheduler] 🔍 HYBRID MODE - Slot ${slotIndex}: isEvenSlot=${isEvenSlot}, will use ${isEvenSlot ? 'AI' : 'customText'}`
+              );
+
+              if (isEvenSlot) {
+                // Четные слоты - AI
+                // ВАЖНО: Используем комбинированный подход: проверка по индексу, хешу и тексту
+                const selectedText = selectUnusedAiText(
+                  aiTexts,
+                  usedAiTextIndices,
+                  usedAiTextHashes,
+                  usedTextsInCurrentGeneration
+                );
+
+                if (selectedText) {
+                  text = formatNotificationTextWithName(
+                    selectedText.text,
+                    userName
+                  );
+                  selectedAiTextIndex = selectedText.index;
+                  usedAiTextIndices.add(selectedText.index);
+                  // ВАЖНО: Добавляем хеш и текст в Sets для проверки дубликатов
+                  // Хеш вычисляем от исходного текста (rawText), чтобы имя пользователя не влияло
+                  const textHash = hashNotificationText(selectedText.text);
+                  usedAiTextHashes.add(textHash);
+                  usedTextsInCurrentGeneration.add(selectedText.text);
+                  templateIdForSlot = 'ai_generated';
+                  console.log(
+                    `[Scheduler] ✅ Using AI text (hybrid mode, slot ${slotIndex}, even): user ${userId}, kind: ${kind}, index: ${selectedText.index}, text="${text.substring(0, 50)}..."`
+                  );
+                } else {
+                  console.warn(
+                    `[Scheduler] ❌ All AI texts already used, skipping slot: user ${userId}, kind: ${kind}, slot ${slotIndex}`
+                  );
+                  slotsSkipped += 1;
+                  continue;
+                }
+              } else {
+                // Нечетные слоты - customTexts
+                // ВАЖНО: Проверяем использованные тексты, чтобы избежать дублирования
+                if (
+                  customText &&
+                  usedTextsInCurrentGeneration.has(customText)
+                ) {
+                  console.warn(
+                    `[Scheduler] ⚠️ Custom text already used, skipping slot: user ${userId}, kind: ${kind}, slot ${slotIndex}, text="${customText.substring(0, 50)}..."`
+                  );
+                  slotsSkipped += 1;
+                  continue;
+                }
+
+                text = customText;
+                if (text) {
+                  usedTextsInCurrentGeneration.add(text);
+                }
+                customTextIndex += 1;
+                templateIdForSlot = 'custom_user_text';
+                console.log(
+                  `[Scheduler] ✅ Using custom text (hybrid mode, slot ${slotIndex}, odd): user ${userId}, kind: ${kind}, text="${text ? text.substring(0, 50) : 'null'}...", customTextIndex=${customTextIndex - 1}`
+                );
+              }
+            } else {
+              console.error(
+                `[Scheduler] ❌ ERROR: Both sources should be available but aiTexts is null! slot ${slotIndex}, hasCustomTexts=${hasCustomTexts}, hasAiTexts=${hasAiTexts}`
+              );
+              slotsSkipped += 1;
+              continue;
             }
           } else {
-            // Если шаблон не найден, но есть AI-тексты и textSource === 'templates' или undefined,
-            // можно использовать AI-тексты как fallback (но только если textSource не 'templates' явно)
-            // Или просто логируем для отладки
-            if (textSource === undefined && aiTexts && aiTexts.length > 0) {
-              // Если textSource не определен и есть AI-тексты, используем их как fallback
+            // Режим templates или undefined - используем только customTexts
+            if (customText) {
+              // ВАЖНО: Проверяем использованные тексты, чтобы избежать дублирования
+              if (usedTextsInCurrentGeneration.has(customText)) {
+                console.warn(
+                  `[Scheduler] ⚠️ Custom text already used, skipping slot: user ${userId}, kind: ${kind}, slot ${slotIndex}, text="${customText.substring(0, 50)}..."`
+                );
+                slotsSkipped += 1;
+                continue;
+              }
+
+              text = customText;
+              usedTextsInCurrentGeneration.add(text);
+              customTextIndex += 1; // ВАЖНО: Увеличиваем индекс для чередования текстов
+              templateIdForSlot = 'custom_user_text';
+              console.log(
+                `[Scheduler] ✅ Using custom text (templates mode, slot ${slotIndex}): user ${userId}, kind: ${kind}, text="${text.substring(0, 30)}...", customTextIndex=${customTextIndex - 1}`
+              );
+            } else {
+              console.warn(
+                `[Scheduler] ❌ No custom text found for custom entity: user ${userId}, kind: ${kind}, entityKey: ${entityKey || 'none'}, prefMeta: ${JSON.stringify(prefMeta)}, customTexts: ${prefMeta?.customTexts?.length || 0}`
+              );
+              slotsSkipped += 1;
+              continue;
+            }
+          }
+
+          // Если все еще нет текста - пропускаем
+          if (!text) {
+            console.warn(
+              `[Scheduler] ❌ No text found for custom entity after all checks: user ${userId}, kind: ${kind}, entityKey: ${entityKey || 'none'}`
+            );
+            slotsSkipped += 1;
+            continue;
+          }
+        }
+        // Для готовых шаблонов (привычки и терапия)
+        else {
+          // Если textSource не определен, используем шаблоны по умолчанию (обратная совместимость)
+          const useTemplates =
+            !textSource ||
+            textSource === 'templates' ||
+            textSource === 'hybrid';
+          const useAi = textSource === 'ai' || textSource === 'hybrid';
+
+          // Приоритет: если textSource === 'ai', используем только AI (игнорируем customText)
+          // Если textSource === 'hybrid', чередуем шаблоны и AI
+          // Если textSource === 'templates' или undefined, используем шаблоны
+
+          if (textSource === 'ai') {
+            // Режим AI - используем только AI-тексты
+            if (aiTexts && aiTexts.length > 0) {
               const rawAiText = aiTexts[aiTextIndex % aiTexts.length];
               // ВАЖНО: Заменяем {name} на имя пользователя в AI-текстах
               text = formatNotificationTextWithName(rawAiText, userName);
               aiTextIndex += 1;
               templateIdForSlot = 'ai_generated';
               console.log(
-                `[Scheduler] Template not found, using AI text as fallback: user ${userId}, kind: ${kind}`
+                `[Scheduler] Using AI text (AI mode): user ${userId}, kind: ${kind}`
               );
             } else {
+              // AI-тексты еще не готовы - пропускаем слот с предупреждением
+              // Тексты будут сгенерированы асинхронно, слоты можно будет создать позже
               console.warn(
-                `[Scheduler] Template not found: user ${userId}, kind: ${kind}, intent: ${intent}, habitKey: ${habitKey}, subtype: ${actualSubtype}, entityKey: ${entityKey || 'none'}, textSource: ${textSource}`
+                `[Scheduler] AI texts not ready yet, skipping slot (will be generated asynchronously): user ${userId}, kind: ${kind}, preferenceId: ${sourcePref.id}`
               );
+              continue;
+            }
+          } else if (textSource === 'hybrid') {
+            // Гибридный режим - чередуем шаблоны и AI детерминированно
+            const hasAiTexts = aiTexts && aiTexts.length > 0;
+            const isEvenSlot = slotIndex % 2 === 0;
+
+            console.log(
+              `[Scheduler] 🔍 HYBRID MODE (template) - Slot ${slotIndex}: hasAiTexts=${hasAiTexts}, aiTexts=${aiTexts ? `[${aiTexts.length} texts]` : 'null'}, isEvenSlot=${isEvenSlot}`
+            );
+
+            // Детерминированное чередование: четные слоты - AI, нечетные - шаблоны
+            // Если шаблонов нет, используем AI для всех слотов
+            if (isEvenSlot && hasAiTexts && aiTexts) {
+              // Четные слоты - AI
+              if (!tryUseAiText(aiTexts, slotIndex, 'hybrid mode, even slot')) {
+                slotsSkipped += 1;
+                continue;
+              }
+            } else {
+              // Нечетные слоты - пробуем шаблоны, если нет - используем AI
+              if (!text) {
+                // ВАЖНО: Для детерминированного выбора используем scheduledAt и userId
+                // Это обеспечит одинаковый выбор шаблона при каждой регенерации для одного и того же времени
+                // Используем хеш от scheduledAt и userId для стабильности
+                const timeHash = scheduledAt.getTime();
+                const deterministicTemplateIndex =
+                  (timeHash + userId) % 1000000;
+
+                console.log(
+                  `[Scheduler] 🔍 Deterministic template selection: scheduledAt=${scheduledAt.toISOString()}, timeHash=${timeHash}, userId=${userId}, templateIndex=${deterministicTemplateIndex}, actualSubtype=${actualSubtype}`
+                );
+
+                // Пробуем найти шаблон с детерминированным выбором
+                // ВАЖНО: Всегда используем excludeTemplateIds для предотвращения дублирования
+                // Если все шаблоны использованы, findTemplate автоматически сбросит список и начнет заново
+                template = findTemplate(kind as NotificationKind, {
+                  entityKey: entityKey,
+                  intent,
+                  subtype: actualSubtype as NotificationSubtype | undefined,
+                  excludeTemplateIds: Array.from(
+                    usedTemplatesInCurrentGeneration
+                  ), // ВСЕГДА используем исключения для предотвращения дублирования
+                  templateIndex: deterministicTemplateIndex, // Детерминированный выбор на основе времени
+                });
+
+                // Fallback для habits
+                if (!template && kind === 'habits' && actualSubtype) {
+                  const fallbackSubtypes: Array<
+                    'reminder' | 'informational' | 'motivational'
+                  > =
+                    actualSubtype === 'reminder'
+                      ? ['informational', 'motivational']
+                      : actualSubtype === 'informational'
+                        ? ['reminder', 'motivational']
+                        : ['reminder', 'informational'];
+
+                  for (const fallbackSubtype of fallbackSubtypes) {
+                    const timeHash = scheduledAt.getTime();
+                    const deterministicTemplateIndex =
+                      (timeHash + userId) % 1000000;
+                    template = findTemplate(kind as NotificationKind, {
+                      entityKey: entityKey,
+                      intent,
+                      subtype: fallbackSubtype,
+                      excludeTemplateIds: Array.from(
+                        usedTemplatesInCurrentGeneration
+                      ), // ВСЕГДА используем исключения для предотвращения дублирования
+                      templateIndex: deterministicTemplateIndex, // Детерминированный выбор на основе времени
+                    });
+                    if (template) break;
+                  }
+                }
+
+                if (template) {
+                  // Получаем текст шаблона
+                  const candidateText = getTemplateText(
+                    template,
+                    addressing as any,
+                    sourcePref.directness as any,
+                    userName ?? undefined
+                  );
+
+                  // ВАЖНО: Проверяем, не использовался ли этот текст недавно
+                  // Это предотвращает дублирование одинаковых текстов в соседних слотах
+                  if (usedTextsInCurrentGeneration.has(candidateText)) {
+                    console.warn(
+                      `[Scheduler] ⚠️ Text already used, trying another template: templateId="${template.id}", text="${candidateText.substring(0, 50)}..."`
+                    );
+
+                    // Исключаем этот шаблон и пробуем найти другой
+                    usedTemplatesInCurrentGeneration.add(template.id);
+                    template = findTemplate(kind as NotificationKind, {
+                      entityKey: entityKey,
+                      intent,
+                      subtype: actualSubtype as NotificationSubtype | undefined,
+                      excludeTemplateIds: Array.from(
+                        usedTemplatesInCurrentGeneration
+                      ),
+                      templateIndex: deterministicTemplateIndex + 1, // Пробуем следующий индекс
+                    });
+
+                    if (template) {
+                      // Пробуем новый шаблон
+                      const newCandidateText = getTemplateText(
+                        template,
+                        addressing as any,
+                        sourcePref.directness as any,
+                        userName ?? undefined
+                      );
+
+                      // Если новый текст тоже использован, пропускаем этот слот
+                      if (usedTextsInCurrentGeneration.has(newCandidateText)) {
+                        console.warn(
+                          `[Scheduler] ⚠️ Alternative template text also used, skipping slot: templateId="${template.id}"`
+                        );
+                        slotsSkipped += 1;
+                        continue;
+                      }
+
+                      text = newCandidateText;
+                      usedTemplatesInCurrentGeneration.add(template.id);
+                      usedTextsInCurrentGeneration.add(text);
+                      templateIdForSlot = template.id;
+                      console.log(
+                        `[Scheduler] ✅ Using alternative template text (hybrid mode, slot ${slotIndex}): user ${userId}, kind: ${kind}, templateId="${template.id}"`
+                      );
+                    } else {
+                      // Если альтернативный шаблон не найден, используем AI если доступен
+                      if (hasAiTexts && aiTexts) {
+                        console.log(
+                          `[Scheduler] 🔍 No alternative template found, using AI text instead (hybrid mode, slot ${slotIndex}): user ${userId}, kind: ${kind}`
+                        );
+                        if (
+                          !tryUseAiText(
+                            aiTexts,
+                            slotIndex,
+                            'hybrid mode, no alternative template'
+                          )
+                        ) {
+                          slotsSkipped += 1;
+                          continue;
+                        }
+                      } else {
+                        // Если альтернативный шаблон не найден и нет AI-текстов, пропускаем слот
+                        console.warn(
+                          `[Scheduler] ⚠️ No alternative template found and no AI texts, skipping slot: user ${userId}, kind: ${kind}`
+                        );
+                        slotsSkipped += 1;
+                        continue;
+                      }
+                    }
+                  } else {
+                    // Текст не использован - используем его
+                    usedTemplatesInCurrentGeneration.add(template.id);
+                    usedTextsInCurrentGeneration.add(candidateText);
+                    templateIdForSlot = template.id;
+                    text = candidateText;
+                    console.log(
+                      `[Scheduler] ✅ Using template text (hybrid mode, slot ${slotIndex}): user ${userId}, kind: ${kind}, templateId="${template.id}"`
+                    );
+                  }
+                } else {
+                  // Шаблон не найден - если есть AI-тексты, используем их для всех слотов
+                  if (hasAiTexts && aiTexts) {
+                    console.log(
+                      `[Scheduler] 🔍 No templates found, using AI text for all slots (hybrid mode, slot ${slotIndex}): user ${userId}, kind: ${kind}`
+                    );
+                    if (
+                      !tryUseAiText(
+                        aiTexts,
+                        slotIndex,
+                        'hybrid mode, no templates'
+                      )
+                    ) {
+                      slotsSkipped += 1;
+                      continue;
+                    }
+                  } else {
+                    // Если шаблон не найден и нет AI-текстов, пропускаем слот
+                    console.warn(
+                      `[Scheduler] ⚠️ No templates found and no AI texts, skipping slot: user ${userId}, kind: ${kind}, slot ${slotIndex}`
+                    );
+                    slotsSkipped += 1;
+                    continue;
+                  }
+                }
+              }
+            }
+          } else {
+            // Режим templates или undefined - используем шаблоны
+            if (!text) {
+              // ВАЖНО: Для детерминированного выбора используем scheduledAt и userId
+              // Это обеспечит одинаковый выбор шаблона при каждой регенерации для одного и того же времени
+              const timeHash = scheduledAt.getTime();
+              const deterministicTemplateIndex = (timeHash + userId) % 1000000;
+
+              console.log(
+                `[Scheduler] 🔍 Deterministic template selection: scheduledAt=${scheduledAt.toISOString()}, timeHash=${timeHash}, userId=${userId}, templateIndex=${deterministicTemplateIndex}, actualSubtype=${actualSubtype}`
+              );
+
+              // ВАЖНО: Всегда используем excludeTemplateIds для предотвращения дублирования
+              // Если все шаблоны использованы, findTemplate автоматически сбросит список и начнет заново
+              template = findTemplate(kind as NotificationKind, {
+                entityKey: entityKey,
+                intent,
+                subtype: actualSubtype as NotificationSubtype | undefined,
+                excludeTemplateIds: Array.from(
+                  usedTemplatesInCurrentGeneration
+                ), // ВСЕГДА используем исключения для предотвращения дублирования
+                templateIndex: deterministicTemplateIndex, // Детерминированный выбор на основе времени
+              });
+
+              // Fallback для habits
+              if (!template && kind === 'habits' && actualSubtype) {
+                const fallbackSubtypes: Array<
+                  'reminder' | 'informational' | 'motivational'
+                > =
+                  actualSubtype === 'reminder'
+                    ? ['informational', 'motivational']
+                    : actualSubtype === 'informational'
+                      ? ['reminder', 'motivational']
+                      : ['reminder', 'informational'];
+
+                for (const fallbackSubtype of fallbackSubtypes) {
+                  const timeHash = scheduledAt.getTime();
+                  const deterministicTemplateIndex =
+                    (timeHash + userId) % 1000000;
+                  template = findTemplate(kind as NotificationKind, {
+                    entityKey: entityKey,
+                    intent,
+                    subtype: fallbackSubtype,
+                    excludeTemplateIds: Array.from(
+                      usedTemplatesInCurrentGeneration
+                    ), // ВСЕГДА используем исключения для предотвращения дублирования
+                    templateIndex: deterministicTemplateIndex, // Детерминированный выбор на основе времени
+                  });
+                  if (template) break;
+                }
+              }
+
+              if (template) {
+                // Получаем текст шаблона
+                const candidateText = getTemplateText(
+                  template,
+                  addressing as any,
+                  sourcePref.directness as any,
+                  userName ?? undefined
+                );
+
+                // ВАЖНО: Проверяем, не использовался ли этот текст недавно
+                // Это предотвращает дублирование одинаковых текстов в соседних слотах
+                if (usedTextsInCurrentGeneration.has(candidateText)) {
+                  console.warn(
+                    `[Scheduler] ⚠️ Text already used, trying another template: templateId="${template.id}", text="${candidateText.substring(0, 50)}..."`
+                  );
+
+                  // Исключаем этот шаблон и пробуем найти другой
+                  usedTemplatesInCurrentGeneration.add(template.id);
+                  const timeHash = scheduledAt.getTime();
+                  const alternativeTemplateIndex =
+                    (timeHash + userId + 1) % 1000000;
+                  template = findTemplate(kind as NotificationKind, {
+                    entityKey: entityKey,
+                    intent,
+                    subtype: actualSubtype as NotificationSubtype | undefined,
+                    excludeTemplateIds: Array.from(
+                      usedTemplatesInCurrentGeneration
+                    ),
+                    templateIndex: alternativeTemplateIndex,
+                  });
+
+                  if (template) {
+                    // Пробуем новый шаблон
+                    const newCandidateText = getTemplateText(
+                      template,
+                      addressing as any,
+                      sourcePref.directness as any,
+                      userName ?? undefined
+                    );
+
+                    // Если новый текст тоже использован, пропускаем этот слот
+                    if (usedTextsInCurrentGeneration.has(newCandidateText)) {
+                      console.warn(
+                        `[Scheduler] ⚠️ Alternative template text also used, skipping slot: templateId="${template.id}"`
+                      );
+                      slotsSkipped += 1;
+                      continue;
+                    }
+
+                    text = newCandidateText;
+                    usedTemplatesInCurrentGeneration.add(template.id);
+                    usedTextsInCurrentGeneration.add(text);
+                    templateIdForSlot = template.id;
+                    console.log(
+                      `[Scheduler] ✅ Using alternative template text (templates mode): user ${userId}, kind: ${kind}, templateId="${template.id}"`
+                    );
+                  } else {
+                    // Если альтернативный шаблон не найден, пропускаем слот
+                    console.warn(
+                      `[Scheduler] ⚠️ No alternative template found, skipping slot: user ${userId}, kind: ${kind}`
+                    );
+                    slotsSkipped += 1;
+                    continue;
+                  }
+                } else {
+                  // Текст не использован - используем его
+                  usedTemplatesInCurrentGeneration.add(template.id);
+                  usedTextsInCurrentGeneration.add(candidateText);
+                  templateIdForSlot = template.id;
+                  text = candidateText;
+                  console.log(
+                    `[Scheduler] ✅ Using template text (templates mode): user ${userId}, kind: ${kind}, templateId="${template.id}"`
+                  );
+                }
+              } else {
+                // Если шаблон не найден, но есть AI-тексты и textSource === 'templates' или undefined,
+                // можно использовать AI-тексты как fallback (но только если textSource не 'templates' явно)
+                // Или просто логируем для отладки
+                if (textSource === undefined && aiTexts && aiTexts.length > 0) {
+                  // Если textSource не определен и есть AI-тексты, используем их как fallback
+                  const rawAiText = aiTexts[aiTextIndex % aiTexts.length];
+                  // ВАЖНО: Заменяем {name} на имя пользователя в AI-текстах
+                  text = formatNotificationTextWithName(rawAiText, userName);
+                  aiTextIndex += 1;
+                  templateIdForSlot = 'ai_generated';
+                  console.log(
+                    `[Scheduler] Template not found, using AI text as fallback: user ${userId}, kind: ${kind}`
+                  );
+                } else {
+                  console.warn(
+                    `[Scheduler] Template not found: user ${userId}, kind: ${kind}, intent: ${intent}, subtype: ${actualSubtype}, entityKey: ${entityKey || 'none'}, textSource: ${textSource}`
+                  );
+                }
+              }
             }
           }
+
+          // Если все еще нет текста - пропускаем
+          if (!text) {
+            console.warn(
+              `[Scheduler] ❌ No text found for template entity after all checks: user ${userId}, kind: ${kind}, entityKey: ${entityKey || 'none'}, textSource: ${textSource || 'undefined'}, aiTexts: ${aiTexts?.length || 0}, template: ${template ? 'found' : 'not found'}`
+            );
+            slotsSkipped += 1;
+            continue;
+          }
+
+          console.log(
+            `[Scheduler] ✅ Selected text for template entity slot: user ${userId}, kind: ${kind}, templateId: ${templateIdForSlot}, text length: ${text.length}, isAi: ${templateIdForSlot === 'ai_generated'}`
+          );
         }
-      }
 
-      // Если все еще нет текста - пропускаем
-      if (!text) {
-        console.warn(
-          `[Scheduler] ❌ No text found for template entity after all checks: user ${userId}, kind: ${kind}, entityKey: ${entityKey || 'none'}, textSource: ${textSource || 'undefined'}, aiTexts: ${aiTexts?.length || 0}, template: ${template ? 'found' : 'not found'}`
+        const isDevelopment = process.env.NODE_ENV !== 'production';
+        let devPrefix = '';
+        // Используем entityDisplayName для кастомных сущностей, entityKey для шаблонов
+        const displayNameForPrefix = isCustomEntity
+          ? entityName
+          : entityKey || 'unknown';
+        if (isDevelopment) {
+          if (kind === 'therapy' && displayNameForPrefix) {
+            devPrefix = `[${displayNameForPrefix.toUpperCase()}|${sourcePref.directness.toUpperCase()}] `;
+          } else if (kind === 'habits') {
+            const habitLabel = displayNameForPrefix || 'unknown';
+            // Кастомная привычка определяется по isCustomEntity (найдена в БД)
+            const subtypeLabel = actualSubtype
+              ? actualSubtype.toUpperCase()
+              : isCustomEntity
+                ? 'CUSTOM'
+                : 'N/A';
+            devPrefix = `[${habitLabel}|${subtypeLabel}|${sourcePref.directness.toUpperCase()}] `;
+          }
+        }
+
+        // Определяем, является ли текст AI-сгенерированным
+        // TODO: Реализовать AI-генерацию в будущем
+        const isAiGenerated = templateIdForSlot === 'ai_generated';
+
+        // ВАЖНО: Используем одно и то же значение для колонки БД и payload JSON
+        // Для кастомных сущностей = ID, для шаблонных = ключ шаблона
+        const finalEntityKey = normalizedEntityKeyForSlot ?? entityKey ?? null;
+
+        const payload: NotificationPayload = {
+          title: 'Mentai: время паузы',
+          body: `${devPrefix}${text}`,
+          templateId: templateIdForSlot,
+          action: 'open',
+          deepLink: kind === 'therapy' ? '/support' : '/habits',
+          data: {
+            kind: kind as NotificationKind,
+            entityKey: finalEntityKey ?? undefined, // Используем то же значение, что и в колонке БД
+            entityDisplayName: entityName || undefined, // Читаемое название для удобства разработчиков
+            slotId: '',
+            isAiGenerated,
+            ...(isDevelopment && {
+              subtype: actualSubtype,
+              directness: sourcePref.directness,
+            }),
+          },
+        };
+
+        const slotId = nanoid();
+        payload.data!.slotId = slotId;
+
+        // Финальный лог перед созданием слота
+        console.log(
+          `[Scheduler] 🎯 FINAL SLOT CREATION - Slot ${slotIndex}: templateId="${templateIdForSlot}", isAiGenerated=${templateIdForSlot === 'ai_generated'}, text="${text ? text.substring(0, 60) : 'null'}...", scheduledAt=${scheduledAt.toISOString()}`
         );
-        slotsSkipped += 1;
-        continue;
+
+        // ВАЖНО: Используем то же значение, что и в payload.data.entityKey
+        await db.insert(notificationSlots).values({
+          id: slotId,
+          userId,
+          kind: sourcePref.kind,
+          entityKey: finalEntityKey,
+          entityDisplayName: entityName || null, // Читаемое название для удобства разработчиков
+          scheduledAt,
+          payload,
+          templateId: templateIdForSlot,
+          status: 'planned',
+        });
+
+        // Сохраняем информацию об использовании AI-текста в БД
+        if (
+          templateIdForSlot === 'ai_generated' &&
+          selectedAiTextIndex !== null &&
+          aiTextRecordId !== null &&
+          aiTexts &&
+          aiTexts[selectedAiTextIndex]
+        ) {
+          try {
+            // ВАЖНО: Хеш вычисляем от исходного текста, а не от отформатированного
+            // Имя пользователя - переменная часть, не должна влиять на проверку дубликатов
+            const rawText = aiTexts[selectedAiTextIndex];
+            await db.insert(aiNotificationTextUsage).values({
+              aiTextId: aiTextRecordId,
+              slotId,
+              textIndex: selectedAiTextIndex,
+              textHash: hashNotificationText(rawText),
+            });
+            console.log(
+              `[Scheduler] ✅ Saved text usage: aiTextId=${aiTextRecordId}, slotId=${slotId}, index=${selectedAiTextIndex}`
+            );
+          } catch (error) {
+            console.error(`[Scheduler] ❌ Failed to save text usage:`, error);
+            // Не прерываем выполнение, так как слот уже создан
+          }
+        }
+
+        slotsCreated += 1;
+        console.log(
+          `[Scheduler] ✅ Created slot ${slotsCreated}: id=${slotId}, entityKey=${normalizedEntityKeyForSlot || entityKey || 'null'}, templateId=${templateIdForSlot}, scheduledAt=${scheduledAt.toISOString()}`
+        );
       }
 
+      if (DEBUG_NOTIFICATIONS) {
+        console.log(`[Scheduler] ========== SLOT CREATION SUMMARY ==========`);
+        console.log(
+          `[Scheduler] 📊 Statistics: isCustomEntity=${isCustomEntity}, textSource=${textSource}, aiTexts loaded=${aiTexts ? aiTexts.length : 0}, customTexts count=${prefMeta?.customTexts?.length || 0}`
+        );
+        console.log(`[Scheduler] ========== END SLOT REGENERATION ==========`);
+      }
       console.log(
-        `[Scheduler] ✅ Selected text for template entity slot: user ${userId}, kind: ${kind}, templateId: ${templateIdForSlot}, text length: ${text.length}, isAi: ${templateIdForSlot === 'ai_generated'}`
+        `[Scheduler] ✅ Regenerated slots for source: user ${userId}, kind: ${kind}, created: ${slotsCreated}, skipped: ${slotsSkipped}, total time slots: ${newSlotTimes.length}`
       );
+    } catch (error) {
+      console.error(
+        `[Scheduler] ❌ Error during slot regeneration: user ${userId}, kind: ${kind}, entityKey: ${entityKey || 'none'}`,
+        error
+      );
+      throw error;
     }
+  })();
 
-    const isDevelopment = process.env.NODE_ENV !== 'production';
-    let devPrefix = '';
-    if (isDevelopment) {
-      if (kind === 'therapy' && entityKey) {
-        devPrefix = `[${entityKey.toUpperCase()}|${sourcePref.directness.toUpperCase()}] `;
-      } else if (kind === 'habits') {
-        const habitLabel = entityKey || 'custom';
-        const isCustomHabit = intent === 'custom';
-        const subtypeLabel = actualSubtype
-          ? actualSubtype.toUpperCase()
-          : isCustomHabit
-            ? 'CUSTOM'
-            : 'N/A';
-        devPrefix = `[${habitLabel}|${subtypeLabel}|${sourcePref.directness.toUpperCase()}] `;
-      }
-    }
+  // Сохраняем промис в Map ПЕРЕД await
+  activeRegenerations.set(regenerationKey, regenerationPromise);
 
-    // Определяем, является ли текст AI-сгенерированным
-    // TODO: Реализовать AI-генерацию в будущем
-    const isAiGenerated = templateIdForSlot === 'ai_generated';
-
-    const payload: NotificationPayload = {
-      title: 'Mentai: время паузы',
-      body: `${devPrefix}${text}`,
-      templateId: templateIdForSlot,
-      action: 'open',
-      deepLink: kind === 'therapy' ? '/support' : '/habits',
-      data: {
-        kind: kind as NotificationKind,
-        entityKey: entityKey ?? undefined,
-        slotId: '',
-        isAiGenerated,
-        ...(isDevelopment && {
-          subtype: actualSubtype,
-          directness: sourcePref.directness,
-        }),
-      },
-    };
-
-    const slotId = nanoid();
-    payload.data!.slotId = slotId;
-
-    // Финальный лог перед созданием слота
+  try {
+    // Ждем завершения операции
+    await regenerationPromise;
+  } finally {
+    // Удаляем промис из Map после завершения операции
+    activeRegenerations.delete(regenerationKey);
     console.log(
-      `[Scheduler] 🎯 FINAL SLOT CREATION - Slot ${slotIndex}: templateId="${templateIdForSlot}", isAiGenerated=${templateIdForSlot === 'ai_generated'}, text="${text ? text.substring(0, 60) : 'null'}...", scheduledAt=${scheduledAt.toISOString()}`
-    );
-
-    // ВАЖНО: Используем нормализованное (читаемое) значение для entityKey
-    await db.insert(notificationSlots).values({
-      id: slotId,
-      userId,
-      kind: sourcePref.kind,
-      entityKey:
-        normalizedEntityKeyForSlot ??
-        (kind === 'habits'
-          ? (habitKey ?? entityKey ?? null)
-          : (entityKey ?? null)),
-      scheduledAt,
-      payload,
-      templateId: templateIdForSlot,
-      status: 'planned',
-    });
-    slotsCreated += 1;
-    console.log(
-      `[Scheduler] ✅ Created slot ${slotsCreated}: id=${slotId}, entityKey=${normalizedEntityKeyForSlot || entityKey || 'null'}, templateId=${templateIdForSlot}, scheduledAt=${scheduledAt.toISOString()}`
+      `[Scheduler] 🧹 Cleaned up regeneration promise for: user ${userId}, kind: ${kind}, entityKey: ${entityKey || 'none'}`
     );
   }
-
-  console.log(`[Scheduler] ========== SLOT CREATION SUMMARY ==========`);
-  console.log(
-    `[Scheduler] ✅ Regenerated slots for source: user ${userId}, kind: ${kind}, created: ${slotsCreated}, skipped: ${slotsSkipped}, total time slots: ${newSlotTimes.length}`
-  );
-  console.log(
-    `[Scheduler] 📊 Statistics: isCustomEntity=${isCustomEntity}, textSource=${textSource}, aiTexts loaded=${aiTexts ? aiTexts.length : 0}, customTexts count=${prefMeta?.customTexts?.length || 0}`
-  );
-  console.log(`[Scheduler] ========== END SLOT REGENERATION ==========`);
 }
 
 /**

@@ -21,8 +21,15 @@ export const config = {
         },
         notifications: {
           temperature: 0.7, // Выше для разнообразия
-          maxOutputTokens: 512, // Короткие тексты
-          enableReasoning: false, // Не нужно
+          // maxOutputTokens не используется напрямую - вычисляется динамически: count * 200 + 5000
+          // Значение ниже - минимальный fallback, рассчитывается на основе AI_NOTIFICATIONS_DEFAULT_COUNT
+          maxOutputTokens: (() => {
+            const defaultCount =
+              Number(process.env.AI_NOTIFICATIONS_DEFAULT_COUNT) || 50;
+            // Рассчитываем минимальное значение на основе дефолтного количества: count * 200 + 5000
+            return defaultCount * 200 + 5000; // Для 50 текстов = 15000 токенов
+          })(),
+          enableReasoning: false, // Не нужно для простых уведомлений (увеличивает стоимость и время)
         },
       },
 

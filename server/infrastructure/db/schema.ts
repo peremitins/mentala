@@ -178,7 +178,6 @@ export const habits = pgTable('habits', {
   name: varchar('name', { length: 120 }).notNull(),
   intent: varchar('intent', { length: 10 }).notNull(), // 'build' | 'quit' | 'custom'
   habitKey: varchar('habit_key', { length: 50 }), // Нормализованный ключ для маппинга на шаблоны (water, smoking, etc.)
-  slug: varchar('slug', { length: 255 }), // URL-friendly идентификатор
   emoji: varchar('emoji', { length: 8 }),
   description: text('description'),
   createdAt: timestamp('created_at', { withTimezone: true })
@@ -194,7 +193,6 @@ export const therapyTopicsCustom = pgTable('therapy_topics_custom', {
   id: text('id').primaryKey(),
   userId: integer('user_id').notNull(),
   name: varchar('name', { length: 120 }).notNull(),
-  slug: varchar('slug', { length: 255 }), // URL-friendly идентификатор
   description: text('description'),
   emoji: varchar('emoji', { length: 8 }),
   createdAt: timestamp('created_at', { withTimezone: true })
@@ -245,7 +243,7 @@ export const notificationPreferences = pgTable('notification_preferences', {
   id: text('id').primaryKey(),
   userId: integer('user_id').notNull(),
   kind: varchar('kind', { length: 20 }).notNull(), // 'therapy' | 'habits'
-  entityKey: varchar('entity_key', { length: 255 }), // Единое поле для идентификации источника (может быть ID, slug или ключ шаблона)
+  entityKey: varchar('entity_key', { length: 255 }), // Единое поле для идентификации источника (ID для кастомных, ключ шаблона для шаблонных)
   enabled: boolean('enabled').default(true).notNull(),
   timesPerDay: integer('times_per_day').notNull(),
   directness: varchar('directness', { length: 20 }).notNull(), // 'soft' | 'moderate' | 'hard'
@@ -272,7 +270,8 @@ export const notificationSlots = pgTable('notification_slots', {
   id: text('id').primaryKey(),
   userId: integer('user_id').notNull(),
   kind: varchar('kind', { length: 20 }).notNull(), // 'therapy' | 'habits'
-  entityKey: varchar('entity_key', { length: 255 }), // Единое поле для идентификации источника (может быть ID, slug или ключ шаблона)
+  entityKey: varchar('entity_key', { length: 255 }), // Единое поле для идентификации источника (ID для кастомных, ключ шаблона для шаблонных)
+  entityDisplayName: varchar('entity_display_name', { length: 255 }), // Читаемое название сущности (для удобства разработчиков, не участвует в логике)
   scheduledAt: timestamp('scheduled_at', { withTimezone: true }).notNull(), // UTC с джиттером
   payload: jsonb('payload').notNull(), // { title, body, templateId, action, deepLink, ... }
   templateId: varchar('template_id', { length: 255 }),
@@ -347,7 +346,8 @@ export const aiGeneratedNotificationTexts = pgTable(
     id: serial('id').primaryKey(),
     userId: integer('user_id').notNull(),
     kind: varchar('kind', { length: 20 }).notNull(), // 'habits' | 'therapy'
-    entityKey: varchar('entity_key', { length: 255 }).notNull(), // Единое поле для идентификации источника (может быть ID, slug или ключ шаблона)
+    entityKey: varchar('entity_key', { length: 255 }).notNull(), // Единое поле для идентификации источника (ID для кастомных, ключ шаблона для шаблонных)
+    entityDisplayName: varchar('entity_display_name', { length: 255 }), // Читаемое название сущности (для удобства разработчиков, не участвует в логике)
     preferenceId: text('preference_id').notNull(), // FK к notification_preferences.id
     textSource: varchar('text_source', { length: 20 }).notNull(), // 'ai' | 'hybrid' (только для AI-текстов)
     texts: jsonb('texts').notNull(), // массив сгенерированных текстов (до 100)
@@ -365,3 +365,19 @@ export const aiGeneratedNotificationTexts = pgTable(
     expiresAt: timestamp('expires_at', { withTimezone: true }), // опционально: срок действия кеша
   }
 );
+
+// Отслеживание использованных AI-текстов уведомлений
+export const aiNotificationTextUsage = pgTable('ai_notification_text_usage', {
+  id: serial('id').primaryKey(),
+  aiTextId: integer('ai_text_id')
+    .notNull()
+    .references(() => aiGeneratedNotificationTexts.id, {
+      onDelete: 'cascade',
+    }),
+  slotId: text('slot_id')
+    .notNull()
+    .references(() => notificationSlots.id, { onDelete: 'cascade' }),
+  textIndex: integer('text_index').notNull(), // Индекс текста в массиве texts
+  textHash: text('text_hash').notNull(), // Хеш текста для проверки уникальности
+  sentAt: timestamp('sent_at', { withTimezone: true }).defaultNow().notNull(),
+});

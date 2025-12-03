@@ -29,11 +29,15 @@ export type InteractionAction =
   | 'unanswered';
 export type SnoozeDuration = '15m' | '1h' | '4h' | 'tomorrow';
 export type HabitIntent = 'build' | 'quit' | 'custom';
-export type HabitSubtype =
+// Универсальный тип subtype для всех видов уведомлений
+export type NotificationSubtype =
   | 'reminder'
   | 'informational'
   | 'motivational'
   | 'mixed';
+
+// Обратная совместимость
+export type HabitSubtype = NotificationSubtype;
 
 // ==========================================
 // Глобальные настройки пользователя
@@ -57,12 +61,12 @@ export interface NotificationPreferencesDto {
   id: string;
   userId: number;
   kind: NotificationKind;
-  entityKey?: string | null; // Единое поле для идентификации источника (может быть ID, slug или ключ шаблона)
+  entityKey?: string | null; // Единое поле для идентификации источника (ID для кастомных, ключ шаблона для шаблонных)
   enabled: boolean;
   timesPerDay: number;
   directness: Directness;
   timezone: string;
-  subtype?: HabitSubtype | null; // Для habits: reminder | informational | motivational
+  subtype?: NotificationSubtype | null; // Для habits и therapy: reminder | informational | motivational | mixed
   activeDays: number[]; // Дни недели (0 = Воскресенье, 1 = Понедельник, ..., 6 = Суббота)
   customSlotTimes?: (number | null)[] | null; // Индивидуальные времена слотов (0-1439 минут) для каждого уведомления
   timeRangeStart: number; // Начало временного окна в минутах от начала дня (0-1439)
@@ -77,8 +81,8 @@ export interface UpdateNotificationPreferencesDto {
   timesPerDay?: number;
   directness?: Directness;
   timezone?: string;
-  entityKey?: string | null; // Единое поле для идентификации источника (может быть ID, slug или ключ шаблона)
-  subtype?: HabitSubtype | null;
+  entityKey?: string | null; // Единое поле для идентификации источника (ID для кастомных, ключ шаблона для шаблонных)
+  subtype?: NotificationSubtype | null;
   activeDays?: number[]; // Дни недели (0 = Воскресенье, 1 = Понедельник, ..., 6 = Суббота)
   customSlotTimes?: (number | null)[] | null; // Пользовательские времена слотов (0-1439 минут)
   timeRangeStart?: number; // Начало временного окна в минутах от начала дня (0-1439)
@@ -98,7 +102,6 @@ export interface HabitDto {
   name: string;
   intent: HabitIntent;
   habitKey?: string | null; // Нормализованный ключ для маппинга на шаблоны
-  slug?: string | null; // URL-friendly идентификатор
   emoji?: string | null;
   description?: string | null;
   createdAt: string;
@@ -134,7 +137,6 @@ export interface NotificationPreferenceMeta {
 export interface TherapyTopicDto {
   id: string;
   name: string;
-  slug?: string | null; // URL-friendly идентификатор
   description?: string | null;
   emoji?: string | null;
   createdAt: string;
@@ -180,7 +182,7 @@ export interface NotificationSlotDto {
   id: string;
   userId: number;
   kind: NotificationKind;
-  entityKey?: string | null; // Единое поле для идентификации источника (может быть ID, slug или ключ шаблона)
+  entityKey?: string | null; // Единое поле для идентификации источника (ID для кастомных, ключ шаблона для шаблонных)
   scheduledAt: string;
   payload: NotificationPayload;
   templateId?: string | null;

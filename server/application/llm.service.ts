@@ -36,12 +36,20 @@ export async function chatViaProvider(params: {
 
   // Если указан scenario, используем настройки из конфига
   let temperature = params.options?.temperature;
+  // ВАЖНО: maxOutputTokens из options имеет приоритет - не перезаписываем, если задано явно
   let maxOutputTokens = params.options?.maxOutputTokens;
 
-  if (params.options?.scenario && !temperature) {
+  if (params.options?.scenario) {
     const scenarioConfig = config.llm.openai.settings[params.options.scenario];
-    temperature = scenarioConfig.temperature;
-    maxOutputTokens = maxOutputTokens || scenarioConfig.maxOutputTokens;
+    // Температура: используем из options, если задана, иначе из конфига
+    if (!temperature) {
+      temperature = scenarioConfig.temperature;
+    }
+    // maxOutputTokens: НЕ перезаписываем, если уже задано явно в options (для динамических расчетов)
+    // Используем из конфига только если не задано в options
+    if (!maxOutputTokens) {
+      maxOutputTokens = scenarioConfig.maxOutputTokens;
+    }
   }
 
   return provider.chat({
@@ -137,12 +145,20 @@ export function chatStreamViaProvider(params: {
 
   // Если указан scenario, используем настройки из конфига
   let temperature = params.options?.temperature;
+  // ВАЖНО: maxOutputTokens из options имеет приоритет - не перезаписываем, если задано явно
   let maxOutputTokens = params.options?.maxOutputTokens;
 
-  if (params.options?.scenario && !temperature) {
+  if (params.options?.scenario) {
     const scenarioConfig = config.llm.openai.settings[params.options.scenario];
-    temperature = scenarioConfig.temperature;
-    maxOutputTokens = maxOutputTokens || scenarioConfig.maxOutputTokens;
+    // Температура: используем из options, если задана, иначе из конфига
+    if (!temperature) {
+      temperature = scenarioConfig.temperature;
+    }
+    // maxOutputTokens: НЕ перезаписываем, если уже задано явно в options (для динамических расчетов)
+    // Используем из конфига только если не задано в options
+    if (!maxOutputTokens) {
+      maxOutputTokens = scenarioConfig.maxOutputTokens;
+    }
   }
 
   return provider.chatStream({

@@ -15,6 +15,7 @@ import {
 } from '@/server/infrastructure/db/schema';
 import type { NotificationPayload } from '@/shared/dto/notifications';
 import { checkAndRegenerateSlotsIfNeeded } from '@/server/application/notifications/scheduler.service';
+import { refillAllTextPoolsIfNeeded } from '@/server/application/notifications/ai-generation.service';
 import admin from 'firebase-admin';
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve, isAbsolute } from 'node:path';
@@ -330,6 +331,10 @@ export function startDeliveryWorker(): void {
   const SCHEDULER_CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 час
   const SCHEDULER_INITIAL_DELAY_MS = 5 * 60 * 1000; // 5 минут после старта
 
+  // Интервал для проверки и догенерации текстов (раз в час, с небольшим смещением)
+  const TEXT_POOL_REFILL_INTERVAL_MS = 60 * 60 * 1000; // 1 час
+  const TEXT_POOL_REFILL_INITIAL_DELAY_MS = 10 * 60 * 1000; // 10 минут после старта
+
   console.log(
     `[DeliveryWorker] Mode: ${isDevelopment ? 'development' : 'production'}`
   );
@@ -366,10 +371,27 @@ export function startDeliveryWorker(): void {
     }, SCHEDULER_CHECK_INTERVAL_MS);
   }, SCHEDULER_INITIAL_DELAY_MS);
 
+  // Первый запуск проверки и догенерации текстов
+  setTimeout(() => {
+    refillAllTextPoolsIfNeeded().catch((error) => {
+      console.error('[DeliveryWorker] Error in text pool refill:', error);
+    });
+
+    // Последующие запуски проверки и догенерации текстов
+    setInterval(() => {
+      refillAllTextPoolsIfNeeded().catch((error) => {
+        console.error('[DeliveryWorker] Error in text pool refill:', error);
+      });
+    }, TEXT_POOL_REFILL_INTERVAL_MS);
+  }, TEXT_POOL_REFILL_INITIAL_DELAY_MS);
+
   console.log(
     `[DeliveryWorker] Worker scheduled (first check in ${INITIAL_DELAY_MS / 1000}s, then every ${INTERVAL_MS / 1000}s)`
   );
   console.log(
     `[DeliveryWorker] Scheduler check scheduled (first check in ${SCHEDULER_INITIAL_DELAY_MS / 1000 / 60} minutes, then every ${SCHEDULER_CHECK_INTERVAL_MS / 1000 / 60} minutes)`
+  );
+  console.log(
+    `[DeliveryWorker] Text pool refill scheduled (first check in ${TEXT_POOL_REFILL_INITIAL_DELAY_MS / 1000 / 60} minutes, then every ${TEXT_POOL_REFILL_INTERVAL_MS / 1000 / 60} minutes)`
   );
 }
