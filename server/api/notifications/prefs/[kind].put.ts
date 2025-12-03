@@ -7,7 +7,7 @@ import {
 } from '@/server/infrastructure/db/schema';
 import { db } from '@/server/infrastructure/db/client';
 import type {
-  HabitSubtype,
+  NotificationSubtype,
   NotificationPreferencesDto,
   UpdateNotificationPreferencesDto,
   NotificationPreferenceMeta,
@@ -49,7 +49,8 @@ function normalizeCustomSlotTimes(
  * PUT /api/notifications/prefs/:kind
  * Обновить локальные настройки конкретного типа (therapy | habits)
  */
-const HABIT_SUBTYPES: HabitSubtype[] = [
+// Универсальные значения subtype для всех видов уведомлений
+const NOTIFICATION_SUBTYPES: NotificationSubtype[] = [
   'reminder',
   'informational',
   'motivational',
@@ -152,16 +153,9 @@ export default defineEventHandler(
     }
 
     if (body.subtype !== undefined) {
-      if (kind !== 'habits' && body.subtype !== null) {
-        throw createError({
-          statusCode: 400,
-          message: 'subtype is only supported for habits',
-        });
-      }
-
       if (
         body.subtype !== null &&
-        !HABIT_SUBTYPES.includes(body.subtype as HabitSubtype)
+        !NOTIFICATION_SUBTYPES.includes(body.subtype as NotificationSubtype)
       ) {
         throw createError({
           statusCode: 400,
@@ -281,90 +275,50 @@ export default defineEventHandler(
     const entityKey = body.entityKey;
 
     // Пытаемся найти существующие настройки с учётом entityKey
-    // ВАЖНО: entityKey в body может быть как slug, так и ID
-    // В БД может храниться как slug, так и ID (для обратной совместимости)
-    // Поэтому ищем по обоим вариантам
     const conditions = [
       eq(notificationPreferences.userId, userId),
       eq(notificationPreferences.kind, kind),
     ];
 
     if (entityKey) {
-      // Ищем настройки, где entityKey совпадает с переданным значением (slug или ID)
-      // Также проверяем, может ли переданное значение быть slug для кастомной сущности
-      // или ID, который нужно сопоставить со slug в БД
+      // Для кастомных сущностей entityKey = ID, для шаблонных = ключ шаблона
       if (kind === 'habits') {
+        // Для кастомных сущностей entityKey должен быть ID
         const [habit] = await db
-          .select({ id: habits.id, slug: habits.slug, intent: habits.intent })
+          .select({ id: habits.id, intent: habits.intent })
           .from(habits)
-          .where(
-            and(
-              or(eq(habits.id, entityKey), eq(habits.slug, entityKey)),
-              eq(habits.userId, userId)
-            )
-          )
+          .where(and(eq(habits.id, entityKey), eq(habits.userId, userId)))
           .limit(1);
 
         if (habit) {
-          // Нашли привычку - используем и ID, и slug для поиска настроек
-          // (в БД может храниться любой из них)
-          const habitSlug = habit.slug;
-          if (habitSlug && typeof habitSlug === 'string') {
-            const entityKeyOr = or(
-              eq(notificationPreferences.entityKey, habit.id),
-              eq(notificationPreferences.entityKey, habitSlug)
-            );
-            if (entityKeyOr) {
-              conditions.push(entityKeyOr);
-            } else {
-              conditions.push(eq(notificationPreferences.entityKey, habit.id));
-            }
-          } else {
-            conditions.push(eq(notificationPreferences.entityKey, habit.id));
-          }
+          // Нашли привычку в БД - это кастомная, используем ID
+          conditions.push(eq(notificationPreferences.entityKey, habit.id));
         } else {
-          // Привычка не найдена - возможно, это готовый шаблон
-          // Ищем напрямую по переданному значению
+          // Не нашли в БД - значит это шаблон (water, meditation и т.д.)
+          // Используем entityKey как есть (ключ шаблона)
           conditions.push(eq(notificationPreferences.entityKey, entityKey));
         }
       } else if (kind === 'therapy') {
-        // Аналогично для терапии
+        // Для кастомных сущностей entityKey должен быть ID
         const [topic] = await db
           .select({
             id: therapyTopicsCustom.id,
-            slug: therapyTopicsCustom.slug,
           })
           .from(therapyTopicsCustom)
           .where(
             and(
-              or(
-                eq(therapyTopicsCustom.id, entityKey),
-                eq(therapyTopicsCustom.slug, entityKey)
-              ),
+              eq(therapyTopicsCustom.id, entityKey),
               eq(therapyTopicsCustom.userId, userId)
             )
           )
           .limit(1);
 
         if (topic) {
-          // Нашли тему - используем и ID, и slug для поиска настроек
-          const topicSlug = topic.slug;
-          if (topicSlug && typeof topicSlug === 'string') {
-            const entityKeyOr = or(
-              eq(notificationPreferences.entityKey, topic.id),
-              eq(notificationPreferences.entityKey, topicSlug)
-            );
-            if (entityKeyOr) {
-              conditions.push(entityKeyOr);
-            } else {
-              conditions.push(eq(notificationPreferences.entityKey, topic.id));
-            }
-          } else {
-            conditions.push(eq(notificationPreferences.entityKey, topic.id));
-          }
+          // Нашли тему в БД - это кастомная, используем ID
+          conditions.push(eq(notificationPreferences.entityKey, topic.id));
         } else {
-          // Тема не найдена - возможно, это готовый шаблон
-          // Ищем напрямую по переданному значению
+          // Не нашли в БД - значит это шаблон
+          // Используем entityKey как есть (ключ шаблона)
           conditions.push(eq(notificationPreferences.entityKey, entityKey));
         }
       } else {
@@ -392,29 +346,11 @@ export default defineEventHandler(
         customSlotTimesInput,
         nextTimesPerDay
       );
-      // ВАЖНО: Для кастомных привычек subtype всегда null
-      // Определяем isCustomHabitForUpdate ДО вычисления nextSubtype
-      let isCustomHabitForSubtype = false;
-      if (kind === 'habits' && entityKey) {
-        const [habitForSubtype] = await db
-          .select({ intent: habits.intent })
-          .from(habits)
-          .where(
-            and(
-              or(eq(habits.id, entityKey), eq(habits.slug, entityKey)),
-              eq(habits.userId, userId)
-            )
-          )
-          .limit(1);
-        isCustomHabitForSubtype = habitForSubtype?.intent === 'custom';
-      }
-
+      // Упрощенная логика: subtype сохраняется для всех типов сущностей
       const nextSubtype =
-        kind === 'habits' && !isCustomHabitForSubtype
-          ? body.subtype !== undefined
-            ? body.subtype
-            : (existing.subtype as HabitSubtype | null)
-          : null;
+        body.subtype !== undefined
+          ? body.subtype
+          : (existing.subtype as NotificationSubtype | null);
       const existingMeta =
         (existing.meta as NotificationPreferenceMeta | null) ?? null;
       const shouldUpdateMeta =
@@ -454,7 +390,6 @@ export default defineEventHandler(
       const metaToSave = hasMetaFields ? finalMeta : null;
 
       // Определяем, кастомная ли это привычка, чтобы правильно обработать subtype
-      // Также нормализуем entityKey для читаемости (используем slug для кастомных сущностей)
       let isCustomHabitForUpdate = false;
       let normalizedEntityKey = entityKey;
 
@@ -468,23 +403,23 @@ export default defineEventHandler(
       let oldEntityDescriptionBeforeUpdate: string | null = null;
 
       if (kind === 'habits' && entityKey) {
+        // Для кастомных сущностей entityKey должен быть ID
         const [habit] = await db
           .select({
             intent: habits.intent,
-            slug: habits.slug,
             id: habits.id,
             name: habits.name,
             description: habits.description,
           })
           .from(habits)
-          .where(
-            and(
-              or(eq(habits.id, entityKey), eq(habits.slug, entityKey)),
-              eq(habits.userId, userId)
-            )
-          )
+          .where(and(eq(habits.id, entityKey), eq(habits.userId, userId)))
           .limit(1);
-        isCustomHabitForUpdate = habit?.intent === 'custom';
+        // Кастомная привычка - это любая привычка, найденная в БД (не шаблон)
+        isCustomHabitForUpdate = !!habit;
+
+        console.log(
+          `[NotificationPrefs] 🔍 Searching habit: entityKey=${entityKey}, found=${!!habit}, id=${habit?.id}, name="${habit?.name}"`
+        );
 
         // Сохраняем старые значения ДО обновления
         if (habit) {
@@ -493,7 +428,6 @@ export default defineEventHandler(
         }
 
         // Обновляем название и описание, если они переданы
-        // ВАЖНО: Slug не меняется при изменении названия, чтобы избежать проблем с routing
         if (
           habit &&
           (body.name !== undefined || body.description !== undefined)
@@ -506,13 +440,19 @@ export default defineEventHandler(
             updatedAt: new Date(),
           };
 
-          if (body.name !== undefined && body.name.trim() !== habit.name) {
-            updateData.name = body.name.trim();
-            nameChanged = true;
-
-            console.log(
-              `[NotificationPrefs] Updating habit name: "${habit.name}" -> "${updateData.name}" (slug remains unchanged: "${habit.slug || 'none'}")`
-            );
+          if (body.name !== undefined) {
+            const newName = body.name.trim();
+            if (newName !== habit.name) {
+              updateData.name = newName;
+              nameChanged = true;
+              console.log(
+                `[NotificationPrefs] ✅ Updating habit name: "${habit.name}" -> "${newName}"`
+              );
+            } else {
+              console.log(
+                `[NotificationPrefs] ⏭️ Habit name unchanged: "${habit.name}"`
+              );
+            }
           }
 
           if (body.description !== undefined) {
@@ -521,12 +461,19 @@ export default defineEventHandler(
               updateData.description = newDescription;
               descriptionChanged = true;
               console.log(
-                `[NotificationPrefs] Updating habit description: "${habit.description || 'null'}" -> "${newDescription || 'null'}"`
+                `[NotificationPrefs] ✅ Updating habit description: "${habit.description || 'null'}" -> "${newDescription || 'null'}"`
+              );
+            } else {
+              console.log(
+                `[NotificationPrefs] ⏭️ Habit description unchanged: "${habit.description || 'null'}"`
               );
             }
           }
 
           if (nameChanged || descriptionChanged) {
+            console.log(
+              `[NotificationPrefs] 🔄 Saving habit changes: nameChanged=${nameChanged}, descriptionChanged=${descriptionChanged}`
+            );
             const [updatedHabit] = await db
               .update(habits)
               .set(updateData)
@@ -535,54 +482,34 @@ export default defineEventHandler(
 
             if (updatedHabit) {
               updatedEntityId = updatedHabit.id;
-              // Используем существующий slug (не меняем его)
-              if (updatedHabit.slug) {
-                normalizedEntityKey = updatedHabit.slug;
-              }
+              // Для кастомных сущностей entityKey = ID
+              normalizedEntityKey = updatedHabit.id;
+              console.log(
+                `[NotificationPrefs] ✅ Habit updated: id=${updatedHabit.id}, name="${updatedHabit.name}", description="${updatedHabit.description || 'null'}"`
+              );
             }
+          } else {
+            console.log(
+              `[NotificationPrefs] ⏭️ No changes to save for habit: name=${body.name !== undefined ? 'provided' : 'not provided'}, description=${body.description !== undefined ? 'provided' : 'not provided'}`
+            );
           }
+        } else if (!habit) {
+          console.log(
+            `[NotificationPrefs] ⚠️ Habit not found for entityKey=${entityKey}, cannot update name/description`
+          );
         }
 
-        // Для кастомных привычек используем slug вместо id для читаемости
-        if (habit && habit.intent === 'custom') {
-          if (normalizedEntityKey === entityKey) {
-            // Если normalizedEntityKey не обновился выше, используем существующий slug
-            if (habit.slug) {
-              normalizedEntityKey = habit.slug;
-            } else {
-              // Если slug отсутствует, генерируем его сразу
-              console.warn(
-                `[NotificationPrefs] Custom habit ${entityKey} has no slug, generating one...`
-              );
-              const { generateSlug } = await import('@/server/utils/slug');
-              const existingHabits = await db
-                .select({ slug: habits.slug })
-                .from(habits)
-                .where(eq(habits.userId, userId));
-              const existingSlugs = existingHabits
-                .map((h) => h.slug)
-                .filter((s): s is string => s !== null);
-              const newSlug = generateSlug(
-                habit.name || 'habit',
-                existingSlugs
-              );
-              // Обновляем slug в БД
-              await db
-                .update(habits)
-                .set({ slug: newSlug })
-                .where(eq(habits.id, habit.id));
-              normalizedEntityKey = newSlug;
-              console.log(
-                `[NotificationPrefs] Generated and saved slug for custom habit: ${newSlug}`
-              );
-            }
-          }
+        // Для кастомных привычек используем ID
+        if (habit) {
+          normalizedEntityKey = habit.id; // ВСЕГДА ID для кастомных сущностей
+          console.log(
+            `[NotificationPrefs] Normalized entityKey for habit: original=${entityKey}, normalized=${normalizedEntityKey} (ID)`
+          );
         }
       } else if (kind === 'therapy' && entityKey) {
-        // Для терапии entityKey уже должен быть читаемым (slug), но проверим
+        // Для кастомных сущностей entityKey должен быть ID
         const [topic] = await db
           .select({
-            slug: therapyTopicsCustom.slug,
             id: therapyTopicsCustom.id,
             name: therapyTopicsCustom.name,
             description: therapyTopicsCustom.description,
@@ -590,10 +517,7 @@ export default defineEventHandler(
           .from(therapyTopicsCustom)
           .where(
             and(
-              or(
-                eq(therapyTopicsCustom.id, entityKey),
-                eq(therapyTopicsCustom.slug, entityKey)
-              ),
+              eq(therapyTopicsCustom.id, entityKey),
               eq(therapyTopicsCustom.userId, userId)
             )
           )
@@ -606,7 +530,6 @@ export default defineEventHandler(
         }
 
         // Обновляем название и описание, если они переданы
-        // ВАЖНО: Slug не меняется при изменении названия, чтобы избежать проблем с routing
         if (
           topic &&
           (body.name !== undefined || body.description !== undefined)
@@ -619,13 +542,19 @@ export default defineEventHandler(
             updatedAt: new Date(),
           };
 
-          if (body.name !== undefined && body.name.trim() !== topic.name) {
-            updateData.name = body.name.trim();
-            nameChanged = true;
-
-            console.log(
-              `[NotificationPrefs] Updating therapy topic name: "${topic.name}" -> "${updateData.name}" (slug remains unchanged: "${topic.slug || 'none'}")`
-            );
+          if (body.name !== undefined) {
+            const newName = body.name.trim();
+            if (newName !== topic.name) {
+              updateData.name = newName;
+              nameChanged = true;
+              console.log(
+                `[NotificationPrefs] ✅ Updating therapy topic name: "${topic.name}" -> "${newName}"`
+              );
+            } else {
+              console.log(
+                `[NotificationPrefs] ⏭️ Therapy topic name unchanged: "${topic.name}"`
+              );
+            }
           }
 
           if (body.description !== undefined) {
@@ -634,12 +563,19 @@ export default defineEventHandler(
               updateData.description = newDescription;
               descriptionChanged = true;
               console.log(
-                `[NotificationPrefs] Updating therapy topic description: "${topic.description || 'null'}" -> "${newDescription || 'null'}"`
+                `[NotificationPrefs] ✅ Updating therapy topic description: "${topic.description || 'null'}" -> "${newDescription || 'null'}"`
+              );
+            } else {
+              console.log(
+                `[NotificationPrefs] ⏭️ Therapy topic description unchanged: "${topic.description || 'null'}"`
               );
             }
           }
 
           if (nameChanged || descriptionChanged) {
+            console.log(
+              `[NotificationPrefs] 🔄 Saving therapy topic changes: nameChanged=${nameChanged}, descriptionChanged=${descriptionChanged}`
+            );
             const [updatedTopic] = await db
               .update(therapyTopicsCustom)
               .set(updateData)
@@ -648,16 +584,29 @@ export default defineEventHandler(
 
             if (updatedTopic) {
               updatedEntityId = updatedTopic.id;
-              // Используем существующий slug (не меняем его)
-              if (updatedTopic.slug) {
-                normalizedEntityKey = updatedTopic.slug;
-              }
+              // Для кастомных сущностей entityKey = ID
+              normalizedEntityKey = updatedTopic.id;
+              console.log(
+                `[NotificationPrefs] ✅ Therapy topic updated: id=${updatedTopic.id}, name="${updatedTopic.name}", description="${updatedTopic.description || 'null'}"`
+              );
             }
+          } else {
+            console.log(
+              `[NotificationPrefs] ⏭️ No changes to save for therapy topic: name=${body.name !== undefined ? 'provided' : 'not provided'}, description=${body.description !== undefined ? 'provided' : 'not provided'}`
+            );
           }
+        } else if (!topic) {
+          console.log(
+            `[NotificationPrefs] ⚠️ Therapy topic not found for entityKey=${entityKey}, cannot update name/description`
+          );
         }
 
-        if (topic && topic.slug) {
-          normalizedEntityKey = topic.slug;
+        // Для кастомных тем используем ID
+        if (topic) {
+          normalizedEntityKey = topic.id; // ВСЕГДА ID для кастомных сущностей
+          console.log(
+            `[NotificationPrefs] Normalized entityKey for therapy topic: original=${entityKey}, normalized=${normalizedEntityKey} (ID)`
+          );
         }
       }
 
@@ -669,8 +618,7 @@ export default defineEventHandler(
           timesPerDay: body.timesPerDay ?? existing.timesPerDay,
           directness: body.directness ?? existing.directness,
           timezone: body.timezone ?? existing.timezone,
-          // Для кастомных привычек subtype всегда null в БД
-          subtype: isCustomHabitForUpdate ? null : nextSubtype,
+          subtype: nextSubtype, // Сохраняем subtype для всех типов сущностей
           // Используем нормализованное (читаемое) значение
           entityKey: normalizedEntityKey ?? null,
           activeDays: body.activeDays ?? existing.activeDays,
@@ -700,67 +648,16 @@ export default defineEventHandler(
 
       if (shouldRegenerateAi) {
         // Проверяем, изменились ли параметры, влияющие на генерацию
-        // ВАЖНО: Используем нормализованное (читаемое) значение для entityKey
-        // normalizedEntityKey уже вычислено выше и содержит slug для кастомных сущностей
+        // Используем нормализованное значение для entityKey
         let finalEntityKey = normalizedEntityKey || '';
 
         console.log(
           `[NotificationPrefs] Preparing AI generation: kind=${kind}, original entityKey=${entityKey || 'none'}, normalizedEntityKey=${normalizedEntityKey || 'none'}, finalEntityKey=${finalEntityKey}`
         );
 
-        // Если это кастомная привычка, используем slug вместо id
-        if (kind === 'habits' && entityKey) {
-          const [habit] = await db
-            .select({
-              slug: habits.slug,
-              id: habits.id,
-              intent: habits.intent,
-              name: habits.name,
-            })
-            .from(habits)
-            .where(
-              and(
-                or(eq(habits.id, entityKey), eq(habits.slug, entityKey)),
-                eq(habits.userId, userId)
-              )
-            )
-            .limit(1);
-          if (habit) {
-            if (habit.intent === 'custom' && habit.slug) {
-              // Используем slug для кастомных привычек (читаемый ключ)
-              finalEntityKey = habit.slug;
-              console.log(
-                `[NotificationPrefs] Using slug for custom habit: ${habit.slug} (original entityKey: ${entityKey})`
-              );
-            } else if (habit.intent === 'custom' && !habit.slug) {
-              // Если slug не существует, генерируем его
-              console.warn(
-                `[NotificationPrefs] Custom habit ${entityKey} has no slug, generating one...`
-              );
-              const { generateSlug } = await import('@/server/utils/slug');
-              const existingHabits = await db
-                .select({ slug: habits.slug })
-                .from(habits)
-                .where(eq(habits.userId, userId));
-              const existingSlugs = existingHabits
-                .map((h) => h.slug)
-                .filter((s): s is string => s !== null);
-              const newSlug = await generateSlug(
-                habit.name || 'habit',
-                existingSlugs
-              );
-              // Обновляем slug в БД
-              await db
-                .update(habits)
-                .set({ slug: newSlug })
-                .where(eq(habits.id, habit.id));
-              finalEntityKey = newSlug;
-              console.log(
-                `[NotificationPrefs] Generated and saved slug for custom habit: ${newSlug}`
-              );
-            }
-          }
-        }
+        // Для кастомных сущностей entityKey уже должен быть ID
+        // Для шаблонных - ключ шаблона
+        // finalEntityKey остается как normalizedEntityKey (ID для кастомных, ключ для шаблонных)
 
         const nextDirectness = body.directness ?? existing.directness;
 
@@ -787,17 +684,16 @@ export default defineEventHandler(
 
         // ВАЖНО: Загружаем актуальные значения entityName/entityDescription
         // Если название/описание были обновлены выше, используем обновленные значения
-        // Используем normalizedEntityKey/normalizedEntityKey для поиска (они уже обновлены если изменился slug)
+        // Используем normalizedEntityKey для поиска (для кастомных сущностей это ID)
+        let habitIntent: 'quit' | 'build' | null = null;
         if (kind === 'habits' && normalizedEntityKey) {
+          // Для кастомных сущностей entityKey = ID
           const [habit] = await db
             .select()
             .from(habits)
             .where(
               and(
-                or(
-                  eq(habits.id, normalizedEntityKey),
-                  eq(habits.slug, normalizedEntityKey)
-                ),
+                eq(habits.id, normalizedEntityKey), // Для кастомных сущностей entityKey = ID
                 eq(habits.userId, userId)
               )
             )
@@ -810,6 +706,8 @@ export default defineEventHandler(
             // Используем обновленные значения (если они были обновлены выше)
             entityName = habit.name;
             entityDescription = habit.description;
+            // Берем intent из БД
+            habitIntent = habit.intent as 'quit' | 'build' | null;
             // Используем сохраненные старые значения для вычисления старого хеша
             oldEntityName = oldEntityNameBeforeUpdate || habit.name;
             oldEntityDescription =
@@ -817,18 +715,34 @@ export default defineEventHandler(
                 ? oldEntityDescriptionBeforeUpdate
                 : habit.description;
             console.log(
-              `[NotificationPrefs] 🔍 Found custom habit in DB: id=${habit.id}, slug=${habit.slug}, name="${habit.name}", intent=${habit.intent}, isCustomEntity=${isCustomEntity}, nameChanged=${nameChanged}, descriptionChanged=${descriptionChanged}`
+              `[NotificationPrefs] 🔍 Found custom habit in DB: id=${habit.id}, name="${habit.name}", intent=${habitIntent}, isCustomEntity=${isCustomEntity}, nameChanged=${nameChanged}, descriptionChanged=${descriptionChanged}`
             );
           } else {
             // Готовый шаблон привычки (water, meditation, training и т.д.)
             isCustomEntity = false;
-            entityName = normalizedEntityKey;
-            entityDescription = null;
-            oldEntityName = normalizedEntityKey;
-            oldEntityDescription = null;
-            console.log(
-              `[NotificationPrefs] 🔍 Habit not found in DB, treating as template: entityKey=${normalizedEntityKey}, isCustomEntity=${isCustomEntity}`
-            );
+            // ВАЖНО: Используем читаемое название из каталога, чтобы хеш совпадал с генерацией
+            const { findHabitByKey } = await import('@/app/lib/habitsCatalog');
+            const catalogHabit = findHabitByKey(normalizedEntityKey);
+            if (catalogHabit) {
+              entityName = catalogHabit.name;
+              entityDescription = catalogHabit.description || null;
+              oldEntityName = catalogHabit.name;
+              oldEntityDescription = catalogHabit.description || null;
+              habitIntent = catalogHabit.intent;
+              console.log(
+                `[NotificationPrefs] 🔍 Habit not found in DB, treating as template: entityKey=${normalizedEntityKey}, name="${catalogHabit.name}" (from catalog), intent=${habitIntent}, isCustomEntity=${isCustomEntity}`
+              );
+            } else {
+              // Fallback: если не найден в каталоге, используем entityKey
+              entityName = normalizedEntityKey;
+              entityDescription = null;
+              oldEntityName = normalizedEntityKey;
+              oldEntityDescription = null;
+              habitIntent = null;
+              console.log(
+                `[NotificationPrefs] 🔍 Habit not found in DB and not in catalog: entityKey=${normalizedEntityKey}, using as entityName, intent=${habitIntent}, isCustomEntity=${isCustomEntity}`
+              );
+            }
           }
         } else if (kind === 'therapy' && normalizedEntityKey) {
           // Для терапии проверяем, кастомная ли это тема
@@ -837,10 +751,7 @@ export default defineEventHandler(
             .from(therapyTopicsCustom)
             .where(
               and(
-                or(
-                  eq(therapyTopicsCustom.id, normalizedEntityKey),
-                  eq(therapyTopicsCustom.slug, normalizedEntityKey)
-                ),
+                eq(therapyTopicsCustom.id, normalizedEntityKey),
                 eq(therapyTopicsCustom.userId, userId)
               )
             )
@@ -960,15 +871,14 @@ export default defineEventHandler(
           );
 
           // Запускаем генерацию асинхронно (не блокируя ответ)
-          // ВАЖНО: finalEntityKey должен быть читаемым (slug для кастомных привычек)
           console.log(
-            `[NotificationPrefs] Calling generateNotificationTexts with entityKey: ${finalEntityKey} (should be readable slug for custom habits)`
+            `[NotificationPrefs] Calling generateNotificationTexts with entityKey: ${finalEntityKey}`
           );
           generateNotificationTexts({
             userId,
             preferenceId: existing.id,
             kind: kind as 'habits' | 'therapy',
-            entityKey: finalEntityKey, // Должен быть читаемым (slug для кастомных привычек)
+            entityKey: finalEntityKey, // ID для кастомных, ключ шаблона для шаблонных
             directness: nextDirectness as 'soft' | 'moderate' | 'hard',
             subtype: nextSubtypeForHash as
               | 'reminder'
@@ -977,13 +887,15 @@ export default defineEventHandler(
               | 'mixed'
               | null,
             textSource,
+            count: 50, // ВАЖНО: Всегда 50 текстов при перегенерации
+            habitIntent: kind === 'habits' ? habitIntent : undefined, // Передаем intent для привычек
           })
             .then(async (result) => {
               console.log(
                 `[NotificationPrefs] ✅ AI texts generated: ${result.texts.length} texts, provider: ${result.provider}, model: ${result.model}`
               );
               // Небольшая задержка, чтобы убедиться, что тексты сохранились в БД
-              await new Promise((resolve) => setTimeout(resolve, 500));
+              await new Promise((resolve) => setTimeout(resolve, 1000));
               // После генерации AI-текстов регенерируем слоты
               // Используем нормализованные (читаемые) значения для поиска настроек
               return regenerateSlotsForSource(
@@ -999,11 +911,34 @@ export default defineEventHandler(
                 `[NotificationPrefs] ✅ Slots regenerated after AI generation: user ${userId}, kind: ${kind}, entityKey: ${entityKey || 'none'}`
               );
             })
-            .catch((error) => {
+            .catch(async (error) => {
               console.error(
-                `[NotificationPrefs] ❌ Failed to generate AI texts or regenerate slots:`,
+                `[NotificationPrefs] ❌ Failed to generate AI texts:`,
                 error
               );
+              // ВАЖНО: Даже если генерация AI-текстов завершилась с ошибкой,
+              // нужно перегенерировать слоты, чтобы использовать доступные тексты (шаблоны для hybrid)
+              console.log(
+                `[NotificationPrefs] Regenerating slots anyway (may use templates only): user ${userId}, kind: ${kind}, entityKey: ${entityKey || 'none'}`
+              );
+              try {
+                await new Promise((resolve) => setTimeout(resolve, 1000));
+                await regenerateSlotsForSource(
+                  userId,
+                  kind as 'therapy' | 'habits',
+                  {
+                    entityKey: normalizedEntityKey || undefined,
+                  }
+                );
+                console.log(
+                  `[NotificationPrefs] ✅ Slots regenerated after AI generation error: user ${userId}, kind: ${kind}`
+                );
+              } catch (slotError) {
+                console.error(
+                  `[NotificationPrefs] ❌ Failed to regenerate slots after AI error:`,
+                  slotError
+                );
+              }
             });
         } else {
           console.log(
@@ -1028,7 +963,7 @@ export default defineEventHandler(
         body.timeRangeStart !== undefined ||
         body.timeRangeEnd !== undefined ||
         body.customSlotTimes !== undefined ||
-        (kind === 'habits' && body.subtype !== undefined) ||
+        body.subtype !== undefined ||
         shouldUpdateMeta ||
         body.meta?.textSource !== undefined;
 
@@ -1058,11 +993,6 @@ export default defineEventHandler(
         );
       }
 
-      // ВАЖНО: Для кастомных привычек subtype всегда null в ответе
-      const responseSubtype = isCustomHabitForUpdate
-        ? null
-        : (updated.subtype as HabitSubtype | null);
-
       const response = {
         id: updated.id,
         userId: updated.userId,
@@ -1072,7 +1002,7 @@ export default defineEventHandler(
         timesPerDay: updated.timesPerDay,
         directness: updated.directness as 'soft' | 'moderate' | 'hard',
         timezone: updated.timezone,
-        subtype: responseSubtype, // Всегда null для кастомных привычек
+        subtype: updated.subtype as NotificationSubtype | null, // Возвращаем subtype для всех типов
         activeDays: (updated.activeDays as number[]) ?? [0, 1, 2, 3, 4, 5, 6],
         customSlotTimes:
           (updated.customSlotTimes as (number | null)[] | null) ?? null,
@@ -1093,51 +1023,56 @@ export default defineEventHandler(
         initialTimesPerDay
       );
       // Определяем, кастомная ли это привычка, чтобы правильно обработать subtype
-      // Также нормализуем entityKey для читаемости (используем slug для кастомных сущностей)
       let isCustomHabitForCreate = false;
       let normalizedEntityKey = entityKey;
 
       if (kind === 'habits' && entityKey) {
+        // Для кастомных сущностей entityKey должен быть ID
         const [habit] = await db
-          .select({ intent: habits.intent, slug: habits.slug })
+          .select({ id: habits.id, intent: habits.intent })
           .from(habits)
-          .where(
-            and(
-              or(eq(habits.id, entityKey), eq(habits.slug, entityKey)),
-              eq(habits.userId, userId)
-            )
-          )
+          .where(and(eq(habits.id, entityKey), eq(habits.userId, userId)))
           .limit(1);
-        isCustomHabitForCreate = habit?.intent === 'custom';
-        // Для кастомных привычек используем slug вместо id для читаемости
-        if (habit && habit.intent === 'custom' && habit.slug) {
-          normalizedEntityKey = habit.slug;
+        // Кастомная привычка - это любая привычка, найденная в БД (не шаблон)
+        isCustomHabitForCreate = !!habit;
+        // Для кастомных привычек используем ID
+        if (habit) {
+          normalizedEntityKey = habit.id; // ВСЕГДА ID для кастомных сущностей
+          console.log(
+            `[NotificationPrefs] Creating preference for habit: entityKey param=${entityKey}, found id=${habit.id}, using normalizedEntityKey=${normalizedEntityKey}`
+          );
+        } else {
+          // Не нашли в БД - значит это шаблон (water, meditation и т.д.)
+          normalizedEntityKey = entityKey; // Ключ шаблона
         }
       } else if (kind === 'therapy' && entityKey) {
-        // Для терапии entityKey уже должен быть читаемым (slug), но проверим
+        // Для кастомных сущностей entityKey должен быть ID
         const [topic] = await db
-          .select({ slug: therapyTopicsCustom.slug })
+          .select({
+            id: therapyTopicsCustom.id,
+          })
           .from(therapyTopicsCustom)
           .where(
             and(
-              or(
-                eq(therapyTopicsCustom.id, entityKey),
-                eq(therapyTopicsCustom.slug, entityKey)
-              ),
+              eq(therapyTopicsCustom.id, entityKey),
               eq(therapyTopicsCustom.userId, userId)
             )
           )
           .limit(1);
-        if (topic && topic.slug) {
-          normalizedEntityKey = topic.slug;
+        if (topic) {
+          // Для кастомных тем используем ID
+          normalizedEntityKey = topic.id; // ВСЕГДА ID для кастомных сущностей
+          console.log(
+            `[NotificationPrefs] Creating preference for therapy topic: entityKey param=${entityKey}, found id=${topic.id}, using normalizedEntityKey=${normalizedEntityKey}`
+          );
+        } else {
+          // Не нашли в БД - значит это шаблон
+          normalizedEntityKey = entityKey; // Ключ шаблона
         }
       }
 
-      // Для кастомных привычек subtype всегда null в БД
-      const initialSubtype =
-        kind === 'habits' && !isCustomHabitForCreate
-          ? (body.subtype ?? 'mixed')
-          : null;
+      // Упрощенная логика: subtype сохраняется для всех типов сущностей
+      const initialSubtype = body.subtype ?? 'mixed';
 
       // Формируем initialMeta: объединяем customTexts и textSource из body.meta
       const initialMeta =
@@ -1194,157 +1129,11 @@ export default defineEventHandler(
           initialMeta.textSource === 'hybrid');
 
       if (shouldGenerateAi) {
-        // ВАЖНО: Используем нормализованное (читаемое) значение для entityKey
-        // normalizedEntityKey уже вычислено выше и содержит slug для кастомных сущностей
-        let finalEntityKey = normalizedEntityKey || '';
-
-        // Дополнительная проверка: если это кастомная привычка без slug, генерируем его
-        if (kind === 'habits' && entityKey && isCustomHabitForCreate) {
-          const [habit] = await db
-            .select({ slug: habits.slug, id: habits.id, name: habits.name })
-            .from(habits)
-            .where(
-              and(
-                or(eq(habits.id, entityKey), eq(habits.slug, entityKey)),
-                eq(habits.userId, userId)
-              )
-            )
-            .limit(1);
-          if (habit && !habit.slug) {
-            // Если slug отсутствует, генерируем его
-            console.warn(
-              `[NotificationPrefs] Custom habit ${entityKey} has no slug, generating one...`
-            );
-            const { generateSlug } = await import('@/server/utils/slug');
-            const existingHabits = await db
-              .select({ slug: habits.slug })
-              .from(habits)
-              .where(eq(habits.userId, userId));
-            const existingSlugs = existingHabits
-              .map((h) => h.slug)
-              .filter((s): s is string => s !== null);
-            const newSlug = generateSlug(habit.name || 'habit', existingSlugs);
-            // Обновляем slug в БД
-            await db
-              .update(habits)
-              .set({ slug: newSlug })
-              .where(eq(habits.id, habit.id));
-            finalEntityKey = newSlug;
-            normalizedEntityKey = newSlug;
-            console.log(
-              `[NotificationPrefs] Generated and saved slug for custom habit: ${newSlug}`
-            );
-          } else if (habit && habit.slug) {
-            finalEntityKey = habit.slug;
-            normalizedEntityKey = habit.slug;
-          }
-        }
-
-        console.log(
-          `[NotificationPrefs] Preparing AI generation for NEW preference: kind=${kind}, original entityKey=${entityKey || 'none'}, normalizedEntityKey=${normalizedEntityKey || 'none'}, finalEntityKey=${finalEntityKey} (MUST BE READABLE)`
-        );
-
-        // Если это кастомная привычка, используем slug вместо id
-        if (kind === 'habits' && entityKey) {
-          const [habit] = await db
-            .select({
-              slug: habits.slug,
-              id: habits.id,
-              intent: habits.intent,
-              name: habits.name,
-            })
-            .from(habits)
-            .where(
-              and(
-                or(eq(habits.id, entityKey), eq(habits.slug, entityKey)),
-                eq(habits.userId, userId)
-              )
-            )
-            .limit(1);
-          if (habit) {
-            if (habit.intent === 'custom' && habit.slug) {
-              // Используем slug для кастомных привычек (читаемый ключ)
-              finalEntityKey = habit.slug;
-              console.log(
-                `[NotificationPrefs] Using slug for custom habit: ${habit.slug} (original entityKey: ${entityKey})`
-              );
-            } else if (habit.intent === 'custom' && !habit.slug) {
-              // Если slug не существует, генерируем его
-              console.warn(
-                `[NotificationPrefs] Custom habit ${entityKey} has no slug, generating one...`
-              );
-              const { generateSlug } = await import('@/server/utils/slug');
-              const existingHabits = await db
-                .select({ slug: habits.slug })
-                .from(habits)
-                .where(eq(habits.userId, userId));
-              const existingSlugs = existingHabits
-                .map((h) => h.slug)
-                .filter((s): s is string => s !== null);
-              const newSlug = await generateSlug(
-                habit.name || 'habit',
-                existingSlugs
-              );
-              // Обновляем slug в БД
-              await db
-                .update(habits)
-                .set({ slug: newSlug })
-                .where(eq(habits.id, habit.id));
-              finalEntityKey = newSlug;
-              console.log(
-                `[NotificationPrefs] Generated and saved slug for custom habit: ${newSlug}`
-              );
-            }
-          }
-        }
-
-        const initialDirectness = body.directness ?? 'moderate';
-
-        // Загружаем глобальные настройки пользователя
-        const [userPrefs] = await db
-          .select()
-          .from(userPreferences)
-          .where(eq(userPreferences.userId, userId))
-          .limit(1);
+        // ВАЖНО: Для кастомных сущностей entityKey = ID, для шаблонных = ключ шаблона
+        // normalizedEntityKey уже вычислено выше (ID для кастомных, ключ для шаблонных)
+        const finalEntityKey = normalizedEntityKey || entityKey || '';
 
         // Определяем textSource
-        let isCustomEntity = false;
-
-        if (kind === 'habits' && entityKey) {
-          const [habit] = await db
-            .select()
-            .from(habits)
-            .where(
-              and(
-                or(eq(habits.id, entityKey), eq(habits.slug, entityKey)),
-                eq(habits.userId, userId)
-              )
-            )
-            .limit(1);
-          // ВАЖНО: Кастомная привычка - это любая привычка, найденная в БД (не шаблон)
-          // Не проверяем intent === 'custom', так как у кастомных привычек может быть intent='build' или 'quit'
-          isCustomEntity = !!habit;
-          console.log(
-            `[NotificationPrefs] 🔍 NEW preference - Found custom habit in DB: entityKey=${entityKey}, found=${!!habit}, intent=${habit?.intent}, isCustomEntity=${isCustomEntity}`
-          );
-        } else if (kind === 'therapy' && entityKey) {
-          // Для терапии проверяем, кастомная ли это тема
-          const [topic] = await db
-            .select()
-            .from(therapyTopicsCustom)
-            .where(
-              and(
-                or(
-                  eq(therapyTopicsCustom.id, entityKey),
-                  eq(therapyTopicsCustom.slug, entityKey)
-                ),
-                eq(therapyTopicsCustom.userId, userId)
-              )
-            )
-            .limit(1);
-          isCustomEntity = !!topic;
-        }
-
         const textSource: 'ai' | 'hybrid' =
           initialMeta.textSource === 'ai'
             ? 'ai'
@@ -1352,25 +1141,60 @@ export default defineEventHandler(
               ? 'hybrid'
               : 'ai';
 
-        console.log(
-          `[NotificationPrefs] 🔍 Determined textSource for NEW preference: ${textSource}, isCustomEntity: ${isCustomEntity}, initialMeta: ${JSON.stringify(initialMeta)}`
-        );
+        // Определяем isCustomEntity для вычисления subtype и habitIntent
+        let isCustomEntity = false;
+        let habitIntent: 'quit' | 'build' | null = null;
+        if (kind === 'habits' && entityKey) {
+          // Для кастомных сущностей entityKey = ID
+          const [habit] = await db
+            .select()
+            .from(habits)
+            .where(and(eq(habits.id, entityKey), eq(habits.userId, userId)))
+            .limit(1);
+          isCustomEntity = !!habit;
+          if (habit) {
+            habitIntent = habit.intent as 'quit' | 'build' | null;
+          } else {
+            // Готовый шаблон - берем intent из каталога
+            const { findHabitByKey } = await import('@/app/lib/habitsCatalog');
+            const catalogHabit = findHabitByKey(entityKey);
+            habitIntent = catalogHabit ? catalogHabit.intent : null;
+          }
+        } else if (kind === 'therapy' && entityKey) {
+          // Для кастомных сущностей entityKey = ID
+          const [topic] = await db
+            .select()
+            .from(therapyTopicsCustom)
+            .where(
+              and(
+                eq(therapyTopicsCustom.id, entityKey),
+                eq(therapyTopicsCustom.userId, userId)
+              )
+            )
+            .limit(1);
+          isCustomEntity = !!topic;
+        }
 
         // Для вычисления хеша используем subtype
         // Для кастомных привычек subtype всегда null
-        // Для готовых шаблонов может быть 'mixed', 'reminder', 'informational', 'motivational'
         const initialSubtypeForHash = isCustomEntity ? null : initialSubtype;
 
-        // Запускаем генерацию асинхронно
-        // ВАЖНО: finalEntityKey должен быть читаемым (slug для кастомных привычек)
+        const initialDirectness = body.directness ?? 'moderate';
+
         console.log(
-          `[NotificationPrefs] Starting AI text generation for NEW preference: user ${userId}, kind: ${kind}, entityKey: ${finalEntityKey} (should be readable slug for custom habits), textSource: ${textSource}`
+          `[NotificationPrefs] Preparing AI generation for NEW preference: kind=${kind}, original entityKey=${entityKey || 'none'}, normalizedEntityKey=${normalizedEntityKey || 'none'}, finalEntityKey=${finalEntityKey} (ID for custom, key for template)`
+        );
+
+        // Запускаем генерацию асинхронно
+        // ВАЖНО: finalEntityKey для кастомных сущностей = ID, для шаблонных = ключ шаблона
+        console.log(
+          `[NotificationPrefs] Starting AI text generation for NEW preference: user ${userId}, kind: ${kind}, entityKey: ${finalEntityKey} (ID for custom, key for template), textSource: ${textSource}`
         );
         generateNotificationTexts({
           userId,
           preferenceId: created.id,
           kind: kind as 'habits' | 'therapy',
-          entityKey: finalEntityKey, // Должен быть читаемым (slug для кастомных привычек)
+          entityKey: finalEntityKey, // ID для кастомных, ключ шаблона для шаблонных
           directness: initialDirectness as 'soft' | 'moderate' | 'hard',
           subtype: initialSubtypeForHash as
             | 'reminder'
@@ -1379,15 +1203,17 @@ export default defineEventHandler(
             | 'mixed'
             | null,
           textSource,
+          count: 50, // ВАЖНО: Всегда 50 текстов при создании нового preference
+          habitIntent: kind === 'habits' ? habitIntent : undefined, // Передаем intent для привычек
         })
           .then(async (result) => {
             console.log(
               `[NotificationPrefs] ✅ AI texts generated for new preference: ${result.texts.length} texts, provider: ${result.provider}, model: ${result.model}`
             );
             // Небольшая задержка, чтобы убедиться, что тексты сохранились в БД
-            await new Promise((resolve) => setTimeout(resolve, 500));
+            await new Promise((resolve) => setTimeout(resolve, 1000));
             // После генерации AI-текстов регенерируем слоты
-            // Используем нормализованные (читаемые) значения для поиска настроек
+            // Используем нормализованные значения для поиска настроек
             return regenerateSlotsForSource(
               userId,
               kind as 'therapy' | 'habits',
@@ -1401,32 +1227,50 @@ export default defineEventHandler(
               `[NotificationPrefs] ✅ Slots regenerated after AI generation for new preference: user ${userId}, kind: ${kind}, entityKey: ${entityKey || 'none'}`
             );
           })
-          .catch((error) => {
+          .catch(async (error) => {
             console.error(
-              `[NotificationPrefs] ❌ Failed to generate AI texts or regenerate slots for new preference:`,
+              `[NotificationPrefs] ❌ Failed to generate AI texts for new preference:`,
               error
             );
+            // ВАЖНО: Даже если генерация AI-текстов завершилась с ошибкой,
+            // нужно перегенерировать слоты, чтобы использовать доступные тексты (шаблоны для hybrid)
+            console.log(
+              `[NotificationPrefs] Regenerating slots anyway (may use templates only): user ${userId}, kind: ${kind}, entityKey: ${entityKey || 'none'}`
+            );
+            try {
+              await new Promise((resolve) => setTimeout(resolve, 1000));
+              await regenerateSlotsForSource(
+                userId,
+                kind as 'therapy' | 'habits',
+                {
+                  entityKey: normalizedEntityKey || undefined,
+                }
+              );
+              console.log(
+                `[NotificationPrefs] ✅ Slots regenerated after AI generation error: user ${userId}, kind: ${kind}`
+              );
+            } catch (slotError) {
+              console.error(
+                `[NotificationPrefs] ❌ Failed to regenerate slots after AI error:`,
+                slotError
+              );
+            }
           });
+      } else {
+        // Если AI-тексты не нужны (textSource !== 'ai' && textSource !== 'hybrid'),
+        // генерируем слоты сразу
+        try {
+          await regenerateSlotsForSource(userId, kind as 'therapy' | 'habits', {
+            entityKey: normalizedEntityKey || undefined,
+          });
+          console.log(
+            `[NotificationPrefs] Slots generated for new source (no AI): user ${userId}, kind: ${kind}`,
+            entityKey ? `, entityKey: ${entityKey}` : ''
+          );
+        } catch (error) {
+          console.error(`[NotificationPrefs] Failed to generate slots:`, error);
+        }
       }
-
-      // Генерируем слоты для нового источника
-      // Используем нормализованные (читаемые) значения для поиска настроек
-      try {
-        await regenerateSlotsForSource(userId, kind as 'therapy' | 'habits', {
-          entityKey: normalizedEntityKey || undefined,
-        });
-        console.log(
-          `[NotificationPrefs] Slots generated for new source: user ${userId}, kind: ${kind}`,
-          entityKey ? `, entityKey: ${entityKey}` : ''
-        );
-      } catch (error) {
-        console.error(`[NotificationPrefs] Failed to generate slots:`, error);
-      }
-
-      // ВАЖНО: Для кастомных привычек subtype всегда null в ответе
-      const responseSubtype = isCustomHabitForCreate
-        ? null
-        : (created.subtype as HabitSubtype | null);
 
       const response = {
         id: created.id,
@@ -1437,7 +1281,7 @@ export default defineEventHandler(
         timesPerDay: created.timesPerDay,
         directness: created.directness as 'soft' | 'moderate' | 'hard',
         timezone: created.timezone,
-        subtype: responseSubtype, // Всегда null для кастомных привычек
+        subtype: created.subtype as NotificationSubtype | null, // Возвращаем subtype для всех типов
         activeDays: (created.activeDays as number[]) ?? [0, 1, 2, 3, 4, 5, 6],
         customSlotTimes:
           (created.customSlotTimes as (number | null)[] | null) ?? null,

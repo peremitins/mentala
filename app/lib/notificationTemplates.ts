@@ -1,33 +1,4 @@
 export type NotificationKind = 'therapy' | 'habits';
-export type TherapyType =
-  | 'breath_cue'
-  | 'grounding'
-  | 'body_scan'
-  | 'reframe'
-  | 'mi_prompt'
-  | 'sos';
-export type HabitsType =
-  // build-привычки
-  | 'water'
-  | 'steps'
-  | 'sleep'
-  | 'training'
-  | 'focus'
-  | 'nutrition'
-  | 'meditation'
-  | 'gratitude'
-  | 'morning_routine'
-  | 'planning'
-  // quit-привычки
-  | 'smoking'
-  | 'alcohol'
-  | 'sugar'
-  | 'screentime'
-  | 'caffeine'
-  | 'procrastination'
-  // универсальные
-  | 'custom'
-  | 'quit'; // legacy
 export type Addressing = 'informal' | 'formal';
 export type Tone =
   | 'delicate'
@@ -37,45 +8,42 @@ export type Tone =
   | 'demanding';
 export type Directness = 'soft' | 'moderate' | 'hard' | 'universal';
 
-// Новые типы для habits v3
-export type HabitIntent = 'build' | 'quit' | 'custom';
-export type HabitSubtype =
+// Универсальные типы
+export type EntityKey = string; // Универсальный идентификатор сущности
+
+// Типы для привычек
+export type HabitIntent = 'build' | 'quit';
+
+// Универсальный тип subtype для всех видов уведомлений
+export type NotificationSubtype =
   | 'reminder'
   | 'informational'
   | 'motivational'
   | 'mixed';
-export type HabitKey =
-  // build
-  | 'water'
-  | 'steps'
-  | 'sleep'
-  | 'training'
-  | 'focus'
-  | 'nutrition'
-  | 'meditation'
-  | 'gratitude'
-  | 'morning_routine'
-  | 'planning'
-  // quit
-  | 'smoking'
-  | 'alcohol'
-  | 'sugar'
-  | 'screentime'
-  | 'caffeine'
-  | 'procrastination'
-  // custom (fallback для пользовательских привычек)
-  | 'custom';
+
+// Типы техник терапии (метаданные, не для фильтрации)
+export type TherapyTechnique =
+  | 'breath_cue' // Дыхательные практики (4-7-8, квадратное дыхание) — помогают успокоиться и снизить тревогу
+  | 'grounding' // Техники заземления (5-4-3-2-1, тактильные ощущения) — возвращают в настоящий момент через фокус на ощущениях
+  | 'body_scan' // Сканирование тела — осознание физических ощущений для снижения напряжения и стресса
+  | 'reframe' // Рефрейминг мыслей — переформулирование негативных мыслей и взгляд на ситуацию под другим углом
+  | 'mi_prompt' // Мотивационное интервьюирование — вопросы для саморефлексии и поиска внутренних ресурсов
+  | 'sos'; // Экстренная поддержка — быстрые техники для кризисных моментов высокой тревоги
+
+// Обратная совместимость: HabitSubtype теперь алиас для NotificationSubtype
+export type HabitSubtype = NotificationSubtype;
 
 export interface NotificationTemplate {
   id: string;
   kind: NotificationKind;
-  type: TherapyType | HabitsType;
-  directness: Directness[]; // Только для informational (universal), для reminder/motivational можно не указывать
-  topic?: string; // Для therapy: привязка к теме (anxiety, stress, mood, etc.)
-  // Новые поля для habits v3
-  intent?: HabitIntent; // Для habits: build | quit | custom
-  habitKey?: HabitKey; // Для habits: нормализованный ключ (water, smoking, etc.)
-  subtype?: HabitSubtype; // Для habits: reminder | informational | motivational
+  entityKey: EntityKey; // Универсальный идентификатор (заменяет type, habitKey, topic)
+  directness: Directness[];
+  // Для привычек
+  intent?: HabitIntent; // build | quit
+  // Для всех видов (habits и therapy)
+  subtype?: NotificationSubtype; // reminder | informational | motivational | mixed
+  // Для терапии (метаданные, не для фильтрации)
+  techniques?: TherapyTechnique[]; // ['breath_cue', 'grounding', 'reframe']
   ru: {
     // Universal text (для informational) - один текст для всех directness
     universal?: string;
@@ -106,8 +74,9 @@ export const therapyTemplates: NotificationTemplate[] = [
   {
     id: 'psy_breath_478_01',
     kind: 'therapy',
-    type: 'breath_cue',
-    topic: 'anxiety', // Привязка к теме
+    entityKey: 'anxiety',
+    subtype: 'reminder',
+    techniques: ['breath_cue'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -125,7 +94,9 @@ export const therapyTemplates: NotificationTemplate[] = [
   {
     id: 'psy_breath_478_02',
     kind: 'therapy',
-    type: 'breath_cue',
+    entityKey: 'anxiety',
+    subtype: 'reminder',
+    techniques: ['breath_cue'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -144,7 +115,9 @@ export const therapyTemplates: NotificationTemplate[] = [
   {
     id: 'psy_breath_box_01',
     kind: 'therapy',
-    type: 'breath_cue',
+    entityKey: 'stress',
+    subtype: 'reminder',
+    techniques: ['breath_cue'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -166,7 +139,9 @@ export const therapyTemplates: NotificationTemplate[] = [
   {
     id: 'psy_grounding_54321_01',
     kind: 'therapy',
-    type: 'grounding',
+    entityKey: 'anxiety',
+    subtype: 'reminder',
+    techniques: ['grounding'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -186,7 +161,9 @@ export const therapyTemplates: NotificationTemplate[] = [
   {
     id: 'psy_grounding_3things_01',
     kind: 'therapy',
-    type: 'grounding',
+    entityKey: 'stress',
+    subtype: 'reminder',
+    techniques: ['grounding'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -204,7 +181,9 @@ export const therapyTemplates: NotificationTemplate[] = [
   {
     id: 'psy_grounding_tactile_01',
     kind: 'therapy',
-    type: 'grounding',
+    entityKey: 'anger',
+    subtype: 'reminder',
+    techniques: ['grounding'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -228,7 +207,9 @@ export const therapyTemplates: NotificationTemplate[] = [
   {
     id: 'psy_bodyscan_shoulders_01',
     kind: 'therapy',
-    type: 'body_scan',
+    entityKey: 'stress',
+    subtype: 'reminder',
+    techniques: ['body_scan'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -248,7 +229,9 @@ export const therapyTemplates: NotificationTemplate[] = [
   {
     id: 'psy_bodyscan_jaw_01',
     kind: 'therapy',
-    type: 'body_scan',
+    entityKey: 'stress',
+    subtype: 'reminder',
+    techniques: ['body_scan'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -266,7 +249,9 @@ export const therapyTemplates: NotificationTemplate[] = [
   {
     id: 'psy_bodyscan_belly_01',
     kind: 'therapy',
-    type: 'body_scan',
+    entityKey: 'sleep',
+    subtype: 'reminder',
+    techniques: ['body_scan'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -290,7 +275,9 @@ export const therapyTemplates: NotificationTemplate[] = [
   {
     id: 'psy_reframe_01',
     kind: 'therapy',
-    type: 'reframe',
+    entityKey: 'anxiety',
+    subtype: 'informational',
+    techniques: ['reframe'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -310,7 +297,9 @@ export const therapyTemplates: NotificationTemplate[] = [
   {
     id: 'psy_reframe_02',
     kind: 'therapy',
-    type: 'reframe',
+    entityKey: 'mood',
+    subtype: 'motivational',
+    techniques: ['reframe'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -334,7 +323,9 @@ export const therapyTemplates: NotificationTemplate[] = [
   {
     id: 'psy_mi_01',
     kind: 'therapy',
-    type: 'mi_prompt',
+    entityKey: 'focus',
+    subtype: 'reminder',
+    techniques: ['mi_prompt'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -352,7 +343,9 @@ export const therapyTemplates: NotificationTemplate[] = [
   {
     id: 'psy_mi_02',
     kind: 'therapy',
-    type: 'mi_prompt',
+    entityKey: 'mood',
+    subtype: 'reminder',
+    techniques: ['mi_prompt'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -376,7 +369,9 @@ export const therapyTemplates: NotificationTemplate[] = [
   {
     id: 'psy_sos_01',
     kind: 'therapy',
-    type: 'sos',
+    entityKey: 'sos',
+    subtype: 'reminder',
+    techniques: ['sos'],
     directness: ['moderate', 'hard'],
     ru: {
       informal: {
@@ -392,7 +387,9 @@ export const therapyTemplates: NotificationTemplate[] = [
   {
     id: 'psy_sos_02',
     kind: 'therapy',
-    type: 'sos',
+    entityKey: 'sos',
+    subtype: 'reminder',
+    techniques: ['sos'],
     directness: ['moderate', 'hard'],
     ru: {
       informal: {
@@ -402,6 +399,417 @@ export const therapyTemplates: NotificationTemplate[] = [
       formal: {
         moderate: 'Чувствуете, что не справляетесь? Откройте SOS-карту.',
         hard: 'Не справляетесь? SOS-карта — откройте.',
+      },
+    },
+  },
+
+  // ==========================================
+  // Дополнительные шаблоны для тестирования
+  // ==========================================
+
+  // ANXIETY - Informational
+  {
+    id: 'psy_anxiety_info_01',
+    kind: 'therapy',
+    entityKey: 'anxiety',
+    subtype: 'informational',
+    techniques: ['reframe'],
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Тревога — это нормальная реакция организма на стресс. Она помогает нам быть внимательными.',
+        moderate:
+          'Тревога возникает из-за активации симпатической нервной системы. Это естественный механизм защиты.',
+        hard: 'Тревога активирует систему "бей-беги". Понимание этого помогает управлять реакцией.',
+      },
+      formal: {
+        soft: 'Тревога — это нормальная реакция организма на стресс. Она помогает нам быть внимательными.',
+        moderate:
+          'Тревога возникает из-за активации симпатической нервной системы. Это естественный механизм защиты.',
+        hard: 'Тревога активирует систему "бей-беги". Понимание этого помогает управлять реакцией.',
+      },
+    },
+  },
+  {
+    id: 'psy_anxiety_info_02',
+    kind: 'therapy',
+    entityKey: 'anxiety',
+    subtype: 'informational',
+    techniques: ['reframe'],
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Глубокое дыхание активирует парасимпатическую нервную систему, которая помогает успокоиться.',
+        moderate:
+          'Медленное дыхание снижает частоту сердечных сокращений и уровень кортизола в крови.',
+        hard: 'Дыхательные техники напрямую влияют на вегетативную нервную систему, снижая тревогу.',
+      },
+      formal: {
+        soft: 'Глубокое дыхание активирует парасимпатическую нервную систему, которая помогает успокоиться.',
+        moderate:
+          'Медленное дыхание снижает частоту сердечных сокращений и уровень кортизола в крови.',
+        hard: 'Дыхательные техники напрямую влияют на вегетативную нервную систему, снижая тревогу.',
+      },
+    },
+  },
+  {
+    id: 'psy_anxiety_info_03',
+    kind: 'therapy',
+    entityKey: 'anxiety',
+    subtype: 'informational',
+    techniques: ['reframe'],
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Тревожные мысли часто преувеличивают опасность. Реальность обычно мягче, чем кажется.',
+        moderate:
+          'Когнитивные искажения заставляют видеть ситуацию хуже, чем она есть на самом деле.',
+        hard: 'Тревога искажает восприятие. Факты важнее страхов.',
+      },
+      formal: {
+        soft: 'Тревожные мысли часто преувеличивают опасность. Реальность обычно мягче, чем кажется.',
+        moderate:
+          'Когнитивные искажения заставляют видеть ситуацию хуже, чем она есть на самом деле.',
+        hard: 'Тревога искажает восприятие. Факты важнее страхов.',
+      },
+    },
+  },
+
+  // ANXIETY - Motivational
+  {
+    id: 'psy_anxiety_motiv_01',
+    kind: 'therapy',
+    entityKey: 'anxiety',
+    subtype: 'motivational',
+    techniques: ['reframe'],
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Ты справляешься лучше, чем думаешь. Каждый день — это маленькая победа над тревогой.',
+        moderate:
+          'Ты учишься управлять тревогой. Это требует времени, но прогресс есть.',
+        hard: 'Тревога не определяет тебя. Ты сильнее, чем думаешь.',
+      },
+      formal: {
+        soft: 'Вы справляетесь лучше, чем думаете. Каждый день — это маленькая победа над тревогой.',
+        moderate:
+          'Вы учитесь управлять тревогой. Это требует времени, но прогресс есть.',
+        hard: 'Тревога не определяет Вас. Вы сильнее, чем думаете.',
+      },
+    },
+  },
+  {
+    id: 'psy_anxiety_motiv_02',
+    kind: 'therapy',
+    entityKey: 'anxiety',
+    subtype: 'motivational',
+    techniques: ['reframe'],
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Ты уже прошёл через многое. Тревога временна, а твоя сила постоянна.',
+        moderate:
+          'Ты справлялся с тревогой раньше. Значит, справишься и сейчас.',
+        hard: 'Тревога отступит. Ты переживёшь это, как переживал раньше.',
+      },
+      formal: {
+        soft: 'Вы уже прошли через многое. Тревога временна, а Ваша сила постоянна.',
+        moderate:
+          'Вы справлялись с тревогой раньше. Значит, справитесь и сейчас.',
+        hard: 'Тревога отступит. Вы переживёте это, как переживали раньше.',
+      },
+    },
+  },
+  {
+    id: 'psy_anxiety_motiv_03',
+    kind: 'therapy',
+    entityKey: 'anxiety',
+    subtype: 'motivational',
+    techniques: ['reframe'],
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Ты не одинок. Многие сталкиваются с тревогой. Это нормально.',
+        moderate:
+          'Тревога — это часть человеческого опыта. Ты справляешься как все.',
+        hard: 'Ты справляешься с тревогой. Продолжай бороться.',
+      },
+      formal: {
+        soft: 'Вы не одиноки. Многие сталкиваются с тревогой. Это нормально.',
+        moderate:
+          'Тревога — это часть человеческого опыта. Вы справляетесь как все.',
+        hard: 'Вы справляетесь с тревогой. Продолжайте бороться.',
+      },
+    },
+  },
+
+  // STRESS - Informational
+  {
+    id: 'psy_stress_info_01',
+    kind: 'therapy',
+    entityKey: 'stress',
+    subtype: 'informational',
+    techniques: ['reframe'],
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Хронический стресс влияет на качество сна и общее самочувствие.',
+        moderate:
+          'Длительный стресс повышает уровень кортизола, что влияет на иммунитет и метаболизм.',
+        hard: 'Хронический стресс увеличивает риск развития сердечно-сосудистых заболеваний и депрессии.',
+      },
+      formal: {
+        soft: 'Хронический стресс влияет на качество сна и общее самочувствие.',
+        moderate:
+          'Длительный стресс повышает уровень кортизола, что влияет на иммунитет и метаболизм.',
+        hard: 'Хронический стресс увеличивает риск развития сердечно-сосудистых заболеваний и депрессии.',
+      },
+    },
+  },
+  {
+    id: 'psy_stress_info_02',
+    kind: 'therapy',
+    entityKey: 'stress',
+    subtype: 'informational',
+    techniques: ['reframe'],
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Регулярные паузы помогают снизить уровень стресса и восстановить энергию.',
+        moderate:
+          'Короткие перерывы каждые 90 минут повышают продуктивность и снижают стресс.',
+        hard: 'Без пауз организм накапливает стресс. Регулярные перерывы необходимы.',
+      },
+      formal: {
+        soft: 'Регулярные паузы помогают снизить уровень стресса и восстановить энергию.',
+        moderate:
+          'Короткие перерывы каждые 90 минут повышают продуктивность и снижают стресс.',
+        hard: 'Без пауз организм накапливает стресс. Регулярные перерывы необходимы.',
+      },
+    },
+  },
+  {
+    id: 'psy_stress_info_03',
+    kind: 'therapy',
+    entityKey: 'stress',
+    subtype: 'informational',
+    techniques: ['reframe'],
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Физическое напряжение в теле — это признак накопившегося стресса.',
+        moderate:
+          'Мышечное напряжение при стрессе приводит к головным болям и усталости.',
+        hard: 'Накопленное напряжение в мышцах увеличивает риск хронической боли и травм.',
+      },
+      formal: {
+        soft: 'Физическое напряжение в теле — это признак накопившегося стресса.',
+        moderate:
+          'Мышечное напряжение при стрессе приводит к головным болям и усталости.',
+        hard: 'Накопленное напряжение в мышцах увеличивает риск хронической боли и травм.',
+      },
+    },
+  },
+
+  // STRESS - Motivational
+  {
+    id: 'psy_stress_motiv_01',
+    kind: 'therapy',
+    entityKey: 'stress',
+    subtype: 'motivational',
+    techniques: ['reframe'],
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Ты справляешься со стрессом, даже когда кажется, что нет. Это требует сил, и ты их находишь.',
+        moderate:
+          'Ты управляешь стрессом каждый день. Это значит, что у тебя есть инструменты.',
+        hard: 'Стресс не сломит тебя. Ты сильнее своих обстоятельств.',
+      },
+      formal: {
+        soft: 'Вы справляетесь со стрессом, даже когда кажется, что нет. Это требует сил, и Вы их находите.',
+        moderate:
+          'Вы управляете стрессом каждый день. Это значит, что у Вас есть инструменты.',
+        hard: 'Стресс не сломит Вас. Вы сильнее своих обстоятельств.',
+      },
+    },
+  },
+  {
+    id: 'psy_stress_motiv_02',
+    kind: 'therapy',
+    entityKey: 'stress',
+    subtype: 'motivational',
+    techniques: ['reframe'],
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Забота о себе — это не роскошь, а необходимость. Ты заслуживаешь отдых.',
+        moderate:
+          'Отдых помогает лучше справляться со стрессом. Это инвестиция в себя.',
+        hard: 'Без отдыха стресс накапливается. Сделай паузу сейчас.',
+      },
+      formal: {
+        soft: 'Забота о себе — это не роскошь, а необходимость. Вы заслуживаете отдых.',
+        moderate:
+          'Отдых помогает лучше справляться со стрессом. Это инвестиция в себя.',
+        hard: 'Без отдыха стресс накапливается. Сделайте паузу сейчас.',
+      },
+    },
+  },
+
+  // MOOD - Informational
+  {
+    id: 'psy_mood_info_01',
+    kind: 'therapy',
+    entityKey: 'mood',
+    subtype: 'informational',
+    techniques: ['reframe'],
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Настроение меняется в течение дня. Это нормально и естественно.',
+        moderate:
+          'Настроение зависит от уровня серотонина, дофамина и других нейромедиаторов.',
+        hard: 'Низкое настроение может быть следствием усталости, стресса или недостатка сна.',
+      },
+      formal: {
+        soft: 'Настроение меняется в течение дня. Это нормально и естественно.',
+        moderate:
+          'Настроение зависит от уровня серотонина, дофамина и других нейромедиаторов.',
+        hard: 'Низкое настроение может быть следствием усталости, стресса или недостатка сна.',
+      },
+    },
+  },
+  {
+    id: 'psy_mood_info_02',
+    kind: 'therapy',
+    entityKey: 'mood',
+    subtype: 'informational',
+    techniques: ['reframe'],
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Физическая активность повышает настроение через выработку эндорфинов.',
+        moderate:
+          'Регулярные упражнения увеличивают уровень серотонина и дофамина в мозге.',
+        hard: 'Без движения уровень гормонов счастья снижается. Активность — это лекарство.',
+      },
+      formal: {
+        soft: 'Физическая активность повышает настроение через выработку эндорфинов.',
+        moderate:
+          'Регулярные упражнения увеличивают уровень серотонина и дофамина в мозге.',
+        hard: 'Без движения уровень гормонов счастья снижается. Активность — это лекарство.',
+      },
+    },
+  },
+
+  // MOOD - Motivational
+  {
+    id: 'psy_mood_motiv_02',
+    kind: 'therapy',
+    entityKey: 'mood',
+    subtype: 'motivational',
+    techniques: ['reframe'],
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Трудные дни проходят. Завтра может быть лучше. Держись.',
+        moderate: 'Настроение временно. Оно не определяет всю твою жизнь.',
+        hard: 'Низкое настроение — это не приговор. Оно изменится.',
+      },
+      formal: {
+        soft: 'Трудные дни проходят. Завтра может быть лучше. Держитесь.',
+        moderate: 'Настроение временно. Оно не определяет всю Вашу жизнь.',
+        hard: 'Низкое настроение — это не приговор. Оно изменится.',
+      },
+    },
+  },
+  {
+    id: 'psy_mood_motiv_03',
+    kind: 'therapy',
+    entityKey: 'mood',
+    subtype: 'motivational',
+    techniques: ['reframe'],
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Ты справляешься, даже когда настроение низкое. Это говорит о твоей силе.',
+        moderate:
+          'Ты продолжаешь двигаться, несмотря на настроение. Это важно.',
+        hard: 'Не позволяй настроению останавливать тебя. Продолжай действовать.',
+      },
+      formal: {
+        soft: 'Вы справляетесь, даже когда настроение низкое. Это говорит о Вашей силе.',
+        moderate:
+          'Вы продолжаете двигаться, несмотря на настроение. Это важно.',
+        hard: 'Не позволяйте настроению останавливать Вас. Продолжайте действовать.',
+      },
+    },
+  },
+
+  // SLEEP - Informational
+  {
+    id: 'psy_sleep_info_01',
+    kind: 'therapy',
+    entityKey: 'sleep',
+    subtype: 'informational',
+    techniques: ['reframe'],
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Качественный сон улучшает настроение и способность справляться со стрессом.',
+        moderate:
+          'Недостаток сна снижает уровень серотонина и увеличивает тревожность.',
+        hard: 'Хронический недосып увеличивает риск депрессии и снижает когнитивные функции.',
+      },
+      formal: {
+        soft: 'Качественный сон улучшает настроение и способность справляться со стрессом.',
+        moderate:
+          'Недостаток сна снижает уровень серотонина и увеличивает тревожность.',
+        hard: 'Хронический недосып увеличивает риск депрессии и снижает когнитивные функции.',
+      },
+    },
+  },
+  {
+    id: 'psy_sleep_info_02',
+    kind: 'therapy',
+    entityKey: 'sleep',
+    subtype: 'informational',
+    techniques: ['reframe'],
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Регулярный режим сна помогает настроить внутренние часы организма.',
+        moderate: 'Засыпание и пробуждение в одно время улучшает качество сна.',
+        hard: 'Без режима организм не может синхронизировать циркадные ритмы. Это критично для восстановления.',
+      },
+      formal: {
+        soft: 'Регулярный режим сна помогает настроить внутренние часы организма.',
+        moderate: 'Засыпание и пробуждение в одно время улучшает качество сна.',
+        hard: 'Без режима организм не может синхронизировать циркадные ритмы. Это критично для восстановления.',
+      },
+    },
+  },
+
+  // SLEEP - Motivational
+  {
+    id: 'psy_sleep_motiv_01',
+    kind: 'therapy',
+    entityKey: 'sleep',
+    subtype: 'motivational',
+    techniques: ['reframe'],
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Твой организм заслуживает отдых. Хороший сон — это забота о себе.',
+        moderate:
+          'Качественный сон делает тебя сильнее и устойчивее к стрессу.',
+        hard: 'Сон — это не роскошь, а необходимость. Отдых обязателен.',
+      },
+      formal: {
+        soft: 'Ваш организм заслуживает отдых. Хороший сон — это забота о себе.',
+        moderate: 'Качественный сон делает Вас сильнее и устойчивее к стрессу.',
+        hard: 'Сон — это не роскошь, а необходимость. Отдых обязателен.',
       },
     },
   },
@@ -419,9 +827,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_reminder_01',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -440,9 +847,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_reminder_02',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -461,9 +867,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_reminder_03',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -482,9 +887,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_reminder_04',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -503,9 +907,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_reminder_05',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -524,9 +927,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_reminder_06',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -545,9 +947,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_reminder_07',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -566,9 +967,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_reminder_08',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -587,9 +987,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_reminder_09',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -609,9 +1008,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_reminder_10',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -630,9 +1028,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_reminder_11',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -651,9 +1048,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_reminder_12',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -672,9 +1068,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_reminder_13',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -693,9 +1088,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_reminder_14',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -714,9 +1108,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_reminder_15',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -735,9 +1128,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_reminder_16',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -756,9 +1148,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_reminder_17',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -777,9 +1168,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_reminder_18',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -798,9 +1188,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_reminder_19',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -819,9 +1208,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_reminder_20',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -841,9 +1229,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_info_01',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -853,9 +1240,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_info_02',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -865,9 +1251,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_info_03',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -878,9 +1263,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_info_04',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -890,9 +1274,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_info_05',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -902,9 +1285,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_info_06',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -915,9 +1297,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_info_07',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -927,9 +1308,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_info_08',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -939,9 +1319,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_info_09',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -951,9 +1330,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_info_10',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -963,9 +1341,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_info_11',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -975,9 +1352,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_info_12',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -987,9 +1363,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_info_13',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -999,9 +1374,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_info_14',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -1012,9 +1386,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_info_15',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -1024,9 +1397,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_info_16',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -1036,9 +1408,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_info_17',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -1048,9 +1419,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_info_18',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -1061,9 +1431,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_info_19',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -1074,9 +1443,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_info_20',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -1088,9 +1456,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_motiv_01',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1109,9 +1476,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_motiv_02',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1130,9 +1496,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_motiv_03',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1151,9 +1516,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_motiv_04',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1172,9 +1536,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_motiv_05',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1193,9 +1556,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_motiv_06',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1214,9 +1576,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_motiv_07',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1235,9 +1596,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_motiv_08',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1256,9 +1616,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_motiv_09',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1277,9 +1636,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_motiv_10',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1298,9 +1656,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_motiv_11',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1319,9 +1676,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_motiv_12',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1340,9 +1696,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_motiv_13',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1361,9 +1716,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_motiv_14',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1382,9 +1736,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_motiv_15',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1403,9 +1756,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_motiv_16',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1424,9 +1776,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_motiv_17',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1445,9 +1796,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_motiv_18',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1466,9 +1816,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_motiv_19',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1487,9 +1836,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_water_motiv_20',
     kind: 'habits',
-    type: 'water',
+    entityKey: 'water',
     intent: 'build',
-    habitKey: 'water',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1509,9 +1857,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_steps_reminder_01',
     kind: 'habits',
-    type: 'steps',
+    entityKey: 'steps',
     intent: 'build',
-    habitKey: 'steps',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1532,9 +1879,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_steps_motivational_01',
     kind: 'habits',
-    type: 'steps',
+    entityKey: 'steps',
     intent: 'build',
-    habitKey: 'steps',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1554,9 +1900,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_sleep_reminder_01',
     kind: 'habits',
-    type: 'sleep',
+    entityKey: 'sleep',
     intent: 'build',
-    habitKey: 'sleep',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1575,9 +1920,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_sleep_motivational_01',
     kind: 'habits',
-    type: 'sleep',
+    entityKey: 'sleep',
     intent: 'build',
-    habitKey: 'sleep',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1601,9 +1945,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_reminder_01',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1622,9 +1965,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_reminder_02',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1643,9 +1985,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_reminder_03',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1664,9 +2005,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_reminder_04',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1685,9 +2025,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_reminder_05',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1706,9 +2045,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_reminder_06',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1727,9 +2065,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_reminder_07',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1748,9 +2085,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_reminder_08',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1769,9 +2105,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_reminder_09',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1790,9 +2125,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_reminder_10',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1811,9 +2145,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_reminder_11',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1832,9 +2165,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_reminder_12',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1853,9 +2185,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_reminder_13',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1874,9 +2205,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_reminder_14',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1895,9 +2225,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_reminder_15',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1916,9 +2245,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_reminder_16',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1937,9 +2265,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_reminder_17',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1958,9 +2285,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_reminder_18',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -1979,9 +2305,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_reminder_19',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -2000,9 +2325,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_reminder_20',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'reminder',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -2023,9 +2347,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_info_01',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -2036,9 +2359,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_info_02',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -2049,9 +2371,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_info_03',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -2062,9 +2383,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_info_04',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -2075,9 +2395,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_info_05',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -2087,9 +2406,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_info_06',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -2099,9 +2417,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_info_07',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -2111,9 +2428,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_info_08',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -2124,9 +2440,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_info_09',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -2136,9 +2451,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_info_10',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -2149,9 +2463,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_info_11',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -2162,9 +2475,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_info_12',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -2174,9 +2486,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_info_13',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -2187,9 +2498,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_info_14',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -2200,9 +2510,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_info_15',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -2213,9 +2522,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_info_16',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -2226,9 +2534,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_info_17',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -2239,9 +2546,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_info_18',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -2252,9 +2558,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_info_19',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -2265,9 +2570,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_info_20',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -2280,9 +2584,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_motiv_01',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -2301,9 +2604,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_motiv_02',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -2322,9 +2624,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_motiv_03',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -2343,9 +2644,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_motiv_04',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -2364,9 +2664,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_motiv_05',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -2385,9 +2684,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_motiv_06',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -2406,9 +2704,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_motiv_07',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -2427,9 +2724,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_motiv_08',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -2448,9 +2744,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_motiv_09',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -2469,9 +2764,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_motiv_10',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -2490,9 +2784,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_motiv_11',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -2511,9 +2804,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_motiv_12',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -2532,9 +2824,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_motiv_13',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -2553,9 +2844,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_motiv_14',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -2574,9 +2864,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_motiv_15',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -2595,9 +2884,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_motiv_16',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -2616,9 +2904,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_motiv_17',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -2637,9 +2924,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_motiv_18',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -2658,9 +2944,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_motiv_19',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -2679,9 +2964,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_training_motiv_20',
     kind: 'habits',
-    type: 'training',
+    entityKey: 'training',
     intent: 'build',
-    habitKey: 'training',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -2705,9 +2989,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_smoking_info_01',
     kind: 'habits',
-    type: 'smoking',
+    entityKey: 'smoking',
     intent: 'quit',
-    habitKey: 'smoking',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -2718,9 +3001,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_smoking_info_02',
     kind: 'habits',
-    type: 'smoking',
+    entityKey: 'smoking',
     intent: 'quit',
-    habitKey: 'smoking',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -2730,9 +3012,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_smoking_info_03',
     kind: 'habits',
-    type: 'smoking',
+    entityKey: 'smoking',
     intent: 'quit',
-    habitKey: 'smoking',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -2743,9 +3024,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_smoking_info_04',
     kind: 'habits',
-    type: 'smoking',
+    entityKey: 'smoking',
     intent: 'quit',
-    habitKey: 'smoking',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -2755,9 +3035,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_smoking_info_05',
     kind: 'habits',
-    type: 'smoking',
+    entityKey: 'smoking',
     intent: 'quit',
-    habitKey: 'smoking',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -2768,9 +3047,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_smoking_info_06',
     kind: 'habits',
-    type: 'smoking',
+    entityKey: 'smoking',
     intent: 'quit',
-    habitKey: 'smoking',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -2781,9 +3059,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_smoking_info_07',
     kind: 'habits',
-    type: 'smoking',
+    entityKey: 'smoking',
     intent: 'quit',
-    habitKey: 'smoking',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -2794,9 +3071,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_smoking_info_08',
     kind: 'habits',
-    type: 'smoking',
+    entityKey: 'smoking',
     intent: 'quit',
-    habitKey: 'smoking',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -2807,9 +3083,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_smoking_info_09',
     kind: 'habits',
-    type: 'smoking',
+    entityKey: 'smoking',
     intent: 'quit',
-    habitKey: 'smoking',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -2820,9 +3095,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_smoking_info_10',
     kind: 'habits',
-    type: 'smoking',
+    entityKey: 'smoking',
     intent: 'quit',
-    habitKey: 'smoking',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -2833,9 +3107,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_smoking_info_11',
     kind: 'habits',
-    type: 'smoking',
+    entityKey: 'smoking',
     intent: 'quit',
-    habitKey: 'smoking',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -2845,9 +3118,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_smoking_info_12',
     kind: 'habits',
-    type: 'smoking',
+    entityKey: 'smoking',
     intent: 'quit',
-    habitKey: 'smoking',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -2858,9 +3130,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_smoking_info_13',
     kind: 'habits',
-    type: 'smoking',
+    entityKey: 'smoking',
     intent: 'quit',
-    habitKey: 'smoking',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -2871,9 +3142,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_smoking_info_14',
     kind: 'habits',
-    type: 'smoking',
+    entityKey: 'smoking',
     intent: 'quit',
-    habitKey: 'smoking',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -2883,9 +3153,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_smoking_info_15',
     kind: 'habits',
-    type: 'smoking',
+    entityKey: 'smoking',
     intent: 'quit',
-    habitKey: 'smoking',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -2898,9 +3167,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_smoking_motiv_01',
     kind: 'habits',
-    type: 'smoking',
+    entityKey: 'smoking',
     intent: 'quit',
-    habitKey: 'smoking',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -2919,9 +3187,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_smoking_motiv_02',
     kind: 'habits',
-    type: 'smoking',
+    entityKey: 'smoking',
     intent: 'quit',
-    habitKey: 'smoking',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -2940,9 +3207,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_smoking_motiv_03',
     kind: 'habits',
-    type: 'smoking',
+    entityKey: 'smoking',
     intent: 'quit',
-    habitKey: 'smoking',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -2961,9 +3227,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_smoking_motiv_04',
     kind: 'habits',
-    type: 'smoking',
+    entityKey: 'smoking',
     intent: 'quit',
-    habitKey: 'smoking',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -2982,9 +3247,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_smoking_motiv_05',
     kind: 'habits',
-    type: 'smoking',
+    entityKey: 'smoking',
     intent: 'quit',
-    habitKey: 'smoking',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -3003,9 +3267,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_smoking_motiv_06',
     kind: 'habits',
-    type: 'smoking',
+    entityKey: 'smoking',
     intent: 'quit',
-    habitKey: 'smoking',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -3024,9 +3287,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_smoking_motiv_07',
     kind: 'habits',
-    type: 'smoking',
+    entityKey: 'smoking',
     intent: 'quit',
-    habitKey: 'smoking',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -3045,9 +3307,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_smoking_motiv_08',
     kind: 'habits',
-    type: 'smoking',
+    entityKey: 'smoking',
     intent: 'quit',
-    habitKey: 'smoking',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -3066,9 +3327,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_smoking_motiv_09',
     kind: 'habits',
-    type: 'smoking',
+    entityKey: 'smoking',
     intent: 'quit',
-    habitKey: 'smoking',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -3087,9 +3347,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_smoking_motiv_10',
     kind: 'habits',
-    type: 'smoking',
+    entityKey: 'smoking',
     intent: 'quit',
-    habitKey: 'smoking',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -3113,9 +3372,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_alcohol_info_01',
     kind: 'habits',
-    type: 'alcohol',
+    entityKey: 'alcohol',
     intent: 'quit',
-    habitKey: 'alcohol',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -3126,9 +3384,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_alcohol_info_02',
     kind: 'habits',
-    type: 'alcohol',
+    entityKey: 'alcohol',
     intent: 'quit',
-    habitKey: 'alcohol',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -3138,9 +3395,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_alcohol_info_03',
     kind: 'habits',
-    type: 'alcohol',
+    entityKey: 'alcohol',
     intent: 'quit',
-    habitKey: 'alcohol',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -3150,9 +3406,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_alcohol_info_04',
     kind: 'habits',
-    type: 'alcohol',
+    entityKey: 'alcohol',
     intent: 'quit',
-    habitKey: 'alcohol',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -3163,9 +3418,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_alcohol_info_05',
     kind: 'habits',
-    type: 'alcohol',
+    entityKey: 'alcohol',
     intent: 'quit',
-    habitKey: 'alcohol',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -3175,9 +3429,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_alcohol_info_06',
     kind: 'habits',
-    type: 'alcohol',
+    entityKey: 'alcohol',
     intent: 'quit',
-    habitKey: 'alcohol',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -3187,9 +3440,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_alcohol_info_07',
     kind: 'habits',
-    type: 'alcohol',
+    entityKey: 'alcohol',
     intent: 'quit',
-    habitKey: 'alcohol',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -3199,9 +3451,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_alcohol_info_08',
     kind: 'habits',
-    type: 'alcohol',
+    entityKey: 'alcohol',
     intent: 'quit',
-    habitKey: 'alcohol',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -3212,9 +3463,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_alcohol_info_09',
     kind: 'habits',
-    type: 'alcohol',
+    entityKey: 'alcohol',
     intent: 'quit',
-    habitKey: 'alcohol',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -3224,9 +3474,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_alcohol_info_10',
     kind: 'habits',
-    type: 'alcohol',
+    entityKey: 'alcohol',
     intent: 'quit',
-    habitKey: 'alcohol',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -3236,9 +3485,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_alcohol_info_11',
     kind: 'habits',
-    type: 'alcohol',
+    entityKey: 'alcohol',
     intent: 'quit',
-    habitKey: 'alcohol',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -3248,9 +3496,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_alcohol_info_12',
     kind: 'habits',
-    type: 'alcohol',
+    entityKey: 'alcohol',
     intent: 'quit',
-    habitKey: 'alcohol',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -3261,9 +3508,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_alcohol_info_13',
     kind: 'habits',
-    type: 'alcohol',
+    entityKey: 'alcohol',
     intent: 'quit',
-    habitKey: 'alcohol',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -3273,9 +3519,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_alcohol_info_14',
     kind: 'habits',
-    type: 'alcohol',
+    entityKey: 'alcohol',
     intent: 'quit',
-    habitKey: 'alcohol',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -3286,9 +3531,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_alcohol_info_15',
     kind: 'habits',
-    type: 'alcohol',
+    entityKey: 'alcohol',
     intent: 'quit',
-    habitKey: 'alcohol',
     subtype: 'informational',
     directness: ['universal'],
     ru: {
@@ -3301,9 +3545,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_alcohol_motiv_01',
     kind: 'habits',
-    type: 'alcohol',
+    entityKey: 'alcohol',
     intent: 'quit',
-    habitKey: 'alcohol',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -3322,9 +3565,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_alcohol_motiv_02',
     kind: 'habits',
-    type: 'alcohol',
+    entityKey: 'alcohol',
     intent: 'quit',
-    habitKey: 'alcohol',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -3343,9 +3585,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_alcohol_motiv_03',
     kind: 'habits',
-    type: 'alcohol',
+    entityKey: 'alcohol',
     intent: 'quit',
-    habitKey: 'alcohol',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -3364,9 +3605,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_alcohol_motiv_04',
     kind: 'habits',
-    type: 'alcohol',
+    entityKey: 'alcohol',
     intent: 'quit',
-    habitKey: 'alcohol',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -3385,9 +3625,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_alcohol_motiv_05',
     kind: 'habits',
-    type: 'alcohol',
+    entityKey: 'alcohol',
     intent: 'quit',
-    habitKey: 'alcohol',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -3406,9 +3645,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_alcohol_motiv_06',
     kind: 'habits',
-    type: 'alcohol',
+    entityKey: 'alcohol',
     intent: 'quit',
-    habitKey: 'alcohol',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -3427,9 +3665,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_alcohol_motiv_07',
     kind: 'habits',
-    type: 'alcohol',
+    entityKey: 'alcohol',
     intent: 'quit',
-    habitKey: 'alcohol',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -3448,9 +3685,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_alcohol_motiv_08',
     kind: 'habits',
-    type: 'alcohol',
+    entityKey: 'alcohol',
     intent: 'quit',
-    habitKey: 'alcohol',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -3469,9 +3705,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_alcohol_motiv_09',
     kind: 'habits',
-    type: 'alcohol',
+    entityKey: 'alcohol',
     intent: 'quit',
-    habitKey: 'alcohol',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -3490,9 +3725,8 @@ export const habitsTemplates: NotificationTemplate[] = [
   {
     id: 'habit_alcohol_motiv_10',
     kind: 'habits',
-    type: 'alcohol',
+    entityKey: 'alcohol',
     intent: 'quit',
-    habitKey: 'alcohol',
     subtype: 'motivational',
     directness: ['soft', 'moderate', 'hard'],
     ru: {
@@ -3526,7 +3760,7 @@ export const FALLBACK_TEXT = 'Время сделать паузу и восст
 /**
  * Подбор шаблона по параметрам
  * @param kind - фокус уведомления (therapy | habits)
- * @param options - опциональные параметры фильтрации (entityKey, intent, habitKey, subtype)
+ * @param options - опциональные параметры фильтрации (entityKey, intent, subtype)
  * @returns случайный подходящий шаблон или null
  *
  * Примечание: addressing и tone берутся из БД (userPreferences) и используются только в getTemplateText для выбора текста
@@ -3534,11 +3768,9 @@ export const FALLBACK_TEXT = 'Время сделать паузу и восст
 export function findTemplate(
   kind: NotificationKind,
   options?: {
-    entityKey?: string; // Унифицированное поле для идентификации сущности (для therapy используется для фильтрации по topic, для habits = habitKey)
-    type?: TherapyType | HabitsType;
-    intent?: HabitIntent;
-    habitKey?: HabitKey; // Для обратной совместимости (если передан, имеет приоритет над entityKey для habits)
-    subtype?: HabitSubtype;
+    entityKey?: EntityKey; // Универсальный идентификатор сущности
+    intent?: HabitIntent; // Только для habits
+    subtype?: NotificationSubtype; // Для habits и therapy
     excludeTemplateIds?: string[];
     useFirst?: boolean; // Если true, возвращает первый шаблон вместо случайного (для production)
     templateIndex?: number; // Индекс для детерминированного выбора шаблона (вместо случайного)
@@ -3546,67 +3778,71 @@ export function findTemplate(
 ): NotificationTemplate | null {
   const {
     entityKey,
-    type,
     intent,
-    habitKey: habitKeyParam,
     subtype,
     excludeTemplateIds,
     useFirst = false,
     templateIndex,
   } = options || {};
 
-  // Для habits: используем habitKey из параметров или entityKey
-  const habitKey = habitKeyParam || (kind === 'habits' ? entityKey : undefined);
-  // Для therapy: используем entityKey напрямую (раньше это было topicKey)
-  const entityKeyForTopic = kind === 'therapy' ? entityKey : undefined;
-
   console.log('[findTemplate] Searching:', {
     kind,
     entityKey,
-    habitKey,
     intent,
     subtype,
-    entityKeyForTopic,
   });
 
   const templates = notificationTemplates.filter((t) => {
     const matchKind = t.kind === kind;
-    const matchType = !type || t.type === type;
+    const matchEntityKey = !entityKey || t.entityKey === entityKey;
 
-    // Для информационных шаблонов directness всегда 'universal'
-    // Если subtype = 'informational', то ищем шаблоны с directness = 'universal'
+    // Для информационных шаблонов habits directness всегда 'universal'
+    // Для терапии информационные шаблоны могут иметь разные directness
     const matchDirectness =
-      subtype === 'informational' ? t.directness.includes('universal') : true; // Для reminder/motivational не фильтруем по directness
+      subtype === 'informational' && kind === 'habits'
+        ? t.directness.includes('universal')
+        : true;
 
-    // Фильтруем по entityKey для therapy
-    const matchTopic =
-      !entityKeyForTopic || !t.topic || t.topic === entityKeyForTopic;
+    // Проверка специфичных для kind полей
+    let matchByKindSpecific = true;
 
-    // Для habits: приоритет новым полям (intent, habitKey, subtype)
-    let matchHabit = true;
     if (kind === 'habits') {
-      // Если intent передан, шаблон должен иметь тот же intent
       if (intent !== undefined) {
         if (t.intent) {
-          matchHabit = matchHabit && t.intent === intent;
+          matchByKindSpecific = matchByKindSpecific && t.intent === intent;
         } else {
-          matchHabit = false; // Если intent передан, но у шаблона его нет - не подходит
+          matchByKindSpecific = false;
         }
       }
-      // Если habitKey передан, шаблон должен иметь тот же habitKey
-      if (habitKey !== undefined && habitKey !== null) {
-        if (t.habitKey) {
-          matchHabit = matchHabit && t.habitKey === habitKey;
-        } else {
-          matchHabit = false; // Если habitKey передан, но у шаблона его нет - не подходит
-        }
-      }
-      // Если subtype передан, шаблон должен иметь тот же subtype
       if (subtype !== undefined && subtype !== null) {
-        if (t.subtype) {
-          matchHabit = matchHabit && t.subtype === subtype;
+        // Для 'mixed' принимаем любые подтипы (reminder, informational, motivational)
+        if (subtype === 'mixed') {
+          // Принимаем все шаблоны с любым subtype
+          matchByKindSpecific = matchByKindSpecific && !!t.subtype;
         } else {
-          matchHabit = false; // Если subtype передан, но у шаблона его нет - не подходит
+          // Для конкретного subtype ищем точное совпадение
+          if (t.subtype) {
+            matchByKindSpecific = matchByKindSpecific && t.subtype === subtype;
+          } else {
+            matchByKindSpecific = false;
+          }
+        }
+      }
+    }
+
+    if (kind === 'therapy') {
+      if (subtype !== undefined && subtype !== null) {
+        // Для 'mixed' принимаем любые подтипы (reminder, informational, motivational)
+        if (subtype === 'mixed') {
+          // Принимаем все шаблоны с любым subtype
+          matchByKindSpecific = matchByKindSpecific && !!t.subtype;
+        } else {
+          // Для конкретного subtype ищем точное совпадение
+          if (t.subtype) {
+            matchByKindSpecific = matchByKindSpecific && t.subtype === subtype;
+          } else {
+            matchByKindSpecific = false;
+          }
         }
       }
     }
@@ -3617,30 +3853,10 @@ export function findTemplate(
 
     const matches =
       matchKind &&
-      matchType &&
+      matchEntityKey &&
       matchDirectness &&
-      matchTopic &&
-      matchHabit &&
+      matchByKindSpecific &&
       notExcluded;
-
-    // Отладочное логирование для habits
-    if (kind === 'habits' && habitKey && t.habitKey === habitKey) {
-      // Логируем только шаблоны с правильным habitKey
-      if (!matches) {
-        console.log(
-          `[findTemplate] Template ${t.id} (${t.habitKey}) filtered out:`,
-          `matchKind=${matchKind},`,
-          `matchType=${matchType},`,
-          `matchDirectness=${matchDirectness} (t.directness=${JSON.stringify(t.directness)}, subtype=${subtype}),`,
-          `matchHabit=${matchHabit},`,
-          `t.intent=${t.intent},`,
-          `intent=${intent},`,
-          `t.subtype=${t.subtype},`,
-          `subtype=${subtype},`,
-          `notExcluded=${notExcluded}`
-        );
-      }
-    }
 
     return matches;
   });
@@ -3655,22 +3871,37 @@ export function findTemplate(
       });
     }
     console.warn(
-      `[findTemplate] No templates found for: kind=${kind}, habitKey=${habitKey}, intent=${intent}, subtype=${subtype}`
+      `[findTemplate] ❌ No templates found for: kind=${kind}, entityKey=${entityKey}, intent=${intent}, subtype=${subtype}`
     );
-    // Для отладки: показываем сколько всего шаблонов habits
-    if (kind === 'habits') {
-      const allHabitsTemplates = notificationTemplates.filter(
-        (t) => t.kind === 'habits'
+    // Для отладки: показываем сколько всего шаблонов
+    const allKindTemplates = notificationTemplates.filter(
+      (t) => t.kind === kind
+    );
+    console.log(
+      `[findTemplate] Total ${kind} templates: ${allKindTemplates.length}`
+    );
+    if (entityKey) {
+      const withEntityKey = allKindTemplates.filter(
+        (t) => t.entityKey === entityKey
       );
       console.log(
-        `[findTemplate] Total habits templates: ${allHabitsTemplates.length}`
+        `[findTemplate] Templates with entityKey="${entityKey}": ${withEntityKey.length}`
       );
-      if (habitKey) {
-        const withHabitKey = allHabitsTemplates.filter(
-          (t) => t.habitKey === habitKey
-        );
+      if (withEntityKey.length > 0) {
+        // Показываем доступные подтипы для этого entityKey
+        const availableSubtypes = [
+          ...new Set(withEntityKey.map((t) => t.subtype).filter(Boolean)),
+        ];
         console.log(
-          `[findTemplate] Templates with habitKey="${habitKey}": ${withHabitKey.length}`
+          `[findTemplate] Available subtypes for entityKey="${entityKey}": ${availableSubtypes.join(', ')}`
+        );
+      } else {
+        // Показываем все доступные entityKey для этого kind
+        const availableEntityKeys = [
+          ...new Set(allKindTemplates.map((t) => t.entityKey)),
+        ];
+        console.log(
+          `[findTemplate] Available entityKeys for kind="${kind}": ${availableEntityKeys.join(', ')}`
         );
       }
     }
@@ -3747,7 +3978,7 @@ export function getTemplateText(
  * @param addressing - обращение (из БД: userPreferences.addressing)
  * @param directness - Стиль уведомлений (из настроек: notificationPreferences.directness)
  * @param userName - имя пользователя
- * @param options - опциональные параметры (entityKey, intent, habitKey, subtype)
+ * @param options - опциональные параметры (entityKey, intent, subtype)
  * @returns итоговый текст уведомления
  */
 export function getNotificationText(
@@ -3756,10 +3987,9 @@ export function getNotificationText(
   directness: Directness,
   userName?: string,
   options?: {
-    entityKey?: string; // Унифицированное поле для идентификации сущности
-    intent?: HabitIntent;
-    habitKey?: HabitKey;
-    subtype?: HabitSubtype;
+    entityKey?: string; // Универсальный идентификатор сущности
+    intent?: HabitIntent; // Только для habits
+    subtype?: NotificationSubtype; // Для habits и therapy
   }
 ): string {
   // Находим шаблон (tone больше не используется в фильтрации)

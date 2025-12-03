@@ -11,6 +11,7 @@ import TimeRangeSelector from '@/app/components/TimeRangeSelector.vue';
 import TimePicker from '@/app/components/TimePicker.vue';
 import { useTimeSlotControls } from '@/app/composables/useTimeSlotControls';
 import {
+  SUBTYPE_OPTIONS,
   SUBTYPE_OPTIONS_BUILD,
   SUBTYPE_OPTIONS_QUIT,
   TEXT_SOURCE_OPTIONS,
@@ -32,6 +33,7 @@ import type {
   Addressing,
   Directness,
   HabitSubtype,
+  NotificationSubtype,
   NotificationPreferencesDto,
   Tone,
   UpdateNotificationPreferencesDto,
@@ -174,7 +176,7 @@ const timesPerDaySlider = computed({
   },
 });
 const directness = ref<Directness>('moderate');
-const subtype = ref<HabitSubtype>('mixed');
+const subtype = ref<NotificationSubtype>('mixed');
 const timezone = ref('Europe/Moscow');
 const activeDays = ref<number[]>([0, 1, 2, 3, 4, 5, 6]);
 const timeRange = ref({ start: 540, end: 1350 });
@@ -419,11 +421,7 @@ function computeStateSignature() {
           value === null || value === undefined ? null : value
         )
       : null,
-    subtype: isHabits.value
-      ? isCustomHabit.value
-        ? null
-        : subtype.value
-      : null,
+    subtype: subtype.value ?? null,
     customTexts: isCustomEntity.value ? normalizedCustomTexts.value : null,
     textSource: textSource.value,
     // Добавляем название и описание для отслеживания изменений
@@ -446,33 +444,93 @@ const isSaveDisabled = computed(
   // Пользователь может добавить тексты позже
 );
 
-const directnessOptions = [
-  {
-    value: 'soft' as Directness,
-    label: 'Мягкий',
-    description: 'Тёплый, мягкий стиль без давления',
-  },
-  {
-    value: 'moderate' as Directness,
-    label: 'Сдержанный',
-    description: 'Корректные, нейтральные формулировки без лишних эмоций',
-  },
-  {
-    value: 'hard' as Directness,
-    label: 'Строгий',
-    description:
-      'Прямые, настойчивые сообщения для тех, кому важен чёткий фокус',
-  },
-];
+// Описания стилей для разных фокусов уведомлений
+const directnessOptions = computed(() => {
+  const baseOptions = [
+    {
+      value: 'soft' as Directness,
+      label: 'Мягкий',
+    },
+    {
+      value: 'moderate' as Directness,
+      label: 'Сдержанный',
+    },
+    {
+      value: 'hard' as Directness,
+      label: 'Жесткий',
+    },
+  ];
+
+  // Определяем описание в зависимости от фокуса уведомлений
+  let descriptions: Record<Directness, string> = {
+    soft: 'Тёплый, мягкий стиль без давления',
+    moderate: 'Корректные, нейтральные формулировки без лишних эмоций',
+    hard: 'Прямые, настойчивые сообщения для тех, кому важен чёткий фокус',
+  };
+
+  // Если это привычки и выбран фокус, используем специфичные описания
+  if (isHabits.value && subtype.value) {
+    switch (subtype.value) {
+      case 'informational':
+        // Разные описания для quit и build привычек
+        if (resolvedIntentForFilters.value === 'quit') {
+          descriptions = {
+            soft: 'Факты о влиянии на самочувствие и качество жизни, без упоминания тяжелых последствий',
+            moderate:
+              'Честные медицинские факты о механизмах вреда, без драматизации',
+            hard: 'Прямые факты о серьезных последствиях, включая статистику смертности',
+          };
+        } else {
+          // build привычки - только позитивные факты
+          descriptions = {
+            soft: 'Позитивные факты о пользе, акцент на чувствах и ощущениях',
+            moderate: 'Фактические данные о пользе с научными доказательствами',
+            hard: 'Прямые факты о конкретных выгодах и улучшениях здоровья',
+          };
+        }
+        break;
+      case 'motivational':
+        descriptions = {
+          soft: 'Теплые, мягкие слова поддержки и ободрения',
+          moderate: 'Нейтральные, сдержанные фразы поддержки',
+          hard: 'Прямые, решительные слова мотивации',
+        };
+        break;
+      case 'reminder':
+        descriptions = {
+          soft: 'Мягкие, ненавязчивые напоминания',
+          moderate: 'Нейтральные, фактические напоминания',
+          hard: 'Прямые, категоричные напоминания',
+        };
+        break;
+      case 'mixed':
+        descriptions = {
+          soft: 'Мягкий, деликатный тон в сочетании разных типов уведомлений',
+          moderate:
+            'Сдержанный, нейтральный тон в сочетании разных типов уведомлений',
+          hard: 'Прямой, решительный тон в сочетании разных типов уведомлений',
+        };
+        break;
+    }
+  }
+
+  return baseOptions.map((opt) => ({
+    ...opt,
+    description: descriptions[opt.value],
+  }));
+});
 
 const subtypeOptions = computed(() => {
-  if (!isHabits.value) return [];
+  // Для терапии - все опции
+  if (!isHabits.value) return SUBTYPE_OPTIONS;
+
+  // Для привычек - фильтруем по intent
   const intent = resolvedIntentForFilters.value ?? 'build';
   return intent === 'quit' ? SUBTYPE_OPTIONS_QUIT : SUBTYPE_OPTIONS_BUILD;
 });
 
 const selectedDirectnessOption = computed(() =>
-  directnessOptions.find((opt) => opt.value === directness.value)
+  directnessOptions.value.find((opt) => opt.value === directness.value)
 );
 
 const selectedSubtypeOption = computed(() => {
@@ -630,9 +688,7 @@ onMounted(async () => {
       enabled.value = pref.enabled;
       timesPerDay.value = pref.timesPerDay;
       directness.value = pref.directness;
-      if (isHabits.value) {
-        subtype.value = pref.subtype ?? 'mixed';
-      }
+      subtype.value = pref.subtype ?? 'mixed'; // Загружаем subtype для всех типов
       timezone.value = pref.timezone;
       activeDays.value = pref.activeDays ?? [0, 1, 2, 3, 4, 5, 6];
       timeRange.value = {
@@ -772,49 +828,22 @@ async function saveSettings() {
       customSlotTimes: hasManualSlots ? customSlotTimes.value : null,
     } satisfies Partial<UpdateNotificationPreferencesDto>;
 
+    // Упрощенная логика: все настройки сохраняются одинаково для всех типов
+    const isCustomEntity = isHabits.value
+      ? isCustomHabit.value
+      : isCustomTherapy.value;
+
     const updateData: UpdateNotificationPreferencesDto = {
       ...baseData,
       entityKey: props.entityKey,
-      ...(isHabits.value
-        ? {
-            subtype: isCustomHabit.value ? null : subtype.value,
-            ...(isCustomHabit.value
-              ? {
-                  meta: {
-                    // Для режима AI не отправляем customTexts (или отправляем пустой массив)
-
-                    customTexts:
-                      textSource.value === 'ai'
-                        ? []
-                        : normalizedCustomTexts.value,
-                    textSource: textSource.value,
-                  },
-                }
-              : {
-                  meta: {
-                    textSource: textSource.value,
-                  },
-                }),
-          }
-        : {
-            ...(isCustomTherapy.value
-              ? {
-                  meta: {
-                    // Для режима AI не отправляем customTexts (или отправляем пустой массив)
-
-                    customTexts:
-                      textSource.value === 'ai'
-                        ? []
-                        : normalizedCustomTexts.value,
-                    textSource: textSource.value,
-                  },
-                }
-              : {
-                  meta: {
-                    textSource: textSource.value,
-                  },
-                }),
-          }),
+      subtype: subtype.value, // Всегда сохраняем subtype для всех типов
+      meta: {
+        textSource: textSource.value,
+        // Для кастомных сущностей добавляем customTexts, если textSource не 'ai'
+        ...(isCustomEntity && textSource.value !== 'ai'
+          ? { customTexts: normalizedCustomTexts.value }
+          : {}),
+      },
       // Добавляем название и описание, если они изменены
       ...(nameChanged && newName !== undefined ? { name: newName } : {}),
       ...(descriptionChanged && newDescription !== undefined
@@ -1136,7 +1165,7 @@ const descriptionText = computed(() => {
         <OverloadBanner :total-per-day="currentTotalPerDay" />
 
         <!-- Фокус уведомлений -->
-        <div v-if="isHabits && !isCustomHabit" class="space-y-2 mb-2">
+        <div class="space-y-2 mb-2">
           <div class="flex items-center justify-between">
             <div>
               <p class="text-sm font-semibold text-foreground">
@@ -1155,7 +1184,7 @@ const descriptionText = computed(() => {
             @update:model-value="
               (value) => {
                 if (value && typeof value === 'string')
-                  subtype = value as HabitSubtype;
+                  subtype = value as NotificationSubtype;
               }
             "
           >
@@ -1172,7 +1201,7 @@ const descriptionText = computed(() => {
 
         <!-- Информационный блок про фокус уведомлений -->
         <div
-          v-if="isHabits && !isCustomHabit && selectedSubtypeOption"
+          v-if="selectedSubtypeOption"
           class="rounded-xl border border-primary bg-button-active-soft p-4"
         >
           <div class="flex items-baseline gap-3">
@@ -1189,10 +1218,7 @@ const descriptionText = computed(() => {
         </div>
 
         <!-- Стиль уведомлений -->
-        <div
-          v-if="(!isHabits || subtype !== 'informational') && !isCustomHabit"
-          class="space-y-2 mb-2"
-        >
+        <div class="space-y-2 mb-2">
           <div class="flex items-center justify-between">
             <div>
               <p class="text-sm font-semibold text-foreground">
@@ -1231,18 +1257,14 @@ const descriptionText = computed(() => {
               value="hard"
               class="flex-1 rounded-lg px-2 py-2 text-xs xs:text-sm whitespace-nowrap font-medium transition-all"
             >
-              😑 Строгий
+              😑 Жесткий
             </ToggleGroupItem>
           </ToggleGroup>
         </div>
 
         <!-- Информационный блок про стиль уведомлений -->
         <div
-          v-if="
-            (!isHabits || subtype !== 'informational') &&
-            !isCustomHabit &&
-            selectedDirectnessOption
-          "
+          v-if="selectedDirectnessOption"
           class="rounded-xl border border-primary bg-button-active-soft p-4"
         >
           <div class="flex items-baseline gap-3">

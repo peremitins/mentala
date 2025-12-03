@@ -7,7 +7,6 @@ import {
 import { db } from '@/server/infrastructure/db/client';
 import type { HabitDto, CreateHabitDto } from '@/shared/dto/notifications';
 import { getSessionUser } from '@/server/application/auth/session';
-import { generateSlug } from '@/server/utils/slug';
 
 /**
  * POST /api/habits
@@ -42,16 +41,6 @@ export default defineEventHandler(async (event): Promise<HabitDto> => {
 
   const description = body.description?.trim() || null;
 
-  // Генерируем slug из названия
-  const existingHabits = await db
-    .select({ slug: habits.slug })
-    .from(habits)
-    .where(eq(habits.userId, userId));
-  const existingSlugs = existingHabits
-    .map((h) => h.slug)
-    .filter((s): s is string => s !== null);
-  const slug = generateSlug(body.name.trim(), existingSlugs);
-
   const [created] = await db
     .insert(habits)
     .values({
@@ -60,7 +49,6 @@ export default defineEventHandler(async (event): Promise<HabitDto> => {
       name: body.name.trim(),
       intent: body.intent,
       habitKey: body.habitKey ?? null,
-      slug,
       emoji: body.emoji ?? null,
       description,
     })
@@ -77,7 +65,7 @@ export default defineEventHandler(async (event): Promise<HabitDto> => {
         id: nanoid(),
         userId,
         kind: 'habits',
-        entityKey: slug, // Используем slug для кастомных привычек
+        entityKey: created.id, // Используем ID для кастомных сущностей (стабильность)
         enabled: true, // Уведомления включены по умолчанию
         timesPerDay: 3, // Значение по умолчанию
         directness: 'moderate',
@@ -93,12 +81,12 @@ export default defineEventHandler(async (event): Promise<HabitDto> => {
         },
       });
       console.log(
-        `[Habits] ✅ Auto-created notification preferences for habit: ${slug} (enabled: true)`
+        `[Habits] ✅ Auto-created notification preferences for habit: ${created.id} (enabled: true)`
       );
     } catch (error) {
       // Не критично, если не удалось создать настройки
       console.error(
-        `[Habits] ⚠️ Failed to auto-create notification preferences for habit ${slug}:`,
+        `[Habits] ⚠️ Failed to auto-create notification preferences for habit ${created.id}:`,
         error
       );
     }
@@ -109,7 +97,6 @@ export default defineEventHandler(async (event): Promise<HabitDto> => {
     name: created.name,
     intent: created.intent as 'build' | 'quit' | 'custom',
     habitKey: created.habitKey ?? null,
-    slug: created.slug ?? null,
     emoji: created.emoji ?? null,
     description: created.description ?? null,
     createdAt: created.createdAt.toISOString(),

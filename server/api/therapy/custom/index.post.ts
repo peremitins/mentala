@@ -10,7 +10,6 @@ import type {
   CreateTherapyTopicDto,
 } from '@/shared/dto/notifications';
 import { getSessionUser } from '@/server/application/auth/session';
-import { generateSlug } from '@/server/utils/slug';
 
 /**
  * POST /api/therapy/custom
@@ -34,23 +33,12 @@ export default defineEventHandler(async (event): Promise<TherapyTopicDto> => {
     });
   }
 
-  // Генерируем slug из названия
-  const existingTopics = await db
-    .select({ slug: therapyTopicsCustom.slug })
-    .from(therapyTopicsCustom)
-    .where(eq(therapyTopicsCustom.userId, userId));
-  const existingSlugs = existingTopics
-    .map((t) => t.slug)
-    .filter((s): s is string => s !== null);
-  const slug = generateSlug(body.name.trim(), existingSlugs);
-
   const [created] = await db
     .insert(therapyTopicsCustom)
     .values({
       id: nanoid(),
       userId,
       name: body.name.trim(),
-      slug,
       description: body.description?.trim() || null,
       emoji: body.emoji?.trim() || null,
     })
@@ -65,7 +53,7 @@ export default defineEventHandler(async (event): Promise<TherapyTopicDto> => {
       id: nanoid(),
       userId,
       kind: 'therapy',
-      entityKey: slug, // Используем slug для кастомных тем
+      entityKey: created.id, // Используем ID для кастомных сущностей (стабильность)
       enabled: true, // Уведомления включены по умолчанию
       timesPerDay: 3, // Значение по умолчанию
       directness: 'moderate',
@@ -81,12 +69,12 @@ export default defineEventHandler(async (event): Promise<TherapyTopicDto> => {
       },
     });
     console.log(
-      `[Therapy] ✅ Auto-created notification preferences for topic: ${slug} (enabled: true)`
+      `[Therapy] ✅ Auto-created notification preferences for topic: ${created.id} (enabled: true)`
     );
   } catch (error) {
     // Не критично, если не удалось создать настройки
     console.error(
-      `[Therapy] ⚠️ Failed to auto-create notification preferences for topic ${slug}:`,
+      `[Therapy] ⚠️ Failed to auto-create notification preferences for topic ${created.id}:`,
       error
     );
   }
@@ -94,7 +82,6 @@ export default defineEventHandler(async (event): Promise<TherapyTopicDto> => {
   return {
     id: created.id,
     name: created.name,
-    slug: created.slug ?? null,
     description: created.description ?? null,
     emoji: created.emoji ?? null,
     createdAt: created.createdAt.toISOString(),

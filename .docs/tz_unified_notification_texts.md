@@ -230,7 +230,7 @@ function findAllTemplatesForSettings(options: {
   // Получаем intent из entityKey (для habits)
   let intent: HabitIntent | undefined;
   if (options.kind === 'habits' && options.entityKey) {
-    // Определяем intent по entityKey (build/quit/custom)
+    // Определяем intent по entityKey (build/quit)
     // Можно использовать существующую логику из компонента
     intent = getIntentFromEntityKey(options.entityKey);
   }
@@ -281,7 +281,7 @@ function getIntentFromEntityKey(entityKey: string): HabitIntent | undefined {
 
   if (buildHabits.includes(entityKey)) return 'build';
   if (quitHabits.includes(entityKey)) return 'quit';
-  return 'custom';
+  return undefined; // Для неизвестных entityKey возвращаем undefined
 }
 ```
 

@@ -1,4 +1,4 @@
-import { eq, and, or } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { therapyTopicsCustom } from '@/server/infrastructure/db/schema';
 import { db } from '@/server/infrastructure/db/client';
 import type { TherapyTopicDto } from '@/shared/dto/notifications';
@@ -6,7 +6,7 @@ import { getSessionUser } from '@/server/application/auth/session';
 
 /**
  * GET /api/therapy/custom/:id
- * Получить пользовательскую тему терапии по slug или id (для обратной совместимости)
+ * Получить пользовательскую тему терапии по ID
  */
 export default defineEventHandler(async (event): Promise<TherapyTopicDto> => {
   const user = await getSessionUser(event);
@@ -18,24 +18,21 @@ export default defineEventHandler(async (event): Promise<TherapyTopicDto> => {
   }
   const userId = user.id;
 
-  const identifier = getRouterParam(event, 'id');
-  if (!identifier) {
+  const id = getRouterParam(event, 'id');
+  if (!id) {
     throw createError({
       statusCode: 400,
-      message: 'Topic identifier is required',
+      message: 'Topic ID is required',
     });
   }
 
-  // Ищем по slug или id (для обратной совместимости)
+  // Ищем только по ID
   const [topic] = await db
     .select()
     .from(therapyTopicsCustom)
     .where(
       and(
-        or(
-          eq(therapyTopicsCustom.id, identifier),
-          eq(therapyTopicsCustom.slug, identifier)
-        ),
+        eq(therapyTopicsCustom.id, id),
         eq(therapyTopicsCustom.userId, userId)
       )
     )
@@ -51,7 +48,6 @@ export default defineEventHandler(async (event): Promise<TherapyTopicDto> => {
   return {
     id: topic.id,
     name: topic.name,
-    slug: topic.slug ?? null,
     description: topic.description ?? null,
     emoji: topic.emoji ?? null,
     createdAt: topic.createdAt.toISOString(),

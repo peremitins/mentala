@@ -1,8 +1,10 @@
-import { eq, and, or } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 import {
   notificationPreferences,
   notificationSlots,
   therapyTopicsCustom,
+  aiGeneratedNotificationTexts,
+  aiNotificationTextUsage,
 } from '@/server/infrastructure/db/schema';
 import { db } from '@/server/infrastructure/db/client';
 import { getSessionUser } from '@/server/application/auth/session';
@@ -29,7 +31,7 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // Проверяем, существует ли тема (для получения slug)
+  // Проверяем, существует ли тема
   const [existing] = await db
     .select()
     .from(therapyTopicsCustom)
@@ -48,35 +50,87 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // Удаляем связанные настройки и запланированные уведомления
-  // ВАЖНО: Ищем preferences по ID и slug, т.к. в БД может быть сохранен slug
+  // КРИТИЧНО: Удаляем все связанные данные в правильном порядке (сначала зависимые таблицы)
+
+  // 1. Находим все preference_id для удаления связанных AI-текстов
+  const preferences = await db
+    .select({ id: notificationPreferences.id })
+    .from(notificationPreferences)
+    .where(
+      and(
+        eq(notificationPreferences.userId, userId),
+        eq(notificationPreferences.kind, 'therapy'),
+        eq(notificationPreferences.entityKey, existing.id)
+      )
+    );
+
+  const preferenceIds = preferences.map((p) => p.id);
+
+  // 2. Удаляем использование AI-текстов (связанная таблица)
+  if (preferenceIds.length > 0) {
+    // Находим все AI-тексты для этих preferences
+    const aiTexts = await db
+      .select({ id: aiGeneratedNotificationTexts.id })
+      .from(aiGeneratedNotificationTexts)
+      .where(
+        and(
+          eq(aiGeneratedNotificationTexts.userId, userId),
+          inArray(aiGeneratedNotificationTexts.preferenceId, preferenceIds)
+        )
+      );
+
+    const aiTextIds = aiTexts.map((t) => t.id);
+
+    // Удаляем использование AI-текстов
+    if (aiTextIds.length > 0) {
+      await db
+        .delete(aiNotificationTextUsage)
+        .where(inArray(aiNotificationTextUsage.aiTextId, aiTextIds));
+      console.log(
+        `[Therapy DELETE] Deleted ${aiTextIds.length} AI text usage records`
+      );
+    }
+
+    // 3. Удаляем AI-тексты
+    if (preferenceIds.length > 0) {
+      await db
+        .delete(aiGeneratedNotificationTexts)
+        .where(
+          and(
+            eq(aiGeneratedNotificationTexts.userId, userId),
+            inArray(aiGeneratedNotificationTexts.preferenceId, preferenceIds)
+          )
+        );
+      console.log(
+        `[Therapy DELETE] Deleted AI texts for ${preferenceIds.length} preferences`
+      );
+    }
+  }
+
+  // 4. Удаляем настройки уведомлений
   await db
     .delete(notificationPreferences)
     .where(
       and(
         eq(notificationPreferences.userId, userId),
         eq(notificationPreferences.kind, 'therapy'),
-        or(
-          eq(notificationPreferences.entityKey, existing.id),
-          eq(notificationPreferences.entityKey, existing.slug || '')
-        )
+        eq(notificationPreferences.entityKey, existing.id)
       )
     );
 
-  // ВАЖНО: Удаляем слоты по ID и slug, т.к. в БД может быть сохранен slug
+  // 5. Удаляем ВСЕ слоты (не только planned, но и sent, skipped, failed)
   await db
     .delete(notificationSlots)
     .where(
       and(
         eq(notificationSlots.userId, userId),
         eq(notificationSlots.kind, 'therapy'),
-        eq(notificationSlots.status, 'planned'),
-        or(
-          eq(notificationSlots.entityKey, existing.id),
-          eq(notificationSlots.entityKey, existing.slug || '')
-        )
+        eq(notificationSlots.entityKey, existing.id)
       )
     );
+  console.log(
+    `[Therapy DELETE] Deleted all notification slots for topic ${existing.id}`
+  );
 
   // Удаляем тему (existing уже проверен выше)
   await db

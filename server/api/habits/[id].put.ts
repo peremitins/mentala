@@ -3,7 +3,6 @@ import { habits } from '@/server/infrastructure/db/schema';
 import { db } from '@/server/infrastructure/db/client';
 import type { HabitDto, UpdateHabitDto } from '@/shared/dto/notifications';
 import { getSessionUser } from '@/server/application/auth/session';
-import { generateSlug } from '@/server/utils/slug';
 
 /**
  * PUT /api/habits/:id
@@ -58,46 +57,70 @@ export default defineEventHandler(async (event): Promise<HabitDto> => {
     });
   }
 
-  // Обновляем slug, если изменилось название
-  let slug = existing.slug;
-  if (body.name !== undefined && body.name.trim() !== existing.name) {
-    const existingHabits = await db
-      .select({ slug: habits.slug })
-      .from(habits)
-      .where(eq(habits.userId, userId));
-    const existingSlugs = existingHabits
-      .map((h) => h.slug)
-      .filter((s): s is string => s !== null && s !== existing.slug);
-    slug = generateSlug(body.name.trim(), existingSlugs);
+  // Определяем, изменились ли чувствительные поля
+  const nameChanged =
+    body.name !== undefined && body.name.trim() !== existing.name;
+  const descriptionChanged =
+    body.description !== undefined &&
+    (body.description?.trim() || null) !== existing.description;
+
+  // Формируем данные для обновления
+  const updateData: {
+    name?: string;
+    intent?: 'build' | 'quit' | 'custom';
+    habitKey?: string | null;
+    emoji?: string | null;
+    description?: string | null;
+    updatedAt: Date;
+  } = {
+    updatedAt: new Date(),
+  };
+
+  // Обновляем только переданные поля
+  if (body.name !== undefined) {
+    updateData.name = body.name.trim();
+  }
+  if (body.intent !== undefined) {
+    updateData.intent = body.intent;
+  }
+  if (body.habitKey !== undefined) {
+    updateData.habitKey = body.habitKey ?? null;
+  }
+  if (body.emoji !== undefined) {
+    updateData.emoji = body.emoji ?? null;
+  }
+  if (body.description !== undefined) {
+    updateData.description = body.description?.trim() || null;
   }
 
   const [updated] = await db
     .update(habits)
-    .set({
-      name: body.name?.trim() ?? existing.name,
-      intent: body.intent ?? existing.intent,
-      habitKey: body.habitKey !== undefined ? body.habitKey : existing.habitKey,
-      slug,
-      emoji: body.emoji !== undefined ? body.emoji : existing.emoji,
-      description:
-        body.description !== undefined
-          ? body.description?.trim() || null
-          : existing.description,
-      updatedAt: new Date(),
-    })
+    .set(updateData)
     .where(eq(habits.id, id))
     .returning();
 
-  // Примечание: Пересоздание AI-текстов при изменении названия/описания
-  // происходит автоматически в prefs/[kind].put.ts при следующем сохранении настроек,
-  // так как хеш конфигурации изменится (entityName/entityDescription входят в хеш)
+  // Перегенерируем AI-тексты при изменении названия или описания
+  if (nameChanged || descriptionChanged) {
+    const { regenerateAiTextsForEntity } = await import(
+      '@/server/application/notifications/regenerate-ai-texts-helper'
+    );
+    // Запускаем асинхронно, не блокируя ответ
+    regenerateAiTextsForEntity({
+      userId,
+      kind: 'habits',
+      entityKey: updated.id, // ID для кастомных сущностей
+      entityName: updated.name,
+      entityDescription: updated.description,
+    }).catch((error) => {
+      console.error(`[Habits PUT] ❌ Failed to regenerate AI texts:`, error);
+    });
+  }
 
   return {
     id: updated.id,
     name: updated.name,
     intent: updated.intent as 'build' | 'quit' | 'custom',
     habitKey: updated.habitKey ?? null,
-    slug: updated.slug ?? null,
     emoji: updated.emoji ?? null,
     description: updated.description ?? null,
     createdAt: updated.createdAt.toISOString(),

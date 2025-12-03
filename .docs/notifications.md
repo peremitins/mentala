@@ -1,8 +1,16 @@
 # Система персонализированных уведомлений MentAI
 
-**Версия:** 2.5  
+**Версия:** 2.6  
 **Дата:** 2025-01-XX  
 **Статус:** Production Ready ✅
+
+**Последние изменения:**
+
+- Реализована AI Buffer Pool модель (генерация 50 текстов вместо 15)
+- Добавлена таблица `ai_notification_text_usage` для отслеживания отправленных текстов
+- Реализовано автоматическое пополнение пула при приближении к концу
+- Добавлен retry механизм с exponential backoff для надежности генерации
+- Динамический расчет токенов: `count * 200 + 5000` для гарантии получения всех текстов
 
 ## 📋 Обзор
 
@@ -68,6 +76,7 @@
 - `notification_preferences` — локальные настройки по типу (с поддержкой `entityKey`)
 - `notification_slots` — запланированные слоты уведомлений (с поддержкой `entityKey`)
 - `ai_generated_notification_texts` — AI-генерированные тексты (с поддержкой `entityKey`)
+- `ai_notification_text_usage` — отслеживание отправленных AI-текстов (новая таблица)
 - `user_devices` — FCM токены устройств
 - `notification_interactions` — трекинг взаимодействий
 - `daily_adherence` — дневная агрегация метрик
@@ -81,7 +90,7 @@ notification_preferences {
   kind: 'therapy' | 'habits'
 
   // Унифицированное поле для идентификации сущности
-  entityKey: string | null  // Для habits: ID/slug привычки, для therapy: ключ темы
+  entityKey: string | null  // Для habits: ID привычки, для therapy: ID темы или ключ шаблона
 
   enabled: boolean
   timesPerDay: integer (1-5)
@@ -108,6 +117,7 @@ notification_preferences {
 
 - `0021_refactor_generationMode_to_textSource.sql` — настройка поля `textSource`
 - `0022_refactor_habitId_topicKey_to_entityKey.sql` — настройка поля `entityKey`
+- `0027_add_ai_notification_text_usage.sql` — таблица для отслеживания отправленных AI-текстов
 
 **Применение:**
 
@@ -118,6 +128,7 @@ pnpm db:migrate
 # Вручную
 psql -d mentai -f server/infrastructure/db/migrations/0021_refactor_generationMode_to_textSource.sql
 psql -d mentai -f server/infrastructure/db/migrations/0022_refactor_habitId_topicKey_to_entityKey.sql
+psql -d mentai -f server/infrastructure/db/migrations/0027_add_ai_notification_text_usage.sql
 ```
 
 ---
@@ -291,10 +302,25 @@ if (textSource === 'templates' || textSource === 'hybrid') {
 - Кэширование по `generationConfigHash` (хеш настроек, влияющих на генерацию)
 - Регенерация только при изменении релевантных параметров (название, описание, tone, directness)
 
+**Таблица:** `ai_notification_text_usage` (отслеживание отправленных текстов)
+
+- Хранит информацию о том, какие тексты из пула уже были отправлены
+- Связь между текстами (`ai_text_id`), слотами (`slot_id`) и индексами текстов
+- Предотвращает повторную отправку одного и того же текста
+
+**AI Buffer Pool модель:**
+
+- **Количество текстов по умолчанию**: 50 (настраивается через `AI_NOTIFICATIONS_DEFAULT_COUNT`)
+- Генерируется большой пул текстов сразу, который используется постепенно
+- Автоматическое пополнение при приближении к концу (менее 2 дней запаса)
+- Защита от дублирования: отслеживание уже отправленных текстов
+
 **Конфигурация моделей:**
 
 - Чат: `gpt-4o` (более мощная модель)
 - Уведомления: `gpt-4o-mini` (экономичная модель)
+- **Динамический расчет токенов**: `count * 200 + 5000` (для гарантии получения всех текстов)
+- **Retry механизм**: автоматические повторы при ошибках с exponential backoff
 
 ---
 
@@ -613,7 +639,7 @@ psql -d mentai -f server/infrastructure/db/migrations/0022_refactor_habitId_topi
 
 ### Обратная совместимость
 
-При переходе на slug необходимо сохранить возможность поиска по старому ID для существующих ссылок.
+Все идентификаторы используют стабильный ID (nanoid), который не меняется при изменении названия сущности.
 
 ### Производительность
 

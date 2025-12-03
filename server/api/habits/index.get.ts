@@ -29,7 +29,6 @@ export default defineEventHandler(async (event): Promise<HabitDto[]> => {
     name: h.name,
     intent: h.intent as 'build' | 'quit' | 'custom',
     habitKey: h.habitKey ?? null,
-    slug: h.slug ?? null, // ВАЖНО: Возвращаем slug для читаемых URL
     emoji: h.emoji ?? null,
     description: h.description ?? null,
     createdAt: h.createdAt.toISOString(),

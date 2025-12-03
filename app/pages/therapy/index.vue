@@ -32,10 +32,8 @@ const { topics: userTopics } = storeToRefs(therapyStore);
 
 const customTopicItems = computed<NotificationIndexItem[]>(() =>
   userTopics.value.map((topic) => {
-    // ВАЖНО: Используем slug для читаемого URL, если он есть
-    const identifier = topic.slug || topic.id;
     return {
-      id: identifier, // Используем slug для читаемого URL
+      id: topic.id, // Используем ID
       name: topic.name,
       description: topic.description || 'Персональная тема',
       emoji: topic.emoji || '💬',
@@ -78,22 +76,20 @@ const pendingDeleteItem = ref<NotificationIndexItem | null>(null);
 
 function handleTopicSelect(item: NotificationIndexItem) {
   const payload = item.payload as
-    | { action?: string; type?: string; slug?: string | null }
+    | { action?: string; type?: string }
     | undefined;
   if (payload?.action === 'create-topic') {
     createModalOpen.value = true;
     return;
   }
-  // Используем slug, если есть, иначе id (для обратной совместимости)
-  const identifier = payload?.slug || item.id;
-  navigateTo(`/therapy/${identifier}`);
+  // Используем ID для навигации
+  navigateTo(`/therapy/${item.id}`);
 }
 
 function handleTopicCreated(topic: TherapyTopicDto) {
   createModalOpen.value = false;
-  // Используем slug, если есть, иначе id (для обратной совместимости)
-  const identifier = topic.slug || topic.id;
-  navigateTo(`/therapy/${identifier}`);
+  // Используем ID для навигации
+  navigateTo(`/therapy/${topic.id}`);
 }
 
 function handleTopicRemove(item: NotificationIndexItem) {
@@ -104,10 +100,8 @@ function handleTopicRemove(item: NotificationIndexItem) {
 async function confirmDeleteTopic() {
   const item = pendingDeleteItem.value;
   if (!item) return;
-  // ВАЖНО: Ищем тему по id или slug, т.к. item.id может быть slug
-  const topic = userTopics.value.find(
-    (t) => t.id === item.id || t.slug === item.id
-  );
+  // Ищем тему по ID
+  const topic = userTopics.value.find((t) => t.id === item.id);
   if (!topic) {
     console.error('[Therapy] Topic not found for deletion:', item.id);
     useToast('Тема не найдена');
@@ -115,15 +109,11 @@ async function confirmDeleteTopic() {
     return;
   }
   try {
-    // ВАЖНО: Используем реальный ID из БД для удаления, а не slug
     await therapyStore.remove(topic.id);
     useToast('Тема удалена');
     // Проверяем, находимся ли мы на странице удаленной темы
     const currentRoute = useRoute();
-    if (
-      currentRoute.params.id === item.id ||
-      currentRoute.params.id === topic.slug
-    ) {
+    if (currentRoute.params.id === item.id) {
       navigateTo('/therapy');
     }
   } catch (error: any) {

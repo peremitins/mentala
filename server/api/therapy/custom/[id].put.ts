@@ -6,7 +6,6 @@ import type {
   UpdateTherapyTopicDto,
 } from '@/shared/dto/notifications';
 import { getSessionUser } from '@/server/application/auth/session';
-import { generateSlug } from '@/server/utils/slug';
 
 /**
  * PUT /api/therapy/custom/:id
@@ -56,43 +55,60 @@ export default defineEventHandler(async (event): Promise<TherapyTopicDto> => {
     });
   }
 
-  // Обновляем slug, если изменилось название
-  let slug = existing.slug;
-  if (body.name !== undefined && body.name.trim() !== existing.name) {
-    const existingTopics = await db
-      .select({ slug: therapyTopicsCustom.slug })
-      .from(therapyTopicsCustom)
-      .where(eq(therapyTopicsCustom.userId, userId));
-    const existingSlugs = existingTopics
-      .map((t) => t.slug)
-      .filter((s): s is string => s !== null && s !== existing.slug);
-    slug = generateSlug(body.name.trim(), existingSlugs);
+  // Определяем, изменились ли чувствительные поля
+  const nameChanged =
+    body.name !== undefined && body.name.trim() !== existing.name;
+  const descriptionChanged =
+    body.description !== undefined &&
+    (body.description?.trim() || null) !== existing.description;
+
+  // Формируем данные для обновления
+  const updateData: {
+    name?: string;
+    description?: string | null;
+    emoji?: string | null;
+    updatedAt: Date;
+  } = {
+    updatedAt: new Date(),
+  };
+
+  // Обновляем только переданные поля
+  if (body.name !== undefined) {
+    updateData.name = body.name.trim();
+  }
+  if (body.description !== undefined) {
+    updateData.description = body.description?.trim() || null;
+  }
+  if (body.emoji !== undefined) {
+    updateData.emoji = body.emoji?.trim() || null;
   }
 
   const [updated] = await db
     .update(therapyTopicsCustom)
-    .set({
-      name: body.name?.trim() ?? existing.name,
-      slug,
-      description:
-        body.description !== undefined
-          ? body.description?.trim() || null
-          : existing.description,
-      emoji:
-        body.emoji !== undefined ? body.emoji?.trim() || null : existing.emoji,
-      updatedAt: new Date(),
-    })
+    .set(updateData)
     .where(eq(therapyTopicsCustom.id, id))
     .returning();
 
-  // Примечание: Пересоздание AI-текстов при изменении названия/описания
-  // происходит автоматически в prefs/[kind].put.ts при следующем сохранении настроек,
-  // так как хеш конфигурации изменится (entityName/entityDescription входят в хеш)
+  // Перегенерируем AI-тексты при изменении названия или описания
+  if (nameChanged || descriptionChanged) {
+    const { regenerateAiTextsForEntity } = await import(
+      '@/server/application/notifications/regenerate-ai-texts-helper'
+    );
+    // Запускаем асинхронно, не блокируя ответ
+    regenerateAiTextsForEntity({
+      userId,
+      kind: 'therapy',
+      entityKey: updated.id, // ID для кастомных сущностей
+      entityName: updated.name,
+      entityDescription: updated.description,
+    }).catch((error) => {
+      console.error(`[Therapy PUT] ❌ Failed to regenerate AI texts:`, error);
+    });
+  }
 
   return {
     id: updated.id,
     name: updated.name,
-    slug: updated.slug ?? null,
     description: updated.description ?? null,
     emoji: updated.emoji ?? null,
     createdAt: updated.createdAt.toISOString(),
