@@ -23,22 +23,3 @@ export function formatNotificationTextWithName(
     .replace(/\s+/g, ' ')
     .trim();
 }
-
-export function pickCustomTextFromMeta(
-  meta: NotificationPreferenceMeta | null | undefined,
-  userName?: string | null,
-  sequenceIndex?: number
-): string | null {
-  if (!meta?.customTexts?.length) {
-    return null;
-  }
-
-  const pool = meta.customTexts;
-  const index =
-    sequenceIndex !== undefined
-      ? sequenceIndex % pool.length
-      : Math.floor(Math.random() * pool.length);
-  const selected = pool[index];
-
-  return formatNotificationTextWithName(selected, userName);
-}

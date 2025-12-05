@@ -77,6 +77,8 @@
 - `notification_slots` — запланированные слоты уведомлений (с поддержкой `entityKey`)
 - `ai_generated_notification_texts` — AI-генерированные тексты (с поддержкой `entityKey`)
 - `ai_notification_text_usage` — отслеживание отправленных AI-текстов (новая таблица)
+- `notification_texts` — тексты уведомлений (дефолтные и пользовательские) с изоляцией данных пользователей
+- `notification_text_presets` — эталонные дефолтные тексты (read-only, только для разработчиков/админов)
 - `user_devices` — FCM токены устройств
 - `notification_interactions` — трекинг взаимодействий
 - `daily_adherence` — дневная агрегация метрик
@@ -104,12 +106,34 @@ notification_preferences {
   timeRangeStart: integer  // Начало окна (в минутах, 0-1439)
   timeRangeEnd: integer  // Конец окна (в минутах, 0-1439)
   customSlotTimes: integer[] | null  // Кастомные времена (максимум 5, в минутах)
-  meta: jsonb | null  // { customTexts: [...], techniques: [...] }
+  meta: jsonb | null  // { textSource: 'templates' | 'ai' | 'hybrid' }
 
   createdAt: timestamp
   updatedAt: timestamp
 }
 ```
+
+### Изоляция данных пользователей для текстов уведомлений
+
+**Архитектура:**
+
+- **Полная изоляция данных**: Каждый пользователь работает только со своими текстами
+- **Lazy initialization**: При первом обращении к текстам автоматически копируются из `notification_text_presets` в `notification_texts` с `user_id = <user_id>`, `source='default'`
+- **Источник истины**: `notification_text_presets` — единственный неизменяемый источник, доступный только разработчикам/админам
+- **Персональные дефолты**: У каждого пользователя свои копии дефолтных текстов (`user_id IS NOT NULL`, `source='default'`)
+
+**Структура таблицы `notification_texts`:**
+
+- `id` — уникальный идентификатор (TEXT)
+- `kind` — тип уведомлений ('habits' | 'therapy')
+- `entity_key` — ключ сущности
+- `user_id` — ID пользователя (INTEGER, NOT NULL для всех пользовательских текстов)
+- `source` — источник текста ('default' | 'user')
+- `intent`, `subtype`, `directness`, `addressing`, `locale` — параметры фильтрации
+- `text` — сам текст уведомления
+- `is_deleted` — логическое удаление (BOOLEAN)
+
+**Важно:** В новой модели больше не используются тексты с `user_id IS NULL` для пользовательских данных. Все тексты имеют `user_id IS NOT NULL`.
 
 ### Миграции
 
@@ -118,6 +142,10 @@ notification_preferences {
 - `0021_refactor_generationMode_to_textSource.sql` — настройка поля `textSource`
 - `0022_refactor_habitId_topicKey_to_entityKey.sql` — настройка поля `entityKey`
 - `0027_add_ai_notification_text_usage.sql` — таблица для отслеживания отправленных AI-текстов
+- `0033_add_notification_texts_tables.sql` — создание таблиц `notification_texts` и `notification_text_presets`
+- `0035_migrate_notification_texts_to_user_scoped.sql` — миграция существующих глобальных текстов в персональные копии для каждого пользователя
+- `0036_add_unique_index_notification_texts.sql` — добавление уникального индекса для предотвращения дублей текстов
+- `0037_remove_preference_id_from_notification_texts.sql` — удаление колонки `preference_id` из таблицы `notification_texts` (тексты больше не связаны с notification_preferences напрямую)
 
 **Применение:**
 
@@ -162,7 +190,7 @@ psql -d mentai -f server/infrastructure/db/migrations/0027_add_ai_notification_t
   "timeRangeEnd": 1350, // 22:30
   "customSlotTimes": [540, 720, 1080], // Кастомные времена
   "meta": {
-    "customTexts": ["Текст 1", "Текст 2"]
+    "textSource": "templates"
   }
 }
 ```
@@ -190,11 +218,31 @@ psql -d mentai -f server/infrastructure/db/migrations/0027_add_ai_notification_t
 - `POST /api/notifications/test` — отправить тестовое (dev only)
 - `POST /api/notifications/interaction` — трекинг взаимодействия
 
+### Управление текстами уведомлений
+
+- `GET /api/notifications/texts?kind=habits|therapy&entityKey=:key&includeDeleted=false` — получить тексты для сущности
+- `POST /api/notifications/texts` — получить тексты с фильтрами (subtype, directness, includeDeleted)
+- `PUT /api/notifications/texts/batch` — batch-сохранение изменений (создание, обновление, удаление)
+- `POST /api/notifications/texts/reset` — восстановить дефолтные тексты из presets
+
+**Важно:** Все эндпоинты работают только с текстами текущего пользователя (`userId = текущий_пользователь`). Тексты с `userId IS NULL` больше не используются.
+
 ---
 
-## 📚 Каталог шаблонов
+## 📚 Тексты уведомлений
 
-Файл: `app/lib/notificationTemplates.ts`
+Все тексты уведомлений хранятся в таблице `notification_texts` в БД с полной изоляцией данных пользователей:
+
+- **Дефолтные тексты** (`userId = <user_id>`, `source='default'`) - персональные копии дефолтных текстов для каждого пользователя
+- **Пользовательские тексты** (`userId = <user_id>`, `source='user'`) - кастомные тексты пользователя
+
+**Важно:** В новой модели больше не используются тексты с `userId IS NULL`. Каждый пользователь работает только со своими текстами (`userId IS NOT NULL`).
+
+**Lazy initialization:** При первом обращении к текстам автоматически копируются из `notification_text_presets` в персональные копии пользователя через сервис `initialize-texts.service.ts`.
+
+**Freeze-модель пресетов:** После первой инициализации текстов для сущности, новые пресеты из `notification_text_presets` не попадут к существующим пользователям автоматически. Для обновления нужно использовать reset-эндпоинт или специальные миграции.
+
+Тексты загружаются через сервис `notification-texts.service.ts`, который загружает только тексты текущего пользователя.
 
 ### Типы для Therapy
 
@@ -205,12 +253,35 @@ psql -d mentai -f server/infrastructure/db/migrations/0027_add_ai_notification_t
 - `mi_prompt` — мотивационное интервьюирование
 - `sos` — быстрый вызов SOS-карты
 
+### Унифицированная структура идентификации
+
+**Универсальное поле `entityKey`:**
+
+- Заменяет старые поля `type`, `habitKey`, `topic`
+- Для готовых привычек: ключ шаблона (`'water'`, `'smoking'`, `'sleep'` и др.)
+- Для кастомных привычек: ID привычки из таблицы `habits` (nanoid, стабильный идентификатор)
+- Для готовых тем терапии: ключ темы (`'anxiety'`, `'stress'`, `'mood'` и др.)
+- Для кастомных тем терапии: ID темы из таблицы `therapy_topics_custom` (nanoid, стабильный идентификатор)
+
+**Принципы идентификации:**
+
+- Кастомные сущности используют стабильный ID (nanoid), который не меняется при изменении названия
+- Шаблонные сущности используют статичные ключи, определенные в коде
+- При удалении кастомной сущности автоматически удаляются все связанные данные (настройки, слоты, AI-тексты, использование текстов)
+
+**Унификация настроек:**
+
+- Все три настройки (`subtype`, `directness`, `textSource`) работают для всех типов сущностей
+- Нет различий в обработке между готовыми и кастомными сущностями
+- Единая логика фильтрации и выбора текстов
+
 ### Параметры шаблонов
 
 - `addressing` — informal (ты) / formal (Вы) — берётся из `user_preferences`
-- `directness` — soft / moderate / hard — из `notification_preferences`
-- `topic` — ключ темы терапии (anxiety, stress, mood и др.)
-- `habitKey` — ключ привычки (water, smoking, sleep и др.)
+- `directness` — soft / moderate / hard / universal — из `notification_preferences`
+- `subtype` — reminder / informational / motivational / mixed — для всех типов сущностей
+- `intent` — build / quit — только для привычек
+- `entityKey` — универсальный идентификатор сущности (заменяет старые `habitKey` и `topic`)
 
 **Примечание:** Support Topics (темы поддержки) хранятся как статичный справочник в коде (`app/lib/therapyCatalog.ts`), а их настройки — в `notification_preferences` через поле `entityKey`.
 
@@ -220,19 +291,35 @@ psql -d mentai -f server/infrastructure/db/migrations/0027_add_ai_notification_t
 
 Файл: `server/application/notifications/scheduler.service.ts`
 
+### Архитектура
+
+Планировщик был рефакторирован и разбит на отдельные сервисы:
+
+- **`scheduler.service.ts`** — тонкий фасад/оркестратор, координирует генерацию слотов
+- **`regenerate-slots.service.ts`** — генерация слотов для одного источника
+- **`entity-key.service.ts`** — определение типа сущности (кастомная или шаблонная)
+- **`slot-times.service.ts`** — генерация времен слотов с учётом кастомных времён
+- **`prevent-overlap.service.ts`** — предотвращение одновременных уведомлений
+- **`text-selection.service.ts`** — выбор текста для слота
+- **`needs-regeneration.service.ts`** — проверка необходимости регенерации
+- **`repositories/`** — репозитории для работы с БД (notification-preferences, notification-slots)
+
 ### Функции
 
-- `generateSlotsForUser(userId, kind, options?)` — генерирует слоты на 7 дней
+- `generateAllSlotsForUser(userId)` — генерирует все слоты для пользователя с глобальной оркестрацией
+- `regenerateSlotsForSource(userId, kind, options?)` — регенерирует слоты для конкретного источника
   - `options` может содержать `entityKey` для per-entity генерации
 - `regenerateAllSlots()` — пересоздаёт слоты для всех пользователей
 - `triggerSlotRegeneration(userId, kind, options?)` — триггер при изменении настроек
+- `checkAndRegenerateSlotsIfNeeded(userId)` — проверяет и регенерирует слоты при необходимости
 
 ### Конфигурация
 
 - Окно бодрствования: 09:00 – 22:30 (локальное время)
 - Джиттер: ±15 минут
-- Горизонт: 7 дней
+- Горизонт: 1 день (генерируем слоты на 1 день вперёд)
 - Кастомные слоты: приоритет над автоматическими
+- Минимальный шаг между уведомлениями: 25 минут
 
 ### Алгоритм генерации
 
@@ -254,8 +341,12 @@ psql -d mentai -f server/infrastructure/db/migrations/0027_add_ai_notification_t
 ### Режимы
 
 1. **`templates`** — использование готовых шаблонов или пользовательских текстов
-   - Для кастомных: используется `meta.customTexts`
-   - Для готовых шаблонов: используется каталог `notificationTemplates.ts`
+   - Тексты загружаются из таблицы `notification_texts` в БД
+   - **Изоляция данных**: Каждый пользователь имеет свои персональные копии дефолтных текстов (`user_id = <user_id>`, `source='default'`)
+   - Пользовательские тексты хранятся в `notification_texts` с `user_id = <user_id>`, `source='user'`
+   - Источником истины для дефолтных текстов является таблица `notification_text_presets` (read-only, только для разработчиков/админов)
+   - При первом обращении к текстам автоматически копируются из presets в персональные копии пользователя (lazy initialization)
+   - **Freeze-модель**: После первой инициализации новые пресеты не попадут к существующим пользователям автоматически
 2. **`ai`** — тексты генерируются искусственным интеллектом
    - Используется OpenAI GPT (модель `gpt-4o-mini` для экономии)
    - Тексты сохраняются в `ai_generated_notification_texts`
@@ -266,10 +357,29 @@ psql -d mentai -f server/infrastructure/db/migrations/0027_add_ai_notification_t
 ### Логика выбора текста
 
 ```typescript
-// Для кастомных сущностей
+// Загрузка текстов из БД (для всех типов сущностей)
 if (textSource === 'templates' || textSource === 'hybrid') {
-  // Используем кастомные тексты
-  text = pickCustomTextFromMeta(prefMeta, userName);
+  // Инициализируем тексты, если их еще нет (lazy init)
+  await ensureUserTextsInitialized(userId, kind, entityKey);
+
+  // Загружаем только тексты пользователя (userId = userId)
+  const templateTexts = await db
+    .select()
+    .from(notificationTexts)
+    .where(
+      and(
+        eq(notificationTexts.kind, kind),
+        eq(notificationTexts.entityKey, entityKey),
+        eq(notificationTexts.userId, userId), // ТОЛЬКО тексты пользователя
+        eq(notificationTexts.isDeleted, false),
+        // Фильтры по directness, addressing, intent, subtype
+      )
+    )
+    .orderBy(asc(notificationTexts.id));
+
+  // Выбираем текст из загруженных (с учётом уже использованных)
+  text = selectTextFromPool(templateTexts, usedTexts);
+
   if (textSource === 'hybrid' && Math.random() < 0.3) {
     // 30% AI в hybrid режиме
     text = await generateAiNotification({ ... });
@@ -279,18 +389,6 @@ if (textSource === 'templates' || textSource === 'hybrid') {
 if (!text && (textSource === 'ai' || textSource === 'hybrid')) {
   // Генерируем через AI
   text = await generateAiNotification({ ... });
-}
-
-// Для готовых шаблонов
-if (textSource === 'templates' || textSource === 'hybrid') {
-  // Используем готовые шаблоны
-  template = findTemplate(kind, { entityKey, ... });
-  text = getTemplateText(template, addressing, directness, userName);
-
-  if (textSource === 'hybrid' && Math.random() < 0.3) {
-    // 30% AI в hybrid режиме
-    text = await generateAiNotification({ ... });
-  }
 }
 ```
 
@@ -312,8 +410,12 @@ if (textSource === 'templates' || textSource === 'hybrid') {
 
 - **Количество текстов по умолчанию**: 50 (настраивается через `AI_NOTIFICATIONS_DEFAULT_COUNT`)
 - Генерируется большой пул текстов сразу, который используется постепенно
+- Хватает на 10-14 дней при 3-5 уведомлениях в день
 - Автоматическое пополнение при приближении к концу (менее 2 дней запаса)
-- Защита от дублирования: отслеживание уже отправленных текстов
+- Защита от дублирования: отслеживание уже отправленных текстов через таблицу `ai_notification_text_usage`
+- Retry механизм с exponential backoff для надежности генерации
+- Динамический расчет токенов: `count * 200 + 5000` для гарантии получения всех текстов
+- При изменении настроек (tone, directness, subtype, название, описание) происходит полная перегенерация всех 50 текстов с очисткой старых данных
 
 **Конфигурация моделей:**
 
@@ -330,20 +432,26 @@ if (textSource === 'templates' || textSource === 'hybrid') {
 
 - Создание через `/api/habits` с полями: название, тип, описание, emoji
 - Настройки уведомлений через `/api/notifications/prefs/habits?entityKey=:id`
-- Пользовательские тексты в `meta.customTexts` (до 100 текстов, каждый ≤ 178 символов)
+- **Управление текстами**: отдельная страница `/notifications/habits/[entityKey]/texts`
+- Тексты хранятся в таблице `notification_texts` (до 100 текстов, каждый ≤ 178 символов)
 - Плейсхолдер `{name}` для имени пользователя
 
 ### Пользовательские темы терапии
 
 - Создание через `/api/therapy/custom` с полями: название, описание, emoji
 - Настройки уведомлений через `/api/notifications/prefs/therapy?entityKey=:id`
-- Пользовательские тексты в `meta.customTexts` (до 100 текстов, каждый ≤ 178 символов)
+- **Управление текстами**: отдельная страница `/notifications/therapy/[entityKey]/texts`
+- Тексты хранятся в таблице `notification_texts` (до 100 текстов, каждый ≤ 178 символов)
 
 ### UI особенности
 
-- Для кастомных сущностей скрыты блоки «Фокус уведомления» и «Стиль уведомлений»
-- Доступен блок «Тексты уведомлений» с валидацией
-- Анимации при добавлении/удалении текстов
+- **Унификация настроек**: Все три настройки (`subtype`, `directness`, `textSource`) доступны для всех типов сущностей (готовые и кастомные)
+- **Редактор текстов**: Управление текстами доступно через отдельную страницу `/notifications/[kind]/[entityKey]/texts`
+  - Inline-редактирование текстов (без per-row кнопок сохранения)
+  - Batch-сохранение всех изменений одной кнопкой внизу страницы (`PUT /api/notifications/texts/batch`)
+  - Фильтрация по `subtype` и `directness`
+  - Восстановление дефолтных текстов из presets
+- **Валидация**: максимум 178 символов на текст
 
 ---
 
@@ -380,7 +488,6 @@ ENABLE_NOTIFICATIONS_WORKER=true pnpm dev
 
 ### Компоненты
 
-- `NotificationPreview.vue` — dev-превью уведомления
 - `SettingsGeneral.vue` — глобальные настройки (addressing, tone)
 - `SettingsNotificationsTherapy.vue` — настройки therapy
 - `NotificationSettingsPage.vue` — универсальная страница настроек
@@ -582,7 +689,7 @@ psql -d mentai -f server/infrastructure/db/migrations/0022_refactor_habitId_topi
 
 **Причина:** Нет шаблонов с нужными параметрами
 
-**Решение:** Добавьте больше шаблонов в `app/lib/notificationTemplates.ts` или проверьте фильтрацию по `entityKey` и другим параметрам
+**Решение:** Добавьте больше текстов в таблицу `notification_texts` в БД или проверьте фильтрацию по `entityKey` и другим параметрам. Все тексты должны быть в БД, fallback на код удален.
 
 ---
 
@@ -652,6 +759,42 @@ psql -d mentai -f server/infrastructure/db/migrations/0022_refactor_habitId_topi
 - Валидация через Zod DTO
 - Аутентификация через JWT
 - Обработка невалидных токенов
+
+---
+
+## 📝 История изменений
+
+### Унификация структуры шаблонов (✅ Реализовано)
+
+**Цель:** Унифицировать структуру шаблонов уведомлений для привычек и терапии через единое поле `entityKey`.
+
+**Изменения:**
+
+- Убрано поле `type` из всех шаблонов (дублировало `habitKey`)
+- Переименовано `habitKey` → `entityKey` (универсальное поле)
+- Заменено `topic` → `entityKey` в терапии
+- Добавлен `subtype` для терапии (унификация с привычками)
+- Унифицированы настройки: все три настройки (`subtype`, `directness`, `textSource`) работают для всех типов сущностей
+
+**Результат:** Единая логика обработки для готовых и кастомных сущностей, упрощение кодовой базы.
+
+### Редактор текстов уведомлений (✅ Реализовано)
+
+**Цель:** Единая система управления текстами уведомлений для всех типов сущностей.
+
+**Архитектура:**
+
+- Все тексты хранятся в таблице `notification_texts` в БД
+- Изоляция данных пользователей: каждый пользователь работает только со своими текстами
+- Lazy initialization: тексты копируются из `notification_text_presets` при первом обращении
+- Freeze-модель: новые пресеты не попадают к существующим пользователям автоматически
+
+**UI:**
+
+- Отдельная страница `/notifications/[kind]/[entityKey]/texts` с полноценным редактором
+- Inline-редактирование с batch-сохранением через `PUT /api/notifications/texts/batch`
+- Фильтрация по `subtype` и `directness`
+- Восстановление дефолтных текстов из presets
 
 ---
 

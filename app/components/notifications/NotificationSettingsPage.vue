@@ -3,7 +3,6 @@ import { ref, computed, onMounted, nextTick, watch } from 'vue';
 import { onClickOutside } from '@vueuse/core';
 import { SliderRange, SliderRoot, SliderThumb, SliderTrack } from 'radix-vue';
 import { useToast } from '@/app/composables/useToast';
-import NotificationPreview from '@/app/components/notifications/NotificationPreview.vue';
 import OverloadBanner from '@/app/components/notifications/OverloadBanner.vue';
 import Combobox from '@/app/components/Combobox.vue';
 import WeekdaySelector from '@/app/components/WeekdaySelector.vue';
@@ -15,6 +14,7 @@ import {
   SUBTYPE_OPTIONS_BUILD,
   SUBTYPE_OPTIONS_QUIT,
   TEXT_SOURCE_OPTIONS,
+  DIRECTNESS_OPTIONS,
 } from '@/app/constants/select-options';
 import ToggleGroup from '@/app/components/ui/toggle-group/ToggleGroup.vue';
 import ToggleGroupItem from '@/app/components/ui/toggle-group/ToggleGroupItem.vue';
@@ -39,10 +39,7 @@ import type {
   UpdateNotificationPreferencesDto,
   UserPreferencesDto,
 } from '@/shared/dto/notifications';
-import {
-  MAX_CUSTOM_NOTIFICATION_TEXTS,
-  MAX_NOTIFICATION_TEXT_LENGTH,
-} from '@/shared/dto/notifications';
+import { MAX_NOTIFICATION_TEXT_LENGTH } from '@/shared/dto/notifications';
 
 const props = defineProps<{
   mentaiMode: 'habits' | 'therapy';
@@ -50,6 +47,27 @@ const props = defineProps<{
 }>();
 
 const route = useRoute();
+const router = useRouter();
+
+// Навигация к редактору текстов с передачей фильтров
+function goToTextsEditor() {
+  const query: Record<string, string> = {};
+
+  // Передаем subtype, если он выбран
+  if (subtype.value) {
+    query.subtype = subtype.value;
+  }
+
+  // Передаем directness, если он не равен дефолтному
+  if (directness.value && directness.value !== 'moderate') {
+    query.directness = directness.value;
+  }
+
+  router.push({
+    path: `/notifications/${props.mentaiMode}/${props.entityKey}/texts`,
+    query,
+  });
+}
 
 const isHabits = computed(() => props.mentaiMode === 'habits');
 
@@ -184,44 +202,7 @@ const customSlotTimes = ref<(number | null)[]>([]);
 const loading = ref(false);
 const addressing = ref<Addressing>('informal');
 const tone = ref<Tone>('neutral');
-const customTexts = ref<string[]>(['']);
 const textSource = ref<'templates' | 'ai' | 'hybrid'>('templates');
-const canAddCustomText = computed(
-  () => customTexts.value.length < MAX_CUSTOM_NOTIFICATION_TEXTS
-);
-const customTextErrors = computed(() =>
-  customTexts.value.map((text) =>
-    text.trim().length > MAX_NOTIFICATION_TEXT_LENGTH
-      ? `Максимум ${MAX_NOTIFICATION_TEXT_LENGTH} символов`
-      : ''
-  )
-);
-const normalizedCustomTexts = computed(() =>
-  customTexts.value.map((text) => text.trim()).filter((text) => text.length > 0)
-);
-const hasCustomTextError = computed(() =>
-  customTextErrors.value.some((msg) => Boolean(msg))
-);
-const hasCustomTexts = computed(() => normalizedCustomTexts.value.length > 0);
-const canSubmitCustomTexts = computed(() => {
-  // Для режимов templates и hybrid требуется хотя бы один текст
-  if (isCustomEntity.value) {
-    const source = textSource.value;
-    if (source === 'templates' || source === 'hybrid') {
-      return hasCustomTexts.value && !hasCustomTextError.value;
-    }
-    // Для режима ai тексты не требуются
-    return true;
-  }
-  return hasCustomTexts.value && !hasCustomTextError.value;
-});
-
-// Условное отображение секции текстов для кастомных
-const showCustomTextsSection = computed(() => {
-  if (!isCustomEntity.value) return false;
-  const source = textSource.value;
-  return source === 'templates' || source === 'hybrid';
-});
 
 // Условное отображение информационного блока про AI
 const showAiInfo = computed(() => {
@@ -255,35 +236,6 @@ const {
   setManualTime,
   resetAllSlotTimes,
 } = useTimeSlotControls(timesPerDay, timeRange, customSlotTimes);
-
-function addCustomText() {
-  if (!canAddCustomText.value) return;
-  customTexts.value.push('');
-}
-
-function removeCustomText(index: number) {
-  if (customTexts.value.length === 1) {
-    customTexts.value[0] = '';
-    return;
-  }
-  customTexts.value.splice(index, 1);
-}
-
-function moveCustomText(index: number, direction: 'up' | 'down') {
-  const targetIndex = direction === 'up' ? index - 1 : index + 1;
-  if (
-    targetIndex < 0 ||
-    targetIndex >= customTexts.value.length ||
-    targetIndex === index
-  ) {
-    return;
-  }
-  const texts = [...customTexts.value];
-  const [moved] = texts.splice(index, 1);
-  if (moved === undefined) return;
-  texts.splice(targetIndex, 0, moved);
-  customTexts.value = texts;
-}
 
 function startEditTitle() {
   if (!canEditCustomEntity.value) return;
@@ -422,7 +374,6 @@ function computeStateSignature() {
         )
       : null,
     subtype: subtype.value ?? null,
-    customTexts: isCustomEntity.value ? normalizedCustomTexts.value : null,
     textSource: textSource.value,
     // Добавляем название и описание для отслеживания изменений
     // Сравниваем с исходными значениями
@@ -440,8 +391,8 @@ const isDirty = computed(() => {
 
 const isSaveDisabled = computed(
   () => loading.value || !isDirty.value
-  // Убрали проверку canSubmitCustomTexts - разрешаем сохранять настройки без текстов
-  // Пользователь может добавить тексты позже
+  // Разрешаем сохранять настройки без текстов
+  // Пользователь может добавить тексты позже через редактор текстов
 );
 
 // Описания стилей для разных фокусов уведомлений
@@ -536,14 +487,6 @@ const selectedDirectnessOption = computed(() =>
 const selectedSubtypeOption = computed(() => {
   if (!subtype.value) return null;
   return subtypeOptions.value.find((opt) => opt.value === subtype.value);
-});
-
-const previewKey = computed(() => {
-  if (isHabits.value) {
-    const customSignature = normalizedCustomTexts.value.join('|');
-    return `${addressing.value}-${tone.value}-${directness.value}-${subtype.value}-${props.entityKey}-${customSignature}`;
-  }
-  return `${addressing.value}-${tone.value}-${directness.value}-${props.entityKey}`;
 });
 
 const currentTotalPerDay = computed(() => {
@@ -696,17 +639,7 @@ onMounted(async () => {
         end: pref.timeRangeEnd,
       };
       customSlotTimes.value = pref.customSlotTimes ?? [];
-      if (isCustomEntity.value) {
-        const storedTexts = pref.meta?.customTexts ?? null;
-        customTexts.value =
-          storedTexts && storedTexts.length ? [...storedTexts] : [''];
-        textSource.value = pref.meta?.textSource ?? 'templates';
-      } else {
-        textSource.value = pref.meta?.textSource ?? 'templates';
-      }
-    } else if (isCustomEntity.value) {
-      customTexts.value = [''];
-      textSource.value = 'templates';
+      textSource.value = pref.meta?.textSource ?? 'templates';
     } else {
       textSource.value = 'templates';
     }
@@ -721,8 +654,8 @@ onMounted(async () => {
 });
 
 async function saveSettings() {
-  // Убрали проверку canSubmitCustomTexts - разрешаем сохранять настройки без текстов
-  // Пользователь может добавить тексты позже
+  // Разрешаем сохранять настройки без текстов
+  // Пользователь может добавить тексты позже через редактор текстов
   loading.value = true;
   try {
     const { $api } = useNuxtApp();
@@ -839,10 +772,6 @@ async function saveSettings() {
       subtype: subtype.value, // Всегда сохраняем subtype для всех типов
       meta: {
         textSource: textSource.value,
-        // Для кастомных сущностей добавляем customTexts, если textSource не 'ai'
-        ...(isCustomEntity && textSource.value !== 'ai'
-          ? { customTexts: normalizedCustomTexts.value }
-          : {}),
       },
       // Добавляем название и описание, если они изменены
       ...(nameChanged && newName !== undefined ? { name: newName } : {}),
@@ -951,7 +880,7 @@ const descriptionText = computed(() => {
 </script>
 
 <template>
-  <div class="space-y-6 h-full overflow-y-auto rounded-sm pb-[100px]">
+  <div class="space-y-4 h-full overflow-y-auto rounded-sm pb-[100px]">
     <PageHeader :title="entityName" :show-back-button="true" @go-back="goBack">
       <template #custom>
         <div class="flex items-center gap-2 flex-1 overflow-hidden">
@@ -1242,22 +1171,12 @@ const descriptionText = computed(() => {
             "
           >
             <ToggleGroupItem
-              value="soft"
+              v-for="option in DIRECTNESS_OPTIONS"
+              :key="option.value"
+              :value="option.value"
               class="flex-1 rounded-lg px-2 py-2 text-xs xs:text-sm whitespace-nowrap font-medium transition-all"
             >
-              😊 Мягкий
-            </ToggleGroupItem>
-            <ToggleGroupItem
-              value="moderate"
-              class="flex-1 rounded-lg px-2 py-2 text-xs xs:text-sm whitespace-nowrap font-medium transition-all"
-            >
-              😐 Сдержанный
-            </ToggleGroupItem>
-            <ToggleGroupItem
-              value="hard"
-              class="flex-1 rounded-lg px-2 py-2 text-xs xs:text-sm whitespace-nowrap font-medium transition-all"
-            >
-              😑 Жесткий
+              {{ option.icon }} {{ option.label }}
             </ToggleGroupItem>
           </ToggleGroup>
         </div>
@@ -1319,6 +1238,17 @@ const descriptionText = computed(() => {
           </ToggleGroup>
         </div>
 
+        <!-- Кнопка управления текстами -->
+        <div class="space-y-2">
+          <button
+            type="button"
+            class="btn btn-outline w-full"
+            @click="goToTextsEditor"
+          >
+            🔧 Управлять текстами уведомлений
+          </button>
+        </div>
+
         <!-- Информационный блок для Шаблонов -->
         <div
           v-if="textSource === 'templates'"
@@ -1375,130 +1305,6 @@ const descriptionText = computed(() => {
               </p>
             </div>
           </div>
-        </div>
-
-        <div
-          v-if="isCustomEntity && showCustomTextsSection"
-          class="space-y-3 rounded-2xl border border-dashed border-primary bg-button-active-soft p-4 transition-all"
-        >
-          <div class="flex items-center justify-between gap-3 flex-wrap">
-            <div>
-              <p class="text-sm font-semibold text-foreground">
-                Тексты уведомлений
-              </p>
-              <p class="text-xs text-muted-foreground">
-                До {{ MAX_CUSTOM_NOTIFICATION_TEXTS }} вариантов, максимум
-                {{ MAX_NOTIFICATION_TEXT_LENGTH }} символов. Можно использовать
-                {`{name}`}
-              </p>
-            </div>
-            <button
-              type="button"
-              class="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold border border-primary/30 text-primary hover:bg-primary/10 disabled:opacity-30"
-              :disabled="!canAddCustomText"
-              @click="addCustomText"
-            >
-              <span>+</span> Добавить текст
-            </button>
-          </div>
-
-          <TransitionGroup name="fade" tag="div" class="space-y-3">
-            <div
-              v-for="(text, index) in customTexts"
-              :key="`custom-text-${index}`"
-              class="rounded-xl border border-border bg-card/90 p-3 shadow-sm transition-all"
-            >
-              <textarea
-                v-model="customTexts[index]"
-                rows="3"
-                class="w-full rounded-lg border border-transparent bg-transparent px-2 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-0 text-foreground"
-                :maxlength="MAX_NOTIFICATION_TEXT_LENGTH"
-                placeholder="Например: «{name}, сделай вдох и выпей стакан воды»"
-              />
-              <div class="flex items-center justify-between text-xs mt-2">
-                <div class="flex items-center gap-2">
-                  <span
-                    :class="[
-                      customTextErrors[index]
-                        ? 'text-destructive'
-                        : 'text-muted-foreground',
-                    ]"
-                  >
-                    {{
-                      customTextErrors[index] ||
-                      `${customTexts[index]?.trim().length}/${MAX_NOTIFICATION_TEXT_LENGTH}`
-                    }}
-                  </span>
-                  <div
-                    v-if="customTexts.length > 1"
-                    class="flex items-center gap-1 text-muted-foreground"
-                  >
-                    <button
-                      type="button"
-                      :class="[
-                        'p-1 rounded-md border border-transparent hover:border-border hover:text-foreground transition',
-                        index === 0 ? 'opacity-40 cursor-not-allowed' : '',
-                      ]"
-                      :disabled="index === 0"
-                      @click="moveCustomText(index, 'up')"
-                    >
-                      ↑
-                    </button>
-                    <button
-                      type="button"
-                      :class="[
-                        'p-1 rounded-md border border-transparent hover:border-border hover:text-foreground transition',
-                        index === customTexts.length - 1
-                          ? 'opacity-40 cursor-not-allowed'
-                          : '',
-                      ]"
-                      :disabled="index === customTexts.length - 1"
-                      @click="moveCustomText(index, 'down')"
-                    >
-                      ↓
-                    </button>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  class="text-muted-foreground hover:text-destructive transition text-xs"
-                  @click="removeCustomText(index)"
-                >
-                  Удалить
-                </button>
-              </div>
-            </div>
-          </TransitionGroup>
-
-          <p
-            v-if="!hasCustomTexts"
-            class="text-xs text-destructive font-medium"
-          >
-            Добавьте хотя бы один текст
-          </p>
-        </div>
-
-        <div class="space-y-2">
-          <NotificationPreview
-            v-if="isHabits"
-            :key="`habits-${previewKey}`"
-            kind="habits"
-            :addressing="addressing"
-            :tone="tone"
-            :directness="directness"
-            :entity-key="entityKey"
-            :subtype="subtype"
-            :custom-texts="isCustomEntity ? normalizedCustomTexts : undefined"
-          />
-          <NotificationPreview
-            v-else
-            :key="`therapy-${previewKey}`"
-            kind="therapy"
-            :addressing="addressing"
-            :tone="tone"
-            :directness="directness"
-            :entity-key="entityKey"
-          />
         </div>
       </div>
 
