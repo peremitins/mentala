@@ -8,12 +8,9 @@ import {
 } from '@/server/infrastructure/db/schema';
 import { db } from '@/server/infrastructure/db/client';
 import { getSessionUser } from '@/server/application/auth/session';
-import { getNotificationText } from '@/app/lib/notificationTemplates';
-import type {
-  NotificationPayload,
-  NotificationPreferenceMeta,
-} from '@/shared/dto/notifications';
-import { pickCustomTextFromMeta } from '@/shared/utils/notificationText';
+import { loadTextsForPreference } from '@/server/application/notifications/notification-texts.service';
+import { formatNotificationTextWithName } from '@/shared/utils/notificationText';
+import type { NotificationPayload } from '@/shared/dto/notifications';
 
 /**
  * POST /api/notifications/test-quick
@@ -84,8 +81,6 @@ export default defineEventHandler(
 
     const directness =
       (localPrefs?.directness as 'soft' | 'moderate' | 'hard') ?? 'moderate';
-    const preferenceMeta =
-      (localPrefs?.meta as NotificationPreferenceMeta | null) ?? null;
 
     console.log('[test-quick] Settings:', {
       userId,
@@ -95,29 +90,42 @@ export default defineEventHandler(
       directness,
     });
 
-    const customText =
-      body.kind === 'habits' || body.kind === 'therapy'
-        ? pickCustomTextFromMeta(preferenceMeta, user?.name, 0)
-        : null;
+    // Генерируем текст уведомления из БД
+    // Пытаемся загрузить тексты для любого entityKey (используем первый доступный)
+    let text = 'Время сделать паузу и восстановить дыхание.'; // Fallback текст
 
-    // Генерируем текст уведомления с fallback логикой
-    // tone больше не используется в фильтрации шаблонов
-    const text =
-      customText ||
-      getNotificationText(
-        body.kind,
-        addressing,
+    try {
+      // Пробуем загрузить тексты для первого доступного entityKey
+      // Для тестового эндпоинта используем общий подход
+      const loadedTexts = await loadTextsForPreference({
+        userId,
+        kind: body.kind,
+        entityKey: body.kind === 'therapy' ? 'anxiety' : 'water', // Используем дефолтные entityKey
         directness,
-        user?.name ?? undefined
+        addressing,
+        intent: null,
+        subtype: null,
+      });
+
+      if (loadedTexts.texts.length > 0) {
+        // Берем первый доступный текст
+        const firstText = loadedTexts.texts[0];
+        text = formatNotificationTextWithName(
+          firstText.text,
+          user?.name ?? undefined
+        );
+      }
+    } catch (error) {
+      console.warn(
+        '[test-quick] Failed to load texts from DB, using fallback:',
+        error
       );
+    }
 
     console.log(`[TEST-QUICK NOTIFICATION] notificationText: ${text}`);
 
-    // Для payload нам всё равно нужен templateId, используем дефолтный
-    // tone больше не используется, убираем из templateId
-    const templateId = customText
-      ? 'custom_user_text'
-      : `${body.kind}_${directness}`;
+    // Для payload используем дефолтный templateId
+    const templateId = `${body.kind}_${directness}`;
 
     // Проверяем наличие устройств у пользователя
     const devices = await db

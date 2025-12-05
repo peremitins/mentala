@@ -12,10 +12,7 @@ import type {
   UpdateNotificationPreferencesDto,
   NotificationPreferenceMeta,
 } from '@/shared/dto/notifications';
-import {
-  MAX_CUSTOM_NOTIFICATION_TEXTS,
-  MAX_NOTIFICATION_TEXT_LENGTH,
-} from '@/shared/dto/notifications';
+import { MAX_NOTIFICATION_TEXT_LENGTH } from '@/shared/dto/notifications';
 import { getSessionUser } from '@/server/application/auth/session';
 import { regenerateSlotsForSource } from '@/server/application/notifications/scheduler.service';
 import type { NotificationKind } from '@/app/lib/notificationTemplates';
@@ -56,60 +53,6 @@ const NOTIFICATION_SUBTYPES: NotificationSubtype[] = [
   'motivational',
   'mixed',
 ];
-
-function sanitizeCustomTextsInput(
-  input: string[] | null | undefined
-): string[] | null {
-  if (input === undefined || input === null) {
-    return null;
-  }
-
-  if (!Array.isArray(input)) {
-    throw createError({
-      statusCode: 400,
-      message: 'customTexts must be an array of strings or null',
-    });
-  }
-
-  const cleaned: string[] = [];
-
-  for (const raw of input) {
-    if (typeof raw !== 'string') {
-      throw createError({
-        statusCode: 400,
-        message: 'customTexts must contain only strings',
-      });
-    }
-
-    const trimmed = raw.trim();
-    if (!trimmed) {
-      continue;
-    }
-
-    if (trimmed.length > MAX_NOTIFICATION_TEXT_LENGTH) {
-      throw createError({
-        statusCode: 400,
-        message: `Текст уведомления не должен превышать ${MAX_NOTIFICATION_TEXT_LENGTH} символов`,
-      });
-    }
-
-    cleaned.push(trimmed);
-
-    if (cleaned.length > MAX_CUSTOM_NOTIFICATION_TEXTS) {
-      throw createError({
-        statusCode: 400,
-        message: `Можно сохранить не более ${MAX_CUSTOM_NOTIFICATION_TEXTS} текстов`,
-      });
-    }
-  }
-
-  return cleaned.length ? cleaned : null;
-}
-
-function hasCustomTextsUpdate(meta?: NotificationPreferenceMeta | null) {
-  if (!meta) return false;
-  return Object.prototype.hasOwnProperty.call(meta, 'customTexts');
-}
 
 export default defineEventHandler(
   async (event): Promise<NotificationPreferencesDto> => {
@@ -353,39 +296,17 @@ export default defineEventHandler(
           : (existing.subtype as NotificationSubtype | null);
       const existingMeta =
         (existing.meta as NotificationPreferenceMeta | null) ?? null;
-      const shouldUpdateMeta =
-        (kind === 'habits' || kind === 'therapy') &&
-        hasCustomTextsUpdate(body.meta ?? null);
-      let nextMeta: NotificationPreferenceMeta | null | undefined = undefined;
 
-      if (shouldUpdateMeta) {
-        const sanitizedCustomTexts = sanitizeCustomTextsInput(
-          body.meta?.customTexts ?? null
-        );
-        // Если customTexts - пустой массив, это означает режим AI, сохраняем как пустой массив
-        // Если customTexts - null или undefined, не обновляем
-        if (body.meta?.customTexts !== undefined) {
-          nextMeta = sanitizedCustomTexts
-            ? { customTexts: sanitizedCustomTexts }
-            : { customTexts: [] }; // Пустой массив для режима AI
-        } else {
-          nextMeta = undefined; // Не обновляем customTexts
-        }
-      }
-
-      // Объединяем существующие meta с новыми (textSource)
+      // Объединяем существующие meta с новыми (только textSource)
       const finalMeta: NotificationPreferenceMeta = {
         ...(existingMeta || {}),
-        ...(body.meta || {}),
-        ...(nextMeta !== undefined
-          ? { customTexts: nextMeta?.customTexts }
+        ...(body.meta?.textSource !== undefined
+          ? { textSource: body.meta.textSource }
           : {}),
       };
 
       // Убеждаемся, что meta не пустой объект (если есть хотя бы одно поле)
-      const hasMetaFields =
-        finalMeta.textSource !== undefined ||
-        finalMeta.customTexts !== undefined;
+      const hasMetaFields = finalMeta.textSource !== undefined;
 
       const metaToSave = hasMetaFields ? finalMeta : null;
 
@@ -964,7 +885,6 @@ export default defineEventHandler(
         body.timeRangeEnd !== undefined ||
         body.customSlotTimes !== undefined ||
         body.subtype !== undefined ||
-        shouldUpdateMeta ||
         body.meta?.textSource !== undefined;
 
       if (settingsChanged && !shouldRegenerateSlotsAfterAi) {
@@ -1074,18 +994,11 @@ export default defineEventHandler(
       // Упрощенная логика: subtype сохраняется для всех типов сущностей
       const initialSubtype = body.subtype ?? 'mixed';
 
-      // Формируем initialMeta: объединяем customTexts и textSource из body.meta
+      // Формируем initialMeta: только textSource из body.meta
       const initialMeta =
         kind === 'habits' || kind === 'therapy'
           ? (() => {
-              const sanitized = sanitizeCustomTextsInput(
-                body.meta?.customTexts ?? null
-              );
               const meta: NotificationPreferenceMeta = {};
-
-              if (sanitized) {
-                meta.customTexts = sanitized;
-              }
 
               // Сохраняем textSource из body.meta
               if (body.meta?.textSource !== undefined) {
@@ -1093,10 +1006,7 @@ export default defineEventHandler(
               }
 
               // Возвращаем meta только если есть хотя бы одно поле
-              const hasFields =
-                meta.customTexts !== undefined || meta.textSource !== undefined;
-
-              return hasFields ? meta : null;
+              return meta.textSource !== undefined ? meta : null;
             })()
           : null;
       const [created] = await db

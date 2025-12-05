@@ -1,0 +1,170 @@
+/**
+ * Репозиторий для работы со слотами уведомлений (notification_slots)
+ */
+
+import { and, asc, count, eq, gt, gte, isNull } from 'drizzle-orm';
+import { db } from '@/server/infrastructure/db/client';
+import { notificationSlots } from '@/server/infrastructure/db/schema';
+import type { NotificationKind, NotificationPayload } from '@/shared/dto/notifications';
+
+/**
+ * Удаляет все planned слоты для источника, которые запланированы после указанного времени
+ * @param userId - ID пользователя
+ * @param kind - тип уведомлений
+ * @param entityKey - ключ сущности (или null для общих слотов)
+ * @param now - текущее время (удаляются только будущие слоты)
+ * @returns количество удалённых слотов
+ */
+export async function deletePlannedFutureSlotsForSource(
+  userId: number,
+  kind: NotificationKind,
+  entityKey: string | null,
+  now: Date
+): Promise<number> {
+  const deleteConditions = [
+    eq(notificationSlots.userId, userId),
+    eq(notificationSlots.kind, kind),
+    eq(notificationSlots.status, 'planned'), // ТОЛЬКО planned, НЕ sent!
+    gt(notificationSlots.scheduledAt, now), // ТОЛЬКО будущие слоты
+  ];
+
+  if (entityKey) {
+    deleteConditions.push(eq(notificationSlots.entityKey, entityKey));
+  } else {
+    deleteConditions.push(isNull(notificationSlots.entityKey));
+  }
+
+  const result = await db
+    .delete(notificationSlots)
+    .where(and(...deleteConditions));
+
+  return result.rowCount || 0;
+}
+
+/**
+ * Подсчитывает количество planned слотов начиная с указанной даты
+ * @param userId - ID пользователя
+ * @param from - дата начала подсчёта
+ * @returns количество слотов
+ */
+export async function countPlannedSlotsFromDate(
+  userId: number,
+  from: Date
+): Promise<number> {
+  const [result] = await db
+    .select({ count: count() })
+    .from(notificationSlots)
+    .where(
+      and(
+        eq(notificationSlots.userId, userId),
+        eq(notificationSlots.status, 'planned'),
+        gte(notificationSlots.scheduledAt, from)
+      )
+    );
+
+  return result?.count || 0;
+}
+
+/**
+ * Подсчитывает количество planned слотов для ночного режима на завтра
+ * @param userId - ID пользователя
+ * @param from - дата начала подсчёта (обычно завтра 00:00)
+ * @returns количество слотов
+ */
+export async function countPlannedSlotsForTomorrowNightMode(
+  userId: number,
+  from: Date
+): Promise<number> {
+  const [result] = await db
+    .select({ count: count() })
+    .from(notificationSlots)
+    .where(
+      and(
+        eq(notificationSlots.userId, userId),
+        eq(notificationSlots.status, 'planned'),
+        gte(notificationSlots.scheduledAt, from)
+      )
+    );
+
+  return result?.count || 0;
+}
+
+/**
+ * Находит все planned слоты пользователя после указанного времени
+ * @param userId - ID пользователя
+ * @param now - текущее время
+ * @returns массив слотов, отсортированных по времени
+ */
+export async function findPlannedSlotsForUserAfterNow(
+  userId: number,
+  now: Date
+): Promise<(typeof notificationSlots.$inferSelect)[]> {
+  return await db
+    .select()
+    .from(notificationSlots)
+    .where(
+      and(
+        eq(notificationSlots.userId, userId),
+        eq(notificationSlots.status, 'planned'),
+        gt(notificationSlots.scheduledAt, now)
+      )
+    )
+    .orderBy(asc(notificationSlots.scheduledAt));
+}
+
+/**
+ * Обновляет время слота
+ * @param slotId - ID слота
+ * @param newTime - новое время
+ * @param payloadData - опциональные данные для обновления payload
+ */
+export async function updateSlotTime(
+  slotId: string,
+  newTime: Date,
+  payloadData?: any
+): Promise<void> {
+  const updateData: {
+    scheduledAt: Date;
+    payload?: any;
+  } = {
+    scheduledAt: newTime,
+  };
+
+  if (payloadData) {
+    updateData.payload = payloadData;
+  }
+
+  await db
+    .update(notificationSlots)
+    .set(updateData)
+    .where(eq(notificationSlots.id, slotId));
+}
+
+/**
+ * Создаёт новый слот
+ * @param slot - данные слота
+ */
+export async function insertSlot(slot: {
+  id: string;
+  userId: number;
+  kind: NotificationKind;
+  entityKey: string | null;
+  entityDisplayName: string | null;
+  scheduledAt: Date;
+  payload: NotificationPayload;
+  templateId: string;
+  status: 'planned';
+}): Promise<void> {
+  await db.insert(notificationSlots).values({
+    id: slot.id,
+    userId: slot.userId,
+    kind: slot.kind,
+    entityKey: slot.entityKey,
+    entityDisplayName: slot.entityDisplayName,
+    scheduledAt: slot.scheduledAt,
+    payload: slot.payload,
+    templateId: slot.templateId,
+    status: slot.status,
+  });
+}
+

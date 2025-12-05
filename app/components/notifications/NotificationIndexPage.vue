@@ -87,7 +87,7 @@ function handleRemove(item: NotificationIndexItem) {
 </script>
 
 <template>
-  <div class="space-y-6 h-full overflow-y-auto rounded-sm">
+  <div class="space-y-4 h-full overflow-y-auto rounded-sm">
     <PageHeader :title="title" />
 
     <Tabs v-model="activeTab" class="w-full pb-[100px]">

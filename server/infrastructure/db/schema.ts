@@ -381,3 +381,40 @@ export const aiNotificationTextUsage = pgTable('ai_notification_text_usage', {
   textHash: text('text_hash').notNull(), // Хеш текста для проверки уникальности
   sentAt: timestamp('sent_at', { withTimezone: true }).defaultNow().notNull(),
 });
+
+// Единая таблица для дефолтных и пользовательских текстов уведомлений
+export const notificationTexts = pgTable('notification_texts', {
+  id: text('id').primaryKey(),
+  kind: text('kind').notNull(), // 'habits' | 'therapy'
+  entityKey: text('entity_key').notNull(), // 'water', 'anxiety', кастомный id и т.п.
+  userId: integer('user_id'), // NULL = системный дефолт, не NULL = пользовательский
+  source: text('source').notNull(), // 'default' | 'user'
+  intent: text('intent'), // 'build' | 'quit' (только habits, если нужно)
+  subtype: text('subtype'), // 'reminder' | 'informational' | 'motivational' | 'mixed' | NULL
+  directness: text('directness').notNull(), // 'soft' | 'moderate' | 'hard' | 'universal'
+  addressing: text('addressing').notNull(), // 'informal' | 'formal' | 'universal'
+  locale: text('locale').notNull(), // 'ru' (пока одна, но заложимся)
+  text: text('text').notNull(), // сам текст
+  sortOrder: integer('sort_order').notNull().default(0), // порядок внутри списка
+  isDeleted: boolean('is_deleted').notNull().default(false),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+// Эталон дефолтных текстов (read-only, для восстановления)
+export const notificationTextPresets = pgTable('notification_text_presets', {
+  id: text('id').primaryKey(),
+  kind: text('kind').notNull(), // 'habits' | 'therapy'
+  entityKey: text('entity_key').notNull(), // 'water', 'anxiety' и т.п.
+  intent: text('intent'), // 'build' | 'quit' | NULL
+  subtype: text('subtype'), // 'reminder' | 'informational' | 'motivational' | 'mixed' | NULL
+  directness: text('directness').notNull(), // 'soft' | 'moderate' | 'hard' | 'universal'
+  addressing: text('addressing').notNull(), // 'informal' | 'formal' | 'universal'
+  locale: text('locale').notNull(), // 'ru'
+  text: text('text').notNull(), // сам текст
+  sortOrder: integer('sort_order').notNull().default(0),
+});

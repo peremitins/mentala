@@ -77,7 +77,6 @@ export default defineEventHandler(async (event): Promise<HabitDto> => {
         timeRangeEnd: 1350, // 22:30
         meta: {
           textSource: 'templates', // По умолчанию templates (ручные тексты для кастомных)
-          customTexts: [],
         },
       });
       console.log(

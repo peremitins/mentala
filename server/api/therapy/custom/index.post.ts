@@ -65,7 +65,6 @@ export default defineEventHandler(async (event): Promise<TherapyTopicDto> => {
       timeRangeEnd: 1350, // 22:30
       meta: {
         textSource: 'templates', // По умолчанию templates (ручные тексты для кастомных)
-        customTexts: [],
       },
     });
     console.log(

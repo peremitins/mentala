@@ -8,9 +8,9 @@
 // ==========================================
 
 export const MAX_NOTIFICATION_TEXT_LENGTH = 178;
-export const MAX_CUSTOM_NOTIFICATION_TEXTS = 100;
 
 export type NotificationKind = 'therapy' | 'habits';
+export type NotificationTextSource = 'default' | 'user';
 export type Addressing = 'informal' | 'formal';
 export type Tone =
   | 'delicate'
@@ -29,6 +29,8 @@ export type InteractionAction =
   | 'unanswered';
 export type SnoozeDuration = '15m' | '1h' | '4h' | 'tomorrow';
 export type HabitIntent = 'build' | 'quit' | 'custom';
+// Intent для текстов уведомлений (только 'build' | 'quit', без 'custom')
+export type NotificationTextIntent = 'build' | 'quit';
 // Универсальный тип subtype для всех видов уведомлений
 export type NotificationSubtype =
   | 'reminder'
@@ -71,7 +73,7 @@ export interface NotificationPreferencesDto {
   customSlotTimes?: (number | null)[] | null; // Индивидуальные времена слотов (0-1439 минут) для каждого уведомления
   timeRangeStart: number; // Начало временного окна в минутах от начала дня (0-1439)
   timeRangeEnd: number; // Конец временного окна в минутах от начала дня (0-1439)
-  meta?: NotificationPreferenceMeta | null; // Дополнительные параметры (customTexts и т.д.)
+  meta?: NotificationPreferenceMeta | null; // Дополнительные параметры (textSource и т.д.)
   createdAt: string;
   updatedAt: string;
 }
@@ -125,9 +127,67 @@ export interface UpdateHabitDto {
 }
 
 export interface NotificationPreferenceMeta {
-  customTexts?: string[];
   // Единое поле для всех типов сущностей (кастомные и шаблоны)
   textSource?: 'templates' | 'ai' | 'hybrid';
+}
+
+// ==========================================
+// Тексты уведомлений
+// ==========================================
+
+export interface NotificationText {
+  id: string;
+  kind: NotificationKind;
+  entityKey: string;
+  userId: number | null;
+  source: NotificationTextSource;
+  intent: NotificationTextIntent | null;
+  subtype: NotificationSubtype | null;
+  directness: 'soft' | 'moderate' | 'hard' | 'universal';
+  addressing: 'informal' | 'formal' | 'universal';
+  locale: string; // 'ru'
+  text: string;
+  sortOrder: number;
+  isDeleted: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BatchTextChanges {
+  updated?: Array<{
+    id: string;
+    text?: string;
+    sortOrder?: number;
+  }>;
+  created?: Array<{
+    tempId?: string;
+    intent?: 'build' | 'quit' | null;
+    subtype?: 'reminder' | 'informational' | 'motivational' | 'mixed' | null;
+    directness: 'soft' | 'moderate' | 'hard' | 'universal';
+    // addressing больше не передается с фронта, берется из userPreferences на бэкенде
+    locale: string;
+    text: string;
+  }>;
+  deleted?: Array<{
+    id: string;
+  }>;
+}
+
+export interface BatchTextsRequest {
+  kind: NotificationKind;
+  entityKey: string;
+  changes: BatchTextChanges;
+}
+
+export interface ResetTextsRequest {
+  kind: NotificationKind;
+  entityKey: string;
+  keepUserTexts: boolean;
+}
+
+export interface ResetTextsResponse {
+  restoredDefaults: number;
+  userTextsKept: boolean;
 }
 
 // ==========================================

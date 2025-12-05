@@ -52,6 +52,21 @@ export const SUBTYPE_OPTIONS_QUIT = SUBTYPE_OPTIONS.filter(
 // Опции для привычек BUILD (привить привычку) - все опции
 export const SUBTYPE_OPTIONS_BUILD = SUBTYPE_OPTIONS;
 
+// Опции без "Смешанные" для редактора текстов
+export const SUBTYPE_OPTIONS_WITHOUT_MIXED = SUBTYPE_OPTIONS.filter(
+  (opt) => opt.value !== 'mixed'
+);
+
+// Опции для привычек QUIT без "Смешанные" (для редактора)
+export const SUBTYPE_OPTIONS_QUIT_WITHOUT_MIXED = SUBTYPE_OPTIONS_QUIT.filter(
+  (opt) => opt.value !== 'mixed'
+);
+
+// Опции для привычек BUILD без "Смешанные" (для редактора)
+export const SUBTYPE_OPTIONS_BUILD_WITHOUT_MIXED = SUBTYPE_OPTIONS_BUILD.filter(
+  (opt) => opt.value !== 'mixed'
+);
+
 export const THEME_OPTIONS = [
   { label: 'Системная', value: 'system' },
   { label: 'Тёмная', value: 'dark' },
@@ -75,5 +90,24 @@ export const TEXT_SOURCE_OPTIONS = [
     label: 'Гибридный',
     value: 'hybrid',
     description: 'Комбинация готовых шаблонов и AI-генерации',
+  },
+];
+
+// Опции для стиля уведомлений (directness)
+export const DIRECTNESS_OPTIONS = [
+  {
+    label: 'Мягкий',
+    icon: '😊',
+    value: 'soft' as const,
+  },
+  {
+    label: 'Сдержанный',
+    icon: '😐',
+    value: 'moderate' as const,
+  },
+  {
+    label: 'Жесткий',
+    icon: '😑',
+    value: 'hard' as const,
   },
 ];
