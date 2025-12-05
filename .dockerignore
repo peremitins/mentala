@@ -1,0 +1,15 @@
+node_modules
+.nuxt
+.output
+dist
+android
+.ios
+
+.git
+.gitignore
+Dockerfile
+npm-debug.log
+pnpm-debug.log
+
+.env*
+*.local
