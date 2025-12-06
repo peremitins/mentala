@@ -13,25 +13,54 @@
 -- 1. Таблица habits: category -> intent, добавляем habit_key
 -- ==========================================
 
--- Переименовываем category в intent
-ALTER TABLE habits
-  RENAME COLUMN category TO intent;
+-- Переименовываем category в intent (если колонка category существует)
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = 'habits'
+      AND column_name = 'category'
+  ) THEN
+    ALTER TABLE habits RENAME COLUMN category TO intent;
+  END IF;
+END
+$$;
 
 -- Обновляем значения: 'quit' -> 'quit', остальные -> 'build'
-UPDATE habits
-SET intent = CASE
-  WHEN intent = 'quit' THEN 'quit'
-  ELSE 'build'
-END;
+-- (только если колонка intent существует)
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = 'habits'
+      AND column_name = 'intent'
+  ) THEN
+    EXECUTE 'UPDATE habits SET intent = CASE WHEN intent = ''quit'' THEN ''quit'' ELSE ''build'' END';
+  END IF;
+END
+$$;
 
--- Добавляем ограничение для intent
-ALTER TABLE habits
-  ADD CONSTRAINT habits_intent_check
-  CHECK (intent IN ('build', 'quit', 'custom'));
+-- Добавляем ограничение для intent (если его еще нет)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.table_constraints
+    WHERE table_name = 'habits'
+      AND constraint_name = 'habits_intent_check'
+  ) THEN
+    ALTER TABLE habits
+      ADD CONSTRAINT habits_intent_check
+      CHECK (intent IN ('build', 'quit', 'custom'));
+  END IF;
+END
+$$;
 
 -- Добавляем habit_key для маппинга на шаблоны
 ALTER TABLE habits
-  ADD COLUMN habit_key VARCHAR(50);
+  ADD COLUMN IF NOT EXISTS habit_key VARCHAR(50);
 
 -- Маппинг существующих данных (пример)
 UPDATE habits
@@ -52,7 +81,7 @@ END
 WHERE habit_key IS NULL;
 
 -- Индекс для быстрого поиска по habit_key
-CREATE INDEX habits_habit_key_idx
+CREATE INDEX IF NOT EXISTS habits_habit_key_idx
   ON habits(habit_key)
   WHERE habit_key IS NOT NULL;
 
@@ -62,20 +91,31 @@ CREATE INDEX habits_habit_key_idx
 
 -- Добавляем subtype для типов уведомлений
 ALTER TABLE notification_preferences
-  ADD COLUMN subtype VARCHAR(20);
+  ADD COLUMN IF NOT EXISTS subtype VARCHAR(20);
 
 -- Устанавливаем дефолт для существующих записей
 UPDATE notification_preferences
 SET subtype = 'reminder'
 WHERE kind = 'habits' AND subtype IS NULL;
 
--- Добавляем ограничение для subtype
-ALTER TABLE notification_preferences
-  ADD CONSTRAINT notification_prefs_subtype_check
-  CHECK (subtype IS NULL OR subtype IN ('reminder', 'informational', 'motivational'));
+-- Добавляем ограничение для subtype (если его еще нет)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.table_constraints
+    WHERE table_name = 'notification_preferences'
+      AND constraint_name = 'notification_prefs_subtype_check'
+  ) THEN
+    ALTER TABLE notification_preferences
+      ADD CONSTRAINT notification_prefs_subtype_check
+      CHECK (subtype IS NULL OR subtype IN ('reminder', 'informational', 'motivational'));
+  END IF;
+END
+$$;
 
 -- Индекс для фильтрации по subtype
-CREATE INDEX notification_prefs_subtype_idx
+CREATE INDEX IF NOT EXISTS notification_prefs_subtype_idx
   ON notification_preferences(subtype)
   WHERE subtype IS NOT NULL;
 
