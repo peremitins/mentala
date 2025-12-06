@@ -9,6 +9,7 @@ import {
   uuid,
   jsonb,
   numeric,
+  unique,
 } from 'drizzle-orm/pg-core';
 
 export const users = pgTable('users', {
@@ -363,7 +364,13 @@ export const aiGeneratedNotificationTexts = pgTable(
       .defaultNow()
       .notNull(),
     expiresAt: timestamp('expires_at', { withTimezone: true }), // опционально: срок действия кеша
-  }
+  },
+  (table) => ({
+    // Уникальный индекс для ON CONFLICT в ai_generated_notification_texts
+    userPrefHashUnique: unique(
+      'ai_generated_notification_texts_user_pref_hash_unique'
+    ).on(table.userId, table.preferenceId, table.generationConfigHash),
+  })
 );
 
 // Отслеживание использованных AI-текстов уведомлений
