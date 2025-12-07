@@ -3,6 +3,7 @@
 import { randomUUID } from 'node:crypto';
 import { $fetch } from 'ofetch';
 import { createError } from 'h3';
+import OpenAI from 'openai';
 import type { LlmProviderPort } from '../../ports';
 import { config } from '../../config';
 import { summaryStore } from '../../utils/summaryStore';
@@ -597,17 +598,7 @@ export const openaiProvider: LlmProviderPort = {
         // НЕ добавляем messages - они пустые для welcome-старта!
       ];
 
-      // dynamic import to avoid hard dep at build
-      const mod: any = await (
-        Function('return import("openai")')() as Promise<any>
-      ).catch(() => null);
-      if (!mod?.default) {
-        throw createError({
-          statusCode: 500,
-          message: 'OpenAI SDK is not available',
-        });
-      }
-      const openai = new mod.default({ apiKey });
+      const openai = new OpenAI({ apiKey });
 
       const streamOptions: any = {
         model: usedModel,
@@ -749,17 +740,7 @@ export const openaiProvider: LlmProviderPort = {
     // Но мы все равно должны передавать ВСЕ сообщения текущей сессии (не только новые).
     // Проблема: после перезагрузки страницы messages содержит только новые сообщения.
 
-    // dynamic import to avoid hard dep at build
-    const mod: any = await (
-      Function('return import("openai")')() as Promise<any>
-    ).catch(() => null);
-    if (!mod?.default) {
-      throw createError({
-        statusCode: 500,
-        message: 'OpenAI SDK is not available',
-      });
-    }
-    const openai = new mod.default({ apiKey });
+    const openai = new OpenAI({ apiKey });
 
     const streamOptions: any = {
       model: usedModel,
