@@ -6,6 +6,14 @@ import { responseIdStore } from '@/server/utils/responseIdStore';
 import { readChatSettings } from '@/server/utils/storage';
 
 export default defineEventHandler(async (event) => {
+  const config = useRuntimeConfig();
+
+  console.log(
+    '[Stream API] openaiApiKey present:',
+    !!config.openaiApiKey,
+    'len=',
+    config.openaiApiKey?.length ?? 0
+  );
   const body = await readBody<{
     model?: string;
     messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
@@ -83,25 +91,54 @@ export default defineEventHandler(async (event) => {
 
     console.log('[Stream API] User:', uid, 'isFirstSession:', serverIsFirst);
 
-    const stream = chatStreamViaProvider({
-      provider: 'openai',
+    // 🔍 Логируем входящие данные
+    console.log('[Stream API] Incoming payload:', {
       model: body?.model,
-      messages: body?.messages || [],
-      options: {
-        sessionId: body?.sessionId,
-        temperature: body?.temperature,
-        lang: body?.lang,
-        user_locale: body?.user_locale,
-        user_name: body?.user_name,
-        userId: uid,
-        isFirstSession: serverIsFirst,
-        userPrompt: body?.userPrompt,
-        mode: body?.mode, // Режим для старта с welcome-экрана
-      },
+      messagesCount: body?.messages?.length ?? 0,
+      mode: body?.mode,
+      sessionId: body?.sessionId,
+      lang: body?.lang,
     });
 
-    for await (const delta of stream) {
-      res.write(`data: ${JSON.stringify({ output_text_delta: delta })}\n\n`);
+    try {
+      console.log('[Stream API] Calling chatStreamViaProvider (OpenAI)...');
+
+      const stream = chatStreamViaProvider({
+        provider: 'openai',
+        model: body?.model,
+        messages: body?.messages || [],
+        options: {
+          sessionId: body?.sessionId,
+          temperature: body?.temperature,
+          lang: body?.lang,
+          user_locale: body?.user_locale,
+          user_name: body?.user_name,
+          userId: uid,
+          isFirstSession: serverIsFirst,
+          userPrompt: body?.userPrompt,
+          mode: body?.mode, // Режим для старта с welcome-экрана
+        },
+      });
+
+      console.log(
+        '[Stream API] chatStreamViaProvider returned stream, starting for-await loop'
+      );
+
+      for await (const delta of stream) {
+        res.write(`data: ${JSON.stringify({ output_text_delta: delta })}\n\n`);
+      }
+
+      console.log('[Stream API] Stream finished normally');
+    } catch (e: any) {
+      console.error('[Stream API] OpenAI / chatStreamViaProvider error:', e);
+      try {
+        res.write(
+          `data: ${JSON.stringify({
+            error: true,
+            message: e?.message || 'Stream failed',
+          })}\n\n`
+        );
+      } catch {}
     }
   } catch (e: any) {
     try {
