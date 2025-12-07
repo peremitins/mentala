@@ -2,6 +2,12 @@ import { createError } from 'h3';
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig(event);
+  console.log(
+    '[AI] openaiApiKey present:',
+    !!config.openaiApiKey,
+    'len=',
+    config.openaiApiKey?.length ?? 0
+  );
   const body = await readBody<{
     avatarId?: string;
     voiceId?: string;
