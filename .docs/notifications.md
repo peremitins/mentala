@@ -544,7 +544,7 @@ pnpm db:migrate
 
 ```bash
 # .env
-FIREBASE_SERVICE_ACCOUNT_JSON='{"type":"service_account",...}'
+NUXT_FIREBASE_SERVICE_ACCOUNT_JSON='{"type":"service_account",...}'
 ```
 
 **Для Android:**

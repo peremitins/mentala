@@ -27,7 +27,10 @@ import type {
 
 // Константы для генерации текстов уведомлений
 const DEFAULT_TEXT_COUNT =
-  Number(process.env.AI_NOTIFICATIONS_DEFAULT_COUNT) || 50;
+  Number(
+    process.env.NUXT_AI_NOTIFICATIONS_DEFAULT_COUNT ||
+      process.env.AI_NOTIFICATIONS_DEFAULT_COUNT
+  ) || 50;
 
 interface GenerateNotificationTextsParams {
   userId: number;

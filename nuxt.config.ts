@@ -57,13 +57,14 @@ export default defineNuxtConfig({
     heygenApiKey: process.env.NUXT_HEYGEN_API_KEY,
     heygenBaseUrl: process.env.NUXT_HEYGEN_BASE_URL || 'https://api.heygen.com',
     heygenAvatarId: process.env.NUXT_HEYGEN_AVATAR_ID || '',
-    openaiApiKey: process.env.OPENAI_API_KEY,
+    openaiApiKey: process.env.NUXT_OPENAI_API_KEY,
     OAUTH_GOOGLE_CLIENT_ID: process.env.NUXT_OAUTH_GOOGLE_CLIENT_ID,
     OAUTH_GOOGLE_CLIENT_SECRET: process.env.NUXT_OAUTH_GOOGLE_CLIENT_SECRET,
     OAUTH_VK_CLIENT_ID: process.env.NUXT_OAUTH_VK_CLIENT_ID,
     OAUTH_VK_CLIENT_SECRET: process.env.NUXT_OAUTH_VK_CLIENT_SECRET,
     TELEGRAM_BOT_TOKEN: process.env.NUXT_TELEGRAM_BOT_TOKEN,
-    FIREBASE_SERVICE_ACCOUNT_JSON: process.env.FIREBASE_SERVICE_ACCOUNT_JSON,
+    FIREBASE_SERVICE_ACCOUNT_JSON:
+      process.env.NUXT_FIREBASE_SERVICE_ACCOUNT_JSON,
     public: {
       apiBase: process.env.NUXT_PUBLIC_API_SERVER_URL || '/api', // доступно на клиенте
       appUrl: process.env.NUXT_PRIVATE_API_BASE || 'http://localhost:3000',

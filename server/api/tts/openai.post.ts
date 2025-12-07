@@ -2,11 +2,11 @@ import { defineEventHandler, readBody, setHeader, createError } from 'h3';
 import { $fetch } from 'ofetch';
 
 export default defineEventHandler(async (event) => {
-  const apiKey = process.env.OPENAI_API_KEY || process.env.NUXT_OPENAI_API_KEY;
+  const apiKey = process.env.NUXT_OPENAI_API_KEY;
   if (!apiKey)
     throw createError({
       statusCode: 500,
-      message: 'OPENAI_API_KEY is not set',
+      message: 'NUXT_OPENAI_API_KEY is not set',
     });
 
   const body = await readBody<{
