@@ -66,7 +66,7 @@ export default defineNuxtConfig({
     FIREBASE_SERVICE_ACCOUNT_JSON:
       process.env.NUXT_FIREBASE_SERVICE_ACCOUNT_JSON,
     public: {
-      apiBase: process.env.NUXT_PUBLIC_API_SERVER_URL || '/api', // доступно на клиенте
+      apiBase: process.env.NUXT_PUBLIC_API_SERVER_URL, // доступно на клиенте
       appUrl: process.env.NUXT_PRIVATE_API_BASE || 'http://localhost:3000',
       speechDefaultEngine:
         process.env.NUXT_PUBLIC_SPEECH_DEFAULT_ENGINE || 'auto', // auto | native | webspeech | whisper
