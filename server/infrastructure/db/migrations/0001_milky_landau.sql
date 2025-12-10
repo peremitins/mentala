@@ -1,0 +1,1 @@
+ALTER TABLE "ai_generated_notification_texts" ADD CONSTRAINT "ai_generated_notification_texts_user_pref_hash_unique" UNIQUE("user_id","preference_id","generation_config_hash");

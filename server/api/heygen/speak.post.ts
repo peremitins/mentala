@@ -36,18 +36,28 @@ export default defineEventHandler(async (event) => {
 
     return res;
   } catch (err: any) {
-    const status = err?.response?.status || err?.data?.code || 500;
+    const externalApiStatus = err?.response?.status || err?.data?.code;
     const payload = err?.response?._data ||
       err?.data || { message: err?.message };
     // лог в pino (см. server/plugins/logger.ts)
     event.context.logger?.error(
-      { status, payload },
+      { status: externalApiStatus, payload },
       'heygen.streaming.task error'
     );
+
+    // Для ошибок внешнего API возвращаем 502 (Bad Gateway), а не 401
+    const statusCode =
+      externalApiStatus && externalApiStatus >= 400 && externalApiStatus < 500
+        ? 502 // Bad Gateway - проблема с внешним API
+        : externalApiStatus || 502;
+
     throw createError({
-      statusCode: status,
+      statusCode,
       statusMessage: payload?.message || 'HeyGen streaming.task failed',
-      data: payload,
+      data: {
+        ...payload,
+        originalStatus: externalApiStatus,
+      },
     });
   }
 });

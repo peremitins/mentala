@@ -2,6 +2,12 @@ import { createError } from 'h3';
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig(event);
+  console.log(
+    '[AI] openaiApiKey present:',
+    !!config.openaiApiKey,
+    'len=',
+    config.openaiApiKey?.length ?? 0
+  );
   const body = await readBody<{
     avatarId?: string;
     voiceId?: string;
@@ -90,10 +96,22 @@ export default defineEventHandler(async (event) => {
       },
       'HeyGen session creation failed'
     );
+
+    // Для ошибок внешнего API возвращаем 502 (Bad Gateway), а не 401
+    // чтобы не путать с ошибкой авторизации пользователя
+    const externalApiStatus = err?.response?.status || err?.statusCode;
+    const statusCode =
+      externalApiStatus && externalApiStatus >= 400 && externalApiStatus < 500
+        ? 502 // Bad Gateway - проблема с внешним API
+        : externalApiStatus || 502;
+
     throw createError({
-      statusCode: err?.response?.status || err?.statusCode || 502,
+      statusCode,
       statusMessage: err?.message || 'HeyGen new session failed',
-      data: err?.response?._data || err?.data,
+      data: {
+        ...(err?.response?._data || err?.data || {}),
+        originalStatus: externalApiStatus,
+      },
     });
   }
 });

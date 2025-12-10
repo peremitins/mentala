@@ -3,6 +3,7 @@
 import { randomUUID } from 'node:crypto';
 import { $fetch } from 'ofetch';
 import { createError } from 'h3';
+import OpenAI from 'openai';
 import type { LlmProviderPort } from '../../ports';
 import { config } from '../../config';
 import { summaryStore } from '../../utils/summaryStore';
@@ -79,12 +80,11 @@ export const openaiProvider: LlmProviderPort = {
   id: 'openai',
 
   async chat({ messages, model, options }: any) {
-    const apiKey =
-      process.env.OPENAI_API_KEY || process.env.NUXT_OPENAI_API_KEY;
+    const apiKey = process.env.NUXT_OPENAI_API_KEY;
     if (!apiKey)
       throw createError({
         statusCode: 500,
-        message: 'OPENAI_API_KEY is not set',
+        message: 'NUXT_OPENAI_API_KEY is not set',
       });
 
     const usedModel = model || config.llm.openai.defaultModel;
@@ -94,8 +94,9 @@ export const openaiProvider: LlmProviderPort = {
     let attempt = 0;
     const maxRetries = 5;
 
-    const org = process.env.OPENAI_ORG_ID;
-    const project = process.env.OPENAI_PROJECT_ID;
+    const org = process.env.NUXT_OPENAI_ORG_ID || process.env.OPENAI_ORG_ID;
+    const project =
+      process.env.NUXT_OPENAI_PROJECT_ID || process.env.OPENAI_PROJECT_ID;
     const idempotencyKey = randomUUID();
 
     const sessionId: string | undefined = options?.sessionId;
@@ -103,7 +104,9 @@ export const openaiProvider: LlmProviderPort = {
     const encryptedFromCache = cached?.encryptedReasoning ?? null;
 
     let tryEncrypted =
-      (process.env.OPENAI_ENABLE_ENCRYPTED_REASONING ?? 'false') === 'true';
+      ((process.env.NUXT_OPENAI_ENABLE_ENCRYPTED_REASONING ||
+        process.env.OPENAI_ENABLE_ENCRYPTED_REASONING) ??
+        'false') === 'true';
 
     // eslint-disable-next-line no-constant-condition
     while (true) {
@@ -375,17 +378,17 @@ export const openaiProvider: LlmProviderPort = {
       return;
     }
 
-    const apiKey =
-      process.env.OPENAI_API_KEY || process.env.NUXT_OPENAI_API_KEY;
+    const apiKey = process.env.NUXT_OPENAI_API_KEY;
     if (!apiKey)
       throw createError({
         statusCode: 500,
-        message: 'OPENAI_API_KEY is not set',
+        message: 'NUXT_OPENAI_API_KEY is not set',
       });
 
     const usedModel = model || config.llm.openai.defaultModel;
-    const org = process.env.OPENAI_ORG_ID;
-    const project = process.env.OPENAI_PROJECT_ID;
+    const org = process.env.NUXT_OPENAI_ORG_ID || process.env.OPENAI_ORG_ID;
+    const project =
+      process.env.NUXT_OPENAI_PROJECT_ID || process.env.OPENAI_PROJECT_ID;
     const idempotencyKey = randomUUID();
 
     const lastK = (allMessages || []).slice(-12);
@@ -447,12 +450,11 @@ export const openaiProvider: LlmProviderPort = {
   },
 
   async *chatStream({ messages, model, options }: any): AsyncIterable<string> {
-    const apiKey =
-      process.env.OPENAI_API_KEY || process.env.NUXT_OPENAI_API_KEY;
+    const apiKey = process.env.NUXT_OPENAI_API_KEY;
     if (!apiKey)
       throw createError({
         statusCode: 500,
-        message: 'OPENAI_API_KEY is not set',
+        message: 'NUXT_OPENAI_API_KEY is not set',
       });
 
     // Получаем настройки пользователя для управления памятью
@@ -596,17 +598,7 @@ export const openaiProvider: LlmProviderPort = {
         // НЕ добавляем messages - они пустые для welcome-старта!
       ];
 
-      // dynamic import to avoid hard dep at build
-      const mod: any = await (
-        Function('return import("openai")')() as Promise<any>
-      ).catch(() => null);
-      if (!mod?.default) {
-        throw createError({
-          statusCode: 500,
-          message: 'OpenAI SDK is not available',
-        });
-      }
-      const openai = new mod.default({ apiKey });
+      const openai = new OpenAI({ apiKey });
 
       const streamOptions: any = {
         model: usedModel,
@@ -748,17 +740,7 @@ export const openaiProvider: LlmProviderPort = {
     // Но мы все равно должны передавать ВСЕ сообщения текущей сессии (не только новые).
     // Проблема: после перезагрузки страницы messages содержит только новые сообщения.
 
-    // dynamic import to avoid hard dep at build
-    const mod: any = await (
-      Function('return import("openai")')() as Promise<any>
-    ).catch(() => null);
-    if (!mod?.default) {
-      throw createError({
-        statusCode: 500,
-        message: 'OpenAI SDK is not available',
-      });
-    }
-    const openai = new mod.default({ apiKey });
+    const openai = new OpenAI({ apiKey });
 
     const streamOptions: any = {
       model: usedModel,

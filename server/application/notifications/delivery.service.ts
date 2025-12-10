@@ -2,7 +2,7 @@
  * Сервис отправки push-уведомлений через FCM
  *
  * Использует Firebase Admin SDK для отправки push-уведомлений
- * Требует переменную окружения FIREBASE_SERVICE_ACCOUNT_JSON
+ * Требует переменную окружения NUXT_FIREBASE_SERVICE_ACCOUNT_JSON
  *
  * См. FIREBASE_SETUP.md для инструкций по настройке
  */
@@ -32,11 +32,11 @@ let firebaseApp: admin.app.App | null = null;
 export function initializeFirebase(): void {
   try {
     if (!firebaseApp) {
-      const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+      const serviceAccount = process.env.NUXT_FIREBASE_SERVICE_ACCOUNT_JSON;
 
       // Debug: показываем что именно получили
       console.log(
-        '[FCM] DEBUG: FIREBASE_SERVICE_ACCOUNT_JSON env var:',
+        '[FCM] DEBUG: NUXT_FIREBASE_SERVICE_ACCOUNT_JSON env var:',
         serviceAccount
           ? `Set (${serviceAccount.substring(0, 50)}...)`
           : 'NOT SET'
@@ -44,7 +44,7 @@ export function initializeFirebase(): void {
 
       if (!serviceAccount) {
         console.warn(
-          '[FCM] FIREBASE_SERVICE_ACCOUNT_JSON not set - using mock mode'
+          '[FCM] NUXT_FIREBASE_SERVICE_ACCOUNT_JSON not set - using mock mode'
         );
         console.warn('[FCM] See FIREBASE_SETUP.md for setup instructions');
         return;

@@ -1,6 +1,6 @@
 {
-  "id": "8ec21191-306f-465f-9b04-2aa177acbd78",
-  "prevId": "00000000-0000-0000-0000-000000000000",
+  "id": "98bb57b5-3d6e-4f1a-b4bb-6a97e819d951",
+  "prevId": "8ec21191-306f-465f-9b04-2aa177acbd78",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -110,7 +110,17 @@
       "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "ai_generated_notification_texts_user_pref_hash_unique": {
+          "name": "ai_generated_notification_texts_user_pref_hash_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "user_id",
+            "preference_id",
+            "generation_config_hash"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

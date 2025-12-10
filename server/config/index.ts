@@ -25,7 +25,10 @@ export const config = {
           // Значение ниже - минимальный fallback, рассчитывается на основе AI_NOTIFICATIONS_DEFAULT_COUNT
           maxOutputTokens: (() => {
             const defaultCount =
-              Number(process.env.AI_NOTIFICATIONS_DEFAULT_COUNT) || 50;
+              Number(
+                process.env.NUXT_AI_NOTIFICATIONS_DEFAULT_COUNT ||
+                  process.env.AI_NOTIFICATIONS_DEFAULT_COUNT
+              ) || 50;
             // Рассчитываем минимальное значение на основе дефолтного количества: count * 200 + 5000
             return defaultCount * 200 + 5000; // Для 50 текстов = 15000 токенов
           })(),
