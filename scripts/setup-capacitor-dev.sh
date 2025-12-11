@@ -7,14 +7,21 @@
 
 DEVICE_TYPE=${1:-none}
 
-# Получаем локальный IP (для macOS)
-LOCAL_IP=$(ipconfig getifaddr en0 || ipconfig getifaddr en1 || echo "192.168.0.101")
-
 if [ "$DEVICE_TYPE" = "emulator" ]; then
   # Для эмулятора используем специальный IP
   SERVER_URL="http://10.0.2.2:3000"
   echo "🔧 Настройка для эмулятора: $SERVER_URL"
 elif [ "$DEVICE_TYPE" = "device" ]; then
+  # Для реального устройства получаем локальный IP (для macOS)
+  LOCAL_IP=$(ipconfig getifaddr en0 || ipconfig getifaddr en1)
+  
+  if [ -z "$LOCAL_IP" ]; then
+    echo "❌ Не удалось определить локальный IP автоматически"
+    echo "   Убедись, что компьютер подключен к сети"
+    echo "   Или укажи IP вручную, изменив скрипт"
+    exit 1
+  fi
+  
   # Для реального устройства используем локальный IP
   SERVER_URL="http://${LOCAL_IP}:3000"
   echo "🔧 Настройка для реального устройства: $SERVER_URL"

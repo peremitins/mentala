@@ -196,8 +196,8 @@ cd android && ./gradlew clean installDebug
    - Это автоматически настроит правильные URL
 
 2. **Для production сборки**:
-   - Укажи IP компьютера в `.env.development`: `NUXT_PUBLIC_API_SERVER_URL=http://192.168.x.x:3000`
-   - Для эмулятора используй: `NUXT_PUBLIC_API_SERVER_URL=http://10.0.2.2:3000`
+   - IP больше не нужно указывать вручную - используются относительные пути
+   - Для dev используй скрипты: `pnpm run cap:sync:emulator` (эмулятор) или `pnpm run cap:sync:device` (устройство)
    - После изменения выполни: `pnpm generate && pnpm cap:sync`
 
 ### Микрофон на эмуляторе

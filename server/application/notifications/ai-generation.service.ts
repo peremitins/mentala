@@ -520,6 +520,7 @@ export async function generateNotificationTexts(
     (userPrefs?.addressing as Addressing) || 'informal';
 
   // 3. Вычисляем хеш конфигурации
+  // КРИТИЧНО: habitIntent должен быть включен в хеш, чтобы при изменении intent генерировался новый пул текстов
   const configHash = computeGenerationConfigHash({
     entityName,
     entityDescription,
@@ -534,6 +535,7 @@ export async function generateNotificationTexts(
       | null,
     textSource: params.textSource,
     kind: params.kind,
+    habitIntent: params.kind === 'habits' ? habitIntent : null, // Включаем intent только для habits
   });
 
   console.log(
@@ -1345,19 +1347,18 @@ export async function refillTextPool(
 
     // 5. Обновляем запись с проверкой, что тексты не изменились
     // Используем optimistic locking: проверяем, что текущие тексты совпадают
+    // КРИТИЧНО: НЕ удаляем использованные тексты из массива, только дописываем новые в конец
+    // Иначе индексы в aiNotificationTextUsage станут невалидными (тексты сдвинутся)
     const updated = await db
       .update(aiGeneratedNotificationTexts)
       .set({
-        texts: [
-          ...currentTexts.filter((_, index) => !usedIndicesNow.has(index)),
-          ...result.texts,
-        ],
+        texts: [...currentTexts, ...result.texts], // Просто дописываем новые тексты в конец
         updatedAt: sql`NOW()`,
       })
       .where(
         and(
           eq(aiGeneratedNotificationTexts.id, currentRecord.id),
-          // Проверяем, что количество текстов не изменилось
+          // Проверяем, что количество текстов не изменилось (защита от race condition)
           sql`jsonb_array_length(${aiGeneratedNotificationTexts.texts}) = ${currentTexts.length}`
         )
       )
@@ -1380,165 +1381,5 @@ export async function refillTextPool(
     console.error(`[AI Generation] ❌ Error refilling text pool:`, error);
     // Не прерываем выполнение при ошибке догенерации
     return null;
-  }
-}
-
-/**
- * Проверяет все активные preferences и догенерирует тексты для тех, кому это нужно
- * Вызывается периодическим воркером
- */
-export async function refillAllTextPoolsIfNeeded(): Promise<void> {
-  console.log(
-    '[AI Generation Worker] 🔄 Starting periodic text pool refill check'
-  );
-
-  try {
-    const { notificationPreferences } = await import(
-      '@@/server/infrastructure/db/schema'
-    );
-    const { eq, and, isNotNull } = await import('drizzle-orm');
-
-    // Находим все активные preferences с AI-генерацией
-    const activePrefs = await db
-      .select()
-      .from(notificationPreferences)
-      .where(
-        and(
-          eq(notificationPreferences.enabled, true),
-          isNotNull(notificationPreferences.entityKey)
-        )
-      );
-
-    console.log(
-      `[AI Generation Worker] Found ${activePrefs.length} active notification preferences`
-    );
-
-    let refilledCount = 0;
-    let skippedCount = 0;
-    let errorCount = 0;
-
-    for (const pref of activePrefs) {
-      try {
-        // Проверяем, используется ли AI-генерация
-        const meta = (pref.meta || {}) as any;
-        const textSource = meta.textSource;
-        if (textSource !== 'ai' && textSource !== 'hybrid') {
-          skippedCount++;
-          continue; // Пропускаем preferences без AI-генерации
-        }
-
-        // Вычисляем configHash для проверки
-        const [userPrefs] = await db
-          .select()
-          .from(userPreferences)
-          .where(eq(userPreferences.userId, pref.userId))
-          .limit(1);
-
-        const tone: Tone = (userPrefs?.tone as Tone) || 'neutral';
-        const addressing: Addressing =
-          (userPrefs?.addressing as Addressing) || 'informal';
-        const directness = (pref.directness as Directness) || 'moderate';
-        const subtype = (pref.subtype as HabitSubtype | null) || null;
-
-        // Загружаем данные о сущности для вычисления configHash
-        let entityName = '';
-        let entityDescription: string | null = null;
-
-        if (pref.kind === 'habits') {
-          const [habit] = await db
-            .select()
-            .from(habits)
-            .where(
-              and(
-                eq(habits.id, pref.entityKey!),
-                eq(habits.userId, pref.userId)
-              )
-            )
-            .limit(1);
-
-          if (habit) {
-            entityName = habit.name;
-            entityDescription = habit.description;
-          } else {
-            const { findHabitByKey } = await import('@/app/lib/habitsCatalog');
-            const catalogHabit = findHabitByKey(pref.entityKey!);
-            // Используем читаемое название из каталога для готовых шаблонов
-            entityName = catalogHabit ? catalogHabit.name : pref.entityKey!;
-          }
-        } else {
-          const [topic] = await db
-            .select()
-            .from(therapyTopicsCustom)
-            .where(
-              and(
-                eq(therapyTopicsCustom.id, pref.entityKey!),
-                eq(therapyTopicsCustom.userId, pref.userId)
-              )
-            )
-            .limit(1);
-
-          if (topic) {
-            entityName = topic.name;
-            entityDescription = topic.description;
-          } else {
-            entityName = pref.entityKey!;
-          }
-        }
-
-        const configHash = computeGenerationConfigHash({
-          entityName,
-          entityDescription,
-          tone,
-          addressing,
-          directness,
-          subtype,
-          textSource,
-          kind: pref.kind as 'habits' | 'therapy',
-        });
-
-        // Проверяем статус пула
-        const textsPerDay = pref.timesPerDay || 3;
-        const poolStatus = await checkAndRefillTextPool(
-          pref.userId,
-          pref.id,
-          configHash,
-          textsPerDay
-        );
-
-        if (poolStatus.needsRefill) {
-          console.log(
-            `[AI Generation Worker] 🔄 Refilling pool for userId=${pref.userId}, preferenceId=${pref.id}, kind=${pref.kind}, entityKey=${pref.entityKey}`
-          );
-
-          // Догенерируем тексты
-          await refillTextPool(
-            pref.userId,
-            pref.id,
-            pref.kind as 'habits' | 'therapy',
-            pref.entityKey!,
-            configHash,
-            directness,
-            subtype,
-            textSource
-          );
-
-          refilledCount++;
-        } else {
-          skippedCount++;
-        }
-      } catch (error) {
-        console.error(
-          `[AI Generation Worker] ❌ Error processing preference ${pref.id}:`,
-          error
-        );
-        errorCount++;
-      }
-    }
-
-    console.log(
-      `[AI Generation Worker] ✅ Completed: refilled=${refilledCount}, skipped=${skippedCount}, errors=${errorCount}`
-    );
-  } catch (error) {
-    console.error('[AI Generation Worker] ❌ Fatal error:', error);
   }
 }

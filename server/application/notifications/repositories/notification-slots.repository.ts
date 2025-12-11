@@ -2,10 +2,13 @@
  * Репозиторий для работы со слотами уведомлений (notification_slots)
  */
 
-import { and, asc, count, eq, gt, gte, isNull } from 'drizzle-orm';
+import { and, asc, count, eq, gt, gte, isNull, sql } from 'drizzle-orm';
 import { db } from '@/server/infrastructure/db/client';
 import { notificationSlots } from '@/server/infrastructure/db/schema';
-import type { NotificationKind, NotificationPayload } from '@/shared/dto/notifications';
+import type {
+  NotificationKind,
+  NotificationPayload,
+} from '@/shared/dto/notifications';
 
 /**
  * Удаляет все planned слоты для источника, которые запланированы после указанного времени
@@ -115,19 +118,23 @@ export async function findPlannedSlotsForUserAfterNow(
 /**
  * Обновляет время слота
  * @param slotId - ID слота
- * @param newTime - новое время
+ * @param newTime - новое время (UTC)
+ * @param timezone - часовой пояс пользователя (например, 'Europe/Moscow')
  * @param payloadData - опциональные данные для обновления payload
  */
 export async function updateSlotTime(
   slotId: string,
   newTime: Date,
+  timezone: string,
   payloadData?: any
 ): Promise<void> {
   const updateData: {
     scheduledAt: Date;
+    scheduledAtLocal: any; // SQL выражение
     payload?: any;
   } = {
     scheduledAt: newTime,
+    scheduledAtLocal: sql`timezone(${sql.raw(`'${timezone}'`)}, ${newTime})`,
   };
 
   if (payloadData) {
@@ -143,18 +150,25 @@ export async function updateSlotTime(
 /**
  * Создаёт новый слот
  * @param slot - данные слота
+ * @param timezone - часовой пояс пользователя (например, 'Europe/Moscow')
  */
-export async function insertSlot(slot: {
-  id: string;
-  userId: number;
-  kind: NotificationKind;
-  entityKey: string | null;
-  entityDisplayName: string | null;
-  scheduledAt: Date;
-  payload: NotificationPayload;
-  templateId: string;
-  status: 'planned';
-}): Promise<void> {
+export async function insertSlot(
+  slot: {
+    id: string;
+    userId: number;
+    kind: NotificationKind;
+    entityKey: string | null;
+    entityDisplayName: string | null;
+    scheduledAt: Date; // UTC время
+    payload: NotificationPayload;
+    templateId: string;
+    status: 'planned';
+  },
+  timezone: string
+): Promise<void> {
+  // Используем SQL функцию для преобразования UTC времени в локальное время пользователя
+  // timezone(timezone_name, timestamp) преобразует UTC timestamp в локальное время указанного часового пояса
+  // Результат будет timestamp without time zone с компонентами локального времени
   await db.insert(notificationSlots).values({
     id: slot.id,
     userId: slot.userId,
@@ -162,9 +176,9 @@ export async function insertSlot(slot: {
     entityKey: slot.entityKey,
     entityDisplayName: slot.entityDisplayName,
     scheduledAt: slot.scheduledAt,
+    scheduledAtLocal: sql`timezone(${sql.raw(`'${timezone}'`)}, ${slot.scheduledAt})`,
     payload: slot.payload,
     templateId: slot.templateId,
     status: slot.status,
   });
 }
-
