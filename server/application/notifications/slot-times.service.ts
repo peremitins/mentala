@@ -3,22 +3,23 @@
  * Чистая функция без зависимостей от БД или других сервисов
  */
 
+import { toZonedTime, fromZonedTime } from 'date-fns-tz';
+
 /**
  * Генерирует временные метки для слотов
  * @param timesPerDay - количество уведомлений в день
- * @param timezone - IANA timezone пользователя (⚠️ ВАЖНО: пока не используется, слоты генерируются в локальном времени сервера)
+ * @param timezone - IANA timezone пользователя
  * @param days - количество дней вперёд
  * @param activeDays - массив активных дней недели (0 = Воскресенье, 1 = Понедельник, ..., 6 = Суббота)
  * @param timeRangeStart - начало временного окна в минутах (по умолчанию 540 = 09:00)
  * @param timeRangeEnd - конец временного окна в минутах (по умолчанию 1350 = 22:30)
  * @param customSlotTimes - ручные времена в минутах (если заданы)
  * @param jitterMinutes - джиттер в минутах (по умолчанию 15)
- * @returns массив дат (локальное время сервера) для слотов
- * @todo Реализовать поддержку timezone через date-fns-tz или Intl API
+ * @returns массив дат в UTC для сохранения в БД
  */
 export function generateSlotTimes(
   timesPerDay: number,
-  timezone: string, // Пока не используется, оставлено для будущей реализации
+  timezone: string,
   days: number,
   activeDays: number[] = [0, 1, 2, 3, 4, 5, 6],
   timeRangeStart: number = 540,
@@ -27,17 +28,22 @@ export function generateSlotTimes(
   jitterMinutes: number = 15
 ): Date[] {
   const slots: Date[] = [];
-  const now = new Date();
+
+  // Преобразуем текущее время в локальное время пользователя
+  const nowUTC = new Date();
+  const nowLocal = toZonedTime(nowUTC, timezone);
+
   if (timesPerDay <= 0) {
     return slots;
   }
 
   for (let d = 0; d < days; d++) {
-    const date = new Date(now);
-    date.setDate(date.getDate() + d);
+    // Работаем с локальным временем пользователя
+    const dateLocal = new Date(nowLocal);
+    dateLocal.setDate(dateLocal.getDate() + d);
 
-    // Проверяем, активен ли этот день недели
-    const dayOfWeek = date.getDay(); // 0 = Воскресенье, 1 = Понедельник, ..., 6 = Суббота
+    // Проверяем, активен ли этот день недели (в локальном времени)
+    const dayOfWeek = dateLocal.getDay(); // 0 = Воскресенье, 1 = Понедельник, ..., 6 = Суббота
     if (!activeDays.includes(dayOfWeek)) {
       continue; // Пропускаем этот день
     }
@@ -114,19 +120,56 @@ export function generateSlotTimes(
       const slotHour = Math.floor(slotMinutes / 60);
       const slotMin = slotMinutes % 60;
 
-      // Создаём дату в локальном времени пользователя
-      // TODO: использовать библиотеку типа date-fns-tz для правильной работы с TZ
-      const slot = new Date(date);
-      slot.setHours(slotHour, slotMin, 0, 0);
+      // ВАЖНО: Создаём дату в локальном времени пользователя правильно
+      // Используем компоненты даты из dateLocal (который уже в локальном времени)
+      const year = dateLocal.getFullYear();
+      const month = dateLocal.getMonth();
+      const day = dateLocal.getDate();
 
-      // Если диапазон через полночь и время раньше timeRangeEnd, добавляем день
+      // Определяем день для слота (с учетом перехода через полночь)
+      let slotDay = day;
       if (crossesMidnight && slotMinutes < timeRangeEnd) {
-        slot.setDate(slot.getDate() + 1);
+        slotDay = day + 1;
       }
 
-      // Пропускаем слоты в прошлом
-      if (slot > now) {
-        slots.push(slot);
+      // ВАЖНО: fromZonedTime интерпретирует Date как локальное время в указанном timezone
+      // и преобразует в UTC. Для правильной работы нужно создать Date объект,
+      // который будет интерпретирован как локальное время пользователя.
+      //
+      // Правильный способ: создать Date объект с компонентами локального времени пользователя
+      // (год, месяц, день, час, минута) используя конструктор Date(year, month, day, hour, min, sec, ms).
+      // Этот конструктор создает дату в локальном времени системы, но fromZonedTime интерпретирует
+      // компоненты этой даты (год, месяц, день, час, минута) как локальное время в указанном timezone
+      // и преобразует в UTC.
+      //
+      // Однако, если сервер находится в другом часовом поясе, это может вызвать проблемы.
+      // Более надежный способ - создать строку ISO без указания timezone, затем создать Date объект,
+      // и использовать fromZonedTime для преобразования.
+
+      // Создаём Date объект с компонентами локального времени пользователя
+      // fromZonedTime интерпретирует компоненты этой даты как локальное время в указанном timezone
+      const slotLocalDate = new Date(
+        year,
+        month,
+        slotDay,
+        slotHour,
+        slotMin,
+        0,
+        0
+      );
+
+      // Преобразуем в UTC через fromZonedTime
+      // fromZonedTime интерпретирует slotLocalDate как локальное время в указанном timezone
+      // и преобразует в UTC
+      const slotUTC = fromZonedTime(slotLocalDate, timezone);
+
+      // Преобразуем обратно в локальное время пользователя для сравнения с nowLocal
+      const slotLocal = toZonedTime(slotUTC, timezone);
+
+      // Пропускаем слоты в прошлом (сравниваем локальное время)
+      if (slotLocal > nowLocal) {
+        // slotUTC уже в UTC, сохраняем его в БД
+        slots.push(slotUTC);
       }
     }
   }

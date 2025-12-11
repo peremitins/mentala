@@ -4,12 +4,18 @@ import { users } from '@/server/infrastructure/db/schema';
 import { eq } from 'drizzle-orm';
 import { createSession } from '@/server/application/auth/session';
 import argon2 from 'argon2';
+import {
+  getTimezoneFromRequest,
+  getUserTimezone,
+  updateUserTimezone,
+} from '@/server/application/notifications/timezone.utils';
 
 export default defineEventHandler(async (event) => {
   const body = await readBody<{
     email: string;
     password: string;
     locale?: string;
+    timezone?: string; // Опционально, но приоритет у заголовка X-Timezone
   }>(event as any);
   if (!body?.email || !body?.password) {
     throw createError({
@@ -34,6 +40,43 @@ export default defineEventHandler(async (event) => {
       statusCode: 401,
       statusMessage: 'Invalid credentials',
     });
+
+  // Получить timezone из запроса (заголовок X-Timezone или body.timezone)
+  const timezone = getTimezoneFromRequest(event);
+
+  // Получить текущий timezone пользователя из его preferences
+  let currentTimezone: string;
+  try {
+    currentTimezone = await getUserTimezone(existing[0].id);
+  } catch (error) {
+    // Если не удалось получить timezone (например, нет preferences), используем fallback
+    console.warn(
+      `[Auth] Could not get timezone for user ${existing[0].id}, using fallback:`,
+      error
+    );
+    currentTimezone = 'Europe/Moscow';
+  }
+
+  // Обновить timezone и пересчитать слоты, если изменился
+  // ВАЖНО: Пересчет слотов выполняется асинхронно в фоне, не блокирует авторизацию
+  if (timezone !== currentTimezone) {
+    console.log(
+      `[Auth] Timezone changed for user ${existing[0].id}: ${currentTimezone} → ${timezone}`
+    );
+    // Не используем await, чтобы не блокировать авторизацию
+    // updateUserTimezone сама запустит пересчет слотов асинхронно
+    updateUserTimezone(existing[0].id, timezone).catch((error) => {
+      console.error(
+        `[Auth] Failed to update timezone for user ${existing[0].id}:`,
+        error
+      );
+    });
+  } else {
+    console.log(
+      `[Auth] Timezone unchanged for user ${existing[0].id}: ${timezone}`
+    );
+  }
+
   await db
     .update(users)
     .set({

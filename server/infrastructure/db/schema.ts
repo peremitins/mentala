@@ -10,7 +10,9 @@ import {
   jsonb,
   numeric,
   unique,
+  index,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
@@ -267,21 +269,37 @@ export const notificationPreferences = pgTable('notification_preferences', {
 });
 
 // Запланированные слоты уведомлений
-export const notificationSlots = pgTable('notification_slots', {
-  id: text('id').primaryKey(),
-  userId: integer('user_id').notNull(),
-  kind: varchar('kind', { length: 20 }).notNull(), // 'therapy' | 'habits'
-  entityKey: varchar('entity_key', { length: 255 }), // Единое поле для идентификации источника (ID для кастомных, ключ шаблона для шаблонных)
-  entityDisplayName: varchar('entity_display_name', { length: 255 }), // Читаемое название сущности (для удобства разработчиков, не участвует в логике)
-  scheduledAt: timestamp('scheduled_at', { withTimezone: true }).notNull(), // UTC с джиттером
-  payload: jsonb('payload').notNull(), // { title, body, templateId, action, deepLink, ... }
-  templateId: varchar('template_id', { length: 255 }),
-  status: varchar('status', { length: 20 }).notNull().default('planned'), // planned | sent | skipped | failed
-  snoozedUntil: timestamp('snoozed_until', { withTimezone: true }),
-  createdAt: timestamp('created_at', { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-});
+export const notificationSlots = pgTable(
+  'notification_slots',
+  {
+    id: text('id').primaryKey(),
+    userId: integer('user_id').notNull(),
+    kind: varchar('kind', { length: 20 }).notNull(), // 'therapy' | 'habits'
+    entityKey: varchar('entity_key', { length: 255 }), // Единое поле для идентификации источника (ID для кастомных, ключ шаблона для шаблонных)
+    entityDisplayName: varchar('entity_display_name', { length: 255 }), // Читаемое название сущности (для удобства разработчиков, не участвует в логике)
+    scheduledAt: timestamp('scheduled_at', { withTimezone: true }).notNull(), // UTC с джиттером
+    scheduledAtLocal: timestamp('scheduled_at_local'), // Локальное время отправки (timestamp without time zone для удобства просмотра в БД, nullable для существующих записей)
+    payload: jsonb('payload').notNull(), // { title, body, templateId, action, deepLink, ... }
+    templateId: varchar('template_id', { length: 255 }),
+    status: varchar('status', { length: 20 }).notNull().default('planned'), // planned | queued | sent | skipped | failed
+    snoozedUntil: timestamp('snoozed_until', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    // Индекс для быстрого поиска due-слотов (используется в processDueSlots для BullMQ)
+    // Partial index для planned и queued слотов (queued - поставлены в очередь, но еще не обработаны)
+    statusScheduledIdx: index('idx_notification_slots_status_scheduled')
+      .on(table.status, table.scheduledAt)
+      .where(sql`${table.status} IN ('planned', 'queued')`),
+    // Индекс для поиска слотов по пользователю и статусу
+    userStatusIdx: index('idx_notification_slots_user_status').on(
+      table.userId,
+      table.status
+    ),
+  })
+);
 
 // Регистрация FCM токенов устройств
 export const userDevices = pgTable('user_devices', {

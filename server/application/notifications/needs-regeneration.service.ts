@@ -8,6 +8,7 @@ import {
   countPlannedSlotsForTomorrowNightMode,
 } from './repositories/notification-slots.repository';
 import { computeDayOfYear } from './regenerate-slots.service';
+import { getTimezoneFromPrefs, toLocalTime, toUTC } from './timezone.utils';
 
 /**
  * Проверяет, нужна ли регенерация слотов для пользователя
@@ -17,14 +18,6 @@ import { computeDayOfYear } from './regenerate-slots.service';
 export async function needsSlotRegenerationInternal(
   userId: number
 ): Promise<boolean> {
-  const now = new Date();
-  const today = new Date(now);
-  today.setHours(0, 0, 0, 0); // Начало сегодняшнего дня
-
-  const tomorrow = new Date(now);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  tomorrow.setHours(0, 0, 0, 0); // Начало следующего дня
-
   // Проверяем, есть ли активные настройки через репозиторий
   const activePrefs = await findEnabledPreferencesByUser(userId);
 
@@ -32,6 +25,21 @@ export async function needsSlotRegenerationInternal(
   if (activePrefs.length === 0) {
     return false;
   }
+
+  // Получаем timezone пользователя
+  const userTimezone = getTimezoneFromPrefs(activePrefs);
+
+  // Преобразуем текущее время в локальное время пользователя
+  const nowUTC = new Date();
+  const nowLocal = toLocalTime(nowUTC, userTimezone);
+
+  // Вся логика "сегодня/завтра/ночь" работает только в локальном времени пользователя
+  const todayLocal = new Date(nowLocal);
+  todayLocal.setHours(0, 0, 0, 0); // Начало сегодняшнего дня в локальном времени
+
+  const tomorrowLocal = new Date(nowLocal);
+  tomorrowLocal.setDate(tomorrowLocal.getDate() + 1);
+  tomorrowLocal.setHours(0, 0, 0, 0); // Начало следующего дня в локальном времени
 
   // Подсчитываем ожидаемое количество слотов в день
   const expectedSlotsPerDay = activePrefs.reduce(
@@ -70,30 +78,32 @@ export async function needsSlotRegenerationInternal(
 
   // Если есть ночной режим, проверяем, прошло ли уже час после окончания диапазона
   if (hasNightMode && latestRangeEnd > 0) {
-    // TODO: Учесть таймзону пользователя (user.timezone) для корректной работы night mode
-    // Сейчас используется локальное время сервера, что может привести к рассинхрону
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    // Вся логика работает в локальном времени пользователя
+    const currentMinutes = nowLocal.getHours() * 60 + nowLocal.getMinutes();
     const generationTime = latestRangeEnd + 60; // Через час после окончания (в минутах)
 
     // Нормализуем время генерации (может быть больше 1440 минут)
     const generationHour = Math.floor(generationTime / 60) % 24;
     const generationMin = generationTime % 60;
 
-    // Создаем дату времени генерации для сегодня
-    const generationDate = new Date(now);
-    generationDate.setHours(generationHour, generationMin, 0, 0);
+    // Создаем дату времени генерации для сегодня в локальном времени
+    const generationDateLocal = new Date(nowLocal);
+    generationDateLocal.setHours(generationHour, generationMin, 0, 0);
 
     // Если время генерации уже прошло сегодня, проверяем, нужно ли регенерировать
-    if (now >= generationDate) {
+    if (nowLocal >= generationDateLocal) {
       // Время генерации прошло - проверяем наличие слотов
       // Но только если прошло не более 2 часов (чтобы не регенерировать слишком часто)
       const hoursSinceGeneration =
-        (now.getTime() - generationDate.getTime()) / (1000 * 60 * 60);
+        (nowLocal.getTime() - generationDateLocal.getTime()) / (1000 * 60 * 60);
       if (hoursSinceGeneration <= 2) {
+        // Преобразуем локальную дату в UTC для запроса к БД
+        const tomorrowUTC = toUTC(tomorrowLocal, userTimezone);
+
         // Проверяем наличие слотов на завтра через репозиторий
         const actualSlotsCount = await countPlannedSlotsForTomorrowNightMode(
           userId,
-          tomorrow
+          tomorrowUTC
         );
 
         // Fallback: если слотов совсем нет, регенерировать всегда (аналогично дневному режиму)
@@ -128,20 +138,26 @@ export async function needsSlotRegenerationInternal(
     return false;
   }
 
-  // Для обычного режима (без ночного) используем старую логику
+  // Для обычного режима (без ночного) используем логику в локальном времени
   // Проверяем фактическое количество planned слотов на сегодня (если еще не поздно)
   // и на завтра
-  const currentHour = now.getHours();
-  const checkToday = currentHour < 22; // Проверяем сегодня только если раньше 22:00
+  const currentHour = nowLocal.getHours();
+  const checkToday = currentHour < 22; // Проверяем сегодня только если раньше 22:00 (в локальном времени)
 
-  let checkFromDate = tomorrow;
+  let checkFromDateLocal = tomorrowLocal;
   if (checkToday) {
     // Если еще рано, проверяем с сегодняшнего дня
-    checkFromDate = today;
+    checkFromDateLocal = todayLocal;
   }
 
+  // Преобразуем локальную дату в UTC для запроса к БД
+  const checkFromDateUTC = toUTC(checkFromDateLocal, userTimezone);
+
   // Проверяем фактическое количество planned слотов начиная с checkFromDate через репозиторий
-  const actualSlotsCount = await countPlannedSlotsFromDate(userId, checkFromDate);
+  const actualSlotsCount = await countPlannedSlotsFromDate(
+    userId,
+    checkFromDateUTC
+  );
 
   // Ожидаемое количество слотов зависит от того, проверяем ли мы сегодня или только завтра
   const expectedSlots = checkToday
@@ -171,4 +187,3 @@ export async function needsSlotRegenerationInternal(
 
   return false;
 }
-

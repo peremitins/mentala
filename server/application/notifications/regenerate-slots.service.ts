@@ -6,6 +6,7 @@
 import { eq, and, isNull, count } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { db } from '@/server/infrastructure/db/client';
+import { getTimezoneFromPrefs, toLocalTime } from './timezone.utils';
 import {
   userPreferences,
   habits,
@@ -127,20 +128,25 @@ export async function regenerateSlotsForSourceInternal(
     // Используем хеши и raw-тексты для единообразной проверки
     const usedTextsInCurrentGeneration = new Set<string>();
 
-    const now = new Date();
+    // Получаем timezone и преобразуем текущее время в локальное
+    // ВАЖНО: Если timezone не указан, используем Europe/Moscow как fallback для российского приложения
+    const timezone = sourcePref.timezone || 'Europe/Moscow';
+    const nowUTC = new Date();
+    const nowLocal = toLocalTime(nowUTC, timezone);
 
     // Удаляем только слоты для этого источника через репозиторий
     // КРИТИЧЕСКИ ВАЖНО: Удаляем ТОЛЬКО слоты со статусом 'planned' и scheduledAt > now
     // Отправленные слоты (status: 'sent') НИКОГДА не должны удаляться или изменяться
+    // В репозиторий передаём UTC время (так как в БД хранится UTC)
     const deletedCount = await deletePlannedFutureSlotsForSource(
       userId,
       kind,
       entityKeyInfo.normalized,
-      now
+      nowUTC
     );
 
     console.log(
-      `[RegenerateSlots] Removed ${deletedCount} old PLANNED slots for source: user ${userId}, kind: ${kind}, entityKey: ${entityKey || 'none'}`
+      `[RegenerateSlots] Removed ${deletedCount} old PLANNED slots for source: user ${userId}, kind: ${kind}, entityKey: ${entityKey || 'none'}, timezone: ${timezone}, current time: UTC=${nowUTC.toISOString()}, Local=${nowLocal.toISOString()}`
     );
 
     // Если источник отключен, просто удаляем его слоты (уже удалили выше)
@@ -210,9 +216,7 @@ export async function regenerateSlotsForSourceInternal(
     }
 
     // Генерируем временные метки для нового источника
-    // ВАЖНО: timezone пока не используется, слоты генерируются в локальном времени сервера
-    // TODO: Реализовать поддержку timezone через date-fns-tz или Intl
-    const timezone = sourcePref.timezone || 'Europe/Moscow';
+    // timezone уже получен выше
     const activeDays = (sourcePref.activeDays as number[]) ?? [
       0, 1, 2, 3, 4, 5, 6,
     ];
@@ -267,7 +271,8 @@ export async function regenerateSlotsForSourceInternal(
           'motivational',
         ];
         // Детерминированный выбор на основе userId и даты (для стабильности)
-        const dayOfYear = computeDayOfYear(now);
+        // Используем UTC дату для детерминированности (не зависит от timezone)
+        const dayOfYear = computeDayOfYear(nowUTC);
         const deterministicIndex = (userId + dayOfYear) % subtypes.length;
         actualSubtype = subtypes[deterministicIndex];
         console.log(
@@ -281,7 +286,8 @@ export async function regenerateSlotsForSourceInternal(
         actualSubtype === 'reminder'
       ) {
         // Детерминированный выбор для quit-привычек
-        const dayOfYear = computeDayOfYear(now);
+        // Используем UTC дату для детерминированности (не зависит от timezone)
+        const dayOfYear = computeDayOfYear(nowUTC);
         const deterministicChoice = (userId + dayOfYear) % 2;
         actualSubtype =
           deterministicChoice === 0 ? 'informational' : 'motivational';
@@ -448,6 +454,7 @@ export async function regenerateSlotsForSourceInternal(
         subtype: subtypeForHash,
         textSource: effectiveTextSource,
         kind: kind as 'habits' | 'therapy',
+        habitIntent: kind === 'habits' ? intent || null : null, // Включаем intent только для habits
       });
 
       console.log(
@@ -759,17 +766,21 @@ export async function regenerateSlotsForSourceInternal(
       }
 
       // ВАЖНО: Используем то же значение, что и в payload.data.entityKey
-      await insertSlot({
-        id: slotId,
-        userId,
-        kind: sourcePref.kind as NotificationKind,
-        entityKey: finalEntityKey,
-        entityDisplayName: entityName || null, // Читаемое название для удобства разработчиков
-        scheduledAt,
-        payload,
-        templateId: templateIdForSlot,
-        status: 'planned',
-      });
+      // Передаем timezone в insertSlot для правильного преобразования UTC в локальное время
+      await insertSlot(
+        {
+          id: slotId,
+          userId,
+          kind: sourcePref.kind as NotificationKind,
+          entityKey: finalEntityKey,
+          entityDisplayName: entityName || null, // Читаемое название для удобства разработчиков
+          scheduledAt, // UTC время для логики
+          payload,
+          templateId: templateIdForSlot,
+          status: 'planned',
+        },
+        timezone
+      );
 
       // Сохраняем информацию об использовании AI-текста в БД
       if (

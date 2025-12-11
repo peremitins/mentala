@@ -1,0 +1,2 @@
+DROP INDEX "idx_notification_slots_status_scheduled";--> statement-breakpoint
+CREATE INDEX "idx_notification_slots_status_scheduled" ON "notification_slots" USING btree ("status","scheduled_at") WHERE "notification_slots"."status" IN ('planned', 'queued');

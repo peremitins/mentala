@@ -1,5 +1,5 @@
 import { nanoid } from 'nanoid';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import {
   userPreferences,
   notificationPreferences,
@@ -11,6 +11,10 @@ import { getSessionUser } from '@/server/application/auth/session';
 import { loadTextsForPreference } from '@/server/application/notifications/notification-texts.service';
 import { formatNotificationTextWithName } from '@/shared/utils/notificationText';
 import type { NotificationPayload } from '@/shared/dto/notifications';
+import {
+  getUserTimezone,
+  toLocalTime,
+} from '@/server/application/notifications/timezone.utils';
 
 /**
  * POST /api/notifications/test-quick
@@ -142,6 +146,9 @@ export default defineEventHandler(
       });
     }
 
+    // Получаем часовой пояс пользователя для сохранения локального времени
+    const userTimezone = await getUserTimezone(userId);
+
     // Создаём слот через 1 минуту
     const scheduledAt = new Date(Date.now() + 60 * 1000);
 
@@ -159,12 +166,14 @@ export default defineEventHandler(
     };
 
     try {
+      // Используем SQL функцию для преобразования UTC времени в локальное время пользователя
       await db.insert(notificationSlots).values({
         id: slotId,
         userId,
         kind: body.kind,
         entityKey: null,
         scheduledAt,
+        scheduledAtLocal: sql`timezone(${sql.raw(`'${userTimezone}'`)}, ${scheduledAt})`,
         payload,
         templateId: templateId,
         status: 'planned',

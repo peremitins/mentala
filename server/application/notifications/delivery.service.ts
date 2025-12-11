@@ -7,15 +7,17 @@
  * См. FIREBASE_SETUP.md для инструкций по настройке
  */
 
-import { eq, and, lte } from 'drizzle-orm';
+import { eq, and, lte, asc } from 'drizzle-orm';
 import { db } from '@/server/infrastructure/db/client';
 import {
   notificationSlots,
   userDevices,
 } from '@/server/infrastructure/db/schema';
 import type { NotificationPayload } from '@/shared/dto/notifications';
-import { checkAndRegenerateSlotsIfNeeded } from '@/server/application/notifications/scheduler.service';
-import { refillAllTextPoolsIfNeeded } from '@/server/application/notifications/ai-generation.service';
+import { enqueueAiTextPoolRefillForAllActivePreferences } from '@/server/application/notifications/schedulers/aiTextPool.scheduler';
+import { enqueueSlotGenerationForAllActiveUsers } from '@/server/application/notifications/schedulers/notificationSlots.scheduler';
+import { notificationDeliveryQueue } from '@/server/application/notifications/queues/notificationDelivery.queue';
+import { getUserTimezone, toLocalTime } from './timezone.utils';
 import admin from 'firebase-admin';
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve, isAbsolute } from 'node:path';
@@ -28,26 +30,51 @@ let firebaseApp: admin.app.App | null = null;
 
 /**
  * Инициализация Firebase Admin SDK
+ *
+ * ВАЖНО: В production режиме Firebase должен быть обязательно настроен.
+ * Mock mode используется только в development для удобства разработки.
  */
 export function initializeFirebase(): void {
   try {
     if (!firebaseApp) {
       const serviceAccount = process.env.NUXT_FIREBASE_SERVICE_ACCOUNT_JSON;
+      const isProduction = process.env.NODE_ENV === 'production';
 
-      // Debug: показываем что именно получили
-      console.log(
-        '[FCM] DEBUG: NUXT_FIREBASE_SERVICE_ACCOUNT_JSON env var:',
-        serviceAccount
-          ? `Set (${serviceAccount.substring(0, 50)}...)`
-          : 'NOT SET'
-      );
+      // Debug: показываем статус переменной (в production не показываем содержимое)
+      if (isProduction) {
+        console.log(
+          '[FCM] DEBUG: NUXT_FIREBASE_SERVICE_ACCOUNT_JSON env var:',
+          serviceAccount ? 'Set' : 'NOT SET'
+        );
+      } else {
+        console.log(
+          '[FCM] DEBUG: NUXT_FIREBASE_SERVICE_ACCOUNT_JSON env var:',
+          serviceAccount
+            ? `Set (${serviceAccount.substring(0, 50)}...)`
+            : 'NOT SET'
+        );
+      }
 
       if (!serviceAccount) {
-        console.warn(
-          '[FCM] NUXT_FIREBASE_SERVICE_ACCOUNT_JSON not set - using mock mode'
-        );
-        console.warn('[FCM] See FIREBASE_SETUP.md for setup instructions');
-        return;
+        if (isProduction) {
+          // В production отсутствие Firebase - критическая ошибка
+          console.error(
+            '[FCM] ❌ CRITICAL: NUXT_FIREBASE_SERVICE_ACCOUNT_JSON not set in production!'
+          );
+          console.error(
+            '[FCM] Push notifications will NOT work. Set NUXT_FIREBASE_SERVICE_ACCOUNT_JSON environment variable.'
+          );
+          console.error('[FCM] See FIREBASE_SETUP.md for setup instructions');
+          // Не инициализируем firebaseApp, чтобы sendFCMNotification могла вернуть false
+          return;
+        } else {
+          // В development разрешаем mock mode
+          console.warn(
+            '[FCM] NUXT_FIREBASE_SERVICE_ACCOUNT_JSON not set - using mock mode (development only)'
+          );
+          console.warn('[FCM] See FIREBASE_SETUP.md for setup instructions');
+          return;
+        }
       }
 
       let credentials: any;
@@ -82,8 +109,21 @@ export function initializeFirebase(): void {
       console.log('[FCM] ✅ Firebase Admin SDK initialized successfully');
     }
   } catch (error) {
+    const isProduction = process.env.NODE_ENV === 'production';
     console.error('[FCM] ❌ Failed to initialize Firebase:', error);
-    console.error('[FCM] Push notifications will use mock mode');
+
+    if (isProduction) {
+      console.error(
+        '[FCM] ❌ CRITICAL: Firebase initialization failed in production!'
+      );
+      console.error(
+        '[FCM] Push notifications will NOT work until Firebase is properly configured.'
+      );
+    } else {
+      console.error(
+        '[FCM] Push notifications will use mock mode (development only)'
+      );
+    }
     console.error('[FCM] See FIREBASE_SETUP.md for setup instructions');
   }
 }
@@ -119,14 +159,28 @@ export async function sendFCMNotification(
   token: string,
   payload: NotificationPayload
 ): Promise<boolean> {
-  // Если Firebase не инициализирован - используем mock
+  // Если Firebase не инициализирован
   if (!firebaseApp) {
-    console.log('[FCM] (MOCK) Sending notification:', {
-      token: token.substring(0, 20) + '...',
-      title: payload.title,
-      body: payload.body,
-    });
-    return true;
+    const isProduction = process.env.NODE_ENV === 'production';
+
+    if (isProduction) {
+      // В production это критическая ошибка - уведомления не отправляются
+      console.error(
+        '[FCM] ❌ Cannot send notification: Firebase not initialized in production!'
+      );
+      console.error(
+        '[FCM] Notification was NOT sent. Set NUXT_FIREBASE_SERVICE_ACCOUNT_JSON environment variable.'
+      );
+      return false; // Возвращаем false, чтобы система знала, что отправка не удалась
+    } else {
+      // В development разрешаем mock mode для удобства разработки
+      console.log('[FCM] (MOCK) Sending notification:', {
+        token: token.substring(0, 20) + '...',
+        title: payload.title,
+        body: payload.body,
+      });
+      return true;
+    }
   }
 
   try {
@@ -137,9 +191,12 @@ export async function sendFCMNotification(
     };
 
     // Добавляем дополнительные данные из payload.data
+    // Фильтруем undefined значения, чтобы не отправлять ключи с "undefined"
     if (payload.data) {
       Object.entries(payload.data).forEach(([key, value]) => {
-        dataPayload[key] = String(value);
+        if (value !== undefined && value !== null) {
+          dataPayload[key] = String(value);
+        }
       });
     }
 
@@ -252,71 +309,218 @@ export async function sendToUser(
  * Вызывается периодически (например, каждые 5 минут)
  */
 export async function processDueSlots(): Promise<void> {
-  const now = new Date();
+  const nowUTC = new Date();
+
+  // Логируем UTC время (основной критерий due остаётся в UTC)
+  // Детальное логирование в локальном времени будет для каждого слота отдельно
   console.log(
-    `[DeliveryWorker] Checking for due slots at ${now.toISOString()}`
+    `[DeliveryWorker] Checking for due slots at UTC=${nowUTC.toISOString()}`
   );
 
-  // Получаем все слоты, которые пора отправить
-  const dueSlots = await db
-    .select()
-    .from(notificationSlots)
-    .where(
-      and(
-        eq(notificationSlots.status, 'planned'),
-        lte(notificationSlots.scheduledAt, now)
+  try {
+    // Получаем все слоты, которые пора отправить
+    // Выбираем только 'planned' слоты - 'queued' слоты уже обрабатываются воркером BullMQ
+    // Основной критерий due остаётся в UTC (если слоты генерируются с учётом timezone, это корректно)
+    const dueSlots = await db
+      .select()
+      .from(notificationSlots)
+      .where(
+        and(
+          eq(notificationSlots.status, 'planned'), // Только planned слоты
+          lte(notificationSlots.scheduledAt, nowUTC)
+        )
       )
-    )
-    .limit(100); // Батч из 100 слотов
+      .orderBy(asc(notificationSlots.scheduledAt)) // Сортируем по времени - старые слоты обрабатываем первыми
+      .limit(100); // Батч из 100 слотов
 
-  console.log(`[DeliveryWorker] Found ${dueSlots.length} due slots to process`);
+    console.log(
+      `[DeliveryWorker] Found ${dueSlots.length} due slots to process`
+    );
 
-  for (const slot of dueSlots) {
-    try {
-      // Отправляем уведомление
-      const successCount = await sendToUser(
-        slot.userId,
-        slot.payload as NotificationPayload
-      );
+    // Группируем слоты по пользователям для получения timezone (избегаем N+1 запросов)
+    const userIds = [...new Set(dueSlots.map((s) => s.userId))];
+    const timezoneMap = new Map<number, string>();
 
-      if (successCount > 0) {
-        // Помечаем как отправленное
-        await db
-          .update(notificationSlots)
-          .set({ status: 'sent' })
-          .where(eq(notificationSlots.id, slot.id));
-
-        console.log(
-          `[DeliveryWorker] Slot ${slot.id} sent to ${successCount} device(s)`
+    for (const userId of userIds) {
+      try {
+        const timezone = await getUserTimezone(userId);
+        timezoneMap.set(userId, timezone);
+      } catch (error) {
+        console.error(
+          `[DeliveryWorker] Failed to get timezone for user ${userId}:`,
+          error
         );
-      } else {
-        // Помечаем как failed
-        await db
-          .update(notificationSlots)
-          .set({ status: 'failed' })
-          .where(eq(notificationSlots.id, slot.id));
-
-        console.warn(`[DeliveryWorker] Slot ${slot.id} failed (no devices)`);
+        timezoneMap.set(userId, 'Europe/Moscow'); // Fallback для российского приложения
       }
-    } catch (error) {
+    }
+
+    let enqueuedCount = 0;
+    let skippedCount = 0;
+    let errorCount = 0;
+
+    for (const slot of dueSlots) {
+      // Логируем в локальном времени для отладки
+      const userTimezone = timezoneMap.get(slot.userId) || 'Europe/Moscow';
+      const slotLocal = toLocalTime(slot.scheduledAt, userTimezone);
+      const nowLocal = toLocalTime(nowUTC, userTimezone);
+
+      if (enqueuedCount < 5) {
+        // Логируем первые 5 слотов для отладки
+        console.log(
+          `[DeliveryWorker] Due slot: UTC=${slot.scheduledAt.toISOString()}, Local=${slotLocal.toISOString()} (${userTimezone}), now Local=${nowLocal.toISOString()}`
+        );
+      }
+
+      try {
+        // КРИТИЧНО: Атомарно обновляем статус перед постановкой в очередь
+        // Это предотвращает race condition - если слот уже обрабатывается, обновление не пройдет
+        // Используем результат update напрямую для проверки количества обновленных строк
+        const updateResult = await db
+          .update(notificationSlots)
+          .set({ status: 'queued' })
+          .where(
+            and(
+              eq(notificationSlots.id, slot.id),
+              eq(notificationSlots.status, 'planned') // Только если еще planned
+            )
+          );
+
+        // Проверяем количество обновленных строк через rowCount
+        // Если 0 - значит слот уже обрабатывается другим процессом или был удален
+        const rowsAffected = updateResult.rowCount || 0;
+        if (rowsAffected === 0) {
+          skippedCount++;
+          console.log(
+            `[DeliveryWorker] ⏭️ Slot ${slot.id} already processed, skipping`
+          );
+          continue;
+        }
+
+        // Ставим задачу в очередь
+        await notificationDeliveryQueue.add(
+          'send',
+          {
+            slotId: slot.id,
+            userId: slot.userId,
+            payload: slot.payload as NotificationPayload,
+          },
+          {
+            jobId: `delivery-${slot.id}`, // Уникальный ID для предотвращения дубликатов
+            removeOnComplete: {
+              age: 3600, // Хранить завершённые задачи 1 час для отладки
+              count: 1000, // Или максимум 1000 задач
+            },
+            removeOnFail: {
+              age: 7 * 24 * 3600, // Хранить проваленные задачи 7 дней
+              count: 5000, // Или максимум 5000 задач
+            },
+          }
+        );
+
+        enqueuedCount++;
+      } catch (error: any) {
+        errorCount++;
+        const errorMessage = error?.message || String(error);
+
+        // КРИТИЧНО: Разная логика для разных типов ошибок
+        if (errorMessage.includes('already exists')) {
+          // Задача уже существует в очереди - это нормально
+          // НЕ делаем rollback в planned, оставляем статус queued
+          // Иначе слот будет повторно обработан после завершения джобы → дубликат уведомления
+          skippedCount++;
+          console.log(
+            `[DeliveryWorker] ⏭️ Job for slot ${slot.id} already exists in queue, keeping status 'queued'`
+          );
+        } else {
+          // Реальная ошибка при постановке в очередь - делаем rollback в planned
+          // чтобы слот мог быть обработан при следующем вызове
+          try {
+            await db
+              .update(notificationSlots)
+              .set({ status: 'planned' })
+              .where(eq(notificationSlots.id, slot.id));
+          } catch (rollbackError) {
+            console.error(
+              `[DeliveryWorker] ❌ Failed to rollback status for slot ${slot.id}:`,
+              rollbackError
+            );
+          }
+
+          console.error(
+            `[DeliveryWorker] ❌ Error enqueueing slot ${slot.id}:`,
+            errorMessage
+          );
+        }
+      }
+    }
+
+    if (dueSlots.length === 100) {
+      console.warn(
+        '[DeliveryWorker] ⚠️ Hit batch limit (100 slots), some slots may be processed in next cycle'
+      );
+    }
+
+    console.log(
+      `[DeliveryWorker] ✅ Enqueued ${enqueuedCount} slots, skipped ${skippedCount}, errors ${errorCount} (total due: ${dueSlots.length})`
+    );
+  } catch (error: any) {
+    // Улучшенная обработка ошибок подключения к БД
+    const errorMessage = error?.message || String(error);
+    const errorCode = error?.code;
+
+    if (errorCode === 'ECONNREFUSED' || errorMessage.includes('ECONNREFUSED')) {
       console.error(
-        `[DeliveryWorker] Error processing slot ${slot.id}:`,
+        '[DeliveryWorker] ❌ Database connection refused. Check:',
+        '\n  1. Is PostgreSQL running?',
+        '\n  2. Is SSH tunnel active? (if using remote DB)',
+        '\n  3. Is NUXT_PRIVATE_DB_URL set correctly in .env.development?'
+      );
+    } else if (errorCode === 'ETIMEDOUT' || errorMessage.includes('timeout')) {
+      console.error(
+        '[DeliveryWorker] ❌ Database connection timeout. Check network connection and DB availability.'
+      );
+    } else if (errorMessage.includes('NUXT_PRIVATE_DB_URL')) {
+      console.error(
+        '[DeliveryWorker] ❌ Database URL not configured. Set NUXT_PRIVATE_DB_URL in .env.development'
+      );
+    } else {
+      console.error(
+        '[DeliveryWorker] ❌ Database query error:',
+        errorMessage,
+        '\n  Full error:',
         error
       );
-      // Помечаем как failed
-      await db
-        .update(notificationSlots)
-        .set({ status: 'failed' })
-        .where(eq(notificationSlots.id, slot.id));
     }
+
+    // Не пробрасываем ошибку дальше, чтобы worker продолжал работать
+    // и мог повторить попытку при следующем запуске
   }
 }
 
 /**
- * Запустить воркер (бесконечный цикл с интервалом)
- * В продакшене использовать BullMQ для надёжности
+ * Запускает планировщик для постановки задач в очереди BullMQ
+ * Периодически проверяет состояние системы и ставит задачи в соответствующие очереди:
+ * - processDueSlots() - ставит задачи отправки уведомлений в очередь notification-delivery
+ * - enqueueSlotGenerationForAllActiveUsers() - ставит задачи генерации слотов в очередь notification-slots-generation
+ * - enqueueAiTextPoolRefillForAllActivePreferences() - ставит задачи догенерации AI-текстов в очередь ai-text-pool-refill
+ *
+ * Воркеры BullMQ обрабатывают задачи из этих очередей (см. server/plugins/bullmq-workers.ts)
+ *
+ * ВАЖНО: Эта функция должна вызываться только один раз при старте сервера.
+ * Многократный вызов приведет к дублированию планировщиков и таймеров.
  */
+let workerStarted = false;
+
 export function startDeliveryWorker(): void {
+  // Защита от многократного запуска
+  if (workerStarted) {
+    console.warn(
+      '[DeliveryWorker] ⚠️ Worker already started, skipping duplicate initialization'
+    );
+    return;
+  }
+  workerStarted = true;
+
   console.log('[DeliveryWorker] Starting delivery worker');
 
   // Инициализируем Firebase
@@ -357,30 +561,42 @@ export function startDeliveryWorker(): void {
     }, INTERVAL_MS);
   }, INITIAL_DELAY_MS);
 
-  // Первый запуск проверки и регенерации слотов
+  // Первый запуск постановки задач генерации слотов в очередь BullMQ
   setTimeout(() => {
-    checkAndRegenerateSlotsIfNeeded().catch((error) => {
-      console.error('[DeliveryWorker] Error in scheduler check:', error);
+    enqueueSlotGenerationForAllActiveUsers().catch((error) => {
+      console.error(
+        '[DeliveryWorker] Error enqueueing slot generation:',
+        error
+      );
     });
 
-    // Последующие запуски проверки и регенерации слотов
+    // Последующие запуски постановки задач генерации слотов в очередь BullMQ
     setInterval(() => {
-      checkAndRegenerateSlotsIfNeeded().catch((error) => {
-        console.error('[DeliveryWorker] Error in scheduler check:', error);
+      enqueueSlotGenerationForAllActiveUsers().catch((error) => {
+        console.error(
+          '[DeliveryWorker] Error enqueueing slot generation:',
+          error
+        );
       });
     }, SCHEDULER_CHECK_INTERVAL_MS);
   }, SCHEDULER_INITIAL_DELAY_MS);
 
-  // Первый запуск проверки и догенерации текстов
+  // Первый запуск постановки задач догенерации текстов в очередь BullMQ
   setTimeout(() => {
-    refillAllTextPoolsIfNeeded().catch((error) => {
-      console.error('[DeliveryWorker] Error in text pool refill:', error);
+    enqueueAiTextPoolRefillForAllActivePreferences().catch((error) => {
+      console.error(
+        '[DeliveryWorker] Error enqueueing text pool refill:',
+        error
+      );
     });
 
-    // Последующие запуски проверки и догенерации текстов
+    // Последующие запуски постановки задач в очередь BullMQ
     setInterval(() => {
-      refillAllTextPoolsIfNeeded().catch((error) => {
-        console.error('[DeliveryWorker] Error in text pool refill:', error);
+      enqueueAiTextPoolRefillForAllActivePreferences().catch((error) => {
+        console.error(
+          '[DeliveryWorker] Error enqueueing text pool refill:',
+          error
+        );
       });
     }, TEXT_POOL_REFILL_INTERVAL_MS);
   }, TEXT_POOL_REFILL_INITIAL_DELAY_MS);

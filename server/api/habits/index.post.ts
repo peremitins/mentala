@@ -7,6 +7,7 @@ import {
 import { db } from '@/server/infrastructure/db/client';
 import type { HabitDto, CreateHabitDto } from '@/shared/dto/notifications';
 import { getSessionUser } from '@/server/application/auth/session';
+import { getUserTimezone } from '@/server/application/notifications/timezone.utils';
 
 /**
  * POST /api/habits
@@ -58,8 +59,18 @@ export default defineEventHandler(async (event): Promise<HabitDto> => {
   // Только для кастомных привычек (intent === 'custom' или привычка найдена в БД)
   if (body.intent === 'custom' || !body.habitKey) {
     try {
-      // Получаем timezone пользователя (по умолчанию Europe/Moscow)
-      const timezone = 'Europe/Moscow'; // Можно получить из userPreferences в будущем
+      // Получаем timezone пользователя из существующих preferences или используем fallback
+      let timezone: string;
+      try {
+        timezone = await getUserTimezone(userId);
+      } catch (error) {
+        // Если не удалось получить timezone (например, нет preferences), используем Europe/Moscow как fallback для российского приложения
+        console.warn(
+          `[Habits] Could not get timezone for user ${userId}, using Europe/Moscow as fallback:`,
+          error
+        );
+        timezone = 'Europe/Moscow';
+      }
 
       await db.insert(notificationPreferences).values({
         id: nanoid(),

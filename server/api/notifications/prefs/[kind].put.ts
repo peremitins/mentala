@@ -1,4 +1,4 @@
-import { eq, and, isNull, or, gt } from 'drizzle-orm';
+import { eq, and, isNull } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import {
   notificationPreferences,
@@ -12,7 +12,6 @@ import type {
   UpdateNotificationPreferencesDto,
   NotificationPreferenceMeta,
 } from '@/shared/dto/notifications';
-import { MAX_NOTIFICATION_TEXT_LENGTH } from '@/shared/dto/notifications';
 import { getSessionUser } from '@/server/application/auth/session';
 import { regenerateSlotsForSource } from '@/server/application/notifications/scheduler.service';
 import type { NotificationKind } from '@/app/lib/notificationTemplates';
@@ -279,6 +278,11 @@ export default defineEventHandler(
       .where(and(...conditions))
       .limit(1);
 
+    // ВАЖНО: Если AI-тексты генерируются и textSource === 'ai' или 'hybrid', НЕ регенерируем слоты сейчас
+    // Слоты будут регенерированы после завершения AI-генерации
+    // Объявляем переменную ДО блока if (existing), чтобы она была доступна ниже
+    let shouldRegenerateSlotsAfterAi = false;
+
     if (existing) {
       const nextTimesPerDay = body.timesPerDay ?? existing.timesPerDay;
       const customSlotTimesInput =
@@ -310,8 +314,6 @@ export default defineEventHandler(
 
       const metaToSave = hasMetaFields ? finalMeta : null;
 
-      // Определяем, кастомная ли это привычка, чтобы правильно обработать subtype
-      let isCustomHabitForUpdate = false;
       let normalizedEntityKey = entityKey;
 
       // ВАЖНО: Обновляем название и описание ДО обновления настроек уведомлений
@@ -335,8 +337,6 @@ export default defineEventHandler(
           .from(habits)
           .where(and(eq(habits.id, entityKey), eq(habits.userId, userId)))
           .limit(1);
-        // Кастомная привычка - это любая привычка, найденная в БД (не шаблон)
-        isCustomHabitForUpdate = !!habit;
 
         console.log(
           `[NotificationPrefs] 🔍 Searching habit: entityKey=${entityKey}, found=${!!habit}, id=${habit?.id}, name="${habit?.name}"`
@@ -716,6 +716,7 @@ export default defineEventHandler(
         const nextSubtypeForHash = isCustomEntity ? null : nextSubtype;
 
         // Вычисляем новый хеш конфигурации
+        // КРИТИЧНО: habitIntent должен быть включен в хеш, чтобы при изменении intent генерировался новый пул текстов
         const newConfigHash = computeGenerationConfigHash({
           entityName,
           entityDescription,
@@ -730,6 +731,7 @@ export default defineEventHandler(
             | null,
           textSource,
           kind: kind as 'habits' | 'therapy',
+          habitIntent: kind === 'habits' ? habitIntent : null, // Включаем intent только для habits
         });
 
         console.log(
@@ -755,6 +757,9 @@ export default defineEventHandler(
           const oldSubtypeForHash = isCustomEntity ? null : oldSubtype;
           // ВАЖНО: Используем старые значения entityName/entityDescription для старого хеша
           // Это нужно для правильного сравнения, если название/описание изменились
+          // КРИТИЧНО: habitIntent должен быть включен в хеш, чтобы при изменении intent генерировался новый пул текстов
+          // Для старого хеша используем тот же habitIntent (если он не изменился, хеш не должен меняться только из-за intent)
+          // Но если intent изменился, это будет обнаружено через изменение хеша при следующем обновлении
           oldConfigHash = computeGenerationConfigHash({
             entityName: oldEntityName || entityName, // Используем старые значения если они есть
             entityDescription:
@@ -772,6 +777,7 @@ export default defineEventHandler(
               | null,
             textSource: oldTextSource,
             kind: kind as 'habits' | 'therapy',
+            habitIntent: kind === 'habits' ? habitIntent : null, // Используем текущий intent (если он изменился, хеш изменится)
           });
         }
 
@@ -783,7 +789,8 @@ export default defineEventHandler(
 
         // ВАЖНО: Если AI-тексты генерируются и textSource === 'ai' или 'hybrid', НЕ регенерируем слоты сейчас
         // Слоты будут регенерированы после завершения AI-генерации
-        const shouldRegenerateSlotsAfterAi =
+        // Присваиваем значение переменной, объявленной выше
+        shouldRegenerateSlotsAfterAi =
           needsAiGeneration && (textSource === 'ai' || textSource === 'hybrid');
 
         if (needsAiGeneration) {
@@ -868,11 +875,6 @@ export default defineEventHandler(
         }
       }
 
-      // ВАЖНО: Если AI-тексты генерируются и textSource === 'ai' или 'hybrid', НЕ регенерируем слоты сейчас
-      // Слоты будут регенерированы после завершения AI-генерации
-      // Объявляем переменную вне блока, чтобы она была доступна ниже
-      let shouldRegenerateSlotsAfterAi = false;
-
       // Регенерируем слоты только для этого источника
       // Проверяем, изменились ли настройки, влияющие на слоты
       const settingsChanged =
@@ -936,14 +938,30 @@ export default defineEventHandler(
       return response;
     } else {
       // Создаём новые (дефолтные значения)
-      const timezone = body.timezone ?? 'Europe/Moscow';
+      // Используем timezone из body, если передан, иначе пытаемся получить из существующих preferences
+      let timezone: string;
+      if (body.timezone) {
+        timezone = body.timezone;
+      } else {
+        try {
+          const { getUserTimezone } = await import(
+            '@/server/application/notifications/timezone.utils'
+          );
+          timezone = await getUserTimezone(userId);
+        } catch (error) {
+          // Если не удалось получить timezone, используем Europe/Moscow как fallback для российского приложения
+          console.warn(
+            `[NotificationPrefs] Could not get timezone for user ${userId}, using Europe/Moscow as fallback:`,
+            error
+          );
+          timezone = 'Europe/Moscow';
+        }
+      }
       const initialTimesPerDay = body.timesPerDay ?? 3;
       const initialCustomSlotTimes = normalizeCustomSlotTimes(
         body.customSlotTimes ?? null,
         initialTimesPerDay
       );
-      // Определяем, кастомная ли это привычка, чтобы правильно обработать subtype
-      let isCustomHabitForCreate = false;
       let normalizedEntityKey = entityKey;
 
       if (kind === 'habits' && entityKey) {
@@ -953,8 +971,6 @@ export default defineEventHandler(
           .from(habits)
           .where(and(eq(habits.id, entityKey), eq(habits.userId, userId)))
           .limit(1);
-        // Кастомная привычка - это любая привычка, найденная в БД (не шаблон)
-        isCustomHabitForCreate = !!habit;
         // Для кастомных привычек используем ID
         if (habit) {
           normalizedEntityKey = habit.id; // ВСЕГДА ID для кастомных сущностей
