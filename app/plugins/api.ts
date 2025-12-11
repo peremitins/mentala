@@ -25,6 +25,39 @@ export default defineNuxtPlugin(() => {
 
       if (typeof window !== 'undefined') {
         const token = localStorage.getItem(SESSION_TOKEN_KEY);
+
+        // Определяем системный timezone устройства (не зависит от VPN/IP)
+        // Используем Intl API для получения IANA timezone (например, 'Europe/Moscow')
+        // Поддерживается на всех современных платформах:
+        // - iOS Safari 10+ (2016)
+        // - Android Chrome/WebView (современные версии)
+        // - Все современные браузеры (Desktop и Mobile)
+        let timezone: string;
+        try {
+          // Проверяем доступность Intl API
+          if (
+            typeof Intl !== 'undefined' &&
+            Intl.DateTimeFormat &&
+            typeof Intl.DateTimeFormat === 'function'
+          ) {
+            const resolved = Intl.DateTimeFormat().resolvedOptions();
+            if (resolved.timeZone && typeof resolved.timeZone === 'string') {
+              timezone = resolved.timeZone;
+            } else {
+              throw new Error('timeZone not available in resolvedOptions');
+            }
+          } else {
+            throw new Error('Intl.DateTimeFormat not available');
+          }
+        } catch (error) {
+          // Fallback если Intl API недоступен (очень редко, только на очень старых устройствах)
+          console.warn(
+            '[API] Failed to get timezone from Intl API, using Europe/Moscow:',
+            error
+          );
+          timezone = 'Europe/Moscow';
+        }
+
         const headers = options.headers as
           | Record<string, string>
           | Headers
@@ -33,22 +66,26 @@ export default defineNuxtPlugin(() => {
         if (token) {
           if (headers instanceof Headers) {
             headers.set('X-Session-Token', token);
+            headers.set('X-Timezone', timezone);
             headers.set('Content-Type', 'application/json');
           } else {
             options.headers = {
               ...((headers as Record<string, string>) || {}),
               'Content-Type': 'application/json',
               'X-Session-Token': token,
+              'X-Timezone': timezone,
             } as any;
           }
         } else {
-          // Если нет токена, всё равно устанавливаем Content-Type
+          // Если нет токена, всё равно устанавливаем Content-Type и X-Timezone
           if (headers instanceof Headers) {
             headers.set('Content-Type', 'application/json');
+            headers.set('X-Timezone', timezone);
           } else {
             options.headers = {
               ...((headers as Record<string, string>) || {}),
               'Content-Type': 'application/json',
+              'X-Timezone': timezone,
             } as any;
           }
         }

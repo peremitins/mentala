@@ -103,7 +103,7 @@ export default defineEventHandler((event) => {
   );
   res.setHeader(
     'Access-Control-Allow-Headers',
-    'Content-Type, Authorization, X-Requested-With, X-Session-Token, x-session-token'
+    'Content-Type, Authorization, X-Requested-With, X-Session-Token, x-session-token, X-Timezone, x-timezone'
   );
 
   // Обязательно нужно для работы с credentials: 'include'

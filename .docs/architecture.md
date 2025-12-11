@@ -106,7 +106,7 @@ server/
 • Nitro-ручки: `server/api/heygen/session.post.ts` (streaming.new v2 → LiveKit url/token/session_id), `start.post.ts`, `stop.post.ts`, `speak.post.ts`, `close.post.ts` — фронт не видит приватный ключ.
 • Конфиг (server-only): `runtimeConfig.heygenApiKey`, `heygenBaseUrl`, `heygenAvatarId` в `nuxt.config.ts`.
 • Клиент: `useHeygenStore` создаёт сессию и подключается к LiveKit через `livekit-client`, треки крепятся в `HeyGenPlayer` к `video/audio` ref. LiveKit Room и DOM-узлы держим вне Pinia state (`markRaw` переменная), чтобы Vue devtools/SSR сериализация не падала на `constructor.name` внутри LiveKit.
-• Безопасность: ключ хранится только на сервере; клиент использует `useAPI`/`$api` с базовым `public.apiBase`, токен/URL очищаются при stop/unmount.
+• Безопасность: ключ хранится только на сервере; клиент использует `useAPI`/`$api` с относительными путями (автоматически используют текущий origin), токен/URL очищаются при stop/unmount.
 
 ⸻
 
@@ -120,10 +120,17 @@ server/
 ⸻
 
 🕒 Очереди и фоновые задачи
-• Брокер: Redis.
-• Node.js: BullMQ.
-• Laravel: Horizon.
+• Брокер: Redis (локально через Docker, в production через Upstash).
+• Node.js: BullMQ 5.x для обработки фоновых задач.
+• Структура очередей:
+• `notification-slots-generation` — генерация слотов уведомлений для пользователей
+• `notification-delivery` — отправка уведомлений через FCM
+• `ai-text-pool-refill` — пополнение пула AI-генерированных текстов
+• Воркеры запускаются автоматически через плагин `server/plugins/bullmq-workers.ts`.
+• Конфигурация: `BULLMQ_ENABLE_WORKERS` (по умолчанию `true`, для масштабирования можно отключить на web-контейнерах).
 • Payload: JSON-структуры, совместимые между системами.
+• Retry механизм: 3 попытки с exponential backoff (10 секунд между ретраями).
+• Graceful shutdown: все воркеры корректно завершаются при получении SIGTERM/SIGINT.
 
 ⸻
 

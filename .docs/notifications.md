@@ -6,7 +6,7 @@
 
 **Последние изменения:**
 
-- Реализована AI Buffer Pool модель (генерация 50 текстов вместо 15)
+- Реализована AI Buffer Pool модель (генерация 50 текстов за раз)
 - Добавлена таблица `ai_notification_text_usage` для отслеживания отправленных текстов
 - Реализовано автоматическое пополнение пула при приближении к концу
 - Добавлен retry механизм с exponential backoff для надежности генерации
@@ -46,23 +46,30 @@
 │  Server (Nitro)                     │
 │  ├─ API Endpoints                   │
 │  ├─ Scheduler Service (генерация)  │
-│  └─ Delivery Worker (отправка)     │
+│  └─ BullMQ Workers                  │
+│     ├─ Slots Generation Worker      │
+│     ├─ Delivery Worker              │
+│     └─ AI Text Pool Worker          │
 └────────┬────────────────────────────┘
          │
-    ┌────▼────┐     ┌──────────┐
-    │   DB    │     │   FCM    │
-    │ (Postgres) │  │ (Firebase)│
-    └─────────┘     └──────────┘
+    ┌────▼────┐     ┌──────────┐     ┌──────────┐
+    │   DB    │     │  Redis   │     │   FCM    │
+    │(Postgres)│    │ (BullMQ) │     │(Firebase)│
+    └─────────┘     └──────────┘     └──────────┘
 ```
 
 ### Компоненты
 
 1. **База данных** — PostgreSQL с Drizzle ORM
-2. **API Endpoints** — REST API для настроек, привычек, токенов
-3. **Планировщик** — генерация слотов на 7 дней вперёд
-4. **Воркер отправки** — обработка due-слотов каждые 5 минут
-5. **Frontend Components** — UI для настройки и превью
-6. **Capacitor Push Notifications** — регистрация токенов и обработка уведомлений
+2. **Redis** — брокер очередей для BullMQ
+3. **API Endpoints** — REST API для настроек, привычек, токенов
+4. **Планировщики** — ставят задачи в очереди BullMQ
+5. **Воркеры BullMQ** — обрабатывают задачи из очередей:
+   - Генерация слотов уведомлений
+   - Отправка уведомлений через FCM
+   - Пополнение пула AI-текстов
+6. **Frontend Components** — UI для настройки и превью
+7. **Capacitor Push Notifications** — регистрация токенов и обработка уведомлений
 
 ---
 
@@ -257,7 +264,7 @@ psql -d mentai -f server/infrastructure/db/migrations/0027_add_ai_notification_t
 
 **Универсальное поле `entityKey`:**
 
-- Заменяет старые поля `type`, `habitKey`, `topic`
+- Единое поле для идентификации сущности (объединяет функциональность `type`, `habitKey`, `topic`)
 - Для готовых привычек: ключ шаблона (`'water'`, `'smoking'`, `'sleep'` и др.)
 - Для кастомных привычек: ID привычки из таблицы `habits` (nanoid, стабильный идентификатор)
 - Для готовых тем терапии: ключ темы (`'anxiety'`, `'stress'`, `'mood'` и др.)
@@ -281,7 +288,7 @@ psql -d mentai -f server/infrastructure/db/migrations/0027_add_ai_notification_t
 - `directness` — soft / moderate / hard / universal — из `notification_preferences`
 - `subtype` — reminder / informational / motivational / mixed — для всех типов сущностей
 - `intent` — build / quit — только для привычек
-- `entityKey` — универсальный идентификатор сущности (заменяет старые `habitKey` и `topic`)
+- `entityKey` — универсальный идентификатор сущности (используется вместо `habitKey` для привычек и `topic` для терапии)
 
 **Примечание:** Support Topics (темы поддержки) хранятся как статичный справочник в коде (`app/lib/therapyCatalog.ts`), а их настройки — в `notification_preferences` через поле `entityKey`.
 
@@ -293,7 +300,7 @@ psql -d mentai -f server/infrastructure/db/migrations/0027_add_ai_notification_t
 
 ### Архитектура
 
-Планировщик был рефакторирован и разбит на отдельные сервисы:
+Планировщик организован как набор специализированных сервисов:
 
 - **`scheduler.service.ts`** — тонкий фасад/оркестратор, координирует генерацию слотов
 - **`regenerate-slots.service.ts`** — генерация слотов для одного источника
@@ -311,7 +318,7 @@ psql -d mentai -f server/infrastructure/db/migrations/0027_add_ai_notification_t
   - `options` может содержать `entityKey` для per-entity генерации
 - `regenerateAllSlots()` — пересоздаёт слоты для всех пользователей
 - `triggerSlotRegeneration(userId, kind, options?)` — триггер при изменении настроек
-- `checkAndRegenerateSlotsIfNeeded(userId)` — проверяет и регенерирует слоты при необходимости
+- Планировщик `enqueueSlotGenerationForAllActiveUsers()` — ставит задачи генерации слотов в очередь BullMQ для всех активных пользователей
 
 ### Конфигурация
 
@@ -455,32 +462,64 @@ if (!text && (textSource === 'ai' || textSource === 'hybrid')) {
 
 ---
 
-## 🔔 Воркер отправки
+## 🔔 Система очередей и воркеров
+
+Архитектура основана на **BullMQ** и **Redis** для надёжной обработки фоновых задач.
+
+### Очереди
+
+1. **`notification-slots-generation`** — генерация слотов уведомлений
+
+   - Воркер: `server/application/notifications/workers/notificationSlots.worker.ts`
+   - Планировщик: `server/application/notifications/schedulers/notificationSlots.scheduler.ts`
+   - Concurrency: 2 задачи параллельно
+   - Задачи ставятся планировщиком для всех пользователей с активными настройками
+
+2. **`notification-delivery`** — отправка уведомлений через FCM
+
+   - Воркер: `server/application/notifications/workers/notificationDelivery.worker.ts`
+   - Concurrency: 10 задач параллельно
+   - Обрабатывает задачи отправки уведомлений из очереди
+
+3. **`ai-text-pool-refill`** — пополнение пула AI-генерированных текстов
+   - Воркер: `server/application/notifications/workers/aiTextPool.worker.ts`
+   - Планировщик: `server/application/notifications/schedulers/aiTextPool.scheduler.ts`
+   - Concurrency: 3 задачи параллельно
+   - Rate limiting: максимум 5 задач в секунду
+
+### Функции доставки
 
 Файл: `server/application/notifications/delivery.service.ts`
 
-### Функции
-
 - `sendFCMNotification(token, payload)` — отправка через FCM
 - `sendToUser(userId, payload)` — отправка всем устройствам пользователя
-- `processDueSlots()` — обработка due-слотов
-- `startDeliveryWorker()` — запуск воркера (интервал 5 минут)
 
 ### Запуск
 
-Воркер запускается автоматически через плагин `server/plugins/notifications-worker.ts`.
+Все воркеры запускаются автоматически через плагин `server/plugins/bullmq-workers.ts` при старте Nitro сервера.
 
-**Development:**
+**Конфигурация:**
 
 ```bash
-# Воркер отключён по умолчанию
-# Включить через переменную окружения:
-ENABLE_NOTIFICATIONS_WORKER=true pnpm dev
+# По умолчанию воркеры включены
+# Для масштабирования (scale > 1) отключить на web-контейнерах:
+BULLMQ_ENABLE_WORKERS=false pnpm dev
 ```
 
-**Production:**
+**Redis:**
 
-Воркер запускается автоматически.
+Для локальной разработки Redis запускается автоматически через Docker:
+
+```bash
+# Запуск Redis
+pnpm dev:redis:up
+
+# Проверка статуса
+pnpm dev:redis:check
+
+# Логи Redis
+pnpm dev:redis:logs
+```
 
 ---
 
@@ -561,7 +600,31 @@ android/app/google-services.json
 ios/App/App/GoogleService-Info.plist
 ```
 
-### 3. Установка зависимостей (опционально)
+### 3. Redis (обязательно)
+
+Redis используется для очередей BullMQ. Для локальной разработки:
+
+```bash
+# Запуск Redis через Docker (автоматически при pnpm dev)
+pnpm dev:redis:up
+
+# Проверка статуса
+pnpm dev:redis:check
+
+# Логи Redis
+pnpm dev:redis:logs
+```
+
+**Переменные окружения:**
+
+```bash
+REDIS_HOST=127.0.0.1  # По умолчанию
+REDIS_PORT=6379       # По умолчанию
+REDIS_PASSWORD=       # Опционально
+BULLMQ_ENABLE_WORKERS=true  # По умолчанию true
+```
+
+### 4. Установка зависимостей
 
 #### Firebase Admin SDK (для production)
 
@@ -569,26 +632,21 @@ ios/App/App/GoogleService-Info.plist
 pnpm add firebase-admin
 ```
 
-#### BullMQ + Redis (для production)
+**Примечание:** BullMQ и ioredis уже установлены в проекте.
 
-```bash
-pnpm add bullmq ioredis
-```
-
-### 4. Запуск воркера
+### 5. Запуск
 
 **Development:**
 
 ```bash
-# Воркер отключён по умолчанию
-# Включить через переменную окружения:
-ENABLE_NOTIFICATIONS_WORKER=true pnpm dev
+# Запуск dev-сервера (автоматически запускает Redis и воркеры)
+pnpm dev
 ```
 
 **Production:**
 
 ```bash
-# Воркер запускается автоматически
+# Воркеры запускаются автоматически при старте сервера
 pnpm build
 pnpm preview
 ```
@@ -626,7 +684,7 @@ WHERE user_id = YOUR_USER_ID;
 
 1. Нажать кнопку **"🔔 Тест через 1 мин"**
 2. Появится toast: "Тестовое уведомление запланировано через 1 минуту!"
-3. **Ждать 5 минут** — воркер проверяет слоты каждые 5 минут
+3. Задача автоматически попадает в очередь `notification-delivery` и обрабатывается воркером
 
 ---
 
@@ -646,11 +704,13 @@ WHERE user_id = YOUR_USER_ID;
    SELECT * FROM notification_slots WHERE user_id = YOUR_USER_ID AND status = 'planned';
    ```
 
-3. Проверить логи воркера:
+3. Проверить логи воркеров:
 
    ```bash
    # В консоли сервера должны быть логи вида:
-   [DeliveryWorker] Processing N due slots
+   [Notification Delivery Worker] ✅ Job completed
+   [Notification Slots Worker] ✅ Job completed
+   [AI Text Pool Worker] ✅ Job completed
    ```
 
 4. Проверить Firebase настройки (если используется production FCM).
@@ -706,7 +766,7 @@ psql -d mentai -f server/infrastructure/db/migrations/0022_refactor_habitId_topi
 - ✅ Планировщик слотов (генерация на 7 дней с джиттером)
   - ✅ Поддержка генерации для конкретных сущностей через entityKey
   - ✅ Поддержка кастомных слотов времени
-- ✅ Воркер отправки (обработка due-слотов каждые 5 минут)
+- ✅ Система очередей BullMQ (генерация слотов, отправка уведомлений, пополнение AI-текстов)
 - ✅ UI компоненты (глобальные и локальные настройки, превью)
 - ✅ Capacitor интеграция (регистрация токенов, обработка уведомлений, snooze)
 - ✅ Пользовательские привычки и тексты
@@ -716,29 +776,30 @@ psql -d mentai -f server/infrastructure/db/migrations/0022_refactor_habitId_topi
 ### 🔜 Следующие шаги
 
 - ⏳ Firebase Admin SDK (настройка FCM для production)
-- ⏳ BullMQ + Redis (надёжная очередь вместо setInterval)
 - ⏳ Habit logs и streak (чек-ины, графики выполнения)
 - ⏳ Support logs (отметки состояния, динамика)
 - ⏳ Оркестрация (управление лимитами при нескольких типах)
 - ⏳ Статистика и отчёты (графики, метрики, рекомендации)
+- ⏳ Мониторинг очередей BullMQ (метрики, дашборды)
 
 ---
 
 ## 🏗 Масштабирование
 
-### MVP (текущая реализация)
+### Текущая реализация
 
-- Один процесс Nitro (сервер + воркер)
-- setInterval для периодической обработки
-- PostgreSQL для хранения
+- **BullMQ + Redis** — надёжная система очередей
+- **Автоматические воркеры** — обработка задач в фоне
+- **PostgreSQL** — хранение данных
+- **Горизонтальное масштабирование** — поддержка нескольких воркеров
 - Подходит для ~1000 пользователей, ~10K уведомлений/день
 
-### Production (рекомендации)
+### Production рекомендации
 
-1. **BullMQ + Redis** — надёжная очередь
-2. **Horizontal scaling** — несколько воркеров
-3. **Rate limiting** — глобальные лимиты
-4. **Мониторинг** — метрики, алерты, логи
+1. **Отдельный worker-service** — вынести воркеры в отдельный контейнер при масштабировании
+2. **Мониторинг очередей** — метрики BullMQ, алерты, логи
+3. **Rate limiting** — глобальные лимиты для защиты от перегрузки
+4. **Redis кластер** — для высокой доступности в production
 
 ---
 
@@ -768,12 +829,10 @@ psql -d mentai -f server/infrastructure/db/migrations/0022_refactor_habitId_topi
 
 **Цель:** Унифицировать структуру шаблонов уведомлений для привычек и терапии через единое поле `entityKey`.
 
-**Изменения:**
+**Реализация:**
 
-- Убрано поле `type` из всех шаблонов (дублировало `habitKey`)
-- Переименовано `habitKey` → `entityKey` (универсальное поле)
-- Заменено `topic` → `entityKey` в терапии
-- Добавлен `subtype` для терапии (унификация с привычками)
+- Используется единое поле `entityKey` для идентификации сущностей (вместо отдельных полей `type`, `habitKey`, `topic`)
+- Поле `subtype` добавлено для терапии (унификация с привычками)
 - Унифицированы настройки: все три настройки (`subtype`, `directness`, `textSource`) работают для всех типов сущностей
 
 **Результат:** Единая логика обработки для готовых и кастомных сущностей, упрощение кодовой базы.

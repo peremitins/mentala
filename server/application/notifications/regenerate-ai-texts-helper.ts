@@ -103,6 +103,7 @@ export async function regenerateAiTextsForEntity(params: {
       const subtypeForHash = isCustomEntity ? null : (pref.subtype as any);
 
       // Вычисляем новый хеш конфигурации
+      // КРИТИЧНО: habitIntent должен быть включен в хеш, чтобы при изменении intent генерировался новый пул текстов
       const newConfigHash = computeGenerationConfigHash({
         entityName,
         entityDescription,
@@ -117,6 +118,7 @@ export async function regenerateAiTextsForEntity(params: {
           | null,
         textSource: textSource as 'ai' | 'hybrid',
         kind,
+        habitIntent: kind === 'habits' ? habitIntent : null, // Включаем intent только для habits
       });
 
       console.log(

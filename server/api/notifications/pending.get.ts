@@ -8,6 +8,10 @@ import { getSessionUser } from '@/server/application/auth/session';
 import { db } from '@/server/infrastructure/db/client';
 import { notificationSlots } from '@/server/infrastructure/db/schema';
 import { and, eq, lte } from 'drizzle-orm';
+import {
+  getUserTimezone,
+  toLocalTime,
+} from '@/server/application/notifications/timezone.utils';
 
 export default defineEventHandler(async (event) => {
   const user = await getSessionUser(event);
@@ -36,5 +40,23 @@ export default defineEventHandler(async (event) => {
     `[PendingNotifications] Found ${pending.length} sent slots for user ${user.id}`
   );
 
-  return pending;
+  // Получаем timezone пользователя для преобразования времени
+  const timezone = await getUserTimezone(user.id);
+
+  // Преобразуем scheduledAt из UTC в локальное время пользователя
+  const pendingWithLocalTime = pending.map((slot) => {
+    const scheduledAtUTC =
+      slot.scheduledAt instanceof Date
+        ? slot.scheduledAt
+        : new Date(slot.scheduledAt);
+    const scheduledAtLocal = toLocalTime(scheduledAtUTC, timezone);
+
+    return {
+      ...slot,
+      scheduledAt: scheduledAtUTC.toISOString(), // Оставляем UTC для совместимости
+      scheduledAtLocal: scheduledAtLocal.toISOString(), // Добавляем локальное время
+    };
+  });
+
+  return pendingWithLocalTime;
 });

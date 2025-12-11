@@ -10,23 +10,29 @@ import {
   findPlannedSlotsForUserAfterNow,
   updateSlotTime,
 } from './repositories/notification-slots.repository';
+import { getTimezoneFromPrefs, toLocalTime, toUTC } from './timezone.utils';
 
 /**
  * Вычисляет новое время в пределах диапазона с учетом сдвига
- * @param base - базовое время
+ * @param base - базовое время в UTC (из БД)
  * @param shiftMinutes - сдвиг в минутах
- * @param range - диапазон времени
- * @returns новое время в пределах диапазона
+ * @param range - диапазон времени (в локальных минутах пользователя)
+ * @param timezone - IANA timezone пользователя
+ * @returns новое время в UTC для сохранения в БД
  */
 function computeNewTimeWithinRange(
   base: Date,
   shiftMinutes: number,
-  range: { start: number; end: number; crossesMidnight: boolean }
+  range: { start: number; end: number; crossesMidnight: boolean },
+  timezone: string
 ): Date {
-  const newTime = new Date(base.getTime() + shiftMinutes * 60 * 1000);
-  const newSlotDate = new Date(newTime);
-  const slotHour = newSlotDate.getHours();
-  const slotMin = newSlotDate.getMinutes();
+  // Преобразуем базовое время в локальное время пользователя
+  const baseLocal = toLocalTime(base, timezone);
+
+  // Вычисляем новое время в локальном времени
+  const newTimeLocal = new Date(baseLocal.getTime() + shiftMinutes * 60 * 1000);
+  const slotHour = newTimeLocal.getHours();
+  const slotMin = newTimeLocal.getMinutes();
   let newSlotMinutes = slotHour * 60 + slotMin;
 
   // Проверяем границы диапазона
@@ -54,23 +60,25 @@ function computeNewTimeWithinRange(
     }
   }
 
-  // Если нужно корректировать, пересчитываем newTime
+  // Если нужно корректировать, пересчитываем newTime в локальном времени
   if (needsAdjustment) {
     const normalizedMinutes = newSlotMinutes % 1440;
     const newHour = Math.floor(normalizedMinutes / 60);
     const newMin = normalizedMinutes % 60;
-    const adjustedTime = new Date(newSlotDate);
-    adjustedTime.setHours(newHour, newMin, 0, 0);
+    const adjustedTimeLocal = new Date(newTimeLocal);
+    adjustedTimeLocal.setHours(newHour, newMin, 0, 0);
 
     // Если диапазон через полночь и время попадает во второй день
     if (range.crossesMidnight && normalizedMinutes < range.end) {
-      adjustedTime.setDate(adjustedTime.getDate() + 1);
+      adjustedTimeLocal.setDate(adjustedTimeLocal.getDate() + 1);
     }
 
-    return adjustedTime;
+    // Преобразуем обратно в UTC перед возвратом
+    return toUTC(adjustedTimeLocal, timezone);
   }
 
-  return newTime;
+  // Преобразуем обратно в UTC перед возвратом
+  return toUTC(newTimeLocal, timezone);
 }
 
 /**
@@ -84,10 +92,10 @@ export async function preventSimultaneousNotifications(
   userId: number,
   minGapMinutes: number = 25
 ): Promise<void> {
-  const now = new Date();
+  const nowUTC = new Date();
 
   // Получаем все planned слоты пользователя, отсортированные по времени
-  const allSlots = await findPlannedSlotsForUserAfterNow(userId, now);
+  const allSlots = await findPlannedSlotsForUserAfterNow(userId, nowUTC);
 
   if (allSlots.length <= 1) {
     return; // Нет пересечений, если слотов 0 или 1
@@ -103,6 +111,10 @@ export async function preventSimultaneousNotifications(
         eq(notificationPreferences.enabled, true)
       )
     );
+
+  // Получаем timezone пользователя (все preferences должны иметь одинаковый timezone)
+  const userTimezone = getTimezoneFromPrefs(allPrefs);
+  const nowLocal = toLocalTime(nowUTC, userTimezone);
 
   // Создаем карту диапазонов для быстрого доступа
   // Ключ: kind:entityKey, значение: {start, end, crossesMidnight}
@@ -131,9 +143,13 @@ export async function preventSimultaneousNotifications(
     const prevSlot = allSlots[i - 1];
     const currentSlot = allSlots[i];
 
-    const prevTime = prevSlot.scheduledAt.getTime();
-    const currentTime = currentSlot.scheduledAt.getTime();
-    const gapMinutes = (currentTime - prevTime) / (1000 * 60);
+    // Преобразуем один раз и переиспользуем (минимизация преобразований)
+    const prevTimeLocal = toLocalTime(prevSlot.scheduledAt, userTimezone);
+    const currentTimeLocal = toLocalTime(currentSlot.scheduledAt, userTimezone);
+
+    // Вычисляем gap в локальном времени
+    const gapMinutes =
+      (currentTimeLocal.getTime() - prevTimeLocal.getTime()) / (1000 * 60);
 
     // Если интервал меньше минимального, сдвигаем текущий слот
     if (gapMinutes < minGapMinutes) {
@@ -145,21 +161,24 @@ export async function preventSimultaneousNotifications(
         crossesMidnight: false,
       };
 
+      // Логируем в локальном времени для отладки
       console.log(
-        `[Scheduler] 🔍 Checking slot ${currentSlot.id.substring(0, 8)}... range: [${slotRange.start}-${slotRange.end}], crossesMidnight: ${slotRange.crossesMidnight}, current time: ${currentSlot.scheduledAt.toISOString()}`
+        `[Scheduler] 🔍 Checking slot ${currentSlot.id.substring(0, 8)}... range: [${slotRange.start}-${slotRange.end}], crossesMidnight: ${slotRange.crossesMidnight}, current time: UTC=${currentSlot.scheduledAt.toISOString()}, Local=${currentTimeLocal.toISOString()} (${userTimezone})`
       );
 
-      // Вычисляем новое время со сдвигом
+      // Вычисляем новое время со сдвигом (функция вернёт UTC)
       const shiftMinutes = minGapMinutes - gapMinutes;
-      const newTime = computeNewTimeWithinRange(
-        new Date(currentTime),
+      const newTimeUTC = computeNewTimeWithinRange(
+        currentSlot.scheduledAt, // Передаём UTC время из БД
         shiftMinutes,
-        slotRange
+        slotRange,
+        userTimezone
       );
 
-      if (newTime.getTime() !== currentTime) {
+      const newTimeLocal = toLocalTime(newTimeUTC, userTimezone);
+      if (newTimeUTC.getTime() !== currentSlot.scheduledAt.getTime()) {
         console.log(
-          `[Scheduler] ⚠️ Adjusted slot ${currentSlot.id.substring(0, 8)}... to stay within range [${slotRange.start}-${slotRange.end}], new time: ${newTime.toISOString()}`
+          `[Scheduler] ⚠️ Adjusted slot ${currentSlot.id.substring(0, 8)}... to stay within range [${slotRange.start}-${slotRange.end}], new time: UTC=${newTimeUTC.toISOString()}, Local=${newTimeLocal.toISOString()}`
         );
       }
 
@@ -171,10 +190,16 @@ export async function preventSimultaneousNotifications(
         },
       };
 
-      await updateSlotTime(currentSlot.id, newTime, updatedPayload);
+      // Сохраняем UTC время и локальное время в БД (timezone передается для SQL преобразования)
+      await updateSlotTime(
+        currentSlot.id,
+        newTimeUTC,
+        userTimezone,
+        updatedPayload
+      );
 
-      // Обновляем время в локальном массиве для следующей итерации
-      allSlots[i].scheduledAt = newTime;
+      // Обновляем время в локальном массиве для следующей итерации (в UTC)
+      allSlots[i].scheduledAt = newTimeUTC;
       shiftedCount++;
 
       console.log(

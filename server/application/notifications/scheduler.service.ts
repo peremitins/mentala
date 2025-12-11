@@ -2,10 +2,8 @@
  * Сервис планировщика уведомлений
  * Генерирует слоты на 1 день вперёд с глобальной оркестрацией
  *
- * TODO: Установить BullMQ и Redis для продакшена
- * npm install bullmq ioredis
- *
- * В MVP можно использовать простой cron через node-cron или встроенный setInterval
+ * Использует BullMQ для постановки задач генерации слотов в очередь
+ * (см. server/application/notifications/schedulers/notificationSlots.scheduler.ts)
  */
 
 import { eq } from 'drizzle-orm';
@@ -148,54 +146,11 @@ export async function needsSlotRegeneration(userId: number): Promise<boolean> {
 }
 
 /**
- * Проверяет и регенерирует слоты для пользователей, которым это нужно
- * Вызывается периодически (например, каждый час или после обработки due-слотов)
- */
-export async function checkAndRegenerateSlotsIfNeeded(): Promise<void> {
-  console.log('[Scheduler] Checking if slot regeneration is needed');
-
-  // Получаем уникальные userId с активными preferences
-  // ВАЖНО: Это единственное место, где нужен прямой запрос для получения всех пользователей
-  const activeUsers = await db
-    .select({ userId: notificationPreferences.userId })
-    .from(notificationPreferences)
-    .where(eq(notificationPreferences.enabled, true))
-    .groupBy(notificationPreferences.userId);
-
-  console.log(
-    `[Scheduler] Checking ${activeUsers.length} users with active notifications`
-  );
-
-  let regeneratedCount = 0;
-  for (const { userId } of activeUsers) {
-    try {
-      const needsRegen = await needsSlotRegeneration(userId);
-      if (needsRegen) {
-        console.log(`[Scheduler] Regenerating slots for user ${userId}`);
-        await generateAllSlotsForUser(userId);
-        regeneratedCount++;
-      }
-    } catch (error) {
-      console.error(
-        `[Scheduler] Failed to check/regenerate slots for user ${userId}:`,
-        error
-      );
-    }
-  }
-
-  if (regeneratedCount > 0) {
-    console.log(
-      `[Scheduler] ✅ Regenerated slots for ${regeneratedCount} user(s)`
-    );
-  } else {
-    console.log('[Scheduler] No regeneration needed for any user');
-  }
-}
-
-/**
  * Пересоздать слоты для всех пользователей с активными настройками
  * Вызывается по cron (например, каждую ночь в 00:30 UTC)
- * Или используйте checkAndRegenerateSlotsIfNeeded() для более умной проверки
+ *
+ * Примечание: Для периодической регенерации используется планировщик BullMQ
+ * (см. server/application/notifications/schedulers/notificationSlots.scheduler.ts)
  */
 export async function regenerateAllSlots(): Promise<void> {
   console.log('[Scheduler] Regenerating slots for all users');
