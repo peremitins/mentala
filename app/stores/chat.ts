@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { useSpeechStore } from '@/app/stores/speech';
 import { useChatSettingsStore } from '@/app/stores/chatSettings';
+import { useLoadersStore } from '@/app/stores/loaders';
 import { usePromptsStore } from '@/app/stores/prompts';
 import { nanoid } from 'nanoid';
 
@@ -18,6 +19,16 @@ export const useChatStore = defineStore('chat', {
     },
     finishSession() {
       this.sessionId = '';
+    },
+    /**
+     * Очищает сообщения и сбрасывает сессию
+     * Используется для возврата к приветственному экрану
+     */
+    clearMessages() {
+      this.messages = [];
+      this.userText = '';
+      this.stopChatStream();
+      this.finishSession();
     },
     /**
      * Подготавливает параметры для API запроса
@@ -157,6 +168,8 @@ export const useChatStore = defineStore('chat', {
           responseType: 'stream',
           signal: abortController.signal, // Передаем signal для отмены запроса
         } as any);
+        const loaders = useLoadersStore();
+        loaders.hideLoader();
 
         await this._processStreamResponse(resp, idx);
 
@@ -167,13 +180,26 @@ export const useChatStore = defineStore('chat', {
 
         return { ok: true } as any;
       } catch (e: any) {
+        // Сохраняем ссылку на AbortController перед очисткой
+        const wasAborted =
+          this.currentChatAbortController?.signal?.aborted || false;
+
         // Очищаем AbortController при ошибке
         if (this.currentChatAbortController) {
           this.currentChatAbortController = null;
         }
 
-        // Игнорируем ошибки отмены запроса (AbortError)
-        if (e?.name === 'AbortError') {
+        // Игнорируем ошибки отмены запроса (AbortError или другие признаки отмены)
+        if (
+          e?.name === 'AbortError' ||
+          e?.message?.includes('aborted') ||
+          e?.message?.includes('canceled') ||
+          wasAborted
+        ) {
+          // Удаляем пустое сообщение если оно было создано
+          if (this.messages[idx]?.content === '') {
+            this.messages.splice(idx, 1);
+          }
           return { ok: false } as any;
         }
 
@@ -195,6 +221,9 @@ export const useChatStore = defineStore('chat', {
       this.userText = '';
       this.messages.push({ role: 'user', content: text });
 
+      // Добавляем пустое ответное сообщение, будем наполнять построчно
+      const idx = this.messages.push({ role: 'assistant', content: '' }) - 1;
+
       try {
         // Отменяем предыдущий stream запрос, если он активен
         this.stopChatStream();
@@ -205,9 +234,6 @@ export const useChatStore = defineStore('chat', {
 
         const nuxt = useNuxtApp();
         const apiParams = this._prepareApiParams();
-
-        // Добавляем пустое ответное сообщение, будем наполнять построчно
-        const idx = this.messages.push({ role: 'assistant', content: '' }) - 1;
 
         // Вызываем API с полным массивом messages
         const resp = await nuxt.$api('/api/chat/stream', {
@@ -224,6 +250,9 @@ export const useChatStore = defineStore('chat', {
           signal: abortController.signal, // Передаем signal для отмены запроса
         } as any);
 
+        const loaders = useLoadersStore();
+        loaders.hideLoader();
+
         await this._processStreamResponse(resp, idx);
 
         // Очищаем AbortController после успешного завершения
@@ -233,13 +262,26 @@ export const useChatStore = defineStore('chat', {
 
         return { ok: true } as any;
       } catch (e: any) {
+        // Сохраняем ссылку на AbortController перед очисткой
+        const wasAborted =
+          this.currentChatAbortController?.signal?.aborted || false;
+
         // Очищаем AbortController при ошибке
         if (this.currentChatAbortController) {
           this.currentChatAbortController = null;
         }
 
-        // Игнорируем ошибки отмены запроса (AbortError)
-        if (e?.name === 'AbortError') {
+        // Игнорируем ошибки отмены запроса (AbortError или другие признаки отмены)
+        if (
+          e?.name === 'AbortError' ||
+          e?.message?.includes('aborted') ||
+          e?.message?.includes('canceled') ||
+          wasAborted
+        ) {
+          // Удаляем пустое сообщение если оно было создано
+          if (this.messages[idx]?.content === '') {
+            this.messages.splice(idx, 1);
+          }
           return { ok: false } as any;
         }
 

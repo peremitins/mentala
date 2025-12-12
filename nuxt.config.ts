@@ -46,6 +46,8 @@ export default defineNuxtConfig({
         },
       ],
     },
+    // Глобальные настройки переходов между страницами
+    pageTransition: { name: 'page', mode: 'out-in' },
   },
   css: [
     '~/assets/css/main.scss',

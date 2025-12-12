@@ -65,16 +65,7 @@
       </div>
 
       <!-- Скелетон при загрузке -->
-      <div v-if="loading" class="space-y-3">
-        <div
-          v-for="i in 5"
-          :key="i"
-          class="rounded-xl border border-border bg-card p-3 animate-pulse"
-        >
-          <div class="h-4 bg-muted rounded w-3/4 mb-2"></div>
-          <div class="h-4 bg-muted rounded w-1/2"></div>
-        </div>
-      </div>
+      <Skeleton v-if="loading" type="notification-text" :count="5" />
 
       <!-- Список текстов -->
       <TransitionGroup v-else name="list" tag="div" class="space-y-3">
@@ -308,6 +299,7 @@ import { useNotificationTexts } from '@/app/composables/useNotificationTexts';
 import PageHeader from '@/app/components/PageHeader.vue';
 import TextareaResize from '@/app/components/ui/TextareaResize.vue';
 import ConfirmModal from '@/app/components/ui/ConfirmModal.vue';
+import Skeleton from '@/app/components/ui/Skeleton.vue';
 import { Checkbox } from '@/app/components/ui/shadcn/checkbox';
 import { useToast } from '@/app/composables/useToast';
 import { findHabitByKey } from '@/app/lib/habitsCatalog';

@@ -34,23 +34,6 @@
                     />
                   </div>
 
-                  <div class="flex items-center justify-between h-10">
-                    <div class="text-sm text-foreground">Голос</div>
-
-                    <Switch
-                      v-model:checked="chatSettings.voice"
-                      @update:checked="onSwitchChangeVoice"
-                    />
-                  </div>
-
-                  <div class="flex items-center justify-between h-10">
-                    <div class="text-sm text-foreground">Аватар</div>
-                    <Switch
-                      v-model:checked="chatSettings.avatar"
-                      @update:checked="onSwitchChangeAvatar"
-                    />
-                  </div>
-
                   <div class="flex items-center justify-between gap-0.5 h-10">
                     <div class="text-sm text-foreground">Тема</div>
 
@@ -75,90 +58,88 @@
     <!-- Основной контент -->
     <div class="flex-1 flex flex-col overflow-hidden relative">
       <!-- Приветственный экран -->
-      <Transition name="fade" mode="out-in">
-        <WelcomeScreen
-          v-if="showWelcomeScreen"
-          @select="(mode, userPrompt) => handleWelcomeSelect(mode, userPrompt)"
-          class="flex-1"
-        />
-      </Transition>
+
+      <WelcomeScreen
+        v-if="showWelcomeScreen"
+        @select="(mode, userPrompt) => handleWelcomeSelect(mode, userPrompt)"
+        class="flex-1"
+      />
 
       <!-- Экран чата -->
-      <Transition name="fade" mode="out-in">
-        <div
-          v-if="!showWelcomeScreen"
-          class="flex flex-col flex-1 h-full space-y-6 relative"
-        >
-          <div class="relative h-full mb-2">
-            <section class="w-full h-full grid place-items-center">
-              <div
-                v-if="chatSettings.avatar"
-                class="relative w-full h-full overflow-hidden max-w-[480px]"
-              >
-                <HeyGenPlayer />
-              </div>
-              <div
-                v-else
-                class="relative w-full h-full overflow-hidden max-w-[480px]"
-              >
-                <div class="w-full h-full grid place-items-center">
-                  <div class="text-sm text-muted-foreground">
-                    Аватар не включен
-                  </div>
+
+      <div
+        v-if="!showWelcomeScreen"
+        class="flex flex-col flex-1 h-full space-y-6 relative"
+      >
+        <div class="relative h-full mb-2">
+          <section class="w-full h-full grid place-items-center">
+            <div
+              v-if="chatSettings.avatar"
+              class="relative w-full h-full overflow-hidden max-w-[480px]"
+            >
+              <HeyGenPlayer />
+            </div>
+            <div
+              v-else
+              class="relative w-full h-full overflow-hidden max-w-[480px]"
+            >
+              <div class="w-full h-full grid place-items-center">
+                <div class="text-sm text-muted-foreground">
+                  <!-- Аватар не включен -->
                 </div>
               </div>
-            </section>
-
-            <section
-              ref="chatRef"
-              @scroll="handleScroll"
-              class="absolute bottom-0 overflow-auto max-h-[100%] inset-x-0 pt-[50%] flex flex-col space-y-3"
-              :class="{ 'chat-fade': heygen.isConnected }"
-            >
-              <div
-                v-for="(m, index) in combinedMessages"
-                :key="index"
-                class="w-max px-3 py-1 mb-2 items-center bubble max-w-[80%]"
-                :class="{ 'ml-auto': (m as any).role === 'user' }"
-                v-html="m.content"
-              />
-            </section>
-          </div>
-
-          <section
-            class="glass-deep p-2 mt-auto z-100"
-            :style="{ borderRadius: `calc(var(--radius-sm))` }"
-          >
-            <div class="flex items-center gap-3">
-              <TextareaResize
-                ref="textareaRef"
-                v-model.trim="chat.userText"
-                :resize="true"
-                :prevent-enter-default="true"
-                @enter-pressed="handleKeydown"
-                :placeholder="'Напишите сообщение…'"
-              />
-              <button
-                @click="toggleMic"
-                class="icon-disc flex items-center justify-center cursor-pointer flex-none"
-                :style="{ borderRadius: 'var(--radius-icon)' }"
-              >
-                <IconMic
-                  :class="speechStore.isListening ? 'text-primary' : ''"
-                  class="w-5 h-5"
-                />
-              </button>
-              <button
-                @click="onSend"
-                class="icon-disc flex items-center justify-center cursor-pointer flex-none"
-                :style="{ borderRadius: 'var(--radius-icon)' }"
-              >
-                <IconSend class="w-5 h-5" />
-              </button>
             </div>
           </section>
+
+          <section
+            ref="chatRef"
+            @scroll="handleScroll"
+            class="absolute bottom-0 overflow-auto max-h-[100%] inset-x-0 pt-[50%] flex flex-col space-y-3"
+            :class="{ 'chat-fade': heygen.isConnected }"
+          >
+            <div
+              v-for="(m, index) in combinedMessages"
+              :key="index"
+              class="w-max px-3 py-1 mb-2 items-center bubble max-w-[80%]"
+              :class="{ 'ml-auto': (m as any).role === 'user' }"
+              v-html="m.content"
+            />
+          </section>
         </div>
-      </Transition>
+
+        <section
+          class="glass-deep p-2 mt-auto z-100"
+          :style="{ borderRadius: `calc(var(--radius-sm))` }"
+        >
+          <div class="flex items-center gap-3">
+            <TextareaResize
+              ref="textareaRef"
+              v-model.trim="chat.userText"
+              :resize="true"
+              :prevent-enter-default="true"
+              @enter-pressed="handleKeydown"
+              :placeholder="'Напишите сообщение…'"
+            />
+            <button
+              @click="toggleMic"
+              class="icon-disc flex items-center justify-center cursor-pointer flex-none"
+              :style="{ borderRadius: 'var(--radius-icon)' }"
+            >
+              <IconMic
+                :class="speechStore.isListening ? 'text-primary' : ''"
+                class="w-5 h-5"
+              />
+            </button>
+            <button
+              @click="onSend"
+              class="icon-disc flex items-center justify-center cursor-pointer flex-none"
+              :style="{ borderRadius: 'var(--radius-icon)' }"
+            >
+              <IconSend class="w-5 h-5" />
+            </button>
+          </div>
+        </section>
+      </div>
     </div>
   </div>
 </template>
@@ -196,7 +177,6 @@ import {
   RadioGroupRoot,
   RadioGroupItem,
 } from 'radix-vue';
-import { Switch } from '@/app/components/ui/shadcn/switch';
 import PageHeader from '@/app/components/PageHeader.vue';
 import WelcomeScreen from '@/app/components/WelcomeScreen.vue';
 import AvatarVoiceControls from '@/app/components/AvatarVoiceControls.vue';
@@ -297,18 +277,6 @@ watch(
   }
 );
 
-async function onSwitchChangeVoice(v: boolean) {
-  chatSettings.updateChatSettings({ voice: v });
-
-  chatSettings.getChatSettings();
-}
-
-async function onSwitchChangeAvatar(v: boolean) {
-  chatSettings.updateChatSettings({ avatar: v });
-
-  chatSettings.getChatSettings();
-}
-
 // Обработчик выбора на приветственном экране
 async function handleWelcomeSelect(
   mode: 'therapy' | 'habits' | 'talk',
@@ -340,15 +308,7 @@ async function handleWelcomeSelect(
         const content =
           last && typeof last.content === 'string' ? last.content : '';
         if (content) {
-          // Если аватар включен, ждем его подключения перед озвучкой
-          if (chatSettings.avatar) {
-            // Ждем подключения аватара (максимум 10 секунд)
-            let attempts = 0;
-            while (!heygen.isConnected && attempts < 20) {
-              await new Promise((resolve) => setTimeout(resolve, 500));
-              attempts++;
-            }
-          }
+          // Озвучиваем - если аватар еще не готов, он подключится позже через события
           await speakLastMessage(content);
         }
       }
@@ -565,6 +525,29 @@ watch(
       nextTick(() => {
         scrollToBottom('smooth');
       });
+    }
+  }
+);
+
+// Останавливаем HeyGen и отменяем запросы при возврате на welcome screen
+watch(
+  () => showWelcomeScreen.value,
+  async (isWelcomeScreen) => {
+    if (isWelcomeScreen) {
+      // Отменяем текущий chat stream запрос (если он активен)
+      chat.clearMessages();
+
+      // Останавливаем HeyGen сессию, если она была запущена
+      if (heygen.isConnected || heygen.isStarting) {
+        try {
+          await heygen.stopSession();
+        } catch (error) {
+          console.error(
+            '[Index] Failed to stop HeyGen session on welcome screen:',
+            error
+          );
+        }
+      }
     }
   }
 );

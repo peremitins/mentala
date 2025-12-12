@@ -44,17 +44,31 @@ import IconVideo from '~icons/lucide/video';
 import IconVideoOff from '~icons/lucide/video-off';
 import IconVolume2 from '~icons/lucide/volume-2';
 import IconVolumeX from '~icons/lucide/volume-x';
+import { computed } from 'vue';
 import { useChatSettingsStore } from '@/app/stores/chatSettings';
+import { useChatStore } from '@/app/stores/chat';
+import { useLoadersStore } from '@/app/stores/loaders';
 import { useHeygenStore } from '@/app/stores/heygen';
 import { useTTS } from '@/app/composables/useTTS';
 
 const chatSettings = useChatSettingsStore();
+const chat = useChatStore();
+const loaders = useLoadersStore();
 const heygen = useHeygenStore();
 const { stop: stopTTS } = useTTS();
+
+// Проверяем, находимся ли на welcome screen
+const showWelcomeScreen = computed(() => chat.messages.length === 0);
 
 async function toggleAvatar() {
   const newValue = !chatSettings.avatar;
   await chatSettings.updateChatSettings({ avatar: newValue });
+
+  // Если находимся на welcome screen - только обновляем настройки, не запускаем сессию
+  if (showWelcomeScreen.value) {
+    loaders.hideLoader();
+    return;
+  }
 
   // Если включаем аватар и он ещё не подключен, запускаем сессию
   if (newValue && !heygen.isConnected && !heygen.isStarting) {
@@ -89,5 +103,9 @@ async function toggleVoice() {
   }
 
   await chatSettings.updateChatSettings({ voice: newValue });
+
+  if (showWelcomeScreen.value) {
+    loaders.hideLoader();
+  }
 }
 </script>

@@ -1,7 +1,11 @@
 <template>
-  <div class="glass-deep h-full overflow-y-auto">
-    <PageHeader title="Каталог промптов" :show-back-button="true" />
-    <div class="space-y-4 px-4 py-4">
+  <div class="space-y-4 h-full overflow-y-auto rounded-sm pb-[100px]">
+    <PageHeader
+      title="Каталог промптов"
+      :show-back-button="true"
+      @go-back="handleGoBack"
+    />
+    <div class="">
       <CatalogPromptsList
         :categories="filteredCategories"
         :is-already-added="isAlreadyAdded"
@@ -24,12 +28,18 @@ import type { UserPrompt } from '@/app/types';
 
 const prompts = usePromptsStore();
 const route = useRoute();
+const router = useRouter();
 
 // Получаем тип из query параметра (habits | therapy)
 const contextType = computed(() => {
   const type = route.query.type as string;
   return type === 'habits' || type === 'therapy' ? type : null;
 });
+
+// Обработчик кнопки "Назад"
+function handleGoBack() {
+  router.back();
+}
 
 // Фильтруем категории по типу контекста
 const filteredCategories = computed(() => {

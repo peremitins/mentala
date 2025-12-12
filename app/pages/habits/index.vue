@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, onMounted } from 'vue';
 import { storeToRefs } from 'pinia';
 import NotificationIndexPage, {
   type NotificationIndexItem,
 } from '@/app/components/notifications/NotificationIndexPage.vue';
 import { HABITS_CATALOG, type HabitCatalogItem } from '@/app/lib/habitsCatalog';
 import { useUserHabitsStore } from '@/app/stores/userHabits';
+import { useLoadersStore } from '@/app/stores/loaders';
 import type { HabitDto, TherapyTopicDto } from '@/shared/dto/notifications';
 import CustomEntityModal from '@/app/components/modals/CustomEntityModal.vue';
 import { useToast } from '@/app/composables/useToast';
@@ -18,10 +19,14 @@ const intentColors: Record<string, string> = {
 };
 
 const userHabitsStore = useUserHabitsStore();
-if (!userHabitsStore.habits.length) {
-  await userHabitsStore.fetchAll();
-}
+const loadersStore = useLoadersStore();
 const { habits: userHabits } = storeToRefs(userHabitsStore);
+
+// Загружаем данные после монтирования компонента (с кэшированием)
+// Защита от двойного вызова реализована в store через isSkeletonLoading флаг
+onMounted(async () => {
+  await userHabitsStore.fetchAll();
+});
 
 const baseHabitItems = computed(() =>
   HABITS_CATALOG.map((goal) => ({
@@ -149,6 +154,7 @@ async function confirmDeleteHabit() {
       description="Здесь вы найдёте готовые привычки и сможете добавить свои, чтобы получать именно те уведомления, которые вам подходят"
       mentai-mode="habits"
       :items="habitItems"
+      :loading="loadersStore.isSkeletonLoading"
       @select="handleGoalSelect"
       @remove="handleHabitDelete"
     />
