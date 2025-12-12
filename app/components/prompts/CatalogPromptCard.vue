@@ -1,10 +1,10 @@
 <template>
   <div
-    class="glass-deep p-2 space-y-2"
-    :style="{ borderRadius: `calc(var(--radius-sm))` }"
+    class="group relative overflow-hidden rounded-xl border-2 border-border bg-card p-4 space-y-2 transition-all duration-200 hover:border-primary/50 hover:-translate-y-0.5 hover:shadow-lg animate-slide-up"
+    :style="`animation-delay: ${(index ?? 0) * 0.05}s; animation-fill-mode: both`"
   >
     <div class="flex items-center justify-between">
-      <div class="font-medium">{{ item.title }}</div>
+      <div class="font-semibold text-card-foreground">{{ item.title }}</div>
     </div>
     <div class="space-y-2">
       <ExpandableText
@@ -50,10 +50,16 @@ import { Button } from '@/app/components/ui/shadcn/button';
 import IconPlus from '~icons/lucide/circle-plus';
 import IconCopy from '~icons/lucide/copy';
 
-const props = defineProps<{
-  item: CatalogItem;
-  isAdded: boolean;
-}>();
+const props = withDefaults(
+  defineProps<{
+    item: CatalogItem;
+    isAdded: boolean;
+    index?: number;
+  }>(),
+  {
+    index: 0,
+  }
+);
 
 const emit = defineEmits<{
   (e: 'copy', text: string): void;

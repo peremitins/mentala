@@ -30,6 +30,9 @@ export const useHeygenStore = defineStore('heygen', {
 
     // status: idle -> starting -> connected -> streaming
     status: 'idle' as 'idle' | 'starting' | 'connected' | 'streaming',
+
+    // Флаг что видео трек реально подключен и готов к отображению
+    hasVideoTrack: false,
   }),
   getters: {
     isStarting: (state) => state.status === 'starting',
@@ -51,8 +54,69 @@ export const useHeygenStore = defineStore('heygen', {
     },
   },
   actions: {
+    // Синхронная проверка и подключение существующих треков (для setVideoEl)
+    attachExistingTracksSync(room: LKRoom) {
+      try {
+        // Проверяем всех удаленных участников и их треки
+        room.remoteParticipants.forEach((participant) => {
+          participant.trackPublications.forEach((publication) => {
+            if (publication.isSubscribed && publication.track) {
+              const track = publication.track;
+
+              // Если это видео трек и videoEl уже установлен, но еще не подключен
+              if (
+                track.kind === 'video' &&
+                this.videoEl &&
+                !this.hasVideoTrack
+              ) {
+                try {
+                  (track as LKRemoteVideoTrack).attach(this.videoEl);
+                  this.hasVideoTrack = true;
+                  console.log(
+                    '[HeyGen] ✓ Video track attached from existing tracks'
+                  );
+                } catch (e) {
+                  console.error(
+                    '[HeyGen] Failed to attach existing video track:',
+                    e
+                  );
+                }
+              }
+
+              // Если это аудио трек и audioEl установлен
+              if (track.kind === 'audio' && this.audioEl) {
+                try {
+                  (track as LKRemoteAudioTrack).attach(this.audioEl);
+                  this.audioEl.muted = false;
+                  void this.audioEl.play().catch(() => {});
+                } catch (e) {
+                  console.error(
+                    '[HeyGen] Failed to attach existing audio track:',
+                    e
+                  );
+                }
+              }
+            }
+          });
+        });
+      } catch (e) {
+        console.error('[HeyGen] Error checking existing tracks:', e);
+      }
+    },
+
     setVideoEl(el: HTMLVideoElement | null) {
       this.videoEl = el;
+
+      // Если videoEl установлен и уже есть активная сессия, СРАЗУ проверяем существующие треки
+      if (
+        el &&
+        (this.status === 'streaming' || this.status === 'connected') &&
+        roomInstance &&
+        !this.hasVideoTrack
+      ) {
+        // Синхронная проверка без задержки
+        this.attachExistingTracksSync(roomInstance as LKRoom);
+      }
     },
     setAudioEl(el: HTMLAudioElement | null) {
       this.audioEl = el;
@@ -63,6 +127,12 @@ export const useHeygenStore = defineStore('heygen', {
       if (process.server) return null;
       LiveKit = await import('livekit-client');
       return LiveKit;
+    },
+
+    // Проверка существующих треков (синхронная, вызывается из событий)
+    checkAndAttachExistingTracks(room: LKRoom) {
+      // Просто вызываем синхронную проверку
+      this.attachExistingTracksSync(room);
     },
     async speak(text: string) {
       if (!this.sessionId) return;
@@ -159,6 +229,7 @@ export const useHeygenStore = defineStore('heygen', {
 
       if (this.status !== 'idle') return;
       this.status = 'starting';
+      this.hasVideoTrack = false; // Сбрасываем при новом запуске
       try {
         const session = await useAPI<any>('/api/heygen/session', {
           method: 'POST',
@@ -221,11 +292,22 @@ export const useHeygenStore = defineStore('heygen', {
             return;
           }
 
-          if (track.kind === 'video' && this.videoEl) {
-            try {
-              (track as LKRemoteVideoTrack).attach(this.videoEl);
-            } catch (e) {
-              console.error('[HeyGen] Failed to attach video track:', e);
+          if (track.kind === 'video') {
+            if (this.videoEl) {
+              try {
+                (track as LKRemoteVideoTrack).attach(this.videoEl);
+                // Помечаем что видео трек подключен
+                this.hasVideoTrack = true;
+                console.log('[HeyGen] ✓ Video track attached and ready');
+              } catch (e) {
+                console.error('[HeyGen] Failed to attach video track:', e);
+              }
+            } else {
+              console.warn(
+                '[HeyGen] Video track received but videoEl is not set yet'
+              );
+              // Если videoEl еще не установлен, попробуем подключить позже
+              // Это может произойти если компонент еще не смонтирован
             }
           }
 
@@ -286,6 +368,8 @@ export const useHeygenStore = defineStore('heygen', {
             if (track.kind === 'video' && this.videoEl) {
               (track as LKRemoteVideoTrack).detach(this.videoEl);
               this.videoEl.srcObject = null;
+              // Сбрасываем флаг при отключении
+              this.hasVideoTrack = false;
             }
           } catch (e) {
             console.error('[HeyGen] Error in trackUnsubscribed handler:', e);
@@ -334,6 +418,7 @@ export const useHeygenStore = defineStore('heygen', {
         room.on('disconnected', () => {
           try {
             this.status = 'idle';
+            this.hasVideoTrack = false;
             roomInstance = null;
           } catch (e) {
             console.error('[HeyGen] Error in disconnected handler:', e);
@@ -358,6 +443,11 @@ export const useHeygenStore = defineStore('heygen', {
         } catch {}
 
         this.status = 'streaming';
+
+        // ВАЖНО: Проверяем уже существующие треки после подключения
+        // (на случай если trackSubscribed сработал до установки videoEl)
+        this.checkAndAttachExistingTracks(room);
+
         useToast('HeyGen', 'Подключено и запущено');
       } catch (e: any) {
         useToast('HeyGen', e?.message || 'Не удалось запустить сессию');
@@ -385,6 +475,7 @@ export const useHeygenStore = defineStore('heygen', {
         roomInstance = null;
       }
       this.status = 'idle';
+      this.hasVideoTrack = false;
       this.sessionId = null;
 
       // Удаляем sessionId из универсального хранилища

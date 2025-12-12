@@ -9,7 +9,14 @@
       </NuxtLink>
     </div>
 
-    <div v-if="prompts.length === 0" class="text-sm opacity-70">
+    <!-- Скелетоны при загрузке -->
+    <Skeleton v-if="promptsStore.loading" type="prompt" :count="3" />
+
+    <!-- Сообщение когда нет промптов -->
+    <div
+      v-else-if="!promptsStore.loading && prompts.length === 0"
+      class="text-sm opacity-70"
+    >
       Промптов пока нет.
       <button
         @click="handleAdd"
@@ -20,11 +27,13 @@
       или возьмите из каталога.
     </div>
 
-    <RadioGroup :model-value="activeId" class="w-full gap-3">
+    <!-- Список промптов -->
+    <RadioGroup v-else :model-value="activeId" class="w-full gap-3">
       <div
-        v-for="prompt in prompts"
+        v-for="(prompt, index) in prompts"
         :key="prompt.id"
-        class="border-input [:has([data-state=checked])]:border-primary/50 relative flex items-center justify-between gap-2 rounded-md border p-2 shadow-xs outline-none bg-card"
+        class="group relative overflow-hidden rounded-xl border-2 border-border bg-card p-4 transition-all duration-200 [:has([data-state=checked])]:border-primary/50 hover:border-primary/50 hover:-translate-y-0.5 hover:shadow-lg outline-none animate-slide-up"
+        :style="`animation-delay: ${index * 0.05}s; animation-fill-mode: both`"
       >
         <div class="flex gap-2 w-full">
           <div class="flex items-start">
@@ -111,6 +120,7 @@ import { Separator } from '@/app/components/ui/shadcn/separator';
 import { Button } from '@/app/components/ui/shadcn/button';
 import PromptEditorModal from '@/app/components/PromptEditorModal.vue';
 import IconCirclePlus from '~icons/lucide/circle-plus';
+import Skeleton from '@/app/components/ui/Skeleton.vue';
 
 // Props
 const props = defineProps<{

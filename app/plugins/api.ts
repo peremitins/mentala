@@ -1,7 +1,32 @@
 import { defineNuxtPlugin, useRuntimeConfig } from 'nuxt/app';
 import { Capacitor } from '@capacitor/core';
+import { getActivePinia } from 'pinia';
 
 import { useToast } from '#imports';
+
+/**
+ * Безопасно получает loaders store и вызывает hideAllLoaders
+ * Используется в обработчиках ошибок $fetch
+ */
+function resetAllLoaders() {
+  try {
+    // На сервере не нужно
+    if (typeof window === 'undefined') return;
+
+    // Получаем активный экземпляр Pinia
+    const pinia = getActivePinia();
+    if (!pinia) return;
+
+    // Получаем store instance через _s (stores map), а не только state
+    const loadersStore = (pinia as any)._s?.get('loaders');
+    if (loadersStore && typeof loadersStore.hideAllLoaders === 'function') {
+      loadersStore.hideAllLoaders();
+    }
+  } catch (e) {
+    // Игнорируем ошибки если Pinia еще не инициализирован
+    console.warn('[API] Failed to reset loaders:', e);
+  }
+}
 
 export default defineNuxtPlugin(() => {
   const config = useRuntimeConfig();
@@ -141,7 +166,36 @@ export default defineNuxtPlugin(() => {
       return d;
     },
 
+    onRequestError({ error, request }) {
+      // Обрабатываем canceled запросы (AbortError)
+      if (
+        error?.name === 'AbortError' ||
+        error?.message?.includes('aborted') ||
+        error?.message?.includes('canceled')
+      ) {
+        // Сбрасываем все активные лоудеры при отмене запроса
+        resetAllLoaders();
+      }
+      // Пробрасываем ошибку дальше
+      throw error;
+    },
+
     async onResponseError({ response, request, error }) {
+      // Проверяем, не является ли это canceled запросом
+      const isCanceled =
+        error?.name === 'AbortError' ||
+        error?.message?.includes('aborted') ||
+        error?.message?.includes('canceled') ||
+        (request instanceof Request && request.signal?.aborted);
+
+      // Сбрасываем все активные лоудеры при ошибке (включая canceled)
+      resetAllLoaders();
+
+      // Для canceled запросов не показываем тост и не обрабатываем дальше
+      if (isCanceled) {
+        return;
+      }
+
       // Детальное логирование ошибок в Capacitor
       if (isCapacitor) {
         console.error('[API] Error:', {

@@ -8,6 +8,7 @@
         <li class="flex flex-col items-center gap-1 w-full">
           <NuxtLink
             to="/"
+            @click="handleChatClick"
             class="flex flex-col items-center justify-center icon-disc-wrapper"
             :class="{ 'text-foreground': isActive('/') }"
           >
@@ -87,7 +88,21 @@ import IconMessageCircleHeart from '~icons/lucide/message-circle-heart';
 import IconBrain from '~icons/lucide/brain';
 import IconListCheck from '~icons/lucide/list-check';
 import IconSettings from '~icons/lucide/settings';
+import { useChatStore } from '@/app/stores/chat';
 
 const route = useRoute();
+const router = useRouter();
+const chatStore = useChatStore();
+
 const isActive = (path: string) => route.path === path;
+
+// Обработчик клика на кнопку "Чат"
+function handleChatClick(event: MouseEvent) {
+  // Если уже на странице чата и есть сообщения - очищаем чат
+  if (isActive('/') && chatStore.messages.length > 0) {
+    event.preventDefault(); // Предотвращаем переход по ссылке
+    chatStore.clearMessages();
+  }
+  // Если на другой странице или на главной без сообщений - позволяем NuxtLink обработать переход
+}
 </script>
