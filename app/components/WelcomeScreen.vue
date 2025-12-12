@@ -13,7 +13,7 @@
       <!-- Терапия -->
       <button
         @click="handleSelect('therapy')"
-        class="w-full glass-deep bg-card rounded-[22px] p-4 flex items-center gap-4 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group animate-slide-up"
+        class="w-full glass-deep bg-card rounded-xl p-4 flex items-center gap-4 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group animate-slide-up"
         style="animation-delay: 0.1s; animation-fill-mode: both"
       >
         <div
@@ -22,7 +22,9 @@
           <IconBrain class="w-6 h-6 text-primary-foreground" />
         </div>
         <div class="flex-1 text-left">
-          <div class="text-lg font-semibold text-foreground mb-1">Терапия</div>
+          <div class="text-base font-semibold text-foreground mb-1">
+            Терапия
+          </div>
           <div class="text-sm text-muted-foreground">
             Обсудить эмоции, тревогу, стресс
           </div>
@@ -32,7 +34,7 @@
       <!-- Привычки -->
       <button
         @click="handleSelect('habits')"
-        class="w-full glass-deep rounded-[22px] p-4 flex items-center gap-4 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group animate-slide-up"
+        class="w-full glass-deep rounded-xl p-4 flex items-center gap-4 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group animate-slide-up"
         style="animation-delay: 0.2s; animation-fill-mode: both"
       >
         <div
@@ -41,7 +43,9 @@
           <IconListChecks class="w-6 h-6 text-primary-foreground" />
         </div>
         <div class="flex-1 text-left">
-          <div class="text-lg font-semibold text-foreground mb-1">Привычки</div>
+          <div class="text-base font-semibold text-foreground mb-1">
+            Привычки
+          </div>
           <div class="text-sm text-muted-foreground">
             Поддержка, напоминания, прогресс
           </div>
@@ -51,7 +55,7 @@
       <!-- Просто поговорить -->
       <button
         @click="handleSelect('talk')"
-        class="w-full glass-deep rounded-[22px] p-4 flex items-center gap-4 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group animate-slide-up"
+        class="w-full glass-deep rounded-xl p-4 flex items-center gap-4 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group animate-slide-up"
         style="animation-delay: 0.3s; animation-fill-mode: both"
       >
         <div
@@ -60,7 +64,7 @@
           <IconMessageCircle class="w-6 h-6 text-primary-foreground" />
         </div>
         <div class="flex-1 text-left">
-          <div class="text-lg font-semibold text-foreground mb-1">
+          <div class="text-base font-semibold text-foreground mb-1">
             Просто поговорить
           </div>
           <div class="text-sm text-muted-foreground">Свободный диалог</div>

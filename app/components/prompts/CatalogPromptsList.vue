@@ -3,10 +3,11 @@
     <template v-for="cat in categories" :key="cat.id">
       <div class="space-y-3 mb-6">
         <CatalogPromptCard
-          v-for="item in cat.items"
+          v-for="(item, index) in cat.items"
           :key="item.id"
           :item="item"
           :is-added="isAlreadyAdded(item)"
+          :index="index"
           @copy="handleCopy"
           @add="handleAdd"
         />

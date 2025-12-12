@@ -5,37 +5,50 @@ import type {
   UpdateTherapyTopicDto,
 } from '@/shared/dto/notifications';
 import { useToast } from '@/app/composables/useToast';
+import { useLoadersStore } from '@/app/stores/loaders';
 
 interface TherapyTopicsState {
   topics: TherapyTopicDto[];
-  loading: boolean;
   error: string | null;
+  hasFetched: boolean; // Флаг что данные уже загружались хотя бы раз
 }
 
 export const useTherapyTopicsStore = defineStore('therapy-topics', {
   state: (): TherapyTopicsState => ({
     topics: [],
-    loading: false,
     error: null,
+    hasFetched: false,
   }),
   getters: {
     byId: (state) => (id: string) =>
       state.topics.find((topic) => topic.id === id),
   },
   actions: {
-    async fetchAll() {
-      if (this.loading) return;
-      this.loading = true;
+    async fetchAll(force = false) {
+      const loaders = useLoadersStore();
+
+      // Защита от одновременных вызовов
+      if (loaders.isSkeletonLoading) {
+        return;
+      }
+
+      // Если уже загружали данные и не принудительное обновление - пропускаем
+      if (!force && this.hasFetched) {
+        return;
+      }
+
+      loaders.showSkeleton();
       this.error = null;
       try {
         const { $api } = useNuxtApp();
         const data = await $api<TherapyTopicDto[]>('/api/therapy/custom');
         this.topics = data;
+        this.hasFetched = true;
       } catch (error: any) {
         this.error = error?.message || 'Не удалось загрузить темы';
         console.error('[therapyTopics] fetchAll error:', error);
       } finally {
-        this.loading = false;
+        loaders.hideSkeleton();
       }
     },
     async create(payload: CreateTherapyTopicDto) {

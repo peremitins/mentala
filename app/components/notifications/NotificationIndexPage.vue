@@ -11,6 +11,7 @@ import {
 import Combobox from '@/app/components/Combobox.vue';
 import { INTENT_OPTIONS } from '@/app/constants/select-options';
 import IconTrash from '~icons/lucide/trash';
+import Skeleton from '@/app/components/ui/Skeleton.vue';
 
 export interface NotificationIndexItem {
   id: string;
@@ -28,9 +29,11 @@ const props = withDefaults(
     description: string;
     items: NotificationIndexItem[];
     mentaiMode: 'habits' | 'therapy';
+    loading?: boolean;
   }>(),
   {
     items: () => [],
+    loading: false,
   }
 );
 
@@ -112,12 +115,17 @@ function handleRemove(item: NotificationIndexItem) {
           />
         </div>
 
-        <div class="space-y-2">
+        <!-- Скелетоны при загрузке -->
+        <Skeleton v-if="loading" type="list-item" :count="5" />
+
+        <!-- Список элементов -->
+        <div v-else class="space-y-2">
           <button
-            v-for="item in visibleItems"
+            v-for="(item, index) in visibleItems"
             :key="item.id"
             type="button"
-            class="group relative w-full overflow-hidden rounded-xl border-2 border-border bg-card p-4 text-left transition-all duration-200 hover:border-primary/50 hover:-translate-y-0.5 hover:shadow-lg"
+            class="group relative w-full overflow-hidden rounded-xl border-2 border-border bg-card p-4 text-left transition-all duration-200 hover:border-primary/50 hover:-translate-y-0.5 hover:shadow-lg animate-slide-up"
+            :style="`animation-delay: ${index * 0.05}s; animation-fill-mode: both`"
             @mouseenter="hoveredId = item.id"
             @mouseleave="hoveredId = null"
             @click="handleSelect(item)"
@@ -132,7 +140,7 @@ function handleRemove(item: NotificationIndexItem) {
             </div>
 
             <div class="relative flex items-center justify-between">
-              <div class="flex items-center gap-3 flex-1 min-w-0">
+              <div class="flex items-center gap-4 flex-1 min-w-0">
                 <div
                   class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br text-2xl shadow-sm transition-transform duration-300 group-hover:scale-110"
                   :class="item.gradientClass"
@@ -146,7 +154,7 @@ function handleRemove(item: NotificationIndexItem) {
                   >
                     {{ item.name }}
                   </h3>
-                  <p class="text-xs text-muted-foreground truncate">
+                  <p class="text-sm text-muted-foreground truncate">
                     {{ item.description }}
                   </p>
                 </div>
@@ -183,7 +191,7 @@ function handleRemove(item: NotificationIndexItem) {
         </div>
       </TabsContent>
 
-      <TabsContent value="prompts" class="space-y-4 mt-4 px-2">
+      <TabsContent value="prompts" class="space-y-4 mt-4">
         <PromptsSection :type="mentaiMode" />
       </TabsContent>
     </Tabs>

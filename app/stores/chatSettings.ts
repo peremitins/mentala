@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia';
+import { useLoadersStore } from '@/app/stores/loaders';
 
 export const useChatSettingsStore = defineStore('chatSettings', {
   state: () => ({
@@ -47,6 +48,8 @@ export const useChatSettingsStore = defineStore('chatSettings', {
       }
     },
     async updateChatSettings(payload: Record<string, any>) {
+      const loaders = useLoadersStore();
+      loaders.showLoader();
       try {
         const data = await useAPI('/api/settings/chat', {
           method: 'PATCH',

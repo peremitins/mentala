@@ -68,6 +68,9 @@
     --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
 
+    /* === Скелетоны === */
+    --skeleton: 214 32% 88%;
+
     /* === Границы и инпуты === */
     --border: 214.3 31.8% 91.4%;
     --border-secondary: 275 25% 85%;
@@ -138,6 +141,9 @@
     --muted: 240 3.7% 15.9%;
     --muted-foreground: 240 5% 64.9%;
 
+    /* === Скелетоны === */
+    --skeleton: 240 5% 26%;
+
     /* === Границы и инпуты === */
     --border: 240 4% 26%;
     --border-secondary: 217 21% 27%;
@@ -203,6 +209,9 @@
   --color-muted: hsl(var(--muted));
   --color-muted-foreground: hsl(var(--muted-foreground));
 
+  /* === Скелетоны === */
+  --color-skeleton: hsl(var(--skeleton));
+
   /* === Границы и инпуты === */
   --color-border: hsl(var(--border));
   --color-border-secondary: hsl(var(--border-secondary));
@@ -229,6 +238,12 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+@layer utilities {
+  .bg-skeleton {
+    background-color: var(--color-skeleton);
   }
 }
 

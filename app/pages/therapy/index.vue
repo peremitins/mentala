@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, onMounted } from 'vue';
 import { storeToRefs } from 'pinia';
 import NotificationIndexPage, {
   type NotificationIndexItem,
@@ -8,6 +8,7 @@ import { THERAPY_TOPICS } from '@/app/lib/therapyCatalog';
 import CustomEntityModal from '@/app/components/modals/CustomEntityModal.vue';
 import ConfirmModal from '@/app/components/ui/ConfirmModal.vue';
 import { useTherapyTopicsStore } from '@/app/stores/therapyTopics';
+import { useLoadersStore } from '@/app/stores/loaders';
 import type { TherapyTopicDto } from '@/shared/dto/notifications';
 import { useToast } from '@/app/composables/useToast';
 
@@ -25,10 +26,14 @@ const colorSchemes: Record<string, string> = {
 };
 
 const therapyStore = useTherapyTopicsStore();
-if (!therapyStore.topics.length) {
-  await therapyStore.fetchAll();
-}
+const loadersStore = useLoadersStore();
 const { topics: userTopics } = storeToRefs(therapyStore);
+
+// Загружаем данные после монтирования компонента (с кэшированием)
+// Защита от двойного вызова реализована в store через isSkeletonLoading флаг
+onMounted(async () => {
+  await therapyStore.fetchAll();
+});
 
 const customTopicItems = computed<NotificationIndexItem[]>(() =>
   userTopics.value.map((topic) => {
@@ -132,6 +137,7 @@ async function confirmDeleteTopic() {
       description="Здесь вы найдёте готовые темы поддержки и сможете добавить свои, чтобы получать именно те уведомления, которые вам подходят"
       mentai-mode="therapy"
       :items="topicItems"
+      :loading="loadersStore.isSkeletonLoading"
       @select="handleTopicSelect"
       @remove="handleTopicRemove"
     />
