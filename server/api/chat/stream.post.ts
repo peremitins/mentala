@@ -4,6 +4,12 @@ import { getSessionUser } from '@@/server/application/auth/session';
 import { summaryStore } from '@@/server/utils/summaryStore';
 import { responseIdStore } from '@/server/utils/responseIdStore';
 import { readChatSettings } from '@/server/utils/storage';
+import { db } from '@/server/infrastructure/db/client';
+import { therapySessions } from '@/server/infrastructure/db/schema';
+import { and, eq, isNull } from 'drizzle-orm';
+import { getAiUsageGate } from '@/server/application/subscriptions/ai-usage.service';
+import { CHAT_IDLE_TIMEOUT_MS } from '@/server/config/subscription';
+import { endTherapySession } from '@/server/application/subscriptions/session-time.service';
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
@@ -26,6 +32,7 @@ export default defineEventHandler(async (event) => {
     isFirstSession?: boolean;
     userPrompt?: string;
     mode?: 'therapy' | 'habits' | 'talk'; // Режим для старта с welcome-экрана
+    therapySessionId?: number; // для серверного обновления last_activity_at и биллинга
   }>(event);
 
   // Отдаём как SSE
@@ -39,6 +46,110 @@ export default defineEventHandler(async (event) => {
     // Добавляем память только для авторизованных пользователей
     const sessUser = await getSessionUser(event);
     const uid = sessUser?.id ? String(sessUser.id) : undefined;
+    if (!uid) {
+      res.write(
+        `data: ${JSON.stringify({
+          error: { message: 'Unauthorized' },
+        })}\n\n`
+      );
+      return;
+    }
+
+    // Требуем валидный therapySessionId, чтобы нельзя было обойти биллинг прямыми вызовами /api/chat/stream
+    const therapySessionId =
+      typeof body?.therapySessionId === 'number' ? body.therapySessionId : null;
+
+    if (!therapySessionId) {
+      res.write(
+        `data: ${JSON.stringify({
+          error: { message: 'therapySessionId is required' },
+        })}\n\n`
+      );
+      return;
+    }
+
+    const now = new Date();
+
+    // Проверяем, что сессия принадлежит пользователю и активна.
+    const sessionRows = await db
+      .select({
+        id: therapySessions.id,
+        userId: therapySessions.userId,
+        startedAt: therapySessions.startedAt,
+        lastActivityAt: therapySessions.lastActivityAt,
+        endedAt: therapySessions.endedAt,
+      })
+      .from(therapySessions)
+      .where(eq(therapySessions.id, therapySessionId))
+      .limit(1);
+
+    const session = sessionRows[0];
+    if (!session || session.userId !== Number(uid)) {
+      res.write(
+        `data: ${JSON.stringify({
+          error: { message: 'Therapy session not found' },
+        })}\n\n`
+      );
+      return;
+    }
+
+    if (session.endedAt) {
+      res.write(
+        `data: ${JSON.stringify({
+          error: { message: 'Therapy session already ended' },
+        })}\n\n`
+      );
+      return;
+    }
+
+    const last = session.lastActivityAt || session.startedAt;
+    if (now.getTime() - last.getTime() > CHAT_IDLE_TIMEOUT_MS) {
+      await endTherapySession(session.id);
+      res.write(
+        `data: ${JSON.stringify({
+          error: { message: 'Therapy session expired, start a new one' },
+        })}\n\n`
+      );
+      return;
+    }
+
+    // Обновляем last_activity_at (серверная "истина" для биллинга)
+    await db
+      .update(therapySessions)
+      .set({ lastActivityAt: now, updatedAt: now })
+      .where(
+        and(
+          eq(therapySessions.id, therapySessionId),
+          eq(therapySessions.userId, Number(uid)),
+          isNull(therapySessions.endedAt)
+        )
+      );
+
+    // Серверная проверка доступа к AI и лимита минут
+    const gate = await getAiUsageGate(Number(uid));
+    if (gate.status === 'no_ai_access') {
+      res.write(
+        `data: ${JSON.stringify({
+          error: { message: 'AI access is not available for your plan' },
+        })}\n\n`
+      );
+      return;
+    }
+    if (gate.status === 'weekly_limit_reached') {
+      res.write(
+        `data: ${JSON.stringify({
+          error: {
+            message: 'Weekly minutes limit exceeded',
+            data: {
+              weeklyLimit: gate.weeklyLimit,
+              usedMinutes: gate.usedMinutes,
+              overdraftUsed: gate.overdraftUsed,
+            },
+          },
+        })}\n\n`
+      );
+      return;
+    }
 
     // Определяем isFirstSession: это первая сессия только если НЕТ ни summary, ни previous_response_id
     let serverIsFirst = true;
@@ -134,22 +245,29 @@ export default defineEventHandler(async (event) => {
       try {
         res.write(
           `data: ${JSON.stringify({
-            error: true,
-            message: e?.message || 'Stream failed',
+            error: { message: e?.message || 'Stream failed' },
           })}\n\n`
         );
-      } catch {}
+      } catch (writeErr) {
+        console.error('[Stream API] Failed to write SSE error chunk:', writeErr);
+      }
     }
   } catch (e: any) {
     try {
       res.write(
-        `data: ${JSON.stringify({ error: true, message: e?.message || 'Stream failed' })}\n\n`
+        `data: ${JSON.stringify({
+          error: { message: e?.message || 'Stream failed' },
+        })}\n\n`
       );
-    } catch {}
+    } catch (writeErr) {
+      console.error('[Stream API] Failed to write SSE error chunk:', writeErr);
+    }
   } finally {
     try {
       res.write('data: [DONE]\n\n');
-    } catch {}
+    } catch (writeErr) {
+      console.error('[Stream API] Failed to write SSE [DONE] chunk:', writeErr);
+    }
     res.end();
   }
 });

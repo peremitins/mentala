@@ -5,9 +5,10 @@
       :key="i"
       :class="[
         'animate-pulse animate-slide-up',
+        roundedClass,
         type === 'prompt'
-          ? 'rounded-xl border-2 border-border bg-card p-4'
-          : 'rounded-xl border border-border bg-card p-3',
+          ? 'border-2 border-border bg-card p-4'
+          : 'border border-border bg-card p-3',
       ]"
       :style="`animation-delay: ${(i - 1) * 0.05}s; animation-fill-mode: both`"
     >
@@ -46,19 +47,86 @@
           </div>
         </div>
       </div>
+
+      <!-- Скелетон для статуса подписки -->
+      <div v-else-if="type === 'subscription-status'" class="space-y-3">
+        <!-- Заголовок -->
+        <div class="h-4 bg-skeleton rounded w-1/3"></div>
+
+        <!-- Текущий план -->
+        <div class="space-y-2">
+          <div class="h-5 bg-skeleton rounded w-2/3"></div>
+          <div class="h-4 bg-skeleton rounded w-1/2"></div>
+        </div>
+
+        <!-- Дополнительная информация -->
+        <div class="h-3 bg-skeleton rounded w-3/4"></div>
+      </div>
+
+      <!-- Скелетон для карточки плана -->
+      <div v-else-if="type === 'plan-card'" class="space-y-4">
+        <!-- Заголовок и бейджи -->
+        <div class="flex items-center justify-between">
+          <div class="h-6 bg-skeleton rounded w-24"></div>
+          <div class="flex items-center gap-2">
+            <div class="h-5 bg-skeleton rounded w-20"></div>
+          </div>
+        </div>
+
+        <!-- Переключатель месяц/год -->
+        <div class="flex items-center gap-1.5">
+          <div class="h-7 bg-skeleton rounded-md w-16"></div>
+          <div class="h-7 bg-skeleton rounded-md w-16"></div>
+        </div>
+
+        <!-- Цена -->
+        <div class="space-y-1">
+          <div class="h-8 bg-skeleton rounded w-32"></div>
+          <div class="h-4 bg-skeleton rounded w-24"></div>
+        </div>
+
+        <!-- Описание -->
+        <div class="space-y-2">
+          <div class="h-4 bg-skeleton rounded w-full"></div>
+          <div class="h-4 bg-skeleton rounded w-4/5"></div>
+        </div>
+
+        <!-- Кнопка -->
+        <div class="h-10 bg-skeleton rounded-md w-full"></div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-withDefaults(
+import { computed } from 'vue';
+
+const props = withDefaults(
   defineProps<{
-    type?: 'prompt' | 'notification-text' | 'list-item';
+    type?:
+      | 'prompt'
+      | 'notification-text'
+      | 'list-item'
+      | 'subscription-status'
+      | 'plan-card';
     count?: number;
+    roundedSize?: 'sm' | 'md' | 'lg' | 'xl';
   }>(),
   {
     type: 'list-item',
     count: 3,
+    roundedSize: 'xl',
   }
 );
+
+// Маппинг roundedSize на фиксированные классы Tailwind
+const roundedClass = computed(() => {
+  const roundedMap: Record<'sm' | 'md' | 'lg' | 'xl', string> = {
+    sm: 'rounded-sm',
+    md: 'rounded-md',
+    lg: 'rounded-lg',
+    xl: 'rounded-xl',
+  };
+  return roundedMap[props.roundedSize];
+});
 </script>

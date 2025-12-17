@@ -1,5 +1,9 @@
 import type { UseFetchOptions } from 'nuxt/app';
 
+/**
+ * Композабл для API запросов
+ * X-Platform заголовок добавляется автоматически в app/plugins/api.ts
+ */
 export function useAPI<T = unknown>(
   url: string | (() => string),
   options: UseFetchOptions<T> & { useFetch?: boolean } = {}
@@ -18,13 +22,13 @@ export function useAPI<T = unknown>(
       $fetch: nuxtApp.$api as typeof $fetch,
       server: true,
       immediate: true,
-      // если нужен кэш — передайте свой key извне; если не нужен — передавайте
-      // уникальный key (например, Symbol()), тогда ре-использования не будет
+      // X-Platform добавляется автоматически в app/plugins/api.ts
       ...options,
     }) as any;
   }
 
   // Ветка реального вызова ($api)
+  // X-Platform добавляется автоматически в app/plugins/api.ts
   const resolved = typeof url === 'function' ? url() : url;
 
   return nuxtApp.$api<T>(resolved, options as any);

@@ -38,11 +38,11 @@ export CAPACITOR_SERVER_URL="$SERVER_URL"
 # Выполняем синхронизацию
 if [ -n "$SERVER_URL" ]; then
   echo "📦 Синхронизация с dev-сервером..."
-  npx cap sync && node scripts/fix-capacitor-config.js
+  npx cap sync && CAPACITOR_SERVER_URL="$SERVER_URL" node scripts/fix-capacitor-config.js
 else
   echo "📦 Синхронизация со статическими файлами..."
   pnpm run generate
-  npx cap sync && node scripts/fix-capacitor-config.js
+  npx cap sync && CAPACITOR_SERVER_URL="" node scripts/fix-capacitor-config.js
 fi
 
 echo "✅ Готово! Теперь можно запускать приложение."

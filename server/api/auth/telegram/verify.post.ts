@@ -4,6 +4,7 @@ import { telegramAccounts, users } from '@/server/infrastructure/db/schema';
 import { eq } from 'drizzle-orm';
 import { createSession } from '@/server/application/auth/session';
 import crypto from 'node:crypto';
+import { activateTrialForUser } from '@/server/application/subscriptions/trial.service';
 
 function verifyTelegram(initData: Record<string, string>, botToken: string) {
   const { hash, ...data } = initData;
@@ -65,6 +66,28 @@ export default defineEventHandler(async (event) => {
     await db
       .insert(telegramAccounts)
       .values({ userId, telegramId, username, firstName, lastName, photoUrl });
+
+    // Активируем Trial для нового пользователя (или создаем Basic без Trial)
+    // ВАЖНО: Всегда создаем подписку Basic при регистрации
+    try {
+      const subscription = await activateTrialForUser(userId);
+      if (subscription) {
+        console.log(
+          `[Telegram] ✅ Subscription created for user ${userId}: planId=${subscription.planId}, paymentStatus=${subscription.paymentStatus}`
+        );
+      } else {
+        console.warn(
+          `[Telegram] ⚠️ activateTrialForUser returned null for user ${userId}`
+        );
+      }
+    } catch (error: any) {
+      console.error(
+        `[Telegram] ❌ Failed to activate trial/subscription for user ${userId}:`,
+        error
+      );
+      console.error(`[Telegram] Error details:`, error?.message, error?.stack);
+      // Не блокируем регистрацию, если подписка не активировалась, но логируем ошибку
+    }
   }
 
   await createSession(event, userId, locale);

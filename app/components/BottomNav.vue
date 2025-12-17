@@ -101,8 +101,10 @@ function handleChatClick(event: MouseEvent) {
   // Если уже на странице чата и есть сообщения - очищаем чат
   if (isActive('/') && chatStore.messages.length > 0) {
     event.preventDefault(); // Предотвращаем переход по ссылке
+    // clearMessages уже вызывает endTherapySession внутри
     chatStore.clearMessages();
   }
-  // Если на другой странице или на главной без сообщений - позволяем NuxtLink обработать переход
+  // В остальных случаях позволяем NuxtLink обработать переход
+  // Завершение сессии при уходе со страницы обрабатывается в plugin через router.afterEach
 }
 </script>

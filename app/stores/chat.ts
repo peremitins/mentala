@@ -1,9 +1,9 @@
 import { defineStore } from 'pinia';
-import { useSpeechStore } from '@/app/stores/speech';
 import { useChatSettingsStore } from '@/app/stores/chatSettings';
 import { useLoadersStore } from '@/app/stores/loaders';
-import { usePromptsStore } from '@/app/stores/prompts';
+import { useHeygenStore } from '@/app/stores/heygen';
 import { nanoid } from 'nanoid';
+import { useRuntimeConfig } from 'nuxt/app';
 
 export const useChatStore = defineStore('chat', {
   state: () => ({
@@ -11,7 +11,13 @@ export const useChatStore = defineStore('chat', {
     userText: '' as string,
     provider: 'openai' as 'openai' | 'deepseek' | 'yandex',
     sessionId: '' as string,
+    therapySessionId: null as number | null, // ID therapy сессии для биллинга
     currentChatAbortController: null as AbortController | null,
+    lastActivityAt: null as Date | null, // Время последней активности для idle timeout
+    lastPingAt: null as number | null, // Последний ping на сервер (throttle)
+    idleTimeoutTimer: null as ReturnType<typeof setTimeout> | null, // Таймер для idle timeout чата
+    avatarIdleTimeoutTimer: null as ReturnType<typeof setTimeout> | null, // Таймер для idle timeout аватара
+    isEndingSession: false as boolean, // Флаг для предотвращения множественных вызовов endTherapySession
   }),
   actions: {
     startSession(sessionId?: string) {
@@ -19,6 +25,194 @@ export const useChatStore = defineStore('chat', {
     },
     finishSession() {
       this.sessionId = '';
+      // Завершаем therapy сессию при завершении чата (асинхронно, не блокируем)
+      if (this.therapySessionId && !this.isEndingSession) {
+        void this.endTherapySession();
+      }
+    },
+    /**
+     * Начать therapy сессию для подсчета времени (биллинг)
+     */
+    async startTherapySession() {
+      // Если сессия уже начата, не создаем новую
+      if (this.therapySessionId) {
+        return;
+      }
+
+      try {
+        const { $api } = useNuxtApp();
+        const response = await $api<{ sessionId: number; startedAt: string }>(
+          '/api/therapy/session/start',
+          {
+            method: 'POST',
+          }
+        );
+
+        if (response?.sessionId) {
+          this.therapySessionId = response.sessionId;
+          this.lastActivityAt = new Date();
+          this.lastPingAt = Date.now();
+          this.resetIdleTimeout();
+          this.resetAvatarIdleTimeout();
+          console.log(
+            '[Chat Store] Therapy session started:',
+            response.sessionId
+          );
+        }
+      } catch (error) {
+        console.error('[Chat Store] Failed to start therapy session:', error);
+        // Не блокируем работу чата, если не удалось начать сессию
+      }
+    },
+    /**
+     * Завершить therapy сессию
+     */
+    async endTherapySession() {
+      // Защита от множественных вызовов
+      if (!this.therapySessionId || this.isEndingSession) {
+        return;
+      }
+
+      this.isEndingSession = true;
+      const sessionIdToEnd = this.therapySessionId;
+
+      try {
+        // Используем fetch с keepalive для надежной отправки при обновлении страницы
+        // Это гарантирует, что запрос будет отправлен даже если страница закрывается
+        const config = useRuntimeConfig();
+        const baseURL = (config.public as any).apiBase || '';
+        const url = `${baseURL}/api/therapy/session/end`;
+
+        // Получаем токен для авторизации
+        const token =
+          typeof window !== 'undefined'
+            ? localStorage.getItem('mentai.session.token')
+            : null;
+
+        const headers: HeadersInit = {
+          'Content-Type': 'application/json',
+        };
+
+        if (token) {
+          headers['X-Session-Token'] = token;
+        }
+
+        // Используем fetch с keepalive для надежной отправки
+        await fetch(url, {
+          method: 'POST',
+          body: JSON.stringify({ sessionId: sessionIdToEnd }),
+          headers,
+          keepalive: true, // Важно для запросов при закрытии страницы
+          credentials: 'include', // Включаем cookies
+        });
+
+        console.log('[Chat Store] Therapy session ended:', sessionIdToEnd);
+      } catch (error) {
+        console.error('[Chat Store] Failed to end therapy session:', error);
+        // Не блокируем очистку состояния даже при ошибке
+      } finally {
+        // Очищаем только если это та же сессия
+        if (this.therapySessionId === sessionIdToEnd) {
+          this.therapySessionId = null;
+          this.lastActivityAt = null;
+          this.lastPingAt = null;
+        }
+        this.clearIdleTimeout();
+        this.clearAvatarIdleTimeout();
+        this.isEndingSession = false;
+      }
+    },
+    /**
+     * Обновить время последней активности и сбросить idle timeout
+     */
+    updateActivity() {
+      this.lastActivityAt = new Date();
+      this.resetIdleTimeout();
+      this.resetAvatarIdleTimeout();
+
+      // Пингуем сервер, чтобы обновлять last_activity_at в БД.
+      // Это нужно для корректного подсчёта минут на сервере и автозавершения "stale" сессий.
+      if (!this.therapySessionId) return;
+
+      const now = Date.now();
+      // Троттлинг: не чаще 1 раза в 10 секунд
+      if (this.lastPingAt && now - this.lastPingAt < 10_000) return;
+      this.lastPingAt = now;
+
+      try {
+        const { $api } = useNuxtApp();
+        void $api('/api/therapy/session/ping', {
+          method: 'POST',
+          body: { sessionId: this.therapySessionId },
+        });
+      } catch {
+        // Игнорируем: ping не должен ломать чат
+      }
+    },
+    /**
+     * Сбросить idle timeout таймер для чата
+     */
+    resetIdleTimeout() {
+      this.clearIdleTimeout();
+
+      this.idleTimeoutTimer = setTimeout(() => {
+        console.log(
+          '[Chat Store] Chat idle timeout reached, ending therapy session'
+        );
+        this.endTherapySession();
+      }, useRuntimeConfig().public.chatIdleTimeoutMs);
+    },
+    /**
+     * Сбросить idle timeout таймер для аватара
+     */
+    resetAvatarIdleTimeout() {
+      this.clearAvatarIdleTimeout();
+
+      const heygen = useHeygenStore();
+      const chatSettings = useChatSettingsStore();
+
+      // Таймер только если аватар включен и подключен
+      if (!heygen.isConnected || !chatSettings.avatar) {
+        return;
+      }
+
+      this.avatarIdleTimeoutTimer = setTimeout(async () => {
+        console.log('[Chat Store] Avatar idle timeout reached');
+
+        // Отключаем аватар
+        await heygen.stopSession();
+
+        // Отправляем запрос на отключение аватара в настройках
+        try {
+          await chatSettings.updateChatSettings({ avatar: false });
+        } catch (error) {
+          console.error(
+            '[Chat Store] Failed to disable avatar in settings:',
+            error
+          );
+        }
+
+        // Завершаем therapy сессию
+        this.endTherapySession();
+      }, useRuntimeConfig().public.chatIdleTimeoutMs);
+    },
+    /**
+     * Очистить idle timeout таймер для чата
+     */
+    clearIdleTimeout() {
+      if (this.idleTimeoutTimer) {
+        clearTimeout(this.idleTimeoutTimer);
+        this.idleTimeoutTimer = null;
+      }
+    },
+    /**
+     * Очистить idle timeout таймер для аватара
+     */
+    clearAvatarIdleTimeout() {
+      if (this.avatarIdleTimeoutTimer) {
+        clearTimeout(this.avatarIdleTimeoutTimer);
+        this.avatarIdleTimeoutTimer = null;
+      }
     },
     /**
      * Очищает сообщения и сбрасывает сессию
@@ -28,6 +222,10 @@ export const useChatStore = defineStore('chat', {
       this.messages = [];
       this.userText = '';
       this.stopChatStream();
+      // Завершаем therapy сессию перед очисткой (асинхронно, не блокируем)
+      if (this.therapySessionId && !this.isEndingSession) {
+        void this.endTherapySession();
+      }
       this.finishSession();
     },
     /**
@@ -82,12 +280,14 @@ export const useChatStore = defineStore('chat', {
 
       if (!reader) return;
 
-      while (true) {
+      while (!this.currentChatAbortController?.signal.aborted) {
         // Проверяем, не был ли запрос отменен
         if (this.currentChatAbortController?.signal.aborted) {
           try {
             reader.cancel();
-          } catch {}
+          } catch (cancelErr) {
+            console.warn('[Chat Store] Failed to cancel stream reader:', cancelErr);
+          }
           break;
         }
 
@@ -116,14 +316,16 @@ export const useChatStore = defineStore('chat', {
             if (delta) {
               const msg = this.messages[messageIdx];
               if (msg) msg.content += delta;
+              // Обновляем активность при получении ответа
+              this.updateActivity();
             }
 
             // Обработка ошибок
             if (obj?.error) {
               throw new Error(obj.error.message || 'Stream error');
             }
-          } catch (parseErr) {
-            // Игнорируем ошибки парсинга отдельных чанков
+          } catch {
+            continue;
           }
         }
       }
@@ -138,6 +340,17 @@ export const useChatStore = defineStore('chat', {
     }) {
       if (!this.sessionId) this.startSession();
       this.userText = '';
+
+      // Начинаем therapy сессию для подсчета времени
+      await this.startTherapySession();
+      if (!this.therapySessionId) {
+        this.messages.push({
+          role: 'assistant',
+          content:
+            'Не удалось начать сессию (возможно нет доступа к ИИ или исчерпан лимит минут).',
+        });
+        return { ok: false } as any;
+      }
 
       // НЕ добавляем user-сообщение!
       // Создаем пустое assistant-сообщение для стриминга ответа
@@ -161,6 +374,7 @@ export const useChatStore = defineStore('chat', {
             provider: 'openai',
             messages: [], // ПУСТОЙ массив - старт от ассистента
             sessionId: this.sessionId,
+            therapySessionId: this.therapySessionId,
             mode: apiParams.mode, // Передаем mode (включая 'talk')
             userPrompt: apiParams.userPrompt,
             lang: apiParams.lang,
@@ -221,6 +435,22 @@ export const useChatStore = defineStore('chat', {
       this.userText = '';
       this.messages.push({ role: 'user', content: text });
 
+      // Начинаем therapy сессию при отправке первого сообщения
+      if (!this.therapySessionId) {
+        await this.startTherapySession();
+        if (!this.therapySessionId) {
+          this.messages.push({
+            role: 'assistant',
+            content:
+              'Не удалось начать сессию (возможно нет доступа к ИИ или исчерпан лимит минут).',
+          });
+          return { ok: false } as any;
+        }
+      } else {
+        // Обновляем активность при отправке сообщения
+        this.updateActivity();
+      }
+
       // Добавляем пустое ответное сообщение, будем наполнять построчно
       const idx = this.messages.push({ role: 'assistant', content: '' }) - 1;
 
@@ -242,6 +472,7 @@ export const useChatStore = defineStore('chat', {
             provider: 'openai',
             messages: this.messages,
             sessionId: this.sessionId,
+            therapySessionId: this.therapySessionId,
             mode: apiParams.mode, // ВАЖНО: передаем mode для правильной работы памяти
             userPrompt: apiParams.userPrompt,
             lang: apiParams.lang,
@@ -294,7 +525,7 @@ export const useChatStore = defineStore('chat', {
       if (!this.sessionId) return;
 
       try {
-        const response = await $api('/api/session/finish', {
+        await $api('/api/session/finish', {
           method: 'POST',
           body: { sessionId: this.sessionId, messages: this.messages, model },
         });
@@ -304,6 +535,12 @@ export const useChatStore = defineStore('chat', {
           error
         );
       }
+
+      // Завершаем therapy сессию перед завершением чата
+      if (this.therapySessionId) {
+        await this.endTherapySession();
+      }
+
       this.finishSession();
     },
   },

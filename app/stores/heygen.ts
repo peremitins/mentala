@@ -7,6 +7,7 @@ import {
   setSessionItem,
   removeSessionItem,
 } from '@/app/utils/sessionStorage';
+import { useRuntimeConfig } from 'nuxt/app';
 import type {
   Room as LKRoom,
   RemoteTrackPublication as LKRemoteTrackPublication,
@@ -166,7 +167,21 @@ export const useHeygenStore = defineStore('heygen', {
           });
         }
       } catch (e: any) {
-        useToast('HeyGen', e?.message || 'Не удалось отправить речь');
+        const errorMessage =
+          e?.message || e?.statusMessage || 'Не удалось отправить речь';
+        useToast('HeyGen', errorMessage);
+
+        // При любой ошибке отключаем аватар в настройках
+        try {
+          const chatSettings = useChatSettingsStore();
+          await chatSettings.updateChatSettings({ avatar: false });
+          await this.stopSession();
+        } catch (disableError) {
+          console.error(
+            '[HeyGen] Failed to disable avatar after error:',
+            disableError
+          );
+        }
       } finally {
         // Безопасная установка isAvatarSpeaking обратно в false
         if (speech) {
@@ -240,7 +255,8 @@ export const useHeygenStore = defineStore('heygen', {
             version: 'v2',
             stt_settings: { provider: 'deepgram', confidence: 0.55 },
             disable_idle_timeout: false,
-            activity_idle_timeout: 120,
+            activity_idle_timeout:
+              (useRuntimeConfig().public.chatIdleTimeoutMs as number) / 1000, // Конвертируем миллисекунды в секунды для API
           },
         });
 
@@ -450,7 +466,24 @@ export const useHeygenStore = defineStore('heygen', {
 
         useToast('HeyGen', 'Подключено и запущено');
       } catch (e: any) {
-        useToast('HeyGen', e?.message || 'Не удалось запустить сессию');
+        const errorMessage =
+          e?.message || e?.statusMessage || 'Не удалось запустить сессию';
+
+        useToast('HeyGen', errorMessage);
+
+        // При любой ошибке запуска отключаем аватар в настройках
+        try {
+          const chatSettings = useChatSettingsStore();
+          await chatSettings.updateChatSettings({ avatar: false });
+        } catch (disableError) {
+          console.error(
+            '[HeyGen] Failed to disable avatar after start error:',
+            disableError
+          );
+        }
+
+        // Очищаем состояние при ошибке
+        await this.stopSession();
       } finally {
         if (this.status === 'starting') {
           this.status = 'idle';
