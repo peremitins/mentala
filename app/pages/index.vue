@@ -159,6 +159,8 @@ import { useChatStore } from '@/app/stores/chat';
 import { useSpeechStore } from '@/app/stores/speech';
 import { useChatSettingsStore } from '@/app/stores/chatSettings';
 import { useHeygenStore } from '@/app/stores/heygen';
+import { useSubscriptionStore } from '@/app/stores/subscription';
+import { useColorMode } from '#imports';
 import {
   AI_WORK_MODE_OPTIONS,
   THEME_OPTIONS,
@@ -168,14 +170,11 @@ import TextareaResize from '@/app/components/ui/TextareaResize.vue';
 import IconMic from '~icons/lucide/mic';
 import IconSend from '~icons/lucide/send';
 import IconSettings from '~icons/lucide/settings';
-import IconMessageCircleHeart from '~icons/lucide/message-circle-heart';
 import {
   PopoverRoot,
   PopoverTrigger,
   PopoverPortal,
   PopoverContent,
-  RadioGroupRoot,
-  RadioGroupItem,
 } from 'radix-vue';
 import PageHeader from '@/app/components/PageHeader.vue';
 import WelcomeScreen from '@/app/components/WelcomeScreen.vue';
@@ -213,13 +212,9 @@ const chatSettings = useChatSettingsStore();
 const heygen = useHeygenStore();
 
 // Управление TTS озвучкой
-const { speak: speakTTS, stop: stopTTS } = useTTS();
+const { speak: speakTTS } = useTTS();
 
 const settingsOpen = ref(false);
-
-const connected = computed(() => heygen.isConnected);
-const isStarting = computed(() => heygen.isStarting);
-const isStarted = computed(() => heygen.isStarted);
 
 // Отслеживаем ручные изменения текста для синхронизации speechBase
 // Очищаем speechBase если пользователь полностью удалил текст
@@ -298,7 +293,7 @@ async function handleWelcomeSelect(
       userPrompt,
     });
 
-    if (res) {
+    if (res?.ok) {
       // Озвучим ответ ассистента после получения
       await nextTick();
       if (chatSettings.voice === true) {
@@ -316,9 +311,6 @@ async function handleWelcomeSelect(
   } catch (error) {
     console.error('[handleWelcomeSelect] Failed to start conversation:', error);
   }
-}
-function speak(text: string) {
-  heygen.speak(text);
 }
 
 async function toggleMic() {
@@ -406,9 +398,15 @@ const onSend = async () => {
     textareaRef.value?.resetHeight();
   });
 
-  const res = await chat.sendMessage(JSON.parse(JSON.stringify(textToSend)));
+  let res: any = null;
+  try {
+    res = await chat.sendMessage(JSON.parse(JSON.stringify(textToSend)));
+  } catch (error) {
+    console.error('[onSend] Failed to send message:', error);
+    return;
+  }
 
-  if (res) {
+  if (res?.ok) {
     chat.startSession();
 
     // Озвучим последний ответ ассистента через HeyGen или TTS OpenAI
@@ -444,7 +442,7 @@ const isNearBottom = () => {
   return el.scrollHeight - el.scrollTop - el.clientHeight < THRESHOLD;
 };
 
-const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
+const scrollToBottom = (behavior: 'auto' | 'smooth' = 'smooth') => {
   const el = chatRef.value;
   if (!el) return;
   el.scrollTo({ top: el.scrollHeight, behavior });
@@ -487,9 +485,19 @@ onMounted(async () => {
   await autoStartAvatarIfEnabled();
 });
 
+// Завершаем therapy сессию и останавливаем сервисы при уходе со страницы
 onBeforeUnmount(() => {
+  // Завершаем therapy сессию
+  if (chat.therapySessionId && !chat.isEndingSession) {
+    void chat.endTherapySession();
+  }
+  // Останавливаем голосовой ввод и HeyGen
   stop();
   heygen.stopSession();
+
+  // Сбрасываем кэш subscription store для обновления данных при следующем заходе
+  const subscriptionStore = useSubscriptionStore();
+  subscriptionStore.invalidateCache();
 });
 
 // когда приходит новое сообщение — скроллим, если пользователь внизу
@@ -535,6 +543,7 @@ watch(
   async (isWelcomeScreen) => {
     if (isWelcomeScreen) {
       // Отменяем текущий chat stream запрос (если он активен)
+      // clearMessages уже вызывает endTherapySession, поэтому не нужно вызывать отдельно
       chat.clearMessages();
 
       // Останавливаем HeyGen сессию, если она была запущена
@@ -562,7 +571,7 @@ watch(
     ) {
       // Сохраняем только если режим валидный (talk сохраняется как 'therapy' на бэкенде)
       const modeToSave = newMode === 'talk' ? 'therapy' : newMode;
-      await chatSettings.updateChatSettings({ mode: modeToSave });
+      await chatSettings.updateChatSettings({ mode: modeToSave }, false);
     }
   },
   { immediate: false }

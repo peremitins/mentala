@@ -67,6 +67,10 @@ export default defineNuxtConfig({
     TELEGRAM_BOT_TOKEN: process.env.NUXT_TELEGRAM_BOT_TOKEN,
     FIREBASE_SERVICE_ACCOUNT_JSON:
       process.env.NUXT_FIREBASE_SERVICE_ACCOUNT_JSON,
+    // YooKassa настройки
+    yookassaShopId: process.env.NUXT_YOOKASSA_SHOP_ID,
+    yookassaSecretKey: process.env.NUXT_YOOKASSA_SECRET_KEY,
+    yookassaTestMode: process.env.NUXT_YOOKASSA_TEST_MODE === 'true',
     public: {
       // Если не задано, будет пустая строка = относительные пути
       apiBase: process.env.NUXT_PUBLIC_API_SERVER_URL || '',
@@ -74,6 +78,7 @@ export default defineNuxtConfig({
       speechDefaultEngine:
         process.env.NUXT_PUBLIC_SPEECH_DEFAULT_ENGINE || 'auto', // auto | native | webspeech | whisper
       isDev: process.env.NUXT_PUBLIC_IS_DEV === 'true', // Режим разработки (для управления функционалом в UI)
+      chatIdleTimeoutMs: 2 * 60 * 1000, // 2 минуты в миллисекундах
     },
   },
   nitro: {

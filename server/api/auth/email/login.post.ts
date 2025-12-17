@@ -82,6 +82,7 @@ export default defineEventHandler(async (event) => {
     .set({
       locale: body.locale ?? existing[0].locale,
       lastLoginAt: new Date(),
+      updatedAt: new Date(), // Явно обновляем updatedAt
     })
     .where(eq(users.id, existing[0].id));
   const sessionId = await createSession(event, existing[0].id, body.locale);

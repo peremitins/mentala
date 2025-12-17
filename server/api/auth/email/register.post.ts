@@ -5,6 +5,7 @@ import { eq } from 'drizzle-orm';
 import { createSession } from '@/server/application/auth/session';
 import argon2 from 'argon2';
 import { getTimezoneFromRequest } from '@/server/application/notifications/timezone.utils';
+import { activateTrialForUser } from '@/server/application/subscriptions/trial.service';
 
 export default defineEventHandler(async (event) => {
   const body = await readBody<{
@@ -43,15 +44,31 @@ export default defineEventHandler(async (event) => {
       email: body.email,
       passwordHash: hash,
       locale: body.locale ?? null,
+      timezone: timezone || 'Europe/Moscow', // Сохраняем timezone при регистрации
     })
     .returning();
 
-  // При регистрации timezone сохраняется при создании первой preference
-  // (при создании первой habit или therapy topic)
-  // Здесь мы просто логируем, что timezone будет использован при создании preferences
-  console.log(
-    `[Auth] User ${u.id} registered with timezone: ${timezone} (will be used when creating first preference)`
-  );
+  // Активируем Trial для нового пользователя (или создаем Basic без Trial)
+  // ВАЖНО: Всегда создаем подписку Basic при регистрации
+  try {
+    const subscription = await activateTrialForUser(u.id, timezone);
+    if (subscription) {
+      console.log(
+        `[Auth] ✅ Subscription created for user ${u.id}: planId=${subscription.planId}, paymentStatus=${subscription.paymentStatus}`
+      );
+    } else {
+      console.warn(
+        `[Auth] ⚠️ activateTrialForUser returned null for user ${u.id}`
+      );
+    }
+  } catch (error: any) {
+    console.error(
+      `[Auth] ❌ Failed to activate trial/subscription for user ${u.id}:`,
+      error
+    );
+    console.error(`[Auth] Error details:`, error?.message, error?.stack);
+    // Не блокируем регистрацию, если подписка не активировалась, но логируем ошибку
+  }
 
   const sessionId = await createSession(event, u.id, body.locale);
   return {

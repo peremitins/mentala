@@ -2,6 +2,9 @@
   <div class="space-y-6">
     <!-- Глобальные настройки уведомлений -->
     <section class="space-y-4">
+      <!-- Блок подписки -->
+      <SubscriptionBlock />
+
       <!-- Обращение -->
       <ToggleButtonGroup
         v-model="addressing"
@@ -52,6 +55,7 @@
 import { ref, onMounted } from 'vue';
 import ToggleButtonGroup from '@/app/components/ui/ToggleButtonGroup.vue';
 import VoiceInput from '@/app/components/VoiceInput.vue';
+import SubscriptionBlock from '@/app/components/settings/SubscriptionBlock.vue';
 import { useNotificationsSettings } from '@/app/composables/useNotificationsSettings';
 import { useToast } from '@/app/composables/useToast';
 import type { Addressing, Tone } from '@/shared/dto/notifications';

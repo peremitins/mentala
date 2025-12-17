@@ -4,6 +4,13 @@ import { useChatStore } from '@/app/stores/chat';
 import { useChatSettingsStore } from '@/app/stores/chatSettings';
 import { useSpeechStore } from '@/app/stores/speech';
 import { useHeygenStore } from '@/app/stores/heygen';
+import { useSubscriptionStore } from '@/app/stores/subscription';
+import { useUserHabitsStore } from '@/app/stores/userHabits';
+import { useTherapyTopicsStore } from '@/app/stores/therapyTopics';
+import { useLoadersStore } from '@/app/stores/loaders';
+import { usePromptsStore } from '@/app/stores/prompts';
+import { useNotificationsStore } from '@/app/stores/notifications';
+import { useUserStore } from '@/app/stores/user';
 import { useTTS } from '@/app/composables/useTTS';
 import { useSpeechEngine } from '@/app/composables/useSpeechEngine';
 
@@ -136,13 +143,27 @@ export const useAuthStore = defineStore('auth', {
     },
 
     /**
-     * Сбрасывает состояние всех stores
+     * Сбрасывает состояние всех stores через $reset()
+     * Важно: auth store сбрасывается отдельно через _resetAuthState()
      */
     _resetAllStores() {
-      const chat = useChatStore();
-      chat.$reset();
-      useChatSettingsStore().$reset();
-      useSpeechStore().$reset();
+      try {
+        // Сбрасываем все stores в порядке зависимостей
+        useChatStore().$reset();
+        useChatSettingsStore().$reset();
+        useSpeechStore().$reset();
+        useHeygenStore().$reset();
+        useSubscriptionStore().$reset();
+        useUserHabitsStore().$reset();
+        useTherapyTopicsStore().$reset();
+        useLoadersStore().$reset();
+        usePromptsStore().$reset();
+        useNotificationsStore().$reset();
+        useUserStore().$reset();
+      } catch (err) {
+        console.error('[Auth Store] Error resetting stores:', err);
+        // Продолжаем выполнение даже если какой-то store не удалось сбросить
+      }
     },
 
     /**

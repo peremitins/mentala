@@ -4,6 +4,7 @@ import { db } from '@/server/infrastructure/db/client';
 import { users, oauthAccounts } from '@/server/infrastructure/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { createSession } from './session';
+import { activateTrialForUser } from '@/server/application/subscriptions/trial.service';
 
 const STATE_COOKIE = 'mentai.oauth.state';
 const REDIR_COOKIE = 'mentai.oauth.redirect';
@@ -93,6 +94,8 @@ export async function upsertUserWithOAuth(
     .limit(1);
 
   let userId: number | null = null;
+  let isNewUser = false;
+
   if (acc.length) {
     userId = acc[0].userId as number;
     await db
@@ -123,6 +126,51 @@ export async function upsertUserWithOAuth(
         })
         .returning();
       userId = u.id;
+      isNewUser = true;
+
+      // Активируем Trial для нового пользователя (или создаем Basic без Trial, если уже использовал)
+      // ВАЖНО: Всегда создаем подписку Basic при регистрации
+      try {
+        const subscription = await activateTrialForUser(userId);
+        if (subscription) {
+          console.log(
+            `[OAuth] ✅ Subscription created for new user ${userId}: planId=${subscription.planId}, paymentStatus=${subscription.paymentStatus}`
+          );
+        } else {
+          console.warn(
+            `[OAuth] ⚠️ activateTrialForUser returned null for new user ${userId}`
+          );
+        }
+      } catch (error: any) {
+        console.error(
+          `[OAuth] ❌ Failed to activate trial/subscription for new user ${userId}:`,
+          error
+        );
+        console.error(`[OAuth] Error details:`, error?.message, error?.stack);
+        // Не блокируем регистрацию, если подписка не активировалась, но логируем ошибку
+      }
+    } else {
+      // Пользователь уже существует - проверяем, есть ли у него подписка
+      // Если нет - создаем Basic (без Trial, если hasUsedTrial уже true)
+      try {
+        const subscription = await activateTrialForUser(userId);
+        if (subscription) {
+          console.log(
+            `[OAuth] ✅ Ensured subscription exists for existing user ${userId}: planId=${subscription.planId}, paymentStatus=${subscription.paymentStatus}`
+          );
+        } else {
+          console.warn(
+            `[OAuth] ⚠️ activateTrialForUser returned null for existing user ${userId}`
+          );
+        }
+      } catch (error: any) {
+        console.error(
+          `[OAuth] ❌ Failed to ensure subscription for existing user ${userId}:`,
+          error
+        );
+        console.error(`[OAuth] Error details:`, error?.message, error?.stack);
+        // Не блокируем вход, если подписка не создалась, но логируем ошибку
+      }
     }
     await db.insert(oauthAccounts).values({
       userId: userId!,
