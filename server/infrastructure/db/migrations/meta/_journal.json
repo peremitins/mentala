@@ -36,6 +36,27 @@
       "when": 1765450447255,
       "tag": "0004_neat_paladin",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1765556798797,
+      "tag": "0005_serious_the_hood",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1765892870634,
+      "tag": "0006_simple_the_leader",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1765900346368,
+      "tag": "0007_opposite_warlock",
+      "breakpoints": true
     }
   ]
 }

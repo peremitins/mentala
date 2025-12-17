@@ -25,6 +25,14 @@ export const users = pgTable('users', {
   locale: varchar('locale', { length: 8 }),
   lastLoginAt: timestamp('last_login_at'),
   lastLoginIp: text('last_login_ip'),
+  // Subscription fields
+  hasUsedTrial: boolean('has_used_trial').default(false).notNull(),
+  trialStartedAt: timestamp('trial_started_at', { withTimezone: true }),
+  trialEndedAt: timestamp('trial_ended_at', { withTimezone: true }),
+  billingCredit: numeric('billing_credit', { precision: 10, scale: 2 })
+    .default('0')
+    .notNull(), // внутренний кредит в рублях
+  timezone: varchar('timezone', { length: 100 }), // IANA timezone для расчета недель
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull(),
@@ -443,3 +451,215 @@ export const notificationTextPresets = pgTable('notification_text_presets', {
   text: text('text').notNull(), // сам текст
   sortOrder: integer('sort_order').notNull().default(0),
 });
+
+// === Subscription System ===
+
+// Тарифные планы (конфигурация)
+export const subscriptionPlans = pgTable('subscription_plans', {
+  id: varchar('id', { length: 50 }).primaryKey(), // 'basic', 'pro', 'premium', 'custom'
+  name: varchar('name', { length: 20 }).notNull(), // 'basic' | 'pro' | 'premium' | 'custom'
+  basePrice: numeric('base_price', { precision: 10, scale: 2 }).notNull(), // базовая месячная цена в рублях
+  weeklyMinutesLimit: integer('weekly_minutes_limit').notNull(), // лимит минут в неделю
+  avatarEnabled: boolean('avatar_enabled').default(false).notNull(), // доступен ли аватар
+  pricePerMinuteGPT: numeric('price_per_minute_gpt', {
+    precision: 10,
+    scale: 4,
+  })
+    .default('0.66')
+    .notNull(), // для расчета Custom
+  pricePerMinuteAvatar: numeric('price_per_minute_avatar', {
+    precision: 10,
+    scale: 4,
+  })
+    .default('0.9')
+    .notNull(), // для расчета Custom
+  isCustomConfigurable: boolean('is_custom_configurable')
+    .default(false)
+    .notNull(),
+  isVisibleInUI: boolean('is_visible_in_ui').default(true).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+// Подписки пользователей
+export const userSubscriptions = pgTable(
+  'user_subscriptions',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    planId: varchar('plan_id', { length: 50 })
+      .notNull()
+      .references(() => subscriptionPlans.id),
+    billingPeriod: varchar('billing_period', { length: 10 })
+      .notNull()
+      .default('month'), // 'month' | 'year'
+    customConfig: jsonb('custom_config').$type<{
+      weeklyMinutes: number;
+      avatarEnabled: boolean;
+      totalPrice: number;
+    }>(), // опционально, только для Custom
+    // Checkout fields (для безопасной валидации webhook и корректного учёта billingCredit)
+    checkoutAmount: numeric('checkout_amount', { precision: 10, scale: 2 })
+      .default('0')
+      .notNull(), // ожидаемая сумма к оплате (toPay после применения кредита)
+    checkoutCurrency: varchar('checkout_currency', { length: 3 })
+      .default('RUB')
+      .notNull(),
+    billingCreditApplied: numeric('billing_credit_applied', {
+      precision: 10,
+      scale: 2,
+    })
+      .default('0')
+      .notNull(), // сколько кредита применили для уменьшения toPay
+    billingCreditGranted: numeric('billing_credit_granted', {
+      precision: 10,
+      scale: 2,
+    })
+      .default('0')
+      .notNull(), // сколько кредита нужно начислить при финализации (downgrade)
+    yookassaPaymentId: text('yookassa_payment_id'), // payment.id в YooKassa (если известен)
+    startDate: timestamp('start_date', { withTimezone: true }).notNull(),
+    endDate: timestamp('end_date', { withTimezone: true }).notNull(),
+    paymentStatus: varchar('payment_status', { length: 20 })
+      .notNull()
+      .default('pending'), // 'active' | 'expired' | 'pending' | 'canceled'
+    autoRenew: boolean('auto_renew').default(false).notNull(),
+    sourcePlatform: varchar('source_platform', { length: 20 })
+      .default('web')
+      .notNull(), // 'web' | 'ios' | 'android'
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    // Индекс для поиска активных подписок пользователя
+    userStatusIdx: index('idx_user_subscriptions_user_status').on(
+      table.userId,
+      table.paymentStatus
+    ),
+    // Индекс для поиска истекших подписок
+    expiredIdx: index('idx_user_subscriptions_expired').on(
+      table.paymentStatus,
+      table.endDate
+    ),
+    // Уникальность payment.id от YooKassa (Postgres допускает множество NULL)
+    yookassaPaymentUnique: unique(
+      'uk_user_subscriptions_yookassa_payment_id'
+    ).on(table.yookassaPaymentId),
+  })
+);
+
+// Сессии терапии (для подсчета времени)
+export const therapySessions = pgTable(
+  'therapy_sessions',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull(), // когда отправлено первое сообщение
+    lastActivityAt: timestamp('last_activity_at', { withTimezone: true }), // последняя активность в сессии
+    endedAt: timestamp('ended_at', { withTimezone: true }), // когда сессия завершена
+    durationSeconds: integer('duration_seconds').default(0).notNull(), // длительность в секундах
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    // Индекс для поиска сессий пользователя по дате (для расчета недели)
+    userStartedIdx: index('idx_therapy_sessions_user_started').on(
+      table.userId,
+      table.startedAt
+    ),
+  })
+);
+
+// События подписок (для аналитики)
+export const subscriptionEvents = pgTable('subscription_events', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  eventType: varchar('event_type', { length: 50 }).notNull(), // 'trial_started', 'trial_ended', 'checkout_started', 'purchase_success', etc.
+  planId: varchar('plan_id', { length: 50 }),
+  metadata: jsonb('metadata'), // дополнительные данные события
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+// Платежи от YooKassa (для проверки уникальности и идемпотентности)
+export const payments = pgTable(
+  'payments',
+  {
+    id: text('id').primaryKey(), // payment.id от YooKassa
+    subscriptionId: integer('subscription_id').references(
+      () => userSubscriptions.id,
+      {
+        onDelete: 'set null',
+      }
+    ),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    amount: numeric('amount', { precision: 10, scale: 2 }).notNull(), // сумма в рублях
+    currency: varchar('currency', { length: 3 }).notNull().default('RUB'),
+    status: varchar('status', { length: 20 }).notNull(), // 'succeeded', 'canceled', 'pending'
+    metadata: jsonb('metadata'), // дополнительные данные от YooKassa
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    // Индекс для быстрого поиска по subscriptionId
+    subscriptionIdx: index('idx_payments_subscription').on(
+      table.subscriptionId
+    ),
+    // Индекс для поиска по пользователю
+    userIdx: index('idx_payments_user').on(table.userId),
+  })
+);
+
+// Идемпотентность для команд (checkout, webhook, etc.)
+export const idempotencyKeys = pgTable(
+  'idempotency_keys',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    route: varchar('route', { length: 255 }).notNull(), // путь API
+    key: text('key').notNull(), // Idempotency-Key заголовок
+    responseHash: text('response_hash'), // хеш ответа для возврата того же результата
+    responseJson: jsonb('response_json'), // исходный JSON ответа для повторов
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(), // TTL для очистки старых ключей
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    // Уникальная пара user_id + route + key
+    uniqueKey: unique('uk_idempotency_user_route_key').on(
+      table.userId,
+      table.route,
+      table.key
+    ),
+    // Индекс для очистки просроченных ключей
+    expiresIdx: index('idx_idempotency_expires').on(table.expiresAt),
+  })
+);

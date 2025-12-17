@@ -47,9 +47,11 @@ export const useChatSettingsStore = defineStore('chatSettings', {
         throw error;
       }
     },
-    async updateChatSettings(payload: Record<string, any>) {
+    async updateChatSettings(payload: Record<string, any>, withLoader = true) {
       const loaders = useLoadersStore();
-      loaders.showLoader();
+      if (withLoader) {
+        loaders.showLoader();
+      }
       try {
         const data = await useAPI('/api/settings/chat', {
           method: 'PATCH',
@@ -78,6 +80,10 @@ export const useChatSettingsStore = defineStore('chatSettings', {
       } catch (error) {
         console.error('Error updating chat settings:', error);
         throw error;
+      } finally {
+        if (withLoader) {
+          loaders.hideLoader();
+        }
       }
     },
   },

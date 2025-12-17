@@ -88,10 +88,20 @@ export default defineNuxtPlugin(() => {
           | Headers
           | undefined;
 
+        // Определяем платформу для передачи на сервер
+        const platform = Capacitor.getPlatform();
+        const platformHeader =
+          platform === 'ios'
+            ? 'ios'
+            : platform === 'android'
+              ? 'android'
+              : 'web';
+
         if (token) {
           if (headers instanceof Headers) {
             headers.set('X-Session-Token', token);
             headers.set('X-Timezone', timezone);
+            headers.set('X-Platform', platformHeader);
             headers.set('Content-Type', 'application/json');
           } else {
             options.headers = {
@@ -99,18 +109,21 @@ export default defineNuxtPlugin(() => {
               'Content-Type': 'application/json',
               'X-Session-Token': token,
               'X-Timezone': timezone,
+              'X-Platform': platformHeader,
             } as any;
           }
         } else {
-          // Если нет токена, всё равно устанавливаем Content-Type и X-Timezone
+          // Если нет токена, всё равно устанавливаем Content-Type, X-Timezone и X-Platform
           if (headers instanceof Headers) {
             headers.set('Content-Type', 'application/json');
             headers.set('X-Timezone', timezone);
+            headers.set('X-Platform', platformHeader);
           } else {
             options.headers = {
               ...((headers as Record<string, string>) || {}),
               'Content-Type': 'application/json',
               'X-Timezone': timezone,
+              'X-Platform': platformHeader,
             } as any;
           }
         }

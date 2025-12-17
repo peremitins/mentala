@@ -110,6 +110,46 @@ server/
 
 ⸻
 
+💳 Подписки, минуты и биллинг
+
+• Данные и таблицы:
+• `subscription_plans` — конфигурация тарифов (`basic/pro/premium/custom`), лимиты минут, фичи.
+• `user_subscriptions` — периоды подписок пользователя + статус оплаты (`active/pending/expired/canceled`) + `billing_period`.
+• `subscription_events` — аудит/аналитика (trial_started, checkout_started, purchase_success/failed, subscription_canceled и т.д.).
+• `payments` — идемпотентность webhook по `payment.id` YooKassa (PK = text).
+• `idempotency_keys` — идемпотентность команд (ключ = userId+route+Idempotency-Key), хранит `response_json` для повторов.
+• `therapy_sessions` — учёт минут: `started_at`, `last_activity_at`, `ended_at`, `duration_seconds`.
+
+• Trial:
+• Trial — это **состояние пользователя**, а не отдельный план: `users.has_used_trial`, `users.trial_started_at`, `users.trial_ended_at`.
+• При регистрации создаётся `Basic` подписка; если Trial активен — функционал как Premium на 7 дней.
+
+• Checkout (MVP, без реального YooKassa checkout):
+• `POST /api/subscriptions/start-checkout` требует заголовок `Idempotency-Key`.
+• Создаёт `pending` подписку и сохраняет «ожидаемые» checkout-поля прямо в `user_subscriptions`:
+  `checkout_amount`, `checkout_currency`, `billing_credit_applied`, `billing_credit_granted`, `yookassa_payment_id`.
+• Кредит `billingCredit` **резервируется** на старте checkout (уменьшаем `users.billing_credit`) и:
+  • при `payment.succeeded` не списывается повторно,
+  • при `payment.canceled` возвращается.
+• Если `toPay === 0` — финализация происходит сразу в `start-checkout` (без webhook).
+
+• YooKassa webhook:
+• В `POST /api/payments/yookassa/webhook` подлинность уведомления подтверждается через API YooKassa:
+  `GET https://api.yookassa.ru/v3/payments/{payment_id}` (Basic Auth `shopId:secretKey`).
+• Сумма/валюта сверяются с `user_subscriptions.checkout_*` перед активацией.
+• Все мутации — в транзакции; конкурентные повторы защищены `ON CONFLICT DO NOTHING` по `payments.id`.
+
+• Доступ к AI и лимиты:
+• Сервер жёстко проверяет доступ к AI и недельный лимит минут (с overdraft `WEEKLY_OVERDRAFT_MINUTES`).
+• `/api/therapy/session/start` откажет, если нет доступа к AI или лимит исчерпан.
+• `/api/chat/stream` требует `therapySessionId`, обновляет `last_activity_at` на сервере и проверяет лимиты перед запросом к LLM.
+
+• Миграции (Drizzle):
+• Меняем `server/infrastructure/db/schema.ts` → запускаем `pnpm db:generate` → `pnpm db:migrate`.
+• Миграции для подписок/биллинга сейчас: `0005_*` (база), `0006_*` (payments/idempotency/billing_period/last_activity_at), `0007_*` (checkout-поля + response_json).
+
+⸻
+
 📊 Логирование и мониторинг
 • Node.js (Nitro): Pino + Sentry.
 • Laravel (в будущем): Monolog + Sentry.

@@ -112,7 +112,7 @@ function handleSelect(mode: 'therapy' | 'habits' | 'talk') {
   }
 
   // Сохраняем настройки
-  chatSettings.updateChatSettings({ mode: chatSettings.mode });
+  chatSettings.updateChatSettings({ mode: chatSettings.mode }, false);
 
   // Эмитим событие для родительского компонента с описанием режима
   const description = MODE_DESCRIPTIONS[mode];
