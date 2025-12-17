@@ -1,94 +1,3 @@
-<script setup lang="ts">
-import { computed, ref, watch } from 'vue';
-import PageHeader from '@/app/components/PageHeader.vue';
-import PromptsSection from '@/app/components/prompts/PromptsSection.vue';
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from '@/app/components/ui/shadcn/tabs';
-import Combobox from '@/app/components/Combobox.vue';
-import { INTENT_OPTIONS } from '@/app/constants/select-options';
-import IconTrash from '~icons/lucide/trash';
-import Skeleton from '@/app/components/ui/Skeleton.vue';
-
-export interface NotificationIndexItem {
-  id: string;
-  name: string;
-  description: string;
-  emoji: string;
-  gradientClass: string;
-  payload?: unknown;
-  canDelete?: boolean;
-}
-
-const props = withDefaults(
-  defineProps<{
-    title: string;
-    description: string;
-    items: NotificationIndexItem[];
-    mentaiMode: 'habits' | 'therapy';
-    loading?: boolean;
-  }>(),
-  {
-    items: () => [],
-    loading: false,
-  }
-);
-
-const emit = defineEmits<{
-  (e: 'select', item: NotificationIndexItem): void;
-  (e: 'remove', item: NotificationIndexItem): void;
-}>();
-
-const route = useRoute();
-const router = useRouter();
-const activeTab = ref<string>((route.query.tab as string) || 'notifications');
-const initialIntent = route.query.intent === 'quit' ? 'quit' : 'build';
-const selectedIntent = ref<'build' | 'quit'>(initialIntent);
-
-watch(activeTab, (newTab) => {
-  router.replace({ query: { ...route.query, tab: newTab } });
-});
-
-if (props.mentaiMode === 'habits') {
-  watch(selectedIntent, (newIntent) => {
-    router.replace({ query: { ...route.query, intent: newIntent } });
-  });
-}
-
-const hoveredId = ref<string | null>(null);
-
-const visibleItems = computed(() => {
-  if (props.mentaiMode !== 'habits') {
-    return props.items;
-  }
-
-  const intentValue = selectedIntent.value || 'build';
-  return props.items.filter((item) => {
-    const payload = item.payload as
-      | {
-          intent?: 'build' | 'quit';
-          action?: string;
-        }
-      | undefined;
-    if (payload?.action === 'create-habit') {
-      return true;
-    }
-    return payload?.intent === intentValue;
-  });
-});
-
-function handleSelect(item: NotificationIndexItem) {
-  emit('select', item);
-}
-
-function handleRemove(item: NotificationIndexItem) {
-  emit('remove', item);
-}
-</script>
-
 <template>
   <div class="space-y-4 h-full overflow-y-auto rounded-sm">
     <PageHeader :title="title" />
@@ -197,3 +106,94 @@ function handleRemove(item: NotificationIndexItem) {
     </Tabs>
   </div>
 </template>
+
+<script setup lang="ts">
+import { computed, ref, watch } from 'vue';
+import PageHeader from '@/app/components/PageHeader.vue';
+import PromptsSection from '@/app/components/prompts/PromptsSection.vue';
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/app/components/ui/shadcn/tabs';
+import Combobox from '@/app/components/Combobox.vue';
+import { INTENT_OPTIONS } from '@/app/constants/select-options';
+import IconTrash from '~icons/lucide/trash';
+import Skeleton from '@/app/components/ui/Skeleton.vue';
+
+export interface NotificationIndexItem {
+  id: string;
+  name: string;
+  description: string;
+  emoji: string;
+  gradientClass: string;
+  payload?: unknown;
+  canDelete?: boolean;
+}
+
+const props = withDefaults(
+  defineProps<{
+    title: string;
+    description: string;
+    items: NotificationIndexItem[];
+    mentaiMode: 'habits' | 'therapy';
+    loading?: boolean;
+  }>(),
+  {
+    items: () => [],
+    loading: false,
+  }
+);
+
+const emit = defineEmits<{
+  (e: 'select', item: NotificationIndexItem): void;
+  (e: 'remove', item: NotificationIndexItem): void;
+}>();
+
+const route = useRoute();
+const router = useRouter();
+const activeTab = ref<string>((route.query.tab as string) || 'notifications');
+const initialIntent = route.query.intent === 'quit' ? 'quit' : 'build';
+const selectedIntent = ref<'build' | 'quit'>(initialIntent);
+
+watch(activeTab, (newTab) => {
+  router.replace({ query: { ...route.query, tab: newTab } });
+});
+
+if (props.mentaiMode === 'habits') {
+  watch(selectedIntent, (newIntent) => {
+    router.replace({ query: { ...route.query, intent: newIntent } });
+  });
+}
+
+const hoveredId = ref<string | null>(null);
+
+const visibleItems = computed(() => {
+  if (props.mentaiMode !== 'habits') {
+    return props.items;
+  }
+
+  const intentValue = selectedIntent.value || 'build';
+  return props.items.filter((item) => {
+    const payload = item.payload as
+      | {
+          intent?: 'build' | 'quit';
+          action?: string;
+        }
+      | undefined;
+    if (payload?.action === 'create-habit') {
+      return true;
+    }
+    return payload?.intent === intentValue;
+  });
+});
+
+function handleSelect(item: NotificationIndexItem) {
+  emit('select', item);
+}
+
+function handleRemove(item: NotificationIndexItem) {
+  emit('remove', item);
+}
+</script>

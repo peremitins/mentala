@@ -1,3 +1,25 @@
+<template>
+  <div class="space-y-3">
+    <div>
+      <h3 class="text-sm font-medium text-foreground">
+        Время получения уведомлений
+      </h3>
+      <p class="mt-1 text-xs text-muted-foreground">
+        Уведомления будут приходить только в выбранный промежуток времени и
+        равномерно распределяться внутри него
+      </p>
+    </div>
+
+    <div class="grid grid-cols-2 gap-3">
+      <!-- Start Time Picker -->
+      <TimePicker v-model="startTime" label="Начало" />
+
+      <!-- End Time Picker -->
+      <TimePicker v-model="endTime" label="Конец" />
+    </div>
+  </div>
+</template>
+
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import TimePicker from '@/app/components/TimePicker.vue';
@@ -68,25 +90,3 @@ function formatTime(minutes: number): string {
   return `${h}:${m}`;
 }
 </script>
-
-<template>
-  <div class="space-y-3">
-    <div>
-      <h3 class="text-sm font-medium text-foreground">
-        Время получения уведомлений
-      </h3>
-      <p class="mt-1 text-xs text-muted-foreground">
-        Уведомления будут приходить только в выбранный промежуток времени и
-        равномерно распределяться внутри него
-      </p>
-    </div>
-
-    <div class="grid grid-cols-2 gap-3">
-      <!-- Start Time Picker -->
-      <TimePicker v-model="startTime" label="Начало" />
-
-      <!-- End Time Picker -->
-      <TimePicker v-model="endTime" label="Конец" />
-    </div>
-  </div>
-</template>
