@@ -1,3 +1,25 @@
+<template>
+  <AlertDialog v-model:open="open">
+    <AlertDialogTrigger as-child>
+      <slot name="trigger" />
+    </AlertDialogTrigger>
+    <AlertDialogContent class="bg-popover">
+      <AlertDialogHeader>
+        <AlertDialogTitle>{{ title }}</AlertDialogTitle>
+        <AlertDialogDescription v-if="subtitle">
+          {{ subtitle }}
+        </AlertDialogDescription>
+      </AlertDialogHeader>
+      <AlertDialogFooter>
+        <AlertDialogCancel>{{ cancelLabel }}</AlertDialogCancel>
+        <AlertDialogAction @click="handleConfirm">{{
+          confirmLabel
+        }}</AlertDialogAction>
+      </AlertDialogFooter>
+    </AlertDialogContent>
+  </AlertDialog>
+</template>
+
 <script setup lang="ts">
 import { ref } from 'vue';
 import AlertDialog from '@/app/components/ui/shadcn/alert-dialog/AlertDialog.vue';
@@ -46,25 +68,3 @@ defineExpose({
   close,
 });
 </script>
-
-<template>
-  <AlertDialog v-model:open="open">
-    <AlertDialogTrigger as-child>
-      <slot name="trigger" />
-    </AlertDialogTrigger>
-    <AlertDialogContent class="bg-popover">
-      <AlertDialogHeader>
-        <AlertDialogTitle>{{ title }}</AlertDialogTitle>
-        <AlertDialogDescription v-if="subtitle">
-          {{ subtitle }}
-        </AlertDialogDescription>
-      </AlertDialogHeader>
-      <AlertDialogFooter>
-        <AlertDialogCancel>{{ cancelLabel }}</AlertDialogCancel>
-        <AlertDialogAction @click="handleConfirm">{{
-          confirmLabel
-        }}</AlertDialogAction>
-      </AlertDialogFooter>
-    </AlertDialogContent>
-  </AlertDialog>
-</template>

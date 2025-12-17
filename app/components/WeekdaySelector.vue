@@ -1,3 +1,43 @@
+<template>
+  <div class="space-y-3">
+    <div class="flex items-center justify-between">
+      <label class="text-sm font-medium text-foreground"> Дни недели </label>
+      <span class="text-xs font-medium text-primary">
+        {{ selectedDaysText }}
+      </span>
+    </div>
+
+    <div class="grid grid-cols-7 gap-1.5">
+      <button
+        v-for="day in weekdays"
+        :key="day.value"
+        type="button"
+        :aria-label="`Выбрать ${day.fullLabel}`"
+        :class="[
+          'flex h-8 items-center justify-center rounded-lg border text-sm font-medium transition-all',
+          props.modelValue.includes(day.value)
+            ? 'border-primary bg-button-active-soft text-surface-raised-foreground '
+            : 'border-border bg-card text-surface-inactive-foreground hover:bg-button-active-soft ',
+          // Если это последний выбранный день - не даем его отключить
+          props.modelValue.includes(day.value) && props.modelValue.length === 1
+            ? 'cursor-not-allowed opacity-75'
+            : 'cursor-pointer',
+        ]"
+        :disabled="
+          props.modelValue.includes(day.value) && props.modelValue.length === 1
+        "
+        @click="handleDayToggle(String(day.value))"
+      >
+        {{ day.label }}
+      </button>
+    </div>
+
+    <p class="text-xs text-muted-foreground">
+      Выберите дни для получения уведомлений
+    </p>
+  </div>
+</template>
+
 <script setup lang="ts">
 import { computed } from 'vue';
 
@@ -76,43 +116,3 @@ const selectedDaysText = computed(() => {
     .join(', ');
 });
 </script>
-
-<template>
-  <div class="space-y-3">
-    <div class="flex items-center justify-between">
-      <label class="text-sm font-medium text-foreground"> Дни недели </label>
-      <span class="text-xs font-medium text-primary">
-        {{ selectedDaysText }}
-      </span>
-    </div>
-
-    <div class="grid grid-cols-7 gap-1.5">
-      <button
-        v-for="day in weekdays"
-        :key="day.value"
-        type="button"
-        :aria-label="`Выбрать ${day.fullLabel}`"
-        :class="[
-          'flex h-8 items-center justify-center rounded-lg border text-sm font-medium transition-all',
-          props.modelValue.includes(day.value)
-            ? 'border-primary bg-button-active-soft text-surface-raised-foreground '
-            : 'border-border bg-card text-surface-inactive-foreground hover:bg-button-active-soft ',
-          // Если это последний выбранный день - не даем его отключить
-          props.modelValue.includes(day.value) && props.modelValue.length === 1
-            ? 'cursor-not-allowed opacity-75'
-            : 'cursor-pointer',
-        ]"
-        :disabled="
-          props.modelValue.includes(day.value) && props.modelValue.length === 1
-        "
-        @click="handleDayToggle(String(day.value))"
-      >
-        {{ day.label }}
-      </button>
-    </div>
-
-    <p class="text-xs text-muted-foreground">
-      Выберите дни для получения уведомлений
-    </p>
-  </div>
-</template>

@@ -1,3 +1,127 @@
+<template>
+  <div class="space-y-1.5">
+    <label v-if="label" class="block text-sm font-medium text-foreground mb-1">
+      {{ label }}
+    </label>
+
+    <Popover v-model:open="isOpen">
+      <PopoverTrigger as-child>
+        <slot name="trigger" :formatted-time="formattedTime">
+          <Button
+            variant="outline"
+            class="w-full justify-start text-left font-normal"
+          >
+            <IconClock class="mr-2 h-4 w-4 opacity-50" />
+            {{ formattedTime }}
+          </Button>
+        </slot>
+      </PopoverTrigger>
+
+      <PopoverContent class="w-auto p-0" align="start">
+        <div class="flex items-center">
+          <!-- Часы -->
+          <div class="flex flex-col items-center border-r border-border">
+            <!-- Кнопка вверх для часов (уменьшаем) -->
+            <button
+              type="button"
+              class="flex h-10 w-16 items-center justify-center hover:bg-muted transition-colors"
+              @click="decrementHours"
+            >
+              <IconChevronUp class="h-4 w-4" />
+            </button>
+
+            <!-- Список часов с нативным скроллом -->
+            <div ref="hoursContainer" class="h-40 w-16">
+              <ScrollArea
+                class="h-full [&>div>div]:overflow-y-auto [&_[data-radix-scroll-area-scrollbar]]:hidden"
+              >
+                <div class="flex flex-col">
+                  <button
+                    v-for="hour in hoursList"
+                    :key="`hour-${hour}`"
+                    :data-hour="hour"
+                    type="button"
+                    :class="[
+                      'flex h-10 w-full items-center justify-center text-sm transition-colors',
+                      hour === hours
+                        ? 'bg-primary font-semibold text-primary-foreground'
+                        : 'hover:bg-muted',
+                    ]"
+                    @click="
+                      updateTime(hour, minutes);
+                      scrollToValue('hours', hour);
+                    "
+                  >
+                    {{ hour.toString().padStart(2, '0') }}
+                  </button>
+                </div>
+              </ScrollArea>
+            </div>
+
+            <!-- Кнопка вниз для часов (увеличиваем) -->
+            <button
+              type="button"
+              class="flex h-10 w-16 items-center justify-center hover:bg-muted transition-colors"
+              @click="incrementHours"
+            >
+              <IconChevronDown class="h-4 w-4" />
+            </button>
+          </div>
+
+          <!-- Минуты -->
+          <div class="flex flex-col items-center">
+            <!-- Кнопка вверх для минут (уменьшаем) -->
+            <button
+              type="button"
+              class="flex h-10 w-16 items-center justify-center hover:bg-muted transition-colors"
+              @click="decrementMinutes"
+            >
+              <IconChevronUp class="h-4 w-4" />
+            </button>
+
+            <!-- Список минут с нативным скроллом -->
+            <div ref="minutesContainer" class="h-40 w-16">
+              <ScrollArea
+                class="h-full [&>div>div]:overflow-y-auto [&_[data-radix-scroll-area-scrollbar]]:hidden"
+              >
+                <div class="flex flex-col">
+                  <button
+                    v-for="minute in minutesList"
+                    :key="`minute-${minute}`"
+                    :data-minute="minute"
+                    type="button"
+                    :class="[
+                      'flex h-10 w-full items-center justify-center text-sm transition-colors',
+                      minute === minutes
+                        ? 'bg-primary font-semibold text-primary-foreground'
+                        : 'hover:bg-muted',
+                    ]"
+                    @click="
+                      updateTime(hours, minute);
+                      scrollToValue('minutes', minute);
+                    "
+                  >
+                    {{ minute.toString().padStart(2, '0') }}
+                  </button>
+                </div>
+              </ScrollArea>
+            </div>
+
+            <!-- Кнопка вниз для минут (увеличиваем) -->
+            <button
+              type="button"
+              class="flex h-10 w-16 items-center justify-center hover:bg-muted transition-colors"
+              @click="incrementMinutes"
+            >
+              <IconChevronDown class="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  </div>
+</template>
+
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted, nextTick } from 'vue';
 import {
@@ -243,127 +367,3 @@ onUnmounted(() => {
   }
 });
 </script>
-
-<template>
-  <div class="space-y-1.5">
-    <label v-if="label" class="block text-sm font-medium text-foreground mb-1">
-      {{ label }}
-    </label>
-
-    <Popover v-model:open="isOpen">
-      <PopoverTrigger as-child>
-        <slot name="trigger" :formatted-time="formattedTime">
-          <Button
-            variant="outline"
-            class="w-full justify-start text-left font-normal"
-          >
-            <IconClock class="mr-2 h-4 w-4 opacity-50" />
-            {{ formattedTime }}
-          </Button>
-        </slot>
-      </PopoverTrigger>
-
-      <PopoverContent class="w-auto p-0" align="start">
-        <div class="flex items-center">
-          <!-- Часы -->
-          <div class="flex flex-col items-center border-r border-border">
-            <!-- Кнопка вверх для часов (уменьшаем) -->
-            <button
-              type="button"
-              class="flex h-10 w-16 items-center justify-center hover:bg-muted transition-colors"
-              @click="decrementHours"
-            >
-              <IconChevronUp class="h-4 w-4" />
-            </button>
-
-            <!-- Список часов с нативным скроллом -->
-            <div ref="hoursContainer" class="h-40 w-16">
-              <ScrollArea
-                class="h-full [&>div>div]:overflow-y-auto [&_[data-radix-scroll-area-scrollbar]]:hidden"
-              >
-                <div class="flex flex-col">
-                  <button
-                    v-for="hour in hoursList"
-                    :key="`hour-${hour}`"
-                    :data-hour="hour"
-                    type="button"
-                    :class="[
-                      'flex h-10 w-full items-center justify-center text-sm transition-colors',
-                      hour === hours
-                        ? 'bg-primary font-semibold text-primary-foreground'
-                        : 'hover:bg-muted',
-                    ]"
-                    @click="
-                      updateTime(hour, minutes);
-                      scrollToValue('hours', hour);
-                    "
-                  >
-                    {{ hour.toString().padStart(2, '0') }}
-                  </button>
-                </div>
-              </ScrollArea>
-            </div>
-
-            <!-- Кнопка вниз для часов (увеличиваем) -->
-            <button
-              type="button"
-              class="flex h-10 w-16 items-center justify-center hover:bg-muted transition-colors"
-              @click="incrementHours"
-            >
-              <IconChevronDown class="h-4 w-4" />
-            </button>
-          </div>
-
-          <!-- Минуты -->
-          <div class="flex flex-col items-center">
-            <!-- Кнопка вверх для минут (уменьшаем) -->
-            <button
-              type="button"
-              class="flex h-10 w-16 items-center justify-center hover:bg-muted transition-colors"
-              @click="decrementMinutes"
-            >
-              <IconChevronUp class="h-4 w-4" />
-            </button>
-
-            <!-- Список минут с нативным скроллом -->
-            <div ref="minutesContainer" class="h-40 w-16">
-              <ScrollArea
-                class="h-full [&>div>div]:overflow-y-auto [&_[data-radix-scroll-area-scrollbar]]:hidden"
-              >
-                <div class="flex flex-col">
-                  <button
-                    v-for="minute in minutesList"
-                    :key="`minute-${minute}`"
-                    :data-minute="minute"
-                    type="button"
-                    :class="[
-                      'flex h-10 w-full items-center justify-center text-sm transition-colors',
-                      minute === minutes
-                        ? 'bg-primary font-semibold text-primary-foreground'
-                        : 'hover:bg-muted',
-                    ]"
-                    @click="
-                      updateTime(hours, minute);
-                      scrollToValue('minutes', minute);
-                    "
-                  >
-                    {{ minute.toString().padStart(2, '0') }}
-                  </button>
-                </div>
-              </ScrollArea>
-            </div>
-
-            <!-- Кнопка вниз для минут (увеличиваем) -->
-            <button
-              type="button"
-              class="flex h-10 w-16 items-center justify-center hover:bg-muted transition-colors"
-              @click="incrementMinutes"
-            >
-              <IconChevronDown class="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      </PopoverContent>
-    </Popover>
-  </div>
-</template>

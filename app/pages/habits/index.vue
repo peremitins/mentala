@@ -1,3 +1,39 @@
+<template>
+  <div class="h-full flex flex-col z-0">
+    <NotificationIndexPage
+      title="📋&nbsp;&nbsp;Привычки"
+      description="Здесь вы найдёте готовые привычки и сможете добавить свои, чтобы получать именно те уведомления, которые вам подходят"
+      mentai-mode="habits"
+      :items="habitItems"
+      :loading="loadersStore.isSkeletonLoading"
+      @select="handleGoalSelect"
+      @remove="handleHabitDelete"
+    />
+
+    <CustomEntityModal
+      mentai-mode="habits"
+      :open="createModalOpen"
+      :default-intent="defaultIntent"
+      header-title="Новая привычка"
+      header-subtitle="Настройте свою привычку: выберите цель, добавьте описание и сохраните"
+      hero-title="Персонализируйте тему"
+      hero-subtitle="Эмодзи поможет быстрее находить её в списке"
+      submit-label="Создать и настроить"
+      @update:open="createModalOpen = $event"
+      @created="handleHabitCreated"
+    />
+
+    <ConfirmModal
+      ref="deleteModalRef"
+      title="Удалить привычку?"
+      subtitle="Настройка уведомлений и расписание будут удалены. Это действие необратимо."
+      confirm-label="Удалить"
+      cancel-label="Отмена"
+      @confirm="confirmDeleteHabit"
+    />
+  </div>
+</template>
+
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue';
 import { storeToRefs } from 'pinia';
@@ -146,39 +182,3 @@ async function confirmDeleteHabit() {
   }
 }
 </script>
-
-<template>
-  <div class="h-full flex flex-col z-0">
-    <NotificationIndexPage
-      title="📋&nbsp;&nbsp;Привычки"
-      description="Здесь вы найдёте готовые привычки и сможете добавить свои, чтобы получать именно те уведомления, которые вам подходят"
-      mentai-mode="habits"
-      :items="habitItems"
-      :loading="loadersStore.isSkeletonLoading"
-      @select="handleGoalSelect"
-      @remove="handleHabitDelete"
-    />
-
-    <CustomEntityModal
-      mentai-mode="habits"
-      :open="createModalOpen"
-      :default-intent="defaultIntent"
-      header-title="Новая привычка"
-      header-subtitle="Настройте свою привычку: выберите цель, добавьте описание и сохраните"
-      hero-title="Персонализируйте тему"
-      hero-subtitle="Эмодзи поможет быстрее находить её в списке"
-      submit-label="Создать и настроить"
-      @update:open="createModalOpen = $event"
-      @created="handleHabitCreated"
-    />
-
-    <ConfirmModal
-      ref="deleteModalRef"
-      title="Удалить привычку?"
-      subtitle="Настройка уведомлений и расписание будут удалены. Это действие необратимо."
-      confirm-label="Удалить"
-      cancel-label="Отмена"
-      @confirm="confirmDeleteHabit"
-    />
-  </div>
-</template>

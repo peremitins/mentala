@@ -1,3 +1,39 @@
+<template>
+  <div class="h-full flex flex-col z-0">
+    <NotificationIndexPage
+      title="🧠&nbsp;&nbsp;Терапия"
+      description="Здесь вы найдёте готовые темы поддержки и сможете добавить свои, чтобы получать именно те уведомления, которые вам подходят"
+      mentai-mode="therapy"
+      :items="topicItems"
+      :loading="loadersStore.isSkeletonLoading"
+      @select="handleTopicSelect"
+      @remove="handleTopicRemove"
+    />
+
+    <CustomEntityModal
+      mentai-mode="therapy"
+      :open="createModalOpen"
+      header-title="Новая тема терапии"
+      header-subtitle="Создайте тему под свои запросы: название, описание и эмодзи"
+      hero-title="Персонализируйте тему"
+      hero-subtitle="Эмодзи поможет быстрее находить её в списке"
+      submit-label="Создать и настроить"
+      name-placeholder="Например, «Поддержка перед выступлением»"
+      @update:open="createModalOpen = $event"
+      @created="handleTopicCreated"
+    />
+
+    <ConfirmModal
+      ref="deleteModalRef"
+      title="Удалить тему?"
+      subtitle="Расписание уведомлений по этой теме будет удалено. Продолжить?"
+      confirm-label="Удалить"
+      cancel-label="Отмена"
+      @confirm="confirmDeleteTopic"
+    />
+  </div>
+</template>
+
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue';
 import { storeToRefs } from 'pinia';
@@ -129,39 +165,3 @@ async function confirmDeleteTopic() {
   }
 }
 </script>
-
-<template>
-  <div class="h-full flex flex-col z-0">
-    <NotificationIndexPage
-      title="🧠&nbsp;&nbsp;Терапия"
-      description="Здесь вы найдёте готовые темы поддержки и сможете добавить свои, чтобы получать именно те уведомления, которые вам подходят"
-      mentai-mode="therapy"
-      :items="topicItems"
-      :loading="loadersStore.isSkeletonLoading"
-      @select="handleTopicSelect"
-      @remove="handleTopicRemove"
-    />
-
-    <CustomEntityModal
-      mentai-mode="therapy"
-      :open="createModalOpen"
-      header-title="Новая тема терапии"
-      header-subtitle="Создайте тему под свои запросы: название, описание и эмодзи"
-      hero-title="Персонализируйте тему"
-      hero-subtitle="Эмодзи поможет быстрее находить её в списке"
-      submit-label="Создать и настроить"
-      name-placeholder="Например, «Поддержка перед выступлением»"
-      @update:open="createModalOpen = $event"
-      @created="handleTopicCreated"
-    />
-
-    <ConfirmModal
-      ref="deleteModalRef"
-      title="Удалить тему?"
-      subtitle="Расписание уведомлений по этой теме будет удалено. Продолжить?"
-      confirm-label="Удалить"
-      cancel-label="Отмена"
-      @confirm="confirmDeleteTopic"
-    />
-  </div>
-</template>
