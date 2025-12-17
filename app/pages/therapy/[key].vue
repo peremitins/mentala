@@ -1,6 +1,6 @@
 <template>
   <div class="h-full flex flex-col">
-    <NotificationSettingsPage mentai-mode="therapy" :entity-key="entityKey" />
+    <NotificationSettingsPage mentala-mode="therapy" :entity-key="entityKey" />
   </div>
 </template>
 

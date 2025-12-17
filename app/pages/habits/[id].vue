@@ -1,6 +1,6 @@
 <template>
   <div class="h-full flex flex-col">
-    <NotificationSettingsPage mentai-mode="habits" :entity-key="entityKey" />
+    <NotificationSettingsPage mentala-mode="habits" :entity-key="entityKey" />
   </div>
 </template>
 

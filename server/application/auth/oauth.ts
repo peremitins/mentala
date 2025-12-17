@@ -6,9 +6,9 @@ import { eq, and } from 'drizzle-orm';
 import { createSession } from './session';
 import { activateTrialForUser } from '@/server/application/subscriptions/trial.service';
 
-const STATE_COOKIE = 'mentai.oauth.state';
-const REDIR_COOKIE = 'mentai.oauth.redirect';
-const LOCALE_COOKIE = 'mentai.lang';
+const STATE_COOKIE = 'mentala.oauth.state';
+const REDIR_COOKIE = 'mentala.oauth.redirect';
+const LOCALE_COOKIE = 'mentala.lang';
 const isProd = process.env.NODE_ENV === 'production';
 
 export type Provider = 'google' | 'vk';

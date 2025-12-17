@@ -80,7 +80,7 @@ export function useTTS() {
       const url = `${baseURL}/api/tts/openai`;
 
       // Получаем токен сессии для заголовка
-      const SESSION_TOKEN_KEY = 'mentai.session.token';
+      const SESSION_TOKEN_KEY = 'mentala.session.token';
       const token =
         typeof window !== 'undefined'
           ? localStorage.getItem(SESSION_TOKEN_KEY)

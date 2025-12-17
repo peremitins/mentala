@@ -5,8 +5,8 @@ import { sessions, users } from '@/server/infrastructure/db/schema';
 import { and, eq, isNull, gt } from 'drizzle-orm';
 
 const isProd = process.env.NODE_ENV === 'production';
-const SID = 'mentai.sid';
-const LANG = 'mentai.lang';
+const SID = 'mentala.sid';
+const LANG = 'mentala.lang';
 
 export async function createSession(
   event: any,

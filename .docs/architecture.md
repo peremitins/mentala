@@ -1,4 +1,4 @@
-Архитектура проекта MentAI
+Архитектура проекта Mentala
 
 📌 Общий обзор
 • Фронтенд: Nuxt 4 + TypeScript + Pinia + TailwindCSS + shadcn-vue + vue-query.
@@ -127,15 +127,15 @@ server/
 • Checkout (MVP, без реального YooKassa checkout):
 • `POST /api/subscriptions/start-checkout` требует заголовок `Idempotency-Key`.
 • Создаёт `pending` подписку и сохраняет «ожидаемые» checkout-поля прямо в `user_subscriptions`:
-  `checkout_amount`, `checkout_currency`, `billing_credit_applied`, `billing_credit_granted`, `yookassa_payment_id`.
+`checkout_amount`, `checkout_currency`, `billing_credit_applied`, `billing_credit_granted`, `yookassa_payment_id`.
 • Кредит `billingCredit` **резервируется** на старте checkout (уменьшаем `users.billing_credit`) и:
-  • при `payment.succeeded` не списывается повторно,
-  • при `payment.canceled` возвращается.
+• при `payment.succeeded` не списывается повторно,
+• при `payment.canceled` возвращается.
 • Если `toPay === 0` — финализация происходит сразу в `start-checkout` (без webhook).
 
 • YooKassa webhook:
 • В `POST /api/payments/yookassa/webhook` подлинность уведомления подтверждается через API YooKassa:
-  `GET https://api.yookassa.ru/v3/payments/{payment_id}` (Basic Auth `shopId:secretKey`).
+`GET https://api.yookassa.ru/v3/payments/{payment_id}` (Basic Auth `shopId:secretKey`).
 • Сумма/валюта сверяются с `user_subscriptions.checkout_*` перед активацией.
 • Все мутации — в транзакции; конкурентные повторы защищены `ON CONFLICT DO NOTHING` по `payments.id`.
 
@@ -146,7 +146,7 @@ server/
 
 • Миграции (Drizzle):
 • Меняем `server/infrastructure/db/schema.ts` → запускаем `pnpm db:generate` → `pnpm db:migrate`.
-• Миграции для подписок/биллинга сейчас: `0005_*` (база), `0006_*` (payments/idempotency/billing_period/last_activity_at), `0007_*` (checkout-поля + response_json).
+• Миграции для подписок/биллинга сейчас: `0005_*` (база), `0006_*` (payments/idempotency/billing*period/last_activity_at), `0007*\*` (checkout-поля + response_json).
 
 ⸻
 
@@ -180,9 +180,9 @@ server/
 
 📋 Связанные документы
 • `.docs/notifications.md` - Полная документация по системе уведомлений (архитектура, API, настройка, тестирование)
-• `.docs/mentai_tz_product.md` - Общие требования к продукту
-• `.docs/mentai_tz_frontend.md` - Требования к фронтенду
-• `.docs/mentai_tz_backend.md` - Требования к бэкенду
+• `.docs/mentala_tz_product.md` - Общие требования к продукту
+• `.docs/mentala_tz_frontend.md` - Требования к фронтенду
+• `.docs/mentala_tz_backend.md` - Требования к бэкенду
 • `.docs/security_requirements.md` - Требования к безопасности
 
 ⸻

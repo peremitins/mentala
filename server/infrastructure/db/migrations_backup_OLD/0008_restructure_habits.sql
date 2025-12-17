@@ -1,6 +1,6 @@
 -- ==========================================
 -- Migration: Restructure habits system
--- Version: 0.3 (Mentai Notifications v3)
+-- Version: 0.3 (Mentala Notifications v3)
 -- Date: 2025-11-07
 -- ==========================================
 -- Описание: Реструктуризация системы привычек

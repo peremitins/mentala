@@ -1,7 +1,7 @@
 services:
   redis:
     image: redis:7-alpine
-    container_name: mentai-redis-dev
+    container_name: mentala-redis-dev
     ports:
       - "127.0.0.1:6379:6379"
     volumes:

@@ -485,7 +485,7 @@ import type {
 import { MAX_NOTIFICATION_TEXT_LENGTH } from '@/shared/dto/notifications';
 
 const props = defineProps<{
-  mentaiMode: 'habits' | 'therapy';
+  mentalaMode: 'habits' | 'therapy';
   entityKey: string;
 }>();
 
@@ -507,12 +507,12 @@ function goToTextsEditor() {
   }
 
   router.push({
-    path: `/notifications/${props.mentaiMode}/${props.entityKey}/texts`,
+    path: `/notifications/${props.mentalaMode}/${props.entityKey}/texts`,
     query,
   });
 }
 
-const isHabits = computed(() => props.mentaiMode === 'habits');
+const isHabits = computed(() => props.mentalaMode === 'habits');
 
 type HabitEntity = HabitCatalogItem;
 type TherapyCatalogEntity = (typeof THERAPY_TOPICS)[number];

@@ -1,4 +1,4 @@
-# MentAI — Техническое задание (Backend, Nitro BFF)
+# Mentala — Техническое задание (Backend, Nitro BFF)
 
 ## 1. Роль
 
@@ -6,7 +6,7 @@ BFF на **Nitro (Nuxt 4 server)** — единая точка для фронт
 
 ## 2. Архитектурный подход
 
-Clean Architecture / Hexagonal внутри `mentai/frontend/server`:
+Clean Architecture / Hexagonal внутри `mentala/frontend/server`:
 
 - `domain/` (сущности), `application/` (use‑cases), `ports/` (контракты),
 - `infrastructure/` (ORM/SDK/внешние адаптеры),
@@ -24,7 +24,7 @@ Clean Architecture / Hexagonal внутри `mentai/frontend/server`:
 ## 4. Структура директорий
 
 ```
-mentai/frontend/server/
+mentala/frontend/server/
 ├─ config/
 ├─ domain/
 ├─ ports/
@@ -42,7 +42,7 @@ mentai/frontend/server/
 - Ошибки: `{ "error": { "code": "E_xxx", "message": "..." } }`.
 - Пагинация: `?page=1&limit=20` → `{ items, page, limit, total }`.
 - Идемпотентность: `Idempotency-Key` на чувствительных POST.
-- DTO (Zod): общие в `mentai/frontend/shared/dto/*`.
+- DTO (Zod): общие в `mentala/frontend/shared/dto/*`.
 
 ## 6. Эндпоинты (MVP, кратко)
 

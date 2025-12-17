@@ -43,7 +43,7 @@ export default defineEventHandler(async (event) => {
   const firstName = data.first_name || null;
   const lastName = data.last_name || null;
   const photoUrl = data.photo_url || null;
-  const locale = getCookie(event, 'mentai.lang') || undefined;
+  const locale = getCookie(event, 'mentala.lang') || undefined;
 
   const existing = await db
     .select()

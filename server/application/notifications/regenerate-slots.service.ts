@@ -737,7 +737,7 @@ export async function regenerateSlotsForSourceInternal(
       const finalEntityKey = normalizedEntityKeyForSlot ?? entityKey ?? null;
 
       const payload: NotificationPayload = {
-        title: 'Mentai: время паузы',
+        title: 'Mentala: время паузы',
         body: `${devPrefix}${text}`,
         templateId: templateIdForSlot,
         action: 'open',

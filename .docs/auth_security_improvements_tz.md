@@ -104,7 +104,7 @@
 
 - [ ] Создать функцию `generateCSRFToken()` в `server/application/auth/csrf.ts`
 - [ ] При создании сессии генерировать CSRF токен
-- [ ] Сохранять CSRF токен в httpOnly cookie `mentai.csrf`
+- [ ] Сохранять CSRF токен в httpOnly cookie `mentala.csrf`
 - [ ] Срок жизни CSRF токена = срок жизни сессии
 
 #### 2.2. Проверка CSRF токена
@@ -114,7 +114,7 @@
 - [ ] Исключить из проверки:
   - `/api/auth/*` (логин, регистрация, OAuth)
   - `/api/payments/yookassa/webhook` (webhook от внешних сервисов)
-- [ ] Сравнивать токен из cookie `mentai.csrf` с заголовком `X-CSRF-Token`
+- [ ] Сравнивать токен из cookie `mentala.csrf` с заголовком `X-CSRF-Token`
 
 #### 2.3. Frontend интеграция
 
@@ -151,8 +151,8 @@
 **Требования:**
 
 - [ ] Обновить `server/application/auth/session.ts`:
-  - `sameSite: 'strict'` для cookie `mentai.sid`
-  - `sameSite: 'strict'` для CSRF cookie `mentai.csrf`
+  - `sameSite: 'strict'` для cookie `mentala.sid`
+  - `sameSite: 'strict'` для CSRF cookie `mentala.csrf`
 - [ ] Протестировать работу с OAuth (может потребоваться `lax` для OAuth callback)
 
 **Критерии приемки:**
@@ -317,7 +317,7 @@ CREATE INDEX idx_refresh_tokens_token ON refresh_tokens(token);
 - **Длина:** 32 символа (hex)
 - **Формат:** `[a-f0-9]{32}`
 - **Генерация:** `crypto.randomBytes(16).toString('hex')`
-- **Хранение:** httpOnly cookie `mentai.csrf`
+- **Хранение:** httpOnly cookie `mentala.csrf`
 - **Передача:** заголовок `X-CSRF-Token`
 
 ### Проверка IP
@@ -372,7 +372,7 @@ CREATE INDEX idx_refresh_tokens_token ON refresh_tokens(token);
 
 ```
 X-CSRF-Token: <csrf-token>
-Cookie: mentai.csrf=<csrf-token>
+Cookie: mentala.csrf=<csrf-token>
 ```
 
 **Response (при ошибке):**
@@ -427,14 +427,14 @@ Cookie: mentai.csrf=<csrf-token>
 #### Получение CSRF токена
 
 1. Выполнить логин: `POST /api/auth/email/login`
-2. Получить CSRF токен из cookie `mentai.csrf`
+2. Получить CSRF токен из cookie `mentala.csrf`
 3. Использовать в заголовке `X-CSRF-Token`
 
 #### Запрос с CSRF токеном
 
 ```
 POST /api/subscriptions/start-checkout
-Cookie: mentai.sid=<session-id>; mentai.csrf=<csrf-token>
+Cookie: mentala.sid=<session-id>; mentala.csrf=<csrf-token>
 X-CSRF-Token: <csrf-token>
 Content-Type: application/json
 ```

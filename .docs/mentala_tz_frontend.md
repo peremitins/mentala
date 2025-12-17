@@ -1,4 +1,4 @@
-# MentAI — Техническое задание (Frontend)
+# Mentala — Техническое задание (Frontend)
 
 ## 1. Цель
 
@@ -25,7 +25,7 @@
 ## 3. Структура проекта (Nuxt v4)
 
 ```
-mentai/frontend/
+mentala/frontend/
 ├─ app/
 │  ├─ app.vue
 │  ├─ components/            # атомы/молекулы/организмы (поверх shadcn)

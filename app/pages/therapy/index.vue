@@ -3,7 +3,7 @@
     <NotificationIndexPage
       title="🧠&nbsp;&nbsp;Терапия"
       description="Здесь вы найдёте готовые темы поддержки и сможете добавить свои, чтобы получать именно те уведомления, которые вам подходят"
-      mentai-mode="therapy"
+      mentala-mode="therapy"
       :items="topicItems"
       :loading="loadersStore.isSkeletonLoading"
       @select="handleTopicSelect"
@@ -11,7 +11,7 @@
     />
 
     <CustomEntityModal
-      mentai-mode="therapy"
+      mentala-mode="therapy"
       :open="createModalOpen"
       header-title="Новая тема терапии"
       header-subtitle="Создайте тему под свои запросы: название, описание и эмодзи"

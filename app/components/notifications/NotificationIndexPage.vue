@@ -15,7 +15,7 @@
           </p>
         </div>
 
-        <div v-if="mentaiMode === 'habits'" class="px-2">
+        <div v-if="mentalaMode === 'habits'" class="px-2">
           <Combobox
             v-model="selectedIntent"
             :options="INTENT_OPTIONS"
@@ -101,7 +101,7 @@
       </TabsContent>
 
       <TabsContent value="prompts" class="space-y-4 mt-4">
-        <PromptsSection :type="mentaiMode" />
+        <PromptsSection :type="mentalaMode" />
       </TabsContent>
     </Tabs>
   </div>
@@ -137,7 +137,7 @@ const props = withDefaults(
     title: string;
     description: string;
     items: NotificationIndexItem[];
-    mentaiMode: 'habits' | 'therapy';
+    mentalaMode: 'habits' | 'therapy';
     loading?: boolean;
   }>(),
   {
@@ -161,7 +161,7 @@ watch(activeTab, (newTab) => {
   router.replace({ query: { ...route.query, tab: newTab } });
 });
 
-if (props.mentaiMode === 'habits') {
+if (props.mentalaMode === 'habits') {
   watch(selectedIntent, (newIntent) => {
     router.replace({ query: { ...route.query, intent: newIntent } });
   });
@@ -170,7 +170,7 @@ if (props.mentaiMode === 'habits') {
 const hoveredId = ref<string | null>(null);
 
 const visibleItems = computed(() => {
-  if (props.mentaiMode !== 'habits') {
+  if (props.mentalaMode !== 'habits') {
     return props.items;
   }
 

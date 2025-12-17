@@ -14,7 +14,7 @@ import { useUserStore } from '@/app/stores/user';
 import { useTTS } from '@/app/composables/useTTS';
 import { useSpeechEngine } from '@/app/composables/useSpeechEngine';
 
-const SESSION_TOKEN_KEY = 'mentai.session.token';
+const SESSION_TOKEN_KEY = 'mentala.session.token';
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({ user: null as any, loading: false, isLoggedIn: false }),

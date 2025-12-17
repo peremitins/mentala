@@ -146,7 +146,7 @@ function generateCollapseKey(payload: NotificationPayload): string {
   }
 
   // Fallback: по типу или общий
-  return kind || 'mentai';
+  return kind || 'mentala';
 }
 
 /**
@@ -217,7 +217,7 @@ export async function sendFCMNotification(
         collapseKey,
         notification: {
           sound: 'default',
-          channelId: 'mentai_high',
+          channelId: 'mentala_high',
           clickAction: 'FLUTTER_NOTIFICATION_CLICK',
         },
       },
@@ -234,7 +234,7 @@ export async function sendFCMNotification(
               body: payload.body,
             },
             sound: 'default',
-            category: 'MENTAI_CATEGORY',
+            category: 'MENTALA_CATEGORY',
           },
         },
       },

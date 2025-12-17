@@ -101,7 +101,7 @@
                     : '',
                 ]"
                 @blur="handleNameBlur"
-                :maxlength="props.mentaiMode === 'habits' ? 60 : 80"
+                :maxlength="props.mentalaMode === 'habits' ? 60 : 80"
                 :placeholder="namePlaceholder"
               />
             </div>
@@ -172,7 +172,7 @@ import { z } from 'zod';
 const props = withDefaults(
   defineProps<{
     open: boolean;
-    mentaiMode: 'habits' | 'therapy';
+    mentalaMode: 'habits' | 'therapy';
     defaultIntent?: HabitIntent;
     headerTitle?: string;
     headerSubtitle?: string;
@@ -207,7 +207,7 @@ const formSchema = computed(() =>
         .trim()
         .min(1, 'Название обязательно')
         .max(
-          props.mentaiMode === 'habits' ? 60 : 80,
+          props.mentalaMode === 'habits' ? 60 : 80,
           'Слишком длинное название'
         ),
       emoji: z.string().max(4).optional(),
@@ -245,17 +245,17 @@ const {
 const { value: emoji } = useField<string | undefined>('emoji');
 const { value: description } = useField<string | undefined>('description');
 
-const showIntentSelector = computed(() => props.mentaiMode === 'habits');
+const showIntentSelector = computed(() => props.mentalaMode === 'habits');
 
 const headerTitle = computed(
   () =>
     props.headerTitle ??
-    (props.mentaiMode === 'habits' ? 'Новая привычка' : 'Новая тема терапии')
+    (props.mentalaMode === 'habits' ? 'Новая привычка' : 'Новая тема терапии')
 );
 const headerSubtitle = computed(
   () =>
     props.headerSubtitle ??
-    (props.mentaiMode === 'habits'
+    (props.mentalaMode === 'habits'
       ? 'Настройте свою привычку: выберите цель, добавьте описание и сохраните'
       : 'Создайте тему под свои запросы: название, описание и эмодзи')
 );
@@ -263,12 +263,12 @@ const headerSubtitle = computed(
 const heroTitle = computed(
   () =>
     props.heroTitle ??
-    (props.mentaiMode === 'habits' ? 'Персонализируйте тему' : '')
+    (props.mentalaMode === 'habits' ? 'Персонализируйте тему' : '')
 );
 const heroSubtitle = computed(
   () =>
     props.heroSubtitle ??
-    (props.mentaiMode === 'habits'
+    (props.mentalaMode === 'habits'
       ? 'Эмодзи поможет быстрее находить её в списке'
       : '')
 );
@@ -276,13 +276,13 @@ const heroSubtitle = computed(
 const submitLabel = computed(
   () =>
     props.submitLabel ??
-    (props.mentaiMode === 'habits' ? 'Создать и настроить' : 'Создать тему')
+    (props.mentalaMode === 'habits' ? 'Создать и настроить' : 'Создать тему')
 );
 
 const namePlaceholder = computed(
   () =>
     props.namePlaceholder ??
-    (props.mentaiMode === 'habits'
+    (props.mentalaMode === 'habits'
       ? 'Например, «Осознанное утро»'
       : 'Например, «Поддержка перед выступлением»')
 );
@@ -350,7 +350,7 @@ const createEntity = async (values: {
   emoji?: string;
   description?: string;
 }) => {
-  if (props.mentaiMode === 'habits') {
+  if (props.mentalaMode === 'habits') {
     const habit = await userHabitsStore.create({
       name: values.name.trim(),
       intent: intent.value,

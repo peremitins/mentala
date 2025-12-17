@@ -237,7 +237,7 @@ export const openaiProvider: LlmProviderPort = {
           temperature: options?.temperature ?? 0.3,
           // store должен быть true только если включена память через previous_response_id
           store: enablePreviousResponseId,
-          metadata: { app: 'mentai', feature: 'psych_support' },
+          metadata: { app: 'mentala', feature: 'psych_support' },
           text: {}, // при необходимости можно добавить text.format с json_schema
           // ВАЖНО: truncation: "auto" автоматически усекает контекст, если его размер превышает
           // допустимый лимит. Это позволяет использовать previous_response_id даже для длинных диалогов.

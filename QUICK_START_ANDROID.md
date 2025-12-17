@@ -127,8 +127,8 @@ pnpm run cap:sync:device
 adb logcat
 
 # Перезапуск приложения
-adb shell am force-stop com.mentai.app
-adb shell am start -n com.mentai.app/.MainActivity
+adb shell am force-stop com.mentala.app
+adb shell am start -n com.mentala.app/.MainActivity
 ```
 
 ## 🐛 Если что-то не работает
@@ -222,7 +222,7 @@ cd android && ./gradlew clean installDebug
 3. **В эмуляторе (разрешения приложения)**:
 
    - Настройки → Для разработчиков → Разрешения приложений
-   - Или: Настройки → Приложения → MentAI → Разрешения
+   - Или: Настройки → Приложения → Mentala → Разрешения
    - Включи **Микрофон**
 
 4. **Проверка работы микрофона**:

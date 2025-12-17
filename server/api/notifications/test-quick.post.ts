@@ -154,7 +154,7 @@ export default defineEventHandler(
 
     const slotId = nanoid();
     const payload: NotificationPayload = {
-      title: 'Mentai: тестовое уведомление',
+      title: 'Mentala: тестовое уведомление',
       body: text,
       templateId: templateId,
       action: 'open',

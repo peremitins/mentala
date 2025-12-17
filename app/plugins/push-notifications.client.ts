@@ -16,9 +16,9 @@ export default defineNuxtPlugin((nuxtApp) => {
   const ensureHighPriorityChannel = async () => {
     try {
       await LocalNotifications.createChannel?.({
-        id: 'mentai_high',
-        name: 'MentAI High Priority',
-        description: 'Важные уведомления MentAI',
+        id: 'mentala_high',
+        name: 'Mentala High Priority',
+        description: 'Важные уведомления Mentala',
         importance: 5, // IMPORTANCE_HIGH
         visibility: 1, // VISIBILITY_PUBLIC
         sound: 'default',
@@ -223,10 +223,10 @@ export default defineNuxtPlugin((nuxtApp) => {
                 notifications: [
                   {
                     id: Math.floor(Math.random() * 2147483647),
-                    title: payload.title || 'MentAI',
+                    title: payload.title || 'Mentala',
                     body: payload.body || 'Новое уведомление',
                     sound: 'default',
-                    channelId: 'mentai_high',
+                    channelId: 'mentala_high',
                   },
                 ],
               });

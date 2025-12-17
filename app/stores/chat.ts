@@ -86,7 +86,7 @@ export const useChatStore = defineStore('chat', {
         // Получаем токен для авторизации
         const token =
           typeof window !== 'undefined'
-            ? localStorage.getItem('mentai.session.token')
+            ? localStorage.getItem('mentala.session.token')
             : null;
 
         const headers: HeadersInit = {

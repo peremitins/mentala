@@ -4,7 +4,7 @@ import { useChatStore } from '@/app/stores/chat';
 import { useHeygenStore } from '@/app/stores/heygen';
 import { getSessionItemSync } from '@/app/utils/sessionStorage';
 
-const SESSION_TOKEN_KEY = 'mentai.session.token';
+const SESSION_TOKEN_KEY = 'mentala.session.token';
 
 /**
  * Отправляет запрос на завершение HeyGen сессии при перезагрузке/закрытии

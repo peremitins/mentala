@@ -5,8 +5,8 @@ import { CapacitorConfig } from '@capacitor/cli';
 const isDevServer = process.env.CAPACITOR_SERVER_URL;
 
 const config: CapacitorConfig = {
-  appId: 'com.mentai.app',
-  appName: 'MentAI',
+  appId: 'com.mentala.app',
+  appName: 'Mentala',
   webDir: '.output/public',
   server: isDevServer
     ? {

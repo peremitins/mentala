@@ -3,7 +3,7 @@
     <NotificationIndexPage
       title="📋&nbsp;&nbsp;Привычки"
       description="Здесь вы найдёте готовые привычки и сможете добавить свои, чтобы получать именно те уведомления, которые вам подходят"
-      mentai-mode="habits"
+      mentala-mode="habits"
       :items="habitItems"
       :loading="loadersStore.isSkeletonLoading"
       @select="handleGoalSelect"
@@ -11,7 +11,7 @@
     />
 
     <CustomEntityModal
-      mentai-mode="habits"
+      mentala-mode="habits"
       :open="createModalOpen"
       :default-intent="defaultIntent"
       header-title="Новая привычка"

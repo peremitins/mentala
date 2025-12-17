@@ -1,6 +1,6 @@
 -- ==========================================
 -- Migration: Add topicKey support для unified notifications architecture
--- Version: 2.3 (Mentai Notifications v2)
+-- Version: 2.3 (Mentala Notifications v2)
 -- Date: 2025-11-06
 -- ==========================================
 

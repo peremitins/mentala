@@ -37,7 +37,7 @@ export default defineNuxtPlugin(() => {
   // apiBase: пустой для Web и Capacitor dev, полный URL для Capacitor prod
   const baseURL = (config.public as any).apiBase || '';
 
-  const SESSION_TOKEN_KEY = 'mentai.session.token';
+  const SESSION_TOKEN_KEY = 'mentala.session.token';
 
   const api = $fetch.create({
     baseURL,

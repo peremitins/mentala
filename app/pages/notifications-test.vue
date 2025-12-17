@@ -135,7 +135,7 @@ async function sendTestNotification() {
   addLog('Отправка тестового уведомления...');
   const success = await notifications.sendNotification(
     'Тестовое уведомление',
-    'Это тестовое уведомление от MentAI!'
+    'Это тестовое уведомление от Mentala!'
   );
 
   if (success) {
