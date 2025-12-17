@@ -267,7 +267,7 @@ export const notificationPreferences = pgTable('notification_preferences', {
   customSlotTimes: jsonb('custom_slot_times').$type<(number | null)[] | null>(),
   timeRangeStart: integer('time_range_start').notNull().default(540), // Начало временного окна в минутах от начала дня (09:00)
   timeRangeEnd: integer('time_range_end').notNull().default(1350), // Конец временного окна в минутах от начала дня (22:30)
-  meta: jsonb('meta'), // Дополнительные параметры (techniques, goalType и т.д.)
+  meta: jsonb('meta'), // Дополнительные параметры (textSource: 'templates' | 'ai' | 'hybrid')
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull(),

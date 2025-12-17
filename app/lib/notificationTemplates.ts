@@ -23,15 +23,6 @@ export type EntityKey = string;
 // Intent для привычек (только build | quit, без custom)
 export type HabitIntent = 'build' | 'quit';
 
-// Типы техник терапии (метаданные, не для фильтрации)
-export type TherapyTechnique =
-  | 'breath_cue' // Дыхательные практики (4-7-8, квадратное дыхание) — помогают успокоиться и снизить тревогу
-  | 'grounding' // Техники заземления (5-4-3-2-1, тактильные ощущения) — возвращают в настоящий момент через фокус на ощущениях
-  | 'body_scan' // Сканирование тела — осознание физических ощущений для снижения напряжения и стресса
-  | 'reframe' // Рефрейминг мыслей — переформулирование негативных мыслей и взгляд на ситуацию под другим углом
-  | 'mi_prompt' // Мотивационное интервьюирование — вопросы для саморефлексии и поиска внутренних ресурсов
-  | 'sos'; // Экстренная поддержка — быстрые техники для кризисных моментов высокой тревоги
-
 // Реэкспорт типов для использования в скрипте миграции
 export type { NotificationKind, NotificationSubtype };
 
@@ -44,8 +35,6 @@ export interface NotificationTemplate {
   intent?: HabitIntent; // build | quit
   // Для всех видов (habits и therapy)
   subtype?: NotificationSubtype; // reminder | informational | motivational | mixed
-  // Для терапии (метаданные, не для фильтрации)
-  techniques?: TherapyTechnique[]; // ['breath_cue', 'grounding', 'reframe']
   ru: {
     // Universal text (для informational) - один текст для всех directness
     universal?: string;
@@ -78,7 +67,6 @@ export const therapyTemplates: NotificationTemplate[] = [
     kind: 'therapy',
     entityKey: 'anxiety',
     subtype: 'reminder',
-    techniques: ['breath_cue'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -98,7 +86,6 @@ export const therapyTemplates: NotificationTemplate[] = [
     kind: 'therapy',
     entityKey: 'anxiety',
     subtype: 'reminder',
-    techniques: ['breath_cue'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -119,7 +106,6 @@ export const therapyTemplates: NotificationTemplate[] = [
     kind: 'therapy',
     entityKey: 'stress',
     subtype: 'reminder',
-    techniques: ['breath_cue'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -143,7 +129,6 @@ export const therapyTemplates: NotificationTemplate[] = [
     kind: 'therapy',
     entityKey: 'anxiety',
     subtype: 'reminder',
-    techniques: ['grounding'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -165,7 +150,6 @@ export const therapyTemplates: NotificationTemplate[] = [
     kind: 'therapy',
     entityKey: 'stress',
     subtype: 'reminder',
-    techniques: ['grounding'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -185,7 +169,6 @@ export const therapyTemplates: NotificationTemplate[] = [
     kind: 'therapy',
     entityKey: 'anger',
     subtype: 'reminder',
-    techniques: ['grounding'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -211,7 +194,6 @@ export const therapyTemplates: NotificationTemplate[] = [
     kind: 'therapy',
     entityKey: 'stress',
     subtype: 'reminder',
-    techniques: ['body_scan'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -233,7 +215,6 @@ export const therapyTemplates: NotificationTemplate[] = [
     kind: 'therapy',
     entityKey: 'stress',
     subtype: 'reminder',
-    techniques: ['body_scan'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -253,7 +234,6 @@ export const therapyTemplates: NotificationTemplate[] = [
     kind: 'therapy',
     entityKey: 'sleep',
     subtype: 'reminder',
-    techniques: ['body_scan'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -279,7 +259,6 @@ export const therapyTemplates: NotificationTemplate[] = [
     kind: 'therapy',
     entityKey: 'anxiety',
     subtype: 'informational',
-    techniques: ['reframe'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -301,7 +280,6 @@ export const therapyTemplates: NotificationTemplate[] = [
     kind: 'therapy',
     entityKey: 'mood',
     subtype: 'motivational',
-    techniques: ['reframe'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -327,7 +305,6 @@ export const therapyTemplates: NotificationTemplate[] = [
     kind: 'therapy',
     entityKey: 'focus',
     subtype: 'reminder',
-    techniques: ['mi_prompt'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -347,7 +324,6 @@ export const therapyTemplates: NotificationTemplate[] = [
     kind: 'therapy',
     entityKey: 'mood',
     subtype: 'reminder',
-    techniques: ['mi_prompt'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -373,7 +349,6 @@ export const therapyTemplates: NotificationTemplate[] = [
     kind: 'therapy',
     entityKey: 'sos',
     subtype: 'reminder',
-    techniques: ['sos'],
     directness: ['moderate', 'hard'],
     ru: {
       informal: {
@@ -391,7 +366,6 @@ export const therapyTemplates: NotificationTemplate[] = [
     kind: 'therapy',
     entityKey: 'sos',
     subtype: 'reminder',
-    techniques: ['sos'],
     directness: ['moderate', 'hard'],
     ru: {
       informal: {
@@ -415,7 +389,6 @@ export const therapyTemplates: NotificationTemplate[] = [
     kind: 'therapy',
     entityKey: 'anxiety',
     subtype: 'informational',
-    techniques: ['reframe'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -437,7 +410,6 @@ export const therapyTemplates: NotificationTemplate[] = [
     kind: 'therapy',
     entityKey: 'anxiety',
     subtype: 'informational',
-    techniques: ['reframe'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -459,7 +431,6 @@ export const therapyTemplates: NotificationTemplate[] = [
     kind: 'therapy',
     entityKey: 'anxiety',
     subtype: 'informational',
-    techniques: ['reframe'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -483,7 +454,6 @@ export const therapyTemplates: NotificationTemplate[] = [
     kind: 'therapy',
     entityKey: 'anxiety',
     subtype: 'motivational',
-    techniques: ['reframe'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -505,7 +475,6 @@ export const therapyTemplates: NotificationTemplate[] = [
     kind: 'therapy',
     entityKey: 'anxiety',
     subtype: 'motivational',
-    techniques: ['reframe'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -527,7 +496,6 @@ export const therapyTemplates: NotificationTemplate[] = [
     kind: 'therapy',
     entityKey: 'anxiety',
     subtype: 'motivational',
-    techniques: ['reframe'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -551,7 +519,6 @@ export const therapyTemplates: NotificationTemplate[] = [
     kind: 'therapy',
     entityKey: 'stress',
     subtype: 'informational',
-    techniques: ['reframe'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -573,7 +540,6 @@ export const therapyTemplates: NotificationTemplate[] = [
     kind: 'therapy',
     entityKey: 'stress',
     subtype: 'informational',
-    techniques: ['reframe'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -595,7 +561,6 @@ export const therapyTemplates: NotificationTemplate[] = [
     kind: 'therapy',
     entityKey: 'stress',
     subtype: 'informational',
-    techniques: ['reframe'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -619,7 +584,6 @@ export const therapyTemplates: NotificationTemplate[] = [
     kind: 'therapy',
     entityKey: 'stress',
     subtype: 'motivational',
-    techniques: ['reframe'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -641,7 +605,6 @@ export const therapyTemplates: NotificationTemplate[] = [
     kind: 'therapy',
     entityKey: 'stress',
     subtype: 'motivational',
-    techniques: ['reframe'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -665,7 +628,6 @@ export const therapyTemplates: NotificationTemplate[] = [
     kind: 'therapy',
     entityKey: 'mood',
     subtype: 'informational',
-    techniques: ['reframe'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -687,7 +649,6 @@ export const therapyTemplates: NotificationTemplate[] = [
     kind: 'therapy',
     entityKey: 'mood',
     subtype: 'informational',
-    techniques: ['reframe'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -711,7 +672,6 @@ export const therapyTemplates: NotificationTemplate[] = [
     kind: 'therapy',
     entityKey: 'mood',
     subtype: 'motivational',
-    techniques: ['reframe'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -731,7 +691,6 @@ export const therapyTemplates: NotificationTemplate[] = [
     kind: 'therapy',
     entityKey: 'mood',
     subtype: 'motivational',
-    techniques: ['reframe'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -755,7 +714,6 @@ export const therapyTemplates: NotificationTemplate[] = [
     kind: 'therapy',
     entityKey: 'sleep',
     subtype: 'informational',
-    techniques: ['reframe'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -777,7 +735,6 @@ export const therapyTemplates: NotificationTemplate[] = [
     kind: 'therapy',
     entityKey: 'sleep',
     subtype: 'informational',
-    techniques: ['reframe'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -799,7 +756,6 @@ export const therapyTemplates: NotificationTemplate[] = [
     kind: 'therapy',
     entityKey: 'sleep',
     subtype: 'motivational',
-    techniques: ['reframe'],
     directness: ['soft', 'moderate', 'hard'],
     ru: {
       informal: {
@@ -812,6 +768,962 @@ export const therapyTemplates: NotificationTemplate[] = [
         soft: 'Ваш организм заслуживает отдых. Хороший сон — это забота о себе.',
         moderate: 'Качественный сон делает Вас сильнее и устойчивее к стрессу.',
         hard: 'Сон — это не роскошь, а необходимость. Отдых обязателен.',
+      },
+    },
+  },
+
+  // =========================
+  // LONELINESS (Одиночество и социальные связи) - 45 templates
+  // 15 reminder + 15 informational + 15 motivational
+  // =========================
+
+  // --- REMINDER (15) ---
+  {
+    id: 'psylonelinessreminder01',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, если сейчас одиноко - начни с малого: отправь одному человеку короткое «привет» без объяснений.',
+        moderate:
+          '{name}, выбери одного человека и напиши ему сегодня: «Привет! Как ты?» Одно сообщение - и точка.',
+        hard: '{name}, перестань прятаться. Открой чат и отправь «привет» прямо сейчас. 20 секунд - поехали.',
+      },
+      formal: {
+        soft: '{name}, если сейчас одиноко - начните с малого: отправьте одному человеку короткое «привет» без объяснений.',
+        moderate:
+          '{name}, выберите одного человека и напишите ему сегодня: «Привет! Как вы?» Одно сообщение - и точка.',
+        hard: '{name}, перестаньте прятаться. Откройте чат и отправьте «привет» прямо сейчас. 20 секунд - поехали.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessreminder02',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, можно начать очень мягко: ответь на сторис реакцией или стикером.',
+        moderate:
+          '{name}, выбери один диалог и отправь реакцию на сторис/пост или стикер. Никаких объяснений не нужно.',
+        hard: '{name}, хватит откладывать. Выбери диалог и отправь реакцию или стикер сейчас. Без раздумий.',
+      },
+      formal: {
+        soft: '{name}, можно начать очень мягко: ответьте на сторис реакцией или стикером.',
+        moderate:
+          '{name}, выберите один диалог и отправьте реакцию на сторис/пост или стикер. Никаких объяснений не нужно.',
+        hard: '{name}, хватит откладывать. Выберите диалог и отправьте реакцию или стикер сейчас. Без раздумий.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessreminder03',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, если тянет закрыться - попробуй наоборот: выйди на 10 минут и просто пройдись.',
+        moderate:
+          '{name}, сейчас задача простая: выйти на улицу на 10-15 минут. Быть среди людей - уже поддержка.',
+        hard: '{name}, вставай. Открой дверь и выйди на 10 минут. Не обсуждаем - делаем.',
+      },
+      formal: {
+        soft: '{name}, если тянет закрыться - попробуйте наоборот: выйдите на 10 минут и просто пройдитесь.',
+        moderate:
+          '{name}, сейчас задача простая: выйти на улицу на 10-15 минут. Быть среди людей - уже поддержка.',
+        hard: '{name}, вставайте. Откройте дверь и выйдите на 10 минут. Не обсуждаем - делаем.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessreminder04',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, зайди в ближайшую кофейню/магазин и просто побудь среди людей пару минут.',
+        moderate:
+          '{name}, выбери место рядом (кофейня/магазин) и загляни туда на 5 минут. Цель - быть в живом пространстве.',
+        hard: '{name}, хватит сидеть дома. Одевайся и выйди в ближайшую кофейню/магазин. 5 минут - и назад.',
+      },
+      formal: {
+        soft: '{name}, зайдите в ближайшую кофейню/магазин и просто побудьте среди людей пару минут.',
+        moderate:
+          '{name}, выберите место рядом (кофейня/магазин) и загляните туда на 5 минут. Цель - быть в живом пространстве.',
+        hard: '{name}, хватит сидеть дома. Одевайтесь и выйдите в ближайшую кофейню/магазин. 5 минут - и назад.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessreminder05',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, выбери одного человека, с кем "нормально" общаться, и напиши нейтрально: «Как дела?»',
+        moderate:
+          '{name}, не ищи идеальных слов. Напиши простое: «Привет! Как дела?» - и остановись.',
+        hard: '{name}, перестань ждать "идеального момента". Напиши «Как дела?» одному человеку сейчас.',
+      },
+      formal: {
+        soft: '{name}, выберите одного человека, с кем "нормально" общаться, и напишите нейтрально: «Как дела?»',
+        moderate:
+          '{name}, не ищите идеальных слов. Напишите простое: «Привет! Как дела?» - и остановитесь.',
+        hard: '{name}, перестаньте ждать "идеального момента". Напишите «Как дела?» одному человеку сейчас.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessreminder06',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, можно не начинать разговор. Скинь мем/картинку - это тоже связь.',
+        moderate:
+          '{name}, выбери одного человека и скинь мем/картинку. Без "как дела", без ожиданий - просто контакт.',
+        hard: '{name}, хватит думать. Найди мем и отправь одному человеку сейчас. Действуй.',
+      },
+      formal: {
+        soft: '{name}, можно не начинать разговор. Отправьте мем/картинку - это тоже связь.',
+        moderate:
+          '{name}, выберите одного человека и отправьте мем/картинку. Без "как дела", без ожиданий - просто контакт.',
+        hard: '{name}, хватит думать. Найдите мем и отправьте одному человеку сейчас. Действуйте.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessreminder07',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, попробуй "маленькую смелость": комментарий под постом или короткая реакция - и все.',
+        moderate:
+          '{name}, сделай один социальный микрошаг: комментарий из 1 фразы или реакция. На этом достаточно.',
+        hard: '{name}, перестань исчезать. Напиши одну фразу в комментариях или отправь реакцию. Прямо сейчас.',
+      },
+      formal: {
+        soft: '{name}, попробуйте "маленькую смелость": комментарий под постом или короткая реакция - и все.',
+        moderate:
+          '{name}, сделайте один социальный микрошаг: комментарий из 1 фразы или реакция. На этом достаточно.',
+        hard: '{name}, перестаньте исчезать. Напишите одну фразу в комментариях или отправьте реакцию. Прямо сейчас.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessreminder08',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, сегодня задача на 1 минуту: выйти из дома и сделать 20 шагов. Просто "переключить среду".',
+        moderate:
+          '{name}, выйди и пройдись 10 минут. Не ради спорта - ради контакта с жизнью вокруг.',
+        hard: '{name}, вставай и выходи. 10 минут прогулки - сейчас. Потом решишь, что дальше.',
+      },
+      formal: {
+        soft: '{name}, сегодня задача на 1 минуту: выйдите из дома и сделайте 20 шагов. Просто "переключить среду".',
+        moderate:
+          '{name}, выйдите и пройдитесь 10 минут. Не ради спорта - ради контакта с жизнью вокруг.',
+        hard: '{name}, вставайте и выходите. 10 минут прогулки - сейчас. Потом решите, что дальше.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessreminder09',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, если сложно начать разговор - выбери самый нейтральный вход: «Как день?»',
+        moderate:
+          '{name}, напиши коротко: «Как день?» или «Как неделя?» в один чат. Без разгона и без объяснений.',
+        hard: '{name}, хватит молчать. Выбирай чат и отправляй: «Как день?» Сейчас.',
+      },
+      formal: {
+        soft: '{name}, если сложно начать разговор - выберите самый нейтральный вход: «Как день?»',
+        moderate:
+          '{name}, напишите коротко: «Как день?» или «Как неделя?» в один чат. Без разгона и без объяснений.',
+        hard: '{name}, хватит молчать. Выбирайте чат и отправляйте: «Как день?» Сейчас.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessreminder10',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, если кажется "я никому не нужен" - давай проверим делом: один маленький контакт сегодня.',
+        moderate:
+          '{name}, одна проверка реальностью: выбери человека и напиши коротко. Не рассуждаем - делаем.',
+        hard: '{name}, хватит верить мысли "я никому не нужен". Докажи обратное действием: напиши сейчас.',
+      },
+      formal: {
+        soft: '{name}, если кажется "я никому не нужен" - давайте проверим делом: один маленький контакт сегодня.',
+        moderate:
+          '{name}, одна проверка реальностью: выберите человека и напишите коротко. Не рассуждаем - делаем.',
+        hard: '{name}, хватит верить мысли "я никому не нужен". Докажите обратное действием: напишите сейчас.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessreminder11',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, хочешь связи - сделай шаг: предложи встречу на этой неделе (кофе/прогулка).',
+        moderate:
+          '{name}, выбери человека и напиши: «Есть время на кофе на этой неделе?» Одно предложение - достаточно.',
+        hard: '{name}, перестань ждать. Напиши сейчас: «Кофе на этой неделе?» Отправляй.',
+      },
+      formal: {
+        soft: '{name}, если хочется связи - сделайте шаг: предложите встречу на этой неделе (кофе/прогулка).',
+        moderate:
+          '{name}, выберите человека и напишите: «Есть время на кофе на этой неделе?» Одного предложения достаточно.',
+        hard: '{name}, перестаньте ждать. Напишите сейчас: «Кофе на этой неделе?» Отправляйте.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessreminder12',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, выход "в люди" тоже считается: зайди в место с людьми и просто побудь там 3-5 минут.',
+        moderate:
+          '{name}, выбери простую точку (магазин/кафе) и зайди. Цель - контакт с реальностью, не разговор.',
+        hard: '{name}, хватит изоляции. Выйди в ближайшее место с людьми на 5 минут. Сейчас.',
+      },
+      formal: {
+        soft: '{name}, выход "в люди" тоже считается: зайдите в место с людьми и просто побудьте там 3-5 минут.',
+        moderate:
+          '{name}, выберите простую точку (магазин/кафе) и зайдите. Цель - контакт с реальностью, не разговор.',
+        hard: '{name}, хватит изоляции. Выйдите в ближайшее место с людьми на 5 минут. Сейчас.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessreminder13',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, если окажешься на улице - можно перекинуться парой фраз по ситуации, без продолжения.',
+        moderate:
+          '{name}, маленький шаг офлайн: один короткий обмен фразами по делу (очередь, товар, дорога) - и ты уже в контакте.',
+        hard: '{name}, хватит жить в вакууме. Выйди и сделай один короткий обмен фразами по ситуации. Все.',
+      },
+      formal: {
+        soft: '{name}, если окажетесь на улице - можно перекинуться парой фраз по ситуации, без продолжения.',
+        moderate:
+          '{name}, небольшой шаг офлайн: один короткий обмен фразами по делу (очередь, товар, дорога) - и вы уже в контакте.',
+        hard: '{name}, хватит жить в вакууме. Выйдите и сделайте один короткий обмен фразами по ситуации. Все.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessreminder14',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, попробуй сделать контакт проще: одна короткая фраза по ситуации в любом публичном месте.',
+        moderate:
+          '{name}, если ты в магазине/кафе/очереди - можно сказать 1-2 фразы по делу. Это нормальный контакт, без неловких разговоров.',
+        hard: '{name}, не прячься. Выйди и произнеси 1-2 фразы по ситуации. Это твой шаг на сегодня.',
+      },
+      formal: {
+        soft: '{name}, попробуйте сделать контакт проще: одна короткая фраза по ситуации в любом публичном месте.',
+        moderate:
+          '{name}, если вы в магазине/кафе/очереди - можно сказать 1-2 фразы по делу. Это нормальный контакт, без неловких разговоров.',
+        hard: '{name}, не прячьтесь. Выйдите и произнесите 1-2 фразы по ситуации. Это ваш шаг на сегодня.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessreminder15',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, мысль "никому нет дела" - это мысль, не факт. Давай проверим маленьким контактом.',
+        moderate:
+          '{name}, проверка фактов: один контакт сегодня. Сообщение/реакция/мем - любой вариант.',
+        hard: '{name}, хватит жить в догадках. Проверь реальность: сделай контакт сейчас (сообщение/реакция/мем).',
+      },
+      formal: {
+        soft: '{name}, мысль "никому нет дела" - это мысль, не факт. Давайте проверим маленьким контактом.',
+        moderate:
+          '{name}, проверка фактов: один контакт сегодня. Сообщение/реакция/мем - любой вариант.',
+        hard: '{name}, хватит жить в догадках. Проверьте реальность: сделайте контакт сейчас (сообщение/реакция/мем).',
+      },
+    },
+  },
+
+  // --- INFORMATIONAL (15) ---
+  {
+    id: 'psylonelinessinfo01',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'informational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, одиночество - это не "поломка". Это сигнал: тебе важна связь.',
+        moderate:
+          '{name}, одиночество часто усиливается, когда мы исчезаем. Лучшее лекарство - маленький контакт, а не идеальный разговор.',
+        hard: '{name}, запомни: изоляция кормит одиночество. Разрывай цикл действием - хотя бы одним контактом.',
+      },
+      formal: {
+        soft: '{name}, одиночество - это не "поломка". Это сигнал: вам важна связь.',
+        moderate:
+          '{name}, одиночество часто усиливается, когда мы исчезаем. Лучшее "лекарство" - маленький контакт, а не идеальный разговор.',
+        hard: '{name}, запомните: изоляция кормит одиночество. Разрывайте цикл действием - хотя бы одним контактом.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessinfo02',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'informational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, если кажется "я лишний" - это чувство, а не приговор. Чувства меняются.',
+        moderate:
+          '{name}, мысль "я никому не интересен" обычно звучит убедительно, но не является фактом. Ее можно проверять действиями.',
+        hard: '{name}, хватит верить каждой мысли. "Я никому не нужен" - гипотеза. Проверь ее контактом.',
+      },
+      formal: {
+        soft: '{name}, если кажется "я лишний" - это чувство, а не приговор. Чувства меняются.',
+        moderate:
+          '{name}, мысль "я никому не интересен" обычно звучит убедительно, но не является фактом. Ее можно проверять действиями.',
+        hard: '{name}, хватит верить каждой мысли. "Я никому не нужен" - гипотеза. Проверьте ее контактом.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessinfo03',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'informational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, "быть среди людей" - тоже социальный контакт, даже без разговоров.',
+        moderate:
+          '{name}, иногда первое, что помогает, - смена среды: выйти туда, где есть жизнь и люди, хотя бы на 10 минут.',
+        hard: '{name}, не жди настроения. Сначала действие: выйти в пространство с людьми. Потом станет легче.',
+      },
+      formal: {
+        soft: '{name}, "быть среди людей" - тоже социальный контакт, даже без разговоров.',
+        moderate:
+          '{name}, иногда первое, что помогает, - смена среды: выйти туда, где есть жизнь и люди, хотя бы на 10 минут.',
+        hard: '{name}, не ждите настроения. Сначала действие: выйти в пространство с людьми. Потом станет легче.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessinfo04',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'informational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, одиночество не означает "со мной что-то не так". Оно означает "мне нужен контакт".',
+        moderate:
+          '{name}, когда хочется закрыться - это естественно. Но одиночество снижается не от закрывания, а от маленьких шагов к связи.',
+        hard: '{name}, закрываться - привычно, но это тупик. Нужен шаг наружу: контакт, люди, движение.',
+      },
+      formal: {
+        soft: '{name}, одиночество не означает "со мной что-то не так". Оно означает "мне нужен контакт".',
+        moderate:
+          '{name}, когда хочется закрыться - это естественно. Но одиночество снижается не от закрывания, а от маленьких шагов к связи.',
+        hard: '{name}, закрываться - привычно, но это тупик. Нужен шаг наружу: контакт, люди, движение.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessinfo05',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'informational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, контакт не обязан быть "глубоким". Достаточно короткого "привет".',
+        moderate:
+          '{name}, для связи не нужно много слов. Часто хватает малого: реакция, мем, одно предложение.',
+        hard: '{name}, хватит усложнять. Связь начинается с одного простого действия. Выбирай и делай.',
+      },
+      formal: {
+        soft: '{name}, контакт не обязан быть "глубоким". Достаточно короткого «привет».',
+        moderate:
+          '{name}, для связи не нужно много слов. Часто хватает малого: реакция, мем, одно предложение.',
+        hard: '{name}, хватит усложнять. Связь начинается с одного простого действия. Выбирайте и делайте.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessinfo06',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'informational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, одиночество усиливается в тишине. Даже маленький контакт уже снижает напряжение.',
+        moderate:
+          '{name}, чем дольше тишина, тем страшнее "выйти на связь". Поэтому работают микрошаги - 1 сообщение, 1 реакция.',
+        hard: '{name}, тишина делает хуже. Разрывай ее микродействием - прямо сегодня.',
+      },
+      formal: {
+        soft: '{name}, одиночество усиливается в тишине. Даже маленький контакт уже снижает напряжение.',
+        moderate:
+          '{name}, чем дольше тишина, тем страшнее "выйти на связь". Поэтому работают микрошаги - 1 сообщение, 1 реакция.',
+        hard: '{name}, тишина делает хуже. Разрывайте ее микродействием - прямо сегодня.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessinfo07',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'informational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, ты не обязан(а) "быть интересным(ой)" в каждом контакте. Достаточно быть настоящим(ей).',
+        moderate:
+          '{name}, чувство "я навязываюсь" часто обманывает. Реальность обычно мягче, чем тревога.',
+        hard: '{name}, прекрати угадывать за других. Не решай за человека заранее - просто сделай контакт.',
+      },
+      formal: {
+        soft: '{name}, вы не обязаны "быть интересным(ой)" в каждом контакте. Достаточно быть настоящим(ей).',
+        moderate:
+          '{name}, чувство "я навязываюсь" часто обманывает. Реальность обычно мягче, чем тревога.',
+        hard: '{name}, прекратите угадывать за других. Не решайте за человека заранее - просто сделайте контакт.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessinfo08',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'informational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, если накрывает - вернись в тело: стопы, дыхание. А потом - один маленький шаг к людям.',
+        moderate:
+          '{name}, сначала стабилизация (дыхание/заземление), потом действие. Не наоборот.',
+        hard: '{name}, ты не обязан(а) "починить все". Стабилизируйся и сделай один шаг к связи. Все.',
+      },
+      formal: {
+        soft: '{name}, если накрывает - вернитесь в тело: стопы, дыхание. А потом - один маленький шаг к людям.',
+        moderate:
+          '{name}, сначала стабилизация (дыхание/заземление), потом действие. Не наоборот.',
+        hard: '{name}, вы не обязаны "починить все". Стабилизируйтесь и сделайте один шаг к связи. Все.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessinfo09',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'informational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, одиночество - не про количество людей вокруг. Это про ощущение связи. Его можно создавать маленькими шагами.',
+        moderate:
+          '{name}, связь строится на регулярности: короткие "касания" важнее редких длинных разговоров.',
+        hard: '{name}, перестань ждать "идеальной связи". Делай маленькие касания регулярно - это и есть путь.',
+      },
+      formal: {
+        soft: '{name}, одиночество - не про количество людей вокруг. Это про ощущение связи. Его можно создавать маленькими шагами.',
+        moderate:
+          '{name}, связь строится на регулярности: короткие "касания" важнее редких длинных разговоров.',
+        hard: '{name}, перестаньте ждать "идеальной связи". Делайте маленькие касания регулярно - это и есть путь.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessinfo10',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'informational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, если хочется закрыться - это понятная реакция. Но это не единственный вариант.',
+        moderate:
+          '{name}, можно выбрать не "закрыться или общаться часами", а третий вариант: короткий контакт на 10 секунд.',
+        hard: '{name}, хватит крайностей. Не нужно "общаться идеально". Нужен один короткий контакт - все.',
+      },
+      formal: {
+        soft: '{name}, если хочется закрыться - это понятная реакция. Но это не единственный вариант.',
+        moderate:
+          '{name}, можно выбрать не "закрыться или общаться часами", а третий вариант: короткий контакт на 10 секунд.',
+        hard: '{name}, хватит крайностей. Не нужно "общаться идеально". Нужен один короткий контакт - все.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessinfo11',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'informational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, иногда контакт - это просто "я помню о тебе". И этого достаточно.',
+        moderate:
+          '{name}, простой сигнал внимания (реакция/мем/одно слово) - это уже связь, без обязательств.',
+        hard: '{name}, не драматизируй. Один маленький сигнал - и ты уже не в изоляции.',
+      },
+      formal: {
+        soft: '{name}, иногда контакт - это просто "я помню о вас". И этого достаточно.',
+        moderate:
+          '{name}, простой сигнал внимания (реакция/мем/одно слово) - это уже связь, без обязательств.',
+        hard: '{name}, не драматизируйте. Один маленький сигнал - и вы уже не в изоляции.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessinfo12',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'informational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, если в голове "все бессмысленно" - начни с простого: выйти в живое пространство.',
+        moderate:
+          '{name}, мозг в одиночестве рисует мрачнее. Смена среды и маленький контакт реально меняют ощущение.',
+        hard: '{name}, хватит оставаться один на один с мыслью. Действие - и картинка меняется. Проверь.',
+      },
+      formal: {
+        soft: '{name}, если в голове "все бессмысленно" - начните с простого: выйти в живое пространство.',
+        moderate:
+          '{name}, мозг в одиночестве рисует мрачнее. Смена среды и маленький контакт реально меняют ощущение.',
+        hard: '{name}, хватит оставаться один на один с мыслью. Действие - и картина меняется. Проверьте.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessinfo13',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'informational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, когда одиноко, тело часто напряжено. Пара глубоких выдохов - и становится чуть легче сделать шаг.',
+        moderate:
+          '{name}, сначала выдох, потом действие. Пауза помогает не проваливаться в "все плохо".',
+        hard: '{name}, выдохни. А теперь перестань крутить мысли - делай один шаг к контакту.',
+      },
+      formal: {
+        soft: '{name}, когда одиноко, тело часто напряжено. Пара глубоких выдохов - и становится чуть легче сделать шаг.',
+        moderate:
+          '{name}, сначала выдох, потом действие. Пауза помогает не проваливаться в "все плохо".',
+        hard: '{name}, выдохните. А теперь перестаньте крутить мысли - сделайте один шаг к контакту.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessinfo14',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'informational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, хороший контакт - не тот, где все идеально, а тот, где ты появился(ась).',
+        moderate:
+          '{name}, цель - не "понравиться", а "выйти на связь". Это разные задачи.',
+        hard: '{name}, хватит пытаться выглядеть идеально. Просто появись - и этого достаточно.',
+      },
+      formal: {
+        soft: '{name}, хороший контакт - не тот, где все идеально, а тот, где вы появились.',
+        moderate:
+          '{name}, цель - не "понравиться", а "выйти на связь". Это разные задачи.',
+        hard: '{name}, хватит пытаться выглядеть идеально. Просто появитесь - и этого достаточно.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessinfo15',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'informational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, маленькая цель на сегодня: один социальный шаг. Один - уже победа.',
+        moderate:
+          '{name}, выбери один из трех вариантов: 1) «привет», 2) реакция/стикер, 3) выйти "в люди" на 10 минут.',
+        hard: '{name}, выбирай: «привет» / реакция / выйти на 10 минут. Не думай - делай один из них сейчас.',
+      },
+      formal: {
+        soft: '{name}, маленькая цель на сегодня: один социальный шаг. Один - уже победа.',
+        moderate:
+          '{name}, выберите один из трех вариантов: 1) «привет», 2) реакция/стикер, 3) выйти "в люди" на 10 минут.',
+        hard: '{name}, выбирайте: «привет» / реакция / выйти на 10 минут. Не думайте - сделайте один из них сейчас.',
+      },
+    },
+  },
+
+  // --- MOTIVATIONAL (15) ---
+  {
+    id: 'psylonelinessmotiv01',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, один маленький шаг к людям - и день уже меняется. Ты справишься.',
+        moderate:
+          '{name}, сегодня не нужно "становиться общительным(ой)". Нужно просто сделать один контакт. Это по силам.',
+        hard: '{name}, хватит ждать. Один контакт - сейчас. Делай шаг и возвращай себе жизнь.',
+      },
+      formal: {
+        soft: '{name}, один маленький шаг к людям - и день уже меняется. У вас получится.',
+        moderate:
+          '{name}, сегодня не нужно "становиться общительным(ой)". Нужно просто сделать один контакт. Это по силам.',
+        hard: '{name}, хватит ждать. Один контакт - сейчас. Сделайте шаг и возвращайте себе жизнь.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessmotiv02',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, ты не обязан(а) быть один(а) с этим. Достаточно маленького "привет".',
+        moderate:
+          '{name}, связь начинается с простого. Одно сообщение - это уже движение вперед.',
+        hard: '{name}, перестань тащить все в одиночку. Напиши сейчас. Не оправдывайся - действуй.',
+      },
+      formal: {
+        soft: '{name}, вы не обязаны быть один(а) с этим. Достаточно маленького "привет".',
+        moderate:
+          '{name}, связь начинается с простого. Одно сообщение - это уже движение вперед.',
+        hard: '{name}, перестаньте тащить все в одиночку. Напишите сейчас. Не оправдывайтесь - действуйте.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessmotiv03',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, даже если сейчас нет сил - маленький шаг к людям все равно возможен.',
+        moderate:
+          '{name}, не нужно настроение. Нужен микрошаг. А настроение подтянется следом.',
+        hard: '{name}, хватит ждать "когда захочется". Сделай микрошаг сейчас - и точка.',
+      },
+      formal: {
+        soft: '{name}, даже если сейчас нет сил - маленький шаг к людям все равно возможен.',
+        moderate:
+          '{name}, не нужно настроение. Нужен микрошаг. А настроение подтянется следом.',
+        hard: '{name}, хватит ждать "когда захочется". Сделайте микрошаг сейчас - и точка.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessmotiv04',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, выйти на улицу на 10 минут - это уже забота о себе и шаг к связи.',
+        moderate:
+          '{name}, сделай простой выход "в люди". Не разговор, не подвиг - просто присутствие.',
+        hard: '{name}, подними себя и выйди. 10 минут среди людей - это твоя задача на сейчас.',
+      },
+      formal: {
+        soft: '{name}, выйти на улицу на 10 минут - это уже забота о себе и шаг к связи.',
+        moderate:
+          '{name}, сделайте простой выход "в люди". Не разговор, не подвиг - просто присутствие.',
+        hard: '{name}, поднимите себя и выйдите. 10 минут среди людей - это ваша задача на сейчас.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessmotiv05',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, одна реакция или стикер - и ты уже сделал(а) шаг из изоляции. Это работает.',
+        moderate:
+          '{name}, выбери легкий формат: реакция/стикер/мем. Ты делаешь связь проще - и это сила.',
+        hard: '{name}, хватит усложнять. Отправь реакцию/стикер сейчас. Действуй.',
+      },
+      formal: {
+        soft: '{name}, одна реакция или стикер - и вы уже сделали шаг из изоляции. Это работает.',
+        moderate:
+          '{name}, выберите легкий формат: реакция/стикер/мем. Вы делаете связь проще - и это сила.',
+        hard: '{name}, хватит усложнять. Отправьте реакцию/стикер сейчас. Действуйте.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessmotiv06',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, ты не "слишком поздно написал(а)". Связь не живет по расписанию.',
+        moderate:
+          '{name}, если давно не общались - это не повод молчать дальше. Один короткий контакт все меняет.',
+        hard: '{name}, хватит оправданий "давно не писал". Напиши сейчас - и все.',
+      },
+      formal: {
+        soft: '{name}, вы не "слишком поздно написали". Связь не живет по расписанию.',
+        moderate:
+          '{name}, если давно не общались - это не повод молчать дальше. Один короткий контакт все меняет.',
+        hard: '{name}, хватит оправданий "давно не писал(а)". Напишите сейчас - и все.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessmotiv07',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, ты можешь создать связь сам(а). Начни с одного шага - и этого достаточно.',
+        moderate:
+          '{name}, выбери один шаг к людям и сделай его сегодня. Регулярность важнее идеала.',
+        hard: '{name}, перестань ждать, что "кто-то спасет". Создай контакт сам(а). Сейчас.',
+      },
+      formal: {
+        soft: '{name}, вы можете создать связь сами. Начните с одного шага - и этого достаточно.',
+        moderate:
+          '{name}, выберите один шаг к людям и сделайте его сегодня. Регулярность важнее идеала.',
+        hard: '{name}, перестаньте ждать, что "кто-то спасет". Создайте контакт сами. Сейчас.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessmotiv08',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, попробуй план на неделю: одна встреча или маленькая активность "вне дома". Это реально.',
+        moderate:
+          '{name}, предложи встречу на этой неделе - кофе/прогулка. Это простой способ вернуть связь.',
+        hard: '{name}, делаем ход: напиши человеку и предложи кофе на этой неделе. Отправляй.',
+      },
+      formal: {
+        soft: '{name}, попробуйте план на неделю: одна встреча или небольшая активность "вне дома". Это реально.',
+        moderate:
+          '{name}, предложите встречу на этой неделе - кофе/прогулка. Это простой способ вернуть связь.',
+        hard: '{name}, сделайте ход: напишите человеку и предложите кофе на этой неделе. Отправляйте.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessmotiv09',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, ты не обязан(а) справляться один(а). И ты можешь начать с маленького контакта.',
+        moderate:
+          '{name}, одиночество - не "твой характер", это состояние. Его можно менять действиями.',
+        hard: '{name}, это состояние, а не судьба. Меняй его: один контакт сейчас.',
+      },
+      formal: {
+        soft: '{name}, вы не обязаны справляться один(а). И вы можете начать с маленького контакта.',
+        moderate:
+          '{name}, одиночество - не "ваш характер", это состояние. Его можно менять действиями.',
+        hard: '{name}, это состояние, а не судьба. Меняйте его: один контакт сейчас.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessmotiv10',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, маленькая стабилизация + маленький контакт = уже легче. Ты можешь.',
+        moderate:
+          '{name}, сделай вдох-выдох и один шаг к людям. Это самый короткий путь "в норму".',
+        hard: '{name}, хватит крутить это в голове. Вдох. Выдох. И действие: контакт сейчас.',
+      },
+      formal: {
+        soft: '{name}, небольшая стабилизация + небольшой контакт = уже легче. У вас получится.',
+        moderate:
+          '{name}, сделайте вдох-выдох и один шаг к людям. Это самый короткий путь "в норму".',
+        hard: '{name}, хватит крутить это в голове. Вдох. Выдох. И действие: контакт сейчас.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessmotiv11',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, ты уже делаешь важное - не закрываешь глаза на себя. Остался один маленький шаг к связи.',
+        moderate:
+          '{name}, сделай один контакт сегодня. Это маленькая победа над изоляцией.',
+        hard: '{name}, победа сегодня простая: один контакт. Не больше. Не меньше. Делай.',
+      },
+      formal: {
+        soft: '{name}, вы уже делаете важное - не закрываете глаза на себя. Остался один маленький шаг к связи.',
+        moderate:
+          '{name}, сделайте один контакт сегодня. Это маленькая победа над изоляцией.',
+        hard: '{name}, победа сегодня простая: один контакт. Не больше. Не меньше. Сделайте.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessmotiv12',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, каждый раз, когда ты выходишь "в люди", ты тренируешь связь. Это навык.',
+        moderate:
+          '{name}, связь - это навык. Маленькие повторения дают эффект быстрее, чем редкие подвиги.',
+        hard: '{name}, хватит ждать "само". Тренируй навык: один микрошаг сегодня. Поехали.',
+      },
+      formal: {
+        soft: '{name}, каждый раз, когда вы выходите "в люди", вы тренируете связь. Это навык.',
+        moderate:
+          '{name}, связь - это навык. Маленькие повторения дают эффект быстрее, чем редкие подвиги.',
+        hard: '{name}, хватит ждать "само". Тренируйте навык: один микрошаг сегодня. Поехали.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessmotiv13',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, не нужно "быть удобным(ой)". Нужно быть живым(ой) и появляться.',
+        moderate:
+          '{name}, ты не обязан(а) писать идеально. Главное - появиться и сделать шаг.',
+        hard: '{name}, перестань вылизывать текст в голове. Напиши просто и отправь. Сейчас.',
+      },
+      formal: {
+        soft: '{name}, не нужно "быть удобным(ой)". Нужно быть живым(ой) и появляться.',
+        moderate:
+          '{name}, вам не нужно писать идеально. Главное - появиться и сделать шаг.',
+        hard: '{name}, перестаньте вылизывать текст в голове. Напишите просто и отправьте. Сейчас.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessmotiv14',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, если страшно - это значит, что шаг важный. Сделай его мягко: реакция или короткое "привет".',
+        moderate:
+          '{name}, страх - не стоп-сигнал. Это сигнал "делаем маленький шаг".',
+        hard: '{name}, страх есть - и что? Делай шаг. Реакция/"привет" - сейчас.',
+      },
+      formal: {
+        soft: '{name}, если страшно - это значит, что шаг важный. Сделайте его мягко: реакция или короткое "привет".',
+        moderate:
+          '{name}, страх - не стоп-сигнал. Это сигнал "делаем маленький шаг".',
+        hard: '{name}, страх есть - и что? Сделайте шаг. Реакция/"привет" - сейчас.',
+      },
+    },
+  },
+  {
+    id: 'psylonelinessmotiv15',
+    kind: 'therapy',
+    entityKey: 'loneliness',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: '{name}, сегодня можно стать себе союзником: выйти, написать, проявиться. Маленьким шагом.',
+        moderate:
+          '{name}, одиночество не "победит", если ты делаешь шаги. Один шаг сегодня - уже достаточно.',
+        hard: '{name}, перестань отдавать день одиночеству. Сделай шаг к людям прямо сейчас.',
+      },
+      formal: {
+        soft: '{name}, сегодня можно стать себе союзником: выйти, написать, проявиться. Маленьким шагом.',
+        moderate:
+          '{name}, одиночество не "победит", если вы делаете шаги. Один шаг сегодня - уже достаточно.',
+        hard: '{name}, перестаньте отдавать день одиночеству. Сделайте шаг к людям прямо сейчас.',
       },
     },
   },

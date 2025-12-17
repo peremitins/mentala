@@ -26,7 +26,6 @@ export interface TherapyTopic {
   description: string;
   emoji: string;
   color: string; // Tailwind color class prefix (без dark:)
-  techniques: string[]; // Типы техник для этой темы
 }
 
 /**
@@ -41,7 +40,6 @@ export const THERAPY_TOPICS: readonly TherapyTopic[] = [
       'Помогаем успокоиться и вернуть чувство безопасности: дыхание, заземление и поддерживающие мысли',
     emoji: '😰',
     color: 'blue',
-    techniques: ['breath', 'grounding', 'reframe', 'sos'],
   },
   {
     key: 'stress',
@@ -50,7 +48,6 @@ export const THERAPY_TOPICS: readonly TherapyTopic[] = [
       'Помогаем снизить напряжение и усталость, восстановить ресурс и ощущение контроля',
     emoji: '😮‍💨',
     color: 'gray',
-    techniques: ['breath', 'body_scan', 'reframe'],
   },
   {
     key: 'mood',
@@ -59,7 +56,6 @@ export const THERAPY_TOPICS: readonly TherapyTopic[] = [
       'Помогаем вернуть энергию и опору: маленькие шаги, забота о себе и благодарность',
     emoji: '😔',
     color: 'yellow',
-    techniques: ['reframe', 'mi_prompt'],
   },
   {
     key: 'sleep',
@@ -68,7 +64,6 @@ export const THERAPY_TOPICS: readonly TherapyTopic[] = [
       'Помогаем легче засыпать и высыпаться: вечерние практики, расслабление и режим сна',
     emoji: '😴',
     color: 'purple',
-    techniques: ['breath', 'body_scan'],
   },
   {
     key: 'anger',
@@ -77,7 +72,6 @@ export const THERAPY_TOPICS: readonly TherapyTopic[] = [
       'Помогаем снизить накал и вернуть контроль: пауза, дыхание и техники “охлаждения”',
     emoji: '😤',
     color: 'red',
-    techniques: ['breath', 'grounding', 'body_scan'],
   },
   {
     key: 'selfesteem',
@@ -86,7 +80,6 @@ export const THERAPY_TOPICS: readonly TherapyTopic[] = [
       'Помогаем уменьшить самокритику и поддержать себя: добрые формулировки и новые взгляды',
     emoji: '🤗',
     color: 'pink',
-    techniques: ['reframe', 'mi_prompt'],
   },
   {
     key: 'focus',
@@ -95,7 +88,6 @@ export const THERAPY_TOPICS: readonly TherapyTopic[] = [
       'Помогаем начать и удержать внимание: правило 2 минут, короткие фокус-сессии и меньше откладывания',
     emoji: '🎯',
     color: 'green',
-    techniques: ['mi_prompt', 'reframe'],
   },
   {
     key: 'relations',
@@ -104,7 +96,6 @@ export const THERAPY_TOPICS: readonly TherapyTopic[] = [
       'Помогаем говорить о важном спокойно: Я‑сообщения, поддержка в конфликтах и напоминания о самоценности',
     emoji: '💬',
     color: 'indigo',
-    techniques: ['reframe', 'mi_prompt'],
   },
   {
     key: 'grief',
@@ -113,29 +104,26 @@ export const THERAPY_TOPICS: readonly TherapyTopic[] = [
       'Помогаем пережить утрату мягко: поддержка, дыхание, заземление и нормализация чувств',
     emoji: '💔',
     color: 'slate',
-    techniques: ['breath', 'grounding', 'reframe'],
   },
 
   // NEW (для уведомлений отлично подходит: микрошаги к контакту, выход из изоляции)
   {
     key: 'loneliness',
-    name: 'Одиночество и социальные связи',
+    name: 'Одиночество',
     description:
       'Помогаем сделать маленькие шаги к общению и почувствовать связь',
     emoji: '🤝',
     color: 'amber',
-    techniques: ['mi_prompt', 'reframe', 'behavioral_activation'],
   },
 
   // NEW (хорошо для уведомлений: “разрешающие” фразы, анти-прокрастинация)
   {
     key: 'perfectionism',
-    name: 'Перфекционизм и завышенные требования',
+    name: 'Перфекционизм',
     description:
       'Помогаем снизить давление “надо идеально”: “достаточно хорошо”, черновики и маленькие шаги',
     emoji: '✨',
     color: 'violet',
-    techniques: ['reframe', 'mi_prompt', 'behavioral_activation'],
   },
 
   {
@@ -145,7 +133,6 @@ export const THERAPY_TOPICS: readonly TherapyTopic[] = [
       'Быстрая стабилизация при сильной тревоге: короткие техники, чтобы вернуться в “здесь и сейчас”',
     emoji: '🆘',
     color: 'orange',
-    techniques: ['sos', 'breath', 'grounding'],
   },
 ] as const;
 
