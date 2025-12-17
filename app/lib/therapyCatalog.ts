@@ -1,8 +1,9 @@
 /**
  * Справочник тем терапии (Therapy Topics)
- * Версия: 2.4 (2025-11-06)
+ * Версия: 2.5 (2025-12-17)
  *
- * 10 тематических направлений для эмоциональной терапевтической поддержки
+ * 12 тематических направлений для эмоциональной терапевтической поддержки
+ * (каталог используется для текстовых уведомлений: названия и описания короткие и “узнаваемые”)
  */
 
 export type TherapyTopicKey =
@@ -15,6 +16,8 @@ export type TherapyTopicKey =
   | 'focus'
   | 'relations'
   | 'grief'
+  | 'loneliness'
+  | 'perfectionism'
   | 'sos';
 
 export interface TherapyTopic {
@@ -35,7 +38,7 @@ export const THERAPY_TOPICS: readonly TherapyTopic[] = [
     key: 'anxiety',
     name: 'Тревога и паника',
     description:
-      'Помогаем успокоиться и восстановить чувство безопасности через дыхание и заземление',
+      'Помогаем успокоиться и вернуть чувство безопасности: дыхание, заземление и поддерживающие мысли',
     emoji: '😰',
     color: 'blue',
     techniques: ['breath', 'grounding', 'reframe', 'sos'],
@@ -44,7 +47,7 @@ export const THERAPY_TOPICS: readonly TherapyTopic[] = [
     key: 'stress',
     name: 'Стресс и выгорание',
     description:
-      'Снятие перенапряжения, усталости, восстановление ощущения контроля и отдыха',
+      'Помогаем снизить напряжение и усталость, восстановить ресурс и ощущение контроля',
     emoji: '😮‍💨',
     color: 'gray',
     techniques: ['breath', 'body_scan', 'reframe'],
@@ -53,7 +56,7 @@ export const THERAPY_TOPICS: readonly TherapyTopic[] = [
     key: 'mood',
     name: 'Низкое настроение',
     description:
-      'Повышение энергии, активация, поддержка через микро-цели и благодарность',
+      'Помогаем вернуть энергию и опору: маленькие шаги, забота о себе и благодарность',
     emoji: '😔',
     color: 'yellow',
     techniques: ['reframe', 'mi_prompt'],
@@ -62,7 +65,7 @@ export const THERAPY_TOPICS: readonly TherapyTopic[] = [
     key: 'sleep',
     name: 'Сон и восстановление',
     description:
-      'Помощь при засыпании, формирование режима, вечерние напоминания',
+      'Помогаем легче засыпать и высыпаться: вечерние практики, расслабление и режим сна',
     emoji: '😴',
     color: 'purple',
     techniques: ['breath', 'body_scan'],
@@ -70,7 +73,8 @@ export const THERAPY_TOPICS: readonly TherapyTopic[] = [
   {
     key: 'anger',
     name: 'Раздражительность и злость',
-    description: 'Управление импульсами, техники охлаждения, дыхательные паузы',
+    description:
+      'Помогаем снизить накал и вернуть контроль: пауза, дыхание и техники “охлаждения”',
     emoji: '😤',
     color: 'red',
     techniques: ['breath', 'grounding', 'body_scan'],
@@ -79,16 +83,16 @@ export const THERAPY_TOPICS: readonly TherapyTopic[] = [
     key: 'selfesteem',
     name: 'Самооценка и самокритика',
     description:
-      'Снижение самокритики, фразы само-поддержки, мягкий рефрейминг',
+      'Помогаем уменьшить самокритику и поддержать себя: добрые формулировки и новые взгляды',
     emoji: '🤗',
     color: 'pink',
     techniques: ['reframe', 'mi_prompt'],
   },
   {
     key: 'focus',
-    name: 'Прокрастинация и фокус',
+    name: 'Фокус и прокрастинация',
     description:
-      'Повышение концентрации, правило 2 минут, фокус-слоты, борьба с откладыванием',
+      'Помогаем начать и удержать внимание: правило 2 минут, короткие фокус-сессии и меньше откладывания',
     emoji: '🎯',
     color: 'green',
     techniques: ['mi_prompt', 'reframe'],
@@ -97,25 +101,48 @@ export const THERAPY_TOPICS: readonly TherapyTopic[] = [
     key: 'relations',
     name: 'Отношения и границы',
     description:
-      'Поддержка в конфликтах, напоминания про самоценность, I-сообщения',
+      'Помогаем говорить о важном спокойно: Я‑сообщения, поддержка в конфликтах и напоминания о самоценности',
     emoji: '💬',
     color: 'indigo',
     techniques: ['reframe', 'mi_prompt'],
   },
   {
     key: 'grief',
-    name: 'Потери и горе',
+    name: 'Утрата и горе',
     description:
-      'Помощь при утрате, мягкая поддержка, дыхание, нормализация чувств',
+      'Помогаем пережить утрату мягко: поддержка, дыхание, заземление и нормализация чувств',
     emoji: '💔',
     color: 'slate',
     techniques: ['breath', 'grounding', 'reframe'],
   },
+
+  // NEW (для уведомлений отлично подходит: микрошаги к контакту, выход из изоляции)
+  {
+    key: 'loneliness',
+    name: 'Одиночество и социальные связи',
+    description:
+      'Помогаем сделать маленькие шаги к общению и почувствовать связь',
+    emoji: '🤝',
+    color: 'amber',
+    techniques: ['mi_prompt', 'reframe', 'behavioral_activation'],
+  },
+
+  // NEW (хорошо для уведомлений: “разрешающие” фразы, анти-прокрастинация)
+  {
+    key: 'perfectionism',
+    name: 'Перфекционизм и завышенные требования',
+    description:
+      'Помогаем снизить давление “надо идеально”: “достаточно хорошо”, черновики и маленькие шаги',
+    emoji: '✨',
+    color: 'violet',
+    techniques: ['reframe', 'mi_prompt', 'behavioral_activation'],
+  },
+
   {
     key: 'sos',
-    name: 'Экстренная поддержка (SOS)',
+    name: 'Экстренная поддержка',
     description:
-      'Быстрая стабилизация при высокой тревоге, короткие SOS-техники',
+      'Быстрая стабилизация при сильной тревоге: короткие техники, чтобы вернуться в “здесь и сейчас”',
     emoji: '🆘',
     color: 'orange',
     techniques: ['sos', 'breath', 'grounding'],

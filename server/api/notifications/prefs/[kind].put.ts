@@ -14,7 +14,6 @@ import type {
 } from '@/shared/dto/notifications';
 import { getSessionUser } from '@/server/application/auth/session';
 import { regenerateSlotsForSource } from '@/server/application/notifications/scheduler.service';
-import type { NotificationKind } from '@/app/lib/notificationTemplates';
 import { generateNotificationTexts } from '@/server/application/notifications/ai-generation.service';
 import { computeGenerationConfigHash } from '@/server/utils/notification-ai-config-hash';
 import { userPreferences } from '@/server/infrastructure/db/schema';

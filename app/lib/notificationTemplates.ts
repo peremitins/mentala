@@ -1,25 +1,27 @@
-export type NotificationKind = 'therapy' | 'habits';
-export type Addressing = 'informal' | 'formal';
-export type Tone =
-  | 'delicate'
-  | 'neutral'
-  | 'uplifting'
-  | 'resolute'
-  | 'demanding';
+/**
+ * Каталог шаблонов уведомлений
+ *
+ * Этот файл содержит только определения типов и данные шаблонов.
+ * Шаблоны используются скриптом миграции (scripts/migrate-templates-to-db.ts)
+ * для переноса в БД (таблицы notification_text_presets и notification_texts).
+ *
+ * В продакшене используются тексты из БД, а не этот файл напрямую.
+ */
+
+// Импортируем общие типы из shared DTO
+import type {
+  NotificationKind,
+  NotificationSubtype,
+} from '@/shared/dto/notifications';
+
+// Тип Directness с поддержкой 'universal' (используется только в шаблонах)
 export type Directness = 'soft' | 'moderate' | 'hard' | 'universal';
 
-// Универсальные типы
-export type EntityKey = string; // Универсальный идентификатор сущности
+// Универсальный идентификатор сущности
+export type EntityKey = string;
 
-// Типы для привычек
+// Intent для привычек (только build | quit, без custom)
 export type HabitIntent = 'build' | 'quit';
-
-// Универсальный тип subtype для всех видов уведомлений
-export type NotificationSubtype =
-  | 'reminder'
-  | 'informational'
-  | 'motivational'
-  | 'mixed';
 
 // Типы техник терапии (метаданные, не для фильтрации)
 export type TherapyTechnique =
@@ -30,8 +32,8 @@ export type TherapyTechnique =
   | 'mi_prompt' // Мотивационное интервьюирование — вопросы для саморефлексии и поиска внутренних ресурсов
   | 'sos'; // Экстренная поддержка — быстрые техники для кризисных моментов высокой тревоги
 
-// Обратная совместимость: HabitSubtype теперь алиас для NotificationSubtype
-export type HabitSubtype = NotificationSubtype;
+// Реэкспорт типов для использования в скрипте миграции
+export type { NotificationKind, NotificationSubtype };
 
 export interface NotificationTemplate {
   id: string;
@@ -3746,260 +3748,9 @@ export const habitsTemplates: NotificationTemplate[] = [
 
 /**
  * Полный каталог шаблонов
+ * Используется в скрипте миграции для переноса в БД
  */
 export const notificationTemplates: NotificationTemplate[] = [
   ...therapyTemplates,
   ...habitsTemplates,
 ];
-
-/**
- * Fallback текст при отсутствии подходящего шаблона
- */
-export const FALLBACK_TEXT = 'Время сделать паузу и восстановить дыхание.';
-
-/**
- * Подбор шаблона по параметрам
- * @param kind - фокус уведомления (therapy | habits)
- * @param options - опциональные параметры фильтрации (entityKey, intent, subtype)
- * @returns случайный подходящий шаблон или null
- *
- * Примечание: addressing и tone берутся из БД (userPreferences) и используются только в getTemplateText для выбора текста
- */
-export function findTemplate(
-  kind: NotificationKind,
-  options?: {
-    entityKey?: EntityKey; // Универсальный идентификатор сущности
-    intent?: HabitIntent; // Только для habits
-    subtype?: NotificationSubtype; // Для habits и therapy
-    excludeTemplateIds?: string[];
-    useFirst?: boolean; // Если true, возвращает первый шаблон вместо случайного (для production)
-    templateIndex?: number; // Индекс для детерминированного выбора шаблона (вместо случайного)
-  }
-): NotificationTemplate | null {
-  const {
-    entityKey,
-    intent,
-    subtype,
-    excludeTemplateIds,
-    useFirst = false,
-    templateIndex,
-  } = options || {};
-
-  console.log('[findTemplate] Searching:', {
-    kind,
-    entityKey,
-    intent,
-    subtype,
-  });
-
-  const templates = notificationTemplates.filter((t) => {
-    const matchKind = t.kind === kind;
-    const matchEntityKey = !entityKey || t.entityKey === entityKey;
-
-    // Для информационных шаблонов habits directness всегда 'universal'
-    // Для терапии информационные шаблоны могут иметь разные directness
-    const matchDirectness =
-      subtype === 'informational' && kind === 'habits'
-        ? t.directness.includes('universal')
-        : true;
-
-    // Проверка специфичных для kind полей
-    let matchByKindSpecific = true;
-
-    if (kind === 'habits') {
-      if (intent !== undefined) {
-        if (t.intent) {
-          matchByKindSpecific = matchByKindSpecific && t.intent === intent;
-        } else {
-          matchByKindSpecific = false;
-        }
-      }
-      if (subtype !== undefined && subtype !== null) {
-        // Для 'mixed' принимаем любые подтипы (reminder, informational, motivational)
-        if (subtype === 'mixed') {
-          // Принимаем все шаблоны с любым subtype
-          matchByKindSpecific = matchByKindSpecific && !!t.subtype;
-        } else {
-          // Для конкретного subtype ищем точное совпадение
-          if (t.subtype) {
-            matchByKindSpecific = matchByKindSpecific && t.subtype === subtype;
-          } else {
-            matchByKindSpecific = false;
-          }
-        }
-      }
-    }
-
-    if (kind === 'therapy') {
-      if (subtype !== undefined && subtype !== null) {
-        // Для 'mixed' принимаем любые подтипы (reminder, informational, motivational)
-        if (subtype === 'mixed') {
-          // Принимаем все шаблоны с любым subtype
-          matchByKindSpecific = matchByKindSpecific && !!t.subtype;
-        } else {
-          // Для конкретного subtype ищем точное совпадение
-          if (t.subtype) {
-            matchByKindSpecific = matchByKindSpecific && t.subtype === subtype;
-          } else {
-            matchByKindSpecific = false;
-          }
-        }
-      }
-    }
-
-    // Исключаем недавно использованные
-    const notExcluded =
-      !excludeTemplateIds || !excludeTemplateIds.includes(t.id);
-
-    const matches =
-      matchKind &&
-      matchEntityKey &&
-      matchDirectness &&
-      matchByKindSpecific &&
-      notExcluded;
-
-    return matches;
-  });
-
-  if (templates.length === 0) {
-    // Если все шаблоны исключены, начинаем новый круг
-    if (excludeTemplateIds && excludeTemplateIds.length > 0) {
-      console.warn('[findTemplate] All templates excluded, starting new cycle');
-      return findTemplate(kind, {
-        ...options,
-        excludeTemplateIds: undefined,
-      });
-    }
-    console.warn(
-      `[findTemplate] ❌ No templates found for: kind=${kind}, entityKey=${entityKey}, intent=${intent}, subtype=${subtype}`
-    );
-    // Для отладки: показываем сколько всего шаблонов
-    const allKindTemplates = notificationTemplates.filter(
-      (t) => t.kind === kind
-    );
-    console.log(
-      `[findTemplate] Total ${kind} templates: ${allKindTemplates.length}`
-    );
-    if (entityKey) {
-      const withEntityKey = allKindTemplates.filter(
-        (t) => t.entityKey === entityKey
-      );
-      console.log(
-        `[findTemplate] Templates with entityKey="${entityKey}": ${withEntityKey.length}`
-      );
-      if (withEntityKey.length > 0) {
-        // Показываем доступные подтипы для этого entityKey
-        const availableSubtypes = [
-          ...new Set(withEntityKey.map((t) => t.subtype).filter(Boolean)),
-        ];
-        console.log(
-          `[findTemplate] Available subtypes for entityKey="${entityKey}": ${availableSubtypes.join(', ')}`
-        );
-      } else {
-        // Показываем все доступные entityKey для этого kind
-        const availableEntityKeys = [
-          ...new Set(allKindTemplates.map((t) => t.entityKey)),
-        ];
-        console.log(
-          `[findTemplate] Available entityKeys for kind="${kind}": ${availableEntityKeys.join(', ')}`
-        );
-      }
-    }
-    return null;
-  }
-
-  // Возвращаем шаблон из подходящих:
-  // - Если useFirst = true, возвращаем первый
-  // - Если templateIndex передан, используем его для детерминированного выбора
-  // - Иначе используем случайный выбор (для обратной совместимости)
-  if (useFirst) {
-    return templates[0] ?? null;
-  }
-  if (templateIndex !== undefined && templateIndex !== null) {
-    // Детерминированный выбор на основе индекса
-    const index = templateIndex % templates.length;
-    return templates[index] ?? null;
-  }
-  return templates[Math.floor(Math.random() * templates.length)] ?? null;
-}
-
-/**
- * Получить текст шаблона с подстановкой плейсхолдеров
- * @param template - шаблон
- * @param addressing - обращение
- * @param directness - Стиль уведомлений
- * @param userName - имя пользователя (для подстановки {name})
- * @returns итоговый текст уведомления
- */
-export function getTemplateText(
-  template: NotificationTemplate,
-  addressing: Addressing,
-  directness: Directness,
-  userName?: string
-): string {
-  let text: string | undefined;
-
-  // 1. Приоритет: универсальный текст (для informational)
-  if (template.ru.universal) {
-    text = template.ru.universal;
-  }
-  // 2. Universal с учетом addressing
-  else if (template.ru[addressing]?.universal) {
-    text = template.ru[addressing].universal;
-  }
-  // 3. Точное совпадение addressing + directness
-  else if (template.ru[addressing]?.[directness]) {
-    text = template.ru[addressing][directness];
-  }
-  // 4. Fallback на moderate (если запрошен soft/hard, но его нет)
-  else if (directness !== 'moderate' && template.ru[addressing]?.moderate) {
-    text = template.ru[addressing].moderate;
-  }
-
-  if (!text) return FALLBACK_TEXT;
-
-  // Подстановка плейсхолдера {name}
-  if (userName && userName.trim()) {
-    return text.replace(/{name}/g, userName);
-  }
-
-  // Удаляем плейсхолдер и лишние запятые/пробелы, если имя отсутствует
-  return text
-    .replace(/{name}/g, '')
-    .replace(/,\s*\./g, '.')
-    .replace(/,\s*,/g, ',')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-/**
- * Получить текст уведомления с fallback-логикой
- * @param kind - фокус уведомления
- * @param addressing - обращение (из БД: userPreferences.addressing)
- * @param directness - Стиль уведомлений (из настроек: notificationPreferences.directness)
- * @param userName - имя пользователя
- * @param options - опциональные параметры (entityKey, intent, subtype)
- * @returns итоговый текст уведомления
- */
-export function getNotificationText(
-  kind: NotificationKind,
-  addressing: Addressing,
-  directness: Directness,
-  userName?: string,
-  options?: {
-    entityKey?: string; // Универсальный идентификатор сущности
-    intent?: HabitIntent; // Только для habits
-    subtype?: NotificationSubtype; // Для habits и therapy
-  }
-): string {
-  // Находим шаблон (tone больше не используется в фильтрации)
-  const template = findTemplate(kind, options);
-
-  // Если шаблон найден — вернуть текст с подстановкой
-  if (template) {
-    return getTemplateText(template, addressing, directness, userName);
-  }
-
-  // Fallback: дефолтный текст
-  return FALLBACK_TEXT;
-}
