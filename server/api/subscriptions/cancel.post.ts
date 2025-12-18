@@ -12,8 +12,8 @@ import { eq, and, gt } from 'drizzle-orm';
  * Отменить автопродление подписки
  */
 export default defineEventHandler(async (event) => {
-  const user = await getSessionUser(event);
-  if (!user?.id) {
+  const sessionResult = await getSessionUser(event);
+  if (!sessionResult?.user?.id) {
     throw createError({
       statusCode: 401,
       statusMessage: 'Unauthorized',
@@ -27,7 +27,7 @@ export default defineEventHandler(async (event) => {
     .from(userSubscriptions)
     .where(
       and(
-        eq(userSubscriptions.userId, user.id),
+        eq(userSubscriptions.userId, sessionResult.user.id),
         eq(userSubscriptions.paymentStatus, 'active'),
         gt(userSubscriptions.endDate, now) // подписка не истекла
       )
@@ -54,7 +54,7 @@ export default defineEventHandler(async (event) => {
 
   // Логируем событие
   await db.insert(subscriptionEvents).values({
-    userId: user.id,
+    userId: sessionResult.user.id,
     eventType: 'subscription_canceled',
     planId: subscription.planId,
     metadata: {

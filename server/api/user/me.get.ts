@@ -1,16 +1,16 @@
 import { getSessionUser } from '@/server/application/auth/session';
 
 export default defineEventHandler(async (event) => {
-  const user = await getSessionUser(event);
+  const sessionResult = await getSessionUser(event);
 
   // Если пользователь авторизован - возвращаем его данные
-  if (user?.id) {
+  if (sessionResult?.user?.id) {
     return {
       user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        locale: user.locale,
+        id: sessionResult.user.id,
+        email: sessionResult.user.email,
+        name: sessionResult.user.name,
+        locale: sessionResult.user.locale,
       },
     };
   }

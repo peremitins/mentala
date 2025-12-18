@@ -12,14 +12,8 @@ import { CHAT_IDLE_TIMEOUT_MS } from '@/server/config/subscription';
 import { endTherapySession } from '@/server/application/subscriptions/session-time.service';
 
 export default defineEventHandler(async (event) => {
-  const config = useRuntimeConfig();
-
-  console.log(
-    '[Stream API] openaiApiKey present:',
-    !!config.openaiApiKey,
-    'len=',
-    config.openaiApiKey?.length ?? 0
-  );
+  // Не логируем ключи API (чувствительные данные)
+  // console.log убран для безопасности
   const body = await readBody<{
     model?: string;
     messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
@@ -44,8 +38,10 @@ export default defineEventHandler(async (event) => {
 
   try {
     // Добавляем память только для авторизованных пользователей
-    const sessUser = await getSessionUser(event);
-    const uid = sessUser?.id ? String(sessUser.id) : undefined;
+    const sessionResult = await getSessionUser(event);
+    const uid = sessionResult?.user?.id
+      ? String(sessionResult.user.id)
+      : undefined;
     if (!uid) {
       res.write(
         `data: ${JSON.stringify({
@@ -166,12 +162,7 @@ export default defineEventHandler(async (event) => {
         const count = await summaryStore.countByUser(uid);
         if (count > 0) {
           serverIsFirst = false;
-          console.log(
-            '[Stream API] Found summary for user:',
-            uid,
-            'count:',
-            count
-          );
+          // console.log('[Stream API] Found summary for user:', uid, 'count:', count);
         }
       }
 
@@ -184,12 +175,8 @@ export default defineEventHandler(async (event) => {
             responseIdStore.isResponseValid(lastResponse.expiresAt)
           ) {
             serverIsFirst = false;
-            console.log(
-              '[Stream API] Found valid previous_response_id for user:',
-              uid,
-              'responseId:',
-              lastResponse.responseId
-            );
+            // Не логируем responseId (чувствительные данные)
+            // console.log('[Stream API] Found valid previous_response_id for user:', uid);
           }
         } catch (err) {
           console.error(
@@ -200,19 +187,11 @@ export default defineEventHandler(async (event) => {
       }
     }
 
-    console.log('[Stream API] User:', uid, 'isFirstSession:', serverIsFirst);
-
-    // 🔍 Логируем входящие данные
-    console.log('[Stream API] Incoming payload:', {
-      model: body?.model,
-      messagesCount: body?.messages?.length ?? 0,
-      mode: body?.mode,
-      sessionId: body?.sessionId,
-      lang: body?.lang,
-    });
+    // Логируем только метаданные (без чувствительных данных)
+    // console.log('[Stream API] User:', uid, 'isFirstSession:', serverIsFirst);
 
     try {
-      console.log('[Stream API] Calling chatStreamViaProvider (OpenAI)...');
+      // console.log('[Stream API] Calling chatStreamViaProvider (OpenAI)...');
 
       const stream = chatStreamViaProvider({
         provider: 'openai',
@@ -231,15 +210,13 @@ export default defineEventHandler(async (event) => {
         },
       });
 
-      console.log(
-        '[Stream API] chatStreamViaProvider returned stream, starting for-await loop'
-      );
+      // console.log('[Stream API] chatStreamViaProvider returned stream, starting for-await loop');
 
       for await (const delta of stream) {
         res.write(`data: ${JSON.stringify({ output_text_delta: delta })}\n\n`);
       }
 
-      console.log('[Stream API] Stream finished normally');
+      // console.log('[Stream API] Stream finished normally');
     } catch (e: any) {
       console.error('[Stream API] OpenAI / chatStreamViaProvider error:', e);
       try {
@@ -249,7 +226,10 @@ export default defineEventHandler(async (event) => {
           })}\n\n`
         );
       } catch (writeErr) {
-        console.error('[Stream API] Failed to write SSE error chunk:', writeErr);
+        console.error(
+          '[Stream API] Failed to write SSE error chunk:',
+          writeErr
+        );
       }
     }
   } catch (e: any) {

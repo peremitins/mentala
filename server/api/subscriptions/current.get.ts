@@ -17,8 +17,8 @@ import {
  * Получить текущую подписку пользователя
  */
 export default defineEventHandler(async (event) => {
-  const user = await getSessionUser(event);
-  if (!user?.id) {
+  const sessionResult = await getSessionUser(event);
+  if (!sessionResult?.user?.id) {
     // HTTP-кэширование для неавторизованных пользователей (меньше времени)
     setHeader(event, 'Cache-Control', 'private, max-age=60'); // 1 минута
     return {
@@ -41,7 +41,7 @@ export default defineEventHandler(async (event) => {
     )
     .where(
       and(
-        eq(userSubscriptions.userId, user.id),
+        eq(userSubscriptions.userId, sessionResult.user.id),
         eq(userSubscriptions.paymentStatus, 'active'),
         gt(userSubscriptions.endDate, now) // подписка не истекла
       )
@@ -61,7 +61,7 @@ export default defineEventHandler(async (event) => {
         subscriptionPlans,
         eq(userSubscriptions.planId, subscriptionPlans.id)
       )
-      .where(eq(userSubscriptions.userId, user.id))
+      .where(eq(userSubscriptions.userId, sessionResult.user.id))
       .orderBy(desc(userSubscriptions.createdAt))
       .limit(1);
 
@@ -77,7 +77,7 @@ export default defineEventHandler(async (event) => {
           trialEndedAt: users.trialEndedAt,
         })
         .from(users)
-        .where(eq(users.id, user.id))
+        .where(eq(users.id, sessionResult.user.id))
         .limit(1);
 
       const userRecord = userData[0];
@@ -161,7 +161,7 @@ export default defineEventHandler(async (event) => {
       trialEndedAt: users.trialEndedAt,
     })
     .from(users)
-    .where(eq(users.id, user.id))
+    .where(eq(users.id, sessionResult.user.id))
     .limit(1);
 
   const userRecord = userData[0];

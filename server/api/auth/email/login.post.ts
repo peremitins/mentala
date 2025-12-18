@@ -1,4 +1,4 @@
-import { createError } from 'h3';
+import { createError, getHeader } from 'h3';
 import { db } from '@/server/infrastructure/db/client';
 import { users } from '@/server/infrastructure/db/schema';
 import { eq } from 'drizzle-orm';
@@ -85,7 +85,15 @@ export default defineEventHandler(async (event) => {
       updatedAt: new Date(), // Явно обновляем updatedAt
     })
     .where(eq(users.id, existing[0].id));
-  const sessionId = await createSession(event, existing[0].id, body.locale);
+  
+  // Ротация session ID при логине (защита от session fixation)
+  const { rotateSessionId } = await import('@/server/application/auth/session');
+  const sessionId = await rotateSessionId(event, existing[0].id, body.locale);
+  
+  // Определяем, является ли запрос от native платформы (Capacitor)
+  const platform = String(getHeader(event, 'x-platform') || '').toLowerCase();
+  const isNative = platform === 'ios' || platform === 'android';
+
   return {
     user: {
       id: existing[0].id,
@@ -93,6 +101,8 @@ export default defineEventHandler(async (event) => {
       name: existing[0].name,
       locale: body.locale ?? existing[0].locale,
     },
-    sessionToken: sessionId, // Для использования в заголовке X-Session-Token если cookie не передается
+    // Отдаем sessionToken только для native платформ (Capacitor)
+    // Для web используем только httpOnly cookie
+    ...(isNative ? { sessionToken: sessionId } : {}),
   };
 });

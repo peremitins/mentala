@@ -9,14 +9,14 @@ import { getSessionUser } from '@/server/application/auth/session';
  * Получить список пользовательских тем терапии
  */
 export default defineEventHandler(async (event): Promise<TherapyTopicDto[]> => {
-  const user = await getSessionUser(event);
-  if (!user?.id) {
+  const sessionResult = await getSessionUser(event);
+  if (!sessionResult?.user?.id) {
     throw createError({
       statusCode: 401,
       message: 'Unauthorized',
     });
   }
-  const userId = user.id;
+  const userId = sessionResult.user.id;
 
   const topics = await db
     .select()

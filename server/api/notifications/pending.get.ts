@@ -14,8 +14,8 @@ import {
 } from '@/server/application/notifications/timezone.utils';
 
 export default defineEventHandler(async (event) => {
-  const user = await getSessionUser(event);
-  if (!user?.id) {
+  const sessionResult = await getSessionUser(event);
+  if (!sessionResult?.user?.id) {
     throw createError({
       statusCode: 401,
       message: 'Unauthorized',
@@ -29,7 +29,7 @@ export default defineEventHandler(async (event) => {
     .from(notificationSlots)
     .where(
       and(
-        eq(notificationSlots.userId, user.id),
+        eq(notificationSlots.userId, sessionResult.user.id),
         eq(notificationSlots.status, 'sent')
       )
     )
@@ -37,11 +37,11 @@ export default defineEventHandler(async (event) => {
     .limit(20);
 
   console.log(
-    `[PendingNotifications] Found ${pending.length} sent slots for user ${user.id}`
+    `[PendingNotifications] Found ${pending.length} sent slots for user ${sessionResult.user.id}`
   );
 
   // Получаем timezone пользователя для преобразования времени
-  const timezone = await getUserTimezone(user.id);
+  const timezone = await getUserTimezone(sessionResult.user.id);
 
   // Преобразуем scheduledAt из UTC в локальное время пользователя
   const pendingWithLocalTime = pending.map((slot) => {

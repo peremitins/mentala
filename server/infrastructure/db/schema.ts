@@ -141,6 +141,7 @@ export const sessions = pgTable('sessions', {
     .defaultNow()
     .notNull(),
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  lastExtendedAt: timestamp('last_extended_at', { withTimezone: true }), // для ограничения частоты продления
   revokedAt: timestamp('revoked_at', { withTimezone: true }),
   metadata: jsonb('metadata'),
 });
@@ -661,5 +662,35 @@ export const idempotencyKeys = pgTable(
     ),
     // Индекс для очистки просроченных ключей
     expiresIdx: index('idx_idempotency_expires').on(table.expiresAt),
+  })
+);
+
+// Security events для логирования подозрительных событий
+export const securityEvents = pgTable(
+  'security_events',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id').references(() => users.id, {
+      onDelete: 'cascade',
+    }), // nullable: события могут логироваться до определения user
+    eventType: varchar('event_type', { length: 50 }).notNull(), // 'csrf_mismatch', 'ip_mismatch', 'ua_mismatch', 'suspicious_login', 'origin_mismatch', 'auth_dual_channel_mismatch', 'auth_header_used_on_web', 'logout_everywhere'
+    ipAddress: text('ip_address'),
+    userAgent: text('user_agent'),
+    metadata: jsonb('metadata'), // может содержать sessionId, requestId, anonymousSession для расследования инцидентов
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    // Индекс для поиска событий по пользователю и дате
+    userCreatedIdx: index('idx_security_events_user_created').on(
+      table.userId,
+      table.createdAt
+    ),
+    // Индекс для поиска событий без userId (для расследования)
+    eventTypeCreatedIdx: index('idx_security_events_type_created').on(
+      table.eventType,
+      table.createdAt
+    ),
   })
 );

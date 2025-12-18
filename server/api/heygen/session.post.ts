@@ -1,13 +1,13 @@
 import { createError } from 'h3';
+import { getSessionUser } from '@/server/application/auth/session';
 
 export default defineEventHandler(async (event) => {
+  const sessionResult = await getSessionUser(event);
+  if (!sessionResult?.user?.id) {
+    throw createError({ statusCode: 401, statusMessage: 'Unauthorized' });
+  }
   const config = useRuntimeConfig(event);
-  console.log(
-    '[AI] openaiApiKey present:',
-    !!config.openaiApiKey,
-    'len=',
-    config.openaiApiKey?.length ?? 0
-  );
+  // Не логируем наличие/длину ключей API (чувствительные данные)
   const body = await readBody<{
     avatarId?: string;
     voiceId?: string;
@@ -45,8 +45,16 @@ export default defineEventHandler(async (event) => {
       },
     });
 
-    // Логируем ответ от HeyGen API для отладки
-    event.context.logger?.info({ response: res }, 'HeyGen session response');
+    // Логируем только метаданные ответа (без чувствительных данных)
+    event.context.logger?.info(
+      {
+        hasData: !!(res as any)?.data,
+        hasAccessToken: !!(res as any)?.data?.access_token,
+        hasSessionId: !!(res as any)?.data?.session_id,
+        hasUrl: !!(res as any)?.data?.url,
+      },
+      'HeyGen session created'
+    );
 
     if (!res) {
       throw new Error('Empty response from HeyGen API');
@@ -56,7 +64,7 @@ export default defineEventHandler(async (event) => {
 
     if (!responseData) {
       event.context.logger?.error(
-        { response: res },
+        { hasData: false },
         'HeyGen response missing data field'
       );
       throw new Error('HeyGen response missing data field');
@@ -64,7 +72,7 @@ export default defineEventHandler(async (event) => {
 
     if (!responseData.access_token) {
       event.context.logger?.error(
-        { response: res },
+        { hasData: true, hasAccessToken: false },
         'HeyGen response missing access_token'
       );
       throw new Error('HeyGen response missing access_token');
@@ -72,7 +80,7 @@ export default defineEventHandler(async (event) => {
 
     if (!responseData.url) {
       event.context.logger?.error(
-        { response: res },
+        { hasData: true, hasAccessToken: true, hasUrl: false },
         'HeyGen response missing url'
       );
       throw new Error('HeyGen response missing url');
@@ -81,18 +89,19 @@ export default defineEventHandler(async (event) => {
     // session_id может отсутствовать в некоторых случаях, но проверим
     if (!responseData.session_id) {
       event.context.logger?.warn(
-        { response: res },
+        { hasData: true, hasAccessToken: true, hasUrl: true, hasSessionId: false },
         'HeyGen response missing session_id'
       );
     }
 
     return res;
   } catch (err: any) {
+    // Не логируем response целиком (может содержать access_token)
     event.context.logger?.error(
       {
         error: err?.message,
-        stack: err?.stack,
-        response: err?.response?._data || err?.data,
+        hasResponse: !!(err?.response?._data || err?.data),
+        statusCode: err?.response?.status || err?.statusCode,
       },
       'HeyGen session creation failed'
     );

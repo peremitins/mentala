@@ -5,10 +5,13 @@ import { users, oauthAccounts } from '@/server/infrastructure/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { createSession } from './session';
 import { activateTrialForUser } from '@/server/application/subscriptions/trial.service';
+import {
+  OAUTH_STATE_COOKIE_NAME,
+  OAUTH_REDIRECT_COOKIE_NAME,
+  LANG_COOKIE_NAME,
+  getCookieName,
+} from './cookie-names';
 
-const STATE_COOKIE = 'mentai.oauth.state';
-const REDIR_COOKIE = 'mentai.oauth.redirect';
-const LOCALE_COOKIE = 'mentai.lang';
 const isProd = process.env.NODE_ENV === 'production';
 
 export type Provider = 'google' | 'vk';
@@ -23,7 +26,12 @@ export function setOAuthCookies(
   redirectUri?: string,
   locale?: string
 ) {
-  setCookie(event, STATE_COOKIE, state, {
+  const stateCookieName = getCookieName(OAUTH_STATE_COOKIE_NAME, isProd);
+  const redirectCookieName = getCookieName(OAUTH_REDIRECT_COOKIE_NAME, isProd);
+  const langCookieName = getCookieName(LANG_COOKIE_NAME, isProd);
+
+  // OAuth cookies всегда используют sameSite: 'lax' (даже в production)
+  setCookie(event, stateCookieName, state, {
     httpOnly: true,
     secure: isProd,
     sameSite: 'lax',
@@ -31,7 +39,7 @@ export function setOAuthCookies(
     maxAge: 600,
   });
   if (redirectUri) {
-    setCookie(event, REDIR_COOKIE, redirectUri, {
+    setCookie(event, redirectCookieName, redirectUri, {
       httpOnly: true,
       secure: isProd,
       sameSite: 'lax',
@@ -40,7 +48,7 @@ export function setOAuthCookies(
     });
   }
   if (locale) {
-    setCookie(event, LOCALE_COOKIE, locale, {
+    setCookie(event, langCookieName, locale, {
       httpOnly: false,
       secure: isProd,
       sameSite: 'lax',
@@ -59,14 +67,17 @@ export function setOAuthCookies(
 //   return { state, redirect, locale };
 // }
 export function consumeOAuthCookies(event: any) {
-  const state = getCookie(event, STATE_COOKIE);
-  const raw = getCookie(event, REDIR_COOKIE);
-  // Было: const redirect = getCookie(event, REDIR_COOKIE) || '/'
-  const redirect = raw ? decodeURIComponent(raw) : '/';
-  const locale = getCookie(event, LOCALE_COOKIE) || undefined;
+  const stateCookieName = getCookieName(OAUTH_STATE_COOKIE_NAME, isProd);
+  const redirectCookieName = getCookieName(OAUTH_REDIRECT_COOKIE_NAME, isProd);
+  const langCookieName = getCookieName(LANG_COOKIE_NAME, isProd);
 
-  deleteCookie(event, STATE_COOKIE, { path: '/' });
-  deleteCookie(event, REDIR_COOKIE, { path: '/' });
+  const state = getCookie(event, stateCookieName);
+  const raw = getCookie(event, redirectCookieName);
+  const redirect = raw ? decodeURIComponent(raw) : '/';
+  const locale = getCookie(event, langCookieName) || undefined;
+
+  deleteCookie(event, stateCookieName, { path: '/' });
+  deleteCookie(event, redirectCookieName, { path: '/' });
   return { state, redirect, locale };
 }
 

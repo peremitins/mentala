@@ -19,17 +19,17 @@ export default defineEventHandler(async (event) => {
   }
 
   // Сохраняем summary только для авторизованных пользователей (числовой id)
-  const sessUser = await getSessionUser(event);
+  const sessionResult = await getSessionUser(event);
 
   // Запускаем finishSession в фоне, не блокируем ответ
-  if (sessUser?.id) {
+  if (sessionResult?.user?.id) {
     // Не ждем завершения - запускаем асинхронно в фоне
     void (async () => {
       try {
         await openaiProvider.finishSession?.({
           sessionId: body.sessionId,
           allMessages: body.messages || [],
-          userId: String(sessUser.id),
+          userId: String(sessionResult.user.id),
           model: body.model,
         });
       } catch (error) {

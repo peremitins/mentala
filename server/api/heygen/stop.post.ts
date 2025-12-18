@@ -1,8 +1,13 @@
 import { createError } from 'h3';
+import { getSessionUser } from '@/server/application/auth/session';
 
 // POST /api/heygen/stop
 // body: { sessionId: string }
 export default defineEventHandler(async (event) => {
+  const sessionResult = await getSessionUser(event);
+  if (!sessionResult?.user?.id) {
+    throw createError({ statusCode: 401, statusMessage: 'Unauthorized' });
+  }
   const config = useRuntimeConfig(event);
   const body = await readBody<{ sessionId: string }>(event);
 
@@ -14,7 +19,7 @@ export default defineEventHandler(async (event) => {
     const res = await $fetch(`${config.heygenBaseUrl}/v1/streaming.stop`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${config.heygenApiKey}`,
+        'X-Api-Key': String(config.heygenApiKey || ''),
         'Content-Type': 'application/json',
       },
       body: { session_id: body.sessionId },

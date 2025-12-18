@@ -15,15 +15,15 @@ import { CHAT_IDLE_TIMEOUT_MS } from '@/server/config/subscription';
  * Начать сессию терапии (вызывается при отправке первого сообщения)
  */
 export default defineEventHandler(async (event) => {
-  const user = await getSessionUser(event);
-  if (!user?.id) {
+  const sessionResult = await getSessionUser(event);
+  if (!sessionResult?.user?.id) {
     throw createError({
       statusCode: 401,
       statusMessage: 'Unauthorized',
     });
   }
 
-  const gate = await getAiUsageGate(user.id);
+  const gate = await getAiUsageGate(sessionResult.user.id);
   if (gate.status === 'no_ai_access') {
     throw createError({
       statusCode: 403,
@@ -58,7 +58,7 @@ export default defineEventHandler(async (event) => {
     .from(therapySessions)
     .where(
       and(
-        eq(therapySessions.userId, user.id),
+        eq(therapySessions.userId, sessionResult.user.id),
         isNull(therapySessions.endedAt)
       )
     )
@@ -85,7 +85,7 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  const session = await startTherapySession(user.id);
+  const session = await startTherapySession(sessionResult.user.id);
 
   return {
     sessionId: session.id,

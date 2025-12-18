@@ -38,7 +38,10 @@ mentai/frontend/server/
 ## 5. Конвенции API
 
 - Base: `/api/*`, JSON. Версионирование через заголовок `X-API-Version: 1` (по мере роста `/api/v1/*`).
-- Auth: `Authorization: Bearer <jwt>`.
+- Auth:
+  - **Web:** httpOnly cookie `mentala.sid` + CSRF токен в cookie `mentala.csrf` (Double Submit Cookie паттерн)
+  - **Mobile (Capacitor):** заголовок `X-Session-Token` (CSRF не требуется)
+  - См. подробнее: [auth_security_improvements_tz.md](./auth_security_improvements_tz.md)
 - Ошибки: `{ "error": { "code": "E_xxx", "message": "..." } }`.
 - Пагинация: `?page=1&limit=20` → `{ items, page, limit, total }`.
 - Идемпотентность: `Idempotency-Key` на чувствительных POST.
@@ -48,10 +51,11 @@ mentai/frontend/server/
 
 **Auth**
 
-- `POST /api/auth/register` → `{ userId, token, refreshToken }`
-- `POST /api/auth/login` → `{ userId, token, refreshToken }`
-- `POST /api/auth/refresh` → `{ token }`
+- `POST /api/auth/email/register` → `{ user, sessionToken? }` (sessionToken только для Capacitor)
+- `POST /api/auth/email/login` → `{ user, sessionToken? }` (sessionToken только для Capacitor)
 - `POST /api/auth/logout` → `{ success: true }`
+- `POST /api/auth/logout-everywhere` → ревокация всех сессий
+- OAuth: `GET /api/auth/google/start`, `GET /api/auth/google/callback` (аналогично для VK)
 
 **User**
 

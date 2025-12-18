@@ -5,8 +5,8 @@ import { and, eq } from 'drizzle-orm';
 import { getSessionUser } from '@@/server/application/auth/session';
 
 export default defineEventHandler(async (event) => {
-  const sessUser = await getSessionUser(event);
-  if (!sessUser?.id) {
+  const sessionResult = await getSessionUser(event);
+  if (!sessionResult?.user?.id) {
     setResponseStatus(event, 401);
     return { error: true, message: 'Unauthorized' } as const;
   }
@@ -19,7 +19,7 @@ export default defineEventHandler(async (event) => {
     .select()
     .from(userPrompts)
     .where(
-      and(eq(userPrompts.id, id), eq(userPrompts.userId, Number(sessUser.id)))
+      and(eq(userPrompts.id, id), eq(userPrompts.userId, Number(sessionResult.user.id)))
     )
     .limit(1);
   if (!target) {
@@ -33,7 +33,7 @@ export default defineEventHandler(async (event) => {
     .set({ isActive: false, updatedAt: now })
     .where(
       and(
-        eq(userPrompts.userId, Number(sessUser.id)),
+        eq(userPrompts.userId, Number(sessionResult.user.id)),
         eq(userPrompts.type, target.type)
       )
     );
@@ -41,7 +41,7 @@ export default defineEventHandler(async (event) => {
     .update(userPrompts)
     .set({ isActive: true, updatedAt: now })
     .where(
-      and(eq(userPrompts.id, id), eq(userPrompts.userId, Number(sessUser.id)))
+      and(eq(userPrompts.id, id), eq(userPrompts.userId, Number(sessionResult.user.id)))
     )
     .returning();
   return { item: row };

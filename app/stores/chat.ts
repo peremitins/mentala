@@ -4,6 +4,7 @@ import { useLoadersStore } from '@/app/stores/loaders';
 import { useHeygenStore } from '@/app/stores/heygen';
 import { nanoid } from 'nanoid';
 import { useRuntimeConfig } from 'nuxt/app';
+import { getCsrfTokenForHeader } from '@/app/utils/csrf';
 
 export const useChatStore = defineStore('chat', {
   state: () => ({
@@ -95,6 +96,12 @@ export const useChatStore = defineStore('chat', {
 
         if (token) {
           headers['X-Session-Token'] = token;
+        }
+
+        // Добавляем CSRF токен для web (cookie-канал)
+        const csrf = getCsrfTokenForHeader();
+        if (csrf) {
+          headers['X-CSRF-Token'] = csrf;
         }
 
         // Используем fetch с keepalive для надежной отправки
@@ -286,7 +293,10 @@ export const useChatStore = defineStore('chat', {
           try {
             reader.cancel();
           } catch (cancelErr) {
-            console.warn('[Chat Store] Failed to cancel stream reader:', cancelErr);
+            console.warn(
+              '[Chat Store] Failed to cancel stream reader:',
+              cancelErr
+            );
           }
           break;
         }
