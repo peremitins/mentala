@@ -19,10 +19,11 @@ export default defineEventHandler(async (event) => {
   need(code, 400, 'Missing code');
   need(state && saved && state === saved, 400, 'Invalid state');
 
+  // Не логируем OAuth code (чувствительные данные)
   console.log('GOOGLE OAUTH EXCHANGE', {
-    client_id: clientId,
+    client_id: clientId ? 'present' : 'missing',
     redirect_uri: `${appUrl}/api/auth/google/callback`,
-    code,
+    hasCode: !!code,
   });
 
   let tokenRes;

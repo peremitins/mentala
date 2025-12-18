@@ -1,8 +1,8 @@
-import { createError } from 'h3';
+import { createError, getHeader } from 'h3';
 import { db } from '@/server/infrastructure/db/client';
 import { users } from '@/server/infrastructure/db/schema';
 import { eq } from 'drizzle-orm';
-import { createSession } from '@/server/application/auth/session';
+import { rotateSessionId } from '@/server/application/auth/session';
 import argon2 from 'argon2';
 import { getTimezoneFromRequest } from '@/server/application/notifications/timezone.utils';
 import { activateTrialForUser } from '@/server/application/subscriptions/trial.service';
@@ -70,9 +70,17 @@ export default defineEventHandler(async (event) => {
     // Не блокируем регистрацию, если подписка не активировалась, но логируем ошибку
   }
 
-  const sessionId = await createSession(event, u.id, body.locale);
+  // Ротация session ID при регистрации (защита от session fixation)
+  const sessionId = await rotateSessionId(event, u.id, body.locale);
+  
+  // Определяем, является ли запрос от native платформы (Capacitor)
+  const platform = String(getHeader(event, 'x-platform') || '').toLowerCase();
+  const isNative = platform === 'ios' || platform === 'android';
+  
   return {
     user: { id: u.id, name: u.name, email: u.email, locale: u.locale },
-    sessionToken: sessionId, // Для использования в заголовке X-Session-Token если cookie не передается
+    // Отдаем sessionToken только для native платформ (Capacitor)
+    // Для web используем только httpOnly cookie
+    ...(isNative ? { sessionToken: sessionId } : {}),
   };
 });

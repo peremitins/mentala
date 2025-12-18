@@ -78,6 +78,9 @@
 </template>
 
 <script setup lang="ts">
+definePageMeta({
+  middleware: 'admin',
+});
 import IconCirclePlus from '~icons/lucide/circle-plus';
 import IconEdit from '~icons/lucide/edit';
 import IconTrash2 from '~icons/lucide/trash-2';

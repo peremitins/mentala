@@ -54,14 +54,14 @@ const NOTIFICATION_SUBTYPES: NotificationSubtype[] = [
 
 export default defineEventHandler(
   async (event): Promise<NotificationPreferencesDto> => {
-    const user = await getSessionUser(event);
-    if (!user?.id) {
+    const sessionResult = await getSessionUser(event);
+    if (!sessionResult?.user?.id) {
       throw createError({
         statusCode: 401,
         message: 'Unauthorized',
       });
     }
-    const userId = user.id;
+    const userId = sessionResult.user.id;
 
     const kind = getRouterParam(event, 'kind');
     if (!kind || !['therapy', 'habits'].includes(kind)) {

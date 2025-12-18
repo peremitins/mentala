@@ -1,4 +1,6 @@
 import { ref, computed } from 'vue';
+import { Capacitor } from '@capacitor/core';
+import { getCsrfTokenForHeader } from '@/app/utils/csrf';
 
 /**
  * Composable для управления TTS озвучкой
@@ -90,8 +92,18 @@ export function useTTS() {
         'Content-Type': 'application/json',
       };
 
-      if (token) {
-        headers['X-Session-Token'] = token;
+      const isCapacitor = Capacitor.isNativePlatform();
+      if (isCapacitor) {
+        // Для Capacitor отправляем X-Session-Token
+        if (token) {
+          headers['X-Session-Token'] = token;
+        }
+      } else {
+        // Для web отправляем CSRF токен
+        const csrf = getCsrfTokenForHeader();
+        if (csrf) {
+          headers['X-CSRF-Token'] = csrf;
+        }
       }
 
       // Выполняем запрос к TTS API с поддержкой отмены через нативный fetch

@@ -5,8 +5,8 @@ import { and, eq } from 'drizzle-orm';
 import { getSessionUser } from '@@/server/application/auth/session';
 
 export default defineEventHandler(async (event) => {
-  const sessUser = await getSessionUser(event);
-  if (!sessUser?.id) {
+  const sessionResult = await getSessionUser(event);
+  if (!sessionResult?.user?.id) {
     setResponseStatus(event, 401);
     return { error: true, message: 'Unauthorized' } as const;
   }
@@ -18,7 +18,10 @@ export default defineEventHandler(async (event) => {
   const [row] = await db
     .delete(userPrompts)
     .where(
-      and(eq(userPrompts.id, id), eq(userPrompts.userId, Number(sessUser.id)))
+      and(
+        eq(userPrompts.id, id),
+        eq(userPrompts.userId, Number(sessionResult.user.id))
+      )
     )
     .returning();
   return { item: row };

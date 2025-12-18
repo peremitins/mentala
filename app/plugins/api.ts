@@ -5,6 +5,45 @@ import { getActivePinia } from 'pinia';
 import { useToast } from '#imports';
 
 /**
+ * Получает CSRF токен из cookie (только для web)
+ */
+function getCSRFToken(): string | null {
+  if (typeof document === 'undefined') return null;
+
+  // В Nuxt используем import.meta.env для определения окружения
+  // В development всегда используем базовое имя без префикса
+  const isProd = import.meta.env?.PROD === true;
+  const cookieName = isProd ? '__Host-mentala.csrf' : 'mentala.csrf';
+
+  try {
+    const cookies = document.cookie.split(';');
+    for (const cookie of cookies) {
+      const trimmed = cookie.trim();
+      if (!trimmed) continue;
+
+      const equalIndex = trimmed.indexOf('=');
+      if (equalIndex === -1) continue;
+
+      const name = trimmed.substring(0, equalIndex).trim();
+      const value = trimmed.substring(equalIndex + 1).trim();
+
+      if (name === cookieName && value) {
+        try {
+          return decodeURIComponent(value);
+        } catch (e) {
+          // Если decodeURIComponent не работает, возвращаем как есть
+          return value;
+        }
+      }
+    }
+  } catch (error) {
+    console.error('[API] Error reading CSRF cookie:', error);
+  }
+
+  return null;
+}
+
+/**
  * Безопасно получает loaders store и вызывает hideAllLoaders
  * Используется в обработчиках ошибок $fetch
  */
@@ -97,34 +136,73 @@ export default defineNuxtPlugin(() => {
               ? 'android'
               : 'web';
 
-        if (token) {
+        // Получаем CSRF токен для web (только для state-changing операций)
+        const method = options.method?.toUpperCase() || 'GET';
+        const isStateChanging = ['POST', 'PUT', 'DELETE', 'PATCH'].includes(
+          method
+        );
+        const csrfToken =
+          !isCapacitor && isStateChanging ? getCSRFToken() : null;
+
+        // Отладочное логирование для CSRF токена (только в development)
+        const isDev =
+          !import.meta.env?.PROD && import.meta.env?.MODE !== 'production';
+        if (!isCapacitor && isStateChanging && !csrfToken && isDev) {
+          const isProdForLog =
+            import.meta.env?.PROD || import.meta.env?.MODE === 'production';
+          console.warn(
+            '[API] CSRF token not found for state-changing request:',
+            {
+              method,
+              url: typeof request === 'string' ? request : String(request),
+              cookieName: isProdForLog ? '__Host-mentala.csrf' : 'mentala.csrf',
+              allCookies:
+                typeof document !== 'undefined' ? document.cookie : 'N/A',
+            }
+          );
+        }
+
+        // Отправляем X-Session-Token ТОЛЬКО для Capacitor
+        // Для web полагаемся только на cookie (credentials: 'include')
+        if (isCapacitor) {
           if (headers instanceof Headers) {
-            headers.set('X-Session-Token', token);
+            if (token) headers.set('X-Session-Token', token);
             headers.set('X-Timezone', timezone);
             headers.set('X-Platform', platformHeader);
             headers.set('Content-Type', 'application/json');
           } else {
-            options.headers = {
+            const headersObj: Record<string, string> = {
               ...((headers as Record<string, string>) || {}),
               'Content-Type': 'application/json',
-              'X-Session-Token': token,
               'X-Timezone': timezone,
               'X-Platform': platformHeader,
-            } as any;
+            };
+            if (token) headersObj['X-Session-Token'] = token;
+            options.headers = headersObj as any;
           }
         } else {
-          // Если нет токена, всё равно устанавливаем Content-Type, X-Timezone и X-Platform
+          // Для web: добавляем CSRF токен для state-changing операций
+          const headersObj: Record<string, string> = {
+            ...((headers as Record<string, string>) || {}),
+            'Content-Type': 'application/json',
+            'X-Timezone': timezone,
+            'X-Platform': platformHeader,
+          };
+          // Добавляем CSRF токен для state-changing операций (web)
+          // ВАЖНО: Если токен отсутствует, запрос будет отклонен CSRF middleware
+          // Но мы все равно пытаемся отправить запрос, чтобы получить понятную ошибку
+          if (csrfToken) {
+            headersObj['X-CSRF-Token'] = csrfToken;
+          }
           if (headers instanceof Headers) {
             headers.set('Content-Type', 'application/json');
             headers.set('X-Timezone', timezone);
             headers.set('X-Platform', platformHeader);
+            if (csrfToken) {
+              headers.set('X-CSRF-Token', csrfToken);
+            }
           } else {
-            options.headers = {
-              ...((headers as Record<string, string>) || {}),
-              'Content-Type': 'application/json',
-              'X-Timezone': timezone,
-              'X-Platform': platformHeader,
-            } as any;
+            options.headers = headersObj as any;
           }
         }
       }

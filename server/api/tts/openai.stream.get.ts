@@ -6,8 +6,13 @@ import {
   sendStream,
 } from 'h3';
 import { $fetch } from 'ofetch';
+import { getSessionUser } from '@/server/application/auth/session';
 
 export default defineEventHandler(async (event) => {
+  const sessionResult = await getSessionUser(event);
+  if (!sessionResult?.user?.id) {
+    throw createError({ statusCode: 401, statusMessage: 'Unauthorized' });
+  }
   const apiKey = process.env.NUXT_OPENAI_API_KEY;
   if (!apiKey)
     throw createError({

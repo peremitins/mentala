@@ -6,11 +6,11 @@ import { userPrompts } from '@@/server/infrastructure/db/schema';
 import { and, eq } from 'drizzle-orm';
 
 export default defineEventHandler(async (event) => {
-  const sessUser = await getSessionUser(event);
-  if (!sessUser?.id) {
+  const sessionResult = await getSessionUser(event);
+  if (!sessionResult?.user?.id) {
     return { error: true, message: 'Unauthorized' } as const;
   }
-  const uid = Number(sessUser.id);
+  const uid = Number(sessionResult.user.id);
   const settings = await readChatSettings(String(uid));
   const count = await summaryStore.countByUser(uid);
 

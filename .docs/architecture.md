@@ -50,12 +50,15 @@ server/
 
 🔐 Безопасность
 • Хранение паролей: Argon2id (в Node через argon2, в Laravel встроено).
-• Аутентификация: JWT или PASETO v4.
+• Аутентификация: Система сессий с httpOnly cookie (Web) и заголовком X-Session-Token (Mobile).
+• CSRF защита: Double Submit Cookie паттерн для web-запросов.
 • Шифрование данных: end-to-end для чатов, ключи разделяются (как в Telegram).
 • Middleware:
 • helmet (защита заголовков),
 • rate-limit (DDOS),
-• cors (ограничение доменов).
+• cors (whitelist origins из env),
+• csrf (для cookie-канала, state-changing методы).
+• Логирование security events (csrf_mismatch, origin_mismatch, ip_mismatch и т.д.).
 
 ⸻
 
@@ -127,15 +130,15 @@ server/
 • Checkout (MVP, без реального YooKassa checkout):
 • `POST /api/subscriptions/start-checkout` требует заголовок `Idempotency-Key`.
 • Создаёт `pending` подписку и сохраняет «ожидаемые» checkout-поля прямо в `user_subscriptions`:
-  `checkout_amount`, `checkout_currency`, `billing_credit_applied`, `billing_credit_granted`, `yookassa_payment_id`.
+`checkout_amount`, `checkout_currency`, `billing_credit_applied`, `billing_credit_granted`, `yookassa_payment_id`.
 • Кредит `billingCredit` **резервируется** на старте checkout (уменьшаем `users.billing_credit`) и:
-  • при `payment.succeeded` не списывается повторно,
-  • при `payment.canceled` возвращается.
+• при `payment.succeeded` не списывается повторно,
+• при `payment.canceled` возвращается.
 • Если `toPay === 0` — финализация происходит сразу в `start-checkout` (без webhook).
 
 • YooKassa webhook:
 • В `POST /api/payments/yookassa/webhook` подлинность уведомления подтверждается через API YooKassa:
-  `GET https://api.yookassa.ru/v3/payments/{payment_id}` (Basic Auth `shopId:secretKey`).
+`GET https://api.yookassa.ru/v3/payments/{payment_id}` (Basic Auth `shopId:secretKey`).
 • Сумма/валюта сверяются с `user_subscriptions.checkout_*` перед активацией.
 • Все мутации — в транзакции; конкурентные повторы защищены `ON CONFLICT DO NOTHING` по `payments.id`.
 
@@ -146,7 +149,7 @@ server/
 
 • Миграции (Drizzle):
 • Меняем `server/infrastructure/db/schema.ts` → запускаем `pnpm db:generate` → `pnpm db:migrate`.
-• Миграции для подписок/биллинга сейчас: `0005_*` (база), `0006_*` (payments/idempotency/billing_period/last_activity_at), `0007_*` (checkout-поля + response_json).
+• Миграции для подписок/биллинга сейчас: `0005_*` (база), `0006_*` (payments/idempotency/billing*period/last_activity_at), `0007*\*` (checkout-поля + response_json).
 
 ⸻
 

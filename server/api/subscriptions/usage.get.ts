@@ -19,8 +19,8 @@ import { WEEKLY_OVERDRAFT_MINUTES } from '@/server/config/subscription';
  * Получить использование минут в текущей неделе
  */
 export default defineEventHandler(async (event) => {
-  const user = await getSessionUser(event);
-  if (!user?.id) {
+  const sessionResult = await getSessionUser(event);
+  if (!sessionResult?.user?.id) {
     throw createError({
       statusCode: 401,
       statusMessage: 'Unauthorized',
@@ -34,7 +34,7 @@ export default defineEventHandler(async (event) => {
       trialEndedAt: users.trialEndedAt,
     })
     .from(users)
-    .where(eq(users.id, user.id))
+    .where(eq(users.id, sessionResult.user.id))
     .limit(1);
 
   const timezone = userData[0]?.timezone || 'Europe/Moscow';
@@ -55,7 +55,7 @@ export default defineEventHandler(async (event) => {
     )
     .where(
       and(
-        eq(userSubscriptions.userId, user.id),
+        eq(userSubscriptions.userId, sessionResult.user.id),
         eq(userSubscriptions.paymentStatus, 'active'),
         gt(userSubscriptions.endDate, now) // подписка не истекла
       )
@@ -90,7 +90,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // Получаем использование
-  const usage = await getUsageForCurrentWeek(user.id, timezone);
+  const usage = await getUsageForCurrentWeek(sessionResult.user.id, timezone);
 
   // Вычисляем дополнительные поля
   let availableMinutes: number;

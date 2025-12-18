@@ -44,7 +44,8 @@ export default defineNuxtPlugin((nuxtApp) => {
 
       // Регистрируем на сервере
       try {
-        await $fetch('/api/notifications/register-token', {
+        const nuxtApp = useNuxtApp();
+        await nuxtApp.$api('/api/notifications/register-token', {
           method: 'POST',
           body: {
             token: token.value,
@@ -109,7 +110,8 @@ export default defineNuxtPlugin((nuxtApp) => {
               | '4h'
               | 'tomorrow';
             try {
-              await $fetch('/api/notifications/snooze', {
+              const nuxtApp = useNuxtApp();
+              await nuxtApp.$api('/api/notifications/snooze', {
                 method: 'POST',
                 body: {
                   kind: data.kind || 'therapy',
@@ -125,7 +127,8 @@ export default defineNuxtPlugin((nuxtApp) => {
 
           // Отправляем трекинг взаимодействия
           try {
-            await $fetch('/api/notifications/interaction', {
+            const nuxtApp = useNuxtApp();
+            await nuxtApp.$api('/api/notifications/interaction', {
               method: 'POST',
               body: {
                 slotId: data.slotId,
@@ -207,7 +210,7 @@ export default defineNuxtPlugin((nuxtApp) => {
 
     const checkPending = async () => {
       try {
-        const pending = await $fetch<any[]>('/api/notifications/pending');
+        const pending = await nuxtApp.$api<any[]>('/api/notifications/pending');
 
         if (pending && pending.length > 0) {
           console.log(
@@ -236,7 +239,7 @@ export default defineNuxtPlugin((nuxtApp) => {
               );
 
               // Помечаем как доставленное
-              await $fetch('/api/notifications/mark-delivered', {
+              await nuxtApp.$api('/api/notifications/mark-delivered', {
                 method: 'POST',
                 body: { slotId: slot.id },
               });

@@ -126,7 +126,8 @@ export function useNotificationsSettings() {
     try {
       loading.value = true;
       error.value = null;
-      await $fetch('/api/notifications/register-token', {
+      const { $api } = useNuxtApp();
+      await $api('/api/notifications/register-token', {
         method: 'POST',
         body: dto,
       });
@@ -149,7 +150,8 @@ export function useNotificationsSettings() {
     try {
       loading.value = true;
       error.value = null;
-      await $fetch('/api/notifications/snooze', {
+      const { $api } = useNuxtApp();
+      await $api('/api/notifications/snooze', {
         method: 'POST',
         body: dto,
       });
@@ -172,7 +174,8 @@ export function useNotificationsSettings() {
     try {
       loading.value = true;
       error.value = null;
-      const response = await $fetch<{
+      const { $api } = useNuxtApp();
+      const response = await $api<{
         success: boolean;
         slotId: string;
         scheduledAt: string;
@@ -198,7 +201,8 @@ export function useNotificationsSettings() {
     dto: CreateInteractionDto
   ): Promise<boolean> => {
     try {
-      await $fetch('/api/notifications/interaction', {
+      const { $api } = useNuxtApp();
+      await $api('/api/notifications/interaction', {
         method: 'POST',
         body: dto,
       });

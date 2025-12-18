@@ -5,6 +5,10 @@ import { eq } from 'drizzle-orm';
 import { createSession } from '@/server/application/auth/session';
 import crypto from 'node:crypto';
 import { activateTrialForUser } from '@/server/application/subscriptions/trial.service';
+import {
+  LANG_COOKIE_NAME,
+  getCookieName,
+} from '@/server/application/auth/cookie-names';
 
 function verifyTelegram(initData: Record<string, string>, botToken: string) {
   const { hash, ...data } = initData;
@@ -43,7 +47,9 @@ export default defineEventHandler(async (event) => {
   const firstName = data.first_name || null;
   const lastName = data.last_name || null;
   const photoUrl = data.photo_url || null;
-  const locale = getCookie(event, 'mentai.lang') || undefined;
+  const isProd = process.env.NODE_ENV === 'production';
+  const langCookieName = getCookieName(LANG_COOKIE_NAME, isProd);
+  const locale = getCookie(event, langCookieName) || undefined;
 
   const existing = await db
     .select()
