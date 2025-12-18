@@ -1,6 +1,11 @@
 import { createError } from 'h3';
+import { getSessionUser } from '@/server/application/auth/session';
 
 export default defineEventHandler(async (event) => {
+  const sessionResult = await getSessionUser(event);
+  if (!sessionResult?.user?.id) {
+    throw createError({ statusCode: 401, statusMessage: 'Unauthorized' });
+  }
   const config = useRuntimeConfig(event);
   const body = await readBody<{ sessionId: string }>(event);
 

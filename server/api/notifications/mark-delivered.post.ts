@@ -8,8 +8,8 @@ import { notificationSlots } from '@/server/infrastructure/db/schema';
 import { and, eq } from 'drizzle-orm';
 
 export default defineEventHandler(async (event) => {
-  const user = await getSessionUser(event);
-  if (!user?.id) {
+  const sessionResult = await getSessionUser(event);
+  if (!sessionResult?.user?.id) {
     throw createError({
       statusCode: 401,
       message: 'Unauthorized',
@@ -31,7 +31,7 @@ export default defineEventHandler(async (event) => {
     .where(
       and(
         eq(notificationSlots.id, body.slotId),
-        eq(notificationSlots.userId, user.id)
+        eq(notificationSlots.userId, sessionResult.user.id)
       )
     );
 

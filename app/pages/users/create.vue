@@ -45,6 +45,9 @@
 </template>
 
 <script setup lang="ts">
+definePageMeta({
+  middleware: 'admin',
+});
 import { Input } from '@/app/components/ui/shadcn/input';
 import { Button } from '@/app/components/ui/button';
 

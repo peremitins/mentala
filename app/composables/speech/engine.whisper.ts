@@ -1,5 +1,8 @@
 import type { SpeechEngine, SpeechEngineOptions } from './types';
 import { useSpeechStore } from '@/app/stores/speech';
+import { Capacitor } from '@capacitor/core';
+import { getCsrfTokenForHeader } from '@/app/utils/csrf';
+import { useRuntimeConfig } from '#imports';
 
 export function createWhisperEngine(): SpeechEngine {
   const speechStore = useSpeechStore();
@@ -46,10 +49,27 @@ export function createWhisperEngine(): SpeechEngine {
     const fd = new FormData();
     fd.append('file', blob, 'audio.webm');
     try {
-      const res = await $fetch<{ text: string }>('/api/stt/whisper', {
+      const config = useRuntimeConfig();
+      const baseURL = (config.public as any).apiBase || '';
+      const url = `${baseURL}/api/stt/whisper`;
+
+      const headers: HeadersInit = {};
+      const isCapacitor = Capacitor.isNativePlatform();
+      if (isCapacitor) {
+        const token = localStorage.getItem('mentai.session.token');
+        if (token) headers['X-Session-Token'] = token;
+      } else {
+        const csrf = getCsrfTokenForHeader();
+        if (csrf) headers['X-CSRF-Token'] = csrf;
+      }
+
+      const resp = await fetch(url, {
         method: 'POST',
-        body: fd as any,
+        body: fd,
+        headers,
+        credentials: 'include',
       });
+      const res = (await resp.json()) as { text: string };
       finalCb?.(res.text?.trim() || '');
     } catch {
       finalCb?.('');

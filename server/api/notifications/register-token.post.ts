@@ -13,14 +13,14 @@ import { getSessionUser } from '@/server/application/auth/session';
  * Регистрация/обновление FCM токена устройства
  */
 export default defineEventHandler(async (event): Promise<UserDeviceDto> => {
-  const user = await getSessionUser(event);
-  if (!user?.id) {
+  const sessionResult = await getSessionUser(event);
+  if (!sessionResult?.user?.id) {
     throw createError({
       statusCode: 401,
       message: 'Unauthorized',
     });
   }
-  const userId = user.id;
+  const userId = sessionResult.user.id;
 
   const body = await readBody<RegisterTokenDto>(event);
 

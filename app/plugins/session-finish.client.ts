@@ -3,6 +3,7 @@ import { Capacitor } from '@capacitor/core';
 import { useChatStore } from '@/app/stores/chat';
 import { useHeygenStore } from '@/app/stores/heygen';
 import { getSessionItemSync } from '@/app/utils/sessionStorage';
+import { getCsrfTokenForHeader } from '@/app/utils/csrf';
 
 const SESSION_TOKEN_KEY = 'mentai.session.token';
 
@@ -31,6 +32,12 @@ function sendHeyGenStopRequest(sessionId: string) {
 
   if (token) {
     headers['X-Session-Token'] = token;
+  }
+
+  // Добавляем CSRF токен для web (cookie-канал)
+  const csrf = getCsrfTokenForHeader();
+  if (csrf) {
+    headers['X-CSRF-Token'] = csrf;
   }
 
   // Используем fetch с keepalive для надежной отправки при закрытии страницы

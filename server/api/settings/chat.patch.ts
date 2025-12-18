@@ -16,11 +16,11 @@ type Payload = Partial<{
 }>;
 
 export default defineEventHandler(async (event) => {
-  const sessUser = await getSessionUser(event);
-  if (!sessUser?.id) {
+  const sessionResult = await getSessionUser(event);
+  if (!sessionResult?.user?.id) {
     return { error: true, message: 'Unauthorized' } as const;
   }
-  const uid = Number(sessUser.id);
+  const uid = Number(sessionResult.user.id);
   const body = await readBody<Payload>(event);
   const next = await writeChatSettings(String(uid), body || {});
 

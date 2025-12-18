@@ -6,8 +6,8 @@ import { PromptQueryDto } from '@/shared/dto';
 import { getSessionUser } from '@@/server/application/auth/session';
 
 export default defineEventHandler(async (event) => {
-  const sessUser = await getSessionUser(event);
-  if (!sessUser?.id) {
+  const sessionResult = await getSessionUser(event);
+  if (!sessionResult?.user?.id) {
     setResponseStatus(event, 401);
     return { error: true, message: 'Unauthorized' } as const;
   }
@@ -16,10 +16,10 @@ export default defineEventHandler(async (event) => {
   const where =
     parsed.success && parsed.data.type
       ? and(
-          eq(userPrompts.userId, Number(sessUser.id)),
+          eq(userPrompts.userId, Number(sessionResult.user.id)),
           eq(userPrompts.type, parsed.data.type)
         )
-      : eq(userPrompts.userId, Number(sessUser.id));
+      : eq(userPrompts.userId, Number(sessionResult.user.id));
   const rows = await db
     .select()
     .from(userPrompts)

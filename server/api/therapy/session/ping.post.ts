@@ -14,8 +14,8 @@ const pingSchema = z.object({
  * Обновить lastActivityAt для корректного биллинга и idle timeout на сервере
  */
 export default defineEventHandler(async (event) => {
-  const user = await getSessionUser(event);
-  if (!user?.id) {
+  const sessionResult = await getSessionUser(event);
+  if (!sessionResult?.user?.id) {
     throw createError({
       statusCode: 401,
       statusMessage: 'Unauthorized',
@@ -36,7 +36,7 @@ export default defineEventHandler(async (event) => {
     .where(
       and(
         eq(therapySessions.id, sessionId),
-        eq(therapySessions.userId, user.id),
+        eq(therapySessions.userId, sessionResult.user.id),
         isNull(therapySessions.endedAt)
       )
     )

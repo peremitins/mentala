@@ -31,13 +31,16 @@
 
 См. подробное ТЗ: [auth_security_improvements_tz.md](./auth_security_improvements_tz.md)
 
-**Планируемые улучшения:**
+**Реализованные улучшения:**
 
-- Убрать localStorage для Web (только httpOnly cookie)
-- Добавить CSRF защиту
-- Улучшить SameSite политику
-- Сократить срок жизни сессий
-- Добавить проверку IP/User-Agent
+- ✅ Убрано localStorage для Web (только httpOnly cookie)
+- ✅ Добавлена CSRF защита (Double Submit Cookie паттерн)
+- ✅ Улучшена SameSite политика (strict в production, lax в development)
+- ✅ Сокращен срок жизни сессий (7 дней с автоматическим продлением)
+- ✅ Добавлена проверка IP/User-Agent (soft check)
+- ✅ Добавлена защита платных API endpoints (TTS, STT, HeyGen)
+- ✅ Реализована система админских прав (через ADMIN_EMAILS)
+- ✅ Добавлено логирование security events
 
 ## Система ролей и прав доступа
 

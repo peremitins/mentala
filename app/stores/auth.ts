@@ -48,12 +48,16 @@ export const useAuthStore = defineStore('auth', {
           body: payload,
         });
 
-        // Сохраняем токен сессии в localStorage для использования в заголовке
-        // Это fallback если cookies не работают (например, cross-domain)
+        // Сохраняем токен сессии в localStorage ТОЛЬКО для Capacitor
+        // Для web используем только httpOnly cookie
         if (typeof window !== 'undefined') {
-          const sessionToken = (response as any)?.sessionToken;
-          if (sessionToken) {
-            localStorage.setItem(SESSION_TOKEN_KEY, sessionToken);
+          const { Capacitor } = await import('@capacitor/core');
+          const isCapacitor = Capacitor.isNativePlatform();
+          if (isCapacitor) {
+            const sessionToken = (response as any)?.sessionToken;
+            if (sessionToken) {
+              localStorage.setItem(SESSION_TOKEN_KEY, sessionToken);
+            }
           }
         }
 
@@ -84,6 +88,19 @@ export const useAuthStore = defineStore('auth', {
           method: 'POST',
           body: payload,
         });
+
+        // Сохраняем токен сессии в localStorage ТОЛЬКО для Capacitor
+        // Для web используем только httpOnly cookie
+        if (typeof window !== 'undefined') {
+          const { Capacitor } = await import('@capacitor/core');
+          const isCapacitor = Capacitor.isNativePlatform();
+          if (isCapacitor) {
+            const sessionToken = (response as any)?.sessionToken;
+            if (sessionToken) {
+              localStorage.setItem(SESSION_TOKEN_KEY, sessionToken);
+            }
+          }
+        }
 
         // Устанавливаем пользователя из ответа
         if (response?.user) {

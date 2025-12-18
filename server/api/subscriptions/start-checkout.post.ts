@@ -51,8 +51,8 @@ const checkoutSchema = z.object({
  * Начать процесс оплаты подписки
  */
 export default defineEventHandler(async (event) => {
-  const user = await getSessionUser(event);
-  if (!user?.id) {
+  const sessionResult = await getSessionUser(event);
+  if (!sessionResult?.user?.id) {
     throw createError({
       statusCode: 401,
       statusMessage: 'Unauthorized',
@@ -64,7 +64,11 @@ export default defineEventHandler(async (event) => {
     ? String(idempotencyKeyHeader).trim()
     : '';
 
-  if (!idempotencyKey || idempotencyKey.length < 8 || idempotencyKey.length > 128) {
+  if (
+    !idempotencyKey ||
+    idempotencyKey.length < 8 ||
+    idempotencyKey.length > 128
+  ) {
     throw createError({
       statusCode: 400,
       statusMessage:
@@ -82,7 +86,7 @@ export default defineEventHandler(async (event) => {
     creditGranted: number;
     status: 'pending' | 'active';
   }>({
-    userId: user.id,
+    userId: sessionResult.user.id,
     route,
     key: idempotencyKey,
   });
@@ -162,7 +166,7 @@ export default defineEventHandler(async (event) => {
       .from(userSubscriptions)
       .where(
         and(
-          eq(userSubscriptions.userId, user.id),
+          eq(userSubscriptions.userId, sessionResult.user.id),
           eq(userSubscriptions.paymentStatus, 'active'),
           gt(userSubscriptions.endDate, now) // подписка не истекла
         )
@@ -177,7 +181,7 @@ export default defineEventHandler(async (event) => {
       // Передаем custom цену если это Custom план
       const customPriceForCalculation = finalCustomConfig?.totalPrice;
       calculation = await calculatePlanChange(
-        user.id,
+        sessionResult.user.id,
         planId,
         billingPeriod as BillingPeriod,
         customPriceForCalculation
@@ -210,7 +214,7 @@ export default defineEventHandler(async (event) => {
         trialEndedAt: users.trialEndedAt,
       })
       .from(users)
-      .where(eq(users.id, user.id))
+      .where(eq(users.id, sessionResult.user.id))
       .limit(1);
 
     const currentCredit = userRow[0] ? Number(userRow[0].billingCredit) : 0;
@@ -233,7 +237,7 @@ export default defineEventHandler(async (event) => {
       // Создаем pending подписку
       if (currentSubscription.length) {
         const newSub = await applyPlanChange(
-          user.id,
+          sessionResult.user.id,
           planId,
           billingPeriod as BillingPeriod,
           finalCustomConfig,
@@ -257,7 +261,7 @@ export default defineEventHandler(async (event) => {
         const [newSub] = await tx
           .insert(userSubscriptions)
           .values({
-            userId: user.id,
+            userId: sessionResult.user.id,
             planId,
             billingPeriod: billingPeriod as BillingPeriod,
             customConfig: finalCustomConfig,
@@ -288,12 +292,12 @@ export default defineEventHandler(async (event) => {
         await tx
           .update(users)
           .set({ billingCredit: String(newCredit), updatedAt: now })
-          .where(eq(users.id, user.id));
+          .where(eq(users.id, sessionResult.user.id));
       }
 
       // Логируем событие checkout_started
       await tx.insert(subscriptionEvents).values({
-        userId: user.id,
+        userId: sessionResult.user.id,
         eventType: 'checkout_started',
         planId,
         metadata: {
@@ -321,7 +325,7 @@ export default defineEventHandler(async (event) => {
           .from(userSubscriptions)
           .where(
             and(
-              eq(userSubscriptions.userId, user.id),
+              eq(userSubscriptions.userId, sessionResult.user.id),
               eq(userSubscriptions.paymentStatus, 'active'),
               gt(userSubscriptions.endDate, now),
               ne(userSubscriptions.id, subscriptionId)
@@ -344,7 +348,7 @@ export default defineEventHandler(async (event) => {
               billingCredit: String(afterReserve + creditGranted),
               updatedAt: now,
             })
-            .where(eq(users.id, user.id));
+            .where(eq(users.id, sessionResult.user.id));
         }
 
         // Завершаем Trial немедленно только если активирован платный план (не Basic)
@@ -356,11 +360,11 @@ export default defineEventHandler(async (event) => {
           await tx
             .update(users)
             .set({ trialEndedAt: now, updatedAt: now })
-            .where(eq(users.id, user.id));
+            .where(eq(users.id, sessionResult.user.id));
         }
 
         await tx.insert(subscriptionEvents).values({
-          userId: user.id,
+          userId: sessionResult.user.id,
           eventType: 'purchase_success',
           planId,
           metadata: {
@@ -393,7 +397,8 @@ export default defineEventHandler(async (event) => {
       }
 
       const pending = {
-        paymentUrl: `${appUrl}/subscription?payment_success=true&subscription_id=${subscriptionId}` as string,
+        paymentUrl:
+          `${appUrl}/subscription?payment_success=true&subscription_id=${subscriptionId}` as string,
         subscriptionId: subscriptionId!,
         amount: totalPrice,
         toPay,

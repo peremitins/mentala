@@ -26,14 +26,14 @@ import { nanoid } from 'nanoid';
  */
 export default defineEventHandler(
   async (event): Promise<ResetTextsResponse> => {
-    const user = await getSessionUser(event);
-    if (!user?.id) {
+    const sessionResult = await getSessionUser(event);
+    if (!sessionResult?.user?.id) {
       throw createError({
         statusCode: 401,
         message: 'Unauthorized',
       });
     }
-    const userId = user.id;
+    const userId = sessionResult.user.id;
 
     const body = (await readBody(event)) as ResetTextsRequest;
 
