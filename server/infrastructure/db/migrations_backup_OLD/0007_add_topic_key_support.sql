@@ -12,7 +12,7 @@ ALTER TABLE notification_preferences
 ALTER TABLE notification_slots
   ADD COLUMN IF NOT EXISTS topic_key VARCHAR(50);
 
--- Добавляем meta для дополнительных параметров (techniques и т.д.)
+-- Добавляем meta для дополнительных параметров
 ALTER TABLE notification_preferences
   ADD COLUMN IF NOT EXISTS meta JSONB;
 
@@ -63,4 +63,4 @@ $$;
 
 COMMENT ON COLUMN notification_preferences.topic_key IS 'Support topic key (anxiety, stress, mood, etc.) для therapy notifications';
 COMMENT ON COLUMN notification_slots.topic_key IS 'Support topic key для привязки слота к конкретной теме';
-COMMENT ON COLUMN notification_preferences.meta IS 'Дополнительные параметры (techniques, goalType и т.д.) в формате JSONB';
+COMMENT ON COLUMN notification_preferences.meta IS 'Дополнительные параметры (textSource: templates | ai | hybrid) в формате JSONB';
