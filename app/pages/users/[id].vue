@@ -5,7 +5,7 @@
       :style="{ borderRadius: `calc(var(--radius-sm))` }"
     >
       <h2 class="text-lg font-semibold mb-4">
-        Редактировать пользователя #{{ id }}
+        Редактировать пользователя {{ userName || `#${id}` }}
       </h2>
 
       <form class="space-y-3" @submit.prevent="onSubmit">
@@ -21,6 +21,17 @@
           placeholder="Имя (опционально)"
           :show-clear-button="false"
         />
+        <Select v-model="roleId">
+          <SelectTrigger>
+            <SelectValue placeholder="Выберите роль" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="user">Пользователь</SelectItem>
+            <SelectItem value="admin">Администратор</SelectItem>
+            <SelectItem value="moderator">Модератор</SelectItem>
+            <SelectItem value="support">Поддержка</SelectItem>
+          </SelectContent>
+        </Select>
         <Input
           v-model="password"
           type="password"
@@ -53,23 +64,39 @@ definePageMeta({
 });
 import { Input } from '@/app/components/ui/shadcn/input';
 import { Button } from '@/app/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/app/components/ui/shadcn/select';
 
 const route = useRoute();
 const id = computed(() => Number(route.params.id));
 const email = ref('');
 const name = ref('');
+const roleId = ref('user');
 const password = ref('');
 const confirm = ref('');
 const saving = ref(false);
 const error = ref('');
+const userName = ref('');
 
 onMounted(async () => {
   try {
     const res = await $fetch<{
-      item: { id: number; email: string | null; name: string | null };
+      item: {
+        id: number;
+        email: string | null;
+        name: string | null;
+        roleId?: string | null;
+      };
     }>(`/api/users/${id.value}`);
     email.value = res.item.email || '';
     name.value = res.item.name || '';
+    userName.value = res.item.name || '';
+    roleId.value = res.item.roleId || 'user';
   } catch (e: any) {
     error.value = e?.data?.message || e?.message || 'Ошибка загрузки';
   }
@@ -96,6 +123,7 @@ async function onSubmit() {
       body: {
         email: email.value.trim(),
         name: name.value.trim() || undefined,
+        roleId: roleId.value,
         password: password.value || undefined,
       },
     });

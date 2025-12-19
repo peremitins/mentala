@@ -74,12 +74,12 @@ async function onSubmit() {
   }
   saving.value = true;
   try {
-    await useAPI('/api/users', {
+    await useAPI('/api/admin/users', {
       method: 'POST',
       body: {
         email: email.value.trim(),
         name: name.value.trim() || undefined,
-        password: password.value || undefined,
+        password: password.value,
       },
     });
 

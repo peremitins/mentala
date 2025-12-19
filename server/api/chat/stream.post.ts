@@ -1,6 +1,6 @@
 import { defineEventHandler, readBody, setHeader } from 'h3';
 import { chatStreamViaProvider } from '@@/server/application/llm.service';
-import { getSessionUser } from '@@/server/application/auth/session';
+import { getSessionUserWithRole } from '@/server/utils/require-role';
 import { summaryStore } from '@@/server/utils/summaryStore';
 import { responseIdStore } from '@/server/utils/responseIdStore';
 import { readChatSettings } from '@/server/utils/storage';
@@ -38,10 +38,8 @@ export default defineEventHandler(async (event) => {
 
   try {
     // Добавляем память только для авторизованных пользователей
-    const sessionResult = await getSessionUser(event);
-    const uid = sessionResult?.user?.id
-      ? String(sessionResult.user.id)
-      : undefined;
+    const sessionResult = await getSessionUserWithRole(event);
+    const uid = sessionResult?.id ? String(sessionResult.id) : undefined;
     if (!uid) {
       res.write(
         `data: ${JSON.stringify({
@@ -122,7 +120,7 @@ export default defineEventHandler(async (event) => {
       );
 
     // Серверная проверка доступа к AI и лимита минут
-    const gate = await getAiUsageGate(Number(uid));
+    const gate = await getAiUsageGate(Number(uid), sessionResult.role);
     if (gate.status === 'no_ai_access') {
       res.write(
         `data: ${JSON.stringify({

@@ -15,7 +15,10 @@ export type AiUsageGateStatus = 'ok' | 'no_ai_access' | 'weekly_limit_reached';
  * Серверная проверка доступа к AI + лимита минут.
  * Использовать в критичных местах (start therapy session, chat endpoints).
  */
-export async function getAiUsageGate(userId: number): Promise<{
+export async function getAiUsageGate(
+  userId: number,
+  userRole?: string // Передавать роль для premium доступа служебных ролей
+): Promise<{
   status: AiUsageGateStatus;
   trialActive: boolean;
   timezone: string;
@@ -69,7 +72,12 @@ export async function getAiUsageGate(userId: number): Promise<{
     : null;
 
   const features = user
-    ? await getFeatures(user, subscriptionForFeatures, plan)
+    ? await getFeatures(
+        { id: userId, trialEndedAt: user.trialEndedAt },
+        subscriptionForFeatures,
+        plan,
+        userRole
+      )
     : { ai: false, avatar: false, weeklyMinutesLimit: 0 };
 
   if (!features.ai) {

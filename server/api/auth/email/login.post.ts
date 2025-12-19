@@ -2,7 +2,6 @@ import { createError, getHeader } from 'h3';
 import { db } from '@/server/infrastructure/db/client';
 import { users } from '@/server/infrastructure/db/schema';
 import { eq } from 'drizzle-orm';
-import { createSession } from '@/server/application/auth/session';
 import argon2 from 'argon2';
 import {
   getTimezoneFromRequest,
@@ -34,12 +33,23 @@ export default defineEventHandler(async (event) => {
       statusMessage: 'Invalid credentials',
     });
   }
+
+  // Сначала проверяем пароль (чтобы не раскрывать информацию о блокировке)
   const ok = await argon2.verify(existing[0].passwordHash!, body.password);
-  if (!ok)
+  if (!ok) {
     throw createError({
       statusCode: 401,
       statusMessage: 'Invalid credentials',
     });
+  }
+
+  // Проверяем, не заблокирован ли пользователь (после проверки пароля)
+  if (existing[0].isBlocked) {
+    throw createError({
+      statusCode: 401, // Всегда 401 для скрытия факта блокировки
+      statusMessage: 'Invalid credentials',
+    });
+  }
 
   // Получить timezone из запроса (заголовок X-Timezone или body.timezone)
   const timezone = getTimezoneFromRequest(event);
@@ -85,11 +95,11 @@ export default defineEventHandler(async (event) => {
       updatedAt: new Date(), // Явно обновляем updatedAt
     })
     .where(eq(users.id, existing[0].id));
-  
+
   // Ротация session ID при логине (защита от session fixation)
   const { rotateSessionId } = await import('@/server/application/auth/session');
   const sessionId = await rotateSessionId(event, existing[0].id, body.locale);
-  
+
   // Определяем, является ли запрос от native платформы (Capacitor)
   const platform = String(getHeader(event, 'x-platform') || '').toLowerCase();
   const isNative = platform === 'ios' || platform === 'android';
@@ -100,6 +110,8 @@ export default defineEventHandler(async (event) => {
       email: existing[0].email,
       name: existing[0].name,
       locale: body.locale ?? existing[0].locale,
+      role: existing[0].roleId || 'user',
+      isBlocked: existing[0].isBlocked || false,
     },
     // Отдаем sessionToken только для native платформ (Capacitor)
     // Для web используем только httpOnly cookie

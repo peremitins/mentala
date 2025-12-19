@@ -14,13 +14,20 @@ export function isTrialActive(user: { trialEndedAt: Date | null }): boolean {
 /**
  * Проверяет доступ к ИИ (AI-чат)
  * Доступ есть если:
- * - Trial активен (trialActive = true)
+ * - Пользователь имеет служебную роль (admin, moderator, support)
+ * - ИЛИ Trial активен (trialActive = true)
  * - ИЛИ план pro, premium, custom
  */
-export function hasAIAccess(
-  user: { trialEndedAt: Date | null },
-  subscription: { planId: string } | null
-): boolean {
+export async function hasAIAccess(
+  user: { id: number; trialEndedAt: Date | null },
+  subscription: { planId: string } | null,
+  userRole?: string // Передавать роль из сессии
+): Promise<boolean> {
+  // Служебные роли получают полный доступ
+  if (userRole && ['admin', 'moderator', 'support'].includes(userRole)) {
+    return true;
+  }
+
   if (!subscription) return false;
 
   const trialActive = isTrialActive(user);
@@ -32,16 +39,23 @@ export function hasAIAccess(
 /**
  * Проверяет доступ к аватару
  * Доступ есть если:
- * - Trial активен (trialActive = true)
+ * - Пользователь имеет служебную роль (admin, moderator, support)
+ * - ИЛИ Trial активен (trialActive = true)
  * - ИЛИ план premium, custom (с avatarEnabled = true)
  */
-export function hasAvatarAccess(
-  user: { trialEndedAt: Date | null },
+export async function hasAvatarAccess(
+  user: { id: number; trialEndedAt: Date | null },
   subscription: {
     planId: string;
     customConfig?: { avatarEnabled?: boolean };
-  } | null
-): boolean {
+  } | null,
+  userRole?: string // Передавать роль из сессии
+): Promise<boolean> {
+  // Служебные роли получают полный доступ
+  if (userRole && ['admin', 'moderator', 'support'].includes(userRole)) {
+    return true;
+  }
+
   if (!subscription) return false;
 
   const trialActive = isTrialActive(user);
@@ -57,19 +71,26 @@ export function hasAvatarAccess(
 
 /**
  * Получает лимит минут в неделю для пользователя
+ * - Служебные роли: неограниченный лимит (999999)
  * - Basic с Trial: DEFAULT_WEEKLY_MINUTES_LIMIT минут (как Premium)
  * - Basic без Trial: 0 минут
  * - PRO/Premium: из плана или DEFAULT_WEEKLY_MINUTES_LIMIT
  * - Custom: из customConfig.weeklyMinutes
  */
 export async function getWeeklyMinutesLimit(
-  user: { trialEndedAt: Date | null },
+  user: { id: number; trialEndedAt: Date | null },
   subscription: {
     planId: string;
     customConfig?: { weeklyMinutes?: number };
   } | null,
-  plan?: { weeklyMinutesLimit: number } | null
+  plan?: { weeklyMinutesLimit: number } | null,
+  userRole?: string // Передавать роль из сессии
 ): Promise<number> {
+  // Служебные роли получают неограниченный лимит
+  if (userRole && ['admin', 'moderator', 'support'].includes(userRole)) {
+    return 999999; // Практически неограниченно
+  }
+
   if (!subscription) return 0;
 
   const { DEFAULT_WEEKLY_MINUTES_LIMIT } = await import(
@@ -102,20 +123,26 @@ export async function getWeeklyMinutesLimit(
  * Получает объект с информацией о доступных функциях
  */
 export async function getFeatures(
-  user: { trialEndedAt: Date | null },
+  user: { id: number; trialEndedAt: Date | null },
   subscription: {
     planId: string;
     customConfig?: { avatarEnabled?: boolean; weeklyMinutes?: number };
   } | null,
-  plan?: { weeklyMinutesLimit: number; avatarEnabled: boolean } | null
+  plan?: { weeklyMinutesLimit: number; avatarEnabled: boolean } | null,
+  userRole?: string // Добавить параметр роли
 ): Promise<{
   ai: boolean;
   avatar: boolean;
   weeklyMinutesLimit: number;
 }> {
   return {
-    ai: hasAIAccess(user, subscription),
-    avatar: hasAvatarAccess(user, subscription),
-    weeklyMinutesLimit: await getWeeklyMinutesLimit(user, subscription, plan),
+    ai: await hasAIAccess(user, subscription, userRole),
+    avatar: await hasAvatarAccess(user, subscription, userRole),
+    weeklyMinutesLimit: await getWeeklyMinutesLimit(
+      user,
+      subscription,
+      plan,
+      userRole
+    ),
   };
 }

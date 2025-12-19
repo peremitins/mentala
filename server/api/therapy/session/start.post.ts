@@ -1,4 +1,4 @@
-import { getSessionUser } from '@/server/application/auth/session';
+import { getSessionUserWithRole } from '@/server/utils/require-role';
 import { createError } from 'h3';
 import {
   endTherapySession,
@@ -15,15 +15,15 @@ import { CHAT_IDLE_TIMEOUT_MS } from '@/server/config/subscription';
  * Начать сессию терапии (вызывается при отправке первого сообщения)
  */
 export default defineEventHandler(async (event) => {
-  const sessionResult = await getSessionUser(event);
-  if (!sessionResult?.user?.id) {
+  const sessionResult = await getSessionUserWithRole(event);
+  if (!sessionResult?.id) {
     throw createError({
       statusCode: 401,
       statusMessage: 'Unauthorized',
     });
   }
 
-  const gate = await getAiUsageGate(sessionResult.user.id);
+  const gate = await getAiUsageGate(sessionResult.id, sessionResult.role);
   if (gate.status === 'no_ai_access') {
     throw createError({
       statusCode: 403,
@@ -58,7 +58,7 @@ export default defineEventHandler(async (event) => {
     .from(therapySessions)
     .where(
       and(
-        eq(therapySessions.userId, sessionResult.user.id),
+        eq(therapySessions.userId, sessionResult.id),
         isNull(therapySessions.endedAt)
       )
     )
@@ -85,7 +85,7 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  const session = await startTherapySession(sessionResult.user.id);
+  const session = await startTherapySession(sessionResult.id);
 
   return {
     sessionId: session.id,
