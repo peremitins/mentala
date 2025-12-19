@@ -118,3 +118,6 @@ export interface PhraseHistory {
   encouragement: string[];
   deepeningQuestions: string[];
 }
+
+// === Roles and Permissions Types ===
+export type UserRole = 'admin' | 'user' | 'moderator' | 'support';

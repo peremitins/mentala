@@ -1,5 +1,4 @@
 import { defineStore } from 'pinia';
-import { Capacitor } from '@capacitor/core';
 import { useChatStore } from '@/app/stores/chat';
 import { useChatSettingsStore } from '@/app/stores/chatSettings';
 import { useSpeechStore } from '@/app/stores/speech';
@@ -17,7 +16,18 @@ import { useSpeechEngine } from '@/app/composables/useSpeechEngine';
 const SESSION_TOKEN_KEY = 'mentai.session.token';
 
 export const useAuthStore = defineStore('auth', {
-  state: () => ({ user: null as any, loading: false, isLoggedIn: false }),
+  state: () => ({
+    user: null as {
+      id: number;
+      email: string;
+      name: string;
+      locale?: string;
+      role?: string;
+      isBlocked?: boolean;
+    } | null,
+    loading: false,
+    isLoggedIn: false,
+  }),
   actions: {
     async me() {
       try {

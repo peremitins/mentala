@@ -78,7 +78,14 @@ export default defineEventHandler(async (event) => {
   const isNative = platform === 'ios' || platform === 'android';
   
   return {
-    user: { id: u.id, name: u.name, email: u.email, locale: u.locale },
+    user: {
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      locale: u.locale,
+      role: u.roleId || 'user',
+      isBlocked: u.isBlocked || false,
+    },
     // Отдаем sessionToken только для native платформ (Capacitor)
     // Для web используем только httpOnly cookie
     ...(isNative ? { sessionToken: sessionId } : {}),

@@ -14,6 +14,20 @@ import {
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
+// Roles table (must be defined before users references it)
+export const roles = pgTable('roles', {
+  id: varchar('id', { length: 50 }).primaryKey(), // 'admin', 'user', 'moderator', 'support'
+  name: varchar('name', { length: 100 }).notNull(), // 'Администратор', 'Пользователь', 'Модератор', 'Поддержка'
+  description: text('description'),
+  isSystem: boolean('is_system').default(false).notNull(), // системные роли нельзя удалить
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
   name: varchar('name', { length: 120 }),
@@ -33,6 +47,12 @@ export const users = pgTable('users', {
     .default('0')
     .notNull(), // внутренний кредит в рублях
   timezone: varchar('timezone', { length: 100 }), // IANA timezone для расчета недель
+  // Roles and permissions
+  roleId: varchar('role_id', { length: 50 })
+    .default('user')
+    .notNull()
+    .references(() => roles.id),
+  isBlocked: boolean('is_blocked').default(false).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull(),

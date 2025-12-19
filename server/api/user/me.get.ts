@@ -1,16 +1,18 @@
-import { getSessionUser } from '@/server/application/auth/session';
+import { getSessionUserWithRole } from '@/server/utils/require-role';
 
 export default defineEventHandler(async (event) => {
-  const sessionResult = await getSessionUser(event);
+  const user = await getSessionUserWithRole(event);
 
   // Если пользователь авторизован - возвращаем его данные
-  if (sessionResult?.user?.id) {
+  if (user?.id) {
     return {
       user: {
-        id: sessionResult.user.id,
-        email: sessionResult.user.email,
-        name: sessionResult.user.name,
-        locale: sessionResult.user.locale,
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        locale: user.locale,
+        role: user.role,
+        isBlocked: user.isBlocked,
       },
     };
   }

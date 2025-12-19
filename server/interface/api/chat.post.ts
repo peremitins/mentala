@@ -1,10 +1,9 @@
 import { defineEventHandler, readBody, setResponseStatus } from 'h3';
 import { estimateCostUSD } from '../../application/llm.service';
 import { config } from '../../config';
-import { z } from 'zod';
 import { ChatRequestDto, ChatResponseDto } from '@/shared/dto';
 import { chatViaProvider } from '../../application/llm.service';
-import { getSessionUser } from '@@/server/application/auth/session';
+import { getSessionUserWithRole } from '@/server/utils/require-role';
 import { db } from '@/server/infrastructure/db/client';
 import { therapySessions } from '@/server/infrastructure/db/schema';
 import { eq, and, isNull } from 'drizzle-orm';
@@ -17,13 +16,13 @@ export default defineEventHandler(async (event) => {
     const body = await readBody(event);
     const parsed = ChatRequestDto.parse(body);
     // Force OpenAI for now regardless of body.provider
-    const sessionResult = await getSessionUser(event);
-    if (!sessionResult?.user?.id) {
+    const sessionResult = await getSessionUserWithRole(event);
+    if (!sessionResult?.id) {
       setResponseStatus(event, 401);
       return { error: true, message: 'Unauthorized' } as const;
     }
 
-    const uid = Number(sessionResult.user.id);
+    const uid = Number(sessionResult.id);
 
     // Требуем валидный therapySessionId, чтобы нельзя было обойти биллинг прямыми вызовами /api/chat
     const therapySessionId =
@@ -88,7 +87,7 @@ export default defineEventHandler(async (event) => {
       );
 
     // Серверная проверка доступа к AI и лимита минут
-    const gate = await getAiUsageGate(uid);
+    const gate = await getAiUsageGate(uid, sessionResult.role);
     if (gate.status === 'no_ai_access') {
       setResponseStatus(event, 403);
       return {
@@ -97,11 +96,13 @@ export default defineEventHandler(async (event) => {
       } as const;
     }
 
-    if (gate.status === 'no_minutes') {
+    if (gate.status === 'weekly_limit_reached') {
       setResponseStatus(event, 402);
       return {
         error: true,
-        message: 'No minutes available, please upgrade your plan',
+        message: 'Weekly minutes limit exceeded',
+        weeklyLimit: gate.weeklyLimit,
+        usedMinutes: gate.usedMinutes,
       } as const;
     }
     const result = await chatViaProvider({
@@ -113,7 +114,7 @@ export default defineEventHandler(async (event) => {
         lang: (parsed as any)?.lang,
         user_locale: (parsed as any)?.user_locale,
         user_name: (parsed as any)?.user_name,
-        userId: sessionResult.user.id, // серверный стабильный uid
+        userId: uid, // серверный стабильный uid
         isFirstSession: undefined, // рассчитывается в других местах при стриминге
         userPrompt: (parsed as any)?.userPrompt,
       },
