@@ -173,21 +173,34 @@ export const openaiProvider: LlmProviderPort = {
 
         const lang = options?.lang ?? 'ru';
 
+        // Вычисляем responseNumber для ротации типов ответов
+        // Считаем количество сообщений пользователя в текущей сессии
+        const userMessagesCount = (messages || []).filter(
+          (m: { role: string; content: string }) => m.role === 'user'
+        ).length;
+        const responseNumber = userMessagesCount + 1;
+
+        // Извлекаем последнее сообщение пользователя (опционально, для detectApproachFromContext)
+        const lastUserMessage =
+          (messages || [])
+            .filter((m: { role: string; content: string }) => m.role === 'user')
+            .slice(-1)[0]?.content || '';
+
         // Для повторных сессий исключаем память из system и добавляем её отдельным developer-сообщением ниже
-        const systemPrelude = isFirst
-          ? buildChatPrelude({
-              lang,
-              user_locale: options?.user_locale,
-              user_name: options?.user_name,
-            })
-          : buildChatPreludeWithMemory(
-              {
-                lang,
-                user_locale: options?.user_locale,
-                user_name: options?.user_name,
-              },
-              { isFirstSession: isFirst, sessionMemoryText: sessionMemoryText }
-            );
+        const systemPrelude = buildChatPreludeWithMemory(
+          {
+            lang,
+            user_locale: options?.user_locale,
+            user_name: options?.user_name,
+            mode: options?.mode || 'therapy',
+          },
+          {
+            isFirstSession: isFirst,
+            sessionMemoryText: sessionMemoryText,
+            responseNumber,
+            userMessage: lastUserMessage,
+          }
+        );
 
         const developerStyle = '';
 
@@ -570,20 +583,21 @@ export const openaiProvider: LlmProviderPort = {
       });
 
       // System промпт для старта
-      const systemPrelude = isFirst
-        ? buildChatPrelude({
-            lang,
-            user_locale: options?.user_locale,
-            user_name: options?.user_name,
-          })
-        : buildChatPreludeWithMemory(
-            {
-              lang,
-              user_locale: options?.user_locale,
-              user_name: options?.user_name,
-            },
-            { isFirstSession: isFirst, sessionMemoryText: sessionMemoryText }
-          );
+      // Для welcome-старта responseNumber = 1 (первое сообщение)
+      const responseNumber = 1;
+      const systemPrelude = buildChatPreludeWithMemory(
+        {
+          lang,
+          user_locale: options?.user_locale,
+          user_name: options?.user_name,
+          mode: options?.mode || 'therapy',
+        },
+        {
+          isFirstSession: isFirst,
+          sessionMemoryText: sessionMemoryText,
+          responseNumber,
+        }
+      );
 
       // Для welcome-старта формируем input БЕЗ messages (они пустые)
       const input = [
@@ -680,20 +694,32 @@ export const openaiProvider: LlmProviderPort = {
     }
 
     // ОБЫЧНЫЙ РЕЖИМ ДИАЛОГА (messages не пустые или нет mode)
-    const systemPrelude = isFirst
-      ? buildChatPrelude({
-          lang,
-          user_locale: options?.user_locale,
-          user_name: options?.user_name,
-        })
-      : buildChatPreludeWithMemory(
-          {
-            lang,
-            user_locale: options?.user_locale,
-            user_name: options?.user_name,
-          },
-          { isFirstSession: isFirst, sessionMemoryText: sessionMemoryText }
-        );
+    // Вычисляем responseNumber для ротации типов ответов
+    const userMessagesCount = (messages || []).filter(
+      (m: { role: string; content: string }) => m.role === 'user'
+    ).length;
+    const responseNumber = userMessagesCount + 1;
+
+    // Извлекаем последнее сообщение пользователя (опционально, для detectApproachFromContext)
+    const lastUserMessage =
+      (messages || [])
+        .filter((m: { role: string; content: string }) => m.role === 'user')
+        .slice(-1)[0]?.content || '';
+
+    const systemPrelude = buildChatPreludeWithMemory(
+      {
+        lang,
+        user_locale: options?.user_locale,
+        user_name: options?.user_name,
+        mode: options?.mode || 'therapy',
+      },
+      {
+        isFirstSession: isFirst,
+        sessionMemoryText: sessionMemoryText,
+        responseNumber,
+        userMessage: lastUserMessage,
+      }
+    );
 
     const developerStyle = '';
 
