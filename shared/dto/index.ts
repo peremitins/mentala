@@ -81,3 +81,40 @@ export type PromptCreateDto = z.infer<typeof PromptCreateDto>;
 export type PromptUpdateDto = z.infer<typeof PromptUpdateDto>;
 export type PromptQueryDto = z.infer<typeof PromptQueryDto>;
 export type UserPromptDto = z.infer<typeof UserPromptDto>;
+
+// === Prompts System Types (v3.0) ===
+export type TherapyApproach =
+  | 'cbt'
+  | 'psychoanalysis'
+  | 'existential'
+  | 'positive';
+export type ResponseType =
+  | 'exploration'
+  | 'analytics'
+  | 'support'
+  | 'recommendation'
+  | 'synthesis';
+export type ChatMode = 'therapy' | 'habits' | 'talk';
+
+/**
+ * Дополняем существующий ChatSession интерфейс
+ * (для будущего расширения, если понадобится хранить в БД)
+ */
+export interface ChatSessionExtended {
+  messagesCount: number;
+  responseTypes: ResponseType[];
+  preferredApproach?: TherapyApproach;
+  approachHistory?: TherapyApproach[];
+  approachFeedback?: Record<TherapyApproach, number>;
+}
+
+/**
+ * Для хранения фраз, чтобы не повторялись в одной сессии
+ */
+export interface PhraseHistory {
+  validation: string[];
+  empathy: string[];
+  normalization: string[];
+  encouragement: string[];
+  deepeningQuestions: string[];
+}
