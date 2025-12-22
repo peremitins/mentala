@@ -12,6 +12,7 @@ export default defineEventHandler(async (event) => {
     email: users.email,
     name: users.name,
     locale: users.locale,
+    roleId: users.roleId,
     createdAt: users.createdAt,
     updatedAt: users.updatedAt,
   }).from(users)

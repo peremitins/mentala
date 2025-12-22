@@ -1,5 +1,5 @@
 import { getSessionUser } from '@/server/application/auth/session';
-import { setHeader } from 'h3';
+import { setHeader, getQuery } from 'h3';
 import { db } from '@/server/infrastructure/db/client';
 import {
   userSubscriptions,
@@ -11,10 +11,13 @@ import {
   isTrialActive,
   getFeatures,
 } from '@/server/application/subscriptions/access.service';
+import { getSessionUserWithRole } from '@/server/utils/require-role';
+import { createError } from 'h3';
 
 /**
  * GET /api/subscriptions/current
  * Получить текущую подписку пользователя
+ * Поддерживает query параметр ?userId=123 для admin/support
  */
 export default defineEventHandler(async (event) => {
   const sessionResult = await getSessionUser(event);
@@ -25,6 +28,25 @@ export default defineEventHandler(async (event) => {
       subscription: null,
       noActiveSubscription: true,
     };
+  }
+
+  const query = getQuery(event);
+  let targetUserId = sessionResult.user.id;
+
+  // Если запрашивается другой пользователь - проверяем права (только admin/support)
+  if (query.userId) {
+    const requestedUserId = Number(query.userId);
+    if (Number.isFinite(requestedUserId) && requestedUserId !== sessionResult.user.id) {
+      // Проверяем, что смотрящий - admin или support (не moderator)
+      const viewer = await getSessionUserWithRole(event);
+      if (!viewer || !['admin', 'support'].includes(viewer.role)) {
+        throw createError({
+          statusCode: 403,
+          statusMessage: 'Forbidden: Only admin and support can view other users subscriptions',
+        });
+      }
+      targetUserId = requestedUserId;
+    }
   }
 
   // Получаем активную подписку (не истекшую)
@@ -41,7 +63,7 @@ export default defineEventHandler(async (event) => {
     )
     .where(
       and(
-        eq(userSubscriptions.userId, sessionResult.user.id),
+        eq(userSubscriptions.userId, targetUserId),
         eq(userSubscriptions.paymentStatus, 'active'),
         gt(userSubscriptions.endDate, now) // подписка не истекла
       )
@@ -61,7 +83,7 @@ export default defineEventHandler(async (event) => {
         subscriptionPlans,
         eq(userSubscriptions.planId, subscriptionPlans.id)
       )
-      .where(eq(userSubscriptions.userId, sessionResult.user.id))
+      .where(eq(userSubscriptions.userId, targetUserId))
       .orderBy(desc(userSubscriptions.createdAt))
       .limit(1);
 
@@ -77,7 +99,7 @@ export default defineEventHandler(async (event) => {
           trialEndedAt: users.trialEndedAt,
         })
         .from(users)
-        .where(eq(users.id, sessionResult.user.id))
+        .where(eq(users.id, targetUserId))
         .limit(1);
 
       const userRecord = userData[0];
@@ -89,8 +111,21 @@ export default defineEventHandler(async (event) => {
         customConfig: subscription.customConfig || undefined,
       };
 
+      // Получаем роль целевого пользователя для premium доступа (не смотрящего!)
+      const targetUserData = await db
+        .select({ roleId: users.roleId })
+        .from(users)
+        .where(eq(users.id, targetUserId))
+        .limit(1);
+      const targetUserRole = targetUserData[0]?.roleId || 'user';
+
       const features = userRecord
-        ? await getFeatures(userRecord, subscriptionForFeatures, plan)
+        ? await getFeatures(
+            { id: targetUserId, trialEndedAt: userRecord.trialEndedAt },
+            subscriptionForFeatures,
+            plan,
+            targetUserRole
+          )
         : { ai: false, avatar: false, weeklyMinutesLimit: 0 };
 
       // Не отдаём внутренние поля checkout/billing, только публичные данные подписки
@@ -161,7 +196,7 @@ export default defineEventHandler(async (event) => {
       trialEndedAt: users.trialEndedAt,
     })
     .from(users)
-    .where(eq(users.id, sessionResult.user.id))
+    .where(eq(users.id, targetUserId))
     .limit(1);
 
   const userRecord = userData[0];
@@ -173,8 +208,21 @@ export default defineEventHandler(async (event) => {
     customConfig: subscription.customConfig || undefined,
   };
 
+  // Получаем роль целевого пользователя для premium доступа (не смотрящего!)
+  const targetUserData = await db
+    .select({ roleId: users.roleId })
+    .from(users)
+    .where(eq(users.id, targetUserId))
+    .limit(1);
+  const targetUserRole = targetUserData[0]?.roleId || 'user';
+
   const features = userRecord
-    ? await getFeatures(userRecord, subscriptionForFeatures, plan)
+    ? await getFeatures(
+        { id: targetUserId, trialEndedAt: userRecord.trialEndedAt },
+        subscriptionForFeatures,
+        plan,
+        targetUserRole
+      )
     : { ai: false, avatar: false, weeklyMinutesLimit: 0 };
 
   // Не отдаём внутренние поля checkout/billing, только публичные данные подписки

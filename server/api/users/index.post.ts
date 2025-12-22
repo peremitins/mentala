@@ -17,5 +17,6 @@ export default defineEventHandler(async (event) => {
   
   // Не возвращаем passwordHash в ответе
   const { passwordHash, ...item } = inserted[0]
+  void passwordHash; // Явно игнорируем для линтера
   return { item }
 })

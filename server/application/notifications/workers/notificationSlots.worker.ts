@@ -16,6 +16,9 @@ import {
   generateAllSlotsForUser,
   needsSlotRegeneration,
 } from '@/server/application/notifications/scheduler.service';
+import { db } from '@/server/infrastructure/db/client';
+import { users } from '@/server/infrastructure/db/schema';
+import { eq } from 'drizzle-orm';
 
 /**
  * Запускает воркер для обработки задач генерации слотов
@@ -31,6 +34,27 @@ export function startNotificationSlotsWorker() {
       );
 
       try {
+        // КРИТИЧНО: Проверяем, что пользователь существует и не удален
+        const [user] = await db
+          .select({ id: users.id, isBlocked: users.isBlocked })
+          .from(users)
+          .where(eq(users.id, userId))
+          .limit(1);
+
+        if (!user) {
+          console.warn(
+            `[Notification Slots Worker] ❌ User ${userId} does not exist, skipping job ${job.id}`
+          );
+          return { skipped: true, reason: 'user_not_found' };
+        }
+
+        if (user.isBlocked) {
+          console.warn(
+            `[Notification Slots Worker] ❌ User ${userId} is blocked/deleted, skipping job ${job.id}`
+          );
+          return { skipped: true, reason: 'user_blocked' };
+        }
+
         // Проверяем, нужна ли регенерация
         const needsRegen = await needsSlotRegeneration(userId);
         if (!needsRegen) {

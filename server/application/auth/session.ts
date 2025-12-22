@@ -179,7 +179,12 @@ export async function getSessionUser(
   const user = await db
     .select()
     .from(users)
-    .where(eq(users.id, rows[0].userId))
+    .where(
+      and(
+        eq(users.id, rows[0].userId),
+        eq(users.isBlocked, false) // Блокированные пользователи не могут авторизоваться
+      )
+    )
     .limit(1);
 
   if (!user.length) return null;

@@ -1,8 +1,9 @@
 import { createError } from 'h3';
 import { getSessionUser } from './session';
+import { getUserRole } from './roles';
 
 /**
- * Получить список email админов из env переменной ADMIN_EMAILS
+ * Получить список email админов из env переменной ADMIN_EMAILS (для обратной совместимости)
  * Формат: ADMIN_EMAILS=user1@example.com,user2@example.com
  */
 function getAdminEmails(): Set<string> {
@@ -16,13 +17,11 @@ function getAdminEmails(): Set<string> {
 
 /**
  * Требует, чтобы текущий пользователь был админом
- * Проверяет email пользователя против ADMIN_EMAILS env переменной
- *
- * TODO: Когда будет реализована система ролей, заменить на проверку role === 'admin'
+ * Проверяет роль пользователя из БД (roleId === 'admin')
+ * Если система ролей еще не настроена, использует ADMIN_EMAILS как fallback
  *
  * @throws {401} Если пользователь не авторизован
  * @throws {403} Если пользователь не является админом
- * @throws {500} Если ADMIN_EMAILS не настроен
  * @returns User объект админа
  */
 export async function requireAdmin(event: any) {
@@ -31,18 +30,22 @@ export async function requireAdmin(event: any) {
     throw createError({ statusCode: 401, statusMessage: 'Unauthorized' });
   }
 
-  const admins = getAdminEmails();
-  if (!admins.size) {
-    throw createError({
-      statusCode: 500,
-      statusMessage: 'ADMIN_EMAILS is not set',
-    });
+  try {
+    // Пытаемся использовать систему ролей
+    const role = await getUserRole(session.user.id);
+    if (role === 'admin') {
+      return session.user;
+    }
+  } catch (error) {
+    // Если система ролей еще не настроена, используем fallback на ADMIN_EMAILS
+    const admins = getAdminEmails();
+    if (admins.size > 0) {
+      const email = String(session.user.email || '').toLowerCase();
+      if (admins.has(email)) {
+        return session.user;
+      }
+    }
   }
 
-  const email = String(session.user.email || '').toLowerCase();
-  if (!admins.has(email)) {
-    throw createError({ statusCode: 403, statusMessage: 'Forbidden' });
-  }
-
-  return session.user;
+  throw createError({ statusCode: 403, statusMessage: 'Forbidden' });
 }

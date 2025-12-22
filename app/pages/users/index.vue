@@ -20,50 +20,81 @@
             >
               Пока нет пользователей
             </div>
-            <ul class="space-y-2">
-              <li
-                v-for="u in users"
-                @click="editUser(u.id)"
+            <div class="w-full gap-3 space-y-3">
+              <div
+                v-for="(u, index) in users"
                 :key="u.id"
-                class="flex items-center gap-2 justify-between bg-card border border-border rounded-xl px-3 py-2 hover:bg-accent transition-colors cursor-pointer"
+                class="group relative overflow-hidden rounded-xl border-2 border-border bg-card p-4 transition-all duration-200 hover:border-primary/50 hover:-translate-y-0.5 hover:shadow-lg outline-none animate-slide-up cursor-pointer"
+                :style="`animation-delay: ${index * 0.05}s; animation-fill-mode: both`"
+                :class="{
+                  'cursor-pointer': canManageUsers,
+                  'cursor-default': !canManageUsers,
+                }"
+                @click="canManageUsers ? editUser(u.id) : undefined"
               >
-                <div class="flex items-center gap-3 min-w-0 w-full">
-                  <span
-                    class="text-muted-foreground text-xs sm:text-sm shrink-0"
+                <div class="grid gap-1 z-1">
+                  <!-- Верхний блок с 3 столбцами -->
+                  <div class="flex items-center gap-3 w-full">
+                    <!-- Столбец 1: Имя (фиксированная ширина) -->
+                    <span
+                      class="text-muted-foreground text-sm font-medium shrink-1 min-w-[50px] truncate"
+                      :title="u.name || ''"
+                    >
+                      {{ u.name || 'Без имени' }}
+                    </span>
+                    <!-- Столбец 2: Email (занимает оставшееся место) -->
+                    <span
+                      class="text-foreground text-sm truncate min-w-0 flex-1"
+                      :title="u.email || ''"
+                    >
+                      {{ u.email }}
+                    </span>
+                    <!-- Столбец 3: Роль (фиксированная ширина) -->
+                    <span
+                      class="text-muted-foreground text-xs capitalize shrink-0 w-[50px] truncate"
+                      :title="String(u.roleId)"
+                    >
+                      {{ u.roleId }}
+                    </span>
+                  </div>
+                  <!-- Разделитель -->
+                  <Separator v-if="canManageUsers" class="mt-2" />
+                  <!-- Кнопки внизу (только для admin) -->
+                  <div
+                    v-if="canManageUsers"
+                    class="flex justify-end z-1 mt-2"
+                    @click.stop
                   >
-                    {{ u.name }}
-                  </span>
-                  <span class="truncate text-foreground">{{ u.email }}</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      @click="editUser(u.id)"
+                      title="Редактировать"
+                      class="p-3 min-w-[44px] min-h-[44px]"
+                    >
+                      <IconEdit class="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      @click="removeUser(u.id)"
+                      :disabled="removingId === u.id"
+                      title="Удалить"
+                      class="p-3 min-w-[44px] min-h-[44px] text-destructive hover:text-destructive/80"
+                    >
+                      <IconTrash2 class="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
-                <div class="flex items-center shrink-0">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    class="min-w-[44px] min-h-[44px]"
-                    @click="editUser(u.id)"
-                    title="Редактировать"
-                  >
-                    <IconEdit class="w-4 h-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    class="min-w-[44px] min-h-[44px]"
-                    @click="removeUser(u.id)"
-                    :disabled="removingId === u.id"
-                    title="Удалить"
-                  >
-                    <IconTrash2 class="w-4 h-4" />
-                  </Button>
-                </div>
-              </li>
-            </ul>
+              </div>
+            </div>
           </div>
         </div>
       </div>
     </section>
-    <!-- Floating add button -->
+    <!-- Floating add button (только для admin) -->
     <Button
+      v-if="canManageUsers"
       as-child
       variant="outline"
       size="icon"
@@ -85,14 +116,18 @@ import IconCirclePlus from '~icons/lucide/circle-plus';
 import IconEdit from '~icons/lucide/edit';
 import IconTrash2 from '~icons/lucide/trash-2';
 import { Button } from '@/app/components/ui/button';
+import { Separator } from '@/app/components/ui/shadcn/separator';
+import { useUserRole } from '@/app/composables/useUserRole';
 
 type UserRow = {
   id: number;
   email: string | null;
   createdAt: string;
   name: string | null;
+  roleId?: string | null;
 };
 
+const { canManageUsers } = useUserRole();
 const users = ref<UserRow[]>([]);
 const loading = ref(false);
 const error = ref('');
@@ -101,8 +136,8 @@ async function fetchUsers() {
   loading.value = true;
   error.value = '';
   try {
-    const res = await $fetch<{ items: UserRow[] }>('/api/users');
-    users.value = res.items || [];
+    const res = await $fetch<{ users: UserRow[] }>('/api/admin/users');
+    users.value = res.users || [];
   } catch (e: any) {
     error.value = e?.data?.message || e?.message || 'Ошибка загрузки';
   } finally {
@@ -124,7 +159,10 @@ async function removeUser(id: number) {
     });
     users.value = users.value.filter((x) => x.id !== id);
     useToast('Готово', 'Пользователь удалён');
-  } catch (e) {
+  } catch (e: any) {
+    const errorMessage = e?.data?.message || e?.message || 'Ошибка удаления';
+    useToast('Ошибка', errorMessage);
+    console.error('Failed to delete user:', e);
   } finally {
     removingId.value = null;
   }

@@ -1,12 +1,9 @@
 import { useAuthStore } from '@/app/stores/auth';
-import { createError } from 'h3';
 
 /**
  * Middleware для админских страниц
- * TODO: Заменить на проверку role === 'admin' когда будет реализована система ролей
- *
- * Сейчас: проверяет через серверный API endpoint /api/admin/me
- * В будущем: будет проверять auth.user.role === 'admin'
+ * Для страницы /users разрешает admin и moderator (read-only для moderator)
+ * Для остальных админских страниц требуется только admin
  */
 export default defineNuxtRouteMiddleware(async (to) => {
   // Проверяем авторизацию
@@ -23,25 +20,26 @@ export default defineNuxtRouteMiddleware(async (to) => {
     return navigateTo('/auth');
   }
 
-  // Проверяем, является ли пользователь админом через серверный API
-  // Это безопаснее, чем читать process.env на клиенте
-  // TODO: Когда будет реализована система ролей, заменить на:
-  // if (auth.user.role !== 'admin') {
-  //   throw createError({ statusCode: 403, statusMessage: 'Forbidden' });
-  // }
-  try {
-    const { $api } = useNuxtApp();
-    const result = await $api<{ isAdmin: boolean }>('/api/admin/me', {
-      method: 'GET',
-    });
+  const userRole = auth.user.role || 'user';
 
-    if (!result?.isAdmin) {
-      throw createError({ statusCode: 403, statusMessage: 'Forbidden' });
+  // Для страницы списка пользователей разрешаем admin и moderator
+  if (to.path === '/users') {
+    if (!['admin', 'moderator'].includes(userRole)) {
+      return navigateTo('/');
     }
-  } catch (error: any) {
-    if (error?.statusCode === 403 || error?.statusCode === 401) {
-      throw createError({ statusCode: 403, statusMessage: 'Forbidden' });
+    return;
+  }
+
+  // Для страниц редактирования/создания пользователей - только admin
+  if (to.path.startsWith('/users/')) {
+    if (userRole !== 'admin') {
+      return navigateTo('/users'); // Модератор может только смотреть список
     }
-    throw error;
+    return;
+  }
+
+  // Для остальных админских страниц требуется только admin
+  if (userRole !== 'admin') {
+    return navigateTo('/');
   }
 });
