@@ -27,7 +27,7 @@ export async function deletePlannedFutureSlotsForSource(
   const deleteConditions = [
     eq(notificationSlots.userId, userId),
     eq(notificationSlots.kind, kind),
-    eq(notificationSlots.status, 'planned'), // ТОЛЬКО planned, НЕ sent!
+    sql`${notificationSlots.status} IN ('planned', 'queued')`, // Удаляем planned и queued
     gt(notificationSlots.scheduledAt, now), // ТОЛЬКО будущие слоты
   ];
 
@@ -93,7 +93,7 @@ export async function countPlannedSlotsForTomorrowNightMode(
 }
 
 /**
- * Находит все planned слоты пользователя после указанного времени
+ * Находит все planned и queued слоты пользователя после указанного времени
  * @param userId - ID пользователя
  * @param now - текущее время
  * @returns массив слотов, отсортированных по времени
@@ -108,7 +108,7 @@ export async function findPlannedSlotsForUserAfterNow(
     .where(
       and(
         eq(notificationSlots.userId, userId),
-        eq(notificationSlots.status, 'planned'),
+        sql`${notificationSlots.status} IN ('planned', 'queued')`, // Включаем planned и queued
         gt(notificationSlots.scheduledAt, now)
       )
     )

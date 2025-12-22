@@ -58,8 +58,9 @@ const DEBUG_NOTIFICATIONS = process.env.DEBUG_NOTIFICATIONS === 'true';
 
 // Конфигурация планировщика (используется из scheduler.service.ts)
 const SCHEDULE_CONFIG = {
-  horizonDays: 1,
+  horizonDays: 2, // Планируем на 2 дня вперёд (сегодня + завтра)
   jitterMinutes: 15,
+  minGapMinutes: 10, // Минимальный интервал между слотами (для большого количества уведомлений)
 };
 
 /**
@@ -90,6 +91,27 @@ export async function regenerateSlotsForSourceInternal(
   const { entityKey } = options || {};
 
   try {
+    // КРИТИЧНО: Проверяем, что пользователь существует и не удален
+    const [user] = await db
+      .select({ id: users.id, isBlocked: users.isBlocked })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    if (!user) {
+      console.warn(
+        `[RegenerateSlots] ❌ User ${userId} does not exist, skipping slot generation`
+      );
+      return;
+    }
+
+    if (user.isBlocked) {
+      console.warn(
+        `[RegenerateSlots] ❌ User ${userId} is blocked/deleted, skipping slot generation`
+      );
+      return;
+    }
+
     if (DEBUG_NOTIFICATIONS) {
       console.log(`[RegenerateSlots] ========== REGENERATING SLOTS ==========`);
     }
@@ -232,7 +254,10 @@ export async function regenerateSlotsForSourceInternal(
       timeRangeStart,
       timeRangeEnd,
       customSlotTimes,
-      SCHEDULE_CONFIG.jitterMinutes
+      SCHEDULE_CONFIG.jitterMinutes,
+      userId, // ДОБАВЛЕНО: для детерминированного джиттера
+      kind, // ДОБАВЛЕНО: для разных джиттеров у разных шаблонов
+      entityKey // ДОБАВЛЕНО: для разных джиттеров у разных шаблонов
     );
 
     // ВАЖНО: Сортируем слоты по времени для детерминированного порядка

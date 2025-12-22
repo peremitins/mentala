@@ -4,8 +4,8 @@
 
 import { notificationSlotsQueue } from '../queues/notificationSlots.queue';
 import { db } from '@/server/infrastructure/db/client';
-import { notificationPreferences } from '@/server/infrastructure/db/schema';
-import { eq } from 'drizzle-orm';
+import { notificationPreferences, users } from '@/server/infrastructure/db/schema';
+import { eq, and, inArray } from 'drizzle-orm';
 
 /**
  * Ставит задачи в очередь для всех пользователей с активными preferences
@@ -23,13 +23,44 @@ export async function enqueueSlotGenerationForAllActiveUsers(): Promise<void> {
       .where(eq(notificationPreferences.enabled, true))
       .groupBy(notificationPreferences.userId);
 
+    if (activeUsers.length === 0) {
+      console.log('[Notification Slots Scheduler] No active users found');
+      return;
+    }
+
+    const activeUserIds = activeUsers.map((u) => u.userId);
+
+    // КРИТИЧНО: Проверяем, что все пользователи существуют и не удалены
+    const existingUsers = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(
+        and(
+          inArray(users.id, activeUserIds),
+          eq(users.isBlocked, false) // Исключаем заблокированных/удаленных
+        )
+      );
+
+    const existingUserIds = existingUsers.map((u) => u.id);
+    const deletedUserIds = activeUserIds.filter((id) => !existingUserIds.includes(id));
+
+    if (deletedUserIds.length > 0) {
+      console.warn(
+        `[Notification Slots Scheduler] ⚠️ Found ${deletedUserIds.length} deleted/blocked users with active preferences: [${deletedUserIds.join(', ')}]`
+      );
+      console.warn(
+        `[Notification Slots Scheduler] ⚠️ These users will be skipped. Consider running cleanup script.`
+      );
+    }
+
     console.log(
-      `[Notification Slots Scheduler] Found ${activeUsers.length} users with active notifications`
+      `[Notification Slots Scheduler] Found ${activeUsers.length} users with active notifications, ${existingUserIds.length} existing and not blocked`
     );
 
     let enqueuedCount = 0;
 
-    for (const { userId } of activeUsers) {
+    // Используем только существующих пользователей
+    for (const userId of existingUserIds) {
       try {
         // Ставим задачу в очередь с детерминированным jobId
         // Один пользователь = одна задача генерации в очереди (защита от дублей)
