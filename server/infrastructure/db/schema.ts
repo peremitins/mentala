@@ -714,3 +714,50 @@ export const securityEvents = pgTable(
     ),
   })
 );
+
+// === Content Generation System ===
+
+// Таблица для хранения сгенерированных постов
+export const contentPosts = pgTable(
+  'content_posts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    // Параметры генерации (денормализованы для производительности)
+    platform: varchar('platform', { length: 20 }).notNull(),
+    format: varchar('format', { length: 50 }).notNull(),
+    topic: text('topic').notNull(),
+    goal: varchar('goal', { length: 50 }),
+    toneLevel: integer('tone_level').notNull(),
+    addressing: varchar('addressing', { length: 10 }).notNull(),
+    length: varchar('length', { length: 20 }).notNull(),
+    ctaType: varchar('cta_type', { length: 50 }).notNull(),
+    ctaText: text('cta_text'),
+    ctaPayload: text('cta_payload'),
+    // Контент
+    content: text('content').notNull(), // форматированный (с markdown/HTML)
+    assets: jsonb('assets').notNull().default({}), // slides, cover_titles, story_prompts, reels_script, extra_titles, extra_cta_variants etc.
+    safetyFlags: jsonb('safety_flags').notNull().default({}), // sensitive_topic, disclaimer_added, rejected_reason etc.
+    status: varchar('status', { length: 20 }).notNull().default('draft'), // draft|selected|published|rejected|needs_review
+    publishedAt: timestamp('published_at', { withTimezone: true }),
+    publishedPlatform: varchar('published_platform', { length: 20 }), // telegram|instagram
+    publishedUrl: text('published_url'),
+    tags: jsonb('tags').$type<string[]>().default([]), // теги для организации (v2, но можно добавить сразу)
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    platformStatusCreatedIdx: index('idx_cp_platform_status_created_at').on(
+      table.platform,
+      table.status,
+      table.createdAt
+    ),
+    topicCreatedIdx: index('idx_cp_topic_created_at').on(
+      table.topic,
+      table.createdAt
+    ),
+  })
+);
