@@ -11,7 +11,7 @@ import type {
   ResetTextsRequest,
   ResetTextsResponse,
 } from '@/shared/dto/notifications';
-import { regenerateSlotsForSource } from '@/server/application/notifications/scheduler.service';
+import { generateAllSlotsForUser } from '@/server/application/notifications/scheduler.service';
 import { nanoid } from 'nanoid';
 
 /**
@@ -184,13 +184,8 @@ export default defineEventHandler(
     // Регенерируем асинхронно, не блокируя ответ
     (async () => {
       try {
-        await regenerateSlotsForSource(
-          userId,
-          body.kind as 'habits' | 'therapy',
-          {
-            entityKey: normalizedEntityKey,
-          }
-        );
+        // ВАЖНО: Используем глобальную оркестрацию для правильного чередования тем
+        await generateAllSlotsForUser(userId);
         console.log(
           `[NotificationTexts] ✅ Slots regenerated after reset: user ${userId}, kind: ${body.kind}, entityKey: ${normalizedEntityKey}`
         );

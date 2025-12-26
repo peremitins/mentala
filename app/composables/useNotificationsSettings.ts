@@ -165,35 +165,6 @@ export function useNotificationsSettings() {
   };
 
   // ==========================================
-  // Быстрый тест (создать слот через 1 минуту)
-  // ==========================================
-
-  const scheduleQuickTest = async (
-    kind: NotificationKind
-  ): Promise<string | null> => {
-    try {
-      loading.value = true;
-      error.value = null;
-      const { $api } = useNuxtApp();
-      const response = await $api<{
-        success: boolean;
-        slotId: string;
-        scheduledAt: string;
-        message: string;
-      }>('/api/notifications/test-quick', {
-        method: 'POST',
-        body: { kind },
-      });
-      return response.message;
-    } catch (e: any) {
-      error.value = e.message || 'Failed to schedule quick test';
-      return null;
-    } finally {
-      loading.value = false;
-    }
-  };
-
-  // ==========================================
   // Трекинг взаимодействия с уведомлением
   // ==========================================
 
@@ -222,7 +193,6 @@ export function useNotificationsSettings() {
     updateNotificationPreferences,
     registerToken,
     snoozeNotification,
-    scheduleQuickTest,
     trackInteraction,
   };
 }
