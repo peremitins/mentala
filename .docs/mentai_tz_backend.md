@@ -1,4 +1,4 @@
-# MentAI — Техническое задание (Backend, Nitro BFF)
+# Mentala — Техническое задание (Backend, Nitro BFF)
 
 ## 1. Роль
 

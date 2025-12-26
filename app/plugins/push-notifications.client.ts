@@ -17,8 +17,8 @@ export default defineNuxtPlugin((nuxtApp) => {
     try {
       await LocalNotifications.createChannel?.({
         id: 'mentai_high',
-        name: 'MentAI High Priority',
-        description: 'Важные уведомления MentAI',
+        name: 'Mentala High Priority',
+        description: 'Важные уведомления Mentala',
         importance: 5, // IMPORTANCE_HIGH
         visibility: 1, // VISIBILITY_PUBLIC
         sound: 'default',
@@ -197,77 +197,12 @@ export default defineNuxtPlugin((nuxtApp) => {
     }
   };
 
-  // ==========================================
-  // Fallback режим: polling для тестирования без Firebase
-  // Используется только в development, когда Firebase не настроен
-  // ==========================================
-
-  const startDevPolling = () => {
-    console.log('[PushPlugin] Starting fallback polling for notifications');
-    console.log(
-      '[PushPlugin] (Firebase не настроен - используется LocalNotifications)'
-    );
-
-    const checkPending = async () => {
-      try {
-        const pending = await nuxtApp.$api<any[]>('/api/notifications/pending');
-
-        if (pending && pending.length > 0) {
-          console.log(
-            `[PushPlugin] Found ${pending.length} pending notifications`
-          );
-
-          for (const slot of pending) {
-            const payload = slot.payload;
-
-            // Показываем через LocalNotifications
-            try {
-              await LocalNotifications.schedule({
-                notifications: [
-                  {
-                    id: Math.floor(Math.random() * 2147483647),
-                    title: payload.title || 'MentAI',
-                    body: payload.body || 'Новое уведомление',
-                    sound: 'default',
-                    channelId: 'mentai_high',
-                  },
-                ],
-              });
-
-              console.log(
-                `[PushPlugin] Notification shown: ${payload.body?.substring(0, 50)}...`
-              );
-
-              // Помечаем как доставленное
-              await nuxtApp.$api('/api/notifications/mark-delivered', {
-                method: 'POST',
-                body: { slotId: slot.id },
-              });
-            } catch (error) {
-              console.error('[PushPlugin] Failed to show notification:', error);
-            }
-          }
-        }
-      } catch (error) {
-        // Игнорируем ошибки (например, если не авторизован)
-      }
-    };
-
-    // Проверяем каждые 15 секунд
-    setInterval(checkPending, 15000);
-
-    // Первая проверка через 5 секунд
-    setTimeout(checkPending, 5000);
-  };
-
   // Используем Nuxt хук для отложенной инициализации после полной загрузки
   nuxtApp.hook('app:mounted', () => {
     console.log('[PushPlugin] App mounted, scheduling notification init in 3s');
     setTimeout(initNotifications, 3000);
 
     // Fallback polling отключен - используем только реальные FCM push-уведомления
-    // Раскомментируй строку ниже если Firebase не работает и нужен fallback:
-    // startDevPolling();
 
     console.log(
       '[PushPlugin] Using FCM push notifications (fallback polling disabled)'

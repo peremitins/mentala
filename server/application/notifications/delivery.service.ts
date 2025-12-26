@@ -15,7 +15,6 @@ import {
 } from '@/server/infrastructure/db/schema';
 import type { NotificationPayload } from '@/shared/dto/notifications';
 import { enqueueAiTextPoolRefillForAllActivePreferences } from '@/server/application/notifications/schedulers/aiTextPool.scheduler';
-import { enqueueSlotGenerationForAllActiveUsers } from '@/server/application/notifications/schedulers/notificationSlots.scheduler';
 import { notificationDeliveryQueue } from '@/server/application/notifications/queues/notificationDelivery.queue';
 import { getUserTimezone, toLocalTime } from './timezone.utils';
 import admin from 'firebase-admin';
@@ -204,22 +203,38 @@ export async function sendFCMNotification(
     // Для habits: habits_{entityKey}, для therapy: therapy_{entityKey} или therapy
     const collapseKey = generateCollapseKey(payload);
 
+    // Подготовка notification объекта с опциональным изображением
+    const notificationPayload: admin.messaging.Notification = {
+      title: payload.title,
+      body: payload.body,
+    };
+
+    // Добавляем изображение, если оно указано
+    if (payload.image) {
+      notificationPayload.imageUrl = payload.image;
+    }
+
+    // Подготовка Android notification
+    const androidNotification: admin.messaging.AndroidNotification = {
+      sound: 'default',
+      channelId: 'mentai_high',
+      clickAction: 'FLUTTER_NOTIFICATION_CLICK',
+    };
+
+    // Добавляем изображение для Android (Android 7+)
+    if (payload.image) {
+      androidNotification.imageUrl = payload.image;
+    }
+
     const message: admin.messaging.Message = {
       token,
-      notification: {
-        title: payload.title,
-        body: payload.body,
-      },
+      notification: notificationPayload,
       data: dataPayload,
       android: {
         priority: 'high',
         ttl: 60 * 60 * 1000, // 1 час (3600 секунд)
         collapseKey,
-        notification: {
-          sound: 'default',
-          channelId: 'mentai_high',
-          clickAction: 'FLUTTER_NOTIFICATION_CLICK',
-        },
+        notification: androidNotification,
       },
       apns: {
         headers: {
@@ -236,6 +251,12 @@ export async function sendFCMNotification(
             sound: 'default',
             category: 'MENTAI_CATEGORY',
           },
+          // Добавляем изображение для iOS (через fcm_options)
+          ...(payload.image && {
+            fcm_options: {
+              image: payload.image,
+            },
+          }),
         },
       },
     };
@@ -310,6 +331,7 @@ export async function sendToUser(
  */
 export async function processDueSlots(): Promise<void> {
   const nowUTC = new Date();
+  const LATE_DELIVERY_GRACE_MINUTES = 10;
 
   // Логируем UTC время (основной критерий due остаётся в UTC)
   // Детальное логирование в локальном времени будет для каждого слота отдельно
@@ -363,6 +385,8 @@ export async function processDueSlots(): Promise<void> {
       const userTimezone = timezoneMap.get(slot.userId) || 'Europe/Moscow';
       const slotLocal = toLocalTime(slot.scheduledAt, userTimezone);
       const nowLocal = toLocalTime(nowUTC, userTimezone);
+      const lateMinutes =
+        (nowUTC.getTime() - slot.scheduledAt.getTime()) / (60 * 1000);
 
       if (enqueuedCount < 5) {
         // Логируем первые 5 слотов для отладки
@@ -372,6 +396,26 @@ export async function processDueSlots(): Promise<void> {
       }
 
       try {
+        if (lateMinutes > LATE_DELIVERY_GRACE_MINUTES) {
+          const updateResult = await db
+            .update(notificationSlots)
+            .set({ status: 'skipped' })
+            .where(
+              and(
+                eq(notificationSlots.id, slot.id),
+                eq(notificationSlots.status, 'planned')
+              )
+            );
+          const rowsAffected = updateResult.rowCount || 0;
+          if (rowsAffected > 0) {
+            skippedCount++;
+            console.warn(
+              `[DeliveryWorker] ⏭️ Slot ${slot.id} is late by ${lateMinutes.toFixed(1)} min (local=${slotLocal.toISOString()}), marking as skipped`
+            );
+          }
+          continue;
+        }
+
         // КРИТИЧНО: Атомарно обновляем статус перед постановкой в очередь
         // Это предотвращает race condition - если слот уже обрабатывается, обновление не пройдет
         // Используем результат update напрямую для проверки количества обновленных строк
@@ -501,13 +545,18 @@ export async function processDueSlots(): Promise<void> {
  * Запускает планировщик для постановки задач в очереди BullMQ
  * Периодически проверяет состояние системы и ставит задачи в соответствующие очереди:
  * - processDueSlots() - ставит задачи отправки уведомлений в очередь notification-delivery
- * - enqueueSlotGenerationForAllActiveUsers() - ставит задачи генерации слотов в очередь notification-slots-generation
  * - enqueueAiTextPoolRefillForAllActivePreferences() - ставит задачи догенерации AI-текстов в очередь ai-text-pool-refill
  *
  * Воркеры BullMQ обрабатывают задачи из этих очередей (см. server/plugins/bullmq-workers.ts)
  *
  * ВАЖНО: Эта функция должна вызываться только один раз при старте сервера.
  * Многократный вызов приведет к дублированию планировщиков и таймеров.
+ *
+ * ПРИМЕЧАНИЕ: Регенерация слотов происходит event-driven образом:
+ * - При изменении настроек уведомлений
+ * - При изменении timezone
+ * - При первом включении уведомлений
+ * Периодическая регенерация для всех пользователей отключена как избыточная.
  */
 let workerStarted = false;
 
@@ -531,10 +580,6 @@ export function startDeliveryWorker(): void {
   const INTERVAL_MS = isDevelopment ? 30 * 1000 : 5 * 60 * 1000; // 30 сек в dev, 5 минут в prod
   const INITIAL_DELAY_MS = isDevelopment ? 10 * 1000 : 60 * 1000; // 10 сек в dev, 1 минута в prod
 
-  // Интервал для проверки и регенерации слотов (раз в час)
-  const SCHEDULER_CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 час
-  const SCHEDULER_INITIAL_DELAY_MS = 5 * 60 * 1000; // 5 минут после старта
-
   // Интервал для проверки и догенерации текстов (раз в час, с небольшим смещением)
   const TEXT_POOL_REFILL_INTERVAL_MS = 60 * 60 * 1000; // 1 час
   const TEXT_POOL_REFILL_INITIAL_DELAY_MS = 10 * 60 * 1000; // 10 минут после старта
@@ -543,9 +588,6 @@ export function startDeliveryWorker(): void {
     `[DeliveryWorker] Mode: ${isDevelopment ? 'development' : 'production'}`
   );
   console.log(`[DeliveryWorker] Check interval: ${INTERVAL_MS / 1000} seconds`);
-  console.log(
-    `[DeliveryWorker] Scheduler check interval: ${SCHEDULER_CHECK_INTERVAL_MS / 1000 / 60} minutes`
-  );
 
   // Первый запуск обработки due-слотов
   setTimeout(() => {
@@ -560,26 +602,6 @@ export function startDeliveryWorker(): void {
       });
     }, INTERVAL_MS);
   }, INITIAL_DELAY_MS);
-
-  // Первый запуск постановки задач генерации слотов в очередь BullMQ
-  setTimeout(() => {
-    enqueueSlotGenerationForAllActiveUsers().catch((error) => {
-      console.error(
-        '[DeliveryWorker] Error enqueueing slot generation:',
-        error
-      );
-    });
-
-    // Последующие запуски постановки задач генерации слотов в очередь BullMQ
-    setInterval(() => {
-      enqueueSlotGenerationForAllActiveUsers().catch((error) => {
-        console.error(
-          '[DeliveryWorker] Error enqueueing slot generation:',
-          error
-        );
-      });
-    }, SCHEDULER_CHECK_INTERVAL_MS);
-  }, SCHEDULER_INITIAL_DELAY_MS);
 
   // Первый запуск постановки задач догенерации текстов в очередь BullMQ
   setTimeout(() => {
@@ -603,9 +625,6 @@ export function startDeliveryWorker(): void {
 
   console.log(
     `[DeliveryWorker] Worker scheduled (first check in ${INITIAL_DELAY_MS / 1000}s, then every ${INTERVAL_MS / 1000}s)`
-  );
-  console.log(
-    `[DeliveryWorker] Scheduler check scheduled (first check in ${SCHEDULER_INITIAL_DELAY_MS / 1000 / 60} minutes, then every ${SCHEDULER_CHECK_INTERVAL_MS / 1000 / 60} minutes)`
   );
   console.log(
     `[DeliveryWorker] Text pool refill scheduled (first check in ${TEXT_POOL_REFILL_INITIAL_DELAY_MS / 1000 / 60} minutes, then every ${TEXT_POOL_REFILL_INTERVAL_MS / 1000 / 60} minutes)`

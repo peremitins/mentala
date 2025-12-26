@@ -14,7 +14,7 @@ import type {
 } from '@/shared/dto/notifications';
 import { MAX_NOTIFICATION_TEXT_LENGTH } from '@/shared/dto/notifications';
 import { nanoid } from 'nanoid';
-import { regenerateSlotsForSource } from '@/server/application/notifications/scheduler.service';
+import { generateAllSlotsForUser } from '@/server/application/notifications/scheduler.service';
 import { ensureUserTextsInitialized } from '@/server/application/notifications/initialize-texts.service';
 
 /**
@@ -336,13 +336,8 @@ export default defineEventHandler(async (event) => {
     // Регенерируем слоты асинхронно, не блокируя ответ
     (async () => {
       try {
-        await regenerateSlotsForSource(
-          userId,
-          body.kind as 'habits' | 'therapy',
-          {
-            entityKey: normalizedEntityKey,
-          }
-        );
+        // ВАЖНО: Используем глобальную оркестрацию для правильного чередования тем
+        await generateAllSlotsForUser(userId);
         console.log(
           `[NotificationTexts] ✅ Slots regenerated after text changes: user ${userId}, kind: ${body.kind}, entityKey: ${normalizedEntityKey}`
         );

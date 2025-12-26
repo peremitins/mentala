@@ -194,11 +194,27 @@ export async function preventSimultaneousNotifications(
         crossesMidnight: false,
       };
 
-      // ВАЖНО: Проверяем, является ли слот ручным (customSlotTimes)
-      // Для ручных слотов не сдвигаем, только логируем предупреждение
-      // (проверка через payload или другие признаки - пока пропускаем, так как нет явного флага)
+      // ВАЖНО: Проверяем, является ли слот фиксированным (fixedTime)
+      // Для фиксированных слотов не сдвигаем, только логируем предупреждение
+      const isFixedSlot =
+        currentSlot.payload &&
+        typeof currentSlot.payload === 'object' &&
+        'data' in currentSlot.payload &&
+        currentSlot.payload.data &&
+        typeof currentSlot.payload.data === 'object' &&
+        'fixedTime' in currentSlot.payload.data &&
+        currentSlot.payload.data.fixedTime !== undefined &&
+        currentSlot.payload.data.fixedTime !== null;
 
-      // Ищем свободное время в обе стороны
+      if (isFixedSlot) {
+        console.warn(
+          `[PreventOverlap] ⚠️ Fixed slot ${currentSlot.id.substring(0, 8)}... has conflict (gap: ${gapMinutes.toFixed(1)} min), but cannot be moved. Only flexible slots will be shifted.`
+        );
+        // Пропускаем fixed-слот, не сдвигаем его
+        continue;
+      }
+
+      // Ищем свободное время в обе стороны (только для гибких слотов)
       let freeTime = findNearestFreeTimeInBothDirections(
         currentSlot.scheduledAt,
         allSlots.slice(0, i), // Все предыдущие слоты
@@ -211,47 +227,64 @@ export async function preventSimultaneousNotifications(
       // Это предотвращает "прилипание" всех слотов к концу диапазона
       if (!freeTime) {
         // Ищем ближайшее свободное место, сдвигая слот на minGapMinutes от предыдущего
-        const currentTimeLocal = toLocalTime(currentSlot.scheduledAt, userTimezone);
+        const currentTimeLocal = toLocalTime(
+          currentSlot.scheduledAt,
+          userTimezone
+        );
         const prevTimeLocal = toLocalTime(prevSlot.scheduledAt, userTimezone);
-        
+
         // Вычисляем новое время: предыдущий слот + minGapMinutes
         const newTimeLocal = new Date(
           prevTimeLocal.getTime() + minGapMinutes * 60 * 1000
         );
-        
+
         // Проверяем, что новое время в пределах диапазона
-        const newSlotMinutes = newTimeLocal.getHours() * 60 + newTimeLocal.getMinutes();
+        const newSlotMinutes =
+          newTimeLocal.getHours() * 60 + newTimeLocal.getMinutes();
         let adjustedMinutes = newSlotMinutes;
-        
+
         if (!slotRange.crossesMidnight) {
           // Обычный диапазон
           if (newSlotMinutes > slotRange.end) {
             // Вышли за границу - ищем свободное место раньше
             // Пробуем сдвинуть назад от конца диапазона
-            adjustedMinutes = Math.max(slotRange.start, slotRange.end - minGapMinutes);
+            adjustedMinutes = Math.max(
+              slotRange.start,
+              slotRange.end - minGapMinutes
+            );
           } else if (newSlotMinutes < slotRange.start) {
             adjustedMinutes = slotRange.start;
           }
         } else {
           // Диапазон через полночь
-          if (newSlotMinutes < slotRange.start && newSlotMinutes > slotRange.end) {
+          if (
+            newSlotMinutes < slotRange.start &&
+            newSlotMinutes > slotRange.end
+          ) {
             // В запрещенной зоне - сдвигаем к ближайшей границе
-            const distToStart = (slotRange.start - newSlotMinutes + 1440) % 1440;
+            const distToStart =
+              (slotRange.start - newSlotMinutes + 1440) % 1440;
             const distToEnd = (newSlotMinutes - slotRange.end + 1440) % 1440;
-            adjustedMinutes = distToStart < distToEnd ? slotRange.start : slotRange.end;
+            adjustedMinutes =
+              distToStart < distToEnd ? slotRange.start : slotRange.end;
           }
         }
-        
+
         // Создаем новое время с учетом корректировки
         const adjustedHour = Math.floor(adjustedMinutes / 60);
         const adjustedMin = adjustedMinutes % 60;
         const adjustedTimeLocal = new Date(newTimeLocal);
         adjustedTimeLocal.setHours(adjustedHour, adjustedMin, 0, 0);
-        
+
         // Проверяем, что скорректированное время свободно
         const adjustedUTC = toUTC(adjustedTimeLocal, userTimezone);
         if (
-          isTimeFree(adjustedUTC, allSlots.slice(0, i), minGapMinutes * 60 * 1000, userTimezone) &&
+          isTimeFree(
+            adjustedUTC,
+            allSlots.slice(0, i),
+            minGapMinutes * 60 * 1000,
+            userTimezone
+          ) &&
           isWithinRange(adjustedTimeLocal, slotRange, userTimezone)
         ) {
           freeTime = adjustedUTC;
@@ -261,12 +294,12 @@ export async function preventSimultaneousNotifications(
           const rangeDuration = slotRange.crossesMidnight
             ? 1440 - slotRange.start + slotRange.end
             : slotRange.end - slotRange.start;
-          
+
           // Пробуем несколько позиций в диапазоне
           for (let attempt = 0; attempt < 10; attempt++) {
             const position = (rangeDuration * attempt) / 10;
             let candidateMinutes: number;
-            
+
             if (slotRange.crossesMidnight) {
               if (position < 1440 - slotRange.start) {
                 candidateMinutes = slotRange.start + position;
@@ -276,15 +309,20 @@ export async function preventSimultaneousNotifications(
             } else {
               candidateMinutes = slotRange.start + position;
             }
-            
+
             const candidateHour = Math.floor(candidateMinutes / 60);
             const candidateMin = candidateMinutes % 60;
             const candidateTimeLocal = new Date(currentTimeLocal);
             candidateTimeLocal.setHours(candidateHour, candidateMin, 0, 0);
             const candidateUTC = toUTC(candidateTimeLocal, userTimezone);
-            
+
             if (
-              isTimeFree(candidateUTC, allSlots.slice(0, i), minGapMinutes * 60 * 1000, userTimezone) &&
+              isTimeFree(
+                candidateUTC,
+                allSlots.slice(0, i),
+                minGapMinutes * 60 * 1000,
+                userTimezone
+              ) &&
               isWithinRange(candidateTimeLocal, slotRange, userTimezone)
             ) {
               freeTime = candidateUTC;
@@ -323,32 +361,44 @@ export async function preventSimultaneousNotifications(
         // КРИТИЧНО: Если все равно не нашли свободное время, НЕ оставляем слот на месте
         // Вместо этого сдвигаем его на minGapMinutes от предыдущего, даже если это выходит за границы
         // Это предотвращает "прилипание" всех слотов к концу диапазона
-        const currentTimeLocal = toLocalTime(currentSlot.scheduledAt, userTimezone);
+        const currentTimeLocal = toLocalTime(
+          currentSlot.scheduledAt,
+          userTimezone
+        );
         const prevTimeLocal = toLocalTime(prevSlot.scheduledAt, userTimezone);
         const newTimeLocal = new Date(
           prevTimeLocal.getTime() + minGapMinutes * 60 * 1000
         );
-        
+
         // Ограничиваем границами диапазона
-        const newSlotMinutes = newTimeLocal.getHours() * 60 + newTimeLocal.getMinutes();
+        const newSlotMinutes =
+          newTimeLocal.getHours() * 60 + newTimeLocal.getMinutes();
         let finalMinutes = newSlotMinutes;
-        
+
         if (!slotRange.crossesMidnight) {
-          finalMinutes = Math.max(slotRange.start, Math.min(slotRange.end, newSlotMinutes));
+          finalMinutes = Math.max(
+            slotRange.start,
+            Math.min(slotRange.end, newSlotMinutes)
+          );
         } else {
-          if (newSlotMinutes < slotRange.start && newSlotMinutes > slotRange.end) {
-            const distToStart = (slotRange.start - newSlotMinutes + 1440) % 1440;
+          if (
+            newSlotMinutes < slotRange.start &&
+            newSlotMinutes > slotRange.end
+          ) {
+            const distToStart =
+              (slotRange.start - newSlotMinutes + 1440) % 1440;
             const distToEnd = (newSlotMinutes - slotRange.end + 1440) % 1440;
-            finalMinutes = distToStart < distToEnd ? slotRange.start : slotRange.end;
+            finalMinutes =
+              distToStart < distToEnd ? slotRange.start : slotRange.end;
           }
         }
-        
+
         const finalHour = Math.floor(finalMinutes / 60);
         const finalMin = finalMinutes % 60;
         const finalTimeLocal = new Date(newTimeLocal);
         finalTimeLocal.setHours(finalHour, finalMin, 0, 0);
         const finalUTC = toUTC(finalTimeLocal, userTimezone);
-        
+
         console.warn(
           `[Scheduler] ⚠️ Cannot find free time for slot ${currentSlot.id.substring(0, 8)}..., forcing shift to: UTC=${finalUTC.toISOString()}, Local=${finalTimeLocal.toISOString()} (range: [${slotRange.start}-${slotRange.end}])`
         );

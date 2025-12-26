@@ -13,7 +13,7 @@ import type {
   NotificationPreferenceMeta,
 } from '@/shared/dto/notifications';
 import { getSessionUser } from '@/server/application/auth/session';
-import { regenerateSlotsForSource } from '@/server/application/notifications/scheduler.service';
+import { generateAllSlotsForUser } from '@/server/application/notifications/scheduler.service';
 import { generateNotificationTexts } from '@/server/application/notifications/ai-generation.service';
 import { computeGenerationConfigHash } from '@/server/utils/notification-ai-config-hash';
 import { userPreferences } from '@/server/infrastructure/db/schema';
@@ -825,13 +825,10 @@ export default defineEventHandler(
               await new Promise((resolve) => setTimeout(resolve, 1000));
               // После генерации AI-текстов регенерируем слоты
               // Используем нормализованные (читаемые) значения для поиска настроек
-              return regenerateSlotsForSource(
-                userId,
-                kind as 'therapy' | 'habits',
-                {
-                  entityKey: normalizedEntityKey || undefined,
-                }
-              );
+              // ВАЖНО: Используем глобальную оркестрацию для правильного чередования тем
+              return generateAllSlotsForUser(userId, {
+                forceTodaySlots: true,
+              });
             })
             .then(() => {
               console.log(
@@ -850,13 +847,10 @@ export default defineEventHandler(
               );
               try {
                 await new Promise((resolve) => setTimeout(resolve, 1000));
-                await regenerateSlotsForSource(
-                  userId,
-                  kind as 'therapy' | 'habits',
-                  {
-                    entityKey: normalizedEntityKey || undefined,
-                  }
-                );
+                // ВАЖНО: Используем глобальную оркестрацию для правильного чередования тем
+                await generateAllSlotsForUser(userId, {
+                  forceTodaySlots: true,
+                });
                 console.log(
                   `[NotificationPrefs] ✅ Slots regenerated after AI generation error: user ${userId}, kind: ${kind}`
                 );
@@ -890,8 +884,9 @@ export default defineEventHandler(
 
       if (settingsChanged && !shouldRegenerateSlotsAfterAi) {
         try {
-          await regenerateSlotsForSource(userId, kind as 'therapy' | 'habits', {
-            entityKey: normalizedEntityKey || undefined,
+          // ВАЖНО: Используем глобальную оркестрацию для правильного чередования тем
+          await generateAllSlotsForUser(userId, {
+            forceTodaySlots: true,
           });
           console.log(
             `[NotificationPrefs] Slots regenerated for source: user ${userId}, kind: ${kind}`,
@@ -1138,14 +1133,10 @@ export default defineEventHandler(
             // Небольшая задержка, чтобы убедиться, что тексты сохранились в БД
             await new Promise((resolve) => setTimeout(resolve, 1000));
             // После генерации AI-текстов регенерируем слоты
-            // Используем нормализованные значения для поиска настроек
-            return regenerateSlotsForSource(
-              userId,
-              kind as 'therapy' | 'habits',
-              {
-                entityKey: normalizedEntityKey || undefined,
-              }
-            );
+            // ВАЖНО: Используем глобальную оркестрацию для правильного чередования тем
+            return generateAllSlotsForUser(userId, {
+              forceTodaySlots: true,
+            });
           })
           .then(() => {
             console.log(
@@ -1164,13 +1155,10 @@ export default defineEventHandler(
             );
             try {
               await new Promise((resolve) => setTimeout(resolve, 1000));
-              await regenerateSlotsForSource(
-                userId,
-                kind as 'therapy' | 'habits',
-                {
-                  entityKey: normalizedEntityKey || undefined,
-                }
-              );
+              // ВАЖНО: Используем глобальную оркестрацию для правильного чередования тем
+              await generateAllSlotsForUser(userId, {
+                forceTodaySlots: true,
+              });
               console.log(
                 `[NotificationPrefs] ✅ Slots regenerated after AI generation error: user ${userId}, kind: ${kind}`
               );
@@ -1185,8 +1173,9 @@ export default defineEventHandler(
         // Если AI-тексты не нужны (textSource !== 'ai' && textSource !== 'hybrid'),
         // генерируем слоты сразу
         try {
-          await regenerateSlotsForSource(userId, kind as 'therapy' | 'habits', {
-            entityKey: normalizedEntityKey || undefined,
+          // ВАЖНО: Используем глобальную оркестрацию для правильного чередования тем
+          await generateAllSlotsForUser(userId, {
+            forceTodaySlots: true,
           });
           console.log(
             `[NotificationPrefs] Slots generated for new source (no AI): user ${userId}, kind: ${kind}`,

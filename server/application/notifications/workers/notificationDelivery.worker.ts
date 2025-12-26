@@ -31,6 +31,19 @@ export function startNotificationDeliveryWorker() {
       );
 
       try {
+        const [slot] = await db
+          .select({ id: notificationSlots.id, status: notificationSlots.status })
+          .from(notificationSlots)
+          .where(eq(notificationSlots.id, slotId))
+          .limit(1);
+
+        if (!slot || slot.status !== 'queued') {
+          console.warn(
+            `[Notification Delivery Worker] ⏭️ Slot ${slotId} missing or not queued (status: ${slot?.status ?? 'missing'}), skipping send`
+          );
+          return { skipped: true, reason: 'slot_not_queued' };
+        }
+
         // Отправляем уведомление
         const successCount = await sendToUser(userId, payload);
 

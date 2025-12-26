@@ -46,8 +46,8 @@ export function useNotifications() {
         try {
           await LocalNotifications.createChannel?.({
             id: 'mentai_high',
-            name: 'MentAI High Priority',
-            description: 'Важные уведомления MentAI',
+            name: 'Mentala High Priority',
+            description: 'Важные уведомления Mentala',
             importance: 5, // IMPORTANCE_HIGH
             visibility: 1, // VISIBILITY_PUBLIC
             sound: 'default',
