@@ -5,8 +5,8 @@ import { CapacitorConfig } from '@capacitor/cli';
 const isDevServer = process.env.CAPACITOR_SERVER_URL;
 
 const config: CapacitorConfig = {
-  appId: 'com.mentai.app',
-  appName: 'MentAI',
+  appId: 'com.mentala.app',
+  appName: 'Mentala',
   webDir: '.output/public',
   server: isDevServer
     ? {
@@ -46,7 +46,7 @@ const config: CapacitorConfig = {
       presentationOptions: ['badge', 'sound', 'alert'],
     },
     LocalNotifications: {
-      smallIcon: 'ic_stat_icon_config_sample',
+      smallIcon: 'ic_stat_mentala',
       iconColor: '#488AFF',
     },
   },

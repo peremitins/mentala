@@ -154,12 +154,12 @@ export function startAiTextPoolWorker() {
             `[AI Text Pool Worker] ✅ Job ${job.id} completed: generated ${result.texts.length} texts`
           );
           return { success: true, textsGenerated: result.texts.length };
-        } else {
-          console.log(
-            `[AI Text Pool Worker] ⏭️ Job ${job.id} skipped: pool is full or no refill needed`
-          );
-          return { skipped: true, reason: 'pool_full' };
         }
+
+        console.log(
+          `[AI Text Pool Worker] ⏭️ Job ${job.id} skipped: pool is full or no refill needed`
+        );
+        return { skipped: true, reason: 'pool_full' };
       } catch (error) {
         console.error(`[AI Text Pool Worker] ❌ Job ${job.id} failed:`, error);
         throw error; // BullMQ сделает retry автоматически

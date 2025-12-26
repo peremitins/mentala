@@ -9,7 +9,7 @@
           class="rounded-3xl border border-border/20 bg-card/95 backdrop-blur-xl shadow-xl p-6"
         >
           <div class="text-center mb-6">
-            <div class="text-2xl font-semibold text-foreground">MentAI</div>
+            <div class="text-2xl font-semibold text-foreground">Mentala</div>
             <div class="text-sm text-muted-foreground">вход и регистрация</div>
           </div>
 

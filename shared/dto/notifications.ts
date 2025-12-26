@@ -254,6 +254,7 @@ export interface NotificationSlotDto {
 export interface NotificationPayload {
   title: string;
   body: string;
+  image?: string; // URL большого изображения для уведомлений (Android 7+, iOS)
   templateId?: string;
   action: string; // 'open' | 'snooze:15m' | 'snooze:1h' | ...
   deepLink?: string;

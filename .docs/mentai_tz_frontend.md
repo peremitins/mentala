@@ -1,4 +1,4 @@
-# MentAI — Техническое задание (Frontend)
+# Mentala — Техническое задание (Frontend)
 
 ## 1. Цель
 

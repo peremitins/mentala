@@ -1,51 +1,25 @@
 /**
  * Сервис планировщика уведомлений
- * Генерирует слоты на 1 день вперёд с глобальной оркестрацией
+ * Генерирует слоты на 2 дня вперёд (сегодня + завтра) с глобальной оркестрацией
  *
  * Использует BullMQ для постановки задач генерации слотов в очередь
- * (см. server/application/notifications/schedulers/notificationSlots.scheduler.ts)
  */
 
 import { eq } from 'drizzle-orm';
 import { db } from '@/server/infrastructure/db/client';
 import { notificationPreferences } from '@/server/infrastructure/db/schema';
 import type { NotificationKind } from '@/shared/dto/notifications';
-import { preventSimultaneousNotifications } from '@/server/application/notifications/prevent-overlap.service';
-import { regenerateSlotsForSourceInternal } from './regenerate-slots.service';
 import { needsSlotRegenerationInternal } from './needs-regeneration.service';
-import { findEnabledPreferencesByUser } from './repositories/notification-preferences.repository';
+import { orchestrateAllSlotsForUser } from './global-orchestration.service';
 
 // ==========================================
-// Конфигурация планировщика
+// Защита от параллельных регенераций
 // ==========================================
 
-// Флаг для детального логирования (можно включить через DEBUG_NOTIFICATIONS=true)
-const DEBUG_NOTIFICATIONS = process.env.DEBUG_NOTIFICATIONS === 'true';
-
-// Защита от одновременных вызовов regenerateSlotsForSource для одного источника
-// Ключ: `${userId}:${kind}:${entityKey || 'null'}`
+// Защита от одновременных вызовов generateAllSlotsForUser для одного пользователя
+// Ключ: userId (number)
 // Значение: Promise<void> - промис выполняющейся операции
-const activeRegenerations = new Map<string, Promise<void>>();
-
-/**
- * Получает ключ для отслеживания активных регенераций
- */
-function getRegenerationKey(
-  userId: number,
-  kind: NotificationKind,
-  entityKey?: string
-): string {
-  return `${userId}:${kind}:${entityKey || 'null'}`;
-}
-
-const SCHEDULE_CONFIG = {
-  horizonDays: 2, // Генерируем слоты на 2 дня вперёд (сегодня + завтра)
-  awakeWindowStart: '09:00', // Начало окна бодрствования (локальное время)
-  awakeWindowEnd: '22:30', // Конец окна бодрствования (локальное время)
-  jitterMinutes: 15, // Джиттер ±15 минут
-  maxDailyCap: 100, // Максимальный лимит уведомлений в день (защита)
-  minGapMinutes: 10, // Минимальный шаг между уведомлениями (унифицировано с regenerate-slots.service.ts)
-};
+const activeRegenerations = new Map<number, Promise<void>>();
 
 // ==========================================
 // УДАЛЕНО: Функция inferHabitKey была костылем
@@ -58,76 +32,74 @@ const SCHEDULE_CONFIG = {
 
 /**
  * Генерирует ВСЕ слоты для пользователя с глобальной оркестрацией
- * Распределяет уведомления равномерно по дню независимо от источника
+ * Распределяет уведомления равномерно по дню с чередованием тем
+ *
+ * ВАЖНО: Защищена от параллельных вызовов - если для одного пользователя
+ * уже выполняется регенерация, последующие вызовы будут ждать завершения
+ *
  * @param userId - ID пользователя
  */
-export async function generateAllSlotsForUser(userId: number): Promise<void> {
-  console.log(`[Scheduler] Starting global orchestration for user ${userId}`);
-
-  // 1. Получаем ВСЕ активные preferences пользователя через репозиторий
-  const allPrefs = await findEnabledPreferencesByUser(userId);
-
-  if (allPrefs.length === 0) {
-    console.log(`[Scheduler] No active preferences for user ${userId}`);
-    return;
+export async function generateAllSlotsForUser(
+  userId: number,
+  options?: {
+    forceTodaySlots?: boolean;
   }
-
-  // 2. Считаем общее количество уведомлений в день
-  const totalPerDay = allPrefs.reduce((sum, p) => sum + p.timesPerDay, 0);
-
-  console.log(
-    `[Scheduler] User ${userId}: ${allPrefs.length} sources, ${totalPerDay} notifications/day`
-  );
-
-  // 3. Проверяем лимит
-  if (totalPerDay > SCHEDULE_CONFIG.maxDailyCap) {
-    throw new Error(
-      `Too many notifications: ${totalPerDay} exceeds limit of ${SCHEDULE_CONFIG.maxDailyCap}`
+): Promise<void> {
+  // Проверяем, не выполняется ли уже регенерация для этого пользователя
+  const existingRegeneration = activeRegenerations.get(userId);
+  if (existingRegeneration) {
+    console.log(
+      `[Scheduler] ⏳ Regeneration already in progress for user ${userId}. Waiting for completion...`
     );
-  }
-
-  if (totalPerDay === 0) {
-    console.log(`[Scheduler] User ${userId} has 0 notifications/day`);
-    return;
-  }
-
-  // ВАЖНО: Вместо старой логики используем regenerateSlotsForSource для каждого источника
-  // Это обеспечивает правильную поддержку AI-текстов и textSource
-  // regenerateSlotsForSource сама удалит старые слоты и создаст новые с правильной логикой
-  console.log(
-    `[Scheduler] Using regenerateSlotsForSource for each source to support AI texts`
-  );
-
-  // Группируем preferences по источникам (kind + entityKey)
-  const sourceMap = new Map<string, (typeof allPrefs)[0]>();
-  for (const pref of allPrefs) {
-    const sourceKey = `${pref.kind}:${pref.entityKey || 'null'}`;
-    if (!sourceMap.has(sourceKey)) {
-      sourceMap.set(sourceKey, pref);
-    }
-  }
-
-  // Регенерируем слоты для каждого источника отдельно
-  for (const pref of sourceMap.values()) {
+    // Ждем завершения существующей операции
     try {
-      await regenerateSlotsForSource(userId, pref.kind as NotificationKind, {
-        entityKey: pref.entityKey ?? undefined,
-      });
+      await existingRegeneration;
+      console.log(
+        `[Scheduler] ✅ Previous regeneration completed, skipping duplicate call for user ${userId}`
+      );
+      return;
     } catch (error) {
-      console.error(
-        `[Scheduler] Failed to regenerate slots for source: user ${userId}, kind: ${pref.kind}, entityKey: ${pref.entityKey || 'none'}`,
+      // Если предыдущая операция завершилась с ошибкой, продолжаем
+      console.warn(
+        `[Scheduler] ⚠️ Previous regeneration failed, starting new one for user ${userId}:`,
         error
       );
     }
   }
 
-  // ВАЖНО: После генерации всех слотов проверяем и исправляем пересечения
-  // Это предотвращает ситуацию, когда в одно время прилетает 2+ уведомлений
-  await preventSimultaneousNotifications(userId, SCHEDULE_CONFIG.minGapMinutes);
+  console.log(`[Scheduler] Starting global orchestration for user ${userId}`);
 
-  console.log(
-    `[Scheduler] ✅ Generated slots for ${sourceMap.size} sources using regenerateSlotsForSource`
-  );
+  // Создаем новую операцию регенерации
+  const regenerationPromise = (async () => {
+    // Используем новый сервис глобальной оркестрации
+    // Он обеспечивает:
+    // - Равномерное распределение по дням
+    // - Чередование тем (не более 2 подряд)
+    // - Weighted round-robin по группам
+    // - Частичное распределение при позднем включении
+    // - Поддержку фиксированных времен
+    // - Поддержку AI-текстов
+    await orchestrateAllSlotsForUser(userId, options);
+  })();
+
+  // ✅ КОРРЕКТНАЯ РЕАЛИЗАЦИЯ: Сохраняем промис в Map ПЕРЕД await
+  // Это гарантирует, что последующие вызовы для того же пользователя будут ждать завершения текущей операции
+  activeRegenerations.set(userId, regenerationPromise);
+
+  try {
+    // Ждем завершения операции
+    await regenerationPromise;
+    console.log(
+      `[Scheduler] ✅ Completed global orchestration for user ${userId}`
+    );
+  } finally {
+    // ✅ КОРРЕКТНАЯ РЕАЛИЗАЦИЯ: Удаляем промис из Map после завершения операции (всегда, даже при ошибке)
+    // Это гарантирует, что Map не будет расти бесконечно и последующие вызовы смогут создать новую операцию
+    activeRegenerations.delete(userId);
+    console.log(
+      `[Scheduler] 🧹 Cleaned up regeneration promise for user ${userId}`
+    );
+  }
 }
 
 // ==========================================
@@ -147,10 +119,12 @@ export async function needsSlotRegeneration(userId: number): Promise<boolean> {
 
 /**
  * Пересоздать слоты для всех пользователей с активными настройками
- * Вызывается по cron (например, каждую ночь в 00:30 UTC)
+ * Может использоваться для ручного запуска регенерации (админские задачи, миграции)
  *
- * Примечание: Для периодической регенерации используется планировщик BullMQ
- * (см. server/application/notifications/schedulers/notificationSlots.scheduler.ts)
+ * ПРИМЕЧАНИЕ: Периодическая регенерация отключена. Регенерация происходит event-driven образом:
+ * - При изменении настроек уведомлений
+ * - При изменении timezone
+ * - При первом включении уведомлений
  */
 export async function regenerateAllSlots(): Promise<void> {
   console.log('[Scheduler] Regenerating slots for all users');
@@ -182,12 +156,17 @@ export async function regenerateAllSlots(): Promise<void> {
 }
 
 /**
- * Регенерирует слоты только для конкретного источника (entityKey)
- * Удаляет старые слоты для этого источника и пересоздает только их с учетом новых настроек
- * Сохраняет существующие слоты для других источников
+ * Регенерирует слоты для конкретного источника уведомлений
+ * ВАЖНО: Теперь использует глобальную оркестрацию через generateAllSlotsForUser
+ * для правильного чередования тем и weighted round-robin
+ *
+ * ВНИМАНИЕ: Параметры kind и entityKey игнорируются - регенерируются ВСЕ источники пользователя.
+ * Это необходимо для правильного чередования тем и weighted round-robin.
+ *
  * @param userId - ID пользователя
- * @param kind - фокус уведомлений (therapy | habits)
- * @param options - параметры источника (entityKey для идентификации)
+ * @param kind - тип уведомлений ('therapy' | 'habits') - игнорируется, регенерируются все источники
+ * @param options - параметры источника (entityKey) - игнорируется, регенерируются все источники
+ * @deprecated Используйте generateAllSlotsForUser напрямую для явности. Эта функция оставлена только для обратной совместимости.
  */
 export async function regenerateSlotsForSource(
   userId: number,
@@ -196,72 +175,32 @@ export async function regenerateSlotsForSource(
     entityKey?: string;
   }
 ): Promise<void> {
-  const { entityKey } = options || {};
-  const regenerationKey = getRegenerationKey(userId, kind, entityKey);
-
-  // Проверяем, не выполняется ли уже регенерация для этого источника
-  const existingRegeneration = activeRegenerations.get(regenerationKey);
-  if (existingRegeneration) {
-    console.log(
-      `[Scheduler] ⏳ Regeneration already in progress for source: user ${userId}, kind: ${kind}, entityKey: ${entityKey || 'none'}. Waiting for completion...`
-    );
-    // Ждем завершения существующей операции
-    try {
-      await existingRegeneration;
-      console.log(
-        `[Scheduler] ✅ Previous regeneration completed, skipping duplicate call: user ${userId}, kind: ${kind}, entityKey: ${entityKey || 'none'}`
-      );
-      return;
-    } catch (error) {
-      // Если предыдущая операция завершилась с ошибкой, продолжаем
-      console.warn(
-        `[Scheduler] ⚠️ Previous regeneration failed, starting new one: user ${userId}, kind: ${kind}, entityKey: ${entityKey || 'none'}`,
-        error
-      );
-    }
-  }
-
-  // Создаем новую операцию регенерации
-  const regenerationPromise = regenerateSlotsForSourceInternal(
-    userId,
-    kind,
-    options
+  // ВАЖНО: Используем глобальную оркестрацию для всех источников
+  // Это обеспечивает правильное чередование тем и weighted round-robin
+  // Параметры kind и options игнорируются - регенерируются все источники пользователя
+  console.log(
+    `[Scheduler] regenerateSlotsForSource called for user ${userId}, kind: ${kind}, entityKey: ${options?.entityKey || 'none'}. Using global orchestration instead (all sources will be regenerated).`
   );
-
-  // ✅ КОРРЕКТНАЯ РЕАЛИЗАЦИЯ: Сохраняем промис в Map ПЕРЕД await
-  // Это гарантирует, что последующие вызовы для того же источника будут ждать завершения текущей операции
-  activeRegenerations.set(regenerationKey, regenerationPromise);
-
-  try {
-    // Ждем завершения операции
-    await regenerationPromise;
-  } finally {
-    // ✅ КОРРЕКТНАЯ РЕАЛИЗАЦИЯ: Удаляем промис из Map после завершения операции (всегда, даже при ошибке)
-    // Это гарантирует, что Map не будет расти бесконечно и последующие вызовы смогут создать новую операцию
-    activeRegenerations.delete(regenerationKey);
-    console.log(
-      `[Scheduler] 🧹 Cleaned up regeneration promise for: user ${userId}, kind: ${kind}, entityKey: ${entityKey || 'none'}`
-    );
-  }
+  await generateAllSlotsForUser(userId);
 }
 
 /**
  * Триггер для пересоздания слотов при изменении настроек
  * Вызывается из API endpoints при PUT /api/notifications/prefs/:kind
- * Теперь использует регенерацию только для конкретного источника
+ * ВАЖНО: Всегда использует глобальную оркестрацию для правильного чередования тем
  */
 export async function triggerSlotRegeneration(
   userId: number,
   kind?: NotificationKind,
   options?: {
     entityKey?: string;
+    forceTodaySlots?: boolean;
   }
 ): Promise<void> {
-  if (kind) {
-    // Регенерируем только для конкретного источника
-    await regenerateSlotsForSource(userId, kind, options);
-  } else {
-    // Если kind не указан, пересоздаем все слоты (fallback)
-    await generateAllSlotsForUser(userId);
-  }
+  // Всегда используем глобальную оркестрацию для всех источников
+  // Это обеспечивает правильное чередование тем и weighted round-robin
+  // При изменении настроек одного источника пересоздаём все слоты с новой логикой
+  await generateAllSlotsForUser(userId, {
+    forceTodaySlots: options?.forceTodaySlots ?? false,
+  });
 }

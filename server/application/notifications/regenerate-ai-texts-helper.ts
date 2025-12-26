@@ -176,17 +176,17 @@ export async function regenerateAiTextsForEntity(params: {
         console.log(
           `[RegenerateAI] Regenerating slots for entity: kind=${kind}, entityKey=${entityKey}`
         );
-        const { regenerateSlotsForSource } = await import(
+        const { generateAllSlotsForUser } = await import(
           '@/server/application/notifications/scheduler.service'
         );
         // Небольшая задержка, чтобы убедиться, что все AI-тексты сохранились в БД
         await new Promise((resolve) => setTimeout(resolve, 1000));
         try {
-          await regenerateSlotsForSource(Number(userId), kind, {
-            entityKey, // ID для кастомных сущностей
-          });
+          // ВАЖНО: Используем глобальную оркестрацию для правильного чередования тем
+          // При регенерации AI-текстов пересоздаём все слоты с новой логикой
+          await generateAllSlotsForUser(Number(userId));
           console.log(
-            `[RegenerateAI] ✅ Slots regenerated for entity: kind=${kind}, entityKey=${entityKey}`
+            `[RegenerateAI] ✅ Slots regenerated using global orchestration for user ${userId}`
           );
         } catch (error) {
           console.error(

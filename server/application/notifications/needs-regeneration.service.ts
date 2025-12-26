@@ -7,7 +7,7 @@ import {
   countPlannedSlotsFromDate,
   countPlannedSlotsForTomorrowNightMode,
 } from './repositories/notification-slots.repository';
-import { computeDayOfYear } from './regenerate-slots.service';
+import { computeDayOfYear } from './notification-date.utils';
 import { getTimezoneFromPrefs, toLocalTime, toUTC } from './timezone.utils';
 
 /**
