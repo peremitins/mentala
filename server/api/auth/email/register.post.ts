@@ -1,93 +1,109 @@
-import { createError, getHeader } from 'h3';
+import { setResponseHeader } from 'h3';
+import argon2 from 'argon2';
+import { eq } from 'drizzle-orm';
 import { db } from '@/server/infrastructure/db/client';
 import { users } from '@/server/infrastructure/db/schema';
-import { eq } from 'drizzle-orm';
-import { rotateSessionId } from '@/server/application/auth/session';
-import argon2 from 'argon2';
 import { getTimezoneFromRequest } from '@/server/application/notifications/timezone.utils';
-import { activateTrialForUser } from '@/server/application/subscriptions/trial.service';
+import { getClientIp } from '@/server/utils/ip';
+import {
+  AUTH_CODE_TTL_SECONDS,
+  getEmailPasswordKey,
+  getEmailVerificationKey,
+  normalizeEmail,
+  storeTempPasswordHash,
+} from '@/server/application/auth/verification';
+import { checkRateLimit } from '@/server/application/auth/rate-limit';
+import { AuthRegisterDto } from '@/shared/dto/auth';
+import { issueVerificationCode } from '@/server/application/auth/email-verification.service';
 
 export default defineEventHandler(async (event) => {
-  const body = await readBody<{
-    name?: string;
-    email: string;
-    password: string;
-    locale?: string;
-    timezone?: string; // Опционально, но приоритет у заголовка X-Timezone
-  }>(event as any);
-  if (!body?.email || !body?.password) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'Missing email or password',
-    });
+  const body = AuthRegisterDto.parse(await readBody(event as any));
+  const email = normalizeEmail(body.email);
+  const ip = getClientIp(event) || 'unknown';
+
+  const rateLimits = await Promise.all([
+    checkRateLimit(`auth:rate_limit:email_verification:ip:${ip}`, 5, 3600),
+    checkRateLimit(
+      `auth:rate_limit:email_verification:email:${email}`,
+      3,
+      3600
+    ),
+    checkRateLimit(
+      `auth:rate_limit:email_verification:ip_email:${ip}:${email}`,
+      5,
+      3600
+    ),
+  ]);
+  const blocked = rateLimits.find((limit) => !limit.allowed);
+  if (blocked?.retryAfter) {
+    setResponseHeader(event, 'Retry-After', String(blocked.retryAfter));
   }
+
+  if (blocked && !blocked.allowed) {
+    return {
+      message:
+        'Если аккаунт существует, мы отправили письмо с кодом подтверждения',
+      retryAfter: blocked.retryAfter,
+    };
+  }
+
   const existing = await db
     .select()
     .from(users)
-    .where(eq(users.email, body.email))
+    .where(eq(users.email, email))
     .limit(1);
+
   if (existing.length) {
-    throw createError({
-      statusCode: 409,
-      statusMessage: 'Email already registered',
-    });
+    if (!existing[0].emailVerifiedAt) {
+      const passwordHash = await argon2.hash(body.password, {
+        type: argon2.argon2id,
+      });
+      await storeTempPasswordHash(
+        getEmailPasswordKey(email),
+        passwordHash,
+        AUTH_CODE_TTL_SECONDS
+      );
+
+      if (!existing[0].name && body.name) {
+        await db
+          .update(users)
+          .set({ name: body.name, updatedAt: new Date() })
+          .where(eq(users.id, existing[0].id));
+      }
+
+      await issueVerificationCode(getEmailVerificationKey(email), email);
+    }
+
+    return {
+      message:
+        'Если аккаунт существует, мы отправили письмо с кодом подтверждения',
+    };
   }
 
-  // Получить timezone из запроса (заголовок X-Timezone или body.timezone)
   const timezone = getTimezoneFromRequest(event);
 
-  const hash = await argon2.hash(body.password, { type: argon2.argon2id });
-  const [u] = await db
-    .insert(users)
-    .values({
-      name: body.name ?? null,
-      email: body.email,
-      passwordHash: hash,
-      locale: body.locale ?? null,
-      timezone: timezone || 'Europe/Moscow', // Сохраняем timezone при регистрации
-    })
-    .returning();
+  await db.insert(users).values({
+    name: body.name ?? null,
+    email,
+    emailVerifiedAt: null,
+    passwordHash: null,
+    locale: body.locale ?? null,
+    timezone: timezone || 'Europe/Moscow',
+  });
 
-  // Активируем Trial для нового пользователя (или создаем Basic без Trial)
-  // ВАЖНО: Всегда создаем подписку Basic при регистрации
-  try {
-    const subscription = await activateTrialForUser(u.id, timezone);
-    if (subscription) {
-      console.log(
-        `[Auth] ✅ Subscription created for user ${u.id}: planId=${subscription.planId}, paymentStatus=${subscription.paymentStatus}`
-      );
-    } else {
-      console.warn(
-        `[Auth] ⚠️ activateTrialForUser returned null for user ${u.id}`
-      );
-    }
-  } catch (error: any) {
-    console.error(
-      `[Auth] ❌ Failed to activate trial/subscription for user ${u.id}:`,
-      error
-    );
-    console.error(`[Auth] Error details:`, error?.message, error?.stack);
-    // Не блокируем регистрацию, если подписка не активировалась, но логируем ошибку
-  }
+  const passwordHash = await argon2.hash(body.password, {
+    type: argon2.argon2id,
+  });
+  await storeTempPasswordHash(
+    getEmailPasswordKey(email),
+    passwordHash,
+    AUTH_CODE_TTL_SECONDS
+  );
 
-  // Ротация session ID при регистрации (защита от session fixation)
-  const sessionId = await rotateSessionId(event, u.id, body.locale);
-  
-  // Определяем, является ли запрос от native платформы (Capacitor)
-  const platform = String(getHeader(event, 'x-platform') || '').toLowerCase();
-  const isNative = platform === 'ios' || platform === 'android';
-  
+  await issueVerificationCode(getEmailVerificationKey(email), email);
+
   return {
-    user: {
-      id: u.id,
-      name: u.name,
-      email: u.email,
-      locale: u.locale,
-      role: u.roleId || 'user',
-      isBlocked: u.isBlocked || false,
-    },
-    // Отдаем sessionToken только для native платформ (Capacitor)
-    // Для web используем только httpOnly cookie
-    ...(isNative ? { sessionToken: sessionId } : {}),
+    message:
+      'Если аккаунт существует, мы отправили письмо с кодом подтверждения',
   };
 });

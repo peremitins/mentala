@@ -3,8 +3,17 @@ import { useChatSettingsStore } from '@/app/stores/chatSettings';
 import { useSubscriptionStore } from '@/app/stores/subscription';
 
 export default defineNuxtRouteMiddleware(async (to) => {
-  const publicRoutes = ['/auth', '/error'];
-  if (publicRoutes.includes(to.path)) return;
+  // Публичные маршруты, не требующие авторизации
+  const publicRoutes = ['/auth', '/error', '/forgot', '/reset-password'];
+
+  // Явная проверка для /auth/link (может быть с query параметрами)
+  if (to.path === '/auth/link' || to.path.startsWith('/auth/link')) {
+    return; // Пропускаем проверку авторизации
+  }
+
+  if (publicRoutes.includes(to.path)) {
+    return;
+  }
 
   // Проверяем только на клиенте, чтобы избежать проблем с SSR
   if (process.server) return;

@@ -6,6 +6,11 @@ import { eq, and } from 'drizzle-orm';
 import { createSession } from './session';
 import { activateTrialForUser } from '@/server/application/subscriptions/trial.service';
 import {
+  generateLinkingToken,
+  storeLinkingData,
+} from '@/server/application/auth/oauth-linking';
+import { normalizeEmail } from '@/server/application/auth/verification';
+import {
   OAUTH_STATE_COOKIE_NAME,
   OAUTH_REDIRECT_COOKIE_NAME,
   LANG_COOKIE_NAME,
@@ -15,6 +20,9 @@ import {
 const isProd = process.env.NODE_ENV === 'production';
 
 export type Provider = 'google' | 'vk';
+export type OAuthResult =
+  | { status: 'linked'; userId: number; isNewUser: boolean }
+  | { status: 'linking_required'; linkingToken: string; email: string };
 
 export function makeState() {
   return randomBytes(16).toString('hex');
@@ -87,12 +95,12 @@ export async function upsertUserWithOAuth(
   profile: {
     providerUserId: string;
     email?: string | null;
+    emailVerified?: boolean;
     name?: string | null;
     avatarUrl?: string | null;
     locale?: string | null;
-  },
-  tokens?: { access_token?: string; refresh_token?: string; expires_at?: Date }
-) {
+  }
+): Promise<OAuthResult> {
   const acc = await db
     .select()
     .from(oauthAccounts)
@@ -106,94 +114,187 @@ export async function upsertUserWithOAuth(
 
   let userId: number | null = null;
   let isNewUser = false;
+  const normalizedEmail = profile.email ? normalizeEmail(profile.email) : null;
 
   if (acc.length) {
     userId = acc[0].userId as number;
     await db
       .update(oauthAccounts)
       .set({
-        accessToken: tokens?.access_token ?? null,
-        refreshToken: tokens?.refresh_token ?? null,
-        expiresAt: tokens?.expires_at ?? null,
+        accessToken: null,
+        refreshToken: null,
+        expiresAt: null,
       })
       .where(eq(oauthAccounts.id, acc[0].id));
-  } else {
-    if (profile.email) {
-      const u = await db
+
+    const existingUser = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    if (existingUser.length && existingUser[0].deletedAt) {
+      await db
+        .update(users)
+        .set({ deletedAt: null, deletionRequestedAt: null })
+        .where(eq(users.id, userId));
+    }
+
+    if (!existingUser.length) {
+      if (!normalizedEmail) {
+        throw createError({
+          statusCode: 400,
+          statusMessage: 'OAuth не вернул email',
+        });
+      }
+
+      const userByEmail = await db
         .select()
         .from(users)
-        .where(eq(users.email, profile.email))
+        .where(eq(users.email, normalizedEmail))
         .limit(1);
-      if (u.length) userId = u[0].id;
-    }
-    if (!userId) {
-      const [u] = await db
-        .insert(users)
-        .values({
-          email: profile.email ?? null,
-          name: profile.name ?? null,
-          avatarUrl: profile.avatarUrl ?? null,
-          locale: profile.locale ?? null,
-        })
-        .returning();
-      userId = u.id;
-      isNewUser = true;
 
-      // Активируем Trial для нового пользователя (или создаем Basic без Trial, если уже использовал)
-      // ВАЖНО: Всегда создаем подписку Basic при регистрации
-      try {
-        const subscription = await activateTrialForUser(userId);
-        if (subscription) {
-          console.log(
-            `[OAuth] ✅ Subscription created for new user ${userId}: planId=${subscription.planId}, paymentStatus=${subscription.paymentStatus}`
-          );
-        } else {
-          console.warn(
-            `[OAuth] ⚠️ activateTrialForUser returned null for new user ${userId}`
-          );
+      if (userByEmail.length) {
+        if (userByEmail[0].deletedAt) {
+          await db
+            .update(users)
+            .set({ deletedAt: null, deletionRequestedAt: null })
+            .where(eq(users.id, userByEmail[0].id));
         }
-      } catch (error: any) {
-        console.error(
-          `[OAuth] ❌ Failed to activate trial/subscription for new user ${userId}:`,
-          error
-        );
-        console.error(`[OAuth] Error details:`, error?.message, error?.stack);
-        // Не блокируем регистрацию, если подписка не активировалась, но логируем ошибку
+        userId = userByEmail[0].id;
+      } else {
+        const [createdUser] = await db
+          .insert(users)
+          .values({
+            email: normalizedEmail,
+            emailVerifiedAt: profile.emailVerified ? new Date() : null,
+            name: profile.name ?? null,
+            avatarUrl: profile.avatarUrl ?? null,
+            locale: profile.locale ?? null,
+          })
+          .returning();
+        userId = createdUser.id;
+        isNewUser = true;
       }
-    } else {
-      // Пользователь уже существует - проверяем, есть ли у него подписка
-      // Если нет - создаем Basic (без Trial, если hasUsedTrial уже true)
-      try {
-        const subscription = await activateTrialForUser(userId);
-        if (subscription) {
-          console.log(
-            `[OAuth] ✅ Ensured subscription exists for existing user ${userId}: planId=${subscription.planId}, paymentStatus=${subscription.paymentStatus}`
-          );
-        } else {
-          console.warn(
-            `[OAuth] ⚠️ activateTrialForUser returned null for existing user ${userId}`
-          );
-        }
-      } catch (error: any) {
-        console.error(
-          `[OAuth] ❌ Failed to ensure subscription for existing user ${userId}:`,
-          error
-        );
-        console.error(`[OAuth] Error details:`, error?.message, error?.stack);
-        // Не блокируем вход, если подписка не создалась, но логируем ошибку
+
+      await db
+        .update(oauthAccounts)
+        .set({ userId: userId! })
+        .where(eq(oauthAccounts.id, acc[0].id));
+    }
+
+    const currentUser = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    if (currentUser.length) {
+      const current = currentUser[0];
+      const updates: Partial<typeof users.$inferInsert> = {};
+      if (!current.name && profile.name) updates.name = profile.name;
+      if (!current.avatarUrl && profile.avatarUrl)
+        updates.avatarUrl = profile.avatarUrl;
+      if (!current.emailVerifiedAt && profile.emailVerified) {
+        updates.emailVerifiedAt = new Date();
+      }
+      if (Object.keys(updates).length) {
+        await db.update(users).set(updates).where(eq(users.id, userId!));
       }
     }
+
+    try {
+      const subscription = await activateTrialForUser(userId!);
+      if (subscription) {
+        console.log(
+          `[OAuth] ✅ Ensured subscription exists for user ${userId}: planId=${subscription.planId}, paymentStatus=${subscription.paymentStatus}`
+        );
+      } else {
+        console.warn(
+          `[OAuth] ⚠️ activateTrialForUser returned null for user ${userId}`
+        );
+      }
+    } catch (error: any) {
+      console.error(
+        `[OAuth] ❌ Failed to ensure subscription for user ${userId}:`,
+        error
+      );
+      console.error(`[OAuth] Error details:`, error?.message, error?.stack);
+    }
+  } else {
+    if (!normalizedEmail) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'OAuth не вернул email',
+      });
+    }
+
+    const u = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, normalizedEmail))
+      .limit(1);
+    if (u.length) {
+      const linkingToken = generateLinkingToken();
+      await storeLinkingData(linkingToken, {
+        provider,
+        providerUserId: profile.providerUserId,
+        email: normalizedEmail,
+        name: profile.name ?? null,
+        avatarUrl: profile.avatarUrl ?? null,
+        locale: profile.locale ?? null,
+      });
+      return {
+        status: 'linking_required',
+        linkingToken,
+        email: normalizedEmail,
+      };
+    }
+
+    const [createdUser] = await db
+      .insert(users)
+      .values({
+        email: normalizedEmail,
+        emailVerifiedAt: profile.emailVerified ? new Date() : null,
+        name: profile.name ?? null,
+        avatarUrl: profile.avatarUrl ?? null,
+        locale: profile.locale ?? null,
+      })
+      .returning();
+    userId = createdUser.id;
+    isNewUser = true;
+
+    try {
+      const subscription = await activateTrialForUser(userId);
+      if (subscription) {
+        console.log(
+          `[OAuth] ✅ Subscription created for new user ${userId}: planId=${subscription.planId}, paymentStatus=${subscription.paymentStatus}`
+        );
+      } else {
+        console.warn(
+          `[OAuth] ⚠️ activateTrialForUser returned null for new user ${userId}`
+        );
+      }
+    } catch (error: any) {
+      console.error(
+        `[OAuth] ❌ Failed to activate trial/subscription for new user ${userId}:`,
+        error
+      );
+      console.error(`[OAuth] Error details:`, error?.message, error?.stack);
+    }
+
     await db.insert(oauthAccounts).values({
       userId: userId!,
       provider,
       providerUserId: profile.providerUserId,
-      accessToken: tokens?.access_token ?? null,
-      refreshToken: tokens?.refresh_token ?? null,
-      expiresAt: tokens?.expires_at ?? null,
+      accessToken: null,
+      refreshToken: null,
+      expiresAt: null,
     });
   }
+
   await createSession(event, userId!, profile.locale ?? undefined);
-  return userId!;
+  return { status: 'linked', userId: userId!, isNewUser };
 }
 
 export async function postForm<T = any>(

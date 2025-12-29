@@ -176,6 +176,116 @@ PUBLIC_APP_ORIGIN=https://app.mentala.com
 
 ---
 
+## ✉️ Email и верификация (обязательно для prod, опционально для dev)
+
+## 🧹 Удаление аккаунта (опционально)
+
+### `AUTH_DELETE_GRACE_DAYS`
+
+**Описание:** Сколько дней даётся на восстановление после запроса удаления.
+
+**Формат:** Число дней (0 или пусто — удаление сразу).
+
+**Примеры:**
+
+```bash
+# Удалять сразу
+AUTH_DELETE_GRACE_DAYS=0
+
+# Окно восстановления 7 дней
+AUTH_DELETE_GRACE_DAYS=7
+```
+
+**Где используется:**
+
+- `/api/user/delete` — включает 2‑фазное удаление и постановку задачи в очередь
+
+
+### `AUTH_EMAIL_CODE_SECRET`
+
+**Описание:** Secret для хеширования 6-значных кодов подтверждения email.
+
+**Формат:** Строка (минимум 32 символа).
+
+**Где используется:**
+
+- Хеширование и проверка кода верификации email
+- Защита от подбора и timing атак
+
+---
+
+### `AUTH_EMAIL_CODE_SECRET_PREVIOUS` (опционально)
+
+**Описание:** Предыдущий secret для безопасной ротации.
+
+**Где используется:**
+
+- Позволяет валидировать коды, созданные до ротации секретов
+
+---
+
+### SMTP (Yandex)
+
+**Переменные:**
+
+```bash
+SMTP_HOST=smtp.yandex.ru
+SMTP_PORT=465
+SMTP_SECURE=true
+SMTP_USER=your-email@yandex.ru
+SMTP_PASSWORD=your-app-password
+SMTP_FROM=your-email@yandex.ru
+SMTP_FROM_NAME=Mentala
+```
+
+**Где используется:**
+
+- Отправка кодов подтверждения email через nodemailer
+
+---
+
+### `AUTH_CLEANUP_ENABLED` (опционально)
+
+**Описание:** Включает ежедневную очистку незавершённых аккаунтов.
+
+**Значения:**
+
+- `true` (по умолчанию)
+- `false` — отключить очистку
+
+---
+
+## 🔐 OAuth Google (Web + Native)
+
+### `NUXT_OAUTH_GOOGLE_CLIENT_ID`
+
+**Описание:** Web OAuth Client ID для server-side web callback (`/api/auth/google/callback`) и для валидации ID token на backend.
+
+**Где используется:**
+
+- Web OAuth (Authorization Code)
+- Валидация ID token для нативного Google Sign-In
+
+---
+
+### `NUXT_OAUTH_GOOGLE_CLIENT_SECRET`
+
+**Описание:** Секрет Web OAuth клиента (нужен только серверу).
+
+---
+
+### `NUXT_PUBLIC_GOOGLE_WEB_CLIENT_ID`
+
+**Описание:** Публичный Web Client ID для инициализации нативного Google Sign-In (Android/iOS).\nЕсли не задан, используется `NUXT_OAUTH_GOOGLE_CLIENT_ID`.
+
+---
+
+### `NUXT_PUBLIC_GOOGLE_IOS_CLIENT_ID`
+
+**Описание:** iOS Client ID для Google Sign-In (нужен для iOS).\nБерётся из Google Cloud Console (iOS OAuth client).
+
+---
+
 ## 🧪 Проверка конфигурации
 
 После настройки переменных окружения проверьте:

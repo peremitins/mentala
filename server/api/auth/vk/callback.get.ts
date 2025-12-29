@@ -3,6 +3,7 @@ import {
   need,
   upsertUserWithOAuth,
 } from '@/server/application/auth/oauth';
+import { resolveAppUrl } from '@/server/application/auth/oauth-redirect';
 
 export default defineEventHandler(async (event) => {
   const cfg = useRuntimeConfig(event);
@@ -10,7 +11,7 @@ export default defineEventHandler(async (event) => {
     cfg.OAUTH_VK_CLIENT_ID || process.env.NUXT_OAUTH_VK_CLIENT_ID;
   const clientSecret =
     cfg.OAUTH_VK_CLIENT_SECRET || process.env.NUXT_OAUTH_VK_CLIENT_SECRET;
-  const appUrl = cfg.public.appUrl || 'http://localhost:3000';
+  const appUrl = resolveAppUrl(event, cfg.public.appUrl);
 
   const { code, state } = getQuery(event);
   const { state: saved, redirect, locale } = consumeOAuthCookies(event);
@@ -29,6 +30,11 @@ export default defineEventHandler(async (event) => {
 
   const providerUserId = String(tokenRes.user_id);
   const email = tokenRes.email || null;
+  const emailVerified = Boolean(email);
+
+  if (!email) {
+    return sendRedirect(event, `${appUrl}/auth?error=email_required`, 303);
+  }
 
   const usersGet = await $fetch<any>('https://api.vk.com/method/users.get', {
     query: {
@@ -43,22 +49,23 @@ export default defineEventHandler(async (event) => {
     [info.first_name, info.last_name].filter(Boolean).join(' ') || null;
   const avatarUrl = info.photo_200 || null;
 
-  await upsertUserWithOAuth(
-    event,
-    'vk',
-    {
-      providerUserId,
-      email,
-      name,
-      avatarUrl,
-      locale: locale ?? null,
-    },
-    {
-      access_token: tokenRes.access_token,
-      refresh_token: null,
-      expires_at: undefined,
-    }
-  );
+  const result = await upsertUserWithOAuth(event, 'vk', {
+    providerUserId,
+    email,
+    emailVerified,
+    name,
+    avatarUrl,
+    locale: locale ?? null,
+  });
 
-  return sendRedirect(event, String(redirect || '/'), 302);
+  if (result.status === 'linking_required') {
+    const backUrl = redirect ? new URL(redirect, appUrl) : new URL('/', appUrl);
+    const linkUrl = new URL('/auth/link', appUrl);
+    linkUrl.searchParams.set('token', result.linkingToken);
+    linkUrl.searchParams.set('email', result.email);
+    linkUrl.searchParams.set('back', backUrl.toString());
+    return sendRedirect(event, linkUrl.toString(), 303);
+  }
+
+  return sendRedirect(event, redirect || `${appUrl}/`, 303);
 });

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+export * from './auth';
 
 export const UserDto = z.object({
   id: z.string().uuid().optional(),

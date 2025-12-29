@@ -74,7 +74,15 @@ export default defineNuxtPlugin(() => {
   const isCapacitor = Capacitor.isNativePlatform();
 
   // apiBase: пустой для Web и Capacitor dev, полный URL для Capacitor prod
-  const baseURL = (config.public as any).apiBase || '';
+  const apiBase = (config.public as any).apiBase || '';
+  const isDev =
+    (config.public as any).isDev === true ||
+    (!import.meta.env?.PROD && import.meta.env?.MODE !== 'production');
+  const appOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+  const baseURL =
+    isCapacitor && isDev && appOrigin && apiBase && apiBase !== appOrigin
+      ? appOrigin
+      : apiBase || '';
 
   const SESSION_TOKEN_KEY = 'mentai.session.token';
 
@@ -305,14 +313,27 @@ export default defineNuxtPlugin(() => {
         `${response?.status || 'Network'} ${response?.statusText || 'Request Error'}`;
 
       // Авто‑тост ошибок
-      useToast('Ошибка запроса', String(message));
+      useToast('Ошибка запроса', String(message), 'error');
 
       if (response?.status === 401) {
         // Очищаем токен при 401 ошибке (неавторизован)
         if (isCapacitor && typeof window !== 'undefined') {
           localStorage.removeItem(SESSION_TOKEN_KEY);
         }
-        router.push('/auth');
+        // Не редиректим на /auth для публичных маршрутов
+        const currentPath = router.currentRoute.value?.path || '';
+        const publicRoutes = [
+          '/auth',
+          '/auth/link',
+          '/forgot',
+          '/reset-password',
+        ];
+        if (
+          !publicRoutes.includes(currentPath) &&
+          !currentPath.startsWith('/auth/link')
+        ) {
+          router.push('/auth');
+        }
       }
     },
   });

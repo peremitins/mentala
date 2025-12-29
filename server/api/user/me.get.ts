@@ -13,6 +13,8 @@ export default defineEventHandler(async (event) => {
         locale: user.locale,
         role: user.role,
         isBlocked: user.isBlocked,
+        emailVerifiedAt: user.emailVerifiedAt,
+        hasPassword: !!user.passwordHash,
       },
     };
   }

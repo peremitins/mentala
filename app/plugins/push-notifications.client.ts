@@ -42,11 +42,40 @@ export default defineNuxtPlugin((nuxtApp) => {
         window.localStorage.setItem('pushToken', token.value);
       }
 
-      // Регистрируем на сервере
+      // Регистрируем на сервере (только если есть сессия)
       try {
-        const nuxtApp = useNuxtApp();
-        await nuxtApp.$api('/api/notifications/register-token', {
+        const sessionToken =
+          typeof window !== 'undefined'
+            ? window.localStorage.getItem('mentai.session.token')
+            : null;
+        if (!sessionToken) {
+          console.log(
+            '[PushPlugin] Skip token registration: no session token yet'
+          );
+          return;
+        }
+
+        const config = useRuntimeConfig();
+        const baseURL =
+          typeof window !== 'undefined' && window.location?.origin
+            ? window.location.origin
+            : (config.public as any).apiBase || '';
+        const timezone =
+          typeof Intl !== 'undefined' &&
+          Intl.DateTimeFormat &&
+          typeof Intl.DateTimeFormat === 'function'
+            ? Intl.DateTimeFormat().resolvedOptions().timeZone ||
+              'Europe/Moscow'
+            : 'Europe/Moscow';
+
+        await $fetch(`${baseURL}/api/notifications/register-token`, {
           method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Session-Token': sessionToken,
+            'X-Platform': platform === 'ios' ? 'ios' : 'android',
+            'X-Timezone': timezone,
+          },
           body: {
             token: token.value,
             platform: platform === 'ios' ? 'ios' : 'android',
