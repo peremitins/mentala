@@ -35,7 +35,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue';
+import { computed, ref, onMounted, nextTick } from 'vue';
 import { storeToRefs } from 'pinia';
 import NotificationIndexPage, {
   type NotificationIndexItem,
@@ -119,9 +119,24 @@ const deletingId = ref<string | null>(null);
 const deleteModalRef = ref<InstanceType<typeof ConfirmModal> | null>(null);
 const pendingDeleteItem = ref<NotificationIndexItem | null>(null);
 const route = useRoute();
+const router = useRouter();
 const defaultIntent = computed<'build' | 'quit'>(() =>
   (route.query.intent as 'build' | 'quit') === 'quit' ? 'quit' : 'build'
 );
+
+async function safeNavigate(path: string) {
+  try {
+    await router.push(path);
+    await nextTick();
+    if (router.currentRoute.value.fullPath === path) return;
+  } catch (error) {
+    console.error('[Habits] Router navigation failed:', error);
+  }
+
+  if (typeof window !== 'undefined' && window.location) {
+    window.location.href = path;
+  }
+}
 
 function handleGoalSelect(item: NotificationIndexItem) {
   const payload = item.payload as
@@ -137,13 +152,13 @@ function handleGoalSelect(item: NotificationIndexItem) {
   if (!payload) return;
 
   if ('habitKey' in payload && payload.habitKey) {
-    navigateTo(`/habits/${payload.habitKey}?intent=${payload.intent}`);
+    safeNavigate(`/habits/${payload.habitKey}?intent=${payload.intent}`);
     return;
   }
 
   if ('id' in payload) {
     // Используем ID для навигации
-    navigateTo(`/habits/${payload.id}?intent=${payload.intent || 'build'}`);
+    safeNavigate(`/habits/${payload.id}?intent=${payload.intent || 'build'}`);
   }
 }
 
@@ -151,7 +166,7 @@ function handleHabitCreated(payload: HabitDto | TherapyTopicDto) {
   const habit = payload as HabitDto;
   createModalOpen.value = false;
   // Используем ID для навигации
-  navigateTo(`/habits/${habit.id}?intent=${habit.intent || 'build'}`);
+  safeNavigate(`/habits/${habit.id}?intent=${habit.intent || 'build'}`);
 }
 
 function handleHabitDelete(item: NotificationIndexItem) {

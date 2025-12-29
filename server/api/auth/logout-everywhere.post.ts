@@ -9,7 +9,7 @@ export default defineEventHandler(async (event) => {
   if (!sessionResult?.user?.id) {
     throw createError({
       statusCode: 401,
-      statusMessage: 'Unauthorized',
+      statusMessage: 'Не авторизован',
     });
   }
 
@@ -29,4 +29,3 @@ export default defineEventHandler(async (event) => {
 
   return { ok: true };
 });
-

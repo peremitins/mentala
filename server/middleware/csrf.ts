@@ -23,7 +23,17 @@ function isPublicEndpoint(path: string): boolean {
   const publicPaths = [
     '/api/auth/email/login',
     '/api/auth/email/register',
+    '/api/auth/email/verify',
+    '/api/auth/email/resend-code',
+    '/api/auth/email/request-verification',
+    '/api/auth/password/forgot',
+    '/api/auth/password/reset',
+    '/api/auth/oauth/link-verify-password',
+    '/api/auth/oauth/link-send-code',
+    '/api/auth/oauth/link-verify-code',
+    '/api/auth/oauth/link-cancel',
     '/api/auth/google/callback',
+    '/api/auth/google/native',
     '/api/auth/vk/callback',
     '/api/payments/yookassa/webhook',
   ];

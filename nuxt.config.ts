@@ -93,6 +93,15 @@ export default defineNuxtConfig({
     TELEGRAM_BOT_TOKEN: process.env.NUXT_TELEGRAM_BOT_TOKEN,
     FIREBASE_SERVICE_ACCOUNT_JSON:
       process.env.NUXT_FIREBASE_SERVICE_ACCOUNT_JSON,
+    authEmailCodeSecret: process.env.AUTH_EMAIL_CODE_SECRET,
+    authEmailCodeSecretPrevious: process.env.AUTH_EMAIL_CODE_SECRET_PREVIOUS,
+    smtpHost: process.env.SMTP_HOST,
+    smtpPort: process.env.SMTP_PORT,
+    smtpSecure: process.env.SMTP_SECURE,
+    smtpUser: process.env.SMTP_USER,
+    smtpPassword: process.env.SMTP_PASSWORD,
+    smtpFrom: process.env.SMTP_FROM,
+    smtpFromName: process.env.SMTP_FROM_NAME,
     // YooKassa настройки
     yookassaShopId: process.env.NUXT_YOOKASSA_SHOP_ID,
     yookassaSecretKey: process.env.NUXT_YOOKASSA_SECRET_KEY,
@@ -101,6 +110,11 @@ export default defineNuxtConfig({
       // Если не задано, будет пустая строка = относительные пути
       apiBase: process.env.NUXT_PUBLIC_API_SERVER_URL || '',
       appUrl: process.env.NUXT_PRIVATE_API_BASE || 'http://localhost:3000',
+      googleWebClientId:
+        process.env.NUXT_PUBLIC_GOOGLE_WEB_CLIENT_ID ||
+        process.env.NUXT_OAUTH_GOOGLE_CLIENT_ID ||
+        '',
+      googleIosClientId: process.env.NUXT_PUBLIC_GOOGLE_IOS_CLIENT_ID || '',
       speechDefaultEngine:
         process.env.NUXT_PUBLIC_SPEECH_DEFAULT_ENGINE || 'auto', // auto | native | webspeech | whisper
       isDev: process.env.NUXT_PUBLIC_IS_DEV === 'true', // Режим разработки (для управления функционалом в UI)

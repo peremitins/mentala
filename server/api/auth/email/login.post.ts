@@ -1,36 +1,47 @@
-import { createError, getHeader } from 'h3';
-import { db } from '@/server/infrastructure/db/client';
-import { users } from '@/server/infrastructure/db/schema';
-import { eq } from 'drizzle-orm';
+import { createError, getHeader, setResponseHeader } from 'h3';
 import argon2 from 'argon2';
+import { eq } from 'drizzle-orm';
+import { db } from '@/server/infrastructure/db/client';
+import { securityEvents, users } from '@/server/infrastructure/db/schema';
 import {
   getTimezoneFromRequest,
   getUserTimezone,
   updateUserTimezone,
 } from '@/server/application/notifications/timezone.utils';
+import { getClientIp } from '@/server/utils/ip';
+import { checkRateLimit } from '@/server/application/auth/rate-limit';
+import { normalizeEmail } from '@/server/application/auth/verification';
+import { AuthLoginDto } from '@/shared/dto/auth';
 
 export default defineEventHandler(async (event) => {
-  const body = await readBody<{
-    email: string;
-    password: string;
-    locale?: string;
-    timezone?: string; // Опционально, но приоритет у заголовка X-Timezone
-  }>(event as any);
-  if (!body?.email || !body?.password) {
+  const body = AuthLoginDto.parse(await readBody(event as any));
+  const email = normalizeEmail(body.email);
+  const ip = getClientIp(event) || 'unknown';
+
+  const loginLimit = await checkRateLimit(
+    `auth:rate_limit:login:ip:${ip}:email:${email}`,
+    10,
+    15 * 60
+  );
+  if (!loginLimit.allowed) {
+    if (loginLimit.retryAfter) {
+      setResponseHeader(event, 'Retry-After', loginLimit.retryAfter);
+    }
     throw createError({
-      statusCode: 400,
-      statusMessage: 'Missing email or password',
+      statusCode: 401,
+      statusMessage: 'Неверный email или пароль',
     });
   }
+
   const existing = await db
     .select()
     .from(users)
-    .where(eq(users.email, body.email))
+    .where(eq(users.email, email))
     .limit(1);
   if (!existing.length || !existing[0].passwordHash) {
     throw createError({
       statusCode: 401,
-      statusMessage: 'Invalid credentials',
+      statusMessage: 'Неверный email или пароль',
     });
   }
 
@@ -39,15 +50,30 @@ export default defineEventHandler(async (event) => {
   if (!ok) {
     throw createError({
       statusCode: 401,
-      statusMessage: 'Invalid credentials',
+      statusMessage: 'Неверный email или пароль',
     });
+  }
+
+  if (!existing[0].emailVerifiedAt) {
+    await logSecurityEvent(event, 'email_login_unverified', { email });
+    throw createError({
+      statusCode: 401,
+      statusMessage: 'Неверный email или пароль',
+    });
+  }
+
+  if (existing[0].deletedAt) {
+    await db
+      .update(users)
+      .set({ deletedAt: null, deletionRequestedAt: null })
+      .where(eq(users.id, existing[0].id));
   }
 
   // Проверяем, не заблокирован ли пользователь (после проверки пароля)
   if (existing[0].isBlocked) {
     throw createError({
       statusCode: 401, // Всегда 401 для скрытия факта блокировки
-      statusMessage: 'Invalid credentials',
+      statusMessage: 'Неверный email или пароль',
     });
   }
 
@@ -112,9 +138,31 @@ export default defineEventHandler(async (event) => {
       locale: body.locale ?? existing[0].locale,
       role: existing[0].roleId || 'user',
       isBlocked: existing[0].isBlocked || false,
+      emailVerifiedAt: existing[0].emailVerifiedAt,
+      hasPassword: !!existing[0].passwordHash,
     },
     // Отдаем sessionToken только для native платформ (Capacitor)
     // Для web используем только httpOnly cookie
     ...(isNative ? { sessionToken: sessionId } : {}),
   };
 });
+
+async function logSecurityEvent(
+  event: any,
+  eventType: string,
+  metadata: Record<string, unknown>
+): Promise<void> {
+  try {
+    const ip = getClientIp(event);
+    const userAgent = event.node?.req?.headers['user-agent'] || null;
+    await db.insert(securityEvents).values({
+      userId: null,
+      eventType,
+      ipAddress: ip,
+      userAgent,
+      metadata,
+    });
+  } catch (error) {
+    console.error('[Auth] Failed to log security event:', error);
+  }
+}

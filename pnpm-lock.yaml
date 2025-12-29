@@ -44,6 +44,9 @@ importers:
       '@capacitor/status-bar':
         specifier: ^7.0.3
         version: 7.0.3(@capacitor/core@7.4.3)
+      '@capgo/capacitor-social-login':
+        specifier: ^8.2.5
+        version: 8.2.5(@capacitor/core@7.4.3)
       '@iconify-json/lucide':
         specifier: ^1.2.68
         version: 1.2.68
@@ -98,6 +101,9 @@ importers:
       floating-vue:
         specifier: ^5.2.2
         version: 5.2.2(vue@3.5.22(typescript@5.6.3))
+      google-auth-library:
+        specifier: ^9.15.0
+        version: 9.15.1
       howler:
         specifier: ^2.2.4
         version: 2.2.4
@@ -113,6 +119,9 @@ importers:
       nanoid:
         specifier: ^5.1.6
         version: 5.1.6
+      nodemailer:
+        specifier: ^6.9.14
+        version: 6.10.1
       nuxt:
         specifier: ^4.1.2
         version: 4.1.2(@capacitor/preferences@7.0.2(@capacitor/core@7.4.3))(@parcel/watcher@2.5.1)(@types/node@24.5.2)(@vue/compiler-sfc@3.5.22)(db0@0.3.2(drizzle-orm@0.44.6(@opentelemetry/api@1.9.0)(@types/pg@8.15.5)(pg@8.16.3)(postgres@3.4.7)))(drizzle-orm@0.44.6(@opentelemetry/api@1.9.0)(@types/pg@8.15.5)(pg@8.16.3)(postgres@3.4.7))(eslint@8.57.1)(ioredis@5.8.2)(lightningcss@1.30.1)(magicast@0.3.5)(optionator@0.9.4)(rollup@4.52.3)(sass@1.93.2)(stylus@0.57.0)(terser@5.44.0)(tsx@4.21.0)(typescript@5.6.3)(vite@7.1.7(@types/node@24.5.2)(jiti@2.6.0)(lightningcss@1.30.1)(sass@1.93.2)(stylus@0.57.0)(terser@5.44.0)(tsx@4.21.0)(yaml@2.8.1))(xml2js@0.6.2)(yaml@2.8.1)
@@ -514,6 +523,11 @@ packages:
     resolution: {integrity: sha512-JyRpVnKwHij9hgPWolF6PK+HT3e2HSPjN11/h2OmKxq8GAdPGARFLv+97eZl0pvuvm0Kka/LpiLb5whXISBg7Q==}
     peerDependencies:
       '@capacitor/core': '>=7.0.0'
+
+  '@capgo/capacitor-social-login@8.2.5':
+    resolution: {integrity: sha512-0ulzswVTnUtLDoEXOxMvRmKWQ5FPBdlGVfnaS8c3FtczZlzHowFYZ1WJXx8bBkKU3szmEmIWpkUxil34Xeb3iQ==}
+    peerDependencies:
+      '@capacitor/core': '>=8.0.0'
 
   '@cloudflare/kv-asset-handler@0.4.0':
     resolution: {integrity: sha512-+tv3z+SPp+gqTIcImN9o0hqE9xyfQjI1XD9pL6NuKjua9B1y7mNYv0S9cP+QEbA4ppVgGZEmKOvHX5G5Ei1CVA==}
@@ -6730,6 +6744,10 @@ packages:
   node-releases@2.0.21:
     resolution: {integrity: sha512-5b0pgg78U3hwXkCM8Z9b2FJdPZlr9Psr9V2gQPESdGHqbntyFJKFW4r5TeWGFzafGY3hzs1JC62VEQMbl1JFkw==}
 
+  nodemailer@6.10.1:
+    resolution: {integrity: sha512-Z+iLaBGVaSjbIzQ4pX6XV41HrooLsQ10ZWPUehGmuantvzWoDVBnmsdUcOIDM1t+yPor5pDhVlDESgOMEGxhHA==}
+    engines: {node: '>=6.0.0'}
+
   nopt@7.2.1:
     resolution: {integrity: sha512-taM24ViiimT/XntxbPyJQzCG+p4EKOpgD3mxFwW38mGjVUrfERQOeY4EDHjdnptttfHuHQXFx+lTP08Q+mLa/w==}
     engines: {node: ^14.17.0 || ^16.13.0 || >=18.0.0}
@@ -9408,6 +9426,10 @@ snapshots:
       '@capacitor/core': 7.4.3
 
   '@capacitor/status-bar@7.0.3(@capacitor/core@7.4.3)':
+    dependencies:
+      '@capacitor/core': 7.4.3
+
+  '@capgo/capacitor-social-login@8.2.5(@capacitor/core@7.4.3)':
     dependencies:
       '@capacitor/core': 7.4.3
 
@@ -16603,6 +16625,8 @@ snapshots:
   node-mock-http@1.0.3: {}
 
   node-releases@2.0.21: {}
+
+  nodemailer@6.10.1: {}
 
   nopt@7.2.1:
     dependencies:

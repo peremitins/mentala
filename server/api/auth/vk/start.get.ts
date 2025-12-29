@@ -1,10 +1,11 @@
 import { makeState, setOAuthCookies } from '@/server/application/auth/oauth';
+import { resolveAppUrl } from '@/server/application/auth/oauth-redirect';
 
 export default defineEventHandler(async (event) => {
   const cfg = useRuntimeConfig(event);
   const clientId =
     cfg.OAUTH_VK_CLIENT_ID || process.env.NUXT_OAUTH_VK_CLIENT_ID;
-  const appUrl = cfg.public.appUrl || 'http://localhost:3000';
+  const appUrl = resolveAppUrl(event, cfg.public.appUrl);
 
   const query = getQuery(event);
   const redirectUri = String(query.redirect_uri || `${appUrl}`);
