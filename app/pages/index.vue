@@ -52,7 +52,6 @@
       </template>
     </PageHeader>
 
-    <!-- Кнопки управления аватаром и звуком -->
     <AvatarVoiceControls />
 
     <!-- Основной контент -->
@@ -72,30 +71,11 @@
         class="flex flex-col flex-1 h-full space-y-6 relative"
       >
         <div class="relative h-full mb-2">
-          <section class="w-full h-full grid place-items-center">
-            <div
-              v-if="chatSettings.avatar"
-              class="relative w-full h-full overflow-hidden max-w-[480px]"
-            >
-              <HeyGenPlayer />
-            </div>
-            <div
-              v-else
-              class="relative w-full h-full overflow-hidden max-w-[480px]"
-            >
-              <div class="w-full h-full grid place-items-center">
-                <div class="text-sm text-muted-foreground">
-                  <!-- Аватар не включен -->
-                </div>
-              </div>
-            </div>
-          </section>
-
           <section
             ref="chatRef"
             @scroll="handleScroll"
             class="absolute bottom-0 overflow-auto max-h-[100%] inset-x-0 pt-[50%] flex flex-col space-y-3"
-            :class="{ 'chat-fade': heygen.isConnected }"
+            :class="{ 'chat-fade': false }"
           >
             <div
               v-for="(m, index) in combinedMessages"
@@ -158,7 +138,6 @@ import { useTTS } from '@/app/composables/useTTS';
 import { useChatStore } from '@/app/stores/chat';
 import { useSpeechStore } from '@/app/stores/speech';
 import { useChatSettingsStore } from '@/app/stores/chatSettings';
-import { useHeygenStore } from '@/app/stores/heygen';
 import { useSubscriptionStore } from '@/app/stores/subscription';
 import { useColorMode } from '#imports';
 import {
@@ -179,7 +158,6 @@ import {
 import PageHeader from '@/app/components/PageHeader.vue';
 import WelcomeScreen from '@/app/components/WelcomeScreen.vue';
 import AvatarVoiceControls from '@/app/components/AvatarVoiceControls.vue';
-import HeyGenPlayer from '@/app/components/HeyGenPlayer.vue';
 
 const emit = defineEmits<{ (e: 'send', text: string): void }>();
 
@@ -209,7 +187,6 @@ const chat = useChatStore();
 const { settings, start, stop, onPartial, onFinal } = useSpeechEngine();
 const speechStore = useSpeechStore();
 const chatSettings = useChatSettingsStore();
-const heygen = useHeygenStore();
 
 // Управление TTS озвучкой
 const { speak: speakTTS } = useTTS();
@@ -281,11 +258,6 @@ async function handleWelcomeSelect(
   // Начинаем диалог от ассистента (без user-сообщения "Привет")
   try {
     chat.startSession();
-
-    // Запускаем аватар, если он включен (заранее, до получения ответа)
-    if (chatSettings.avatar && !heygen.isConnected && !heygen.isStarting) {
-      await heygen.startSession();
-    }
 
     // Вызываем новый метод startConversation - он НЕ добавляет user-сообщение
     const res = await chat.startConversation({
@@ -364,15 +336,10 @@ function handleKeydown(e: KeyboardEvent) {
 }
 
 async function speakLastMessage(content: string) {
-  if (content) {
-    // Если аватар включен, используем его для озвучки
-    if (chatSettings.avatar && heygen.isConnected) {
-      await heygen.speak(content);
-    } else if (chatSettings.voice) {
-      // Используем TTS только если аватар выключен
-      // useTTS автоматически останавливает предыдущую озвучку
-      await speakTTS(content);
-    }
+  if (content && chatSettings.voice) {
+    // Используем только TTS для озвучки
+    // useTTS автоматически останавливает предыдущую озвучку
+    await speakTTS(content);
   }
 }
 
@@ -409,7 +376,7 @@ const onSend = async () => {
   if (res?.ok) {
     chat.startSession();
 
-    // Озвучим последний ответ ассистента через HeyGen или TTS OpenAI
+    // Озвучим последний ответ ассистента через TTS OpenAI
     if (chatSettings.voice === true) {
       const last = [...chat.messages]
         .reverse()
@@ -453,23 +420,6 @@ const handleScroll = () => {
   stickToBottom.value = isNearBottom();
 };
 
-// Функция для автоматического запуска аватара, если он включен
-async function autoStartAvatarIfEnabled() {
-  // Проверяем, включен ли аватар в настройках
-  if (
-    chatSettings.avatar &&
-    !heygen.isConnected &&
-    !heygen.isStarting &&
-    chat.messages?.length
-  ) {
-    try {
-      await heygen.startSession();
-    } catch (error) {
-      console.error('[Index] Failed to auto-start avatar:', error);
-    }
-  }
-}
-
 onMounted(async () => {
   // Загружаем настройки чата при монтировании
   try {
@@ -480,9 +430,6 @@ onMounted(async () => {
 
   await nextTick();
   scrollToBottom('auto'); // на старте — без анимации
-
-  // Автоматически запускаем аватар, если он включен в настройках
-  await autoStartAvatarIfEnabled();
 });
 
 // Завершаем therapy сессию и останавливаем сервисы при уходе со страницы
@@ -491,9 +438,8 @@ onBeforeUnmount(() => {
   if (chat.therapySessionId && !chat.isEndingSession) {
     void chat.endTherapySession();
   }
-  // Останавливаем голосовой ввод и HeyGen
+  // Останавливаем голосовой ввод
   stop();
-  heygen.stopSession();
 
   // Сбрасываем кэш subscription store для обновления данных при следующем заходе
   const subscriptionStore = useSubscriptionStore();
@@ -537,7 +483,7 @@ watch(
   }
 );
 
-// Останавливаем HeyGen и отменяем запросы при возврате на welcome screen
+// отменяем запросы при возврате на welcome screen
 watch(
   () => showWelcomeScreen.value,
   async (isWelcomeScreen) => {
@@ -545,18 +491,6 @@ watch(
       // Отменяем текущий chat stream запрос (если он активен)
       // clearMessages уже вызывает endTherapySession, поэтому не нужно вызывать отдельно
       chat.clearMessages();
-
-      // Останавливаем HeyGen сессию, если она была запущена
-      if (heygen.isConnected || heygen.isStarting) {
-        try {
-          await heygen.stopSession();
-        } catch (error) {
-          console.error(
-            '[Index] Failed to stop HeyGen session on welcome screen:',
-            error
-          );
-        }
-      }
     }
   }
 );

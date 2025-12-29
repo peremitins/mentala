@@ -1,61 +1,6 @@
 import { defineNuxtPlugin, useRuntimeConfig } from 'nuxt/app';
 import { Capacitor } from '@capacitor/core';
 import { useChatStore } from '@/app/stores/chat';
-import { useHeygenStore } from '@/app/stores/heygen';
-import { getSessionItemSync } from '@/app/utils/sessionStorage';
-import { getCsrfTokenForHeader } from '@/app/utils/csrf';
-
-const SESSION_TOKEN_KEY = 'mentai.session.token';
-
-/**
- * Отправляет запрос на завершение HeyGen сессии при перезагрузке/закрытии
- * Работает на всех платформах: Web, Android, iOS
- */
-function sendHeyGenStopRequest(sessionId: string) {
-  const config = useRuntimeConfig();
-  const baseURL = (config.public as any).apiBase || '';
-  const url = `${baseURL}/api/heygen/stop`;
-
-  // Получаем токен для авторизации
-  const token =
-    typeof window !== 'undefined'
-      ? localStorage.getItem(SESSION_TOKEN_KEY)
-      : null;
-
-  const body = JSON.stringify({ sessionId });
-
-  // sendBeacon не поддерживает кастомные заголовки, поэтому всегда используем fetch с keepalive
-  // Это работает на всех платформах (Web, Android, iOS) и поддерживает кастомные заголовки
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-  };
-
-  if (token) {
-    headers['X-Session-Token'] = token;
-  }
-
-  // Добавляем CSRF токен для web (cookie-канал)
-  const csrf = getCsrfTokenForHeader();
-  if (csrf) {
-    headers['X-CSRF-Token'] = csrf;
-  }
-
-  // Используем fetch с keepalive для надежной отправки при закрытии страницы
-  // Это работает на Web, Android и iOS
-  fetch(url, {
-    method: 'POST',
-    body,
-    headers,
-    keepalive: true, // Важно для запросов при закрытии страницы
-    credentials: 'include', // Включаем cookies на случай, если токен не передан
-  }).catch((error) => {
-    // Игнорируем ошибки при закрытии страницы - это нормально
-    console.warn(
-      '[Session Finish Plugin] Failed to send HeyGen stop request:',
-      error
-    );
-  });
-}
 
 export default defineNuxtPlugin(() => {
   if (process.server) return;
@@ -76,7 +21,7 @@ export default defineNuxtPlugin(() => {
     // Если уходим со страницы чата на другую страницу - завершаем therapy сессию
     if (from.path === '/' && to.path !== '/') {
       handleEndTherapySession();
-      
+
       // Инвалидируем кэш subscription store для обновления данных
       // Используем динамический импорт, чтобы не блокировать навигацию
       import('@/app/stores/subscription').then(({ useSubscriptionStore }) => {
@@ -92,25 +37,11 @@ export default defineNuxtPlugin(() => {
       // ВСЕГДА завершаем therapy сессию при обновлении/закрытии страницы
       // Это критично для правильного подсчета времени
       handleEndTherapySession();
-      
+
       // Завершаем сессию чата
       if (chat.sessionId && chat.messages && chat.messages.length > 0) {
         // Вызываем обычный метод - он использует $api с правильными заголовками
         void chat.finishAndSave();
-      }
-
-      // Завершаем сессию HeyGen при перезагрузке/закрытии страницы
-      const heygen = useHeygenStore();
-      // Проверяем sessionId в store или в универсальном хранилище (на случай перезагрузки)
-      // Используем синхронную версию, так как обработчики событий не могут быть async
-      const heygenSessionId =
-        heygen.sessionId ||
-        (typeof window !== 'undefined'
-          ? getSessionItemSync('heygen_session_id')
-          : null);
-
-      if (heygenSessionId) {
-        sendHeyGenStopRequest(heygenSessionId);
       }
     } catch (error) {
       console.error('[Session Finish Plugin] Error:', error);
@@ -120,7 +51,7 @@ export default defineNuxtPlugin(() => {
   // На Web используем beforeunload и visibilitychange
   if (platform === 'web') {
     window.addEventListener('beforeunload', handleUnload);
-    
+
     // Обрабатываем уход в фон (спящий режим, переключение вкладок)
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden') {

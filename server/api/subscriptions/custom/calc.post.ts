@@ -15,7 +15,6 @@ const calcSchema = z.object({
     .min(CUSTOM_MIN_WEEKLY_MINUTES)
     .max(CUSTOM_MAX_WEEKLY_MINUTES)
     .multipleOf(CUSTOM_MINUTES_STEP),
-  avatarEnabled: z.boolean(),
   billingPeriod: z.enum(['month', 'year']).default('month'),
 });
 
@@ -27,11 +26,10 @@ export default defineEventHandler(async (event) => {
   const body = await readBody(event);
   const validated = calcSchema.parse(body);
 
-  const { weeklyMinutes, avatarEnabled, billingPeriod } = validated;
+  const { weeklyMinutes, billingPeriod } = validated;
 
   const totalPrice = calculateCustomPrice({
     weeklyMinutes,
-    avatarEnabled,
     billingPeriod: billingPeriod as BillingPeriod,
   });
 

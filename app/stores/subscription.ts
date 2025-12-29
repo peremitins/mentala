@@ -6,7 +6,6 @@ interface Plan {
   name: string;
   basePrice: number;
   weeklyMinutesLimit: number;
-  avatarEnabled: boolean;
   isCustomConfigurable: boolean;
   isVisibleInUI?: boolean;
 }
@@ -19,7 +18,6 @@ interface Subscription {
   billingPeriod?: 'month' | 'year';
   customConfig?: {
     weeklyMinutes: number;
-    avatarEnabled: boolean;
     totalPrice: number;
   };
   plan: {
@@ -27,7 +25,6 @@ interface Subscription {
     name: string;
     basePrice: number;
     weeklyMinutesLimit: number;
-    avatarEnabled: boolean;
   };
 }
 

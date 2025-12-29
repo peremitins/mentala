@@ -38,7 +38,7 @@
 - ✅ Улучшена SameSite политика (strict в production, lax в development)
 - ✅ Сокращен срок жизни сессий (7 дней с автоматическим продлением)
 - ✅ Добавлена проверка IP/User-Agent (soft check)
-- ✅ Добавлена защита платных API endpoints (TTS, STT, HeyGen)
+- ✅ Добавлена защита платных API endpoints (TTS, STT)
 - ✅ Реализована система админских прав (через ADMIN_EMAILS)
 - ✅ Добавлено логирование security events
 

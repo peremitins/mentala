@@ -28,8 +28,7 @@
           class="mt-2 space-y-1"
         >
           <p class="text-xs text-muted-foreground">
-            Доступен полный функционал Premium: AI-чат, аватар, 100 минут в
-            неделю
+            Доступен полный функционал Premium: AI-чат, 100 минут в неделю
           </p>
           <p class="text-xs text-muted-foreground">
             Пробный период действует до:
@@ -100,7 +99,7 @@
         <p class="text-xs text-muted-foreground">
           На тарифе Basic без пробного периода доступны только уведомления с
           шаблонами. Выберите тариф PRO, Premium или Custom, чтобы получить
-          доступ к AI-чату и аватару.
+          доступ к AI-чату.
         </p>
       </div>
 
@@ -137,7 +136,6 @@ interface Subscription {
   paymentStatus: string;
   customConfig?: {
     weeklyMinutes: number;
-    avatarEnabled: boolean;
   };
   plan: {
     id: string;
@@ -152,7 +150,6 @@ interface SubscriptionResponse {
   trialExpiresAt: string | null;
   features: {
     ai: boolean;
-    avatar: boolean;
     weeklyMinutesLimit: number;
   };
   subscription: Subscription | null;

@@ -108,19 +108,6 @@
         </div>
       </div>
 
-      <div class="flex items-center gap-2">
-        <Checkbox
-          v-model:checked="avatarEnabledComputed"
-          :id="`avatar-enabled-${plan.id}`"
-        />
-        <label
-          :for="`avatar-enabled-${plan.id}`"
-          class="text-sm cursor-pointer"
-        >
-          Аватар-терапевт, живое видео во время сессии
-        </label>
-      </div>
-
       <div v-if="customPrice" class="rounded-md bg-muted p-3 text-center">
         <p class="text-sm text-muted-foreground">Итоговая стоимость</p>
         <p class="text-2xl font-bold">
@@ -156,7 +143,6 @@ interface Plan {
   name: string;
   basePrice: number;
   weeklyMinutesLimit: number;
-  avatarEnabled: boolean;
   isCustomConfigurable: boolean;
 }
 
@@ -170,7 +156,6 @@ const props = defineProps<{
   customPrice?: number | null; // Итоговая цена Custom тарифа
   customConfig?: {
     weeklyMinutes: number;
-    avatarEnabled: boolean;
   }; // Конфигурация Custom тарифа
 }>();
 
@@ -178,15 +163,12 @@ const emit = defineEmits<{
   select: [plan: Plan];
   'update:billingPeriod': [value: 'month' | 'year'];
   'confirm-change': [plan: Plan];
-  'update:customConfig': [
-    value: { weeklyMinutes: number; avatarEnabled: boolean },
-  ];
+  'update:customConfig': [value: { weeklyMinutes: number }];
 }>();
 
 // Локальное состояние для Custom конфигурации, если не передано извне
 const localCustomConfig = ref({
   weeklyMinutes: props.customConfig?.weeklyMinutes ?? 100,
-  avatarEnabled: props.customConfig?.avatarEnabled ?? true,
 });
 
 // Используем переданный customConfig или локальное состояние
@@ -253,7 +235,6 @@ function getFeatures() {
       features.push('7 дней бесплатно');
       features.push('Полный доступ к Premium функционалу');
       features.push('AI-чат с искусственным интеллектом');
-      features.push('Аватар-терапевт (живое видео)');
       features.push('100 минут в неделю');
     } else {
       // Basic без Trial
@@ -267,13 +248,11 @@ function getFeatures() {
     features.push('100 минут в неделю');
   } else if (props.plan.name === 'premium') {
     features.push('Всё из PRO');
-    features.push('Реалистичный аватар-терапевт');
     features.push('Расширенные рекомендации и аналитика');
     features.push('Приоритетная поддержка');
     features.push('100 минут в неделю');
   } else if (props.plan.name === 'custom') {
     features.push('Выберите количество минут в неделю (10–200)');
-    features.push('Включите или выключите аватар');
     features.push('Платите только за то, чем реально пользуетесь');
   }
 
@@ -289,7 +268,6 @@ const weeklyMinutesSlider = computed({
     if (value && value.length > 0 && value[0] !== undefined) {
       const newConfig = {
         weeklyMinutes: value[0],
-        avatarEnabled: currentCustomConfig.value.avatarEnabled,
       };
 
       // Всегда обновляем локальное состояние
@@ -297,22 +275,6 @@ const weeklyMinutesSlider = computed({
       // Всегда эмитим событие для синхронизации с родителем
       emit('update:customConfig', newConfig);
     }
-  },
-});
-
-// Computed для Checkbox
-const avatarEnabledComputed = computed({
-  get: () => currentCustomConfig.value.avatarEnabled,
-  set: (value: boolean) => {
-    const newConfig = {
-      weeklyMinutes: currentCustomConfig.value.weeklyMinutes,
-      avatarEnabled: value,
-    };
-
-    // Всегда обновляем локальное состояние
-    localCustomConfig.value = newConfig;
-    // Всегда эмитим событие для синхронизации с родителем
-    emit('update:customConfig', newConfig);
   },
 });
 </script>

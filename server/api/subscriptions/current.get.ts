@@ -36,13 +36,17 @@ export default defineEventHandler(async (event) => {
   // Если запрашивается другой пользователь - проверяем права (только admin/support)
   if (query.userId) {
     const requestedUserId = Number(query.userId);
-    if (Number.isFinite(requestedUserId) && requestedUserId !== sessionResult.user.id) {
+    if (
+      Number.isFinite(requestedUserId) &&
+      requestedUserId !== sessionResult.user.id
+    ) {
       // Проверяем, что смотрящий - admin или support (не moderator)
       const viewer = await getSessionUserWithRole(event);
       if (!viewer || !['admin', 'support'].includes(viewer.role)) {
         throw createError({
           statusCode: 403,
-          statusMessage: 'Forbidden: Only admin and support can view other users subscriptions',
+          statusMessage:
+            'Forbidden: Only admin and support can view other users subscriptions',
         });
       }
       targetUserId = requestedUserId;
@@ -146,7 +150,7 @@ export default defineEventHandler(async (event) => {
           name: plan.name,
           basePrice: Number(plan.basePrice),
           weeklyMinutesLimit: plan.weeklyMinutesLimit,
-          avatarEnabled: plan.avatarEnabled,
+          avatarEnabled: false,
         },
       };
 
@@ -243,7 +247,7 @@ export default defineEventHandler(async (event) => {
       name: plan.name,
       basePrice: Number(plan.basePrice),
       weeklyMinutesLimit: plan.weeklyMinutesLimit,
-      avatarEnabled: plan.avatarEnabled,
+      avatarEnabled: false,
     },
   };
 

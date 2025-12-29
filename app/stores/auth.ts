@@ -2,7 +2,6 @@ import { defineStore } from 'pinia';
 import { useChatStore } from '@/app/stores/chat';
 import { useChatSettingsStore } from '@/app/stores/chatSettings';
 import { useSpeechStore } from '@/app/stores/speech';
-import { useHeygenStore } from '@/app/stores/heygen';
 import { useSubscriptionStore } from '@/app/stores/subscription';
 import { useUserHabitsStore } from '@/app/stores/userHabits';
 import { useTherapyTopicsStore } from '@/app/stores/therapyTopics';
@@ -428,13 +427,7 @@ export const useAuthStore = defineStore('auth', {
         const chat = useChatStore();
         chat.stopChatStream();
 
-        // 3. Останавливаем HeyGen сессию
-        const heygen = useHeygenStore();
-        if (heygen.isConnected || heygen.isStarting) {
-          heygen.stopSession();
-        }
-
-        // 4. Останавливаем микрофон, если активен
+        // 3. Останавливаем микрофон, если активен
         const speechStore = useSpeechStore();
         if (speechStore.isListening) {
           const { stop: stopSpeech } = useSpeechEngine();
@@ -467,7 +460,6 @@ export const useAuthStore = defineStore('auth', {
         useChatStore().$reset();
         useChatSettingsStore().$reset();
         useSpeechStore().$reset();
-        useHeygenStore().$reset();
         useSubscriptionStore().$reset();
         useUserHabitsStore().$reset();
         useTherapyTopicsStore().$reset();
