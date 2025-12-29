@@ -35,7 +35,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue';
+import { computed, ref, onMounted, nextTick } from 'vue';
 import { storeToRefs } from 'pinia';
 import NotificationIndexPage, {
   type NotificationIndexItem,
@@ -64,6 +64,7 @@ const colorSchemes: Record<string, string> = {
 const therapyStore = useTherapyTopicsStore();
 const loadersStore = useLoadersStore();
 const { topics: userTopics } = storeToRefs(therapyStore);
+const router = useRouter();
 
 // Загружаем данные после монтирования компонента (с кэшированием)
 // Защита от двойного вызова реализована в store через isSkeletonLoading флаг
@@ -115,6 +116,20 @@ const createModalOpen = ref(false);
 const deleteModalRef = ref<InstanceType<typeof ConfirmModal> | null>(null);
 const pendingDeleteItem = ref<NotificationIndexItem | null>(null);
 
+async function safeNavigate(path: string) {
+  try {
+    await router.push(path);
+    await nextTick();
+    if (router.currentRoute.value.fullPath === path) return;
+  } catch (error) {
+    console.error('[Therapy] Router navigation failed:', error);
+  }
+
+  if (typeof window !== 'undefined' && window.location) {
+    window.location.href = path;
+  }
+}
+
 function handleTopicSelect(item: NotificationIndexItem) {
   const payload = item.payload as
     | { action?: string; type?: string }
@@ -124,13 +139,13 @@ function handleTopicSelect(item: NotificationIndexItem) {
     return;
   }
   // Используем ID для навигации
-  navigateTo(`/therapy/${item.id}`);
+  safeNavigate(`/therapy/${item.id}`);
 }
 
 function handleTopicCreated(topic: TherapyTopicDto) {
   createModalOpen.value = false;
   // Используем ID для навигации
-  navigateTo(`/therapy/${topic.id}`);
+  safeNavigate(`/therapy/${topic.id}`);
 }
 
 function handleTopicRemove(item: NotificationIndexItem) {

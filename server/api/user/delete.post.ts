@@ -1,12 +1,40 @@
 import { defineEventHandler, setResponseStatus } from 'h3';
-import { getSessionUser, revokeAllUserSessions } from '@@/server/application/auth/session';
+import {
+  getSessionUser,
+  revokeAllUserSessions,
+} from '@@/server/application/auth/session';
 import { db } from '@@/server/infrastructure/db/client';
 import {
-  users,
-  userDevices,
+  aiGeneratedNotificationTexts,
+  aiMessages,
+  aiSessions,
+  chatSettings,
+  dailyAdherence,
+  habits,
+  idempotencyKeys,
+  notificationInteractions,
+  notificationPreferences,
   notificationSlots,
+  notificationTexts,
+  oauthAccounts,
+  payments,
+  profiles,
+  securityEvents,
+  sessionSummaries,
+  sessions,
+  subscriptionEvents,
+  therapySessions,
+  therapyTopicsCustom,
+  telegramAccounts,
+  userDevices,
+  userPrompts,
+  userResponseIds,
+  userSubscriptions,
+  userPreferences,
+  users,
+  welcomePrompts,
 } from '@@/server/infrastructure/db/schema';
-import { eq, and, sql, isNull } from 'drizzle-orm';
+import { eq, and, sql, inArray } from 'drizzle-orm';
 import { userDeletionQueue } from '@@/server/application/users/queues/userDeletion.queue';
 import { deleteAll } from '../../utils/storage';
 
@@ -19,6 +47,7 @@ import { deleteAll } from '../../utils/storage';
  * - Поставить задачу в BullMQ с delay 7 days
  */
 export default defineEventHandler(async (event) => {
+  const cfg = useRuntimeConfig(event);
   const sessionResult = await getSessionUser(event);
   if (!sessionResult?.user?.id) {
     setResponseStatus(event, 401);
@@ -27,37 +56,102 @@ export default defineEventHandler(async (event) => {
 
   const userId = sessionResult.user.id;
   const now = new Date();
+  const graceDaysRaw =
+    cfg.AUTH_DELETE_GRACE_DAYS || process.env.AUTH_DELETE_GRACE_DAYS;
+  const graceDays = Number(graceDaysRaw || 0);
+  const restoreEnabled = Number.isFinite(graceDays) && graceDays > 0;
 
   try {
-    // 1. Soft-delete пользователя
-    // Проверяем, есть ли поля deletion_requested_at и deleted_at в схеме
-    // Если нет - используем временное решение через isBlocked
-    const userUpdate: any = {};
-    
-    // Пытаемся обновить поля, если они есть в схеме
-    try {
-      await db
-        .update(users)
-        .set({
-          // @ts-ignore - поля могут отсутствовать до миграции
-          deletionRequestedAt: now,
-          // @ts-ignore
-          deletedAt: now,
-        } as any)
-        .where(eq(users.id, userId));
-    } catch (error: any) {
-      // Если поля не существуют, используем временное решение
-      if (error?.message?.includes('deletion_requested_at') || error?.message?.includes('deleted_at')) {
-        // Временно блокируем пользователя
-        await db
-          .update(users)
-          .set({ isBlocked: true })
-          .where(eq(users.id, userId));
-        console.warn('[UserDeletion] Fields deletion_requested_at/deleted_at not found, using isBlocked as fallback');
-      } else {
-        throw error;
+    if (!restoreEnabled) {
+      await db.transaction(async (tx) => {
+        const aiSessionRows = await tx
+          .select({ id: aiSessions.id })
+          .from(aiSessions)
+          .where(eq(aiSessions.userId, userId));
+        const aiSessionIds = aiSessionRows.map((row) => row.id);
+        if (aiSessionIds.length) {
+          await tx
+            .delete(aiMessages)
+            .where(inArray(aiMessages.sessionId, aiSessionIds));
+        }
+
+        await Promise.all([
+          tx
+            .delete(notificationInteractions)
+            .where(eq(notificationInteractions.userId, userId)),
+          tx.delete(dailyAdherence).where(eq(dailyAdherence.userId, userId)),
+          tx
+            .delete(aiGeneratedNotificationTexts)
+            .where(eq(aiGeneratedNotificationTexts.userId, userId)),
+          tx
+            .delete(notificationTexts)
+            .where(eq(notificationTexts.userId, userId)),
+          tx
+            .delete(notificationPreferences)
+            .where(eq(notificationPreferences.userId, userId)),
+          tx
+            .delete(notificationSlots)
+            .where(eq(notificationSlots.userId, userId)),
+          tx.delete(userDevices).where(eq(userDevices.userId, userId)),
+          tx.delete(userPrompts).where(eq(userPrompts.userId, userId)),
+          tx.delete(welcomePrompts).where(eq(welcomePrompts.userId, userId)),
+          tx.delete(habits).where(eq(habits.userId, userId)),
+          tx
+            .delete(therapyTopicsCustom)
+            .where(eq(therapyTopicsCustom.userId, userId)),
+          tx.delete(userPreferences).where(eq(userPreferences.userId, userId)),
+          tx.delete(chatSettings).where(eq(chatSettings.userId, userId)),
+          tx.delete(aiSessions).where(eq(aiSessions.userId, userId)),
+          tx
+            .delete(sessionSummaries)
+            .where(eq(sessionSummaries.userId, String(userId))),
+          tx
+            .delete(userResponseIds)
+            .where(eq(userResponseIds.userId, String(userId))),
+          tx.delete(payments).where(eq(payments.userId, userId)),
+          tx
+            .delete(subscriptionEvents)
+            .where(eq(subscriptionEvents.userId, userId)),
+          tx
+            .delete(userSubscriptions)
+            .where(eq(userSubscriptions.userId, userId)),
+          tx.delete(therapySessions).where(eq(therapySessions.userId, userId)),
+          tx.delete(idempotencyKeys).where(eq(idempotencyKeys.userId, userId)),
+          tx.delete(securityEvents).where(eq(securityEvents.userId, userId)),
+          tx.delete(oauthAccounts).where(eq(oauthAccounts.userId, userId)),
+          tx
+            .delete(telegramAccounts)
+            .where(eq(telegramAccounts.userId, userId)),
+          tx.delete(sessions).where(eq(sessions.userId, userId)),
+          tx.delete(profiles).where(eq(profiles.userId, userId)),
+        ]);
+
+        await tx.delete(users).where(eq(users.id, userId));
+      });
+
+      try {
+        deleteAll(String(userId));
+      } catch (error) {
+        console.error('[UserDeletion] Failed to delete user files:', error);
       }
+
+      setResponseStatus(event, 200);
+      return {
+        ok: true,
+        loggedOut: true,
+        canRestore: false,
+        message: 'Аккаунт удалён сразу. Все данные пользователя очищены.',
+      };
     }
+
+    // 1. Soft-delete пользователя
+    await db
+      .update(users)
+      .set({
+        deletionRequestedAt: now,
+        deletedAt: now,
+      })
+      .where(eq(users.id, userId));
 
     // 2. Ревокнуть все сессии
     await revokeAllUserSessions(userId);
@@ -81,30 +175,40 @@ export default defineEventHandler(async (event) => {
 
     // 4. Поставить задачу в BullMQ с delay 7 days
     const jobId = `user-delete-${userId}`;
-    const gracePeriodDays = 7;
-    const delayMs = gracePeriodDays * 24 * 60 * 60 * 1000;
+    const delayMs = graceDays * 24 * 60 * 60 * 1000;
 
-    await userDeletionQueue.add(
-      'user-deletion',
-      { userId },
-      {
-        jobId,
-        delay: delayMs, // 7 дней
-        removeOnComplete: true,
-      }
-    );
+    try {
+      await userDeletionQueue.add(
+        'user-deletion',
+        { userId },
+        {
+          jobId,
+          delay: delayMs,
+          removeOnComplete: true,
+        }
+      );
+    } catch (error) {
+      console.error(
+        '[UserDeletion] Failed to enqueue deletion job, will continue:',
+        error
+      );
+    }
 
     // 5. Удалить файлы пользователя (chat_settings)
-    deleteAll(String(userId));
+    try {
+      deleteAll(String(userId));
+    } catch (error) {
+      console.error('[UserDeletion] Failed to delete user files:', error);
+    }
 
     // 6. Вернуть ответ
-    setResponseStatus(event, 202); // Accepted
+    setResponseStatus(event, 202);
     return {
       ok: true,
       jobId,
       loggedOut: true,
       canRestore: true,
-      message: 'Account deletion requested. You can restore it within 7 days.',
+      message: `Запрос на удаление принят. Аккаунт будет удалён.`,
     };
   } catch (error: any) {
     console.error('[UserDeletion] Error in phase A:', error);

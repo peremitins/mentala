@@ -31,16 +31,22 @@ export default defineEventHandler(async (event) => {
   if (!botToken)
     throw createError({
       statusCode: 500,
-      statusMessage: 'Missing TELEGRAM_BOT_TOKEN',
+      statusMessage: 'Не задан TELEGRAM_BOT_TOKEN',
     });
   const body = await readBody<{ initData: Record<string, string> }>(
     event as any
   );
   const data = body?.initData;
   if (!data)
-    throw createError({ statusCode: 400, statusMessage: 'Missing initData' });
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Отсутствуют данные Telegram',
+    });
   if (!verifyTelegram(data, String(botToken)))
-    throw createError({ statusCode: 401, statusMessage: 'TELEGRAM_INVALID' });
+    throw createError({
+      statusCode: 401,
+      statusMessage: 'Неверная подпись Telegram',
+    });
 
   const telegramId = Number(data.id);
   const username = data.username || null;

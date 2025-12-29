@@ -9,6 +9,7 @@ import {
 import { and, eq, isNull, gt } from 'drizzle-orm';
 import {
   SESSION_COOKIE_NAME,
+  CSRF_COOKIE_NAME,
   LANG_COOKIE_NAME,
   getCookieName,
 } from './cookie-names';
@@ -179,15 +180,41 @@ export async function getSessionUser(
   const user = await db
     .select()
     .from(users)
-    .where(
-      and(
-        eq(users.id, rows[0].userId),
-        eq(users.isBlocked, false) // Блокированные пользователи не могут авторизоваться
-      )
-    )
+    .where(eq(users.id, rows[0].userId))
     .limit(1);
 
-  if (!user.length) return null;
+  if (!user.length) {
+    await purgeSessionForMissingUser(
+      event,
+      sid,
+      cookieSid,
+      rows[0].userId,
+      'user_missing'
+    );
+    return null;
+  }
+
+  if (user[0].deletedAt) {
+    await purgeSessionForMissingUser(
+      event,
+      sid,
+      cookieSid,
+      user[0].id,
+      'user_missing'
+    );
+    return null;
+  }
+
+  if (user[0].isBlocked) {
+    await purgeSessionForMissingUser(
+      event,
+      sid,
+      cookieSid,
+      user[0].id,
+      'user_blocked'
+    );
+    return null;
+  }
 
   // Автоматическое продление сессии при активности
   const newExpiresAt = await maybeExtendSession(sid, now);
@@ -209,6 +236,41 @@ export async function getSessionUser(
   }
 
   return { user: user[0], channel };
+}
+
+async function purgeSessionForMissingUser(
+  event: any,
+  sessionId: string,
+  cookieSid: string | null,
+  userId: number,
+  reason: 'user_missing' | 'user_blocked'
+): Promise<void> {
+  await db.delete(sessions).where(eq(sessions.id, sessionId));
+
+  if (cookieSid && cookieSid === sessionId) {
+    const sessionCookieName = getCookieName(SESSION_COOKIE_NAME, isProd);
+    const csrfCookieName = getCookieName(CSRF_COOKIE_NAME, isProd);
+    deleteCookie(event, sessionCookieName, { path: '/' });
+    deleteCookie(event, csrfCookieName, { path: '/' });
+  }
+
+  try {
+    await db.insert(securityEvents).values({
+      userId: reason === 'user_blocked' ? userId : null,
+      eventType:
+        reason === 'user_blocked'
+          ? 'session_revoked_blocked_user'
+          : 'session_orphaned_user',
+      ipAddress: getClientIp(event),
+      userAgent: getHeader(event, 'user-agent') || null,
+      metadata: {
+        sessionId: `${sessionId.slice(0, 8)}...`,
+        sessionUserId: userId,
+      },
+    });
+  } catch (error) {
+    console.error('[Session] Failed to log orphaned session event:', error);
+  }
 }
 
 /**

@@ -31,7 +31,7 @@ export const roles = pgTable('roles', {
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
   name: varchar('name', { length: 120 }),
-  email: varchar('email', { length: 255 }).unique(),
+  email: varchar('email', { length: 255 }).unique().notNull(),
   emailVerifiedAt: timestamp('email_verified_at'),
   passwordHash: text('password_hash'),
   avatarUrl: text('avatar_url'),
@@ -53,6 +53,10 @@ export const users = pgTable('users', {
     .notNull()
     .references(() => roles.id),
   isBlocked: boolean('is_blocked').default(false).notNull(),
+  deletionRequestedAt: timestamp('deletion_requested_at', {
+    withTimezone: true,
+  }),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull(),
@@ -124,18 +128,27 @@ export const userResponseIds = pgTable('user_response_ids', {
 });
 
 // OAuth accounts
-export const oauthAccounts = pgTable('oauth_accounts', {
-  id: serial('id').primaryKey(),
-  userId: integer('user_id').notNull(),
-  provider: varchar('provider', { length: 50 }).notNull(),
-  providerUserId: varchar('provider_user_id', { length: 255 }).notNull(),
-  accessToken: text('access_token'),
-  refreshToken: text('refresh_token'),
-  expiresAt: timestamp('expires_at'),
-  createdAt: timestamp('created_at', { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-});
+export const oauthAccounts = pgTable(
+  'oauth_accounts',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id').notNull(),
+    provider: varchar('provider', { length: 50 }).notNull(),
+    providerUserId: varchar('provider_user_id', { length: 255 }).notNull(),
+    accessToken: text('access_token'),
+    refreshToken: text('refresh_token'),
+    expiresAt: timestamp('expires_at'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    providerUserIdUnique: unique('uk_oauth_accounts_provider_user_id').on(
+      table.provider,
+      table.providerUserId
+    ),
+  })
+);
 
 // Telegram accounts
 export const telegramAccounts = pgTable('telegram_accounts', {

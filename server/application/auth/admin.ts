@@ -27,7 +27,7 @@ function getAdminEmails(): Set<string> {
 export async function requireAdmin(event: any) {
   const session = await getSessionUser(event);
   if (!session?.user?.id) {
-    throw createError({ statusCode: 401, statusMessage: 'Unauthorized' });
+    throw createError({ statusCode: 401, statusMessage: 'Не авторизован' });
   }
 
   try {
@@ -47,5 +47,5 @@ export async function requireAdmin(event: any) {
     }
   }
 
-  throw createError({ statusCode: 403, statusMessage: 'Forbidden' });
+  throw createError({ statusCode: 403, statusMessage: 'Доступ запрещен' });
 }

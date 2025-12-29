@@ -51,6 +51,7 @@ server/
 🔐 Безопасность
 • Хранение паролей: Argon2id (в Node через argon2, в Laravel встроено).
 • Аутентификация: Система сессий с httpOnly cookie (Web) и заголовком X-Session-Token (Mobile).
+• Cookie-канал: используется только каноничное имя cookie (fallback на альтернативное имя отключён).
 • CSRF защита: Double Submit Cookie паттерн для web-запросов.
 • Шифрование данных: end-to-end для чатов, ключи разделяются (как в Telegram).
 • Middleware:
@@ -59,6 +60,19 @@ server/
 • cors (whitelist origins из env),
 • csrf (для cookie-канала, state-changing методы).
 • Логирование security events (csrf_mismatch, origin_mismatch, ip_mismatch и т.д.).
+• Email-верификация: коды в Redis (`auth:email_verification:*`), hash `sha256(code+secret)`, TTL 15 минут, 5 попыток, rate limit по IP/email.
+• Временный пароль до верификации: `auth:email_verification_password:*` (TTL 15 минут), перенос в БД только после подтверждения.
+• OAuth-линковка: временные данные `auth:oauth_link:*` + код `auth:oauth_link_code:*`, TTL 15 минут, до 5 попыток.
+• OAuth redirect в dev: если configured `PUBLIC_APP_ORIGIN` не совпадает с origin запроса, используется origin текущего запроса (нужно для ngrok/туннелей и мобильного dev).
+• Очистка незавершённых аккаунтов: nightly cleanup по `emailVerifiedAt = null` и `passwordHash = null` (можно отключить `AUTH_CLEANUP_ENABLED=false`).
+• OAuth защита от дублей: уникальный constraint на `(provider, providerUserId)` в `oauth_accounts`.
+• Восстановление осиротевших OAuth-аккаунтов: если `oauth_accounts` указывает на несуществующего пользователя, запись перевязывается на пользователя по email или создаётся новый пользователь.
+• Email обязателен для всех аккаунтов (NOT NULL); OAuth без email не создаёт пользователя.
+• Осиротевшие/заблокированные сессии: если сессия указывает на удалённого или заблокированного пользователя, она удаляется и cookies сбрасываются.
+• Политика удаления аккаунта: по умолчанию удаление происходит сразу (hard delete), но можно включить grace‑период через `AUTH_DELETE_GRACE_DAYS` (тогда используется 2‑фазное удаление и очередь).
+• Нативный Google Sign-In (Capacitor): клиент получает `idToken` и отправляет в `/api/auth/google/native`, сервер валидирует через `google-auth-library` и создаёт сессию.
+• Диагностика Google Sign-In на мобильных: клиент валидирует Web Client ID и показывает понятные ошибки по типовым кодам Google (DEVELOPER_ERROR, отмена входа, сеть).
+• Capacitor dev CORS: при запуске через `server.url` в dev клиент использует `window.location.origin` как API baseURL, чтобы избегать CORS между ngrok/локальным доменом.
 
 ⸻
 

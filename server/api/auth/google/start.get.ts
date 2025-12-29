@@ -1,14 +1,20 @@
 import { makeState, setOAuthCookies } from '@/server/application/auth/oauth';
+import { resolveAppUrl } from '@/server/application/auth/oauth-redirect';
 
 export default defineEventHandler(async (event) => {
   const cfg = useRuntimeConfig(event);
   const clientId =
     cfg.OAUTH_GOOGLE_CLIENT_ID || process.env.NUXT_OAUTH_GOOGLE_CLIENT_ID;
-  const appUrl = cfg.public.appUrl || 'http://localhost:3000';
+  const appUrl = resolveAppUrl(event, cfg.public.appUrl);
+  if (!clientId) {
+    throw createError({
+      statusCode: 500,
+      statusMessage: 'Google OAuth не настроен: отсутствует client id',
+    });
+  }
 
   const query = getQuery(event);
-  // Было: const redirectUri = String(query.redirect_uri || `${appUrl}`)
-  const redirectUri = String(query.redirect_uri || `${appUrl}/`); // ставим / на конец
+  const redirectUri = String(query.redirect_uri || `${appUrl}/`);
   const locale = query.locale ? String(query.locale) : undefined;
   const state = makeState();
 
@@ -22,7 +28,6 @@ export default defineEventHandler(async (event) => {
     state,
     prompt: 'consent',
   });
-  console.log('redirect1', params.toString());
   return sendRedirect(
     event,
     `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`,

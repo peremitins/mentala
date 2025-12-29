@@ -3,6 +3,7 @@ import { db } from '../../infrastructure/db/client';
 import { users } from '../../infrastructure/db/schema';
 import { eq, sql } from 'drizzle-orm';
 import { getSessionUserWithRole, requireCanEditUser } from '@/server/utils/require-role';
+import { cleanupAuthArtifactsForUsers } from '@/server/application/auth/user-cleanup';
 
 export default defineEventHandler(async (event) => {
   const user = await getSessionUserWithRole(event);
@@ -50,6 +51,7 @@ export default defineEventHandler(async (event) => {
     }
   }
 
+  await cleanupAuthArtifactsForUsers([id]);
   const deleted = await db.delete(users).where(eq(users.id, id)).returning();
 
   if (!deleted.length) {

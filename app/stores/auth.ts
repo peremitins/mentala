@@ -14,6 +14,25 @@ import { useTTS } from '@/app/composables/useTTS';
 import { useSpeechEngine } from '@/app/composables/useSpeechEngine';
 
 const SESSION_TOKEN_KEY = 'mentai.session.token';
+const GOOGLE_WEB_CLIENT_ID_REGEX = /\.apps\.googleusercontent\.com$/i;
+
+function mapGoogleLoginError(error: any): string {
+  const rawMessage = String(error?.message || error || '').trim();
+  const code = String(error?.code || '').trim();
+  const text = `${code} ${rawMessage}`.toLowerCase();
+
+  if (text.includes('sign_in_cancelled') || text.includes('12501')) {
+    return 'Вход отменён пользователем';
+  }
+  if (text.includes('developer_error') || text.includes('10')) {
+    return 'Google отклонил вход (DEVELOPER_ERROR). Проверь SHA-1 (debug/release) и package name в Android OAuth client, а также что используется Web Client ID.';
+  }
+  if (text.includes('network') || text.includes('12500')) {
+    return 'Не удалось подключиться к Google. Проверь интернет и Google Play Services.';
+  }
+  if (rawMessage) return rawMessage;
+  return 'Не удалось войти через Google';
+}
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
@@ -24,6 +43,8 @@ export const useAuthStore = defineStore('auth', {
       locale?: string;
       role?: string;
       isBlocked?: boolean;
+      emailVerifiedAt?: string | null;
+      hasPassword?: boolean;
     } | null,
     loading: false,
     isLoggedIn: false,
@@ -42,7 +63,7 @@ export const useAuthStore = defineStore('auth', {
       } catch (error) {
         this.user = null;
         this.isLoggedIn = false;
-        console.warn('Failed to fetch user:', error);
+        console.warn('Не удалось получить пользователя:', error);
         throw error;
       }
     },
@@ -80,8 +101,98 @@ export const useAuthStore = defineStore('auth', {
         // Переходим на главную
         await navigateTo('/');
       } catch (error) {
-        console.error('Login error:', error);
+        console.error('Ошибка входа:', error);
         throw error;
+      } finally {
+        this.loading = false;
+      }
+    },
+    async loginWithGoogle(locale?: string) {
+      if (typeof window === 'undefined') return;
+
+      const { Capacitor } = await import('@capacitor/core');
+      const isCapacitor = Capacitor.isNativePlatform();
+
+      if (!isCapacitor) {
+        this.oauth('google', locale);
+        return;
+      }
+
+      this.loading = true;
+      try {
+        const { SocialLogin } = await import('@capgo/capacitor-social-login');
+        const config = useRuntimeConfig();
+        const webClientId = String(
+          config.public.googleWebClientId || ''
+        ).trim();
+        const iosClientId = String(
+          config.public.googleIosClientId || ''
+        ).trim();
+
+        if (!Capacitor.isPluginAvailable('SocialLogin')) {
+          throw new Error(
+            'Нативный плагин SocialLogin не найден. Выполни `pnpm cap sync android`, затем Clean/Rebuild и переустанови приложение.'
+          );
+        }
+
+        if (!webClientId || !GOOGLE_WEB_CLIENT_ID_REGEX.test(webClientId)) {
+          throw new Error(
+            'Не задан или некорректен Google Web Client ID. Проверь NUXT_PUBLIC_GOOGLE_WEB_CLIENT_ID.'
+          );
+        }
+
+        const googleConfig: Record<string, any> = {
+          webClientId,
+          mode: 'online',
+        };
+
+        if (Capacitor.getPlatform() === 'ios' && iosClientId) {
+          googleConfig.iOSClientId = iosClientId;
+          googleConfig.iOSServerClientId = webClientId;
+        }
+
+        await SocialLogin.initialize({ google: googleConfig });
+        const loginResponse: any = await SocialLogin.login({
+          provider: 'google',
+          options: {
+            scopes: ['email', 'profile'],
+          },
+        });
+        const idToken = loginResponse?.result?.idToken;
+        if (!idToken) {
+          throw new Error('Google idToken missing');
+        }
+
+        const response: any = await useAPI('/api/auth/google/native', {
+          method: 'POST',
+          body: { idToken },
+        });
+
+        if (response?.requiresAccountLinking) {
+          const params = new URLSearchParams({
+            token: response.linkingToken,
+            email: response.email,
+            back: '/',
+          });
+          await navigateTo(`/auth/link?${params.toString()}`);
+          return response;
+        }
+
+        const sessionToken = response?.sessionToken;
+        if (sessionToken) {
+          localStorage.setItem(SESSION_TOKEN_KEY, sessionToken);
+        }
+
+        if (response?.user) {
+          this.user = response.user;
+          this.isLoggedIn = true;
+        }
+
+        await navigateTo('/');
+        return response;
+      } catch (error) {
+        console.error('Ошибка нативного входа Google:', error);
+        throw new Error(mapGoogleLoginError(error));
       } finally {
         this.loading = false;
       }
@@ -95,6 +206,124 @@ export const useAuthStore = defineStore('auth', {
       this.loading = true;
       try {
         const response = await useAPI('/api/auth/email/register', {
+          method: 'POST',
+          body: payload,
+        });
+        return response as any;
+      } catch (error) {
+        console.error('Ошибка регистрации:', error);
+        throw error;
+      } finally {
+        this.loading = false;
+      }
+    },
+    async verifyEmailCode(
+      payload: { email: string; code: string },
+      options?: { redirect?: string | null }
+    ) {
+      this.loading = true;
+      try {
+        const response = await useAPI('/api/auth/email/verify', {
+          method: 'POST',
+          body: payload,
+        });
+
+        if (typeof window !== 'undefined') {
+          const { Capacitor } = await import('@capacitor/core');
+          const isCapacitor = Capacitor.isNativePlatform();
+          if (isCapacitor) {
+            const sessionToken = (response as any)?.sessionToken;
+            if (sessionToken) {
+              localStorage.setItem(SESSION_TOKEN_KEY, sessionToken);
+            }
+          }
+        }
+
+        if ((response as any)?.user) {
+          this.user = (response as any).user;
+          this.isLoggedIn = true;
+        }
+
+        const redirectTo =
+          options && 'redirect' in options ? options.redirect : '/';
+        if (redirectTo) {
+          await navigateTo(redirectTo);
+        }
+        return response as any;
+      } catch (error) {
+        console.error('Ошибка проверки email:', error);
+        throw error;
+      } finally {
+        this.loading = false;
+      }
+    },
+    async resendEmailCode(payload: { email: string }) {
+      return await useAPI('/api/auth/email/resend-code', {
+        method: 'POST',
+        body: payload,
+      });
+    },
+    async requestEmailVerification(payload: { email: string }) {
+      return await useAPI('/api/auth/email/request-verification', {
+        method: 'POST',
+        body: payload,
+      });
+    },
+    async linkOAuthVerifyPassword(payload: {
+      linkingToken: string;
+      password: string;
+    }) {
+      this.loading = true;
+      try {
+        const response = await useAPI('/api/auth/oauth/link-verify-password', {
+          method: 'POST',
+          body: payload,
+        });
+
+        if (typeof window !== 'undefined') {
+          const { Capacitor } = await import('@capacitor/core');
+          const isCapacitor = Capacitor.isNativePlatform();
+          if (isCapacitor) {
+            const sessionToken = (response as any)?.sessionToken;
+            if (sessionToken) {
+              localStorage.setItem(SESSION_TOKEN_KEY, sessionToken);
+            }
+          }
+        }
+
+        if ((response as any)?.user) {
+          this.user = (response as any).user;
+          this.isLoggedIn = true;
+        }
+
+        return response as any;
+      } catch (error) {
+        console.error('Ошибка привязки OAuth по паролю:', error);
+        throw error;
+      } finally {
+        this.loading = false;
+      }
+    },
+    async linkOAuthSendCode(payload: { linkingToken: string }) {
+      return await useAPI('/api/auth/oauth/link-send-code', {
+        method: 'POST',
+        body: payload,
+      });
+    },
+    async requestPasswordReset(payload: { email: string }) {
+      return await useAPI('/api/auth/password/forgot', {
+        method: 'POST',
+        body: payload,
+      });
+    },
+    async resetPassword(payload: {
+      token: string;
+      password: string;
+      confirmPassword: string;
+    }) {
+      this.loading = true;
+      try {
+        const response = await useAPI('/api/auth/password/reset', {
           method: 'POST',
           body: payload,
         });
@@ -118,14 +347,73 @@ export const useAuthStore = defineStore('auth', {
           this.isLoggedIn = true;
         }
 
-        // Переходим на главную
-        await navigateTo('/');
+        return response as any;
       } catch (error) {
-        console.error('Registration error:', error);
+        console.error('Ошибка восстановления пароля:', error);
         throw error;
       } finally {
         this.loading = false;
       }
+    },
+    async validateResetToken(token: string) {
+      return await useAPI(`/api/auth/password/reset/validate?token=${token}`, {
+        method: 'GET',
+      });
+    },
+    async linkOAuthVerifyCode(payload: { linkingToken: string; code: string }) {
+      this.loading = true;
+      try {
+        const response = await useAPI('/api/auth/oauth/link-verify-code', {
+          method: 'POST',
+          body: payload,
+        });
+
+        // Обрабатываем ответ после успешной линковки
+        if (typeof window !== 'undefined') {
+          const { Capacitor } = await import('@capacitor/core');
+          const isCapacitor = Capacitor.isNativePlatform();
+          if (isCapacitor) {
+            const sessionToken = response?.sessionToken;
+            if (sessionToken) {
+              localStorage.setItem(SESSION_TOKEN_KEY, sessionToken);
+            }
+          }
+        }
+
+        if ((response as any)?.user) {
+          this.user = (response as any).user;
+          this.isLoggedIn = true;
+        }
+
+        return response;
+      } catch (error) {
+        console.error('Ошибка привязки OAuth по коду:', error);
+        throw error;
+      } finally {
+        this.loading = false;
+      }
+    },
+    async linkOAuthCancel(payload: { linkingToken: string }) {
+      return await useAPI('/api/auth/oauth/link-cancel', {
+        method: 'POST',
+        body: payload,
+      });
+    },
+    async setPassword(payload: { password: string; confirmPassword: string }) {
+      return await useAPI('/api/auth/password/set', {
+        method: 'POST',
+        body: payload,
+      });
+    },
+    async changePassword(payload: {
+      currentPassword: string;
+      newPassword: string;
+      confirmPassword: string;
+    }) {
+      return await useAPI('/api/auth/password/change', {
+        method: 'POST',
+        body: payload,
+      });
     },
     /**
      * Останавливает все активные запросы и озвучки
@@ -153,7 +441,7 @@ export const useAuthStore = defineStore('auth', {
           await stopSpeech();
         }
       } catch (err) {
-        console.error('[Auth Store] Error stopping active requests:', err);
+        console.error('[Auth Store] Ошибка остановки активных запросов:', err);
       }
     },
 
@@ -164,7 +452,7 @@ export const useAuthStore = defineStore('auth', {
       const chat = useChatStore();
       if (chat.sessionId && chat.messages && chat.messages.length > 0) {
         void chat.finishAndSave().catch((err) => {
-          console.error('[Auth Store] Background finishAndSave failed:', err);
+          console.error('[Auth Store] Фоновое сохранение не удалось:', err);
         });
       }
     },
@@ -188,7 +476,7 @@ export const useAuthStore = defineStore('auth', {
         useNotificationsStore().$reset();
         useUserStore().$reset();
       } catch (err) {
-        console.error('[Auth Store] Error resetting stores:', err);
+        console.error('[Auth Store] Ошибка сброса стора:', err);
         // Продолжаем выполнение даже если какой-то store не удалось сбросить
       }
     },
@@ -235,9 +523,12 @@ export const useAuthStore = defineStore('auth', {
       navigateTo('/auth');
     },
     oauth(provider: string, locale?: string) {
-      const back = `${location.origin}/`; // вернёмся на главную
+      if (typeof window === 'undefined') return;
+      const back = `${window.location.origin}/`; // вернёмся на главную
+      const base =
+        provider === 'vk' ? '/api/auth/vk/start' : '/api/auth/google/start';
       window.location.assign(
-        `/api/auth/google/start?redirect_uri=${encodeURIComponent(back)}&locale=${locale}`
+        `${base}?redirect_uri=${encodeURIComponent(back)}&locale=${locale}`
       );
     },
   },
