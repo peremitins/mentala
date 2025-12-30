@@ -80,7 +80,7 @@
             <div
               v-for="(m, index) in combinedMessages"
               :key="index"
-              class="w-max px-3 py-1 mb-2 items-center bubble max-w-[80%]"
+              class="w-max px-3 py-2 mb-2 items-center bubble max-w-[80%] glass-deep"
               :class="{ 'ml-auto': (m as any).role === 'user' }"
               v-html="m.content"
             />
@@ -390,15 +390,6 @@ const onSend = async () => {
 
 const combinedMessages = computed(() => chat?.messages || []);
 
-// длина контента последнего сообщения (для стриминга)
-const lastMessageContentLen = computed(() => {
-  const arr = combinedMessages.value as Array<any>;
-  if (!arr || arr.length === 0) return 0;
-  const last = arr[arr.length - 1];
-  const text = last && typeof last.content === 'string' ? last.content : '';
-  return text.length;
-});
-
 const chatRef = ref<HTMLElement | null>(null);
 const stickToBottom = ref(true); // «прилипать» ли при добавлении
 const THRESHOLD = 80; // порог, насколько близко к низу считать «рядом»
@@ -449,15 +440,6 @@ onBeforeUnmount(() => {
 // когда приходит новое сообщение — скроллим, если пользователь внизу
 watch(
   () => combinedMessages.value.length,
-  async () => {
-    await nextTick();
-    if (stickToBottom.value) scrollToBottom('smooth');
-  }
-);
-
-// при поступлении стрим-чанков (меняется длина текста последнего сообщения)
-watch(
-  () => lastMessageContentLen.value,
   async () => {
     await nextTick();
     if (stickToBottom.value) scrollToBottom('smooth');

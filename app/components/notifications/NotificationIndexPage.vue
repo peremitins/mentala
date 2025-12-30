@@ -33,7 +33,7 @@
             v-for="(item, index) in visibleItems"
             :key="item.id"
             type="button"
-            class="group relative w-full overflow-hidden rounded-xl border-2 border-border bg-card p-4 text-left transition-all duration-200 hover:border-primary/50 hover:-translate-y-0.5 hover:shadow-lg animate-slide-up"
+            class="glass-deep group relative w-full overflow-hidden rounded-xl bg-card p-4 text-left transition-all duration-200 hover:border-primary/50 hover:shadow-lg animate-slide-up"
             :style="`animation-delay: ${index * 0.05}s; animation-fill-mode: both`"
             @mouseenter="hoveredId = item.id"
             @mouseleave="hoveredId = null"

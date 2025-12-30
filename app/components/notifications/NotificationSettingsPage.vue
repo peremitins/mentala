@@ -228,7 +228,7 @@
           <ToggleGroup
             :model-value="subtype || ''"
             type="single"
-            class="inline-flex w-full rounded-lg border border-border-secondary bg-card p-1 gap-2 overflow-auto"
+            class="inline-flex w-full rounded-lg border border-border-secondary p-1 gap-2 overflow-auto"
             @update:model-value="
               (value) => {
                 if (value && typeof value === 'string')
@@ -250,7 +250,7 @@
         <!-- Информационный блок про фокус уведомлений -->
         <div
           v-if="selectedSubtypeOption"
-          class="rounded-xl border border-primary bg-button-active-soft p-4"
+          class="rounded-xl border border-primary p-4"
         >
           <div class="flex items-baseline gap-3">
             <span class="">{{ selectedSubtypeOption.icon }}</span>
@@ -281,7 +281,7 @@
           <ToggleGroup
             :model-value="directness"
             type="single"
-            class="inline-flex w-full rounded-lg border border-border-secondary bg-card p-1 gap-2 overflow-auto"
+            class="inline-flex w-full rounded-lg border border-border-secondary p-1 gap-2 overflow-auto"
             @update:model-value="
               (value) => {
                 if (value && typeof value === 'string')
@@ -303,7 +303,7 @@
         <!-- Информационный блок про стиль уведомлений -->
         <div
           v-if="selectedDirectnessOption"
-          class="rounded-xl border border-primary bg-button-active-soft p-4"
+          class="rounded-xl border border-primary p-4"
         >
           <div class="flex items-baseline gap-3">
             <span class="">💬</span>
@@ -334,7 +334,7 @@
           <ToggleGroup
             v-model="textSource"
             type="single"
-            class="inline-flex w-full rounded-lg border border-border-secondary bg-card p-1 gap-2 overflow-auto"
+            class="inline-flex w-full rounded-lg border border-border-secondary p-1 gap-2 overflow-auto"
           >
             <ToggleGroupItem
               value="templates"
@@ -371,7 +371,7 @@
         <!-- Информационный блок для Шаблонов -->
         <div
           v-if="textSource === 'templates'"
-          class="rounded-xl border border-primary bg-button-active-soft p-4"
+          class="rounded-xl border border-primary p-4"
         >
           <div class="flex items-baseline gap-3">
             <span class="">✍️</span>
@@ -390,7 +390,7 @@
         <!-- Информационный блок для ИИ -->
         <div
           v-if="textSource === 'ai'"
-          class="rounded-xl border border-primary bg-button-active-soft p-4"
+          class="rounded-xl border border-primary p-4"
         >
           <div class="flex items-baseline gap-3">
             <span class="">✨</span>
@@ -409,7 +409,7 @@
         <!-- Информационный блок для Гибридного режима -->
         <div
           v-if="textSource === 'hybrid'"
-          class="rounded-xl border border-primary bg-button-active-soft p-4"
+          class="rounded-xl border border-primary p-4"
         >
           <div class="flex items-baseline gap-3">
             <span class="">🔀</span>
