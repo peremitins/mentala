@@ -16,6 +16,7 @@ import {
   buildSessionMemoryText,
   buildChatPreludeWithMemory,
   buildWelcomePrompt,
+  buildEntryContextDescription,
 } from '@@/server/application/prompts';
 
 const OPENAI_URL = 'https://api.openai.com/v1/responses';
@@ -73,6 +74,31 @@ function mapToResponsesInput(
 
     // tool/прочие роли тут не обрабатываем (при необходимости добавить поддержку)
     return [];
+  });
+}
+
+// === Функция для форматирования промптов для логирования ===
+function formatPromptsForLogging(input: any[]): any[] {
+  return input.map((item, index) => {
+    const role = item.role;
+    const content = item.content || [];
+    // Извлекаем текст из content, который может быть массивом объектов с type и text
+    const textContent = content
+      .map((c: any) => {
+        // content может быть в формате { type: 'input_text' | 'output_text', text: string }
+        if (c.text !== undefined) return c.text;
+        // Или в других форматах
+        return '';
+      })
+      .join('')
+      .trim();
+
+    return {
+      index,
+      role,
+      textLength: textContent.length,
+      textPreview: textContent.length > 500 ? `${textContent}` : textContent,
+    };
   });
 }
 
@@ -271,6 +297,25 @@ export const openaiProvider: LlmProviderPort = {
           }
         }
 
+        // Логирование запроса терапии в OpenAI
+        console.log('[OpenAI chat()] Отправка запроса терапии:', {
+          model: usedModel,
+          mode: options?.mode || 'therapy',
+          userId: options?.userId || 'unknown',
+          sessionId: sessionId || 'none',
+          isFirstSession: isFirst,
+          hasPreviousResponseId: Boolean(previousResponseId),
+          hasSessionMemory: Boolean(sessionMemoryText),
+          messagesCount: (messages || []).length,
+          userMessagesCount,
+          temperature: body.temperature,
+          maxOutputTokens: maxTokens,
+          store: body.store,
+          hasPreviousResponseIdInBody: Boolean(body.previous_response_id),
+          tryEncrypted,
+          prompts: formatPromptsForLogging(input),
+        });
+
         const res: any = await $fetch(OPENAI_URL, {
           method: 'POST',
           timeout: 30_000,
@@ -432,6 +477,20 @@ export const openaiProvider: LlmProviderPort = {
       temperature: 0.2,
     };
 
+    // Логирование запроса finishSession в OpenAI
+    console.log(
+      '[OpenAI finishSession()] Отправка запроса завершения сессии:',
+      {
+        model: usedModel,
+        userId: String(userId),
+        sessionId: sessionId || 'none',
+        messagesCount: lastK.length,
+        maxOutputTokens: body.max_output_tokens,
+        temperature: body.temperature,
+        prompts: formatPromptsForLogging(input),
+      }
+    );
+
     try {
       const res: any = await $fetch(OPENAI_URL, {
         method: 'POST',
@@ -537,6 +596,9 @@ export const openaiProvider: LlmProviderPort = {
     }
 
     const lang = options?.lang ?? 'ru';
+    const contextNote = options?.entryContext
+      ? buildEntryContextDescription(options.entryContext)
+      : '';
 
     // ОБРАБОТКА СТАРТА С WELCOME-ЭКРАНА
     if (isWelcomeStart) {
@@ -580,6 +642,7 @@ export const openaiProvider: LlmProviderPort = {
         user_locale: options?.user_locale,
         user_name: options?.user_name,
         welcomePromptContent: welcomePromptContent || undefined,
+        entryContext: options?.entryContext,
       });
 
       // System промпт для старта
@@ -632,6 +695,28 @@ export const openaiProvider: LlmProviderPort = {
         streamOptions.previous_response_id = previousResponseId;
         streamOptions.store = true;
       }
+
+      // Логирование запроса терапии в OpenAI (welcome-старт)
+      console.log(
+        '[OpenAI chatStream()] Отправка запроса терапии (welcome-старт):',
+        {
+          model: usedModel,
+          mode: options?.mode || 'therapy',
+          userId: options?.userId || 'unknown',
+          sessionId: options?.sessionId || 'none',
+          isFirstSession: isFirst,
+          hasPreviousResponseId: Boolean(previousResponseId),
+          hasSessionMemory: Boolean(sessionMemoryText),
+          hasWelcomePrompt: Boolean(welcomePromptContent),
+          temperature: streamOptions.temperature,
+          maxOutputTokens: streamOptions.max_output_tokens,
+          store: streamOptions.store,
+          hasPreviousResponseIdInOptions: Boolean(
+            streamOptions.previous_response_id
+          ),
+          prompts: formatPromptsForLogging(input),
+        }
+      );
 
       const stream = await openai.responses.stream(streamOptions);
 
@@ -722,16 +807,31 @@ export const openaiProvider: LlmProviderPort = {
     );
 
     const developerStyle = '';
+    const developerMessages: Array<{
+      role: 'developer';
+      content: Array<{ type: 'input_text'; text: string }>;
+    }> = [];
+
+    if (contextNote) {
+      developerMessages.push({
+        role: 'developer',
+        content: [{ type: 'input_text' as const, text: contextNote }],
+      });
+    }
+
+    if (developerStyle) {
+      developerMessages.push({
+        role: 'developer',
+        content: [{ type: 'input_text' as const, text: developerStyle }],
+      });
+    }
 
     const input = [
       {
         role: 'system',
         content: [{ type: 'input_text' as const, text: systemPrelude }],
       },
-      {
-        role: 'developer',
-        content: [{ type: 'input_text' as const, text: developerStyle }],
-      },
+      ...developerMessages,
       // ПАМЯТЬ ПРОШЛЫХ СЕССИЙ → developer-блок до истории сообщений
       ...(!isFirst && sessionMemoryText
         ? [
@@ -787,6 +887,32 @@ export const openaiProvider: LlmProviderPort = {
       streamOptions.previous_response_id = previousResponseId;
       streamOptions.store = true; // Принудительно устанавливаем store: true при использовании previous_response_id
     }
+
+    // Логирование запроса терапии в OpenAI (обычный режим диалога)
+    console.log(
+      '[OpenAI chatStream()] Отправка запроса терапии (обычный режим):',
+      {
+        model: usedModel,
+        mode: options?.mode || 'therapy',
+        userId: options?.userId || 'unknown',
+        sessionId: options?.sessionId || 'none',
+        isFirstSession: isFirst,
+        hasPreviousResponseId: Boolean(previousResponseId),
+        hasSessionMemory: Boolean(sessionMemoryText),
+        messagesCount: (messages || []).length,
+        userMessagesCount,
+        responseNumber,
+        hasEntryContext: Boolean(contextNote),
+        hasUserPrompt: Boolean(options?.userPrompt),
+        temperature: streamOptions.temperature,
+        maxOutputTokens: streamOptions.max_output_tokens,
+        store: streamOptions.store,
+        hasPreviousResponseIdInOptions: Boolean(
+          streamOptions.previous_response_id
+        ),
+        prompts: formatPromptsForLogging(input),
+      }
+    );
 
     const stream = await openai.responses.stream(streamOptions);
 

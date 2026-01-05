@@ -10,7 +10,12 @@
 // 5. Единая стилизация (без markdown)
 // ===================================================================
 
-import type { TherapyApproach, ChatMode, ResponseType } from '@/shared/dto';
+import type {
+  ChatEntryContext,
+  TherapyApproach,
+  ChatMode,
+  ResponseType,
+} from '@/shared/dto';
 
 export type PromptTemplate = string;
 
@@ -298,12 +303,8 @@ export const systemCore = `Ты — заботливый помощник по �
 ВАЖНО: Ты НЕ врач, НЕ диагностируешь, НЕ заменяешь профессионального терапевта.
 
 
-╔════════════════════════════════════════════════════════════════════════════╗
-║         ГЛАВНОЕ ПРАВИЛО: ИССЛЕДОВАНИЕ + КОНКРЕТНАЯ МИКРОПОЛЕЗНОСТЬ        ║
-║   Платная сессия = вопросы для понимания + КОНКРЕТНАЯ опора                ║
-║   МАКСИМУМ 1 ВОПРОС НА СООБЩЕНИЕ (нет интервью-эффекта)                   ║
-╚════════════════════════════════════════════════════════════════════════════╝
-
+ГЛАВНОЕ ПРАВИЛО: ИССЛЕДОВАНИЕ + КОНКРЕТНАЯ МИКРОПОЛЕЗНОСТЬ.
+МАКСИМУМ 1 ВОПРОС НА СООБЩЕНИЕ (нет интервью-эффекта).
 
 ────────────────────────────────────────────────────────────────────────────
 
@@ -421,7 +422,6 @@ export const systemCore = `Ты — заботливый помощник по �
 ✓ ВАРИАТИВНОСТЬ: Не повторяй фразы в сессии
 ✓ КОНКРЕТНОСТЬ: Используй детали из рассказа пользователя
 ✓ ПРИВЯЗКА: Варианты ссылаются на то что сказал(а) пользователь
-✓ ЧЕСТНОСТЬ: Платная сессия = исследование, не тратим время
 ✓ ТОНУС: Живой, естественный, как опытный друг-психолог
 
 
@@ -750,6 +750,29 @@ export function buildSummaryPrompt(vars: { lang: string }) {
   return renderTemplate(sessionSummaryJson, vars);
 }
 
+export function buildEntryContextDescription(
+  context: ChatEntryContext
+): string {
+  if (context.type === 'habit') {
+    const name = context.habit_name || context.habit_id;
+    const intent = context.habit_intent === 'quit' ? 'отказа' : 'формирования';
+    const description = context.habit_description
+      ? ` — ${context.habit_description}`
+      : '';
+    return `Контекст: пользователь хочет обсудить привычку «${name}» (${intent})${description}.`;
+  }
+
+  if (context.type === 'therapy_topic') {
+    const name = context.topic_name || context.topic_id;
+    const description = context.topic_description
+      ? ` — ${context.topic_description}`
+      : '';
+    return `Контекст: пользователь хочет поговорить о теме «${name}»${description}.`;
+  }
+
+  return '';
+}
+
 export function buildWelcomePrompt(options: {
   mode: 'therapy' | 'habits' | 'talk';
   isFirstSession: boolean;
@@ -758,11 +781,15 @@ export function buildWelcomePrompt(options: {
   user_locale?: string;
   user_name?: string;
   welcomePromptContent?: string;
+  entryContext?: ChatEntryContext;
 }): string {
   const lang = options.lang || 'ru';
   const isFirst = options.isFirstSession;
   const mode = options.mode;
   const sessionMemoryText = options.sessionMemoryText || '';
+  const contextNote = options.entryContext
+    ? buildEntryContextDescription(options.entryContext)
+    : '';
 
   if (options.welcomePromptContent) {
     let prompt = options.welcomePromptContent;
@@ -780,7 +807,7 @@ export function buildWelcomePrompt(options: {
       prompt +
       '\n\nВАЖНО: Твое сообщение будет ПЕРВЫМ в диалоге. Сгенерируй: приветствие (2-3 предложения) + 1 конкретная опора (выбор/инсайт/рамка) + 1 открытый вопрос. Без форматирования. Просто текст.';
 
-    return prompt;
+    return contextNote ? `${contextNote}\n\n${prompt}` : prompt;
   }
 
   const modeDescriptions: Record<string, { first: string; repeat: string }> = {
@@ -874,5 +901,5 @@ export function buildWelcomePrompt(options: {
     );
   }
 
-  return prompt;
+  return contextNote ? `${contextNote}\n\n${prompt}` : prompt;
 }

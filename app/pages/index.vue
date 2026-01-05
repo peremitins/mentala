@@ -87,10 +87,7 @@
           </section>
         </div>
 
-        <section
-          class="glass-deep p-2 mt-auto z-100"
-          :style="{ borderRadius: `calc(var(--radius-sm))` }"
-        >
+        <section class="glass-deep p-2 mt-auto z-100">
           <div class="flex items-center gap-3">
             <TextareaResize
               ref="textareaRef"
@@ -133,6 +130,7 @@ import {
   ref,
   computed,
 } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { useSpeechEngine } from '@/app/composables/useSpeechEngine';
 import { useTTS } from '@/app/composables/useTTS';
 import { useChatStore } from '@/app/stores/chat';
@@ -161,10 +159,28 @@ import AvatarVoiceControls from '@/app/components/AvatarVoiceControls.vue';
 
 const emit = defineEmits<{ (e: 'send', text: string): void }>();
 
+const route = useRoute();
+const router = useRouter();
 const colorMode = useColorMode();
 
-// Показываем приветственный экран, если нет сообщений
-const showWelcomeScreen = computed(() => chat.messages.length === 0);
+// Определяем экран на основе query параметра и состояния чата
+const showWelcomeScreen = computed(() => {
+  const screenParam = route.query.screen as string | undefined;
+
+  // Если в URL указан screen=welcome, показываем welcome
+  if (screenParam === 'welcome') {
+    return true;
+  }
+
+  // Если в URL указан screen=chat, показываем chat
+  if (screenParam === 'chat') {
+    return false;
+  }
+
+  // Если параметра screen нет, определяем по наличию сообщений
+  // (для обратной совместимости)
+  return chat.messages.length === 0;
+});
 
 // Computed для отображения режима в Combobox (маппим 'talk' на 'therapy')
 const displayMode = computed({
@@ -249,12 +265,36 @@ watch(
   }
 );
 
+// Функция для обновления URL с query параметрами
+function updateURL(
+  screen: 'welcome' | 'chat',
+  mode?: 'therapy' | 'habits' | 'talk'
+) {
+  const query: Record<string, string> = { screen };
+  if (mode) {
+    query.mode = mode;
+  }
+
+  // Используем replace, чтобы не создавать новую запись в истории
+  router
+    .replace({
+      path: route.path,
+      query,
+    })
+    .catch(() => {
+      // Игнорируем ошибки навигации (например, если уже находимся на этой странице)
+    });
+}
+
 // Обработчик выбора на приветственном экране
 async function handleWelcomeSelect(
   mode: 'therapy' | 'habits' | 'talk',
   userPrompt?: string
 ) {
   // Режим уже установлен в WelcomeScreen компоненте
+  // Обновляем URL с параметрами screen=chat и mode
+  updateURL('chat', mode);
+
   // Начинаем диалог от ассистента (без user-сообщения "Привет")
   try {
     chat.startSession();
@@ -411,12 +451,118 @@ const handleScroll = () => {
   stickToBottom.value = isNearBottom();
 };
 
+// Флаг для предотвращения циклических обновлений URL
+const isUpdatingURL = ref(false);
+
+// Watch на route.query для реакции на изменение URL (например, при навигации назад/вперед)
+watch(
+  () => route.query,
+  (newQuery) => {
+    if (isUpdatingURL.value) return;
+
+    const screenParam = newQuery.screen as string | undefined;
+    const modeParam = newQuery.mode as
+      | 'therapy'
+      | 'habits'
+      | 'talk'
+      | undefined;
+
+    // Если в URL указан режим и экран чата, восстанавливаем режим
+    if (screenParam === 'chat' && modeParam) {
+      // Устанавливаем режим в настройках (маппим talk на therapy для внутреннего использования)
+      if (modeParam === 'talk') {
+        chatSettings.mode = 'therapy';
+      } else if (modeParam === 'therapy' || modeParam === 'habits') {
+        chatSettings.mode = modeParam;
+      }
+    }
+  },
+  { immediate: false }
+);
+
+// Watch на chat.messages для синхронизации URL
+watch(
+  () => chat.messages.length,
+  (messageCount) => {
+    if (isUpdatingURL.value) return;
+
+    const screenParam = route.query.screen as string | undefined;
+
+    // Если сообщения появились и screen не chat - обновляем URL
+    if (messageCount > 0 && screenParam !== 'chat') {
+      const currentMode = chatSettings.mode;
+      const modeForURL = currentMode === 'therapy' ? 'therapy' : currentMode;
+      isUpdatingURL.value = true;
+      updateURL('chat', modeForURL as 'therapy' | 'habits' | 'talk');
+      nextTick(() => {
+        isUpdatingURL.value = false;
+      });
+    }
+    // Если сообщений нет и screen не welcome - обновляем URL
+    else if (messageCount === 0 && screenParam !== 'welcome') {
+      isUpdatingURL.value = true;
+      updateURL('welcome');
+      nextTick(() => {
+        isUpdatingURL.value = false;
+      });
+    }
+  },
+  { immediate: false }
+);
+
 onMounted(async () => {
   // Загружаем настройки чата при монтировании
   try {
     await chatSettings.getChatSettings();
   } catch (error) {
     console.error('[Index] Failed to load chat settings:', error);
+  }
+
+  // Восстанавливаем состояние из query параметров
+  const screenParam = route.query.screen as string | undefined;
+  const modeParam = route.query.mode as
+    | 'therapy'
+    | 'habits'
+    | 'talk'
+    | undefined;
+
+  // Если в URL указан режим и экран чата, восстанавливаем режим
+  if (screenParam === 'chat' && modeParam) {
+    // Устанавливаем режим в настройках (маппим talk на therapy для внутреннего использования)
+    if (modeParam === 'talk') {
+      chatSettings.mode = 'therapy';
+    } else if (modeParam === 'therapy' || modeParam === 'habits') {
+      chatSettings.mode = modeParam;
+    }
+  }
+
+  // Если screen не указан в URL, но есть сообщения - устанавливаем screen=chat
+  if (!screenParam && chat.messages.length > 0) {
+    const currentMode = chatSettings.mode;
+    const modeForURL = currentMode === 'therapy' ? 'therapy' : currentMode;
+    isUpdatingURL.value = true;
+    updateURL('chat', modeForURL as 'therapy' | 'habits' | 'talk');
+    nextTick(() => {
+      isUpdatingURL.value = false;
+    });
+  }
+  // Если screen не указан и нет сообщений - устанавливаем screen=welcome
+  else if (!screenParam && chat.messages.length === 0) {
+    isUpdatingURL.value = true;
+    updateURL('welcome');
+    nextTick(() => {
+      isUpdatingURL.value = false;
+    });
+  }
+  // Если есть entryContext (переход с другой страницы), но screen не указан - устанавливаем screen=chat
+  else if (!screenParam && chat.entryContext) {
+    const currentMode = chatSettings.mode || 'therapy';
+    const modeForURL = currentMode === 'therapy' ? 'therapy' : currentMode;
+    isUpdatingURL.value = true;
+    updateURL('chat', modeForURL as 'therapy' | 'habits' | 'talk');
+    nextTick(() => {
+      isUpdatingURL.value = false;
+    });
   }
 
   await nextTick();
@@ -465,14 +611,20 @@ watch(
   }
 );
 
-// отменяем запросы при возврате на welcome screen
+// отменяем запросы при возврате на welcome screen и синхронизируем URL
 watch(
   () => showWelcomeScreen.value,
   async (isWelcomeScreen) => {
-    if (isWelcomeScreen) {
-      // Отменяем текущий chat stream запрос (если он активен)
-      // clearMessages уже вызывает endTherapySession, поэтому не нужно вызывать отдельно
-      chat.clearMessages();
+    if (isWelcomeScreen && !isUpdatingURL.value) {
+      const screenParam = route.query.screen as string | undefined;
+      // Обновляем URL только если он еще не установлен на welcome
+      if (screenParam !== 'welcome') {
+        isUpdatingURL.value = true;
+        updateURL('welcome');
+        nextTick(() => {
+          isUpdatingURL.value = false;
+        });
+      }
     }
   }
 );

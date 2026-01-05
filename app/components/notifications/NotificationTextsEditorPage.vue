@@ -1,12 +1,12 @@
 <template>
-  <div class="space-y-4 h-full overflow-y-auto rounded-sm">
+  <div class="space-y-4 h-full overflow-y-auto rounded-lg pb-[80px]">
     <PageHeader
       title="Тексты уведомлений"
       :show-back-button="true"
       @go-back="goBack"
     />
 
-    <section class="flex-1 overflow-y-auto space-y-4 pb-[80px]">
+    <section class="flex-1 overflow-y-auto space-y-4 pb-[100px]">
       <!-- Заголовок с информацией -->
       <div>
         <h2 class="text-lg font-semibold text-foreground">
@@ -27,7 +27,7 @@
           <ToggleGroup
             :model-value="selectedSubtype || ''"
             type="single"
-            class="inline-flex w-full rounded-lg border border-border bg-card p-1 gap-2 overflow-auto"
+            class="inline-flex w-full gap-2 overflow-auto"
             @update:model-value="handleSubtypeChange"
           >
             <ToggleGroupItem
@@ -49,7 +49,7 @@
           <ToggleGroup
             :model-value="selectedDirectness"
             type="single"
-            class="inline-flex w-full rounded-lg border border-border bg-card p-1 gap-2 overflow-auto"
+            class="inline-flex w-full gap-2 overflow-auto"
             @update:model-value="handleDirectnessChange"
           >
             <ToggleGroupItem
@@ -73,7 +73,7 @@
           v-for="(text, index) in localTexts"
           :key="text.id || text.tempId"
           :data-text-id="text.id || text.tempId"
-          class="rounded-xl border border-border bg-card p-3 transition-all shadow-sm relative overflow-hidden list-item"
+          class="rounded-lg border border-border bg-transparent p-3 transition-all shadow-sm relative overflow-hidden list-item hover:border-primary"
           :class="{
             'border-primary ring-2 ring-primary/20':
               editingId === (text.id || text.tempId),
@@ -97,7 +97,7 @@
             </div>
             <div class="flex items-center gap-1">
               <button
-                class="inline-flex items-center justify-center rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                class="inline-flex items-center justify-center rounded-md p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
                 aria-label="Редактировать"
               >
                 <svg
@@ -154,7 +154,7 @@
             />
             <div class="flex items-center justify-between text-xs">
               <span class="text-muted-foreground">
-                Можно использовать {'{name}'} для подстановки имени
+                Можно использовать {name} для подстановки имени
               </span>
               <span
                 :class="{
@@ -173,7 +173,7 @@
 
       <!-- Кнопка добавления -->
       <button
-        class="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2.5 text-sm font-medium text-foreground hover:bg-accent transition-colors w-full"
+        class="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-transparent px-4 py-2.5 text-sm font-medium text-foreground hover:border-primary hover:text-primary transition-colors w-full"
         @click="addNewText"
       >
         <svg
@@ -193,7 +193,7 @@
       </button>
 
       <!-- Восстановление дефолтных -->
-      <div class="rounded-xl border border-border bg-card p-4 space-y-3">
+      <div class="rounded-lg border border-border bg-transparent p-4 space-y-3">
         <h3 class="text-sm font-semibold text-foreground">
           Восстановить стандартные шаблоны
         </h3>
@@ -210,7 +210,7 @@
           Ваши тексты останутся, дефолтные будут добавлены обратно
         </p>
         <button
-          class="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2.5 text-sm font-medium text-foreground hover:bg-accent transition-colors w-full"
+          class="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-transparent px-4 py-2.5 text-sm font-medium text-foreground hover:border-primary hover:text-primary transition-colors w-full"
           @click="handleReset"
         >
           <svg
@@ -232,11 +232,9 @@
     </section>
 
     <!-- Фиксированная кнопка сохранения -->
-    <div
-      class="sticky bottom-[80px] border-t border-border bg-background/95 backdrop-blur-sm p-4"
-    >
+    <div class="sticky bottom-[20px]">
       <button
-        class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors w-full disabled:opacity-50 disabled:cursor-not-allowed"
+        class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors w-full disabled:opacity-70 disabled:cursor-not-allowed"
         :disabled="!hasChanges || saving"
         @click="handleSave"
       >
@@ -276,7 +274,7 @@
     <!-- Модалка подтверждения сброса -->
     <ConfirmModal
       ref="resetModalRef"
-      :title="`Сбросить тексты для '${entityName}'?`"
+      :title="`Сбросить тексты для ${entityName}?`"
       :subtitle="`Будут восстановлены стандартные тексты.\n⚠️ ВНИМАНИЕ: Все ваши изменения стандартных текстов будут потеряны.\n\nВаши ${userTextsCount} пользовательских текстов будут сохранены, если включена галочка.`"
       confirm-label="Сбросить"
       cancel-label="Отмена"

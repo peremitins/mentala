@@ -1,5 +1,5 @@
 <template>
-  <div class="rounded-lg border border-border bg-card p-4 space-y-3">
+  <div class="glass-deep rounded-lg border border-border p-4 space-y-3">
     <div class="flex items-center justify-between">
       <h3 class="text-sm font-semibold">Подписка</h3>
       <span v-if="subscription?.plan?.name === 'premium'" class="text-lg"
@@ -72,7 +72,7 @@
             этой неделе
           </span>
         </div>
-        <div class="h-2 w-full rounded-full bg-muted overflow-hidden">
+        <div class="h-2 w-full rounded-full bg-primary/20 overflow-hidden">
           <div
             class="h-full transition-all duration-300"
             :class="

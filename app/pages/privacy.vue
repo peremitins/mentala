@@ -7,7 +7,7 @@
     />
     <section
       class="space-y-6"
-      :style="{ borderRadius: `calc(var(--radius-sm))` }"
+      :style="{ borderRadius: `calc(var(--radius-lg))` }"
     >
       <!-- Настройки памяти AI -->
       <MemorySettings />

@@ -12,6 +12,7 @@
         label="Обращение"
         layout="flex"
         size="sm"
+        variant="outline"
         item-max-width="200px"
       />
 
@@ -21,6 +22,7 @@
         :options="toneOptions"
         label="Тон общения"
         size="sm"
+        variant="outline"
         description="Эти параметры влияют на стиль общения AI-ассистента и текст всех уведомлений."
         item-max-width="200px"
       />

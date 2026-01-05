@@ -117,7 +117,7 @@ import {
   RadioGroupItem,
 } from '@/app/components/ui/shadcn/radio-group';
 import { Separator } from '@/app/components/ui/shadcn/separator';
-import { Button } from '@/app/components/ui/shadcn/button';
+import { Button } from '@/app/components/ui/button';
 import PromptEditorModal from '@/app/components/PromptEditorModal.vue';
 import IconCirclePlus from '~icons/lucide/circle-plus';
 import Skeleton from '@/app/components/ui/Skeleton.vue';

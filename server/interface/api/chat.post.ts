@@ -117,6 +117,7 @@ export default defineEventHandler(async (event) => {
         userId: uid, // серверный стабильный uid
         isFirstSession: undefined, // рассчитывается в других местах при стриминге
         userPrompt: (parsed as any)?.userPrompt,
+        entryContext: (parsed as any)?.entryContext,
       },
     });
     // simple guard: roughly estimate tokens by characters (very rough ~4 chars per token)

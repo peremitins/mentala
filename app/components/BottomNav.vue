@@ -1,9 +1,6 @@
 <template>
   <div v-bind="$attrs" class="flex-[0_0_auto] inset-x-0 mt-2 sticky bottom-0">
-    <section
-      class="glass-deep px-0 py-3"
-      :style="{ borderRadius: `calc(var(--radius-sm))` }"
-    >
+    <section class="glass-deep px-0 py-3">
       <ul class="grid grid-cols-4 gap-1 text-xs">
         <li class="flex flex-col items-center gap-1 w-full">
           <NuxtLink

@@ -4,6 +4,7 @@ import { useLoadersStore } from '@/app/stores/loaders';
 import { nanoid } from 'nanoid';
 import { useRuntimeConfig } from 'nuxt/app';
 import { getCsrfTokenForHeader } from '@/app/utils/csrf';
+import type { ChatEntryContext } from '@/shared/dto';
 
 export const useChatStore = defineStore('chat', {
   state: () => ({
@@ -17,6 +18,7 @@ export const useChatStore = defineStore('chat', {
     lastPingAt: null as number | null, // Последний ping на сервер (throttle)
     idleTimeoutTimer: null as ReturnType<typeof setTimeout> | null, // Таймер для idle timeout чата
     isEndingSession: false as boolean, // Флаг для предотвращения множественных вызовов endTherapySession
+    entryContext: null as ChatEntryContext | null,
   }),
   actions: {
     startSession(sessionId?: string) {
@@ -214,6 +216,7 @@ export const useChatStore = defineStore('chat', {
         mode,
         userPrompt,
         lang: 'ru' as const,
+        entryContext: this.entryContext,
       };
     },
     /**
@@ -301,6 +304,11 @@ export const useChatStore = defineStore('chat', {
       userPrompt?: string;
     }) {
       if (!this.sessionId) this.startSession();
+
+      const loaders = useLoadersStore();
+
+      loaders.showLoader();
+
       this.userText = '';
 
       // Начинаем therapy сессию для подсчета времени
@@ -340,12 +348,11 @@ export const useChatStore = defineStore('chat', {
             mode: apiParams.mode, // Передаем mode (включая 'talk')
             userPrompt: apiParams.userPrompt,
             lang: apiParams.lang,
+            entryContext: apiParams.entryContext,
           },
           responseType: 'stream',
           signal: abortController.signal, // Передаем signal для отмены запроса
         } as any);
-        const loaders = useLoadersStore();
-        loaders.hideLoader();
 
         await this._processStreamResponse(resp, idx);
 
@@ -356,6 +363,7 @@ export const useChatStore = defineStore('chat', {
 
         return { ok: true } as any;
       } catch (e: any) {
+        loaders.hideLoader();
         // Сохраняем ссылку на AbortController перед очисткой
         const wasAborted =
           this.currentChatAbortController?.signal?.aborted || false;
@@ -389,7 +397,8 @@ export const useChatStore = defineStore('chat', {
             content: 'Ошибка начала диалога. Попробуйте еще раз.',
           });
         }
-        throw e;
+      } finally {
+        loaders.hideLoader();
       }
     },
     async sendMessage(text: string) {

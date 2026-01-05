@@ -4,15 +4,15 @@
       'rounded-lg border p-6 space-y-4 transition-all',
       isSelected
         ? 'border-primary bg-primary/5'
-        : 'border-border bg-card hover:border-primary/50',
+        : 'border-border bg-transparent hover:border-primary/50',
     ]"
   >
-    <div class="flex items-center justify-between">
+    <div class="flex items-start justify-between gap-2">
       <h3 class="text-lg font-semibold">{{ getPlanName() }}</h3>
       <div class="flex items-center gap-2">
         <span
           v-if="plan.name === 'basic' && props.trialActive"
-          class="text-xs bg-primary/10 text-primary px-2 py-1 rounded font-medium"
+          class="text-xs bg-primary/10 text-primary px-2 py-1 rounded font-medium text-end"
         >
           Бесплатный пробный период
         </span>
@@ -30,10 +30,10 @@
     <div v-if="plan.name !== 'basic'" class="flex items-center gap-1.5">
       <button
         :class="[
-          'px-2.5 py-1 text-xs rounded-md transition-colors',
+          'px-2.5 py-1 text-xs rounded-md transition-colors border ',
           billingPeriod === 'month'
             ? 'bg-primary text-primary-foreground'
-            : 'bg-muted text-muted-foreground hover:bg-muted/80',
+            : 'bg-transparent text-muted-foreground hover:bg-primary/10 border border-border',
         ]"
         @click.stop="handlePeriodChange('month')"
       >
@@ -41,10 +41,10 @@
       </button>
       <button
         :class="[
-          'px-2.5 py-1 text-xs rounded-md transition-colors',
+          'px-2.5 py-1 text-xs rounded-md transition-colors border ',
           billingPeriod === 'year'
             ? 'bg-primary text-primary-foreground'
-            : 'bg-muted text-muted-foreground hover:bg-muted/80',
+            : 'bg-transparent text-muted-foreground hover:bg-primary/10 border border-border',
         ]"
         @click.stop="handlePeriodChange('year')"
       >
@@ -90,13 +90,15 @@
           class="relative flex w-full touch-none select-none items-center py-3"
           aria-label="Минут в неделю"
         >
-          <SliderTrack class="relative h-2 w-full grow rounded-full bg-muted">
+          <SliderTrack
+            class="relative h-2 w-full grow rounded-full bg-primary/20"
+          >
             <SliderRange
               class="absolute h-full rounded-full bg-gradient-to-r from-primary to-primary"
             />
           </SliderTrack>
           <SliderThumb
-            class="block h-5 w-5 rounded-full border-2 border-background bg-primary shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            class="block h-5 w-5 rounded-full border-2 border-background/50 bg-primary shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           />
         </SliderRoot>
         <div class="flex justify-between text-xs text-muted-foreground mt-1">
@@ -108,7 +110,10 @@
         </div>
       </div>
 
-      <div v-if="customPrice" class="rounded-md bg-muted p-3 text-center">
+      <div
+        v-if="customPrice"
+        class="rounded-md bg-transparent p-3 text-center border border-border"
+      >
         <p class="text-sm text-muted-foreground">Итоговая стоимость</p>
         <p class="text-2xl font-bold">
           {{ customPrice }} ₽ / {{ billingPeriod === 'year' ? 'год' : 'месяц' }}
@@ -123,12 +128,12 @@
           ? 'bg-primary text-primary-foreground cursor-not-allowed opacity-75'
           : isSelected
             ? 'bg-primary text-primary-foreground hover:opacity-90'
-            : 'bg-muted text-muted-foreground hover:bg-muted/80',
+            : 'bg-primary/10 text-primary hover:bg-primary/20',
       ]"
       :disabled="isCurrent"
       @click.stop="handleButtonClick"
     >
-      {{ isCurrent ? 'Выбрано' : 'Выбрать' }}
+      {{ isCurrent ? 'Активный' : 'Выбрать' }}
     </button>
   </div>
 </template>

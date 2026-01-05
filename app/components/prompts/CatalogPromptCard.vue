@@ -46,7 +46,7 @@
 import type { CatalogItem } from '@/app/lib/promptsCatalog';
 import { ExpandableText } from '@/app/components/ui/expandable-text';
 import { Separator } from '@/app/components/ui/shadcn/separator';
-import { Button } from '@/app/components/ui/shadcn/button';
+import { Button } from '@/app/components/ui/button';
 import IconPlus from '~icons/lucide/circle-plus';
 import IconCopy from '~icons/lucide/copy';
 

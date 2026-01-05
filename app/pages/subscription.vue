@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-4 h-full overflow-y-auto rounded-sm">
+  <div class="space-y-4 h-full overflow-y-auto rounded-lg">
     <PageHeader
       :title="'Управление подпиской'"
       :show-back-button="true"
@@ -32,7 +32,7 @@
           <div
             v-else
             key="content"
-            class="rounded-lg border border-border bg-card p-4"
+            class="glass-deep rounded-lg border border-border p-4"
           >
             <div
               v-if="
@@ -144,7 +144,7 @@
       :open="showConfirmDialog"
       @update:open="showConfirmDialog = $event"
     >
-      <AlertDialogContent class="bg-background border-border">
+      <AlertDialogContent class="glass-deep">
         <AlertDialogHeader>
           <AlertDialogTitle>Подтвердите смену тарифа</AlertDialogTitle>
           <AlertDialogDescription>

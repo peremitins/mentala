@@ -1,24 +1,19 @@
 <template>
-  <div class="space-y-4 h-dvh overflow-y-auto pb-[100px]">
+  <div class="space-y-4 h-dvh overflow-y-auto pb-[100px] rounded-lg">
     <PageHeader title="⚙️&nbsp;&nbsp;Настройки" />
 
     <section
       class="space-y-3"
-      :style="{ borderRadius: `calc(var(--radius-sm))` }"
+      :style="{ borderRadius: `calc(var(--radius-lg))` }"
     >
       <Tabs :model-value="tab" @update:model-value="onTabChange" class="w-full">
-        <TabsList class="grid grid-cols-3">
+        <TabsList class="grid grid-cols-2">
           <TabsTrigger class="" value="general">Общие</TabsTrigger>
-          <TabsTrigger class="" value="notifications">Уведомления</TabsTrigger>
           <TabsTrigger class="" value="user">Пользователь</TabsTrigger>
         </TabsList>
 
         <TabsContent value="general" class="space-y-3">
           <SettingsGeneral />
-        </TabsContent>
-
-        <TabsContent value="notifications" class="space-y-4">
-          <SettingsNotifications />
         </TabsContent>
 
         <TabsContent value="user" class="space-y-4">
@@ -43,7 +38,6 @@ import {
   TabsTrigger,
 } from '@/app/components/ui/shadcn/tabs';
 import SettingsGeneral from '@/app/components/settings/SettingsGeneral.vue';
-import SettingsNotifications from '@/app/components/settings/SettingsNotifications.vue';
 import SettingsUser from '@/app/components/settings/SettingsUser.vue';
 
 const auth = useAuthStore();

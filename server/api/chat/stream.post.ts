@@ -10,6 +10,7 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { getAiUsageGate } from '@/server/application/subscriptions/ai-usage.service';
 import { CHAT_IDLE_TIMEOUT_MS } from '@/server/config/subscription';
 import { endTherapySession } from '@/server/application/subscriptions/session-time.service';
+import type { ChatEntryContext } from '@/shared/dto';
 
 export default defineEventHandler(async (event) => {
   // Не логируем ключи API (чувствительные данные)
@@ -27,6 +28,7 @@ export default defineEventHandler(async (event) => {
     userPrompt?: string;
     mode?: 'therapy' | 'habits' | 'talk'; // Режим для старта с welcome-экрана
     therapySessionId?: number; // для серверного обновления last_activity_at и биллинга
+    entryContext?: ChatEntryContext;
   }>(event);
 
   // Отдаём как SSE
@@ -205,6 +207,7 @@ export default defineEventHandler(async (event) => {
           isFirstSession: serverIsFirst,
           userPrompt: body?.userPrompt,
           mode: body?.mode, // Режим для старта с welcome-экрана
+          entryContext: body?.entryContext,
         },
       });
 
