@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-4 h-full overflow-y-auto rounded-sm">
+  <div class="space-y-4 h-full overflow-y-auto rounded-lg">
     <PageHeader
       :title="'Управление подпиской'"
       :show-back-button="true"
@@ -32,7 +32,7 @@
           <div
             v-else
             key="content"
-            class="rounded-lg border border-border bg-card p-4"
+            class="glass-deep rounded-lg border border-border p-4"
           >
             <div
               v-if="
@@ -50,8 +50,7 @@
                 class="mt-2 space-y-1"
               >
                 <p class="text-xs text-muted-foreground">
-                  Доступен полный функционал Premium: AI-чат, аватар, 100 минут
-                  в неделю
+                  Доступен полный функционал Premium: AI-чат, 100 минут в неделю
                 </p>
                 <p class="text-xs text-muted-foreground">
                   Пробный период действует до:
@@ -145,7 +144,7 @@
       :open="showConfirmDialog"
       @update:open="showConfirmDialog = $event"
     >
-      <AlertDialogContent class="bg-background border-border">
+      <AlertDialogContent class="glass-deep">
         <AlertDialogHeader>
           <AlertDialogTitle>Подтвердите смену тарифа</AlertDialogTitle>
           <AlertDialogDescription>
@@ -195,7 +194,6 @@ interface Plan {
   name: string;
   basePrice: number;
   weeklyMinutesLimit: number;
-  avatarEnabled: boolean;
   isCustomConfigurable: boolean;
   isVisibleInUI?: boolean;
 }
@@ -218,7 +216,6 @@ interface SubscriptionResponse {
   trialExpiresAt: string | null;
   features: {
     ai: boolean;
-    avatar: boolean;
     weeklyMinutesLimit: number;
   };
   subscription: Subscription | null;
@@ -253,7 +250,6 @@ const planBillingPeriods = ref<Map<string, 'month' | 'year'>>(new Map());
 const selectedPlanId = ref<string | null>(null);
 const customConfig = ref({
   weeklyMinutes: 100,
-  avatarEnabled: true,
 });
 const customPrice = ref<number | null>(null);
 const processing = ref(false);
@@ -357,10 +353,7 @@ function setBillingPeriod(planId: string, period: 'month' | 'year') {
   planBillingPeriods.value.set(planId, period);
 }
 
-function handleCustomConfigUpdate(config: {
-  weeklyMinutes: number;
-  avatarEnabled: boolean;
-}) {
+function handleCustomConfigUpdate(config: { weeklyMinutes: number }) {
   customConfig.value = config;
 }
 
@@ -474,7 +467,6 @@ async function calculateCustomPriceForPlan(planId: string): Promise<void> {
       method: 'POST',
       body: {
         weeklyMinutes: customConfig.value.weeklyMinutes,
-        avatarEnabled: customConfig.value.avatarEnabled,
         billingPeriod,
       },
     });
@@ -510,7 +502,6 @@ function goBack() {
 watch(
   () => [
     customConfig.value.weeklyMinutes,
-    customConfig.value.avatarEnabled,
     selectedPlanId.value,
     planBillingPeriods.value,
   ],
@@ -544,7 +535,6 @@ async function startCheckout() {
     if (plan.isCustomConfigurable && customConfig.value) {
       body.customConfig = {
         weeklyMinutes: customConfig.value.weeklyMinutes,
-        avatarEnabled: customConfig.value.avatarEnabled,
       };
     }
 

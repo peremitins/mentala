@@ -16,7 +16,7 @@ const DEFAULT_SETTINGS: ChatSettings = {
   theme: 'dark',
   mode: 'therapy',
   voice: true,
-  avatar: true,
+  avatar: false,
   enablePreviousResponseId: true,
   enableSummary: true,
 };

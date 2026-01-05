@@ -91,7 +91,7 @@ defineExpose({
       :maxlength="maxlength"
       :class="
         cn(
-          'flex h-10 w-full rounded-2xl border-2 border-border bg-card px-3  text-sm',
+          'flex h-10 w-full rounded-lg border-2 border-border bg-transparent px-3  text-sm',
           'ring-offset-background ',
           'placeholder:text-muted-foreground',
           'focus-visible:outline-none focus:border-primary ',
@@ -112,7 +112,7 @@ defineExpose({
       type="button"
       :class="
         cn(
-          'absolute right-2 top-1/2 -translate-y-1/2 rounded-sm p-0.5',
+          'absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-0.5',
           'opacity-70 ring-offset-background transition-opacity',
           'hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
           'disabled:pointer-events-none',

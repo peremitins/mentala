@@ -5,9 +5,7 @@
       class="container mx-auto px-4 py-8 flex items-center justify-center min-h-dvh relative z-10"
     >
       <div class="w-full max-w-md">
-        <div
-          class="rounded-3xl border border-border/20 bg-card/95 backdrop-blur-xl shadow-xl p-6"
-        >
+        <div class="glass-deep p-6">
           <div class="text-center mb-6">
             <div class="text-2xl font-semibold text-foreground">Mentala</div>
             <div class="text-sm text-muted-foreground">Новый пароль</div>

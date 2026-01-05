@@ -25,7 +25,7 @@ export default defineEventHandler(async (event) => {
       name: plan.name,
       basePrice: Number(plan.basePrice),
       weeklyMinutesLimit: plan.weeklyMinutesLimit,
-      avatarEnabled: plan.avatarEnabled,
+      avatarEnabled: false,
       pricePerMinuteGPT: Number(plan.pricePerMinuteGPT),
       pricePerMinuteAvatar: Number(plan.pricePerMinuteAvatar),
       isCustomConfigurable: plan.isCustomConfigurable,

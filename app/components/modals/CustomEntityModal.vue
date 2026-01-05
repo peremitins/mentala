@@ -1,7 +1,7 @@
 <template>
   <Dialog :open="open" @update:open="emit('update:open', $event)">
     <DialogContent
-      class="border border-border bg-card backdrop-blur-xl shadow-2xl data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:fade-in data-[state=closed]:fade-out data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95"
+      class="glass-deep border border-border bg-card backdrop-blur-xl shadow-2xl data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:fade-in data-[state=closed]:fade-out data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95"
     >
       <DialogHeader>
         <DialogTitle
@@ -25,7 +25,7 @@
           <ToggleGroup
             :model-value="intent || ''"
             type="single"
-            class="inline-flex w-full rounded-lg border border-border-secondary bg-card p-1 gap-2 overflow-auto"
+            class="inline-flex w-full gap-2 overflow-auto"
             @update:model-value="
               (value) => {
                 if (value && typeof value === 'string')
@@ -46,7 +46,7 @@
 
         <div
           v-if="showHero && heroTitle"
-          class="flex items-start gap-2 sm:gap-4 p-2.5 sm:p-3 rounded-xl sm:rounded-2xl border border-primary bg-button-active-soft transition-all duration-300"
+          class="flex items-start gap-2 sm:gap-4 p-2.5 sm:p-3 rounded-xl sm:rounded-lg border border-primary bg-transparent transition-all duration-300"
         >
           <div
             class="flex items-start rounded-2xl text-2xl transition-transform duration-300"

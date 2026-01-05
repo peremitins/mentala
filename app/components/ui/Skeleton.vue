@@ -6,9 +6,11 @@
       :class="[
         'animate-pulse animate-slide-up',
         roundedClass,
-        type === 'prompt'
-          ? 'border-2 border-border bg-card p-4'
-          : 'border border-border bg-card p-3',
+        !withWrapper
+          ? ''
+          : type === 'prompt'
+            ? 'border-2 border-border bg-transparent p-4'
+            : 'border border-border bg-transparent p-3',
       ]"
       :style="`animation-delay: ${(i - 1) * 0.05}s; animation-fill-mode: both`"
     >
@@ -94,6 +96,12 @@
         <!-- Кнопка -->
         <div class="h-10 bg-skeleton rounded-md w-full"></div>
       </div>
+
+      <div v-else-if="type === 'simple-text'" class="space-y-3">
+        <div class="h-3 bg-skeleton rounded w-full" />
+        <div class="h-3 bg-skeleton rounded w-full" />
+        <div class="h-3 bg-skeleton rounded w-3/4" />
+      </div>
     </div>
   </div>
 </template>
@@ -108,14 +116,17 @@ const props = withDefaults(
       | 'notification-text'
       | 'list-item'
       | 'subscription-status'
-      | 'plan-card';
+      | 'plan-card'
+      | 'simple-text';
     count?: number;
     roundedSize?: 'sm' | 'md' | 'lg' | 'xl';
+    withWrapper?: boolean;
   }>(),
   {
     type: 'list-item',
     count: 3,
     roundedSize: 'xl',
+    withWrapper: true,
   }
 );
 

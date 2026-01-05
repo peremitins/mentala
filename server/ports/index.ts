@@ -1,3 +1,5 @@
+import type { ChatEntryContext } from '@/shared/dto';
+
 export interface LoggerPort {
   info: (msg: string, meta?: unknown) => void;
   error: (msg: string, meta?: unknown) => void;
@@ -19,6 +21,7 @@ export interface LlmProviderPort {
       userId?: number | string;
       isFirstSession?: boolean;
       userPrompt?: string;
+      entryContext?: ChatEntryContext;
       mode?: 'therapy' | 'habits' | 'talk'; // Режим чата для ротации типов ответов
     };
   }) => Promise<{ role: 'assistant'; content: string; model?: string }>;
@@ -37,6 +40,7 @@ export interface LlmProviderPort {
       userId?: number | string;
       isFirstSession?: boolean;
       userPrompt?: string;
+      entryContext?: ChatEntryContext;
       mode?: 'therapy' | 'habits' | 'talk'; // Режим чата для ротации типов ответов
     };
   }) => AsyncIterable<string>;

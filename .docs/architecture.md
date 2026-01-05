@@ -122,12 +122,6 @@ server/
 • Тексты уведомлений хранятся в таблице `notification_texts`; планировщик обрабатывает терапию так же, как привычки: при `textSource === 'templates'` используются тексты из БД; при `textSource === 'ai'` или `'hybrid'` используются AI-генерированные тексты.
 • Удаление кастомной темы через UI очищает локальный store и оставляет пользователя на списке (navigateTo `/therapy`), а отдельная кнопка корзины выровнена с arrow-иконкой в NotificationIndexPage, чтобы список для therapy/habits выглядел единообразно.
 
-• HeyGen Streaming Avatar (BFF-прокси):
-• Nitro-ручки: `server/api/heygen/session.post.ts` (streaming.new v2 → LiveKit url/token/session_id), `start.post.ts`, `stop.post.ts`, `speak.post.ts`, `close.post.ts` — фронт не видит приватный ключ.
-• Конфиг (server-only): `runtimeConfig.heygenApiKey`, `heygenBaseUrl`, `heygenAvatarId` в `nuxt.config.ts`.
-• Клиент: `useHeygenStore` создаёт сессию и подключается к LiveKit через `livekit-client`, треки крепятся в `HeyGenPlayer` к `video/audio` ref. LiveKit Room и DOM-узлы держим вне Pinia state (`markRaw` переменная), чтобы Vue devtools/SSR сериализация не падала на `constructor.name` внутри LiveKit.
-• Безопасность: ключ хранится только на сервере; клиент использует `useAPI`/`$api` с относительными путями (автоматически используют текущий origin), токен/URL очищаются при stop/unmount.
-
 ⸻
 
 💳 Подписки, минуты и биллинг
@@ -163,6 +157,8 @@ server/
 • Сервер жёстко проверяет доступ к AI и недельный лимит минут (с overdraft `WEEKLY_OVERDRAFT_MINUTES`).
 • `/api/therapy/session/start` откажет, если нет доступа к AI или лимит исчерпан.
 • `/api/chat/stream` требует `therapySessionId`, обновляет `last_activity_at` на сервере и проверяет лимиты перед запросом к LLM.
+• Summary сессий сохраняется только при наличии достаточных ответов пользователя; без фактов из сообщений пользователя summary не генерируется.
+• Welcome‑приветствия в повторных сессиях формулируются нейтрально и не утверждают факт обсуждения конкретной темы.
 
 • Миграции (Drizzle):
 • Меняем `server/infrastructure/db/schema.ts` → запускаем `pnpm db:generate` → `pnpm db:migrate`.

@@ -372,7 +372,7 @@
 1. ✅ Убрать localStorage для Web
 2. ✅ Добавить CSRF защиту
 3. ✅ Обновить документацию
-4. ✅ Защитить платные API endpoints (TTS, STT, HeyGen)
+4. ✅ Защитить платные API endpoints (TTS, STT)
 5. ✅ Исправить утечки в логах (токены, OAuth codes)
 6. ✅ Закрыть админские API (requireAdmin)
 

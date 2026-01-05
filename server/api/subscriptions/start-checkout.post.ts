@@ -41,7 +41,6 @@ const checkoutSchema = z.object({
         .min(CUSTOM_MIN_WEEKLY_MINUTES)
         .max(CUSTOM_MAX_WEEKLY_MINUTES)
         .multipleOf(CUSTOM_MINUTES_STEP),
-      avatarEnabled: z.boolean(),
     })
     .optional(),
 });
@@ -129,7 +128,10 @@ export default defineEventHandler(async (event) => {
 
     // Рассчитываем цену
     let totalPrice: number;
-    let finalCustomConfig = null;
+    let finalCustomConfig: {
+      weeklyMinutes: number;
+      totalPrice: number;
+    } | null = null;
 
     if (plan[0].isCustomConfigurable) {
       if (!customConfig) {
@@ -141,13 +143,11 @@ export default defineEventHandler(async (event) => {
 
       totalPrice = calculateCustomPrice({
         weeklyMinutes: customConfig.weeklyMinutes,
-        avatarEnabled: customConfig.avatarEnabled,
         billingPeriod: billingPeriod as BillingPeriod,
       });
 
       finalCustomConfig = {
         weeklyMinutes: customConfig.weeklyMinutes,
-        avatarEnabled: customConfig.avatarEnabled,
         totalPrice,
       };
     } else {

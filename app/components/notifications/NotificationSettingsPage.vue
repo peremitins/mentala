@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-4 h-full overflow-y-auto rounded-sm pb-[100px]">
+  <div class="space-y-4 h-full overflow-y-auto rounded-lg pb-[100px]">
     <PageHeader :title="entityName" :show-back-button="true" @go-back="goBack">
       <template #custom>
         <div class="flex items-center gap-2 flex-1 overflow-hidden">
@@ -67,10 +67,10 @@
       </div>
       <div
         v-else
-        class="flex items-start gap-3 rounded-2xl bg-button-active-soft px-3 py-2 border border-primary"
+        class="flex items-start gap-3 rounded-lg px-3 py-2 border border-primary"
       >
         <p
-          class="text-sm text-surface-raised-foreground flex-1 border-2 border-transparent"
+          class="text-sm text-foreground flex-1 border-2 border-transparent"
           v-html="descriptionText"
         />
         <button
@@ -122,14 +122,14 @@
               aria-label="Частота уведомлений"
             >
               <SliderTrack
-                class="relative h-2 w-full grow rounded-full bg-muted"
+                class="relative h-2 w-full grow rounded-full bg-primary/20"
               >
                 <SliderRange
                   class="absolute h-full rounded-full bg-gradient-to-r from-primary to-primary"
                 />
               </SliderTrack>
               <SliderThumb
-                class="block h-5 w-5 rounded-full border-2 border-background bg-primary shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                class="block h-5 w-5 rounded-full border-2 border-background/50 bg-primary shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               />
             </SliderRoot>
           </div>
@@ -154,10 +154,10 @@
                       >
                         <span
                           :class="[
-                            'flex h-8 w-8 items-center justify-center rounded-full border text-sm transition-colors',
+                            'flex h-8 w-8 items-center justify-center rounded-full border text-sm transition-all',
                             slot.isManual
-                              ? 'border-surface-raised-foreground bg-button-active-soft text-surface-raised-foreground'
-                              : 'border-surface-raised-inactive-border bg-card text-surface-inactive-foreground ',
+                              ? 'border-primary  text-surface-raised-foreground hover:opacity-75'
+                              : 'border-border  text-surface-inactive-foreground hover:border-primary hover:text-surface-raised-foreground',
                           ]"
                         >
                           {{ slot.number }}
@@ -228,7 +228,7 @@
           <ToggleGroup
             :model-value="subtype || ''"
             type="single"
-            class="inline-flex w-full rounded-lg border border-border-secondary bg-card p-1 gap-2 overflow-auto"
+            class="inline-flex w-full gap-2 overflow-auto"
             @update:model-value="
               (value) => {
                 if (value && typeof value === 'string')
@@ -250,15 +250,15 @@
         <!-- Информационный блок про фокус уведомлений -->
         <div
           v-if="selectedSubtypeOption"
-          class="rounded-xl border border-primary bg-button-active-soft p-4"
+          class="rounded-lg border border-primary p-4"
         >
           <div class="flex items-baseline gap-3">
             <span class="">{{ selectedSubtypeOption.icon }}</span>
             <div class="flex-1">
-              <p class="text-sm font-semibold text-surface-raised-foreground">
+              <p class="text-sm font-semibold text-foreground">
                 {{ selectedSubtypeOption.label }}
               </p>
-              <p class="text-xs text-surface-raised-subtitle mt-1">
+              <p class="text-xs text-muted-foreground mt-1">
                 {{ selectedSubtypeOption.description }}
               </p>
             </div>
@@ -281,7 +281,7 @@
           <ToggleGroup
             :model-value="directness"
             type="single"
-            class="inline-flex w-full rounded-lg border border-border-secondary bg-card p-1 gap-2 overflow-auto"
+            class="inline-flex w-full gap-2 overflow-auto"
             @update:model-value="
               (value) => {
                 if (value && typeof value === 'string')
@@ -303,15 +303,15 @@
         <!-- Информационный блок про стиль уведомлений -->
         <div
           v-if="selectedDirectnessOption"
-          class="rounded-xl border border-primary bg-button-active-soft p-4"
+          class="rounded-lg border border-primary p-4"
         >
           <div class="flex items-baseline gap-3">
             <span class="">💬</span>
             <div class="flex-1">
-              <p class="text-sm font-semibold text-surface-raised-foreground">
+              <p class="text-sm font-semibold text-foreground">
                 {{ selectedDirectnessOption.label }}
               </p>
-              <p class="text-xs text-surface-raised-subtitle mt-1">
+              <p class="text-xs text-muted-foreground mt-1">
                 {{ selectedDirectnessOption.description }}
               </p>
             </div>
@@ -334,7 +334,7 @@
           <ToggleGroup
             v-model="textSource"
             type="single"
-            class="inline-flex w-full rounded-lg border border-border-secondary bg-card p-1 gap-2 overflow-auto"
+            class="inline-flex w-full gap-2 overflow-auto"
           >
             <ToggleGroupItem
               value="templates"
@@ -371,15 +371,15 @@
         <!-- Информационный блок для Шаблонов -->
         <div
           v-if="textSource === 'templates'"
-          class="rounded-xl border border-primary bg-button-active-soft p-4"
+          class="rounded-lg border border-primary p-4"
         >
           <div class="flex items-baseline gap-3">
             <span class="">✍️</span>
             <div class="flex-1">
-              <p class="text-sm font-semibold text-surface-raised-foreground">
+              <p class="text-sm font-semibold text-foreground">
                 Использование шаблонов
               </p>
-              <p class="text-xs text-surface-raised-subtitle mt-1">
+              <p class="text-xs text-muted-foreground mt-1">
                 Тексты уведомлений будут браться из готовых шаблонов с учетом
                 всех параметров настроек (фокус, стиль, обращение).
               </p>
@@ -390,15 +390,15 @@
         <!-- Информационный блок для ИИ -->
         <div
           v-if="textSource === 'ai'"
-          class="rounded-xl border border-primary bg-button-active-soft p-4"
+          class="rounded-lg border border-primary p-4"
         >
           <div class="flex items-baseline gap-3">
             <span class="">✨</span>
             <div class="flex-1">
-              <p class="text-sm font-semibold text-surface-raised-foreground">
+              <p class="text-sm font-semibold text-foreground">
                 Генерация через ИИ
               </p>
-              <p class="text-xs text-surface-raised-subtitle mt-1">
+              <p class="text-xs text-muted-foreground mt-1">
                 Тексты уведомлений будут генерироваться ИИ с учетом всех
                 параметров настроек (фокус, стиль, обращение).
               </p>
@@ -409,15 +409,15 @@
         <!-- Информационный блок для Гибридного режима -->
         <div
           v-if="textSource === 'hybrid'"
-          class="rounded-xl border border-primary bg-button-active-soft p-4"
+          class="rounded-lg border border-primary p-4"
         >
           <div class="flex items-baseline gap-3">
             <span class="">🔀</span>
             <div class="flex-1">
-              <p class="text-sm font-semibold text-surface-raised-foreground">
+              <p class="text-sm font-semibold text-foreground">
                 Гибридный режим
               </p>
-              <p class="text-xs text-surface-raised-subtitle mt-1">
+              <p class="text-xs text-muted-foreground mt-1">
                 Тексты уведомлений будут чередоваться: часть будет взята из
                 готовых шаблонов, часть создаст ИИ с учётом всех параметров
                 настроек.
@@ -430,7 +430,7 @@
       <div class="flex flex-col gap-3">
         <button
           type="button"
-          class="rounded-xl px-4 py-3 text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+          class="rounded-lg px-4 py-3 text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
           :disabled="isSaveDisabled"
           @click="saveSettings"
         >
@@ -1295,17 +1295,10 @@ async function saveSettings() {
 }
 
 function goBack() {
-  console.log('goBack');
   if (isHabits.value) {
-    const intentFromQuery = route.query.intent as
-      | 'build'
-      | 'quit'
-      | 'custom'
-      | undefined;
-    const intent = intentFromQuery || resolvedIntentForFilters.value || 'build';
-    navigateTo(`/habits?intent=${intent}`);
+    navigateTo(`/habits/${props.entityKey}`);
   } else {
-    navigateTo('/therapy');
+    navigateTo(`/therapy/${props.entityKey}`);
   }
 }
 

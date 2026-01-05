@@ -16,9 +16,12 @@ import {
   buildSessionMemoryText,
   buildChatPreludeWithMemory,
   buildWelcomePrompt,
+  buildEntryContextDescription,
 } from '@@/server/application/prompts';
 
 const OPENAI_URL = 'https://api.openai.com/v1/responses';
+const MIN_SUMMARY_USER_MESSAGES = 1;
+const MIN_SUMMARY_USER_CHARS = 20;
 
 // In-memory cache for current session encrypted reasoning
 const sessionCache = new Map<
@@ -40,6 +43,133 @@ function parseStrictJson(raw: string): any {
   } catch {
     return { summary_text: s };
   }
+}
+
+// === Валидация и нормализация summary ===
+function validateAndNormalizeSummary(parsed: any): any {
+  // Базовые проверки
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return createEmptySummary();
+  }
+
+  // Список допустимых ключей
+  const validKeys = [
+    'summary_detailed',
+    'themes_explored',
+    'patterns_identified',
+    'homework_suggested',
+    'emotional_journey',
+    'topics',
+    'risk_flag',
+    'approaches_used',
+  ];
+
+  // Если есть неправильные ключи - возвращаем пустой summary
+  const hasInvalidKeys = Object.keys(parsed).some(
+    (key) => !validKeys.includes(key)
+  );
+  if (hasInvalidKeys) {
+    console.warn(
+      '[OpenAI finishSession] Invalid summary: unexpected keys found, using empty summary'
+    );
+    return createEmptySummary();
+  }
+
+  // Нормализуем структуру, заполняя недостающие поля
+  return {
+    summary_detailed:
+      typeof parsed.summary_detailed === 'string'
+        ? parsed.summary_detailed
+        : '',
+    themes_explored: Array.isArray(parsed.themes_explored)
+      ? parsed.themes_explored.map((theme: any) => ({
+          theme:
+            typeof theme?.theme === 'string'
+              ? theme.theme
+              : String(theme || ''),
+          depth:
+            theme?.depth === 'surface' ||
+            theme?.depth === 'moderate' ||
+            theme?.depth === 'deep'
+              ? theme.depth
+              : 'surface',
+          key_insight:
+            typeof theme?.key_insight === 'string' ? theme.key_insight : '',
+        }))
+      : [],
+    patterns_identified: Array.isArray(parsed.patterns_identified)
+      ? parsed.patterns_identified
+          .filter((p: any) => typeof p === 'string')
+          .slice(0, 10)
+      : [],
+    homework_suggested:
+      parsed.homework_suggested &&
+      typeof parsed.homework_suggested === 'object' &&
+      !Array.isArray(parsed.homework_suggested)
+        ? {
+            name:
+              typeof parsed.homework_suggested.name === 'string'
+                ? parsed.homework_suggested.name
+                : '',
+            instruction:
+              typeof parsed.homework_suggested.instruction === 'string'
+                ? parsed.homework_suggested.instruction
+                : '',
+            duration:
+              typeof parsed.homework_suggested.duration === 'string'
+                ? parsed.homework_suggested.duration
+                : '',
+          }
+        : null,
+    emotional_journey:
+      parsed.emotional_journey &&
+      typeof parsed.emotional_journey === 'object' &&
+      !Array.isArray(parsed.emotional_journey)
+        ? {
+            start_level:
+              typeof parsed.emotional_journey.start_level === 'string'
+                ? parsed.emotional_journey.start_level
+                : '5',
+            end_level:
+              typeof parsed.emotional_journey.end_level === 'string'
+                ? parsed.emotional_journey.end_level
+                : '5',
+            shift_observed:
+              typeof parsed.emotional_journey.shift_observed === 'string'
+                ? parsed.emotional_journey.shift_observed
+                : '',
+          }
+        : null,
+    topics: Array.isArray(parsed.topics)
+      ? parsed.topics.filter((t: any) => typeof t === 'string').slice(0, 20)
+      : [],
+    risk_flag:
+      parsed.risk_flag === 'none' ||
+      parsed.risk_flag === 'watch' ||
+      parsed.risk_flag === 'elevated'
+        ? parsed.risk_flag
+        : 'none',
+    approaches_used: Array.isArray(parsed.approaches_used)
+      ? parsed.approaches_used
+          .filter((a: any) =>
+            ['cbt', 'psychoanalysis', 'existential', 'positive'].includes(a)
+          )
+          .slice(0, 4)
+      : [],
+  };
+}
+
+function createEmptySummary(): any {
+  return {
+    summary_detailed: '',
+    themes_explored: [],
+    patterns_identified: [],
+    homework_suggested: null,
+    emotional_journey: null,
+    topics: [],
+    risk_flag: 'none',
+    approaches_used: [],
+  };
 }
 
 // === Маппер сообщений под Responses API ===
@@ -73,6 +203,31 @@ function mapToResponsesInput(
 
     // tool/прочие роли тут не обрабатываем (при необходимости добавить поддержку)
     return [];
+  });
+}
+
+// === Функция для форматирования промптов для логирования ===
+function formatPromptsForLogging(input: any[]): any[] {
+  return input.map((item, index) => {
+    const role = item.role;
+    const content = item.content || [];
+    // Извлекаем текст из content, который может быть массивом объектов с type и text
+    const textContent = content
+      .map((c: any) => {
+        // content может быть в формате { type: 'input_text' | 'output_text', text: string }
+        if (c.text !== undefined) return c.text;
+        // Или в других форматах
+        return '';
+      })
+      .join('')
+      .trim();
+
+    return {
+      index,
+      role,
+      textLength: textContent.length,
+      textPreview: textContent.length > 500 ? `${textContent}` : textContent,
+    };
   });
 }
 
@@ -271,6 +426,25 @@ export const openaiProvider: LlmProviderPort = {
           }
         }
 
+        // Логирование запроса терапии в OpenAI
+        console.log('[OpenAI chat()] Отправка запроса терапии:', {
+          model: usedModel,
+          mode: options?.mode || 'therapy',
+          userId: options?.userId || 'unknown',
+          sessionId: sessionId || 'none',
+          isFirstSession: isFirst,
+          hasPreviousResponseId: Boolean(previousResponseId),
+          hasSessionMemory: Boolean(sessionMemoryText),
+          messagesCount: (messages || []).length,
+          userMessagesCount,
+          temperature: body.temperature,
+          maxOutputTokens: maxTokens,
+          store: body.store,
+          hasPreviousResponseIdInBody: Boolean(body.previous_response_id),
+          tryEncrypted,
+          prompts: formatPromptsForLogging(input),
+        });
+
         const res: any = await $fetch(OPENAI_URL, {
           method: 'POST',
           timeout: 30_000,
@@ -391,6 +565,24 @@ export const openaiProvider: LlmProviderPort = {
       return;
     }
 
+    const userMessages = (allMessages || []).filter(
+      (m: { role: string; content: string }) =>
+        m?.role === 'user' && String(m?.content || '').trim().length > 0
+    );
+    const totalUserChars = userMessages.reduce(
+      (sum: number, m: { content: string }) =>
+        sum + String(m?.content || '').trim().length,
+      0
+    );
+
+    if (
+      userMessages.length < MIN_SUMMARY_USER_MESSAGES ||
+      totalUserChars < MIN_SUMMARY_USER_CHARS
+    ) {
+      sessionCache.delete(sessionId);
+      return;
+    }
+
     const apiKey = process.env.NUXT_OPENAI_API_KEY;
     if (!apiKey)
       throw createError({
@@ -432,6 +624,20 @@ export const openaiProvider: LlmProviderPort = {
       temperature: 0.2,
     };
 
+    // Логирование запроса finishSession в OpenAI
+    console.log(
+      '[OpenAI finishSession()] Отправка запроса завершения сессии:',
+      {
+        model: usedModel,
+        userId: String(userId),
+        sessionId: sessionId || 'none',
+        messagesCount: lastK.length,
+        maxOutputTokens: body.max_output_tokens,
+        temperature: body.temperature,
+        prompts: formatPromptsForLogging(input),
+      }
+    );
+
     try {
       const res: any = await $fetch(OPENAI_URL, {
         method: 'POST',
@@ -447,16 +653,17 @@ export const openaiProvider: LlmProviderPort = {
       });
 
       const raw = extractText(res);
-      const normalized = parseStrictJson(raw);
-
+      const parsed = parseStrictJson(raw);
+      const normalized = validateAndNormalizeSummary(parsed);
       await summaryStore.save(userId, sessionId, JSON.stringify(normalized));
     } catch (error) {
-      // Сохраняем пустой summary в случае ошибки
-      await summaryStore.save(
-        userId,
-        sessionId,
-        JSON.stringify({ summary_text: '' })
+      // Сохраняем пустой summary с правильной структурой в случае ошибки
+      console.error(
+        '[OpenAI finishSession] Error during summary generation:',
+        error
       );
+      const emptySummary = createEmptySummary();
+      await summaryStore.save(userId, sessionId, JSON.stringify(emptySummary));
     } finally {
       sessionCache.delete(sessionId);
     }
@@ -537,6 +744,9 @@ export const openaiProvider: LlmProviderPort = {
     }
 
     const lang = options?.lang ?? 'ru';
+    const contextNote = options?.entryContext
+      ? buildEntryContextDescription(options.entryContext)
+      : '';
 
     // ОБРАБОТКА СТАРТА С WELCOME-ЭКРАНА
     if (isWelcomeStart) {
@@ -580,6 +790,7 @@ export const openaiProvider: LlmProviderPort = {
         user_locale: options?.user_locale,
         user_name: options?.user_name,
         welcomePromptContent: welcomePromptContent || undefined,
+        entryContext: options?.entryContext,
       });
 
       // System промпт для старта
@@ -632,6 +843,28 @@ export const openaiProvider: LlmProviderPort = {
         streamOptions.previous_response_id = previousResponseId;
         streamOptions.store = true;
       }
+
+      // Логирование запроса терапии в OpenAI (welcome-старт)
+      console.log(
+        '[OpenAI chatStream()] Отправка запроса терапии (welcome-старт):',
+        {
+          model: usedModel,
+          mode: options?.mode || 'therapy',
+          userId: options?.userId || 'unknown',
+          sessionId: options?.sessionId || 'none',
+          isFirstSession: isFirst,
+          hasPreviousResponseId: Boolean(previousResponseId),
+          hasSessionMemory: Boolean(sessionMemoryText),
+          hasWelcomePrompt: Boolean(welcomePromptContent),
+          temperature: streamOptions.temperature,
+          maxOutputTokens: streamOptions.max_output_tokens,
+          store: streamOptions.store,
+          hasPreviousResponseIdInOptions: Boolean(
+            streamOptions.previous_response_id
+          ),
+          prompts: formatPromptsForLogging(input),
+        }
+      );
 
       const stream = await openai.responses.stream(streamOptions);
 
@@ -722,16 +955,31 @@ export const openaiProvider: LlmProviderPort = {
     );
 
     const developerStyle = '';
+    const developerMessages: Array<{
+      role: 'developer';
+      content: Array<{ type: 'input_text'; text: string }>;
+    }> = [];
+
+    if (contextNote) {
+      developerMessages.push({
+        role: 'developer',
+        content: [{ type: 'input_text' as const, text: contextNote }],
+      });
+    }
+
+    if (developerStyle) {
+      developerMessages.push({
+        role: 'developer',
+        content: [{ type: 'input_text' as const, text: developerStyle }],
+      });
+    }
 
     const input = [
       {
         role: 'system',
         content: [{ type: 'input_text' as const, text: systemPrelude }],
       },
-      {
-        role: 'developer',
-        content: [{ type: 'input_text' as const, text: developerStyle }],
-      },
+      ...developerMessages,
       // ПАМЯТЬ ПРОШЛЫХ СЕССИЙ → developer-блок до истории сообщений
       ...(!isFirst && sessionMemoryText
         ? [
@@ -787,6 +1035,32 @@ export const openaiProvider: LlmProviderPort = {
       streamOptions.previous_response_id = previousResponseId;
       streamOptions.store = true; // Принудительно устанавливаем store: true при использовании previous_response_id
     }
+
+    // Логирование запроса терапии в OpenAI (обычный режим диалога)
+    console.log(
+      '[OpenAI chatStream()] Отправка запроса терапии (обычный режим):',
+      {
+        model: usedModel,
+        mode: options?.mode || 'therapy',
+        userId: options?.userId || 'unknown',
+        sessionId: options?.sessionId || 'none',
+        isFirstSession: isFirst,
+        hasPreviousResponseId: Boolean(previousResponseId),
+        hasSessionMemory: Boolean(sessionMemoryText),
+        messagesCount: (messages || []).length,
+        userMessagesCount,
+        responseNumber,
+        hasEntryContext: Boolean(contextNote),
+        hasUserPrompt: Boolean(options?.userPrompt),
+        temperature: streamOptions.temperature,
+        maxOutputTokens: streamOptions.max_output_tokens,
+        store: streamOptions.store,
+        hasPreviousResponseIdInOptions: Boolean(
+          streamOptions.previous_response_id
+        ),
+        prompts: formatPromptsForLogging(input),
+      }
+    );
 
     const stream = await openai.responses.stream(streamOptions);
 

@@ -45,26 +45,16 @@ export function calculatePlanPrice(params: PlanPriceParams): number {
  */
 export function calculateCustomPrice(params: {
   weeklyMinutes: number;
-  avatarEnabled: boolean;
   billingPeriod: BillingPeriod;
 }): number {
   const totalMinutesPerMonth = params.weeklyMinutes * WEEKS_IN_MONTH;
 
   let monthlyPrice =
-    BASE_PRICE_PRO +
-    PRICE_PER_MINUTE_GPT * totalMinutesPerMonth +
-    (params.avatarEnabled
-      ? PRICE_PER_MINUTE_AVATAR * totalMinutesPerMonth
-      : 0);
+    BASE_PRICE_PRO + PRICE_PER_MINUTE_GPT * totalMinutesPerMonth;
 
-  // Минимальная цена: Premium если аватар включен, PRO если выключен
-  const minPrice = params.avatarEnabled ? BASE_PRICE_PREMIUM : BASE_PRICE_PRO;
+  // Минимальная цена: PRO
+  const minPrice = BASE_PRICE_PRO;
   monthlyPrice = Math.max(monthlyPrice, minPrice);
-
-  // Если настройки совпадают с Premium (100 минут + аватар), используем цену Premium
-  if (params.weeklyMinutes === 100 && params.avatarEnabled) {
-    monthlyPrice = BASE_PRICE_PREMIUM;
-  }
 
   return calculatePlanPrice({
     baseMonthlyPrice: monthlyPrice,
@@ -73,4 +63,3 @@ export function calculateCustomPrice(params: {
     monthlyCustomPrice: monthlyPrice,
   });
 }
-

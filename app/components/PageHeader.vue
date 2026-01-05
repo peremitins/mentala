@@ -3,7 +3,7 @@
     <div class="flex items-center w-full">
       <Button
         v-if="props.showBackButton"
-        class="h-8 w-8 flex-shrink-0"
+        class="h-8 w-8 flex-shrink-0 hover:bg-primary/10"
         variant="ghost"
         size="icon"
         @click="handleGoBack"

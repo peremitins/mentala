@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-4 h-full overflow-y-auto rounded-sm pb-[100px]">
+  <div class="space-y-4 h-full overflow-y-auto rounded-lg pb-[100px]">
     <PageHeader
       title="Каталог промптов"
       :show-back-button="true"

@@ -51,7 +51,7 @@ a {
     0 2px 8px rgba(0, 0, 0, 0.06),
     0 4px 16px rgba(0, 0, 0, 0.04);
   backdrop-filter: blur(10px);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-lg);
   border: 1px solid rgba(0, 0, 0, 0.08);
   background: color-mix(in oklab, var(--color-background) 7%, transparent);
   background-clip: padding-box;
@@ -63,7 +63,7 @@ a {
     inset 1px 1px 0.12px rgba(255, 255, 255, 0.4),
     1px 1px 3px rgba(0, 0, 0, 0.1);
   backdrop-filter: blur(10px);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-lg);
   border: 1px solid rgba(255, 255, 255, 0.18);
   background: color-mix(in oklab, var(--color-background) 7%, transparent);
   background-clip: padding-box;

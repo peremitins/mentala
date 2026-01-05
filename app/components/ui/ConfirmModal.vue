@@ -3,7 +3,7 @@
     <AlertDialogTrigger as-child>
       <slot name="trigger" />
     </AlertDialogTrigger>
-    <AlertDialogContent class="bg-popover">
+    <AlertDialogContent class="glass-deep">
       <AlertDialogHeader>
         <AlertDialogTitle>{{ title }}</AlertDialogTitle>
         <AlertDialogDescription v-if="subtitle">
@@ -11,7 +11,11 @@
         </AlertDialogDescription>
       </AlertDialogHeader>
       <AlertDialogFooter>
-        <AlertDialogCancel>{{ cancelLabel }}</AlertDialogCancel>
+        <AlertDialogCancel
+          class="bg-transparent hover:bg-transparent hover:text-primary hover:border-primary"
+        >
+          {{ cancelLabel }}
+        </AlertDialogCancel>
         <AlertDialogAction @click="handleConfirm">{{
           confirmLabel
         }}</AlertDialogAction>

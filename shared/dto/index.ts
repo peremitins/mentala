@@ -12,6 +12,28 @@ export const ChatMessageDto = z.object({
   text: z.string(),
 });
 
+export const HabitEntryContextDto = z.object({
+  type: z.literal('habit'),
+  habit_id: z.string(),
+  habit_name: z.string().optional(),
+  habit_intent: z
+    .enum(['build', 'quit', 'custom'])
+    .optional(),
+  habit_description: z.string().optional(),
+});
+
+export const TherapyTopicEntryContextDto = z.object({
+  type: z.literal('therapy_topic'),
+  topic_id: z.string(),
+  topic_name: z.string().optional(),
+  topic_description: z.string().optional(),
+});
+
+export const ChatEntryContextDto = z.discriminatedUnion('type', [
+  HabitEntryContextDto,
+  TherapyTopicEntryContextDto,
+]);
+
 export const ChatRequestDto = z.object({
   messages: z
     .array(
@@ -31,6 +53,7 @@ export const ChatRequestDto = z.object({
   lang: z.string().optional(),
   user_locale: z.string().optional(),
   user_name: z.string().optional(),
+  entryContext: ChatEntryContextDto.optional(),
 });
 
 export const ChatResponseDto = z.object({
@@ -43,6 +66,7 @@ export type UserDto = z.infer<typeof UserDto>;
 export type ChatMessageDto = z.infer<typeof ChatMessageDto>;
 export type ChatRequestDto = z.infer<typeof ChatRequestDto>;
 export type ChatResponseDto = z.infer<typeof ChatResponseDto>;
+export type ChatEntryContext = z.infer<typeof ChatEntryContextDto>;
 
 // === Prompts DTO ===
 export const PromptTypeEnum = z.enum(['habits', 'therapy']);

@@ -1,10 +1,10 @@
 import { defineStore } from 'pinia';
 import { useChatSettingsStore } from '@/app/stores/chatSettings';
 import { useLoadersStore } from '@/app/stores/loaders';
-import { useHeygenStore } from '@/app/stores/heygen';
 import { nanoid } from 'nanoid';
 import { useRuntimeConfig } from 'nuxt/app';
 import { getCsrfTokenForHeader } from '@/app/utils/csrf';
+import type { ChatEntryContext } from '@/shared/dto';
 
 export const useChatStore = defineStore('chat', {
   state: () => ({
@@ -17,8 +17,8 @@ export const useChatStore = defineStore('chat', {
     lastActivityAt: null as Date | null, // Время последней активности для idle timeout
     lastPingAt: null as number | null, // Последний ping на сервер (throttle)
     idleTimeoutTimer: null as ReturnType<typeof setTimeout> | null, // Таймер для idle timeout чата
-    avatarIdleTimeoutTimer: null as ReturnType<typeof setTimeout> | null, // Таймер для idle timeout аватара
     isEndingSession: false as boolean, // Флаг для предотвращения множественных вызовов endTherapySession
+    entryContext: null as ChatEntryContext | null,
   }),
   actions: {
     startSession(sessionId?: string) {
@@ -54,7 +54,6 @@ export const useChatStore = defineStore('chat', {
           this.lastActivityAt = new Date();
           this.lastPingAt = Date.now();
           this.resetIdleTimeout();
-          this.resetAvatarIdleTimeout();
           console.log(
             '[Chat Store] Therapy session started:',
             response.sessionId
@@ -125,7 +124,6 @@ export const useChatStore = defineStore('chat', {
           this.lastPingAt = null;
         }
         this.clearIdleTimeout();
-        this.clearAvatarIdleTimeout();
         this.isEndingSession = false;
       }
     },
@@ -135,7 +133,6 @@ export const useChatStore = defineStore('chat', {
     updateActivity() {
       this.lastActivityAt = new Date();
       this.resetIdleTimeout();
-      this.resetAvatarIdleTimeout();
 
       // Пингуем сервер, чтобы обновлять last_activity_at в БД.
       // Это нужно для корректного подсчёта минут на сервере и автозавершения "stale" сессий.
@@ -170,55 +167,12 @@ export const useChatStore = defineStore('chat', {
       }, useRuntimeConfig().public.chatIdleTimeoutMs);
     },
     /**
-     * Сбросить idle timeout таймер для аватара
-     */
-    resetAvatarIdleTimeout() {
-      this.clearAvatarIdleTimeout();
-
-      const heygen = useHeygenStore();
-      const chatSettings = useChatSettingsStore();
-
-      // Таймер только если аватар включен и подключен
-      if (!heygen.isConnected || !chatSettings.avatar) {
-        return;
-      }
-
-      this.avatarIdleTimeoutTimer = setTimeout(async () => {
-        console.log('[Chat Store] Avatar idle timeout reached');
-
-        // Отключаем аватар
-        await heygen.stopSession();
-
-        // Отправляем запрос на отключение аватара в настройках
-        try {
-          await chatSettings.updateChatSettings({ avatar: false });
-        } catch (error) {
-          console.error(
-            '[Chat Store] Failed to disable avatar in settings:',
-            error
-          );
-        }
-
-        // Завершаем therapy сессию
-        this.endTherapySession();
-      }, useRuntimeConfig().public.chatIdleTimeoutMs);
-    },
-    /**
      * Очистить idle timeout таймер для чата
      */
     clearIdleTimeout() {
       if (this.idleTimeoutTimer) {
         clearTimeout(this.idleTimeoutTimer);
         this.idleTimeoutTimer = null;
-      }
-    },
-    /**
-     * Очистить idle timeout таймер для аватара
-     */
-    clearAvatarIdleTimeout() {
-      if (this.avatarIdleTimeoutTimer) {
-        clearTimeout(this.avatarIdleTimeoutTimer);
-        this.avatarIdleTimeoutTimer = null;
       }
     },
     /**
@@ -262,6 +216,7 @@ export const useChatStore = defineStore('chat', {
         mode,
         userPrompt,
         lang: 'ru' as const,
+        entryContext: this.entryContext,
       };
     },
     /**
@@ -349,6 +304,11 @@ export const useChatStore = defineStore('chat', {
       userPrompt?: string;
     }) {
       if (!this.sessionId) this.startSession();
+
+      const loaders = useLoadersStore();
+
+      loaders.showLoader();
+
       this.userText = '';
 
       // Начинаем therapy сессию для подсчета времени
@@ -388,12 +348,11 @@ export const useChatStore = defineStore('chat', {
             mode: apiParams.mode, // Передаем mode (включая 'talk')
             userPrompt: apiParams.userPrompt,
             lang: apiParams.lang,
+            entryContext: apiParams.entryContext,
           },
           responseType: 'stream',
           signal: abortController.signal, // Передаем signal для отмены запроса
         } as any);
-        const loaders = useLoadersStore();
-        loaders.hideLoader();
 
         await this._processStreamResponse(resp, idx);
 
@@ -404,6 +363,7 @@ export const useChatStore = defineStore('chat', {
 
         return { ok: true } as any;
       } catch (e: any) {
+        loaders.hideLoader();
         // Сохраняем ссылку на AbortController перед очисткой
         const wasAborted =
           this.currentChatAbortController?.signal?.aborted || false;
@@ -437,7 +397,8 @@ export const useChatStore = defineStore('chat', {
             content: 'Ошибка начала диалога. Попробуйте еще раз.',
           });
         }
-        throw e;
+      } finally {
+        loaders.hideLoader();
       }
     },
     async sendMessage(text: string) {
