@@ -97,4 +97,5 @@ function handleChatClick(event: MouseEvent) {
   if (isActive('/')) {
     router.push({ path: '/', query: { screen: 'welcome' } });
   }
+}
 </script>
