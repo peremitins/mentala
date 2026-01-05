@@ -85,23 +85,16 @@ import IconMessageCircleHeart from '~icons/lucide/message-circle-heart';
 import IconBrain from '~icons/lucide/brain';
 import IconListCheck from '~icons/lucide/list-check';
 import IconSettings from '~icons/lucide/settings';
-import { useChatStore } from '@/app/stores/chat';
 
 const route = useRoute();
 const router = useRouter();
-const chatStore = useChatStore();
 
 const isActive = (path: string) => route.path === path;
 
 // Обработчик клика на кнопку "Чат"
 function handleChatClick(event: MouseEvent) {
-  // Если уже на странице чата и есть сообщения - очищаем чат
-  if (isActive('/') && chatStore.messages.length > 0) {
-    event.preventDefault(); // Предотвращаем переход по ссылке
-    // clearMessages уже вызывает endTherapySession внутри
-    chatStore.clearMessages();
+  // Если уже на странице чата и есть сообщения - очищаем чат и переходим на welcome
+  if (isActive('/')) {
+    router.push({ path: '/', query: { screen: 'welcome' } });
   }
-  // В остальных случаях позволяем NuxtLink обработать переход
-  // Завершение сессии при уходе со страницы обрабатывается в plugin через router.afterEach
-}
 </script>

@@ -9,7 +9,6 @@ export function useEntryChat() {
 
   async function startEntryChat(options: { mode: ChatMode }) {
     try {
-      chat.clearMessages();
       chat.startConversation({
         mode: options.mode,
       });

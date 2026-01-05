@@ -20,6 +20,8 @@ import {
 } from '@@/server/application/prompts';
 
 const OPENAI_URL = 'https://api.openai.com/v1/responses';
+const MIN_SUMMARY_USER_MESSAGES = 1;
+const MIN_SUMMARY_USER_CHARS = 20;
 
 // In-memory cache for current session encrypted reasoning
 const sessionCache = new Map<
@@ -41,6 +43,133 @@ function parseStrictJson(raw: string): any {
   } catch {
     return { summary_text: s };
   }
+}
+
+// === Валидация и нормализация summary ===
+function validateAndNormalizeSummary(parsed: any): any {
+  // Базовые проверки
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return createEmptySummary();
+  }
+
+  // Список допустимых ключей
+  const validKeys = [
+    'summary_detailed',
+    'themes_explored',
+    'patterns_identified',
+    'homework_suggested',
+    'emotional_journey',
+    'topics',
+    'risk_flag',
+    'approaches_used',
+  ];
+
+  // Если есть неправильные ключи - возвращаем пустой summary
+  const hasInvalidKeys = Object.keys(parsed).some(
+    (key) => !validKeys.includes(key)
+  );
+  if (hasInvalidKeys) {
+    console.warn(
+      '[OpenAI finishSession] Invalid summary: unexpected keys found, using empty summary'
+    );
+    return createEmptySummary();
+  }
+
+  // Нормализуем структуру, заполняя недостающие поля
+  return {
+    summary_detailed:
+      typeof parsed.summary_detailed === 'string'
+        ? parsed.summary_detailed
+        : '',
+    themes_explored: Array.isArray(parsed.themes_explored)
+      ? parsed.themes_explored.map((theme: any) => ({
+          theme:
+            typeof theme?.theme === 'string'
+              ? theme.theme
+              : String(theme || ''),
+          depth:
+            theme?.depth === 'surface' ||
+            theme?.depth === 'moderate' ||
+            theme?.depth === 'deep'
+              ? theme.depth
+              : 'surface',
+          key_insight:
+            typeof theme?.key_insight === 'string' ? theme.key_insight : '',
+        }))
+      : [],
+    patterns_identified: Array.isArray(parsed.patterns_identified)
+      ? parsed.patterns_identified
+          .filter((p: any) => typeof p === 'string')
+          .slice(0, 10)
+      : [],
+    homework_suggested:
+      parsed.homework_suggested &&
+      typeof parsed.homework_suggested === 'object' &&
+      !Array.isArray(parsed.homework_suggested)
+        ? {
+            name:
+              typeof parsed.homework_suggested.name === 'string'
+                ? parsed.homework_suggested.name
+                : '',
+            instruction:
+              typeof parsed.homework_suggested.instruction === 'string'
+                ? parsed.homework_suggested.instruction
+                : '',
+            duration:
+              typeof parsed.homework_suggested.duration === 'string'
+                ? parsed.homework_suggested.duration
+                : '',
+          }
+        : null,
+    emotional_journey:
+      parsed.emotional_journey &&
+      typeof parsed.emotional_journey === 'object' &&
+      !Array.isArray(parsed.emotional_journey)
+        ? {
+            start_level:
+              typeof parsed.emotional_journey.start_level === 'string'
+                ? parsed.emotional_journey.start_level
+                : '5',
+            end_level:
+              typeof parsed.emotional_journey.end_level === 'string'
+                ? parsed.emotional_journey.end_level
+                : '5',
+            shift_observed:
+              typeof parsed.emotional_journey.shift_observed === 'string'
+                ? parsed.emotional_journey.shift_observed
+                : '',
+          }
+        : null,
+    topics: Array.isArray(parsed.topics)
+      ? parsed.topics.filter((t: any) => typeof t === 'string').slice(0, 20)
+      : [],
+    risk_flag:
+      parsed.risk_flag === 'none' ||
+      parsed.risk_flag === 'watch' ||
+      parsed.risk_flag === 'elevated'
+        ? parsed.risk_flag
+        : 'none',
+    approaches_used: Array.isArray(parsed.approaches_used)
+      ? parsed.approaches_used
+          .filter((a: any) =>
+            ['cbt', 'psychoanalysis', 'existential', 'positive'].includes(a)
+          )
+          .slice(0, 4)
+      : [],
+  };
+}
+
+function createEmptySummary(): any {
+  return {
+    summary_detailed: '',
+    themes_explored: [],
+    patterns_identified: [],
+    homework_suggested: null,
+    emotional_journey: null,
+    topics: [],
+    risk_flag: 'none',
+    approaches_used: [],
+  };
 }
 
 // === Маппер сообщений под Responses API ===
@@ -436,6 +565,24 @@ export const openaiProvider: LlmProviderPort = {
       return;
     }
 
+    const userMessages = (allMessages || []).filter(
+      (m: { role: string; content: string }) =>
+        m?.role === 'user' && String(m?.content || '').trim().length > 0
+    );
+    const totalUserChars = userMessages.reduce(
+      (sum: number, m: { content: string }) =>
+        sum + String(m?.content || '').trim().length,
+      0
+    );
+
+    if (
+      userMessages.length < MIN_SUMMARY_USER_MESSAGES ||
+      totalUserChars < MIN_SUMMARY_USER_CHARS
+    ) {
+      sessionCache.delete(sessionId);
+      return;
+    }
+
     const apiKey = process.env.NUXT_OPENAI_API_KEY;
     if (!apiKey)
       throw createError({
@@ -506,16 +653,17 @@ export const openaiProvider: LlmProviderPort = {
       });
 
       const raw = extractText(res);
-      const normalized = parseStrictJson(raw);
-
+      const parsed = parseStrictJson(raw);
+      const normalized = validateAndNormalizeSummary(parsed);
       await summaryStore.save(userId, sessionId, JSON.stringify(normalized));
     } catch (error) {
-      // Сохраняем пустой summary в случае ошибки
-      await summaryStore.save(
-        userId,
-        sessionId,
-        JSON.stringify({ summary_text: '' })
+      // Сохраняем пустой summary с правильной структурой в случае ошибки
+      console.error(
+        '[OpenAI finishSession] Error during summary generation:',
+        error
       );
+      const emptySummary = createEmptySummary();
+      await summaryStore.save(userId, sessionId, JSON.stringify(emptySummary));
     } finally {
       sessionCache.delete(sessionId);
     }

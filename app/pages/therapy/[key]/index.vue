@@ -294,7 +294,6 @@ const entryContext = computed<ChatEntryContext>(() => ({
 
 async function startConversation() {
   try {
-    chat.clearMessages();
     // Устанавливаем entryContext перед запуском разговора
     chat.entryContext = entryContext.value;
     chat.startSession();
