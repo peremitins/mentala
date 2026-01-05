@@ -3,7 +3,10 @@
  */
 
 import { db } from '@/server/infrastructure/db/client';
-import { userSubscriptions, subscriptionPlans } from '@/server/infrastructure/db/schema';
+import {
+  userSubscriptions,
+  subscriptionPlans,
+} from '@/server/infrastructure/db/schema';
 import { eq, and, gt } from 'drizzle-orm';
 import { calculatePlanPrice, type BillingPeriod } from './price-calculator';
 
@@ -178,7 +181,6 @@ export async function applyPlanChange(
   billingPeriod: BillingPeriod,
   customConfig: {
     weeklyMinutes: number;
-    avatarEnabled: boolean;
     totalPrice: number;
   } | null,
   calculation: PlanChangeCalculation,
@@ -251,7 +253,9 @@ export async function applyPlanChange(
       planId: newPlanId,
       billingPeriod: billingPeriod as BillingPeriod,
       customConfig: customConfig || null,
-      checkoutAmount: String(checkout?.checkoutAmount ?? calculation.toPay ?? 0),
+      checkoutAmount: String(
+        checkout?.checkoutAmount ?? calculation.toPay ?? 0
+      ),
       checkoutCurrency: checkout?.checkoutCurrency ?? 'RUB',
       billingCreditApplied: String(checkout?.billingCreditApplied ?? 0),
       billingCreditGranted: String(checkout?.billingCreditGranted ?? 0),

@@ -1,6 +1,6 @@
 <template>
   <div class="flex flex-1 relative overflow-hidden p-2">
-    <section class="w-full" :style="{ borderRadius: `calc(var(--radius-sm))` }">
+    <section class="w-full" :style="{ borderRadius: `calc(var(--radius-lg))` }">
       <h2 class="text-lg font-semibold mb-4">Добавить пользователя</h2>
 
       <form class="space-y-3" @submit.prevent="onSubmit">

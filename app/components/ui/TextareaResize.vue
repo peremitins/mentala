@@ -13,7 +13,7 @@
             'disabled:cursor-not-allowed disabled:opacity-50 placeholder:text-sm text-sm ',
             props.variant === 'form'
               ? [
-                  'rounded-2xl border-2 border-border bg-card px-3 py-2 text-sm',
+                  'rounded-lg border-2 border-border bg-transparent px-3 py-2 text-sm',
                   'ring-offset-background',
                   'focus-visible:outline-none focus:border-primary',
                   'transition-colors',
@@ -224,7 +224,7 @@ onMounted(() => {
   /* Базовые стили */
   overflow-y: auto;
   resize: none; /* Отключаем ручное изменение размера */
-  border-radius: 6px;
+  border-radius: 15px;
 
   /* Glassmorphism эффект */
   background: hsl(var(--background) / 0.08);
@@ -253,12 +253,12 @@ onMounted(() => {
 
 /* Состояние фокуса */
 .textarea-styled:focus {
-  border-color: hsl(var(--accent) / 0.6);
-  background: hsl(var(--background) / 0.12);
-  box-shadow:
+  border-color: hsl(var(--primary) / 0.6);
+  /* background: hsl(var(--background) / 0.12); */
+  /* box-shadow:
     inset 0 1px 2px rgba(255, 255, 255, 0.15),
     0 0 0 3px hsl(var(--accent) / 0.12),
-    0 4px 12px rgba(0, 0, 0, 0.15);
+    0 4px 12px rgba(0, 0, 0, 0.15); */
 }
 
 /* Состояние disabled */

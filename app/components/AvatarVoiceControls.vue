@@ -2,7 +2,8 @@
   <div class="flex gap-2 py-2">
     <!-- Кнопка аватара -->
     <button
-      @click="toggleAvatar"
+      v-if="false"
+      @click="false"
       class="flex-1 glass-deep rounded-xl px-4 py-3 flex items-center justify-center gap-2 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
     >
       <IconVideo
@@ -48,37 +49,15 @@ import { computed } from 'vue';
 import { useChatSettingsStore } from '@/app/stores/chatSettings';
 import { useChatStore } from '@/app/stores/chat';
 import { useLoadersStore } from '@/app/stores/loaders';
-import { useHeygenStore } from '@/app/stores/heygen';
 import { useTTS } from '@/app/composables/useTTS';
 
 const chatSettings = useChatSettingsStore();
 const chat = useChatStore();
 const loaders = useLoadersStore();
-const heygen = useHeygenStore();
 const { stop: stopTTS } = useTTS();
 
 // Проверяем, находимся ли на welcome screen
 const showWelcomeScreen = computed(() => chat.messages.length === 0);
-
-async function toggleAvatar() {
-  const newValue = !chatSettings.avatar;
-  await chatSettings.updateChatSettings({ avatar: newValue });
-
-  // Если находимся на welcome screen - только обновляем настройки, не запускаем сессию
-  if (showWelcomeScreen.value) {
-    loaders.hideLoader();
-    return;
-  }
-
-  // Если включаем аватар и он ещё не подключен, запускаем сессию
-  if (newValue && !heygen.isConnected && !heygen.isStarting) {
-    heygen.startSession();
-  }
-  // Если выключаем аватар и он подключен, останавливаем сессию
-  else if (!newValue && heygen.isConnected) {
-    heygen.stopSession();
-  }
-}
 
 async function toggleVoice() {
   const newValue = !chatSettings.voice;
@@ -87,19 +66,6 @@ async function toggleVoice() {
   if (!newValue) {
     // Останавливаем TTS озвучку
     stopTTS();
-
-    // Останавливаем HeyGen аудио, если оно воспроизводится
-    if (heygen.audioEl) {
-      try {
-        heygen.audioEl.pause();
-        heygen.audioEl.currentTime = 0;
-      } catch (error) {
-        console.error(
-          '[AvatarVoiceControls] Error stopping HeyGen audio:',
-          error
-        );
-      }
-    }
   }
 
   await chatSettings.updateChatSettings({ voice: newValue });

@@ -28,7 +28,7 @@
         align="start"
         :side-offset="8"
         :collision-padding="12"
-        class="p-0 min-w-[260px] w-[var(--radix-popper-anchor-width)] will-change-[transform,opacity] data-[state=open]:animate-dropdown-in data-[state=closed]:animate-dropdown-out"
+        class="glass-deep p-0 min-w-[260px] w-[var(--radix-popper-anchor-width)] will-change-[transform,opacity] data-[state=open]:animate-dropdown-in data-[state=closed]:animate-dropdown-out"
       >
         <Command>
           <CommandInput v-if="props.search" placeholder="Поиск..." />

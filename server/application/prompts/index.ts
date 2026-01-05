@@ -10,7 +10,12 @@
 // 5. Единая стилизация (без markdown)
 // ===================================================================
 
-import type { TherapyApproach, ChatMode, ResponseType } from '@/shared/dto';
+import type {
+  ChatEntryContext,
+  TherapyApproach,
+  ChatMode,
+  ResponseType,
+} from '@/shared/dto';
 
 export type PromptTemplate = string;
 
@@ -298,12 +303,8 @@ export const systemCore = `Ты — заботливый помощник по �
 ВАЖНО: Ты НЕ врач, НЕ диагностируешь, НЕ заменяешь профессионального терапевта.
 
 
-╔════════════════════════════════════════════════════════════════════════════╗
-║         ГЛАВНОЕ ПРАВИЛО: ИССЛЕДОВАНИЕ + КОНКРЕТНАЯ МИКРОПОЛЕЗНОСТЬ        ║
-║   Платная сессия = вопросы для понимания + КОНКРЕТНАЯ опора                ║
-║   МАКСИМУМ 1 ВОПРОС НА СООБЩЕНИЕ (нет интервью-эффекта)                   ║
-╚════════════════════════════════════════════════════════════════════════════╝
-
+ГЛАВНОЕ ПРАВИЛО: ИССЛЕДОВАНИЕ + КОНКРЕТНАЯ МИКРОПОЛЕЗНОСТЬ.
+МАКСИМУМ 1 ВОПРОС НА СООБЩЕНИЕ (нет интервью-эффекта).
 
 ────────────────────────────────────────────────────────────────────────────
 
@@ -421,7 +422,6 @@ export const systemCore = `Ты — заботливый помощник по �
 ✓ ВАРИАТИВНОСТЬ: Не повторяй фразы в сессии
 ✓ КОНКРЕТНОСТЬ: Используй детали из рассказа пользователя
 ✓ ПРИВЯЗКА: Варианты ссылаются на то что сказал(а) пользователь
-✓ ЧЕСТНОСТЬ: Платная сессия = исследование, не тратим время
 ✓ ТОНУС: Живой, естественный, как опытный друг-психолог
 
 
@@ -530,6 +530,14 @@ export const crisisProtocol = `ВНИМАНИЕ: ПОТЕНЦИАЛЬНЫЙ КР
 
 export const sessionSummaryJson = `Создай подробное резюме сессии в JSON формате.
 
+КРИТИЧЕСКИ ВАЖНО:
+- Верни ТОЛЬКО валидный JSON объект с ТОЧНО такой структурой, как указано ниже
+- НЕ добавляй никаких других полей (например, "joke", "comment", "note" и т.д.)
+- НЕ пиши текст до или после JSON
+- НЕ используй markdown форматирование (\`\`\`json)
+- Используй ТОЛЬКО факты из сообщений которые были в сессии. Не додумывай и не заполняй поля предположениями.
+
+Обязательная структура JSON (скопируй и заполни):
 {
   "summary_detailed": "string (3-6 предложений, поддерживающий тон)",
   "themes_explored": [
@@ -555,7 +563,7 @@ export const sessionSummaryJson = `Создай подробное резюме 
   "approaches_used": ["cbt", "psychoanalysis", "existential", "positive"]
 }
 
-Пиши ТОЛЬКО валидный JSON.`;
+Верни ТОЛЬКО этот JSON объект, без дополнительных полей и без текста вокруг.`;
 
 // ===================================================================
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
@@ -750,6 +758,29 @@ export function buildSummaryPrompt(vars: { lang: string }) {
   return renderTemplate(sessionSummaryJson, vars);
 }
 
+export function buildEntryContextDescription(
+  context: ChatEntryContext
+): string {
+  if (context.type === 'habit') {
+    const name = context.habit_name || context.habit_id;
+    const intent = context.habit_intent === 'quit' ? 'отказа' : 'формирования';
+    const description = context.habit_description
+      ? ` — ${context.habit_description}`
+      : '';
+    return `Контекст: пользователь хочет обсудить привычку «${name}» (${intent})${description}.`;
+  }
+
+  if (context.type === 'therapy_topic') {
+    const name = context.topic_name || context.topic_id;
+    const description = context.topic_description
+      ? ` — ${context.topic_description}`
+      : '';
+    return `Контекст: пользователь хочет поговорить о теме «${name}»${description}.`;
+  }
+
+  return '';
+}
+
 export function buildWelcomePrompt(options: {
   mode: 'therapy' | 'habits' | 'talk';
   isFirstSession: boolean;
@@ -758,11 +789,15 @@ export function buildWelcomePrompt(options: {
   user_locale?: string;
   user_name?: string;
   welcomePromptContent?: string;
+  entryContext?: ChatEntryContext;
 }): string {
   const lang = options.lang || 'ru';
   const isFirst = options.isFirstSession;
   const mode = options.mode;
   const sessionMemoryText = options.sessionMemoryText || '';
+  const contextNote = options.entryContext
+    ? buildEntryContextDescription(options.entryContext)
+    : '';
 
   if (options.welcomePromptContent) {
     let prompt = options.welcomePromptContent;
@@ -778,9 +813,9 @@ export function buildWelcomePrompt(options: {
 
     prompt =
       prompt +
-      '\n\nВАЖНО: Твое сообщение будет ПЕРВЫМ в диалоге. Сгенерируй: приветствие (2-3 предложения) + 1 конкретная опора (выбор/инсайт/рамка) + 1 открытый вопрос. Без форматирования. Просто текст.';
+      '\n\nВАЖНО: Не утверждай, что вы уже обсуждали конкретно эту тему; если контекст неочевиден — формулируй нейтрально. Твое сообщение будет ПЕРВЫМ в диалоге. Сгенерируй: приветствие (2-3 предложения) + 1 конкретная опора (выбор/инсайт/рамка) + 1 открытый вопрос. Без форматирования. Просто текст.';
 
-    return prompt;
+    return contextNote ? `${contextNote}\n\n${prompt}` : prompt;
   }
 
   const modeDescriptions: Record<string, { first: string; repeat: string }> = {
@@ -800,7 +835,7 @@ export function buildWelcomePrompt(options: {
 {{sessionMemoryText}}
 
 Сгенерируй приветствие (2-3 предложения), которое:
-- Показывает что помнишь основные темы
+- Не утверждает, что вы уже обсуждали конкретно эту тему; формулируй нейтрально
 - Добавляет 1 конкретную опору (выбор/инсайт/рамка)
 - Мягко предлагает вернуться к темам или перейти к новым
 - Завершается 1 открытым вопросом
@@ -823,7 +858,7 @@ export function buildWelcomePrompt(options: {
 {{sessionMemoryText}}
 
 Сгенерируй приветствие (2-3 предложения), которое:
-- Показывает что помнишь основные темы
+- Не утверждает, что вы уже обсуждали конкретно эту тему; формулируй нейтрально
 - Добавляет 1 конкретную опору
 - Мягко предлагает вернуться или перейти к новым
 - Завершается 1 открытым вопросом
@@ -846,7 +881,7 @@ export function buildWelcomePrompt(options: {
 {{sessionMemoryText}}
 
 Сгенерируй приветствие (2-3 предложения), которое:
-- Показывает что помнишь основные темы
+- Не утверждает, что вы уже обсуждали конкретно эту тему; формулируй нейтрально
 - Добавляет 1 конкретную опору
 - Мягко предлагает вернуться или перейти к новым
 - Завершается 1 открытым вопросом
@@ -874,5 +909,5 @@ export function buildWelcomePrompt(options: {
     );
   }
 
-  return prompt;
+  return contextNote ? `${contextNote}\n\n${prompt}` : prompt;
 }

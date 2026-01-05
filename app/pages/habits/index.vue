@@ -8,6 +8,7 @@
       :loading="loadersStore.isSkeletonLoading"
       @select="handleGoalSelect"
       @remove="handleHabitDelete"
+      @quick-chat="handleHabitQuickChat"
     />
 
     <CustomEntityModal
@@ -43,10 +44,13 @@ import NotificationIndexPage, {
 import { HABITS_CATALOG, type HabitCatalogItem } from '@/app/lib/habitsCatalog';
 import { useUserHabitsStore } from '@/app/stores/userHabits';
 import { useLoadersStore } from '@/app/stores/loaders';
+import { useChatStore } from '@/app/stores/chat';
 import type { HabitDto, TherapyTopicDto } from '@/shared/dto/notifications';
 import CustomEntityModal from '@/app/components/modals/CustomEntityModal.vue';
 import { useToast } from '@/app/composables/useToast';
 import ConfirmModal from '@/app/components/ui/ConfirmModal.vue';
+import type { ChatEntryContext } from '@/shared/dto';
+import { useEntryChat } from '@/app/composables/useEntryChat';
 
 const intentColors: Record<string, string> = {
   build: 'from-blue-500 to-cyan-500',
@@ -55,6 +59,7 @@ const intentColors: Record<string, string> = {
 };
 
 const userHabitsStore = useUserHabitsStore();
+const chat = useChatStore();
 const loadersStore = useLoadersStore();
 const { habits: userHabits } = storeToRefs(userHabitsStore);
 
@@ -123,6 +128,8 @@ const router = useRouter();
 const defaultIntent = computed<'build' | 'quit'>(() =>
   (route.query.intent as 'build' | 'quit') === 'quit' ? 'quit' : 'build'
 );
+
+const { startEntryChat } = useEntryChat();
 
 async function safeNavigate(path: string) {
   try {
@@ -194,6 +201,38 @@ async function confirmDeleteHabit() {
   } finally {
     deletingId.value = null;
     pendingDeleteItem.value = null;
+  }
+}
+
+function buildHabitEntryContext(
+  item: NotificationIndexItem
+): ChatEntryContext | null {
+  const payload = item.payload as
+    | (HabitCatalogItem & { action?: string; intent?: 'build' | 'quit' })
+    | (HabitDto & { action?: string; intent?: 'build' | 'quit' })
+    | undefined;
+  if (!payload || payload.action) return null;
+
+  // Проверяем наличие id для определения типа (HabitDto имеет id, HabitCatalogItem - habitKey)
+  const habitId = 'id' in payload ? payload.id : payload.habitKey;
+  if (!habitId) return null;
+  return {
+    type: 'habit',
+    habit_id: habitId,
+    habit_name: item.name,
+    habit_intent: payload.intent || 'build',
+    habit_description:
+      'description' in payload ? payload.description || undefined : undefined,
+  };
+}
+
+async function handleHabitQuickChat(item: NotificationIndexItem) {
+  chat.entryContext = buildHabitEntryContext(item);
+
+  try {
+    await startEntryChat({ mode: 'habits' });
+  } catch {
+    // useEntryChat уже показал toast
   }
 }
 </script>

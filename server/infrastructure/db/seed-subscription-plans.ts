@@ -62,7 +62,7 @@ const plans = [
     name: 'premium',
     basePrice: '649',
     weeklyMinutesLimit: 100,
-    avatarEnabled: true,
+    avatarEnabled: false,
     pricePerMinuteGPT: '0.66',
     pricePerMinuteAvatar: '0.9',
     isCustomConfigurable: false,

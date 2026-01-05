@@ -1,0 +1,340 @@
+<template>
+  <div class="space-y-4 h-full overflow-y-auto rounded-lg pb-[100px]">
+    <PageHeader :title="entityName" :show-back-button="true" @go-back="goBack">
+      <template #custom>
+        <div class="flex items-center gap-2 flex-1 overflow-hidden">
+          <div class="flex flex-shrink-0 items-center justify-center text-2xl">
+            {{ entityEmoji }}
+          </div>
+          <div class="flex-1 min-w-0 space-y-1.5">
+            <div ref="titleInputContainerRef" class="flex items-center gap-2">
+              <template v-if="isEditingTitle">
+                <Input
+                  ref="titleInputRef"
+                  v-model="titleDraft"
+                  type="text"
+                  class="flex-1 h-8"
+                  :maxlength="120"
+                  :show-clear-button="true"
+                  @keydown.esc.prevent="finishTitleEdit"
+                />
+              </template>
+              <template v-else>
+                <h1 class="text-xl font-bold text-foreground w-full truncate">
+                  {{ entityName }}
+                </h1>
+                <button
+                  v-if="canEditCustomEntity"
+                  type="button"
+                  class="text-muted-foreground hover:text-foreground transition"
+                  @click="startEditTitle"
+                  aria-label="Редактировать название"
+                >
+                  <svg
+                    class="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 013.536 3.536L6.5 20.5 3 21l.5-3.5L16.732 3.732z"
+                    />
+                  </svg>
+                </button>
+              </template>
+            </div>
+          </div>
+        </div>
+      </template>
+    </PageHeader>
+
+    <div v-if="entityLoading" class="flex flex-1 items-center justify-center">
+      <StateBlock state="loading" />
+    </div>
+
+    <div
+      v-else-if="entityError"
+      class="flex flex-1 items-center justify-center px-4"
+    >
+      <StateBlock state="error">
+        <p class="text-sm text-center">{{ entityError }}</p>
+      </StateBlock>
+    </div>
+
+    <div v-else class="flex-1 overflow-y-auto space-y-4">
+      <div class="glass-deep p-5" :class="heroGradient">
+        <div class="space-y-3">
+          <h2 class="text-2xl font-bold text-foreground">
+            {{ entityName }}
+          </h2>
+          <p class="text-sm text-muted-foreground">
+            {{ entityDescription }}
+          </p>
+        </div>
+
+        <Button
+          class="mt-5 w-full justify-center !py-3 text-base font-semibold"
+          variant="default"
+          size="lg"
+          :loading="loaders.isPageLoading"
+          @click="startConversation"
+        >
+          <IconMessageCircle class="mr-2 h-5 w-5" />
+          Поговорить об этом
+        </Button>
+      </div>
+
+      <NotificationsSummaryCard
+        :preference="preference"
+        :loading="prefLoading"
+        @edit="goToNotifications"
+      />
+
+      <StateBlock v-if="notificationError" state="error" class="mt-2">
+        <p class="text-sm text-center">{{ notificationError }}</p>
+      </StateBlock>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
+import PageHeader from '@/app/components/PageHeader.vue';
+import StateBlock from '@/app/components/StateBlock.vue';
+import NotificationsSummaryCard from '@/app/components/notifications/NotificationsSummaryCard.vue';
+import { Button } from '@/app/components/ui/button';
+import { Input } from '@/app/components/ui/shadcn/input';
+import InputComponent from '@/app/components/ui/shadcn/input/Input.vue';
+import IconMessageCircle from '~icons/lucide/message-circle';
+import { useNotificationsSettings } from '@/app/composables/useNotificationsSettings';
+import { useChatStore } from '@/app/stores/chat';
+import { useToast } from '@/app/composables/useToast';
+import { useNuxtApp, navigateTo } from '#app';
+import type { HabitDto, HabitIntent } from '@/shared/dto/notifications';
+import { findHabitByKey } from '@/app/lib/habitsCatalog';
+import type { NotificationPreferencesDto } from '@/shared/dto/notifications';
+import type { ChatEntryContext } from '@/shared/dto';
+import { onClickOutside } from '@vueuse/core';
+import { useUserHabitsStore } from '@/app/stores/userHabits';
+import { useLoadersStore } from '@/app/stores/loaders';
+
+const route = useRoute();
+const chat = useChatStore();
+const userHabitsStore = useUserHabitsStore();
+const loaders = useLoadersStore();
+const { fetchNotificationPreferences } = useNotificationsSettings();
+
+const entityKey = computed(() => String(route.params.id || ''));
+
+const catalogHabit = computed(() => findHabitByKey(entityKey.value));
+const customHabit = ref<HabitDto | null>(null);
+const entityLoading = ref(false);
+const entityError = ref<string | null>(null);
+const { $api } = useNuxtApp();
+
+const preference = ref<NotificationPreferencesDto | null>(null);
+const prefLoading = ref(true);
+const notificationError = ref<string | null>(null);
+
+const habitGradients: Record<string, string> = {
+  build: 'from-blue-500 to-cyan-500',
+  quit: 'from-red-500 to-orange-500',
+  custom: 'from-violet-500 to-pink-500',
+};
+
+const entityData = computed(() => catalogHabit.value || customHabit.value);
+const isCustom = computed(() => !!customHabit.value && !catalogHabit.value);
+
+const isEditingTitle = ref(false);
+const titleDraft = ref('');
+const titleInputRef = ref<InstanceType<typeof InputComponent> | null>(null);
+const titleInputContainerRef = ref<HTMLElement | null>(null);
+const titleSaving = ref(false);
+
+const entityName = computed(() => {
+  if (isEditingTitle.value && titleDraft.value) {
+    return titleDraft.value.trim();
+  }
+  return entityData.value?.name || 'Привычка';
+});
+const entityEmoji = computed(() => entityData.value?.emoji || '✨');
+const entityIntent = computed<HabitIntent>(() => {
+  if (!entityData.value) return 'build';
+  return (entityData.value.intent || 'build') as HabitIntent;
+});
+
+const intentLabel = computed(() =>
+  entityIntent.value === 'quit' ? 'Отказ от привычки' : 'Формирование привычки'
+);
+
+const entityDescription = computed(
+  () =>
+    entityData.value?.description ||
+    'Персонализируйте тему, чтобы ИИ чётче включался в разговор.'
+);
+
+const gradientClass = computed(() => {
+  const key = isCustom.value ? 'custom' : entityIntent.value;
+  return habitGradients[key] ?? habitGradients.build;
+});
+
+const heroGradient = computed(() => `${gradientClass.value} text-white`);
+
+const resolvedIntentForFilters = computed(() =>
+  entityIntent.value === 'custom' ? 'build' : entityIntent.value
+);
+
+const canEditCustomEntity = computed(
+  () => isCustom.value && !!customHabit.value
+);
+
+function goBack() {
+  const intentFromQuery = route.query.intent as
+    | 'build'
+    | 'quit'
+    | 'custom'
+    | undefined;
+  const intent = intentFromQuery || resolvedIntentForFilters.value || 'build';
+  navigateTo(`/habits?intent=${intent}`);
+}
+
+function startEditTitle() {
+  if (!canEditCustomEntity.value) return;
+  titleDraft.value = entityName.value;
+  isEditingTitle.value = true;
+  nextTick(() => {
+    titleInputRef.value?.focus();
+  });
+}
+
+async function finishTitleEdit() {
+  if (!isEditingTitle.value) return;
+  const nextTitle = titleDraft.value.trim();
+  if (!nextTitle || nextTitle === (customHabit.value?.name || '')) {
+    titleDraft.value = customHabit.value?.name || entityName.value;
+    isEditingTitle.value = false;
+    return;
+  }
+  if (!customHabit.value || titleSaving.value) {
+    isEditingTitle.value = false;
+    return;
+  }
+
+  titleSaving.value = true;
+  try {
+    const updated = await $api<HabitDto>(
+      `/api/habits/${customHabit.value.id}`,
+      {
+        method: 'PUT',
+        body: { name: nextTitle },
+      }
+    );
+    customHabit.value = updated;
+    userHabitsStore.updateLocal(updated);
+    useToast('Название обновлено');
+  } catch (error: any) {
+    console.error('[HabitDetail] Failed to update title:', error);
+    useToast(error?.message || 'Не удалось сохранить название');
+    titleDraft.value = customHabit.value?.name || entityName.value;
+  } finally {
+    titleSaving.value = false;
+    isEditingTitle.value = false;
+  }
+}
+
+onClickOutside(titleInputContainerRef, () => {
+  if (isEditingTitle.value) {
+    void finishTitleEdit();
+  }
+});
+function goToNotifications() {
+  const intentQuery = route.query.intent as string | undefined;
+  const query = intentQuery ? `?intent=${intentQuery}` : '';
+  navigateTo(`/habits/${entityKey.value}/notifications${query}`);
+}
+
+async function loadCustomHabit() {
+  if (catalogHabit.value) {
+    customHabit.value = null;
+    entityError.value = null;
+    return;
+  }
+
+  if (!entityKey.value) {
+    entityError.value = 'Неверный идентификатор привычки';
+    return;
+  }
+
+  entityLoading.value = true;
+  entityError.value = null;
+  try {
+    const data = await $api<HabitDto>(`/api/habits/${entityKey.value}`);
+    customHabit.value = data;
+  } catch (error: any) {
+    console.error('[HabitDetail] Failed to load habit:', error);
+    entityError.value = error?.message || 'Привычка не найдена';
+  } finally {
+    entityLoading.value = false;
+  }
+}
+
+async function loadPreference() {
+  prefLoading.value = true;
+  notificationError.value = null;
+  try {
+    const data = await fetchNotificationPreferences('habits', {
+      entityKey: entityKey.value,
+    });
+    preference.value = data;
+  } catch (error: any) {
+    console.error('[HabitDetail] Preference load failed:', error);
+    notificationError.value =
+      error?.message || 'Не удалось загрузить настройки уведомлений';
+  } finally {
+    prefLoading.value = false;
+  }
+}
+
+const entryContext = computed<ChatEntryContext>(() => ({
+  type: 'habit',
+  habit_id: entityKey.value,
+  habit_name: entityName.value,
+  habit_intent: resolvedIntentForFilters.value,
+}));
+
+async function startConversation() {
+  try {
+    // Устанавливаем entryContext перед запуском разговора
+    chat.entryContext = entryContext.value;
+    chat.startSession();
+
+    // Запускаем разговор с правильным режимом
+    chat.startConversation({
+      mode: 'habits',
+    });
+
+    // Переходим на главную страницу с правильными query параметрами
+    navigateTo({
+      path: '/',
+      query: {
+        screen: 'chat',
+        mode: 'habits',
+      },
+    });
+  } catch (error: any) {
+    console.error('[HabitDetail] Failed to start conversation:', error);
+    useToast(error?.message || 'Не удалось открыть чат');
+  }
+}
+
+async function refresh() {
+  await Promise.all([loadCustomHabit(), loadPreference()]);
+}
+
+onMounted(refresh);
+watch(() => route.params.id, refresh);
+</script>

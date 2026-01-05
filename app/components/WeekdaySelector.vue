@@ -16,8 +16,8 @@
         :class="[
           'flex h-8 items-center justify-center rounded-lg border text-sm font-medium transition-all',
           props.modelValue.includes(day.value)
-            ? 'border-primary bg-button-active-soft text-surface-raised-foreground '
-            : 'border-border bg-card text-surface-inactive-foreground hover:bg-button-active-soft ',
+            ? 'border-primary bg-primary/20 text-surface-raised-foreground hover:opacity-75'
+            : 'border-border text-surface-inactive-foreground hover:border-primary hover:text-surface-raised-foreground',
           // Если это последний выбранный день - не даем его отключить
           props.modelValue.includes(day.value) && props.modelValue.length === 1
             ? 'cursor-not-allowed opacity-75'

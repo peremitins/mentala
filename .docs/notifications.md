@@ -527,7 +527,6 @@ pnpm dev:redis:logs
 ### Компоненты
 
 - `SettingsGeneral.vue` — глобальные настройки (addressing, tone)
-- `SettingsNotificationsTherapy.vue` — настройки therapy
 - `NotificationSettingsPage.vue` — универсальная страница настроек
 - `WeekdaySelector.vue` — выбор дней недели
 - `TimeRangeSelector.vue` — выбор окна времени

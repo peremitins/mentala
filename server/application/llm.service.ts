@@ -3,6 +3,7 @@ import { openaiProvider } from '../infrastructure/llm/openai';
 import { deepseekProvider } from '../infrastructure/llm/deepseek';
 import { yandexProvider } from '../infrastructure/llm/yandex';
 import { config } from '../config';
+import type { ChatEntryContext } from '@/shared/dto';
 
 const providers: Record<LlmProviderPort['id'], LlmProviderPort> = {
   openai: openaiProvider,
@@ -30,6 +31,7 @@ export async function chatViaProvider(params: {
     userId?: number | string;
     isFirstSession?: boolean;
     userPrompt?: string;
+    entryContext?: ChatEntryContext;
   };
 }) {
   const provider = getProvider(params.provider);
@@ -135,6 +137,7 @@ export function chatStreamViaProvider(params: {
     userId?: number | string;
     isFirstSession?: boolean;
     userPrompt?: string;
+    entryContext?: ChatEntryContext;
     mode?: 'therapy' | 'habits' | 'talk'; // Режим для старта с welcome-экрана
   };
 }): AsyncIterable<string> {

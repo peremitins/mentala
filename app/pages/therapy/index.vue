@@ -8,6 +8,7 @@
       :loading="loadersStore.isSkeletonLoading"
       @select="handleTopicSelect"
       @remove="handleTopicRemove"
+      @quick-chat="handleTherapyQuickChat"
     />
 
     <CustomEntityModal
@@ -37,6 +38,7 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, nextTick } from 'vue';
 import { storeToRefs } from 'pinia';
+import { useChatStore } from '@/app/stores/chat';
 import NotificationIndexPage, {
   type NotificationIndexItem,
 } from '@/app/components/notifications/NotificationIndexPage.vue';
@@ -47,6 +49,9 @@ import { useTherapyTopicsStore } from '@/app/stores/therapyTopics';
 import { useLoadersStore } from '@/app/stores/loaders';
 import type { TherapyTopicDto } from '@/shared/dto/notifications';
 import { useToast } from '@/app/composables/useToast';
+import { useEntryChat } from '@/app/composables/useEntryChat';
+import type { ChatEntryContext } from '@/shared/dto';
+import { useRouter, useRoute } from 'vue-router';
 
 const colorSchemes: Record<string, string> = {
   blue: 'from-blue-500 to-cyan-500',
@@ -65,6 +70,7 @@ const therapyStore = useTherapyTopicsStore();
 const loadersStore = useLoadersStore();
 const { topics: userTopics } = storeToRefs(therapyStore);
 const router = useRouter();
+const route = useRoute();
 
 // Загружаем данные после монтирования компонента (с кэшированием)
 // Защита от двойного вызова реализована в store через isSkeletonLoading флаг
@@ -93,7 +99,7 @@ const baseTopicItems = computed<NotificationIndexItem[]>(() =>
     description: topic.description,
     emoji: topic.emoji,
     gradientClass: colorSchemes[topic.color] ?? 'from-blue-500 to-cyan-500',
-    payload: { type: 'catalog' },
+    payload: { type: 'catalog', topicKey: topic.key, topicName: topic.name },
   }))
 );
 
@@ -115,6 +121,7 @@ const topicItems = computed<NotificationIndexItem[]>(() => [
 const createModalOpen = ref(false);
 const deleteModalRef = ref<InstanceType<typeof ConfirmModal> | null>(null);
 const pendingDeleteItem = ref<NotificationIndexItem | null>(null);
+const { startEntryChat } = useEntryChat();
 
 async function safeNavigate(path: string) {
   try {
@@ -168,8 +175,7 @@ async function confirmDeleteTopic() {
     await therapyStore.remove(topic.id);
     useToast('Тема удалена');
     // Проверяем, находимся ли мы на странице удаленной темы
-    const currentRoute = useRoute();
-    if (currentRoute.params.id === item.id) {
+    if (route.params.key === item.id) {
       navigateTo('/therapy');
     }
   } catch (error: any) {
@@ -177,6 +183,40 @@ async function confirmDeleteTopic() {
     useToast(error?.message || 'Не удалось удалить тему');
   } finally {
     pendingDeleteItem.value = null;
+  }
+}
+
+function buildTherapyEntryContext(
+  item: NotificationIndexItem
+): ChatEntryContext | null {
+  const payload = item.payload as
+    | (TherapyTopicDto & { action?: string })
+    | { action?: string; topicKey?: string; topicName?: string }
+    | undefined;
+
+  if (!payload || payload.action) return null;
+
+  // Проверяем наличие id для определения типа (TherapyTopicDto имеет id, каталог - topicKey)
+  const topicId = 'id' in payload ? payload.id : payload.topicKey || item.id;
+  if (!topicId) return null;
+
+  return {
+    type: 'therapy_topic',
+    topic_id: topicId,
+    topic_name: item.name,
+    topic_description:
+      'description' in payload ? payload.description || undefined : undefined,
+  };
+}
+
+async function handleTherapyQuickChat(item: NotificationIndexItem) {
+  const chat = useChatStore();
+  chat.entryContext = buildTherapyEntryContext(item);
+
+  try {
+    startEntryChat({ mode: 'therapy' });
+  } catch {
+    // useEntryChat уже показал toast
   }
 }
 </script>

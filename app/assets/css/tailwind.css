@@ -62,7 +62,7 @@
     --accent: 210 40% 96.1%;
     --accent-foreground: 222.2 47.4% 11.2%;
 
-    --destructive: 0 84.2% 60.2%;
+    --destructive: 0 100% 50%;
     --destructive-foreground: 210 40% 98%;
 
     --muted: 210 40% 96.1%;
@@ -121,7 +121,7 @@
       hsl(var(--primary)) 80%,
       white
     );
-    --surface-inactive-foreground: 222 16% 40%;
+    --surface-inactive-foreground: 0 0% 65%;
     --surface-raised-border: 275 84% 38%;
     --surface-raised-inactive-border: 215 16% 34%;
 
@@ -135,17 +135,17 @@
     --accent: 240 3.7% 15.9%;
     --accent-foreground: 0 0% 98%;
 
-    --destructive: 0 62.8% 30.6%;
+    --destructive: 0 100% 50%;
     --destructive-foreground: 0 0% 98%;
 
     --muted: 240 3.7% 15.9%;
     --muted-foreground: 240 5% 64.9%;
 
     /* === Скелетоны === */
-    --skeleton: 240 5% 26%;
+    --skeleton: 0 0% 76%;
 
     /* === Границы и инпуты === */
-    --border: 240 4% 26%;
+    --border: 0 0% 65%;
     --border-secondary: 217 21% 27%;
     --input: 240 3.7% 15.9%;
 

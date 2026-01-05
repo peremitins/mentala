@@ -52,7 +52,6 @@
       </template>
     </PageHeader>
 
-    <!-- Кнопки управления аватаром и звуком -->
     <AvatarVoiceControls />
 
     <!-- Основной контент -->
@@ -72,45 +71,23 @@
         class="flex flex-col flex-1 h-full space-y-6 relative"
       >
         <div class="relative h-full mb-2">
-          <section class="w-full h-full grid place-items-center">
-            <div
-              v-if="chatSettings.avatar"
-              class="relative w-full h-full overflow-hidden max-w-[480px]"
-            >
-              <HeyGenPlayer />
-            </div>
-            <div
-              v-else
-              class="relative w-full h-full overflow-hidden max-w-[480px]"
-            >
-              <div class="w-full h-full grid place-items-center">
-                <div class="text-sm text-muted-foreground">
-                  <!-- Аватар не включен -->
-                </div>
-              </div>
-            </div>
-          </section>
-
           <section
             ref="chatRef"
             @scroll="handleScroll"
             class="absolute bottom-0 overflow-auto max-h-[100%] inset-x-0 pt-[50%] flex flex-col space-y-3"
-            :class="{ 'chat-fade': heygen.isConnected }"
+            :class="{ 'chat-fade': false }"
           >
             <div
               v-for="(m, index) in combinedMessages"
               :key="index"
-              class="w-max px-3 py-1 mb-2 items-center bubble max-w-[80%]"
+              class="w-max px-3 py-2 mb-2 items-center bubble max-w-[80%] glass-deep"
               :class="{ 'ml-auto': (m as any).role === 'user' }"
               v-html="m.content"
             />
           </section>
         </div>
 
-        <section
-          class="glass-deep p-2 mt-auto z-100"
-          :style="{ borderRadius: `calc(var(--radius-sm))` }"
-        >
+        <section class="glass-deep p-2 mt-auto z-100">
           <div class="flex items-center gap-3">
             <TextareaResize
               ref="textareaRef"
@@ -153,12 +130,12 @@ import {
   ref,
   computed,
 } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { useSpeechEngine } from '@/app/composables/useSpeechEngine';
 import { useTTS } from '@/app/composables/useTTS';
 import { useChatStore } from '@/app/stores/chat';
 import { useSpeechStore } from '@/app/stores/speech';
 import { useChatSettingsStore } from '@/app/stores/chatSettings';
-import { useHeygenStore } from '@/app/stores/heygen';
 import { useSubscriptionStore } from '@/app/stores/subscription';
 import { useColorMode } from '#imports';
 import {
@@ -179,14 +156,31 @@ import {
 import PageHeader from '@/app/components/PageHeader.vue';
 import WelcomeScreen from '@/app/components/WelcomeScreen.vue';
 import AvatarVoiceControls from '@/app/components/AvatarVoiceControls.vue';
-import HeyGenPlayer from '@/app/components/HeyGenPlayer.vue';
 
 const emit = defineEmits<{ (e: 'send', text: string): void }>();
 
+const route = useRoute();
+const router = useRouter();
 const colorMode = useColorMode();
 
-// Показываем приветственный экран, если нет сообщений
-const showWelcomeScreen = computed(() => chat.messages.length === 0);
+// Определяем экран на основе query параметра и состояния чата
+const showWelcomeScreen = computed(() => {
+  const screenParam = route.query.screen as string | undefined;
+
+  // Если в URL указан screen=welcome, показываем welcome
+  if (screenParam === 'welcome') {
+    return true;
+  }
+
+  // Если в URL указан screen=chat, показываем chat
+  if (screenParam === 'chat') {
+    return false;
+  }
+
+  // Если параметра screen нет, определяем по наличию сообщений
+  // (для обратной совместимости)
+  return chat.messages.length === 0;
+});
 
 // Computed для отображения режима в Combobox (маппим 'talk' на 'therapy')
 const displayMode = computed({
@@ -209,7 +203,6 @@ const chat = useChatStore();
 const { settings, start, stop, onPartial, onFinal } = useSpeechEngine();
 const speechStore = useSpeechStore();
 const chatSettings = useChatSettingsStore();
-const heygen = useHeygenStore();
 
 // Управление TTS озвучкой
 const { speak: speakTTS } = useTTS();
@@ -272,20 +265,39 @@ watch(
   }
 );
 
+// Функция для обновления URL с query параметрами
+function updateURL(
+  screen: 'welcome' | 'chat',
+  mode?: 'therapy' | 'habits' | 'talk'
+) {
+  const query: Record<string, string> = { screen };
+  if (mode) {
+    query.mode = mode;
+  }
+
+  // Используем replace, чтобы не создавать новую запись в истории
+  router
+    .replace({
+      path: route.path,
+      query,
+    })
+    .catch(() => {
+      // Игнорируем ошибки навигации (например, если уже находимся на этой странице)
+    });
+}
+
 // Обработчик выбора на приветственном экране
 async function handleWelcomeSelect(
   mode: 'therapy' | 'habits' | 'talk',
   userPrompt?: string
 ) {
   // Режим уже установлен в WelcomeScreen компоненте
+  // Обновляем URL с параметрами screen=chat и mode
+  updateURL('chat', mode);
+
   // Начинаем диалог от ассистента (без user-сообщения "Привет")
   try {
     chat.startSession();
-
-    // Запускаем аватар, если он включен (заранее, до получения ответа)
-    if (chatSettings.avatar && !heygen.isConnected && !heygen.isStarting) {
-      await heygen.startSession();
-    }
 
     // Вызываем новый метод startConversation - он НЕ добавляет user-сообщение
     const res = await chat.startConversation({
@@ -364,15 +376,10 @@ function handleKeydown(e: KeyboardEvent) {
 }
 
 async function speakLastMessage(content: string) {
-  if (content) {
-    // Если аватар включен, используем его для озвучки
-    if (chatSettings.avatar && heygen.isConnected) {
-      await heygen.speak(content);
-    } else if (chatSettings.voice) {
-      // Используем TTS только если аватар выключен
-      // useTTS автоматически останавливает предыдущую озвучку
-      await speakTTS(content);
-    }
+  if (content && chatSettings.voice) {
+    // Используем только TTS для озвучки
+    // useTTS автоматически останавливает предыдущую озвучку
+    await speakTTS(content);
   }
 }
 
@@ -409,7 +416,7 @@ const onSend = async () => {
   if (res?.ok) {
     chat.startSession();
 
-    // Озвучим последний ответ ассистента через HeyGen или TTS OpenAI
+    // Озвучим последний ответ ассистента через TTS OpenAI
     if (chatSettings.voice === true) {
       const last = [...chat.messages]
         .reverse()
@@ -422,15 +429,6 @@ const onSend = async () => {
 };
 
 const combinedMessages = computed(() => chat?.messages || []);
-
-// длина контента последнего сообщения (для стриминга)
-const lastMessageContentLen = computed(() => {
-  const arr = combinedMessages.value as Array<any>;
-  if (!arr || arr.length === 0) return 0;
-  const last = arr[arr.length - 1];
-  const text = last && typeof last.content === 'string' ? last.content : '';
-  return text.length;
-});
 
 const chatRef = ref<HTMLElement | null>(null);
 const stickToBottom = ref(true); // «прилипать» ли при добавлении
@@ -453,22 +451,64 @@ const handleScroll = () => {
   stickToBottom.value = isNearBottom();
 };
 
-// Функция для автоматического запуска аватара, если он включен
-async function autoStartAvatarIfEnabled() {
-  // Проверяем, включен ли аватар в настройках
-  if (
-    chatSettings.avatar &&
-    !heygen.isConnected &&
-    !heygen.isStarting &&
-    chat.messages?.length
-  ) {
-    try {
-      await heygen.startSession();
-    } catch (error) {
-      console.error('[Index] Failed to auto-start avatar:', error);
+// Флаг для предотвращения циклических обновлений URL
+const isUpdatingURL = ref(false);
+
+// Watch на route.query для реакции на изменение URL (например, при навигации назад/вперед)
+watch(
+  () => route.query,
+  (newQuery) => {
+    if (isUpdatingURL.value) return;
+
+    const screenParam = newQuery.screen as string | undefined;
+    const modeParam = newQuery.mode as
+      | 'therapy'
+      | 'habits'
+      | 'talk'
+      | undefined;
+
+    // Если в URL указан режим и экран чата, восстанавливаем режим
+    if (screenParam === 'chat' && modeParam) {
+      // Устанавливаем режим в настройках (маппим talk на therapy для внутреннего использования)
+      if (modeParam === 'talk') {
+        chatSettings.mode = 'therapy';
+      } else if (modeParam === 'therapy' || modeParam === 'habits') {
+        chatSettings.mode = modeParam;
+      }
     }
-  }
-}
+  },
+  { immediate: false }
+);
+
+// Watch на chat.messages для синхронизации URL
+watch(
+  () => chat.messages.length,
+  (messageCount) => {
+    if (isUpdatingURL.value) return;
+
+    const screenParam = route.query.screen as string | undefined;
+
+    // Если сообщения появились и screen не chat - обновляем URL
+    if (messageCount > 0 && screenParam !== 'chat') {
+      const currentMode = chatSettings.mode;
+      const modeForURL = currentMode === 'therapy' ? 'therapy' : currentMode;
+      isUpdatingURL.value = true;
+      updateURL('chat', modeForURL as 'therapy' | 'habits' | 'talk');
+      nextTick(() => {
+        isUpdatingURL.value = false;
+      });
+    }
+    // Если сообщений нет и screen не welcome - обновляем URL
+    else if (messageCount === 0 && screenParam !== 'welcome') {
+      isUpdatingURL.value = true;
+      updateURL('welcome');
+      nextTick(() => {
+        isUpdatingURL.value = false;
+      });
+    }
+  },
+  { immediate: false }
+);
 
 onMounted(async () => {
   // Загружаем настройки чата при монтировании
@@ -478,11 +518,55 @@ onMounted(async () => {
     console.error('[Index] Failed to load chat settings:', error);
   }
 
+  // Восстанавливаем состояние из query параметров
+  const screenParam = route.query.screen as string | undefined;
+  const modeParam = route.query.mode as
+    | 'therapy'
+    | 'habits'
+    | 'talk'
+    | undefined;
+
+  // Если в URL указан режим и экран чата, восстанавливаем режим
+  if (screenParam === 'chat' && modeParam) {
+    // Устанавливаем режим в настройках (маппим talk на therapy для внутреннего использования)
+    if (modeParam === 'talk') {
+      chatSettings.mode = 'therapy';
+    } else if (modeParam === 'therapy' || modeParam === 'habits') {
+      chatSettings.mode = modeParam;
+    }
+  }
+
+  // Если screen не указан в URL, но есть сообщения - устанавливаем screen=chat
+  if (!screenParam && chat.messages.length > 0) {
+    const currentMode = chatSettings.mode;
+    const modeForURL = currentMode === 'therapy' ? 'therapy' : currentMode;
+    isUpdatingURL.value = true;
+    updateURL('chat', modeForURL as 'therapy' | 'habits' | 'talk');
+    nextTick(() => {
+      isUpdatingURL.value = false;
+    });
+  }
+  // Если screen не указан и нет сообщений - устанавливаем screen=welcome
+  else if (!screenParam && chat.messages.length === 0) {
+    isUpdatingURL.value = true;
+    updateURL('welcome');
+    nextTick(() => {
+      isUpdatingURL.value = false;
+    });
+  }
+  // Если есть entryContext (переход с другой страницы), но screen не указан - устанавливаем screen=chat
+  else if (!screenParam && chat.entryContext) {
+    const currentMode = chatSettings.mode || 'therapy';
+    const modeForURL = currentMode === 'therapy' ? 'therapy' : currentMode;
+    isUpdatingURL.value = true;
+    updateURL('chat', modeForURL as 'therapy' | 'habits' | 'talk');
+    nextTick(() => {
+      isUpdatingURL.value = false;
+    });
+  }
+
   await nextTick();
   scrollToBottom('auto'); // на старте — без анимации
-
-  // Автоматически запускаем аватар, если он включен в настройках
-  await autoStartAvatarIfEnabled();
 });
 
 // Завершаем therapy сессию и останавливаем сервисы при уходе со страницы
@@ -491,9 +575,8 @@ onBeforeUnmount(() => {
   if (chat.therapySessionId && !chat.isEndingSession) {
     void chat.endTherapySession();
   }
-  // Останавливаем голосовой ввод и HeyGen
+  // Останавливаем голосовой ввод
   stop();
-  heygen.stopSession();
 
   // Сбрасываем кэш subscription store для обновления данных при следующем заходе
   const subscriptionStore = useSubscriptionStore();
@@ -503,15 +586,6 @@ onBeforeUnmount(() => {
 // когда приходит новое сообщение — скроллим, если пользователь внизу
 watch(
   () => combinedMessages.value.length,
-  async () => {
-    await nextTick();
-    if (stickToBottom.value) scrollToBottom('smooth');
-  }
-);
-
-// при поступлении стрим-чанков (меняется длина текста последнего сообщения)
-watch(
-  () => lastMessageContentLen.value,
   async () => {
     await nextTick();
     if (stickToBottom.value) scrollToBottom('smooth');
@@ -537,25 +611,19 @@ watch(
   }
 );
 
-// Останавливаем HeyGen и отменяем запросы при возврате на welcome screen
+// отменяем запросы при возврате на welcome screen и синхронизируем URL
 watch(
   () => showWelcomeScreen.value,
   async (isWelcomeScreen) => {
-    if (isWelcomeScreen) {
-      // Отменяем текущий chat stream запрос (если он активен)
-      // clearMessages уже вызывает endTherapySession, поэтому не нужно вызывать отдельно
-      chat.clearMessages();
-
-      // Останавливаем HeyGen сессию, если она была запущена
-      if (heygen.isConnected || heygen.isStarting) {
-        try {
-          await heygen.stopSession();
-        } catch (error) {
-          console.error(
-            '[Index] Failed to stop HeyGen session on welcome screen:',
-            error
-          );
-        }
+    if (isWelcomeScreen && !isUpdatingURL.value) {
+      const screenParam = route.query.screen as string | undefined;
+      // Обновляем URL только если он еще не установлен на welcome
+      if (screenParam !== 'welcome') {
+        isUpdatingURL.value = true;
+        updateURL('welcome');
+        nextTick(() => {
+          isUpdatingURL.value = false;
+        });
       }
     }
   }

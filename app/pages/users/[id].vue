@@ -2,7 +2,7 @@
   <div class="flex flex-1 relative overflow-hidden p-2">
     <section
       class="flex-auto"
-      :style="{ borderRadius: `calc(var(--radius-sm))` }"
+      :style="{ borderRadius: `calc(var(--radius-lg))` }"
     >
       <h2 class="text-lg font-semibold mb-4">
         Редактировать пользователя {{ userName || `#${id}` }}

@@ -9,7 +9,7 @@
         <slot name="trigger" :formatted-time="formattedTime">
           <Button
             variant="outline"
-            class="w-full justify-start text-left font-normal"
+            class="w-full justify-start text-left font-normal border-primary rounded-lg bg-transparent"
           >
             <IconClock class="mr-2 h-4 w-4 opacity-50" />
             {{ formattedTime }}
@@ -17,7 +17,7 @@
         </slot>
       </PopoverTrigger>
 
-      <PopoverContent class="w-auto p-0" align="start">
+      <PopoverContent class="w-auto p-0 glass-deep" align="start">
         <div class="flex items-center">
           <!-- Часы -->
           <div class="flex flex-col items-center border-r border-border">

@@ -146,15 +146,6 @@ export const useHeygenStore = defineStore('heygen', {
       }
       const speech = useSpeechStore();
       try {
-        // Безопасная установка isAvatarSpeaking с проверкой
-        if (speech) {
-          try {
-            speech.setAvatarSpeaking(true);
-          } catch (e) {
-            console.error('[HeyGen] Error setting avatar speaking to true:', e);
-          }
-        }
-
         if (this.sessionId && text) {
           await useAPI('/api/heygen/speak', {
             method: 'POST',
@@ -181,18 +172,6 @@ export const useHeygenStore = defineStore('heygen', {
             '[HeyGen] Failed to disable avatar after error:',
             disableError
           );
-        }
-      } finally {
-        // Безопасная установка isAvatarSpeaking обратно в false
-        if (speech) {
-          try {
-            speech.setAvatarSpeaking(false);
-          } catch (e) {
-            console.error(
-              '[HeyGen] Error setting avatar speaking to false:',
-              e
-            );
-          }
         }
       }
     },

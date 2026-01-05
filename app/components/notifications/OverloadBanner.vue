@@ -1,7 +1,7 @@
 <template>
   <div
     :class="[
-      'rounded-md px-3 py-2 text-sm border transition-all duration-300 ease-in-out overflow-hidden',
+      'rounded-lg px-3 py-2 text-sm border transition-all duration-300 ease-in-out overflow-hidden',
       isOver
         ? 'bg-destructive/10 border-destructive/50'
         : 'bg-muted/60 border-border/60',

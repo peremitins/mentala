@@ -535,7 +535,6 @@ export const userSubscriptions = pgTable(
       .default('month'), // 'month' | 'year'
     customConfig: jsonb('custom_config').$type<{
       weeklyMinutes: number;
-      avatarEnabled: boolean;
       totalPrice: number;
     }>(), // опционально, только для Custom
     // Checkout fields (для безопасной валидации webhook и корректного учёта billingCredit)
