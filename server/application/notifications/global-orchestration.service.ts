@@ -1440,7 +1440,9 @@ export async function orchestrateAllSlotsForUser(
         const effectiveTextSource: 'ai' | 'hybrid' =
           textSource === 'ai' ? 'ai' : 'hybrid';
         // ВАЖНО: Используем tone из userPreferences, а не из preference.meta
-        const tone = resolveTone(globalPrefs?.tone as string | null | undefined);
+        const tone = resolveTone(
+          globalPrefs?.tone as string | null | undefined
+        );
 
         const hashEntityName =
           source.kind === 'therapy' &&

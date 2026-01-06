@@ -23,6 +23,7 @@ import {
   sessionSummaries,
   sessions,
   subscriptionEvents,
+  trialUsageTracking,
   therapySessions,
   therapyTopicsCustom,
   telegramAccounts,
@@ -37,6 +38,10 @@ import {
 import { eq, and, sql, inArray } from 'drizzle-orm';
 import { userDeletionQueue } from '@@/server/application/users/queues/userDeletion.queue';
 import { deleteAll } from '../../utils/storage';
+import {
+  hashEmail,
+  normalizeEmail,
+} from '@@/server/application/auth/verification';
 
 /**
  * 2-фазное удаление пользователя
@@ -60,6 +65,54 @@ export default defineEventHandler(async (event) => {
     cfg.AUTH_DELETE_GRACE_DAYS || process.env.AUTH_DELETE_GRACE_DAYS;
   const graceDays = Number(graceDaysRaw || 0);
   const restoreEnabled = Number.isFinite(graceDays) && graceDays > 0;
+
+  const trialSnapshot = await db
+    .select({
+      email: users.email,
+      trialStartedAt: users.trialStartedAt,
+    })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  if (trialSnapshot.length && trialSnapshot[0].email) {
+    const trialStartedAt = trialSnapshot[0].trialStartedAt;
+    if (trialStartedAt) {
+      try {
+        const emailNormalized = normalizeEmail(trialSnapshot[0].email);
+        const emailHash = hashEmail(emailNormalized);
+        const diffMs = now.getTime() - trialStartedAt.getTime();
+        const usedDaysRaw = Math.max(
+          1,
+          Math.floor(diffMs / (24 * 60 * 60 * 1000))
+        );
+        const usedDays = Math.min(7, usedDaysRaw);
+
+        await db
+          .insert(trialUsageTracking)
+          .values({
+            emailNormalized,
+            emailHash,
+            firstTrialStartedAt: trialStartedAt,
+            lastTrialStartedAt: trialStartedAt,
+            totalDaysUsed: usedDays,
+            updatedAt: now,
+          })
+          .onConflictDoUpdate({
+            target: trialUsageTracking.emailHash,
+            set: {
+              totalDaysUsed: sql`LEAST(${trialUsageTracking.totalDaysUsed} + ${usedDays}, 7)`,
+              updatedAt: now,
+            },
+          });
+      } catch (error) {
+        console.error(
+          `[Trial] Failed to record trial usage for user ${userId}:`,
+          error
+        );
+      }
+    }
+  }
 
   try {
     if (!restoreEnabled) {

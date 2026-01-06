@@ -1,4 +1,4 @@
-import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomInt, timingSafeEqual } from 'node:crypto';
 import { useRuntimeConfig } from '#imports';
 import { redisConnection } from '@/server/infrastructure/redis/bullmqClient';
 
@@ -13,7 +13,37 @@ export type VerificationRecord = {
 };
 
 export function normalizeEmail(email: string): string {
-  return email.trim().toLowerCase();
+  if (!email) return '';
+
+  let normalized = email.trim().toLowerCase();
+  const [localPart, domain] = normalized.split('@');
+  if (!localPart || !domain) {
+    return normalized.normalize('NFKC');
+  }
+
+  const gmailDomains = ['gmail.com', 'googlemail.com'];
+  if (gmailDomains.includes(domain)) {
+    let gmailLocal = localPart.replace(/\./g, '');
+    gmailLocal = gmailLocal.split('+')[0];
+    normalized = `${gmailLocal}@${domain}`;
+  }
+
+  return normalized.normalize('NFKC');
+}
+
+export function getEmailHashPepper(): string {
+  const cfg = useRuntimeConfig();
+  const pepper = cfg.emailHashPepper || process.env.EMAIL_HASH_PEPPER || '';
+  if (!pepper) {
+    throw new Error('EMAIL_HASH_PEPPER is missing');
+  }
+  return pepper;
+}
+
+export function hashEmail(emailNormalized: string): string {
+  return createHmac('sha256', getEmailHashPepper())
+    .update(emailNormalized)
+    .digest('hex');
 }
 
 export function getEmailVerificationKey(email: string): string {

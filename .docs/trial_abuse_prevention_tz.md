@@ -13,7 +13,7 @@
 
 1. При hard delete аккаунта все данные удаляются, включая `hasUsedTrial`
 2. При soft delete и восстановлении через OAuth/email `hasUsedTrial` сохраняется, но можно использовать другой email
-3. Нет отслеживания использования Trial по другим идентификаторам (IP, устройство, fingerprint)
+3. Нет отслеживания использования Trial по email независимо от существования аккаунта
 
 ---
 
@@ -21,58 +21,110 @@
 
 Предотвратить злоупотребление пробным периодом через:
 
-- Удаление и перерегистрацию аккаунта
-- Регистрацию с разными email-адресами
-- Использование разных устройств/IP
+- Удаление и перерегистрацию аккаунта с тем же email
+- Сохранение информации о количестве использованных дней триала
 
 ---
 
-## 3. Решения
+## 3. Решение: Отслеживание использования Trial по email с учетом использованных дней
 
-### 3.1. Отслеживание использования Trial по email (Базовый уровень)
+**Суть:** Сохранять информацию об использовании Trial отдельно от пользователя, включая количество использованных дней. При повторной регистрации выдавать только оставшиеся дни триала.
 
-**Суть:** Сохранять информацию об использовании Trial отдельно от пользователя.
+**Кейс использования:**
+
+1. Пользователь регистрируется → активируется триал на 7 дней
+2. Проходит 2 дня использования триала
+3. Пользователь удаляет аккаунт
+4. При удалении фиксируется: использовано 2 дня из 7
+5. Пользователь регистрируется заново с тем же email
+6. Система проверяет: использовано 2 дня, осталось 5 дней
+7. Пользователю выдается триал на 5 дней (не на 7)
 
 **Реализация:**
 
 - Создать таблицу `trial_usage_tracking` для отслеживания использованных Trial
-- При активации Trial сохранять email (нормализованный) в таблицу
-- При регистрации проверять, использовал ли этот email уже Trial
+- При активации Trial сохранять email (нормализованный) и дату начала триала
+- При удалении аккаунта вычислять и сохранять количество использованных дней
+- При повторной регистрации проверять использованные дни и выдавать только оставшиеся
 
 **Поля таблицы:**
 
 ```typescript
 trial_usage_tracking {
   id: serial
-  email_normalized: varchar(255) UNIQUE NOT NULL // нормализованный email
-  first_used_at: timestamp NOT NULL // когда впервые использован Trial
-  last_used_at: timestamp // последнее использование (для аналитики)
-  usage_count: integer DEFAULT 1 // количество использований (для аналитики)
+  email_normalized: varchar(255) NOT NULL // нормализованный email (см. раздел 4.5)
+  email_hash: varchar(64) UNIQUE NOT NULL // HMAC-SHA256 от email_normalized (см. GDPR и приватность)
+  first_trial_started_at: timestamp NOT NULL // когда впервые начался триал
+  last_trial_started_at: timestamp // последний раз когда начался триал
+  total_days_used: integer DEFAULT 0 NOT NULL // сколько дней было использовано в сумме (максимум 7)
   created_at: timestamp
   updated_at: timestamp
 }
 ```
 
+**GDPR и приватность:**
+
+- Данные в `trial_usage_tracking` содержат персональные данные (email)
+- **Срок хранения:** 1 год с момента последнего использования Trial (`last_trial_started_at`) или удаления аккаунта, что наступит позже
+- **Очистка:** ежедневная фоновая очистка записей старше 1 года (опционально отключается через `TRIAL_USAGE_CLEANUP_ENABLED=false`)
+- **Анонимизация:** При необходимости анонимизации (по запросу пользователя или по истечении срока) можно:
+  - Удалить `email_normalized`, оставить `email_hash` (HMAC-SHA256)
+  - Это сохраняет защиту от abuse, но снижает риск утечек PII
+- **Рекомендованный подход (выбранный):** хранить **оба** поля (`email_normalized` + `email_hash`):
+  - `email_hash` — основной ключ для поиска/уникальности
+  - `email_normalized` — для поддержки и дебага
+  - Хеш должен быть **HMAC‑SHA256** с серверным секретом (`EMAIL_HASH_PEPPER`)
+
+**Идентификатор пользователя (email/phone):**
+
+- **Текущее решение:** аккаунт без email **не создаём** → без email нет Trial и нет регистрации.
+- **Причина:** защита от abuse в рамках MVP требует стабильного идентификатора.
+- **Будущее (когда появится регистрация по телефону):**
+  - Добавить `phone_normalized` и/или `phone_hash` в ту же таблицу `trial_usage_tracking`
+  - Ввести правило: **trial_usage_tracking** ищется по одному из ключей в порядке приоритета: `email_hash` → `phone_hash`
+  - Для пользователей без email, но с телефоном, триал ограничивается по телефону
+  - Если есть и email и телефон — использовать оба, чтобы не было обхода через смену канала регистрации
+
 **Логика:**
 
 1. При активации Trial (`activateTrialForUser`):
 
-   - Нормализовать email пользователя
-   - Проверить наличие записи в `trial_usage_tracking`
-   - Если записи нет → создать новую запись
-   - Если запись есть → обновить `last_used_at` и `usage_count++`
+   - Нормализовать email пользователя (см. раздел 4.5 о нормализации email)
+   - Вычислить `email_hash = HMAC-SHA256(email_normalized, EMAIL_HASH_PEPPER)`
+   - Проверить наличие записи в `trial_usage_tracking` по `email_hash`
+   - Если записи нет → создать новую запись с `total_days_used = 0`, выдать полный триал на 7 дней
+   - **ВАЖНО:** создание записи должно быть идемпотентным (UPSERT) из‑за гонок при параллельной регистрации
+   - Если запись есть:
+     - Вычислить оставшиеся дни: `remainingDays = 7 - total_days_used`
+     - Если `remainingDays <= 0` → создать Basic БЕЗ триала и установить `hasUsedTrial = true`
+     - Если `remainingDays > 0` → выдать триал на `remainingDays` дней
+     - Обновить `last_trial_started_at`
+   - **ВАЖНО:** Все операции (создание/обновление tracking, создание подписки, обновление пользователя, логирование событий) должны выполняться в одной транзакции для обеспечения консистентности данных
 
-2. При регистрации нового пользователя:
+2. При удалении аккаунта (`delete.post.ts`):
+
+   - Получить email пользователя
+   - Если у пользователя был активный триал (`trialStartedAt` не null):
+     - Вычислить количество использованных дней: `usedDays = Math.max(1, Math.floor((now - trialStartedAt) / 86400000))`
+     - **КРИТИЧНО:** Минимум 1 день засчитывается при любом факте старта триала, даже если прошло менее 24 часов. Это предотвращает обход через удаление аккаунта в первые сутки.
+     - Обновить запись в `trial_usage_tracking`:
+       - `total_days_used = LEAST(total_days_used + usedDays, 7)` (но не больше 7)
+       - `updated_at = now`
+     - **ВАЖНО:** если запись в `trial_usage_tracking` отсутствует — создать её (UPSERT), иначе обновление ничего не сделает и защита сломается
+
+3. При регистрации нового пользователя:
    - Нормализовать email
    - Проверить наличие записи в `trial_usage_tracking`
-   - Если запись есть → установить `hasUsedTrial = true` для нового пользователя
-   - Если записи нет → `hasUsedTrial = false` (можно активировать Trial)
+   - Если запись есть → при активации триала будет использована логика из пункта 1
+   - Если записи нет → `hasUsedTrial = false` (можно активировать полный Trial на 7 дней)
 
 **Преимущества:**
 
 - ✅ Простая реализация
 - ✅ Работает даже при hard delete аккаунта
 - ✅ Не требует дополнительных данных от пользователя
+- ✅ Справедливая система: пользователь получает только неиспользованные дни
+- ✅ Защищает от злоупотребления через удаление и перерегистрацию
 
 **Недостатки:**
 
@@ -81,272 +133,9 @@ trial_usage_tracking {
 
 ---
 
-### 3.2. Отслеживание по комбинации email + IP (Средний уровень)
+## 4. Технические детали реализации
 
-**Суть:** Дополнительно к email отслеживать IP-адрес первого использования Trial.
-
-**Реализация:**
-
-- Расширить таблицу `trial_usage_tracking`:
-  ```typescript
-  trial_usage_tracking {
-    // ... существующие поля
-    first_ip: varchar(45) // IPv4 или IPv6
-    ip_hash: varchar(64) // SHA-256 хеш IP для дополнительной защиты
-  }
-  ```
-
-**Логика:**
-
-1. При активации Trial:
-
-   - Сохранять email и IP-адрес (или хеш IP)
-   - При регистрации проверять и email, и IP
-
-2. При регистрации:
-   - Проверять наличие записи по email ИЛИ по IP (хешу)
-   - Если найдена запись → `hasUsedTrial = true`
-
-**Преимущества:**
-
-- ✅ Защищает от использования разных email с одного IP
-- ✅ Усложняет обход для обычных пользователей
-
-**Недостатки:**
-
-- ❌ Можно обойти через VPN/прокси
-- ❌ Проблемы с динамическими IP (мобильные операторы)
-- ❌ Может блокировать легитимных пользователей из одной сети (офис, семья)
-
----
-
-### 3.3. Отслеживание по устройству/браузеру (Продвинутый уровень)
-
-**Суть:** Использовать fingerprint устройства/браузера для отслеживания.
-
-**Реализация:**
-
-- Расширить таблицу `trial_usage_tracking`:
-  ```typescript
-  trial_usage_tracking {
-    // ... существующие поля
-    device_fingerprint: varchar(255) // хеш fingerprint устройства
-    user_agent_hash: varchar(64) // хеш User-Agent
-  }
-  ```
-
-**Логика:**
-
-1. На клиенте собирать fingerprint устройства (через библиотеку типа `fingerprintjs`)
-2. При регистрации/активации Trial отправлять fingerprint на сервер
-3. Сохранять fingerprint в `trial_usage_tracking`
-4. При регистрации проверять fingerprint
-
-**Преимущества:**
-
-- ✅ Защищает от использования разных email на одном устройстве
-- ✅ Работает даже при смене IP
-
-**Недостатки:**
-
-- ❌ Можно обойти через очистку браузера/использование приватного режима
-- ❌ Проблемы с мобильными приложениями (нужна специальная реализация)
-- ❌ Может блокировать легитимных пользователей на общих устройствах
-
----
-
-### 3.4. Комбинированный подход (Рекомендуемый)
-
-**Суть:** Комбинация методов с весовой системой и лимитами.
-
-**Реализация:**
-
-1. **Таблица отслеживания:**
-
-```typescript
-trial_usage_tracking {
-  id: serial
-  email_normalized: varchar(255) NOT NULL
-  email_hash: varchar(64) // SHA-256 хеш для дополнительной защиты
-  first_ip: varchar(45)
-  ip_hash: varchar(64)
-  device_fingerprint: varchar(255)
-  first_used_at: timestamp NOT NULL
-  last_used_at: timestamp
-  usage_count: integer DEFAULT 1
-  risk_score: integer DEFAULT 0 // оценка риска (0-100)
-  created_at: timestamp
-  updated_at: timestamp
-
-  // Индексы
-  INDEX idx_email_normalized (email_normalized)
-  INDEX idx_email_hash (email_hash)
-  INDEX idx_ip_hash (ip_hash)
-  INDEX idx_device_fingerprint (device_fingerprint)
-}
-```
-
-2. **Логика проверки:**
-
-```typescript
-async function checkTrialEligibility(
-  email: string,
-  ip?: string,
-  deviceFingerprint?: string
-): Promise<{
-  eligible: boolean;
-  reason?: string;
-  riskScore: number;
-}> {
-  const emailNormalized = normalizeEmail(email);
-  const emailHash = sha256(emailNormalized);
-
-  // Проверяем по email
-  const byEmail = await db
-    .select()
-    .from(trialUsageTracking)
-    .where(eq(trialUsageTracking.emailNormalized, emailNormalized))
-    .limit(1);
-
-  if (byEmail.length) {
-    return {
-      eligible: false,
-      reason: 'Trial already used with this email',
-      riskScore: 100,
-    };
-  }
-
-  // Проверяем по IP (если предоставлен)
-  let riskScore = 0;
-  if (ip) {
-    const ipHash = sha256(ip);
-    const byIp = await db
-      .select()
-      .from(trialUsageTracking)
-      .where(eq(trialUsageTracking.ipHash, ipHash))
-      .limit(1);
-
-    if (byIp.length) {
-      riskScore += 30; // IP использовался ранее
-    }
-  }
-
-  // Проверяем по device fingerprint (если предоставлен)
-  if (deviceFingerprint) {
-    const byDevice = await db
-      .select()
-      .from(trialUsageTracking)
-      .where(eq(trialUsageTracking.deviceFingerprint, deviceFingerprint))
-      .limit(1);
-
-    if (byDevice.length) {
-      riskScore += 50; // Устройство использовалось ранее
-    }
-  }
-
-  // Если riskScore >= 80 → блокируем
-  if (riskScore >= 80) {
-    return {
-      eligible: false,
-      reason: 'High risk of trial abuse detected',
-      riskScore,
-    };
-  }
-
-  return {
-    eligible: true,
-    riskScore,
-  };
-}
-```
-
-3. **При активации Trial:**
-
-```typescript
-async function activateTrialForUser(
-  userId: number,
-  email: string,
-  ip?: string,
-  deviceFingerprint?: string,
-  timezone?: string
-) {
-  // Проверяем eligibility
-  const eligibility = await checkTrialEligibility(email, ip, deviceFingerprint);
-
-  if (!eligibility.eligible) {
-    console.warn(`[Trial] User ${userId} not eligible: ${eligibility.reason}`);
-    // Создаем подписку Basic БЕЗ Trial
-    return await createBasicSubscription(userId, timezone, false);
-  }
-
-  // Активируем Trial
-  const subscription = await createBasicSubscription(userId, timezone, true);
-
-  // Сохраняем в tracking
-  const emailNormalized = normalizeEmail(email);
-  await db
-    .insert(trialUsageTracking)
-    .values({
-      emailNormalized,
-      emailHash: sha256(emailNormalized),
-      firstIp: ip || null,
-      ipHash: ip ? sha256(ip) : null,
-      deviceFingerprint: deviceFingerprint || null,
-      firstUsedAt: new Date(),
-      lastUsedAt: new Date(),
-      usageCount: 1,
-      riskScore: eligibility.riskScore,
-    })
-    .onConflictDoUpdate({
-      target: trialUsageTracking.emailNormalized,
-      set: {
-        lastUsedAt: new Date(),
-        usageCount: sql`${trialUsageTracking.usageCount} + 1`,
-      },
-    });
-
-  return subscription;
-}
-```
-
-**Преимущества:**
-
-- ✅ Комплексная защита от разных типов злоупотреблений
-- ✅ Гибкая система оценки риска
-- ✅ Не блокирует легитимных пользователей слишком агрессивно
-- ✅ Позволяет собирать аналитику о попытках злоупотребления
-
-**Недостатки:**
-
-- ❌ Более сложная реализация
-- ❌ Требует сбора дополнительных данных (IP, fingerprint)
-
----
-
-## 4. Рекомендуемое решение
-
-**Выбрать: Комбинированный подход (3.4) с упрощенной реализацией**
-
-**Фаза 1 (MVP):**
-
-- Реализовать отслеживание по email (3.1)
-- Это решит основную проблему для большинства случаев
-
-**Фаза 2 (Улучшение):**
-
-- Добавить отслеживание по IP (3.2)
-- Добавить систему оценки риска
-
-**Фаза 3 (Продвинутая защита):**
-
-- Добавить отслеживание по device fingerprint (3.3)
-- Улучшить систему оценки риска
-
----
-
-## 5. Технические детали реализации
-
-### 5.1. Схема БД
+### 4.1. Схема БД
 
 ```typescript
 // server/infrastructure/db/schema.ts
@@ -354,19 +143,17 @@ export const trialUsageTracking = pgTable(
   'trial_usage_tracking',
   {
     id: serial('id').primaryKey(),
-    emailNormalized: varchar('email_normalized', { length: 255 })
-      .notNull()
-      .unique(),
-    emailHash: varchar('email_hash', { length: 64 }), // SHA-256
-    firstIp: varchar('first_ip', { length: 45 }), // IPv4 или IPv6
-    ipHash: varchar('ip_hash', { length: 64 }), // SHA-256 хеш IP
-    deviceFingerprint: varchar('device_fingerprint', { length: 255 }),
-    firstUsedAt: timestamp('first_used_at', { withTimezone: true })
+    emailNormalized: varchar('email_normalized', { length: 255 }).notNull(),
+    emailHash: varchar('email_hash', { length: 64 }).notNull().unique(),
+    firstTrialStartedAt: timestamp('first_trial_started_at', {
+      withTimezone: true,
+    })
       .notNull()
       .defaultNow(),
-    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
-    usageCount: integer('usage_count').default(1).notNull(),
-    riskScore: integer('risk_score').default(0).notNull(),
+    lastTrialStartedAt: timestamp('last_trial_started_at', {
+      withTimezone: true,
+    }),
+    totalDaysUsed: integer('total_days_used').default(0).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -379,15 +166,11 @@ export const trialUsageTracking = pgTable(
       table.emailNormalized
     ),
     emailHashIdx: index('idx_trial_usage_email_hash').on(table.emailHash),
-    ipHashIdx: index('idx_trial_usage_ip_hash').on(table.ipHash),
-    deviceFingerprintIdx: index('idx_trial_usage_device_fingerprint').on(
-      table.deviceFingerprint
-    ),
   })
 );
 ```
 
-### 5.2. Изменения в `activateTrialForUser`
+### 4.2. Изменения в `activateTrialForUser`
 
 ```typescript
 // server/application/subscriptions/trial.service.ts
@@ -395,85 +178,284 @@ export const trialUsageTracking = pgTable(
 export async function activateTrialForUser(
   userId: number,
   timezone?: string,
-  email?: string, // Добавить email
-  ip?: string, // Добавить IP
-  deviceFingerprint?: string // Добавить fingerprint
+  email?: string // Добавить email
 ) {
   // ... существующий код проверки hasUsedTrial ...
 
   // НОВОЕ: Проверка через trial_usage_tracking
   if (email) {
-    const emailNormalized = normalizeEmail(email);
+    const emailNormalized = normalizeEmail(email); // Использует функцию нормализации из 4.5
+    const emailHash = hashEmail(emailNormalized); // HMAC-SHA256 с pepper (см. 4.5)
     const existing = await db
       .select()
       .from(trialUsageTracking)
-      .where(eq(trialUsageTracking.emailNormalized, emailNormalized))
+      .where(eq(trialUsageTracking.emailHash, emailHash))
       .limit(1);
 
     if (existing.length) {
-      // Email уже использовал Trial
-      console.log(
-        `[Trial] User ${userId} email ${emailNormalized} already used trial, skipping`
-      );
-      // Создаем Basic БЕЗ Trial
-      return await createBasicSubscription(userId, timezone, false);
+      const tracking = existing[0];
+      const remainingDays = 7 - tracking.totalDaysUsed;
+
+      // ВСЕ операции выполняются в транзакции для обеспечения консистентности
+      return await db.transaction(async (tx) => {
+        if (remainingDays <= 0) {
+          // Все дни триала использованы
+          console.log(
+            `[Trial] User ${userId} email ${emailNormalized} already used all 7 trial days, creating Basic without trial`
+          );
+
+          // ВАЖНО: Устанавливаем hasUsedTrial = true даже если триал не выдаем
+          await tx
+            .update(users)
+            .set({
+              hasUsedTrial: true,
+              timezone: timezone || user[0].timezone || 'Europe/Moscow',
+            })
+            .where(eq(users.id, userId));
+
+          // ВАЖНО: createBasicSubscription должна уметь работать через tx
+          return await createBasicSubscription(
+            userId,
+            timezone || user[0].timezone || 'Europe/Moscow',
+            false,
+            tx
+          );
+        }
+
+        // Выдаем триал на оставшиеся дни
+        console.log(
+          `[Trial] User ${userId} email ${emailNormalized} has ${remainingDays} days remaining, creating trial for ${remainingDays} days`
+        );
+
+        const now = new Date();
+        const trialEndDate = new Date(
+          now.getTime() + remainingDays * 24 * 60 * 60 * 1000
+        );
+        const subscriptionEndDate = new Date(
+          now.getTime() + 30 * 24 * 60 * 60 * 1000
+        );
+
+        // Обновляем пользователя
+        await tx
+          .update(users)
+          .set({
+            hasUsedTrial: true,
+            trialStartedAt: now,
+            trialEndedAt: trialEndDate,
+            timezone: timezone || user[0].timezone || 'Europe/Moscow',
+          })
+          .where(eq(users.id, userId));
+
+        // Обновляем tracking
+        await tx
+          .update(trialUsageTracking)
+          .set({
+            lastTrialStartedAt: now,
+            updatedAt: now,
+          })
+          .where(eq(trialUsageTracking.emailHash, emailHash));
+
+        // Создаем подписку Basic (с Trial активным)
+        const [subscription] = await tx
+          .insert(userSubscriptions)
+          .values({
+            userId,
+            planId: 'basic',
+            billingPeriod: 'month',
+            startDate: now,
+            endDate: subscriptionEndDate,
+            paymentStatus: 'active',
+            autoRenew: false,
+            sourcePlatform: 'web',
+          })
+          .returning();
+
+        if (!subscription) {
+          throw new Error(`Failed to create subscription for user ${userId}`);
+        }
+
+        // Логируем событие
+        await tx.insert(subscriptionEvents).values({
+          userId,
+          eventType: 'trial_started',
+          planId: 'basic',
+          metadata: {
+            startDate: now.toISOString(),
+            endDate: trialEndDate.toISOString(),
+            remainingDays,
+            totalDaysUsed: tracking.totalDaysUsed,
+          },
+        });
+
+        return subscription;
+      });
+    } else {
+      // Первая регистрация - создаем запись в tracking в транзакции
+      return await db.transaction(async (tx) => {
+        const now = new Date();
+        await tx
+          .insert(trialUsageTracking)
+          .values({
+            emailNormalized,
+            emailHash,
+            firstTrialStartedAt: now,
+            lastTrialStartedAt: now,
+            totalDaysUsed: 0,
+          })
+          .onConflictDoNothing();
+
+        // Продолжаем с активацией полного триала на 7 дней (существующий код)
+        // ... существующий код активации полного триала на 7 дней для новых пользователей ...
+      });
     }
   }
 
-  // ... существующий код активации Trial ...
-
-  // НОВОЕ: Сохранение в tracking
-  if (email) {
-    const emailNormalized = normalizeEmail(email);
-    await db.insert(trialUsageTracking).values({
-      emailNormalized,
-      emailHash: sha256(emailNormalized),
-      firstIp: ip || null,
-      ipHash: ip ? sha256(ip) : null,
-      deviceFingerprint: deviceFingerprint || null,
-      firstUsedAt: new Date(),
-      lastUsedAt: new Date(),
-      usageCount: 1,
-      riskScore: 0,
-    });
-  }
-
-  return subscription;
+  // ... существующий код активации полного триала на 7 дней для новых пользователей ...
 }
 ```
 
-### 5.3. Изменения в местах вызова `activateTrialForUser`
+### 4.3. Изменения в `delete.post.ts`
 
-Нужно передавать email, IP и fingerprint во всех местах:
+```typescript
+// server/api/user/delete.post.ts
 
-- `server/application/auth/oauth.ts`
-- `server/api/auth/email/verify.post.ts`
-- `server/api/auth/telegram/verify.post.ts`
+// В функции удаления аккаунта, перед soft-delete пользователя:
+
+// Фиксируем использованные дни триала
+const user = await db
+  .select({
+    email: users.email,
+    trialStartedAt: users.trialStartedAt,
+  })
+  .from(users)
+  .where(eq(users.id, userId))
+  .limit(1);
+
+if (user.length && user[0].email && user[0].trialStartedAt) {
+  const emailNormalized = normalizeEmail(user[0].email); // Использует функцию нормализации из 4.5
+  const emailHash = hashEmail(emailNormalized); // HMAC-SHA256 с pepper (см. 4.5)
+  const now = new Date();
+  const trialStart = user[0].trialStartedAt;
+
+  // Вычисляем количество использованных дней
+  // КРИТИЧНО: Минимум 1 день засчитывается при любом факте старта триала
+  // Это предотвращает обход через удаление аккаунта в первые 24 часа
+  const diffMs = now.getTime() - trialStart.getTime();
+  const usedDays = Math.max(1, Math.floor(diffMs / (24 * 60 * 60 * 1000)));
+
+  // Обновляем tracking (всегда, даже если прошло менее 24 часов)
+  // ВАЖНО: если записи нет — создаем её (UPSERT), иначе защита сломается
+  await db
+    .insert(trialUsageTracking)
+    .values({
+      emailNormalized,
+      emailHash,
+      firstTrialStartedAt: trialStart,
+      lastTrialStartedAt: trialStart,
+      totalDaysUsed: usedDays,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: trialUsageTracking.emailHash,
+      set: {
+        totalDaysUsed: sql`LEAST(${trialUsageTracking.totalDaysUsed} + ${usedDays}, 7)`,
+        updatedAt: now,
+      },
+    });
+
+  console.log(
+    `[Trial] User ${userId} (${emailNormalized}) deleted account, recorded ${usedDays} used trial days (minimum 1 day for any trial start)`
+  );
+}
+
+// Затем продолжаем с soft-delete пользователя
+```
+
+### 4.4. Изменения в местах вызова `activateTrialForUser`
+
+Нужно передавать email во всех местах (email должен быть нормализован через `normalizeEmail` из 4.5):
+
+- `server/application/auth/oauth.ts` - передать `email` из профиля (уже нормализован)
+- `server/api/auth/email/verify.post.ts` - передать `email` из запроса (уже нормализован)
+- `server/api/auth/telegram/verify.post.ts` - для Telegram email может быть null, передавать только если есть
+  - **Текущее правило:** если email отсутствует — регистрация отклоняется (аккаунты без email не поддерживаются)
+
+### 4.5. Нормализация email для защиты от алиасов
+
+**Критично:** Необходимо явно описать политику нормализации email для предотвращения обхода через email-алиасы (Gmail +tag, точки, регистры, unicode-homoglyphs).
+
+**Требования к нормализации:**
+
+1. **Регистр:** Привести к нижнему регистру (`toLowerCase()`)
+2. **Gmail-алиасы:**
+   - Удалить точки в локальной части до символа `@` (для Gmail: `user.name@gmail.com` → `username@gmail.com`)
+   - Удалить часть после `+` в локальной части (для Gmail: `user+tag@gmail.com` → `user@gmail.com`)
+   - Применить только для доменов Gmail (`@gmail.com`, `@googlemail.com`)
+3. **Unicode:** Нормализовать unicode-символы (NFKC нормализация) для защиты от homoglyphs
+4. **Trim:** Удалить пробелы в начале и конце
+
+**Реализация:**
+
+```typescript
+// server/application/auth/verification.ts
+
+export function normalizeEmail(email: string): string {
+  if (!email) return email;
+
+  // 1. Trim и приведение к нижнему регистру
+  let normalized = email.trim().toLowerCase();
+
+  // 2. Разделение на локальную часть и домен
+  const [localPart, domain] = normalized.split('@');
+  if (!localPart || !domain) return normalized;
+
+  // 3. Обработка Gmail-алиасов
+  const gmailDomains = ['gmail.com', 'googlemail.com'];
+  if (gmailDomains.includes(domain)) {
+    // Удаляем точки в локальной части
+    let gmailLocal = localPart.replace(/\./g, '');
+    // Удаляем часть после + (если есть)
+    gmailLocal = gmailLocal.split('+')[0];
+    normalized = `${gmailLocal}@${domain}`;
+  }
+
+  // 4. Unicode нормализация (NFKC)
+  normalized = normalized.normalize('NFKC');
+
+  return normalized;
+}
+```
+
+**Хэширование email (обязательное):**
+
+- Используем HMAC‑SHA256 с серверным секретом, чтобы хеш нельзя было перебором восстановить.
+- Секрет хранится в env: `EMAIL_HASH_PEPPER`.
+
+```typescript
+// server/application/auth/verification.ts
+
+import { createHmac } from 'node:crypto';
+
+export function hashEmail(emailNormalized: string): string {
+  return createHmac('sha256', process.env.EMAIL_HASH_PEPPER || '')
+    .update(emailNormalized)
+    .digest('hex');
+}
+```
+
+**Примеры нормализации:**
+
+- `User.Name@gmail.com` → `username@gmail.com`
+- `user+tag@gmail.com` → `user@gmail.com`
+- `user.name+test@Gmail.COM` → `username@gmail.com`
+- `user@example.com` → `user@example.com` (не Gmail, точки не удаляются)
+- `user+tag@example.com` → `user+tag@example.com` (не Gmail, + не удаляется)
+
+**ВАЖНО:** Эта же функция должна использоваться везде, где происходит работа с email (регистрация, авторизация, проверка tracking).
 
 ---
 
-## 6. Дополнительные меры защиты
-
-### 6.1. Лимит попыток регистрации
-
-- Ограничить количество регистраций с одного IP в день (например, 3-5)
-- Хранить в Redis с TTL 24 часа
-
-### 6.2. Аналитика и мониторинг
-
-- Логировать все попытки регистрации с высоким riskScore
-- Отслеживать паттерны злоупотребления (множественные регистрации, быстрые удаления)
-- Алерты для администраторов при подозрительной активности
-
-### 6.3. Grace period для восстановления
-
-- При soft delete сохранять информацию о Trial в `trial_usage_tracking`
-- При восстановлении аккаунта проверять, не истек ли grace period (например, 30 дней)
-- Если grace period не истек → можно восстановить Trial
-
----
-
-## 7. Миграция данных
+## 5. Миграция данных
 
 **Вопрос:** Что делать с существующими пользователями, которые уже использовали Trial?
 
@@ -481,59 +463,87 @@ export async function activateTrialForUser(
 
 1. Создать скрипт миграции, который:
 
-   - Найдет всех пользователей с `hasUsedTrial = true`
-   - Создаст записи в `trial_usage_tracking` для их email
-   - Установит `first_used_at = trial_started_at` из users
-   - Установит `usage_count = 1`
+   - Нормализует `users.email` по новым правилам (Gmail aliases + lowercase + NFKC)
+   - Логирует конфликты (если несколько аккаунтов сводятся к одному email) и прерывает миграцию
+   - Скрипт: `server/infrastructure/db/migrate-normalize-emails.ts`
 
-2. Запустить миграцию один раз после деплоя
+2. Создать скрипт миграции, который:
+
+   - Найдет всех пользователей с `hasUsedTrial = true` и `trialStartedAt` не null
+   - Для каждого пользователя:
+     - Вычислит использованные дни: `usedDays = max(1, floor((now - trialStartedAt) / 86400000))`
+     - Создаст запись в `trial_usage_tracking`:
+       - `email_normalized = normalizeEmail(user.email)`
+       - `email_hash = hashEmail(email_normalized)`
+       - `first_trial_started_at = trial_started_at`
+       - `last_trial_started_at = trial_started_at`
+       - `total_days_used = usedDays` (но не больше 7)
+   - Если триал уже истек, `total_days_used = 7`
+
+3. Запустить миграцию один раз после деплоя (оба скрипта, в этом порядке)
 
 ---
 
-## 8. Acceptance Criteria
+## 6. Acceptance Criteria
 
-1. ✅ Пользователь не может получить Trial повторно с тем же email
+1. ✅ Пользователь не может получить полный Trial повторно с тем же email
 2. ✅ Пользователь не может обойти защиту через удаление и перерегистрацию
 3. ✅ Система отслеживает использование Trial независимо от существования аккаунта
-4. ✅ Существующие пользователи не теряют доступ после внедрения
-5. ✅ Система собирает аналитику о попытках злоупотребления
-6. ✅ Легитимные пользователи не блокируются (низкий false positive rate)
+4. ✅ При удалении аккаунта фиксируется количество использованных дней
+5. ✅ При повторной регистрации пользователь получает только оставшиеся дни триала
+6. ✅ Существующие пользователи не теряют доступ после внедрения
+7. ✅ Если использовано 7 дней, пользователь не получает триал при повторной регистрации
 
 ---
 
-## 9. Приоритет реализации
+## 7. Примеры сценариев
 
-**Высокий приоритет:**
+### Сценарий 1: Первая регистрация
 
-- Фаза 1: Отслеживание по email (решает 80% проблемы)
+- Пользователь регистрируется с email `user@example.com`
+- Активируется триал на 7 дней
+- В `trial_usage_tracking` создается запись: `total_days_used = 0`
 
-**Средний приоритет:**
+### Сценарий 2: Удаление после 2 дней использования
 
-- Фаза 2: Отслеживание по IP + система оценки риска
+- Пользователь использовал триал 2 дня
+- Удаляет аккаунт
+- В `trial_usage_tracking` обновляется: `total_days_used = 2`
 
-**Низкий приоритет:**
+### Сценарий 3: Повторная регистрация после удаления
 
-- Фаза 3: Отслеживание по device fingerprint
-- Расширенная аналитика и мониторинг
+- Пользователь регистрируется снова с `user@example.com`
+- Система проверяет: `total_days_used = 2`, осталось 5 дней
+- Активируется триал на 5 дней
+- В `trial_usage_tracking` обновляется: `last_trial_started_at = now`
+
+### Сценарий 4: Удаление после использования всех 7 дней
+
+- Пользователь использовал все 7 дней триала
+- Удаляет аккаунт
+- В `trial_usage_tracking` обновляется: `total_days_used = 7`
+- При повторной регистрации триал не активируется, создается Basic без триала
 
 ---
 
-## 10. Риски и ограничения
+## 8. Риски и ограничения
 
 **Риски:**
 
-- Ложные срабатывания (false positives) для легитимных пользователей
-- Проблемы с динамическими IP (мобильные операторы)
+- Можно обойти, используя разные email-адреса
 - Обход через временные email-сервисы
 
 **Ограничения:**
 
-- Не защищает от использования разных email-адресов (но усложняет)
-- Не защищает от использования VPN/прокси
-- Требует сбора дополнительных данных (GDPR compliance)
+- Не защищает от использования разных email-адресов (но нормализация защищает от Gmail-алиасов)
+- Требует точного расчета использованных дней (округление в меньшую сторону)
+- Минимум 1 день засчитывается при любом факте старта триала (может показаться несправедливым, но необходимо для защиты)
 
 **Меры:**
 
-- Настроить систему оценки риска с низким порогом блокировки
-- Предусмотреть механизм обжалования для заблокированных пользователей
-- Соблюдать требования GDPR при сборе данных (IP, fingerprint)
+- Использовать округление в меньшую сторону (floor) для расчета дней
+- Ограничить `total_days_used` максимумом 7 дней
+- Минимум 1 день засчитывается при любом факте старта триала (даже если прошло менее 24 часов)
+- Нормализация email для защиты от Gmail-алиасов и других вариантов обхода
+- Все операции выполняются в транзакциях для обеспечения консистентности данных
+- Явная установка `hasUsedTrial = true` даже при `remainingDays <= 0`

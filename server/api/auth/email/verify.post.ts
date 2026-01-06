@@ -78,7 +78,7 @@ export default defineEventHandler(async (event) => {
 
   const timezone = getTimezoneFromRequest(event);
   try {
-    await activateTrialForUser(user.id, timezone);
+    await activateTrialForUser(user.id, timezone, email);
   } catch (error: any) {
     console.error(
       `[Auth] ❌ Failed to activate trial/subscription for user ${user.id}:`,
