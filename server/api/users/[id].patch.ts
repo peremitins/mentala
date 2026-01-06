@@ -23,6 +23,8 @@ export default defineEventHandler(async (event) => {
   const body = await readBody<{
     email?: string;
     name?: string;
+    gender?: 'male' | 'female';
+    ageRange?: 'under_30' | '30_45' | '45_plus' | 'unknown';
     password?: string;
     roleId?: string; // Только для админов
     isBlocked?: boolean; // Запрещено - использовать отдельный endpoint
@@ -36,6 +38,34 @@ export default defineEventHandler(async (event) => {
     });
   }
 
+  if (body?.gender && !['male', 'female'].includes(body.gender)) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Invalid gender value',
+    });
+  }
+
+  if (
+    body?.ageRange &&
+    !['under_30', '30_45', '45_plus', 'unknown'].includes(body.ageRange)
+  ) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Invalid ageRange value',
+    });
+  }
+
+  let trimmedName: string | undefined = undefined;
+  if (body?.name !== undefined) {
+    trimmedName = body.name.trim();
+    if (trimmedName.length < 1 || trimmedName.length > 40) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'Invalid name length',
+      });
+    }
+  }
+
   // Проверка прав доступа (для изменения других пользователей)
   if (user.id !== id) {
     await requireCanEditUser(event, id);
@@ -46,7 +76,9 @@ export default defineEventHandler(async (event) => {
   // Обычный пользователь может изменять только свои базовые данные
   if (user.id === id) {
     if (body?.email) patch.email = body.email;
-    if (body?.name !== undefined) patch.name = body.name;
+    if (trimmedName !== undefined) patch.name = trimmedName;
+    if (body?.gender !== undefined) patch.gender = body.gender;
+    if (body?.ageRange !== undefined) patch.ageRange = body.ageRange;
     if (body?.password && body.password.length >= 6) {
       patch.passwordHash = await argon2.hash(body.password, {
         type: argon2.argon2id,
@@ -56,7 +88,9 @@ export default defineEventHandler(async (event) => {
     // Админ может изменять любые данные других пользователей
     if (user.role === 'admin') {
       if (body?.email) patch.email = body.email;
-      if (body?.name !== undefined) patch.name = body.name;
+      if (trimmedName !== undefined) patch.name = trimmedName;
+      if (body?.gender !== undefined) patch.gender = body.gender;
+      if (body?.ageRange !== undefined) patch.ageRange = body.ageRange;
       if (body?.password && body.password.length >= 6) {
         patch.passwordHash = await argon2.hash(body.password, {
           type: argon2.argon2id,

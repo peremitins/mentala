@@ -212,10 +212,11 @@ const settingsOpen = ref(false);
 // Отслеживаем ручные изменения текста для синхронизации speechBase
 // Очищаем speechBase если пользователь полностью удалил текст
 const isProcessingVoiceInput = ref(false);
+const isSending = ref(false); // Флаг отправки сообщения - блокирует обновление textarea из голосового ввода
 
 onPartial((t) => {
-  // Игнорируем partial, если микрофон не слушает (был остановлен)
-  if (!speechStore.isListening) return;
+  // Игнорируем partial, если микрофон не слушает (был остановлен) или идет отправка
+  if (!speechStore.isListening || isSending.value) return;
 
   isProcessingVoiceInput.value = true;
   lastPartial.value = t; // Сохраняем последний partial
@@ -229,8 +230,12 @@ onPartial((t) => {
 });
 
 onFinal((t) => {
-  // Игнорируем final, если микрофон не слушает (был остановлен)
-  if (!speechStore.isListening) return;
+  // Игнорируем final, если идет отправка сообщения
+  if (isSending.value) return;
+
+  // Для Whisper API isListening может быть false к моменту вызова finalCb
+  // Проверяем только наличие текста
+  if (!t?.trim()) return;
 
   // Для final результата используем speechBase как базу
   isProcessingVoiceInput.value = true;
@@ -388,6 +393,9 @@ const textareaRef = ref<InstanceType<typeof TextareaResize> | null>(null);
 const onSend = async () => {
   if (!chat.userText?.trim()) return;
 
+  // Устанавливаем флаг отправки - блокируем обновление textarea из голосового ввода
+  isSending.value = true;
+
   // Останавливаем микрофон, если он активен
   if (speechStore.isListening) {
     await stop();
@@ -410,6 +418,7 @@ const onSend = async () => {
     res = await chat.sendMessage(JSON.parse(JSON.stringify(textToSend)));
   } catch (error) {
     console.error('[onSend] Failed to send message:', error);
+    isSending.value = false; // Сбрасываем флаг при ошибке
     return;
   }
 
@@ -426,6 +435,13 @@ const onSend = async () => {
       await speakLastMessage(content);
     }
   }
+
+  // Сбрасываем флаг отправки после завершения
+  // Используем небольшую задержку, чтобы убедиться, что все асинхронные вызовы onFinal завершились
+  await nextTick();
+  setTimeout(() => {
+    isSending.value = false;
+  }, 500);
 };
 
 const combinedMessages = computed(() => chat?.messages || []);

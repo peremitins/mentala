@@ -51,6 +51,11 @@ export default defineEventHandler(async (event) => {
       return;
     }
 
+    const userName =
+      (sessionResult as any)?.name ||
+      (typeof body?.user_name === 'string' ? body.user_name : undefined);
+    const userGender = (sessionResult as any)?.gender || undefined;
+
     // Требуем валидный therapySessionId, чтобы нельзя было обойти биллинг прямыми вызовами /api/chat/stream
     const therapySessionId =
       typeof body?.therapySessionId === 'number' ? body.therapySessionId : null;
@@ -202,7 +207,8 @@ export default defineEventHandler(async (event) => {
           temperature: body?.temperature,
           lang: body?.lang,
           user_locale: body?.user_locale,
-          user_name: body?.user_name,
+          user_name: userName,
+          user_gender: userGender,
           userId: uid,
           isFirstSession: serverIsFirst,
           userPrompt: body?.userPrompt,

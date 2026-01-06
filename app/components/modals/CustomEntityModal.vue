@@ -298,8 +298,8 @@ const emojiPlaceholder = computed(
 );
 
 const intentOptions = [
-  { label: 'Привить привычку', value: 'build' },
-  { label: 'Отказаться от привычки', value: 'quit' },
+  { label: 'Приобрести', value: 'build' },
+  { label: 'Избавиться', value: 'quit' },
 ];
 
 const isSubmitDisabled = computed(

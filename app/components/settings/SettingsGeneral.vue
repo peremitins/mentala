@@ -26,6 +26,9 @@
         description="Эти параметры влияют на стиль общения AI-ассистента и текст всех уведомлений."
         item-max-width="200px"
       />
+      <p v-if="toneWasUnknown" class="text-xs text-muted-foreground">
+        Тон не выбран — сейчас используется нейтральный.
+      </p>
 
       <!-- Кнопка сохранения -->
       <button
@@ -48,7 +51,7 @@
       >
         Конфиденциальность
       </NuxtLink>
-      <VoiceInput />
+      <!-- <VoiceInput /> -->
     </section>
   </div>
 </template>
@@ -68,6 +71,7 @@ const { fetchGlobalPreferences, updateGlobalPreferences } =
 const addressing = ref<Addressing>('informal');
 const tone = ref<Tone>('neutral');
 const savingGlobal = ref(false);
+const toneWasUnknown = ref(false);
 
 const addressingOptions = [
   { value: 'informal' as Addressing, label: 'ты' },
@@ -86,7 +90,12 @@ onMounted(async () => {
   const prefs = await fetchGlobalPreferences();
   if (prefs) {
     addressing.value = prefs.addressing;
-    tone.value = prefs.tone;
+    if (prefs.tone === 'unknown') {
+      toneWasUnknown.value = true;
+      tone.value = 'neutral';
+    } else {
+      tone.value = prefs.tone;
+    }
   }
 });
 
@@ -99,6 +108,7 @@ async function saveGlobalPreferences() {
   savingGlobal.value = false;
 
   if (result) {
+    toneWasUnknown.value = false;
     useToast('Настройки сохранены');
   } else {
     useToast('Ошибка при сохранении');

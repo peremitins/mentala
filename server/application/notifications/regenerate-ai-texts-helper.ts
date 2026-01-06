@@ -8,10 +8,25 @@ import { db } from '@/server/infrastructure/db/client';
 import {
   notificationPreferences,
   userPreferences,
+  users,
 } from '@/server/infrastructure/db/schema';
 import { generateNotificationTexts } from './ai-generation.service';
 import { computeGenerationConfigHash } from '@/server/utils/notification-ai-config-hash';
 import type { NotificationPreferenceMeta } from '@/shared/dto/notifications';
+import type { Tone } from '@/shared/dto/notifications';
+
+function resolveTone(value?: string | null): Tone {
+  if (
+    value === 'delicate' ||
+    value === 'neutral' ||
+    value === 'uplifting' ||
+    value === 'resolute' ||
+    value === 'demanding'
+  ) {
+    return value;
+  }
+  return 'neutral';
+}
 
 /**
  * Перегенерирует AI-тексты для всех preferences сущности при изменении названия/описания
@@ -54,8 +69,17 @@ export async function regenerateAiTextsForEntity(params: {
       .where(eq(userPreferences.userId, Number(userId))) // Преобразуем в number для БД
       .limit(1);
 
-    const tone = (userPrefs?.tone as any) || 'neutral';
+    const tone = resolveTone(userPrefs?.tone as string | null | undefined);
     const addressing = (userPrefs?.addressing as any) || 'informal';
+    const [userProfile] = await db
+      .select({ gender: users.gender })
+      .from(users)
+      .where(eq(users.id, Number(userId)))
+      .limit(1);
+    const userGender =
+      userProfile?.gender === 'male' || userProfile?.gender === 'female'
+        ? userProfile.gender
+        : null;
 
     console.log(
       `[RegenerateAI] Found ${preferences.length} preferences for regeneration: kind=${kind}, entityKey=${entityKey}, entityName="${entityName}"`
@@ -119,6 +143,7 @@ export async function regenerateAiTextsForEntity(params: {
         textSource: textSource as 'ai' | 'hybrid',
         kind,
         habitIntent: kind === 'habits' ? habitIntent : null, // Включаем intent только для habits
+        userGender,
       });
 
       console.log(

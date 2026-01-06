@@ -44,4 +44,19 @@ export default defineNuxtRouteMiddleware(async (to) => {
   }
 
   if (!auth.user) return navigateTo('/auth');
+
+  if (!auth.user.onboarding) {
+    try {
+      await auth.me();
+    } catch {}
+  }
+
+  const onboardingCompleted = auth.user?.onboarding?.welcome === true;
+  if (!onboardingCompleted && to.path !== '/onboarding') {
+    return navigateTo('/onboarding');
+  }
+
+  if (onboardingCompleted && to.path === '/onboarding') {
+    return navigateTo('/');
+  }
 });
