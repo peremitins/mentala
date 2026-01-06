@@ -144,10 +144,17 @@ server/
 • `payments` — идемпотентность webhook по `payment.id` YooKassa (PK = text).
 • `idempotency_keys` — идемпотентность команд (ключ = userId+route+Idempotency-Key), хранит `response_json` для повторов.
 • `therapy_sessions` — учёт минут: `started_at`, `last_activity_at`, `ended_at`, `duration_seconds`.
+• `trial_usage_tracking` — защита от злоупотребления Trial по идентификатору пользователя (email, в будущем phone).
 
 • Trial:
 • Trial — это **состояние пользователя**, а не отдельный план: `users.has_used_trial`, `users.trial_started_at`, `users.trial_ended_at`.
 • При регистрации создаётся `Basic` подписка; если Trial активен — функционал как Premium на 7 дней.
+• Идентификатор Trial: сейчас **email обязателен**, без email регистрация не поддерживается.
+• Нормализация email: `normalizeEmail` (lowercase + Gmail aliases + Unicode NFKC) — единая для auth и trial tracking.
+• Идентификатор: `email_hash` (HMAC‑SHA256 + `EMAIL_HASH_PEPPER`) как ключ; `email_normalized` хранится для поддержки.
+• Консистентность: операции Trial выполняются в одной транзакции; `trial_usage_tracking` обновляется через UPSERT.
+• Ретеншн PII для `trial_usage_tracking`: 1 год после последнего использования Trial или удаления аккаунта (см. `.docs/trial_abuse_prevention_tz.md`).
+• Очистка ретеншна: ежедневная фоновая очистка `trial_usage_tracking` (можно отключить `TRIAL_USAGE_CLEANUP_ENABLED=false`).
 
 • Checkout (MVP, без реального YooKassa checkout):
 • `POST /api/subscriptions/start-checkout` требует заголовок `Idempotency-Key`.

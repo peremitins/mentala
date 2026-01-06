@@ -235,7 +235,7 @@
             Удалить аккаунт
           </Button>
         </AlertDialogTrigger>
-        <AlertDialogContent class="bg-background border-border">
+        <AlertDialogContent class="glass-deep">
           <AlertDialogHeader>
             <AlertDialogTitle>Удалить аккаунт?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -369,8 +369,7 @@ async function saveProfile() {
       };
       if (auth.user) {
         auth.user.name = updated.name ?? auth.user.name;
-        (auth.user as any).gender =
-          updated.gender ?? (auth.user as any).gender;
+        (auth.user as any).gender = updated.gender ?? (auth.user as any).gender;
         (auth.user as any).ageRange =
           updated.ageRange ?? (auth.user as any).ageRange;
       }

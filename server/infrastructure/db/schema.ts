@@ -491,6 +491,37 @@ export const notificationTextPresets = pgTable('notification_text_presets', {
 
 // === Subscription System ===
 
+// Отслеживание использования trial по email (anti-abuse)
+export const trialUsageTracking = pgTable(
+  'trial_usage_tracking',
+  {
+    id: serial('id').primaryKey(),
+    emailNormalized: varchar('email_normalized', { length: 255 }).notNull(),
+    emailHash: varchar('email_hash', { length: 64 }).notNull().unique(),
+    firstTrialStartedAt: timestamp('first_trial_started_at', {
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+    lastTrialStartedAt: timestamp('last_trial_started_at', {
+      withTimezone: true,
+    }),
+    totalDaysUsed: integer('total_days_used').default(0).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    emailNormalizedIdx: index('idx_trial_usage_email_normalized').on(
+      table.emailNormalized
+    ),
+    emailHashIdx: index('idx_trial_usage_email_hash').on(table.emailHash),
+  })
+);
+
 // Тарифные планы (конфигурация)
 export const subscriptionPlans = pgTable('subscription_plans', {
   id: varchar('id', { length: 50 }).primaryKey(), // 'basic', 'pro', 'premium', 'custom'

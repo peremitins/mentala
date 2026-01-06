@@ -95,6 +95,7 @@ export default defineNuxtConfig({
       process.env.NUXT_FIREBASE_SERVICE_ACCOUNT_JSON,
     authEmailCodeSecret: process.env.AUTH_EMAIL_CODE_SECRET,
     authEmailCodeSecretPrevious: process.env.AUTH_EMAIL_CODE_SECRET_PREVIOUS,
+    emailHashPepper: process.env.EMAIL_HASH_PEPPER,
     smtpHost: process.env.SMTP_HOST,
     smtpPort: process.env.SMTP_PORT,
     smtpSecure: process.env.SMTP_SECURE,

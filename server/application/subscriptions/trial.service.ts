@@ -9,14 +9,23 @@ import {
   userSubscriptions,
   subscriptionPlans,
   subscriptionEvents,
+  trialUsageTracking,
 } from '@/server/infrastructure/db/schema';
 import { eq, and, gt } from 'drizzle-orm';
+import {
+  normalizeEmail,
+  hashEmail,
+} from '@/server/application/auth/verification';
 
 /**
  * Активировать Trial для нового пользователя
  * Создает подписку Basic с trialActive = true (через trialEndedAt)
  */
-export async function activateTrialForUser(userId: number, timezone?: string) {
+export async function activateTrialForUser(
+  userId: number,
+  timezone?: string,
+  email?: string | null
+) {
   console.log(
     `[Trial] activateTrialForUser called for user ${userId}, timezone: ${timezone || 'not provided'}`
   );
@@ -26,6 +35,7 @@ export async function activateTrialForUser(userId: number, timezone?: string) {
     .select({
       hasUsedTrial: users.hasUsedTrial,
       timezone: users.timezone,
+      email: users.email,
     })
     .from(users)
     .where(eq(users.id, userId))
@@ -82,84 +92,150 @@ export async function activateTrialForUser(userId: number, timezone?: string) {
     return subscription;
   }
 
-  console.log(
-    `[Trial] User ${userId} has not used trial (hasUsedTrial=false), creating Basic WITH trial`
-  );
+  const emailValue = email || user[0].email;
+  if (!emailValue) {
+    throw new Error(`[Trial] Email is required for user ${userId}`);
+  }
 
-  // Получаем план Basic
-  const basicPlan = await db
-    .select()
-    .from(subscriptionPlans)
-    .where(eq(subscriptionPlans.id, 'basic'))
-    .limit(1);
+  const emailNormalized = normalizeEmail(emailValue);
+  const emailHash = hashEmail(emailNormalized);
 
-  if (!basicPlan.length) {
-    const error = new Error(
-      'Basic plan not found. Please run seed script: pnpm seed:subscription-plans'
+  return await db.transaction(async (tx) => {
+    await tx
+      .insert(trialUsageTracking)
+      .values({
+        emailNormalized,
+        emailHash,
+        firstTrialStartedAt: now,
+        lastTrialStartedAt: now,
+        totalDaysUsed: 0,
+      })
+      .onConflictDoNothing({ target: trialUsageTracking.emailHash });
+
+    const tracking = await tx
+      .select()
+      .from(trialUsageTracking)
+      .where(eq(trialUsageTracking.emailHash, emailHash))
+      .limit(1);
+
+    if (!tracking.length) {
+      throw new Error(
+        `[Trial] Failed to load trial_usage_tracking for user ${userId}`
+      );
+    }
+
+    const record = tracking[0];
+    const remainingDays = 7 - record.totalDaysUsed;
+
+    if (remainingDays <= 0) {
+      console.log(
+        `[Trial] User ${userId} email ${emailNormalized} already used all 7 trial days, creating Basic without trial`
+      );
+
+      await tx
+        .update(users)
+        .set({
+          hasUsedTrial: true,
+          timezone: timezone || user[0].timezone || 'Europe/Moscow',
+        })
+        .where(eq(users.id, userId));
+
+      const subscription = await createBasicSubscription(
+        userId,
+        timezone || user[0].timezone || 'Europe/Moscow',
+        false,
+        tx
+      );
+      console.log(
+        `[Trial] ✅ Created Basic subscription (without trial) for user ${userId}: subscriptionId=${subscription.id}`
+      );
+      return subscription;
+    }
+
+    console.log(
+      `[Trial] User ${userId} email ${emailNormalized} has ${remainingDays} days remaining, creating trial for ${remainingDays} days`
     );
-    console.error(`[Trial] ❌ ${error.message}`);
-    throw error;
-  }
 
-  console.log(
-    `[Trial] Found Basic plan: id=${basicPlan[0].id}, name=${basicPlan[0].name}`
-  );
+    const basicPlan = await tx
+      .select()
+      .from(subscriptionPlans)
+      .where(eq(subscriptionPlans.id, 'basic'))
+      .limit(1);
 
-  // Используем now объявленный выше
-  const trialEndDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // +7 дней для Trial
-  const subscriptionEndDate = new Date(
-    now.getTime() + 30 * 24 * 60 * 60 * 1000
-  ); // +30 дней для подписки Basic
+    if (!basicPlan.length) {
+      const error = new Error(
+        'Basic plan not found. Please run seed script: pnpm seed:subscription-plans'
+      );
+      console.error(`[Trial] ❌ ${error.message}`);
+      throw error;
+    }
 
-  // Обновляем пользователя: отмечаем, что Trial использован
-  await db
-    .update(users)
-    .set({
-      hasUsedTrial: true,
-      trialStartedAt: now,
-      trialEndedAt: trialEndDate,
-      timezone: timezone || user[0].timezone || 'Europe/Moscow', // дефолтный timezone
-    })
-    .where(eq(users.id, userId));
+    console.log(
+      `[Trial] Found Basic plan: id=${basicPlan[0].id}, name=${basicPlan[0].name}`
+    );
 
-  // Создаем подписку Basic (с Trial активным)
-  console.log(
-    `[Trial] Creating Basic subscription with Trial for user ${userId}...`
-  );
-  const [subscription] = await db
-    .insert(userSubscriptions)
-    .values({
+    const trialEndDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const subscriptionEndDate = new Date(
+      now.getTime() + 30 * 24 * 60 * 60 * 1000
+    );
+
+    await tx
+      .update(users)
+      .set({
+        hasUsedTrial: true,
+        trialStartedAt: now,
+        trialEndedAt: trialEndDate,
+        timezone: timezone || user[0].timezone || 'Europe/Moscow',
+      })
+      .where(eq(users.id, userId));
+
+    console.log(
+      `[Trial] Creating Basic subscription with Trial for user ${userId}...`
+    );
+    const [subscription] = await tx
+      .insert(userSubscriptions)
+      .values({
+        userId,
+        planId: 'basic',
+        billingPeriod: 'month',
+        startDate: now,
+        endDate: subscriptionEndDate,
+        paymentStatus: 'active',
+        autoRenew: false,
+        sourcePlatform: 'web',
+      })
+      .returning();
+
+    if (!subscription) {
+      throw new Error(`Failed to create subscription for user ${userId}`);
+    }
+
+    console.log(
+      `[Trial] ✅ Created Basic subscription with Trial for user ${userId}: subscriptionId=${subscription.id}, planId=${subscription.planId}, trialEndedAt=${trialEndDate.toISOString()}`
+    );
+
+    await tx
+      .update(trialUsageTracking)
+      .set({
+        lastTrialStartedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(trialUsageTracking.emailHash, emailHash));
+
+    await tx.insert(subscriptionEvents).values({
       userId,
+      eventType: 'trial_started',
       planId: 'basic',
-      billingPeriod: 'month', // Basic всегда месячный
-      startDate: now,
-      endDate: subscriptionEndDate,
-      paymentStatus: 'active',
-      autoRenew: false,
-      sourcePlatform: 'web', // можно определить по user-agent позже
-    })
-    .returning();
+      metadata: {
+        startDate: now.toISOString(),
+        endDate: trialEndDate.toISOString(),
+        remainingDays,
+        totalDaysUsed: record.totalDaysUsed,
+      },
+    });
 
-  if (!subscription) {
-    throw new Error(`Failed to create subscription for user ${userId}`);
-  }
-
-  console.log(
-    `[Trial] ✅ Created Basic subscription with Trial for user ${userId}: subscriptionId=${subscription.id}, planId=${subscription.planId}, trialEndedAt=${trialEndDate.toISOString()}`
-  );
-
-  // Логируем событие
-  await db.insert(subscriptionEvents).values({
-    userId,
-    eventType: 'trial_started',
-    planId: 'basic', // Trial - это состояние Basic
-    metadata: {
-      startDate: now.toISOString(),
-      endDate: trialEndDate.toISOString(),
-    },
+    return subscription;
   });
-
-  return subscription;
 }
 
 /**
@@ -168,13 +244,14 @@ export async function activateTrialForUser(userId: number, timezone?: string) {
 async function createBasicSubscription(
   userId: number,
   timezone: string,
-  withTrial: boolean
+  withTrial: boolean,
+  dbClient = db
 ) {
   console.log(
     `[Trial] createBasicSubscription called for user ${userId}, withTrial=${withTrial}`
   );
 
-  const basicPlan = await db
+  const basicPlan = await dbClient
     .select()
     .from(subscriptionPlans)
     .where(eq(subscriptionPlans.id, 'basic'))
@@ -194,7 +271,7 @@ async function createBasicSubscription(
   console.log(
     `[Trial] Creating Basic subscription (without trial) for user ${userId}...`
   );
-  const [subscription] = await db
+  const [subscription] = await dbClient
     .insert(userSubscriptions)
     .values({
       userId,
