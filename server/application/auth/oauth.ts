@@ -204,7 +204,11 @@ export async function upsertUserWithOAuth(
     }
 
     try {
-      const subscription = await activateTrialForUser(userId!);
+      const subscription = await activateTrialForUser(
+        userId!,
+        undefined,
+        normalizedEmail
+      );
       if (subscription) {
         console.log(
           `[OAuth] ✅ Ensured subscription exists for user ${userId}: planId=${subscription.planId}, paymentStatus=${subscription.paymentStatus}`
@@ -265,7 +269,11 @@ export async function upsertUserWithOAuth(
     isNewUser = true;
 
     try {
-      const subscription = await activateTrialForUser(userId);
+      const subscription = await activateTrialForUser(
+        userId,
+        undefined,
+        normalizedEmail
+      );
       if (subscription) {
         console.log(
           `[OAuth] ✅ Subscription created for new user ${userId}: planId=${subscription.planId}, paymentStatus=${subscription.paymentStatus}`
