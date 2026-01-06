@@ -11,6 +11,7 @@ import type {
   NotificationPreferencesDto,
   UpdateNotificationPreferencesDto,
   NotificationPreferenceMeta,
+  Tone,
 } from '@/shared/dto/notifications';
 import { getSessionUser } from '@/server/application/auth/session';
 import { generateAllSlotsForUser } from '@/server/application/notifications/scheduler.service';
@@ -52,6 +53,19 @@ const NOTIFICATION_SUBTYPES: NotificationSubtype[] = [
   'mixed',
 ];
 
+function resolveTone(value?: string | null): Tone {
+  if (
+    value === 'delicate' ||
+    value === 'neutral' ||
+    value === 'uplifting' ||
+    value === 'resolute' ||
+    value === 'demanding'
+  ) {
+    return value;
+  }
+  return 'neutral';
+}
+
 export default defineEventHandler(
   async (event): Promise<NotificationPreferencesDto> => {
     const sessionResult = await getSessionUser(event);
@@ -62,6 +76,11 @@ export default defineEventHandler(
       });
     }
     const userId = sessionResult.user.id;
+    const userGender =
+      (sessionResult.user as any)?.gender === 'male' ||
+      (sessionResult.user as any)?.gender === 'female'
+        ? (sessionResult.user as any)?.gender
+        : null;
 
     const kind = getRouterParam(event, 'kind');
     if (!kind || !['therapy', 'habits'].includes(kind)) {
@@ -588,7 +607,7 @@ export default defineEventHandler(
           .where(eq(userPreferences.userId, userId))
           .limit(1);
 
-        const tone = (userPrefs?.tone as any) || 'neutral';
+        const tone = resolveTone(userPrefs?.tone as string | null | undefined);
         const addressing = (userPrefs?.addressing as any) || 'informal';
 
         // Определяем textSource (единое поле для всех типов сущностей)
@@ -731,6 +750,7 @@ export default defineEventHandler(
           textSource,
           kind: kind as 'habits' | 'therapy',
           habitIntent: kind === 'habits' ? habitIntent : null, // Включаем intent только для habits
+          userGender,
         });
 
         console.log(
@@ -777,6 +797,7 @@ export default defineEventHandler(
             textSource: oldTextSource,
             kind: kind as 'habits' | 'therapy',
             habitIntent: kind === 'habits' ? habitIntent : null, // Используем текущий intent (если он изменился, хеш изменится)
+            userGender,
           });
         }
 

@@ -35,9 +35,14 @@ export default defineEventHandler(
 
     if (
       body.tone &&
-      !['delicate', 'neutral', 'uplifting', 'resolute', 'demanding'].includes(
-        body.tone
-      )
+      ![
+        'delicate',
+        'neutral',
+        'uplifting',
+        'resolute',
+        'demanding',
+        'unknown',
+      ].includes(body.tone)
     ) {
       throw createError({
         statusCode: 400,
@@ -71,7 +76,8 @@ export default defineEventHandler(
           | 'neutral'
           | 'uplifting'
           | 'resolute'
-          | 'demanding',
+          | 'demanding'
+          | 'unknown',
       };
     } else {
       // Создаём новые
@@ -92,7 +98,8 @@ export default defineEventHandler(
           | 'neutral'
           | 'uplifting'
           | 'resolute'
-          | 'demanding',
+          | 'demanding'
+          | 'unknown',
       };
     }
   }

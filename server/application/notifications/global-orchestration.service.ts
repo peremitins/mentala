@@ -15,6 +15,19 @@ import {
   notificationPreferences,
 } from '@/server/infrastructure/db/schema';
 import type { NotificationKind, Tone } from '@/shared/dto/notifications';
+
+function resolveTone(value?: string | null): Tone {
+  if (
+    value === 'delicate' ||
+    value === 'neutral' ||
+    value === 'uplifting' ||
+    value === 'resolute' ||
+    value === 'demanding'
+  ) {
+    return value;
+  }
+  return 'neutral';
+}
 import { toLocalTime, toUTC, getTimezoneFromPrefs } from './timezone.utils';
 import { findEnabledPreferencesByUser } from './repositories/notification-preferences.repository';
 import {
@@ -1256,11 +1269,15 @@ export async function orchestrateAllSlotsForUser(
 
     const addressing = globalPrefs?.addressing || 'informal';
     const [userRecord] = await db
-      .select({ name: users.name })
+      .select({ name: users.name, gender: users.gender })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);
     const userName = userRecord?.name ?? null;
+    const userGender =
+      userRecord?.gender === 'male' || userRecord?.gender === 'female'
+        ? userRecord.gender
+        : null;
 
     // Создаём слоты
     // Группируем слоты по источникам для эффективной загрузки данных
@@ -1423,7 +1440,7 @@ export async function orchestrateAllSlotsForUser(
         const effectiveTextSource: 'ai' | 'hybrid' =
           textSource === 'ai' ? 'ai' : 'hybrid';
         // ВАЖНО: Используем tone из userPreferences, а не из preference.meta
-        const tone = (globalPrefs?.tone || 'neutral') as Tone;
+        const tone = resolveTone(globalPrefs?.tone as string | null | undefined);
 
         const hashEntityName =
           source.kind === 'therapy' &&
@@ -1462,6 +1479,7 @@ export async function orchestrateAllSlotsForUser(
           textSource: effectiveTextSource,
           kind: source.kind,
           habitIntent: source.kind === 'habits' ? intent : null,
+          userGender,
         });
 
         const aiTextRecord = await loadAiGeneratedTextsWithId(
@@ -1531,6 +1549,7 @@ export async function orchestrateAllSlotsForUser(
           })),
           aiTexts: aiTextsAvailable ? aiTexts : null, // Передаём null если AI-тексты недоступны
           userName,
+          userGender,
         };
 
         const pickResult = pickTextForSlot(textSelectionState, pickParams);

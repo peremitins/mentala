@@ -27,6 +27,7 @@ export interface PickTextParams {
   templateTexts: { id: string; text: string }[];
   aiTexts: string[] | null;
   userName: string | null;
+  userGender: 'male' | 'female' | null;
 }
 
 /**
@@ -98,7 +99,8 @@ function selectUnusedAiText(
 function selectTemplateText(
   templateTexts: { id: string; text: string }[],
   state: TextSelectionState,
-  userName: string | null
+  userName: string | null,
+  userGender: 'male' | 'female' | null
 ): { text: string; index: number } | null {
   if (templateTexts.length === 0) {
     return null;
@@ -133,7 +135,7 @@ function selectTemplateText(
     const rawText = selectedText.text;
 
     return {
-      text: formatNotificationTextWithName(rawText, userName),
+      text: formatNotificationTextWithName(rawText, userName, userGender),
       index: randomIndex,
     };
   }
@@ -156,7 +158,7 @@ function selectTemplateText(
       !state.usedTexts.has(rawText)
     ) {
       return {
-        text: formatNotificationTextWithName(rawText, userName),
+        text: formatNotificationTextWithName(rawText, userName, userGender),
         index: index,
       };
     }
@@ -179,6 +181,7 @@ function tryUseAiText(
   slotIndex: number,
   state: TextSelectionState,
   userName: string | null,
+  userGender: 'male' | 'female' | null,
   reason: string
 ): PickTextResult | null {
   const selectedText = selectUnusedAiText(
@@ -189,7 +192,11 @@ function tryUseAiText(
   );
 
   if (selectedText) {
-    const text = formatNotificationTextWithName(selectedText.text, userName);
+    const text = formatNotificationTextWithName(
+      selectedText.text,
+      userName,
+      userGender
+    );
     state.usedAiIndices.add(selectedText.index);
     const textHash = hashNotificationText(selectedText.text);
     state.usedAiHashes.add(textHash);
@@ -230,12 +237,13 @@ export function pickTextForSlot(
     templateTexts,
     aiTexts,
     userName,
+    userGender,
   } = params;
 
   // Выбираем templateText (если доступен)
   const selectedTemplateText =
     templateTexts.length > 0
-      ? selectTemplateText(templateTexts, state, userName)
+      ? selectTemplateText(templateTexts, state, userName, userGender)
       : null;
   const templateText = selectedTemplateText ? selectedTemplateText.text : null;
 
@@ -253,6 +261,7 @@ export function pickTextForSlot(
           slotIndex,
           state,
           userName,
+          userGender,
           'AI mode (custom entity)'
         );
         if (result) {
@@ -295,6 +304,7 @@ export function pickTextForSlot(
           slotIndex,
           state,
           userName,
+          userGender,
           'hybrid mode, no templateTexts'
         );
       } else if (!hasAiTexts) {
@@ -339,6 +349,7 @@ export function pickTextForSlot(
             slotIndex,
             state,
             userName,
+            userGender,
             'hybrid mode, even slot'
           );
         } else {
@@ -429,6 +440,7 @@ export function pickTextForSlot(
           slotIndex,
           state,
           userName,
+          userGender,
           'AI mode (template entity)'
         );
       } else {
@@ -457,6 +469,7 @@ export function pickTextForSlot(
           slotIndex,
           state,
           userName,
+          userGender,
           'hybrid mode, even slot'
         );
       } else {
@@ -498,6 +511,7 @@ export function pickTextForSlot(
               slotIndex,
               state,
               userName,
+              userGender,
               'hybrid mode, no template texts'
             );
           } else {
@@ -549,4 +563,3 @@ export function pickTextForSlot(
     }
   }
 }
-

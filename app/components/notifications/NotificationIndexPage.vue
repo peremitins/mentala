@@ -9,12 +9,16 @@
     </div>
 
     <div v-if="mentaiMode === 'habits'" class="px-2">
-      <Combobox
-        v-model="selectedIntent"
-        :options="INTENT_OPTIONS"
-        placeholder="Выберите тип"
-        class="max-w-[200px]"
-      />
+      <Tabs
+        :model-value="selectedIntent"
+        @update:model-value="onIntentChange"
+        class="w-full"
+      >
+        <TabsList class="grid grid-cols-2">
+          <TabsTrigger value="build">Приобрести</TabsTrigger>
+          <TabsTrigger value="quit">Избавиться</TabsTrigger>
+        </TabsList>
+      </Tabs>
     </div>
 
     <!-- Скелетоны при загрузке -->
@@ -26,8 +30,15 @@
         v-for="(item, index) in visibleItems"
         :key="item.id"
         type="button"
-        class="glass-deep group relative w-full overflow-hidden rounded-lg bg-card p-4 text-left transition-all duration-200 hover:border-primary/50 hover:shadow-lg animate-slide-up"
-        :style="`animation-delay: ${index * 0.05}s; animation-fill-mode: both`"
+        :class="[
+          'glass-deep group relative w-full overflow-hidden rounded-lg bg-card p-4 text-left transition-all duration-200 hover:border-primary/50 hover:shadow-lg',
+          !wasSkeletonShown ? 'animate-slide-up' : '',
+        ]"
+        :style="
+          !wasSkeletonShown
+            ? `animation-delay: ${index * 0.05}s; animation-fill-mode: both`
+            : ''
+        "
         @mouseenter="hoveredId = item.id"
         @mouseleave="hoveredId = null"
         @click="handleSelect(item)"
@@ -111,12 +122,14 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import PageHeader from '@/app/components/PageHeader.vue';
-import Combobox from '@/app/components/Combobox.vue';
-import { INTENT_OPTIONS } from '@/app/constants/select-options';
+import { Tabs, TabsList, TabsTrigger } from '@/app/components/ui/shadcn/tabs';
 import IconTrash from '~icons/lucide/trash';
 import IconMessageCircle from '~icons/lucide/message-circle';
 import Skeleton from '@/app/components/ui/Skeleton.vue';
 import { useRoute, useRouter } from 'vue-router';
+
+// Отслеживаем, был ли показан скелетон
+const wasSkeletonShown = ref(false);
 
 export interface NotificationIndexItem {
   id: string;
@@ -153,13 +166,24 @@ const router = useRouter();
 const initialIntent = route.query.intent === 'quit' ? 'quit' : 'build';
 const selectedIntent = ref<'build' | 'quit'>(initialIntent);
 
-if (props.mentaiMode === 'habits') {
-  watch(selectedIntent, (newIntent) => {
-    router.replace({ query: { ...route.query, intent: newIntent } });
-  });
+function onIntentChange(newIntent: string | number) {
+  const intentValue = String(newIntent) as 'build' | 'quit';
+  selectedIntent.value = intentValue;
+  router.replace({ query: { ...route.query, intent: intentValue } });
 }
 
 const hoveredId = ref<string | null>(null);
+
+// Отслеживаем показ скелетона
+watch(
+  () => props.loading,
+  (isLoading) => {
+    if (isLoading) {
+      wasSkeletonShown.value = true;
+    }
+  },
+  { immediate: true }
+);
 
 const visibleItems = computed(() => {
   if (props.mentaiMode !== 'habits') {

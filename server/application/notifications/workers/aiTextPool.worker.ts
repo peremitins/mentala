@@ -17,6 +17,7 @@ import { db } from '@/server/infrastructure/db/client';
 import {
   notificationPreferences,
   userPreferences,
+  users,
 } from '@/server/infrastructure/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { computeGenerationConfigHash } from '@@/server/utils/notification-ai-config-hash';
@@ -26,6 +27,19 @@ import type {
   Directness,
   HabitSubtype,
 } from '@/shared/dto/notifications';
+
+function resolveTone(value?: string | null): Tone {
+  if (
+    value === 'delicate' ||
+    value === 'neutral' ||
+    value === 'uplifting' ||
+    value === 'resolute' ||
+    value === 'demanding'
+  ) {
+    return value;
+  }
+  return 'neutral';
+}
 
 /**
  * Запускает воркер для обработки задач догенерации AI-текстов
@@ -69,11 +83,21 @@ export function startAiTextPoolWorker() {
           .where(eq(userPreferences.userId, userId))
           .limit(1);
 
-        const tone: Tone = (userPrefs?.tone as Tone) || 'neutral';
+        const tone = resolveTone(userPrefs?.tone as string | null | undefined);
         const addressing: Addressing =
           (userPrefs?.addressing as Addressing) || 'informal';
         const directness = (pref.directness as Directness) || 'moderate';
         const subtype = (pref.subtype as HabitSubtype | null) || null;
+
+        const [userProfile] = await db
+          .select({ gender: users.gender })
+          .from(users)
+          .where(eq(users.id, userId))
+          .limit(1);
+        const userGender =
+          userProfile?.gender === 'male' || userProfile?.gender === 'female'
+            ? userProfile.gender
+            : null;
 
         // Загружаем данные о сущности для вычисления configHash
         let entityName = '';
@@ -134,6 +158,7 @@ export function startAiTextPoolWorker() {
           textSource,
           kind: pref.kind as 'habits' | 'therapy',
           habitIntent: pref.kind === 'habits' ? habitIntent : null, // Включаем intent только для habits
+          userGender,
         });
 
         // Вызываем функцию догенерации

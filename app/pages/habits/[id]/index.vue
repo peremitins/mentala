@@ -168,7 +168,7 @@ const entityIntent = computed<HabitIntent>(() => {
 });
 
 const intentLabel = computed(() =>
-  entityIntent.value === 'quit' ? 'Отказ от привычки' : 'Формирование привычки'
+  entityIntent.value === 'quit' ? 'Избавиться' : 'Приобрести'
 );
 
 const entityDescription = computed(

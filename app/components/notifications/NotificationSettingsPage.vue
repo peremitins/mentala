@@ -1061,7 +1061,7 @@ onMounted(async () => {
     }
     if (globalPrefs) {
       addressing.value = globalPrefs.addressing;
-      tone.value = globalPrefs.tone;
+      tone.value = globalPrefs.tone === 'unknown' ? 'neutral' : globalPrefs.tone;
     }
 
     const prefsUrl = isHabits.value

@@ -13,6 +13,7 @@ import {
   aiNotificationTextUsage,
   habits,
   therapyTopicsCustom,
+  users,
   userPreferences,
 } from '@@/server/infrastructure/db/schema';
 import { computeGenerationConfigHash } from '@@/server/utils/notification-ai-config-hash';
@@ -51,6 +52,19 @@ interface GenerationResult {
   model: string;
   tokensUsed: number;
   costUsd: number;
+}
+
+function resolveTone(value?: string | null): Tone {
+  if (
+    value === 'delicate' ||
+    value === 'neutral' ||
+    value === 'uplifting' ||
+    value === 'resolute' ||
+    value === 'demanding'
+  ) {
+    return value;
+  }
+  return 'neutral';
 }
 
 /**
@@ -515,9 +529,21 @@ export async function generateNotificationTexts(
     .where(eq(userPreferences.userId, params.userId))
     .limit(1);
 
-  const tone: Tone = (userPrefs?.tone as Tone) || 'neutral';
+  const tone = resolveTone(userPrefs?.tone as string | null | undefined);
   const addressing: Addressing =
     (userPrefs?.addressing as Addressing) || 'informal';
+
+  const [userProfile] = await db
+    .select({ name: users.name, gender: users.gender })
+    .from(users)
+    .where(eq(users.id, params.userId))
+    .limit(1);
+
+  const userName = userProfile?.name ? String(userProfile.name).trim() : null;
+  const userGender =
+    userProfile?.gender === 'male' || userProfile?.gender === 'female'
+      ? userProfile.gender
+      : null;
 
   // 3. Вычисляем хеш конфигурации
   // КРИТИЧНО: habitIntent должен быть включен в хеш, чтобы при изменении intent генерировался новый пул текстов
@@ -536,6 +562,7 @@ export async function generateNotificationTexts(
     textSource: params.textSource,
     kind: params.kind,
     habitIntent: params.kind === 'habits' ? habitIntent : null, // Включаем intent только для habits
+    userGender,
   });
 
   console.log(
@@ -598,6 +625,8 @@ export async function generateNotificationTexts(
     description: entityDescription,
     tone,
     addressing,
+    userName,
+    userGender,
     directness: params.directness,
     subtype: params.subtype,
     kind: params.kind,
@@ -824,17 +853,27 @@ function buildNotificationSystemPrompt(params: {
   description?: string | null;
   tone: Tone;
   addressing: Addressing;
+  userName?: string | null;
+  userGender?: 'male' | 'female' | null;
   directness: Directness;
   subtype?: HabitSubtype | null;
   kind: 'habits' | 'therapy';
   habitIntent?: 'quit' | 'build' | null; // Intent привычки: отказ (quit) или приобретение (build)
 }): string {
+  const genderLabel =
+    params.userGender === 'male'
+      ? 'мужской'
+      : params.userGender === 'female'
+        ? 'женский'
+        : null;
+
   const toneMap: Record<Tone, string> = {
     delicate: 'деликатный, мягкий',
     neutral: 'нейтральный',
     uplifting: 'поддерживающий, вдохновляющий',
     resolute: 'решительный, мотивационный',
     demanding: 'требовательный, директивный',
+    unknown: 'нейтральный',
   };
 
   const directnessMap: Record<Directness, string> = {
@@ -965,6 +1004,8 @@ ${params.description ? '- Используй описание как основ�
 Контекст:
 - Тип: ${params.kind === 'habits' ? 'привычка' : 'тема поддержки'}
 - Название (используй только как внутренний контекст): ${params.entityName}${descriptionContext}
+- Имя пользователя: ${params.userName || 'не указано'}
+- Пол пользователя: ${genderLabel || 'не указан'}
 
 Стиль:
 - Тон: ${toneMap[params.tone]}
@@ -979,6 +1020,9 @@ ${params.subtype ? `- Фокус уведомления: ${subtypeMap[params.sub
 Требования:
 - Каждый текст должен быть примерно 150-178 символов (желательно близко к максимуму для информативности и полноты)
 - Можно использовать плейсхолдер {name} для имени пользователя
+- Если имя не указано, не используй плейсхолдер {name}
+- Если пол не указан, используй нейтральные конструкции без рода
+- Запрещены формы с альтернативами в скобках (например, "сделал / сделала")
 - Тексты должны быть разнообразными и достаточно подробными
 ${
   params.kind === 'habits'
@@ -1245,9 +1289,21 @@ export async function refillTextPool(
       .where(eq(userPreferences.userId, userId))
       .limit(1);
 
-    const tone: Tone = (userPrefs?.tone as Tone) || 'neutral';
+    const tone = resolveTone(userPrefs?.tone as string | null | undefined);
     const addressing: Addressing =
       (userPrefs?.addressing as Addressing) || 'informal';
+
+    const [userProfile] = await db
+      .select({ name: users.name, gender: users.gender })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    const userName = userProfile?.name ? String(userProfile.name).trim() : null;
+    const userGender =
+      userProfile?.gender === 'male' || userProfile?.gender === 'female'
+        ? userProfile.gender
+        : null;
 
     // 4.3. Строим промпт и генерируем только новые тексты через LLM
     const systemPrompt = buildNotificationSystemPrompt({
@@ -1255,6 +1311,8 @@ export async function refillTextPool(
       description: entityDescription,
       tone,
       addressing,
+      userName,
+      userGender,
       directness,
       subtype,
       kind,
