@@ -39,6 +39,9 @@ export const useAuthStore = defineStore('auth', {
       id: number;
       email: string;
       name: string;
+      gender?: 'male' | 'female' | null;
+      ageRange?: 'under_30' | '30_45' | '45_plus' | 'unknown' | null;
+      onboarding?: { welcome: boolean };
       locale?: string;
       role?: string;
       isBlocked?: boolean;

@@ -4,8 +4,8 @@ export const AI_WORK_MODE_OPTIONS = [
 ];
 
 export const INTENT_OPTIONS = [
-  { label: 'Привить привычку', value: 'build' },
-  { label: 'Отказаться от привычки', value: 'quit' },
+  { label: 'Приобрести', value: 'build' },
+  { label: 'Избавиться', value: 'quit' },
 ];
 
 // Универсальные опции subtype для всех видов уведомлений (habits и therapy)
@@ -44,12 +44,12 @@ export const SUBTYPE_OPTIONS = [
   },
 ];
 
-// Опции для привычек QUIT (избавиться от привычки) - без reminder
+// Опции для привычек QUIT (избавиться) - без reminder
 export const SUBTYPE_OPTIONS_QUIT = SUBTYPE_OPTIONS.filter(
   (opt) => opt.value !== 'reminder'
 );
 
-// Опции для привычек BUILD (привить привычку) - все опции
+// Опции для привычек BUILD (приобрести привычку) - все опции
 export const SUBTYPE_OPTIONS_BUILD = SUBTYPE_OPTIONS;
 
 // Опции без "Смешанные" для редактора текстов

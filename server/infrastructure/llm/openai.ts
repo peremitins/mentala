@@ -347,6 +347,7 @@ export const openaiProvider: LlmProviderPort = {
             lang,
             user_locale: options?.user_locale,
             user_name: options?.user_name,
+            user_gender: options?.user_gender,
             mode: options?.mode || 'therapy',
           },
           {
@@ -789,6 +790,7 @@ export const openaiProvider: LlmProviderPort = {
         lang,
         user_locale: options?.user_locale,
         user_name: options?.user_name,
+        user_gender: options?.user_gender,
         welcomePromptContent: welcomePromptContent || undefined,
         entryContext: options?.entryContext,
       });
@@ -801,6 +803,7 @@ export const openaiProvider: LlmProviderPort = {
           lang,
           user_locale: options?.user_locale,
           user_name: options?.user_name,
+          user_gender: options?.user_gender,
           mode: options?.mode || 'therapy',
         },
         {
@@ -944,6 +947,7 @@ export const openaiProvider: LlmProviderPort = {
         lang,
         user_locale: options?.user_locale,
         user_name: options?.user_name,
+        user_gender: options?.user_gender,
         mode: options?.mode || 'therapy',
       },
       {

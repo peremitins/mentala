@@ -23,6 +23,11 @@ export default defineEventHandler(async (event) => {
     }
 
     const uid = Number(sessionResult.id);
+    const userName =
+      (sessionResult as any)?.name ||
+      (parsed as any)?.user_name ||
+      undefined;
+    const userGender = (sessionResult as any)?.gender || undefined;
 
     // Требуем валидный therapySessionId, чтобы нельзя было обойти биллинг прямыми вызовами /api/chat
     const therapySessionId =
@@ -113,7 +118,8 @@ export default defineEventHandler(async (event) => {
         sessionId: parsed.sessionId,
         lang: (parsed as any)?.lang,
         user_locale: (parsed as any)?.user_locale,
-        user_name: (parsed as any)?.user_name,
+        user_name: userName,
+        user_gender: userGender,
         userId: uid, // серверный стабильный uid
         isFirstSession: undefined, // рассчитывается в других местах при стриминге
         userPrompt: (parsed as any)?.userPrompt,

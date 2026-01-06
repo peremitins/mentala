@@ -17,7 +17,8 @@ export type Tone =
   | 'neutral'
   | 'uplifting'
   | 'resolute'
-  | 'demanding';
+  | 'demanding'
+  | 'unknown';
 export type Directness = 'soft' | 'moderate' | 'hard';
 export type Platform = 'ios' | 'android' | 'web';
 export type SlotStatus = 'planned' | 'sent' | 'skipped' | 'failed';

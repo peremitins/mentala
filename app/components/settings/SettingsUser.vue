@@ -31,12 +31,37 @@
         <div class="space-y-2">
           <label class="text-sm font-medium text-foreground"> Имя </label>
           <Input
-            :model-value="user.name || 'Не указано'"
+            v-model="editableName"
             type="text"
-            disabled
+            maxlength="40"
             :show-clear-button="false"
+            placeholder="Имя или никнейм"
+          />
+          <p v-if="nameError" class="text-xs text-destructive">
+            {{ nameError }}
+          </p>
+        </div>
+
+        <!-- Gender -->
+        <div class="space-y-2">
+          <label class="text-sm font-medium text-foreground"> Пол </label>
+          <ToggleButtonGroup
+            v-model="gender"
+            :options="genderOptions"
+            layout="flex"
+            size="sm"
+            variant="outline"
+            item-max-width="200px"
           />
         </div>
+
+        <Button
+          class="w-fit"
+          :disabled="!canSaveProfile || savingProfile"
+          @click="saveProfile"
+        >
+          {{ savingProfile ? 'Сохранение...' : 'Сохранить' }}
+        </Button>
 
         <!-- Locale -->
         <div class="space-y-2">
@@ -239,6 +264,7 @@ import { useCountdown } from '@vueuse/core';
 import { useAuthStore } from '@/app/stores/auth';
 import { Input } from '@/app/components/ui/shadcn/input';
 import { Button } from '@/app/components/ui/button';
+import ToggleButtonGroup from '@/app/components/ui/ToggleButtonGroup.vue';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -253,6 +279,7 @@ import {
 import { useToast } from '@/app/composables/useToast';
 import { useRouter } from 'vue-router';
 import { buttonVariants } from '@/app/components/ui/button';
+import type { Gender } from '@/shared/dto/onboarding';
 
 const auth = useAuthStore();
 const router = useRouter();
@@ -260,6 +287,9 @@ const user = ref<any>(null);
 const loading = ref(true);
 const showDeleteDialog = ref(false);
 const isDeleting = ref(false);
+const editableName = ref('');
+const gender = ref<Gender | null>(null);
+const savingProfile = ref(false);
 
 const emailCode = ref('');
 const emailAttemptsLeft = ref<number | null>(null);
@@ -279,6 +309,20 @@ const {
 
 const emailVerified = computed(() => !!user.value?.emailVerifiedAt);
 const hasPassword = computed(() => !!user.value?.hasPassword);
+const nameError = computed(() => {
+  const trimmed = editableName.value.trim();
+  if (!trimmed) return 'Имя не может быть пустым';
+  if (trimmed.length > 40) return 'Максимум 40 символов';
+  return '';
+});
+const canSaveProfile = computed(() => {
+  return !nameError.value && !!gender.value && !savingProfile.value;
+});
+
+const genderOptions = [
+  { value: 'male' as Gender, label: 'Мужской' },
+  { value: 'female' as Gender, label: 'Женский' },
+];
 
 onMounted(async () => {
   try {
@@ -286,12 +330,62 @@ onMounted(async () => {
       await auth.me();
     }
     user.value = auth.user;
+    editableName.value = user.value?.name || '';
+    gender.value = (user.value as any)?.gender || null;
   } catch (error) {
     console.error('Не удалось загрузить данные пользователя:', error);
   } finally {
     loading.value = false;
   }
 });
+
+async function saveProfile() {
+  if (!user.value || savingProfile.value) return;
+  if (nameError.value || !gender.value) {
+    useToast('Ошибка', 'Заполните имя и выберите пол', 'error');
+    return;
+  }
+
+  savingProfile.value = true;
+  try {
+    const response = await useAPI<{ item?: any }>(
+      `/api/users/${user.value.id}`,
+      {
+        method: 'PATCH',
+        body: {
+          name: editableName.value.trim(),
+          gender: gender.value,
+        },
+      }
+    );
+
+    if (response?.item) {
+      const updated = response.item;
+      user.value = {
+        ...user.value,
+        name: updated.name ?? user.value?.name,
+        gender: updated.gender ?? (user.value as any)?.gender,
+        ageRange: updated.ageRange ?? (user.value as any)?.ageRange,
+      };
+      if (auth.user) {
+        auth.user.name = updated.name ?? auth.user.name;
+        (auth.user as any).gender =
+          updated.gender ?? (auth.user as any).gender;
+        (auth.user as any).ageRange =
+          updated.ageRange ?? (auth.user as any).ageRange;
+      }
+      useToast('Сохранено', 'Профиль обновлён');
+    } else {
+      useToast('Ошибка', 'Не удалось обновить профиль', 'error');
+    }
+  } catch (error: any) {
+    const payload = error?.data || error?.response?._data || {};
+    const message = payload?.message || 'Не удалось обновить профиль';
+    useToast('Ошибка', String(message), 'error');
+  } finally {
+    savingProfile.value = false;
+  }
+}
 
 function onEmailCodeInput() {
   emailCode.value = emailCode.value.replace(/\D/g, '').slice(0, 6);

@@ -22,6 +22,7 @@ export interface GenerationConfig {
   textSource: 'ai' | 'hybrid'; // Только для AI-генерации (не может быть 'templates')
   kind: 'habits' | 'therapy';
   habitIntent?: 'quit' | 'build' | null; // Intent привычки: отказ (quit) или приобретение (build). Только для habits.
+  userGender?: 'male' | 'female' | null;
 }
 
 /**
@@ -45,6 +46,7 @@ export function computeGenerationConfigHash(config: GenerationConfig): string {
     textSource: config.textSource,
     kind: config.kind,
     habitIntent: config.habitIntent || null, // Включаем в хеш для habits (для therapy всегда null)
+    userGender: config.userGender || null,
   };
 
   // Создаем стабильный JSON (без пробелов для консистентности)

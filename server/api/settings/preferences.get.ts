@@ -41,7 +41,8 @@ export default defineEventHandler(
         | 'neutral'
         | 'uplifting'
         | 'resolute'
-        | 'demanding',
+        | 'demanding'
+        | 'unknown',
     };
   }
 );

@@ -4,7 +4,7 @@
     :class="
       cn(
         'absolute inset-0 w-full h-full pointer-events-none',
-        colorMode.value === 'dark' ? 'opacity-95' : 'opacity-30',
+        colorMode.value === 'dark' ? 'opacity-35' : 'opacity-35',
         props.class
       )
     "

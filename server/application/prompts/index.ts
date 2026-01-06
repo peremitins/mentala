@@ -38,7 +38,7 @@ export const diversePhrasesLibrary = {
     'Понимаю, что',
     'Чувствую, что для тебя',
     'Улавливаю суть: ты говоришь о том, что',
-    'Разобрался(ась) в чем-то важном: ты упомянул(а) что',
+    'Важный момент: в твоих словах прозвучало, что',
   ],
   empathy: [
     'Это действительно сложно',
@@ -52,7 +52,7 @@ export const diversePhrasesLibrary = {
   normalization: [
     'Многие люди испытывают то же',
     'Это очень распространенное чувство',
-    'Ты не один(а) в этом',
+    'Этот опыт знаком многим людям',
     'Такие реакции совершенно естественны',
     'Эмоции, которые ты описываешь, очень нормальны',
     'Этот опыт знаком многим',
@@ -62,9 +62,9 @@ export const diversePhrasesLibrary = {
     'То, что ты это замечаешь - уже шаг вперед',
     'Это показывает твою осознанность',
     'Ты делаешь важную работу',
-    'То, что ты готов(а) это изучить - очень смело',
+    'Решиться это изучить — очень смело',
     'Это требует честности, которая у тебя есть',
-    'Ты готов(а) к этому разговору',
+    'Ты уже здесь — это смелый шаг',
     'Это требует силы, которая у тебя точно есть',
   ],
 };
@@ -141,13 +141,13 @@ export const homeworkExercisesLibrary = {
     {
       name: 'Как бы ты помог другу',
       instruction:
-        'Когда критикуешь себя - скажи ту же фразу про хорошего друга. Что бы ты ему сказал(а) вместо критики?',
+        'Когда критикуешь себя - скажи ту же фразу про хорошего друга. Какие слова поддержки можно сказать вместо критики?',
       duration: '3-5 мин',
     },
     {
       name: 'Самосострадание',
       instruction:
-        'Положи руку на сердце и скажи: "Это больно. Я это чувствую. Я достойна(ый) доброты - от других и от себя".',
+        'Положи руку на сердце и скажи: "Это больно. Я это чувствую. Я заслуживаю доброты — от других и от себя".',
       duration: '2-3 мин',
     },
     {
@@ -321,7 +321,7 @@ export const systemCore = `Ты — заботливый помощник по �
 
 ✅ ПРАВИЛЬНО (это конкретная помощь):
    "часто это работает так: когда люди X, потом Y" (РАМКА)
-   "когда ты сказал(а) 'никто не слушает', это может быть про одиночество" (ГИПОТЕЗА привязанная)
+   "когда звучало 'никто не слушает', это может быть про одиночество" (ГИПОТЕЗА привязанная)
    "попробуй сказать себе: это трудный момент, но я есть" (КОНКРЕТНАЯ ФРАЗА)
    "это может быть либо про страх отторжения (который часто), либо про страх быть обузой" (ВАРИАНТЫ привязаны)
 
@@ -402,7 +402,7 @@ export const systemCore = `Ты — заботливый помощник по �
 
 ✓ Мини-пояснение: "Когда человек в стрессе, мозг реагирует по паттерну..."
 ✓ Рамка: "Часто это работает так: человек X, потом Y, потом Z"
-✓ Гипотеза с привязкой: "Когда ты сказал(а) 'никто не слушает'... похоже, здесь про одиночество"
+✓ Гипотеза с привязкой: "Когда звучало 'никто не слушает'... похоже, здесь про одиночество"
 ✓ Конкретная фраза: "Попробуй сказать себе: это трудный момент, но я есть"
 ✓ Варианты с привязкой: "Это может быть либо про страх Y, либо про опыт Z"
 ✓ Проверка: "Попал ли я в точку?"
@@ -421,7 +421,7 @@ export const systemCore = `Ты — заботливый помощник по �
 ✓ НЕТ физических упражнений: Опора, не выполнение
 ✓ ВАРИАТИВНОСТЬ: Не повторяй фразы в сессии
 ✓ КОНКРЕТНОСТЬ: Используй детали из рассказа пользователя
-✓ ПРИВЯЗКА: Варианты ссылаются на то что сказал(а) пользователь
+✓ ПРИВЯЗКА: Варианты ссылаются на то что описал пользователь
 ✓ ТОНУС: Живой, естественный, как опытный друг-психолог
 
 
@@ -500,7 +500,7 @@ export const onboarding = `Привет!
 О конфиденциальности:
 Твой разговор конфиденциален. Используй приватное место.
 
-Готов(а)?`;
+Начнем?`;
 
 // ===================================================================
 // КРИЗИСНЫЙ ПРОТОКОЛ
@@ -509,7 +509,7 @@ export const onboarding = `Привет!
 export const crisisProtocol = `ВНИМАНИЕ: ПОТЕНЦИАЛЬНЫЙ КРИЗИС
 
 1. ВАЛИДАЦИЯ И ЗАБОТА:
-То, что ты чувствуешь — это реально и важно. Ты не один(а).
+То, что ты чувствуешь — это реально и важно. Ты не остаёшься с этим наедине.
 
 2. ПРЯМОЕ ПРЕДЛОЖЕНИЕ ПОМОЩИ:
 Если ты думаешь о самоповреждении или самоубийстве, пожалуйста позвони:
@@ -588,6 +588,36 @@ export function selectDiversePhrase(
   return available[Math.floor(Math.random() * available.length)];
 }
 
+function resolveGenderLabel(value?: string | null): string | null {
+  if (value === 'male') return 'мужской';
+  if (value === 'female') return 'женский';
+  return null;
+}
+
+function buildUserContext(vars: {
+  user_name?: string;
+  user_gender?: string;
+}): string {
+  const name = vars.user_name?.trim();
+  const genderLabel = resolveGenderLabel(vars.user_gender);
+
+  const nameLine = name
+    ? `Имя пользователя: ${name}`
+    : 'Имя пользователя: не указано (не обращайся по имени).';
+  const genderLine = genderLabel
+    ? `Пол пользователя: ${genderLabel}`
+    : 'Пол пользователя: не указан (используй нейтральные конструкции без рода).';
+  const genderInstruction = genderLabel
+    ? 'Используй корректные родовые формы, соответствующие полу.'
+    : 'Используй только нейтральные конструкции без рода.';
+
+  return `Пользовательский контекст:
+- ${nameLine}
+- ${genderLine}
+- ${genderInstruction}
+- Запрещены формы с альтернативами в скобках (например, "сделал / сделала").`;
+}
+
 export function detectApproachFromContext(
   userMessage: string,
   messageHistory: Array<{ role: string; content: string }> = []
@@ -639,6 +669,7 @@ export function buildChatPrelude(vars: {
   lang: string;
   user_locale?: string;
   user_name?: string;
+  user_gender?: string;
   mode?: ChatMode;
   responseNumber?: number;
   approachHint?: TherapyApproach;
@@ -649,7 +680,10 @@ export function buildChatPrelude(vars: {
 
   const modeAddon = modeSpecificAddons[mode] || '';
 
+  const userContext = buildUserContext(vars);
   const systemPrompt = `${systemCore}
+
+${userContext}
 
 ${modeAddon}
 
@@ -703,6 +737,7 @@ export function buildChatPreludeWithMemory(
     lang: string;
     user_locale?: string;
     user_name?: string;
+    user_gender?: string;
     mode?: ChatMode;
   },
   ctx: {
@@ -788,6 +823,7 @@ export function buildWelcomePrompt(options: {
   lang?: string;
   user_locale?: string;
   user_name?: string;
+  user_gender?: string;
   welcomePromptContent?: string;
   entryContext?: ChatEntryContext;
 }): string {
@@ -803,6 +839,7 @@ export function buildWelcomePrompt(options: {
     let prompt = options.welcomePromptContent;
 
     prompt = prompt.replace(/{{user_name}}/g, options.user_name || '');
+    prompt = prompt.replace(/{{user_gender}}/g, options.user_gender || '');
     prompt = prompt.replace(/{{user_locale}}/g, options.user_locale || '');
     prompt = prompt.replace(/{{lang}}/g, lang);
     prompt = prompt.replace(/{{mode}}/g, mode);
@@ -897,6 +934,7 @@ export function buildWelcomePrompt(options: {
   let prompt = template;
 
   prompt = prompt.replace(/{{user_name}}/g, options.user_name || '');
+  prompt = prompt.replace(/{{user_gender}}/g, options.user_gender || '');
   prompt = prompt.replace(/{{user_locale}}/g, options.user_locale || '');
   prompt = prompt.replace(/{{lang}}/g, lang);
 

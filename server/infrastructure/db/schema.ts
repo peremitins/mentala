@@ -31,6 +31,9 @@ export const roles = pgTable('roles', {
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
   name: varchar('name', { length: 120 }),
+  gender: varchar('gender', { length: 10 }),
+  ageRange: varchar('age_range', { length: 20 }),
+  onboarding: jsonb('onboarding').notNull().default({}),
   email: varchar('email', { length: 255 }).unique().notNull(),
   emailVerifiedAt: timestamp('email_verified_at'),
   passwordHash: text('password_hash'),

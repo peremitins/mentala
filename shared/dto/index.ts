@@ -1,5 +1,6 @@
 import { z } from 'zod';
 export * from './auth';
+export * from './onboarding';
 
 export const UserDto = z.object({
   id: z.string().uuid().optional(),
@@ -53,6 +54,7 @@ export const ChatRequestDto = z.object({
   lang: z.string().optional(),
   user_locale: z.string().optional(),
   user_name: z.string().optional(),
+  user_gender: z.string().optional(),
   entryContext: ChatEntryContextDto.optional(),
 });
 
