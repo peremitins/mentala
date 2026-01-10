@@ -25,6 +25,7 @@ import type {
   Directness,
   HabitSubtype,
 } from '@/shared/dto/notifications';
+import { MAX_NOTIFICATION_TEXT_LENGTH } from '@/shared/dto/notifications';
 
 // Константы для генерации текстов уведомлений
 const DEFAULT_TEXT_COUNT =
@@ -666,11 +667,11 @@ export async function generateNotificationTexts(
   const scenarioSettings = config.llm.openai.settings.notifications;
 
   // Вычисляем динамический maxOutputTokens на основе количества текстов
-  // Формула: каждый текст ~150-178 символов (русский текст) = ~90-120 токенов (кириллица кодируется менее эффективно)
+  // Формула: каждый текст ~140-150 символов (русский текст) = ~90-120 токенов (кириллица кодируется менее эффективно)
   // Плюс JSON форматирование ~30-40 токенов на текст (кавычки, запятые, скобки, переносы строк, эмодзи ✨, пробелы)
   // Итого: ~130-160 токенов на текст, используем консервативный расчет
   // Увеличиваем расчет: 250 токенов на текст + 5000 запас для гарантии получения всех текстов
-  // Это обеспечивает достаточное место для генерации полных текстов близко к максимуму (178 символов)
+  // Это обеспечивает достаточное место для генерации полных текстов близко к максимуму (MAX_NOTIFICATION_TEXT_LENGTH символов)
   // Для 50 текстов: 50 * 250 + 5000 = 17500 токенов
   const dynamicMaxOutputTokens = count * 250 + 5000; // 250 токенов на текст + 5000 запас (увеличено для генерации более длинных текстов)
   // Используем только динамическое значение - конфиг уже рассчитан на основе DEFAULT_COUNT
@@ -734,7 +735,7 @@ export async function generateNotificationTexts(
   // Примерная оценка токенов: ~4 символа на токен
   const promptText =
     systemPrompt +
-    `\nСгенерируй ${count} вариантов текстов уведомлений в формате JSON массива строк. Каждый текст должен быть примерно 150-178 символов (желательно близко к максимуму для информативности).`;
+    `\nСгенерируй ${count} вариантов текстов уведомлений в формате JSON массива строк. Каждый текст должен быть примерно 140-${MAX_NOTIFICATION_TEXT_LENGTH} символов (желательно близко к максимуму для информативности).`;
   const tokensIn = Math.ceil(promptText.length / 4);
   const tokensOut = Math.ceil(
     texts.reduce((sum, text) => sum + text.length, 0) / 4
@@ -1018,7 +1019,7 @@ ${params.subtype ? `- Фокус уведомления: ${subtypeMap[params.sub
 - Каждый из всех текстов должен соответствовать всем указанным параметрам и инструкциям из описания
 
 Требования:
-- Каждый текст должен быть примерно 150-178 символов (желательно близко к максимуму для информативности и полноты)
+- Каждый текст должен быть примерно 140-${MAX_NOTIFICATION_TEXT_LENGTH} символов (желательно близко к максимуму для информативности и полноты)
 - Можно использовать плейсхолдер {name} для имени пользователя
 - Если имя не указано, не используй плейсхолдер {name}
 - Если пол не указан, используй нейтральные конструкции без рода
@@ -1069,7 +1070,9 @@ function parseAndValidateTexts(
       `[AI Generation] ⚠️ JSON parse failed, trying regex fallback: ${error.message}`
     );
     // Fallback: пытаемся извлечь тексты через regex
-    const matches = content.match(/"([^"]{1,178})"/g);
+    const matches = content.match(
+      new RegExp(`"([^"]{1,${MAX_NOTIFICATION_TEXT_LENGTH}})"`, 'g')
+    );
     if (matches) {
       texts = matches.map((m) => m.slice(1, -1));
       console.log(
@@ -1092,7 +1095,7 @@ function parseAndValidateTexts(
       if (!text.startsWith('✨')) {
         // Эмодзи "✨ " занимает 2 символа, поэтому проверяем длину с учетом эмодзи
         const emojiPrefix = '✨ ';
-        const maxTextLength = 178 - emojiPrefix.length; // 176 символов для текста
+        const maxTextLength = MAX_NOTIFICATION_TEXT_LENGTH - emojiPrefix.length; // 148 символов для текста
 
         // Если текст уже с эмодзи превышает лимит, обрезаем его
         if (text.length > maxTextLength) {
@@ -1101,13 +1104,15 @@ function parseAndValidateTexts(
         return `${emojiPrefix}${text}`;
       }
       // Если эмодзи уже есть, проверяем общую длину
-      if (text.length > 178) {
+      if (text.length > MAX_NOTIFICATION_TEXT_LENGTH) {
         // Если текст с эмодзи превышает лимит, обрезаем его
-        return text.slice(0, 178);
+        return text.slice(0, MAX_NOTIFICATION_TEXT_LENGTH);
       }
       return text;
     })
-    .filter((text) => text.length > 0 && text.length <= 178)
+    .filter(
+      (text) => text.length > 0 && text.length <= MAX_NOTIFICATION_TEXT_LENGTH
+    )
     .slice(0, expectedCount);
 }
 
@@ -1381,7 +1386,7 @@ export async function refillTextPool(
     // 4.5. Вычисляем стоимость
     const promptText =
       systemPrompt +
-      `\nСгенерируй ${toGenerate} вариантов текстов уведомлений в формате JSON массива строк. Каждый текст должен быть примерно 150-178 символов (желательно близко к максимуму для информативности).`;
+      `\nСгенерируй ${toGenerate} вариантов текстов уведомлений в формате JSON массива строк. Каждый текст должен быть примерно 140-${MAX_NOTIFICATION_TEXT_LENGTH} символов (желательно близко к максимуму для информативности).`;
     const tokensIn = Math.ceil(promptText.length / 4);
     const tokensOut = Math.ceil(
       newTexts.reduce((sum, text) => sum + text.length, 0) / 4
