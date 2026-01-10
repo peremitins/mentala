@@ -52,6 +52,7 @@ import {
 import { computeGenerationConfigHash } from '@/server/utils/notification-ai-config-hash';
 import { computeDayOfYear } from './notification-date.utils';
 import { and, eq } from 'drizzle-orm';
+import { pickNotificationImage } from './notification-images.service';
 import type {
   NotificationPayload,
   NotificationSubtype,
@@ -1296,6 +1297,8 @@ export async function orchestrateAllSlotsForUser(
       if (sourceSlots.length === 0) continue;
 
       const source = sourceSlots[0].source;
+      const daySequenceCounters = new Map<string, number>();
+      const dayMs = 24 * 60 * 60 * 1000;
 
       // Получаем intent для habits
       let intent: 'build' | 'quit' | null = null;
@@ -1532,6 +1535,23 @@ export async function orchestrateAllSlotsForUser(
       // Используем локальный индекс внутри sourceSlots для правильного hybrid-чередования
       for (let slotIndex = 0; slotIndex < sourceSlots.length; slotIndex++) {
         const slot = sourceSlots[slotIndex];
+        const slotDate = slot.scheduledAt;
+        const dayKey = slotDate ? slotDate.toISOString().split('T')[0] : 'na';
+        const daySlotIndex = daySequenceCounters.get(dayKey) ?? 0;
+        daySequenceCounters.set(dayKey, daySlotIndex + 1);
+        const dayNumber = slotDate
+          ? Math.floor(
+              Date.UTC(
+                slotDate.getUTCFullYear(),
+                slotDate.getUTCMonth(),
+                slotDate.getUTCDate()
+              ) / dayMs
+            )
+          : 0;
+        const imageSequenceIndex =
+          source.timesPerDay > 0
+            ? dayNumber * source.timesPerDay + daySlotIndex
+            : daySlotIndex;
         if (!slot.scheduledAt) continue;
 
         // ВАЖНО: Если textSource === 'ai' но AI-тексты недоступны, используем fallback на шаблоны
@@ -1565,6 +1585,14 @@ export async function orchestrateAllSlotsForUser(
 
         const { text, templateIdForSlot } = pickResult;
 
+        const slotId = nanoid();
+        const imageUrl = pickNotificationImage({
+          kind: source.kind,
+          entityKey: source.normalizedEntityKey,
+          gender: userGender,
+          sequenceIndex: imageSequenceIndex,
+        });
+
         // Создаём payload
         const payload: NotificationPayload = {
           title: entityName || '',
@@ -1572,11 +1600,12 @@ export async function orchestrateAllSlotsForUser(
           templateId: templateIdForSlot,
           action: 'open',
           deepLink: source.kind === 'therapy' ? '/support' : '/habits',
+          image: imageUrl || undefined,
           data: {
             kind: source.kind,
             entityKey: source.normalizedEntityKey ?? undefined,
             entityDisplayName: source.preference.entityKey ?? undefined,
-            slotId: '',
+            slotId,
             isAiGenerated: templateIdForSlot === 'ai_generated',
             fixedTime:
               slot.isFixed && slot.fixedTime !== null
@@ -1584,9 +1613,6 @@ export async function orchestrateAllSlotsForUser(
                 : undefined, // Флаг для защиты от сдвига
           },
         };
-
-        const slotId = nanoid();
-        payload.data!.slotId = slotId;
 
         // Сохраняем слот
         await insertSlot(

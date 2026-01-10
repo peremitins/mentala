@@ -7,7 +7,7 @@
 // Базовые типы
 // ==========================================
 
-export const MAX_NOTIFICATION_TEXT_LENGTH = 178;
+export const MAX_NOTIFICATION_TEXT_LENGTH = 150;
 
 export type NotificationKind = 'therapy' | 'habits';
 export type NotificationTextSource = 'default' | 'user';

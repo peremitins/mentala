@@ -23,8 +23,7 @@ WHERE ns.kind = 'habits'
   )
   AND ns.habit_id NOT IN (
     -- Исключаем стандартные ключи из каталога (готовые шаблоны)
-    'water', 'sleep', 'steps', 'meditation', 'nutrition', 'focus_start',
-    'gratitude', 'morning_routine', 'planning', 'smoking', 'alcohol',
+    'water', 'steps', 'meditation', 'nutrition', 'gratitude', 'morning_routine', 'planning', 'smoking', 'alcohol',
     'sugar', 'procrastination', 'screentime', 'caffeine', 'sport'
   );
 
@@ -44,8 +43,8 @@ WHERE ns.kind = 'therapy'
   )
   AND ns.topic_key NOT IN (
     -- Исключаем стандартные ключи из каталога (готовые шаблоны)
-    'anxiety', 'stress', 'mood', 'sleep', 'anger', 'selfesteem', 'self_esteem',
-    'focus', 'relations', 'relationships', 'grief', 'sos', 'work', 'trauma', 'addiction'
+    'anxiety', 'stress', 'mood', 'anger', 'selfesteem', 'self_esteem',
+    'relations', 'relationships', 'grief', 'sos', 'work', 'trauma', 'addiction'
   );
 
 -- ============================================================================
@@ -65,7 +64,6 @@ WHERE ns.kind = 'therapy'
 --     WHERE h.user_id = ns.user_id
 --       AND (h.slug = ns.habit_id OR h.id::text = ns.habit_id)
 --   )
---   AND ns.habit_id NOT IN ('water', 'sleep', 'steps', 'meditation', 'nutrition', 'focus_start',
---     'gratitude', 'morning_routine', 'planning', 'smoking', 'alcohol',
+--   AND ns.habit_id NOT IN ('water', 'steps', 'meditation', 'nutrition', --     'gratitude', 'morning_routine', 'planning', 'smoking', 'alcohol',
 --     'sugar', 'procrastination', 'screentime', 'caffeine', 'sport');
 

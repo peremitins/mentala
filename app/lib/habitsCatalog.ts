@@ -7,19 +7,15 @@
 
 export type HabitKey =
   | 'water'
-  | 'sleep'
   | 'steps'
   | 'meditation'
   | 'nutrition'
-  | 'focus_start'
   | 'gratitude'
-  | 'morning_routine'
-  | 'planning'
   | 'smoking'
   | 'alcohol'
   | 'sugar'
+  | 'junk_food'
   | 'procrastination'
-  | 'screentime'
   | 'caffeine';
 
 export type HabitIntent = 'build' | 'quit';
@@ -46,13 +42,6 @@ export const HABITS_CATALOG: readonly HabitCatalogItem[] = [
     description: 'Поддержание водного баланса',
   },
   {
-    habitKey: 'sleep',
-    name: 'Лучше спать',
-    emoji: '😴',
-    intent: 'build',
-    description: 'Режим сна, вечерние ритуалы',
-  },
-  {
     habitKey: 'steps',
     name: 'Больше двигаться',
     emoji: '🏃',
@@ -75,14 +64,6 @@ export const HABITS_CATALOG: readonly HabitCatalogItem[] = [
     description: 'Регулярные приёмы пищи без переедания и перекусов «на бегу»',
   },
   {
-    habitKey: 'focus_start',
-    name: 'Фокус-старт',
-    emoji: '🎯',
-    intent: 'build',
-    description:
-      'Короткая фокус-сессия в начале работы или учёбы без отвлечений',
-  },
-  {
     habitKey: 'gratitude',
     name: 'Дневник благодарности',
     emoji: '📔',
@@ -90,20 +71,27 @@ export const HABITS_CATALOG: readonly HabitCatalogItem[] = [
     description: 'Записывай хотя бы одну мысль благодарности в конце дня',
   },
   {
-    habitKey: 'morning_routine',
-    name: 'Утренний ритуал',
-    emoji: '🌅',
+    habitKey: 'caffeine',
+    name: 'Баланс кофеина',
+    emoji: '☕️',
     intent: 'build',
-    description:
-      'Простой утренний ритуал: вода, немного движения и план на день',
+    description: 'Сокращение кофе и энергетиков, последняя порция днём',
   },
-  {
-    habitKey: 'planning',
-    name: 'План на день',
-    emoji: '🗒️',
-    intent: 'build',
-    description: 'Мини-план из 3 главных дел на день',
-  },
+  // {
+  //   habitKey: 'morning_routine',
+  //   name: 'Утренний ритуал',
+  //   emoji: '🌅',
+  //   intent: 'build',
+  //   description:
+  //     'Простой утренний ритуал: вода, немного движения и план на день',
+  // },
+  // {
+  //   habitKey: 'planning',
+  //   name: 'План на день',
+  //   emoji: '🗒️',
+  //   intent: 'build',
+  //   description: 'Мини-план из 3 главных дел на день',
+  // },
   // quit
   {
     habitKey: 'smoking',
@@ -121,10 +109,18 @@ export const HABITS_CATALOG: readonly HabitCatalogItem[] = [
   },
   {
     habitKey: 'sugar',
-    name: 'Меньше сахара и фастфуда',
+    name: 'Меньше сахара',
     emoji: '🚫',
     intent: 'quit',
-    description: 'Снижение тяги к сладкому/перекусам',
+    description: 'Меньше сахара для поддержки здоровья и самочувствия',
+  },
+  {
+    habitKey: 'junk_food',
+    name: 'Меньше вредной пищи',
+    emoji: '🚫',
+    intent: 'quit',
+    description:
+      'Сокращение вредной пищи для сохранения здоровья в долгосрочной перспективе',
   },
   {
     habitKey: 'procrastination',
@@ -133,20 +129,13 @@ export const HABITS_CATALOG: readonly HabitCatalogItem[] = [
     intent: 'quit',
     description: 'Правило 2 минут и микрошаги, чтобы легче начинать дела',
   },
-  {
-    habitKey: 'screentime',
-    name: 'Меньше телефона ночью',
-    emoji: '📵',
-    intent: 'quit',
-    description: 'Засыпание без скролла и яркого экрана перед сном',
-  },
-  {
-    habitKey: 'caffeine',
-    name: 'Меньше кофеина',
-    emoji: '🚫',
-    intent: 'quit',
-    description: 'Сокращение кофе и энергетиков, последняя порция днём',
-  },
+  // {
+  //   habitKey: 'screentime',
+  //   name: 'Меньше телефона ночью',
+  //   emoji: '📵',
+  //   intent: 'quit',
+  //   description: 'Засыпание без скролла и яркого экрана перед сном',
+  // },
 ] as const;
 
 /**
