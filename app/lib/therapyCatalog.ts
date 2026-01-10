@@ -10,10 +10,8 @@ export type TherapyTopicKey =
   | 'anxiety'
   | 'stress'
   | 'mood'
-  | 'sleep'
   | 'anger'
   | 'selfesteem'
-  | 'focus'
   | 'relations'
   | 'grief'
   | 'loneliness'
@@ -58,14 +56,6 @@ export const THERAPY_TOPICS: readonly TherapyTopic[] = [
     color: 'yellow',
   },
   {
-    key: 'sleep',
-    name: 'Сон и восстановление',
-    description:
-      'Помогаем легче засыпать и высыпаться: вечерние практики, расслабление и режим сна',
-    emoji: '😴',
-    color: 'purple',
-  },
-  {
     key: 'anger',
     name: 'Раздражительность и злость',
     description:
@@ -80,14 +70,6 @@ export const THERAPY_TOPICS: readonly TherapyTopic[] = [
       'Помогаем уменьшить самокритику и поддержать себя: добрые формулировки и новые взгляды',
     emoji: '🤗',
     color: 'pink',
-  },
-  {
-    key: 'focus',
-    name: 'Фокус и прокрастинация',
-    description:
-      'Помогаем начать и удержать внимание: правило 2 минут, короткие фокус-сессии и меньше откладывания',
-    emoji: '🎯',
-    color: 'green',
   },
   {
     key: 'relations',

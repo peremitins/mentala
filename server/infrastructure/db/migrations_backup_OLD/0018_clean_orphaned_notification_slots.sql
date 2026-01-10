@@ -13,8 +13,7 @@ WHERE ns.kind = 'habits'
   )
   AND ns.habit_id NOT IN (
     -- Исключаем готовые шаблоны из каталога (читаемые ключи)
-    'water', 'sleep', 'steps', 'meditation', 'nutrition', 'focus_start',
-    'gratitude', 'morning_routine', 'planning', 'smoking', 'alcohol',
+    'water', 'steps', 'meditation', 'nutrition', 'gratitude', 'morning_routine', 'planning', 'smoking', 'alcohol',
     'sugar', 'procrastination', 'screentime', 'caffeine', 'sport'
   );
 
@@ -29,7 +28,7 @@ WHERE ns.kind = 'therapy'
   )
   AND ns.topic_key NOT IN (
     -- Исключаем готовые шаблоны из каталога (читаемые ключи)
-    'anxiety', 'stress', 'mood', 'sleep', 'relationships', 'work',
+    'anxiety', 'stress', 'mood', 'relationships', 'work',
     'self_esteem', 'trauma', 'grief', 'addiction'
   );
 
