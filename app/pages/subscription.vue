@@ -127,14 +127,11 @@
           :trial-active="
             plan.name === 'basic' ? subscriptionStore.trialActive : false
           "
-          :custom-price="plan.isCustomConfigurable ? customPrice : undefined"
-          :custom-config="plan.isCustomConfigurable ? customConfig : undefined"
           :style="`animation-delay: ${0.3 + index * 0.1}s`"
           class=""
           @select="selectPlan(plan)"
           @update:billing-period="(period) => setBillingPeriod(plan.id, period)"
           @confirm-change="handlePlanChangeConfirm"
-          @update:custom-config="handleCustomConfigUpdate"
         />
       </div>
     </div>
@@ -170,8 +167,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue';
-import { useDebounceFn } from '@vueuse/core';
+import { ref, onMounted, computed } from 'vue';
 import { useAPI } from '@/app/composables/useAPI';
 import { useRouter } from 'vue-router';
 import { useSubscriptionStore } from '@/app/stores/subscription';
@@ -194,7 +190,6 @@ interface Plan {
   name: string;
   basePrice: number;
   weeklyMinutesLimit: number;
-  isCustomConfigurable: boolean;
   isVisibleInUI?: boolean;
 }
 
@@ -248,10 +243,6 @@ const noActiveSubscription = computed(
 // Храним период оплаты для каждого плана отдельно
 const planBillingPeriods = ref<Map<string, 'month' | 'year'>>(new Map());
 const selectedPlanId = ref<string | null>(null);
-const customConfig = ref({
-  weeklyMinutes: 100,
-});
-const customPrice = ref<number | null>(null);
 const processing = ref(false);
 const showConfirmDialog = ref(false);
 const pendingPlanChange = ref<Plan | null>(null);
@@ -306,7 +297,6 @@ function getPlanDisplayName(name: string) {
   }
   if (name === 'pro') return 'PRO';
   if (name === 'premium') return 'Premium';
-  if (name === 'custom') return 'Custom';
   return name;
 }
 
@@ -353,10 +343,6 @@ function setBillingPeriod(planId: string, period: 'month' | 'year') {
   planBillingPeriods.value.set(planId, period);
 }
 
-function handleCustomConfigUpdate(config: { weeklyMinutes: number }) {
-  customConfig.value = config;
-}
-
 function isCurrentPlan(planId: string): boolean {
   if (!currentSubscription.value) return false;
 
@@ -380,19 +366,8 @@ function selectPlan(plan: Plan) {
   }
 
   // НЕ устанавливаем selectedPlanId здесь - только после подтверждения
-
-  // Если это Custom план, рассчитываем цену перед показом модалки
-  if (plan.isCustomConfigurable) {
-    // Рассчитываем цену для конкретного плана без изменения selectedPlanId
-    calculateCustomPriceForPlan(plan.id).then(() => {
-      pendingPlanChange.value = plan;
-      showConfirmDialog.value = true;
-    });
-  } else {
-    // Для обычных планов сразу показываем модалку
-    pendingPlanChange.value = plan;
-    showConfirmDialog.value = true;
-  }
+  pendingPlanChange.value = plan;
+  showConfirmDialog.value = true;
 }
 
 function handlePlanChangeConfirm(plan: Plan) {
@@ -407,18 +382,11 @@ function getConfirmDialogDescription(): string {
   const newPlanName = getPlanDisplayName(pendingPlanChange.value.name);
   const billingPeriod = getBillingPeriod(pendingPlanChange.value.id);
 
-  let priceText = '';
-  if (pendingPlanChange.value.isCustomConfigurable) {
-    priceText = customPrice.value
-      ? `Стоимость: ${customPrice.value.toLocaleString('ru-RU')} ₽/${billingPeriod === 'year' ? 'год' : 'месяц'}`
-      : 'Стоимость будет рассчитана после настройки параметров.';
-  } else {
-    const price =
-      billingPeriod === 'year'
-        ? Math.round(pendingPlanChange.value.basePrice * 12 * 0.8)
-        : pendingPlanChange.value.basePrice;
-    priceText = `Стоимость: ${price.toLocaleString('ru-RU')} ₽/${billingPeriod === 'year' ? 'год' : 'месяц'}`;
-  }
+  const price =
+    billingPeriod === 'year'
+      ? Math.round(pendingPlanChange.value.basePrice * 12 * 0.8)
+      : pendingPlanChange.value.basePrice;
+  const priceText = `Стоимость: ${price.toLocaleString('ru-RU')} ₽/${billingPeriod === 'year' ? 'год' : 'месяц'}`;
 
   if (currentSubscription.value) {
     const currentPlanName = getPlanDisplayName(
@@ -440,80 +408,14 @@ async function confirmPlanChange() {
   // Генерируем идемпотентный ключ для этого checkout (нужен для защиты от повторов/ретраев)
   checkoutIdempotencyKey.value = nanoid();
 
-  if (pendingPlanChange.value.isCustomConfigurable) {
-    await calculateCustomPrice();
-  }
-
   // Автоматически запускаем checkout
   // fetchCurrentSubscription уже вызывается внутри startCheckout
   await startCheckout();
 }
 
-async function calculateCustomPrice(): Promise<void> {
-  if (!customConfig.value || !selectedPlanId.value) return;
-  await calculateCustomPriceForPlan(selectedPlanId.value);
-}
-
-async function calculateCustomPriceForPlan(planId: string): Promise<void> {
-  if (!customConfig.value) return;
-
-  try {
-    const billingPeriod = planBillingPeriods.value.get(planId) || 'month';
-    const response = await useAPI<{
-      totalPrice: number;
-      totalMinutesPerMonth: number;
-      weeklyMinutes: number;
-    }>('/api/subscriptions/custom/calc', {
-      method: 'POST',
-      body: {
-        weeklyMinutes: customConfig.value.weeklyMinutes,
-        billingPeriod,
-      },
-    });
-
-    customPrice.value = response.totalPrice;
-  } catch (error: any) {
-    // Игнорируем 429 ошибки (слишком много запросов) - это нормально при быстром перетаскивании слайдера
-    if (error?.statusCode === 429) {
-      console.log('Rate limit reached, skipping calculation');
-      return;
-    }
-    console.error('Failed to calculate custom price:', error);
-  }
-}
-
-// Debounced версия для расчета цены (защита от 429)
-const debouncedCalculateCustomPrice = useDebounceFn(
-  () => {
-    // Находим Custom план и пересчитываем для него цену
-    const customPlan = plans.value.find((p) => p.isCustomConfigurable);
-    if (customPlan) {
-      calculateCustomPriceForPlan(customPlan.id);
-    }
-  },
-  500 // 500ms задержка
-);
-
 function goBack() {
   navigateTo('/settings');
 }
-
-// Watch с debounce для слайдера (защита от 429)
-watch(
-  () => [
-    customConfig.value.weeklyMinutes,
-    selectedPlanId.value,
-    planBillingPeriods.value,
-  ],
-  () => {
-    // Пересчитываем цену, если есть Custom план в списке
-    const customPlan = plans.value.find((p) => p.isCustomConfigurable);
-    if (customPlan) {
-      debouncedCalculateCustomPrice();
-    }
-  },
-  { deep: true }
-);
 
 // Функции fetchPlans и fetchCurrentSubscription теперь в store
 
@@ -531,12 +433,6 @@ async function startCheckout() {
       planId: plan.id,
       billingPeriod,
     };
-
-    if (plan.isCustomConfigurable && customConfig.value) {
-      body.customConfig = {
-        weeklyMinutes: customConfig.value.weeklyMinutes,
-      };
-    }
 
     // Если по какой-то причине ключ ещё не задан — создаём прямо здесь
     if (!checkoutIdempotencyKey.value) {

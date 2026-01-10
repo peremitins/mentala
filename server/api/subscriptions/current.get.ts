@@ -109,10 +109,8 @@ export default defineEventHandler(async (event) => {
       const userRecord = userData[0];
       const trialActive = userRecord ? isTrialActive(userRecord) : false;
 
-      // Преобразуем subscription для getFeatures (customConfig может быть null)
       const subscriptionForFeatures = {
         planId: subscription.planId,
-        customConfig: subscription.customConfig || undefined,
       };
 
       // Получаем роль целевого пользователя для premium доступа (не смотрящего!)
@@ -142,7 +140,6 @@ export default defineEventHandler(async (event) => {
         autoRenew: subscription.autoRenew,
         sourcePlatform: subscription.sourcePlatform,
         billingPeriod: subscription.billingPeriod,
-        customConfig: subscription.customConfig,
         createdAt: subscription.createdAt,
         updatedAt: subscription.updatedAt,
         plan: {
@@ -206,10 +203,8 @@ export default defineEventHandler(async (event) => {
   const userRecord = userData[0];
   const trialActive = userRecord ? isTrialActive(userRecord) : false;
 
-  // Преобразуем subscription для getFeatures (customConfig может быть null)
   const subscriptionForFeatures = {
     planId: subscription.planId,
-    customConfig: subscription.customConfig || undefined,
   };
 
   // Получаем роль целевого пользователя для premium доступа (не смотрящего!)
@@ -239,7 +234,6 @@ export default defineEventHandler(async (event) => {
     autoRenew: subscription.autoRenew,
     sourcePlatform: subscription.sourcePlatform,
     billingPeriod: subscription.billingPeriod,
-    customConfig: subscription.customConfig,
     createdAt: subscription.createdAt,
     updatedAt: subscription.updatedAt,
     plan: {

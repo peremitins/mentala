@@ -39,9 +39,6 @@ const plans = [
     basePrice: '0',
     weeklyMinutesLimit: 0, // Без Trial = 0 минут, только уведомления
     avatarEnabled: false,
-    pricePerMinuteGPT: '0.66',
-    pricePerMinuteAvatar: '0.9',
-    isCustomConfigurable: false,
     isVisibleInUI: true,
   },
   // PRO
@@ -51,9 +48,6 @@ const plans = [
     basePrice: '349',
     weeklyMinutesLimit: 100,
     avatarEnabled: false,
-    pricePerMinuteGPT: '0.66',
-    pricePerMinuteAvatar: '0.9',
-    isCustomConfigurable: false,
     isVisibleInUI: true,
   },
   // Premium
@@ -63,21 +57,6 @@ const plans = [
     basePrice: '649',
     weeklyMinutesLimit: 100,
     avatarEnabled: false,
-    pricePerMinuteGPT: '0.66',
-    pricePerMinuteAvatar: '0.9',
-    isCustomConfigurable: false,
-    isVisibleInUI: true,
-  },
-  // Custom
-  {
-    id: 'custom',
-    name: 'custom',
-    basePrice: '349', // базовая цена PRO
-    weeklyMinutesLimit: 100, // дефолтное значение, реальное задается пользователем
-    avatarEnabled: false, // дефолтное значение, реальное задается пользователем
-    pricePerMinuteGPT: '0.66',
-    pricePerMinuteAvatar: '0.9',
-    isCustomConfigurable: true,
     isVisibleInUI: true,
   },
 ];
@@ -97,6 +76,7 @@ async function runSeed() {
     'pro_yearly',
     'premium_monthly',
     'premium_yearly',
+    'custom',
     'trial', // Trial больше не отдельный план, а состояние Basic
   ];
 
@@ -127,9 +107,6 @@ async function runSeed() {
             basePrice: plan.basePrice,
             weeklyMinutesLimit: plan.weeklyMinutesLimit,
             avatarEnabled: plan.avatarEnabled,
-            pricePerMinuteGPT: plan.pricePerMinuteGPT,
-            pricePerMinuteAvatar: plan.pricePerMinuteAvatar,
-            isCustomConfigurable: plan.isCustomConfigurable,
             isVisibleInUI: plan.isVisibleInUI,
             updatedAt: new Date(),
           },

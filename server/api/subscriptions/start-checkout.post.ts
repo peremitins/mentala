@@ -15,14 +15,10 @@ import {
 } from '@/server/application/subscriptions/plan-change.service';
 import {
   calculatePlanPrice,
-  calculateCustomPrice,
   type BillingPeriod,
 } from '@/server/application/subscriptions/price-calculator';
 import { getHeader } from 'h3';
 import {
-  CUSTOM_MIN_WEEKLY_MINUTES,
-  CUSTOM_MAX_WEEKLY_MINUTES,
-  CUSTOM_MINUTES_STEP,
   DEFAULT_WEEKLY_MINUTES_LIMIT,
 } from '@/server/config/subscription';
 import {
@@ -34,15 +30,6 @@ import {
 const checkoutSchema = z.object({
   planId: z.string(),
   billingPeriod: z.enum(['month', 'year']).default('month'),
-  customConfig: z
-    .object({
-      weeklyMinutes: z
-        .number()
-        .min(CUSTOM_MIN_WEEKLY_MINUTES)
-        .max(CUSTOM_MAX_WEEKLY_MINUTES)
-        .multipleOf(CUSTOM_MINUTES_STEP),
-    })
-    .optional(),
 });
 
 /**
@@ -106,7 +93,7 @@ export default defineEventHandler(async (event) => {
   const body = await readBody(event);
   const validated = checkoutSchema.parse(body);
 
-  const { planId, billingPeriod, customConfig } = validated;
+  const { planId, billingPeriod } = validated;
 
   try {
     const config = useRuntimeConfig(event);
@@ -127,37 +114,10 @@ export default defineEventHandler(async (event) => {
     }
 
     // Рассчитываем цену
-    let totalPrice: number;
-    let finalCustomConfig: {
-      weeklyMinutes: number;
-      totalPrice: number;
-    } | null = null;
-
-    if (plan[0].isCustomConfigurable) {
-      if (!customConfig) {
-        throw createError({
-          statusCode: 400,
-          statusMessage: 'customConfig required for Custom plan',
-        });
-      }
-
-      totalPrice = calculateCustomPrice({
-        weeklyMinutes: customConfig.weeklyMinutes,
-        billingPeriod: billingPeriod as BillingPeriod,
-      });
-
-      finalCustomConfig = {
-        weeklyMinutes: customConfig.weeklyMinutes,
-        totalPrice,
-      };
-    } else {
-      // Для обычных планов
-      totalPrice = calculatePlanPrice({
-        baseMonthlyPrice: Number(plan[0].basePrice),
-        billingPeriod: billingPeriod as BillingPeriod,
-        isCustom: false,
-      });
-    }
+    const totalPrice = calculatePlanPrice({
+      baseMonthlyPrice: Number(plan[0].basePrice),
+      billingPeriod: billingPeriod as BillingPeriod,
+    });
 
     // Проверяем, есть ли активная подписка (не истекшая, для пересчета)
     const now = new Date();
@@ -178,21 +138,15 @@ export default defineEventHandler(async (event) => {
 
     if (currentSubscription.length) {
       // Есть активная подписка - рассчитываем пересчет
-      // Передаем custom цену если это Custom план
-      const customPriceForCalculation = finalCustomConfig?.totalPrice;
       calculation = await calculatePlanChange(
         sessionResult.user.id,
         planId,
-        billingPeriod as BillingPeriod,
-        customPriceForCalculation
+        billingPeriod as BillingPeriod
       );
 
       // Проверяем блокировку даунгрейда (если новый план имеет меньший лимит минут)
       const newPlanWeeklyLimit = plan[0].weeklyMinutesLimit;
-      if (finalCustomConfig) {
-        // Для Custom лимит берем из конфига
-        // TODO: проверить usedMinutesThisWeek и заблокировать если превышает
-      } else if (newPlanWeeklyLimit < DEFAULT_WEEKLY_MINUTES_LIMIT) {
+      if (newPlanWeeklyLimit < DEFAULT_WEEKLY_MINUTES_LIMIT) {
         // TODO: проверить usedMinutesThisWeek и заблокировать если превышает новый лимит
       }
     } else {
@@ -240,7 +194,6 @@ export default defineEventHandler(async (event) => {
           sessionResult.user.id,
           planId,
           billingPeriod as BillingPeriod,
-          finalCustomConfig,
           calculation,
           sourcePlatform,
           {
@@ -264,7 +217,6 @@ export default defineEventHandler(async (event) => {
             userId: sessionResult.user.id,
             planId,
             billingPeriod: billingPeriod as BillingPeriod,
-            customConfig: finalCustomConfig,
             checkoutAmount: String(toPay),
             checkoutCurrency: 'RUB',
             billingCreditApplied: String(creditApplied),
@@ -302,7 +254,6 @@ export default defineEventHandler(async (event) => {
         planId,
         metadata: {
           billingPeriod,
-          customConfig: finalCustomConfig,
           totalPrice,
           calculation,
           creditApplied,
