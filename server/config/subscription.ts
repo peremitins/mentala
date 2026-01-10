@@ -9,15 +9,6 @@ export const WEEKLY_OVERDRAFT_MINUTES =
 // Дефолтный лимит минут для планов (если не указан в БД)
 export const DEFAULT_WEEKLY_MINUTES_LIMIT = 100;
 
-// Минимальный лимит для Custom плана
-export const CUSTOM_MIN_WEEKLY_MINUTES = 10;
-
-// Максимальный лимит для Custom плана
-export const CUSTOM_MAX_WEEKLY_MINUTES = 200;
-
-// Шаг изменения минут для Custom плана
-export const CUSTOM_MINUTES_STEP = 10;
-
 // Таймаут бездействия для чата (в миллисекундах)
 // Используется для автоматического завершения сессий при отсутствии активности
 // 2 минуты = 120000 мс

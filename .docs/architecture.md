@@ -139,7 +139,7 @@ server/
 💳 Подписки, минуты и биллинг
 
 • Данные и таблицы:
-• `subscription_plans` — конфигурация тарифов (`basic/pro/premium/custom`), лимиты минут, фичи.
+• `subscription_plans` — конфигурация тарифов (`basic/pro/premium`), лимиты минут, фичи.
 • `user_subscriptions` — периоды подписок пользователя + статус оплаты (`active/pending/expired/canceled`) + `billing_period`.
 • `subscription_events` — аудит/аналитика (trial_started, checkout_started, purchase_success/failed, subscription_canceled и т.д.).
 • `payments` — идемпотентность webhook по `payment.id` YooKassa (PK = text).

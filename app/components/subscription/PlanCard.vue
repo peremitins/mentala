@@ -72,55 +72,6 @@
       </li>
     </ul>
 
-    <!-- Настройки Custom тарифа (внутри карточки) -->
-    <div
-      v-if="plan.isCustomConfigurable"
-      class="space-y-4 pt-4 border-t border-border"
-      @click.stop
-    >
-      <div>
-        <label class="text-sm font-medium mb-2 block">
-          Сколько минут в неделю?
-        </label>
-        <SliderRoot
-          v-model="weeklyMinutesSlider"
-          :min="10"
-          :max="200"
-          :step="10"
-          class="relative flex w-full touch-none select-none items-center py-3"
-          aria-label="Минут в неделю"
-        >
-          <SliderTrack
-            class="relative h-2 w-full grow rounded-full bg-primary/20"
-          >
-            <SliderRange
-              class="absolute h-full rounded-full bg-gradient-to-r from-primary to-primary"
-            />
-          </SliderTrack>
-          <SliderThumb
-            class="block h-5 w-5 rounded-full border-2 border-background/50 bg-primary shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-          />
-        </SliderRoot>
-        <div class="flex justify-between text-xs text-muted-foreground mt-1">
-          <span>10</span>
-          <span class="font-medium"
-            >{{ currentCustomConfig.weeklyMinutes }} минут</span
-          >
-          <span>200</span>
-        </div>
-      </div>
-
-      <div
-        v-if="customPrice"
-        class="rounded-md bg-transparent p-3 text-center border border-border"
-      >
-        <p class="text-sm text-muted-foreground">Итоговая стоимость</p>
-        <p class="text-2xl font-bold">
-          {{ customPrice }} ₽ / {{ billingPeriod === 'year' ? 'год' : 'месяц' }}
-        </p>
-      </div>
-    </div>
-
     <button
       :class="[
         'w-full rounded-md px-4 py-2 text-sm font-medium transition-colors',
@@ -139,16 +90,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
-import { SliderRoot, SliderTrack, SliderRange, SliderThumb } from 'radix-vue';
-import Checkbox from '@/app/components/ui/shadcn/checkbox/Checkbox.vue';
 
 interface Plan {
   id: string;
   name: string;
   basePrice: number;
   weeklyMinutesLimit: number;
-  isCustomConfigurable: boolean;
 }
 
 const props = defineProps<{
@@ -157,44 +104,13 @@ const props = defineProps<{
   isSelected: boolean;
   isCurrent: boolean;
   trialActive?: boolean;
-  weeklyMinutes?: number; // Для отображения в Custom настройках
-  customPrice?: number | null; // Итоговая цена Custom тарифа
-  customConfig?: {
-    weeklyMinutes: number;
-  }; // Конфигурация Custom тарифа
 }>();
 
 const emit = defineEmits<{
   select: [plan: Plan];
   'update:billingPeriod': [value: 'month' | 'year'];
   'confirm-change': [plan: Plan];
-  'update:customConfig': [value: { weeklyMinutes: number }];
 }>();
-
-// Локальное состояние для Custom конфигурации, если не передано извне
-const localCustomConfig = ref({
-  weeklyMinutes: props.customConfig?.weeklyMinutes ?? 100,
-});
-
-// Используем переданный customConfig или локальное состояние
-// Важно: используем computed для реактивности
-const currentCustomConfig = computed(() => {
-  if (props.customConfig) {
-    return props.customConfig;
-  }
-  return localCustomConfig.value;
-});
-
-// Синхронизируем локальное состояние при изменении props
-watch(
-  () => props.customConfig,
-  (newConfig) => {
-    if (newConfig) {
-      localCustomConfig.value = { ...newConfig };
-    }
-  },
-  { immediate: true }
-);
 
 function handlePeriodChange(period: 'month' | 'year') {
   emit('update:billingPeriod', period);
@@ -210,18 +126,10 @@ function getPlanName() {
   if (props.plan.name === 'basic') return 'Basic';
   if (props.plan.name === 'pro') return 'PRO';
   if (props.plan.name === 'premium') return 'Premium';
-  if (props.plan.name === 'custom') return 'Custom';
   return props.plan.name;
 }
 
 function getPrice() {
-  if (props.plan.isCustomConfigurable) {
-    // Для Custom показываем рассчитанную цену или "от 375"
-    if (props.customPrice) {
-      return props.customPrice.toLocaleString('ru-RU');
-    }
-    return 'от 375';
-  }
   // Рассчитываем цену с учетом периода
   const price =
     props.billingPeriod === 'year'
@@ -256,30 +164,8 @@ function getFeatures() {
     features.push('Расширенные рекомендации и аналитика');
     features.push('Приоритетная поддержка');
     features.push('100 минут в неделю');
-  } else if (props.plan.name === 'custom') {
-    features.push('Выберите количество минут в неделю (10–200)');
-    features.push('Платите только за то, чем реально пользуетесь');
   }
 
   return features;
 }
-
-// Computed для SliderRoot (ожидает массив)
-const weeklyMinutesSlider = computed({
-  get: () => {
-    return [currentCustomConfig.value.weeklyMinutes];
-  },
-  set: (value: number[]) => {
-    if (value && value.length > 0 && value[0] !== undefined) {
-      const newConfig = {
-        weeklyMinutes: value[0],
-      };
-
-      // Всегда обновляем локальное состояние
-      localCustomConfig.value = newConfig;
-      // Всегда эмитим событие для синхронизации с родителем
-      emit('update:customConfig', newConfig);
-    }
-  },
-});
 </script>

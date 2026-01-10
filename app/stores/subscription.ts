@@ -6,7 +6,6 @@ interface Plan {
   name: string;
   basePrice: number;
   weeklyMinutesLimit: number;
-  isCustomConfigurable: boolean;
   isVisibleInUI?: boolean;
 }
 
@@ -16,10 +15,6 @@ interface Subscription {
   endDate: string;
   paymentStatus: string;
   billingPeriod?: 'month' | 'year';
-  customConfig?: {
-    weeklyMinutes: number;
-    totalPrice: number;
-  };
   plan: {
     id: string;
     name: string;
@@ -82,8 +77,8 @@ export const useSubscriptionStore = defineStore('subscription', {
         return p.isVisibleInUI !== false;
       });
 
-      // Сортируем: активный план первым, затем Basic, Pro, Premium, Custom
-      const order = ['basic', 'pro', 'premium', 'custom'];
+      // Сортируем: активный план первым, затем Basic, Pro, Premium
+      const order = ['basic', 'pro', 'premium'];
       const sorted = filtered.sort((a, b) => {
         // Активный план всегда первый
         const aIsCurrent = state.currentSubscription?.planId === a.id;
@@ -91,7 +86,7 @@ export const useSubscriptionStore = defineStore('subscription', {
         if (aIsCurrent && !bIsCurrent) return -1;
         if (!aIsCurrent && bIsCurrent) return 1;
 
-        // Затем по порядку: Basic, Pro, Premium, Custom
+      // Затем по порядку: Basic, Pro, Premium
         const aIndex = order.indexOf(a.name);
         const bIndex = order.indexOf(b.name);
         if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
