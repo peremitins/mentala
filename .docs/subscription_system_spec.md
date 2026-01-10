@@ -28,9 +28,8 @@
 
 ## 2. Цели системы
 
-1. Ввести четыре тарифа: `Basic`, `PRO`, `Premium`, `Custom`.
+1. Ввести три тарифа: `Basic`, `PRO`, `Premium`.
 2. Реализовать **пробный период (Trial)** как временное состояние тарифа Basic с полным доступом Premium на 7 дней.
-3. Реализовать **кастомный тариф** с динамическим пересчётом стоимости.
 4. Использовать **YooKassa** как основной платёжный агрегатор для РФ.
 5. Поддержать **годовые планы** со скидкой ~20% от суммы 12 месяцев.
 6. Сделать UX максимально прозрачным и дружелюбным.
@@ -48,7 +47,6 @@
 | **Basic**   | 0 ₽ (бесплатно) | —                       | Только уведомления с шаблонами (без ИИ)          | 0 минут в неделю           |
 | **PRO**     | 349 ₽ / мес     | ~20% скидка на год      | AI-чат, уведомления, трекер привычек             | 100 минут в неделю         |
 | **Premium** | 649 ₽ / мес     | ~20% скидка на год      | Всё из PRO + расширенная аналитика и уведомления | 100 минут в неделю         |
-| **Custom**  | рассчитывается  | рассчитывается          | Гибкая настройка: количество минут в неделю      | настраиваемое (10–200 мин) |
 
 **Пробный период (Trial)**:
 
@@ -73,7 +71,7 @@
 
 ### 3.2. Годовые планы
 
-Для PRO, Premium и Custom:
+Для PRO и Premium:
 
 - годовой план = `месячная цена * 12 * 0.8` (скидка ~20%);
 - в интерфейсе показывать обе цены:  
@@ -81,80 +79,6 @@
   _«649 ₽ в месяц или 6 230 ₽ в год (−20%)»_ (для Premium).
 
 **Примечание:** Basic тариф всегда имеет `billingPeriod = 'month'`, так как цена 0 и это технический placeholder.
-
-### 3.3. Кастомный тариф (Custom)
-
-Параметры, которые выбирает пользователь (только на вебе):
-
-- `weekly_minutes` — количество минут в неделю: **10–200**, шаг 10.
-
-**Важно:** В Custom тарифе нет понятия "сессий" — пользователь выбирает только общее количество минут в неделю, которое он хочет использовать.
-
-Внутренние коэффициенты (конфиг):
-
-```ts
-price_per_minute_gpt = 0.66; // ₽ за минуту AI-чата
-base_price_pro = 349; // базовая месячная цена PRO (100 мин/неделю)
-base_price_premium = 649; // базовая месячная цена Premium (100 мин/неделю)
-premium_weekly_minutes = 100; // стандартный лимит Premium
-annual_discount_factor = 0.8; // скидка 20% на год
-weeks_in_month = 4;
-```
-
-**Важно:** Формула должна обеспечивать, что при настройках Custom, совпадающих с Premium (100 минут в неделю), стоимость Custom плана равна стоимости Premium (649 ₽/мес).
-
-Формула для месячной цены Custom:
-
-```ts
-// Базовые минуты для Premium (100 минут в неделю)
-premium_weekly_minutes = 100;
-
-// Если настройки совпадают с Premium - возвращаем цену Premium
-if (weekly_minutes === 100) {
-  total_price_monthly = base_price_premium; // 649 ₽
-} else {
-  // Иначе считаем от базовой цены PRO + доплата за минуты
-  total_minutes_per_month = weekly_minutes * weeks_in_month;
-
-  total_price_monthly =
-    base_price_pro + price_per_minute_gpt * total_minutes_per_month;
-
-  // Минимальная цена не может быть меньше base_price_pro
-  total_price_monthly = Math.max(total_price_monthly, base_price_pro);
-}
-```
-
-Для годового Custom:
-
-```ts
-total_price_yearly = total_price_monthly * 12 * annual_discount_factor;
-```
-
-Примеры для UI:
-
-**Пример 1:** Настройки Premium (100 минут в неделю):
-
-> 100 минут в неделю × 4 недели = 400 минут в месяц
-> Стоимость: **649 ₽/мес** (совпадает с Premium тарифом)
-
-**Пример 2:** 200 минут в неделю:
-
-> 200 × 4 = 800 минут в месяц
-> 0.66 × 800 + 349 = 528 + 349 = **877 ₽/мес**
-
-**Пример 3:** 50 минут в неделю:
-
-> 50 × 4 = 200 минут в месяц
-> 0.66 × 200 + 349 = 132 + 349 = **481 ₽/мес**
-
-**Пример 4:** 10 минут в неделю (минимум):
-
-> 10 × 4 = 40 минут в месяц
-> 0.66 × 40 + 349 = 26.4 + 349 = **375 ₽/мес** (но не меньше base_price_pro = 349 ₽)
-
-**Примечание:** Минимальный Custom тариф (10 минут) стоит 375 ₽, что осознанно выше базового PRO (349 ₽). Это логика "настраиваемый тариф > базовый тариф". В будущем можно пересмотреть коэффициенты, если захотим сделать Custom дешевле PRO, но для MVP это приемлемое поведение.
-
----
 
 ## 4. Архитектура экранов и UX
 
@@ -293,18 +217,6 @@ const usage = await getUsageForCurrentWeek(userId);
   - Расширенные отчёты и рекомендации
   - Приоритетная поддержка
 
-4. **Custom** (только web, в мобильных приложениях — опционально блок «Доступно на сайте»)
-
-- заголовок: `Custom`
-- цена: `от 375 ₽/мес` (динамически, минимум при 10 минутах в неделю)
-
-**Примечание:** Минимальная цена Custom — от 375 ₽ (10 минут). Это осознанно выше PRO (349 ₽) по логике "настраиваемый тариф > базовый тариф".
-
-- список:
-
-  - Выберите количество минут в неделю (10–200)
-  - Платите только за то, чем реально пользуетесь
-
 **Годовой/месячный режим:**
 
 - сверху над карточками или справа — переключатель:
@@ -316,23 +228,10 @@ const usage = await getUsageForCurrentWeek(userId);
     _«3 350 ₽ в год (вместо 4 188 ₽)»_ (для PRO),  
     _«6 230 ₽ в год (вместо 7 788 ₽)»_ (для Premium).
 
-#### Блок настройки Custom (web only)
-
-Появляется под карточками, если выбран Custom:
-
-- строка `Сколько минут в неделю?` — слайдер 10–200 минут, шаг 10, с отображением выбранного значения.
-
-- под формой:
-
-  > **Итоговая стоимость:** 649 ₽ / месяц
-  > (обновляется при каждом изменении параметров через запрос к API `custom/calc`)
-
-**Примечание:** В Custom тарифе нет понятия "сессий" — пользователь выбирает только общее количество минут в неделю.
-
 #### Основная кнопка действия
 
 - web:
-  `Оформить подписку` / `Перейти на PRO` / `Перейти на Premium` / `Оформить кастомный план`
+  `Оформить подписку` / `Перейти на PRO` / `Перейти на Premium`
   — в зависимости от выбранного тарифа и контекста.
 - мобильные приложения (iOS и Android):
   `Как оформить подписку` (одна общая кнопка под блоком тарифов; интерфейс одинаковый для обеих платформ).
@@ -346,7 +245,6 @@ const usage = await getUsageForCurrentWeek(userId);
 **Функционал:**
 
 - выбор тарифа;
-- настройка Custom;
 - переключение «месяц/год»;
 - старт процесса оплаты;
 - отображение результата (успех/ошибка);
@@ -354,7 +252,7 @@ const usage = await getUsageForCurrentWeek(userId);
 
 **Флоу оплаты (web):**
 
-1. Пользователь выбирает тариф и (при Custom) параметры.
+1. Пользователь выбирает тариф.
 2. Нажимает `Оформить подписку`.
 3. Frontend вызывает backend (`POST /api/subscriptions/start-checkout`) и получает `payment_url` YooKassa.
 4. Пользователь переходит на страницу YooKassa, вводит данные.
@@ -401,14 +299,6 @@ const usage = await getUsageForCurrentWeek(userId);
   — открывает системный браузер по URL `https://mentala.app/subscription` (или корень + авто-редирект после авторизации).
 
 Если надо минимизировать риски с Apple/Google, кнопку можно сделать опциональной (через фичу-флаг), оставив только текст-инструкцию.
-
-**Custom-план на мобильных (iOS и Android, интерфейс одинаковый):**
-
-- в v1 **не даём настраивать Custom с мобильных приложений**;
-- в карточке Custom пишем:
-
-> Настраиваемый тариф
-> Доступен в веб-версии Mentala (mentala.app).
 
 ---
 
@@ -483,18 +373,6 @@ Premium
 • Приоритетная поддержка
 ```
 
-**Custom:**
-
-```text
-Custom
-от 375 ₽ в месяц
-
-• Выберите количество минут в неделю (10–200)
-• Платите только за то, чем реально пользуетесь
-```
-
-**Примечание:** Минимальная цена Custom — от 375 ₽ (10 минут). Это осознанно выше PRO (349 ₽) по логике "настраиваемый тариф > базовый тариф".
-
 ### 6.4. Пробный период (Trial)
 
 **Важно:** Trial — это не отдельный тариф, а временное состояние тарифа Basic.
@@ -531,20 +409,18 @@ Custom
 ### 7.1. Модель `SubscriptionPlan`
 
 ```ts
-type PlanName = 'basic' | 'pro' | 'premium' | 'custom';
+type PlanName = 'basic' | 'pro' | 'premium';
 
 interface SubscriptionPlan {
-  id: string; // 'basic', 'pro', 'premium', 'custom'
+  id: string; // 'basic', 'pro', 'premium'
   name: PlanName;
   basePrice: number; // базовая месячная цена (рубли) для фикс-планов (для Basic = 0)
-  weeklyMinutesLimit: number; // лимит минут в неделю (для Basic = 0, для PRO/Premium = 100, для Custom - настраиваемое)
-  pricePerMinuteGPT: number; // для расчета Custom
-  isCustomConfigurable: boolean; // true только для Custom
+  weeklyMinutesLimit: number; // лимит минут в неделю (для Basic = 0, для PRO/Premium = 100)
   isVisibleInUI: boolean; // можно скрывать тестовые планы
 }
 ```
 
-Хранится в конфиге (таблица/файл). Для Custom `basePrice = base_price_pro`, `weeklyMinutesLimit` задается пользователем. Цена рассчитывается динамически на основе `basePrice` и периода оплаты (`billingPeriod`).
+Хранится в конфиге (таблица/файл). Цена рассчитывается на основе `basePrice` и периода оплаты (`billingPeriod`).
 
 **Важно:** Trial — это не отдельный план, а временное состояние Basic. План `'trial'` не существует в таблице `subscription_plans`.
 
@@ -558,10 +434,6 @@ interface UserSubscription {
   userId: string;
   planId: string;
   billingPeriod: 'month' | 'year'; // период оплаты
-  customConfig?: {
-    weeklyMinutes: number; // настраиваемое количество минут в неделю (10-200)
-    // totalPrice рассчитывается динамически на основе weeklyMinutes
-  };
   startDate: Date;
   endDate: Date;
   paymentStatus: PaymentStatus;
@@ -607,28 +479,6 @@ function isTrialActive(user: User): boolean {
 - **Назначение:** получить список доступных тарифов.
 - **Ответ:** массив `SubscriptionPlan` (только видимые в UI).
 
-#### POST `/api/subscriptions/custom/calc`
-
-- **Тело:**
-
-```json
-{
-  "weeklyMinutes": 150,
-  "billingPeriod": "month"
-}
-```
-
-- **Ответ:**
-
-```json
-{
-  "totalPrice": 1201,
-  "totalMinutesPerMonth": 600,
-  "weeklyMinutes": 150,
-  "billingPeriod": "month"
-}
-```
-
 #### GET `/api/subscriptions/current`
 
 - **Назначение:** получить текущую подписку пользователя с информацией о Trial и доступных функциях.
@@ -669,7 +519,7 @@ function isTrialActive(user: User): boolean {
 **Логика:**
 
 - `trialActive` вычисляется по `user.trialEndedAt > now()`.
-- `features.ai` = `true` если `trialActive || planId in ['pro', 'premium', 'custom']`.
+- `features.ai` = `true` если `trialActive || planId in ['pro', 'premium']`.
 - `features.weeklyMinutesLimit` = `100` если `trialActive`, иначе из плана.
 
 #### POST `/api/subscriptions/start-checkout` (web)
@@ -679,16 +529,13 @@ function isTrialActive(user: User): boolean {
 ```json
 {
   "planId": "premium",
-  "billingPeriod": "month",
-  "customConfig": {
-    "weeklyMinutes": 150
-  } // опционально, только для Custom
+  "billingPeriod": "month"
 }
 ```
 
 - **Логика:**
 
-  - Валидирует параметры плана и (если Custom) конфигурацию.
+  - Валидирует параметры плана.
   - Если это смена плана — вычисляет доплату/возврат по алгоритму из раздела 8.3.
   - Создаёт запись `UserSubscription` со статусом `pending`.
   - Создаёт платёж в YooKassa через их API:
@@ -811,7 +658,7 @@ _В мобильных приложениях (iOS и Android) этот эндп
   - если был Trial (`planId === 'basic' && trialActive === true`):
     - `trialEndedAt = now()` (Trial становится "израсходованным").
     - Старая подписка Basic переводится в `expired` или `canceled`.
-    - Создаётся новая подписка с выбранным `planId` (pro/premium/custom).
+    - Создаётся новая подписка с выбранным `planId` (pro/premium).
   - устанавливается новый `planId`, `startDate`, `endDate`, `paymentStatus='active'`, `autoRenew=true`.
 
 - Если пользователь меняет план (upgrade/downgrade):
@@ -867,14 +714,6 @@ _В мобильных приложениях (iOS и Android) этот эндп
 
     - Лимит был 100 → останется 100, ничего не меняется.
 
-  - **PRO → Custom (200 минут)**:
-
-    - Лимит был 100, used = 40 → сразу становится `limit = 200`, `used = 40`, осталось 160.
-
-  - **Custom (200) → PRO (100)**:
-    - Если `usedMinutesThisWeek <= 100` — ок, станет: лимит 100, used остаётся как есть.
-    - Если `usedMinutesThisWeek > 100` — **запрещаем даунгрейд** до конца недели (или до тех пор, пока used не станет <= нового лимита после сброса в понедельник).
-
   **Логика блокировки даунгрейда:**
 
   ```ts
@@ -887,8 +726,8 @@ _В мобильных приложениях (iOS и Android) этот эндп
 
   **Флоу блокировки:**
 
-  1. Пользователь на `/subscription` выбирает тариф с меньшим лимитом (например, с Custom 200 → PRO 100).
-  2. Жмёт "Перейти на PRO".
+  1. Пользователь на `/subscription` выбирает тариф с меньшим лимитом (например, с Premium 100 → Basic 0).
+  2. Жмёт "Перейти на Basic".
   3. Frontend вызывает backend: `POST /api/subscriptions/start-checkout`.
   4. Backend проверяет условие и выбрасывает ошибку `DowngradeBlockedError`.
   5. Frontend ловит ошибку и показывает модалку:
@@ -897,7 +736,7 @@ _В мобильных приложениях (iOS и Android) этот эндп
   Сейчас нельзя перейти на этот тариф
 
   Вы уже использовали 140 минут на этой неделе.
-  Лимит тарифа PRO — 100 минут.
+  Лимит тарифа Basic — 0 минут.
 
   Попробуйте после понедельника, когда лимит обновится.
   ```
@@ -932,7 +771,6 @@ _В мобильных приложениях (iOS и Android) этот эндп
 - **Basic с Trial** (`trialActive = true`): `weeklyMinutesLimit = 100` минут в неделю (как у Premium)
 - **PRO**: `weeklyMinutesLimit = 100` минут в неделю
 - **Premium**: `weeklyMinutesLimit = 100` минут в неделю
-- **Custom**: `weeklyMinutesLimit` настраивается пользователем (10–200 минут, шаг 10)
 
 #### 8.4.3. Пропорциональный расчет при регистрации
 
@@ -1197,7 +1035,7 @@ await addUsedMinutesToWeek(userId, sessionMinutes);
 
 - `subscription_trial_started`
 - `subscription_trial_ended`
-- `subscription_checkout_started` (planId, billingPeriod, isCustom, totalPrice)
+- `subscription_checkout_started` (planId, billingPeriod, totalPrice)
 - `subscription_purchase_success`
 - `subscription_purchase_failed`
 - `subscription_canceled`
@@ -1224,8 +1062,7 @@ await addUsedMinutesToWeek(userId, sessionMinutes);
    - web: полный функционал выбора/оплаты/смены;
    - мобильные приложения (iOS и Android): статус + тарифы + понятная инструкция и кнопка открытия сайта (интерфейс одинаковый для обеих платформ).
 
-5. Custom-тариф на вебе считает цену в реальном времени по формуле.
-6. Оплата через YooKassa:
+5. Оплата через YooKassa:
 
    - создаётся платёж;
    - при успехе подписка становится активной;
@@ -1234,7 +1071,7 @@ await addUsedMinutesToWeek(userId, sessionMinutes);
 7. Годовые планы отображаются, цена со скидкой считается корректно.
 8. Backend хранит `SubscriptionPlan` и `UserSubscription` по описанным моделям.
 9. Все тексты в интерфейсе приведены к дружелюбному тону, нет заглушек.
-10. Основные сценарии (Basic с Trial → PRO / Premium / Custom → отмена → Basic) проходят без ошибок.
+9. Основные сценарии (Basic с Trial → PRO / Premium → отмена → Basic) проходят без ошибок.
 
 11. Ошибки, крайние случаи и защитные сценарии
 
@@ -1303,7 +1140,6 @@ await addUsedMinutesToWeek(userId, sessionMinutes);
 | Basic                | ✅                                    |
 | Premium              | ✅                                    |
 | PRO                  | ✅                                    |
-| Custom               | ✅                                    |
 | Trial                | ❌ в UI (используем «Пробный период») |
 
 В UI:
@@ -1330,14 +1166,7 @@ await addUsedMinutesToWeek(userId, sessionMinutes);
   - создаётся Basic без Trial;
   - сразу показывается экран выбора тарифа.
 
-### 13.2. Ограничения Custom
-
-- Минимум: `weeklyMinutes ≥ 10`
-- Максимум: `weeklyMinutes ≤ 200`
-- Шаг изменения: 10 минут
-- Backend валидирует входящие параметры `weeklyMinutes`, даже если фронт сломается.
-
-### 13.3. Защита от рассинхронизации
+### 13.2. Защита от рассинхронизации
 
 - **Единственный источник правды — backend**.
 - Frontend:
@@ -1366,7 +1195,7 @@ export async function hasAIAccess(
   const trialActive = isTrialActive(user);
   if (trialActive) return true;
   if (!subscription) return false;
-  return ['pro', 'premium', 'custom'].includes(subscription.planId);
+  return ['pro', 'premium'].includes(subscription.planId);
 }
 
 // Получение лимита минут (async функция)
@@ -1389,11 +1218,6 @@ export async function getWeeklyMinutesLimit(
     return 0;
   }
 
-  // Custom = настраиваемое количество минут
-  if (subscription.planId === 'custom') {
-    return subscription.customConfig?.weeklyMinutes || 100;
-  }
-
   // PRO, Premium = из плана
   return plan?.weeklyMinutesLimit || 100;
 }
@@ -1406,13 +1230,12 @@ Frontend:
 
 ### 14.2. Поведение по тарифам
 
-| Функция                | Basic (без Trial)   | Basic (с Trial) | PRO | Premium | Custom             |
-| ---------------------- | ------------------- | --------------- | --- | ------- | ------------------ |
-| AI-чат                 | ❌                  | ✅              | ✅  | ✅      | ✅                 |
-| Уведомления            | ✅ (только шаблоны) | ✅              | ✅  | ✅      | ✅                 |
-| Трекер привычек        | ✅ (базовый)        | ✅              | ✅  | ✅      | ✅                 |
-| Минут в неделю         | 0                   | 100             | 100 | 100     | 10–200 (по выбору) |
-| Гибкая настройка минут | ❌                  | ❌              | ❌  | ❌      | ✅                 |
+| Функция        | Basic (без Trial)   | Basic (с Trial) | PRO | Premium |
+| -------------- | ------------------- | --------------- | --- | ------- |
+| AI-чат         | ❌                  | ✅              | ✅  | ✅      |
+| Уведомления    | ✅ (только шаблоны) | ✅              | ✅  | ✅      |
+| Трекер привычек | ✅ (базовый)        | ✅              | ✅  | ✅      |
+| Минут в неделю | 0                   | 100             | 100 | 100     |
 
 **Важно:**
 

@@ -92,6 +92,13 @@
       "when": 1767694418634,
       "tag": "0016_slimy_vargas",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1768054683567,
+      "tag": "0017_regular_logan",
+      "breakpoints": true
     }
   ]
 }

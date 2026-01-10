@@ -69,7 +69,6 @@ export default defineEventHandler(async (event) => {
     const sub = activeSubscription[0];
     const subscriptionForFeatures = {
       planId: sub.subscription.planId,
-      customConfig: sub.subscription.customConfig || undefined,
     };
     weeklyLimit = await getWeeklyMinutesLimit(
       userRecord,

@@ -26,9 +26,6 @@ export default defineEventHandler(async (event) => {
       basePrice: Number(plan.basePrice),
       weeklyMinutesLimit: plan.weeklyMinutesLimit,
       avatarEnabled: false,
-      pricePerMinuteGPT: Number(plan.pricePerMinuteGPT),
-      pricePerMinuteAvatar: Number(plan.pricePerMinuteAvatar),
-      isCustomConfigurable: plan.isCustomConfigurable,
     })),
   };
 });

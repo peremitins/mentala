@@ -98,7 +98,7 @@
         </p>
         <p class="text-xs text-muted-foreground">
           На тарифе Basic без пробного периода доступны только уведомления с
-          шаблонами. Выберите тариф PRO, Premium или Custom, чтобы получить
+          шаблонами. Выберите тариф PRO или Premium, чтобы получить
           доступ к AI-чату.
         </p>
       </div>
@@ -134,9 +134,6 @@ interface Subscription {
   planId: string;
   endDate: string;
   paymentStatus: string;
-  customConfig?: {
-    weeklyMinutes: number;
-  };
   plan: {
     id: string;
     name: string;
@@ -206,7 +203,6 @@ const planName = computed(() => {
   }
   if (name === 'pro') return 'PRO';
   if (name === 'premium') return 'Premium';
-  if (name === 'custom') return 'Custom';
   return name;
 });
 

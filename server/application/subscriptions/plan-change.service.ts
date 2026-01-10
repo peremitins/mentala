@@ -25,8 +25,7 @@ export interface PlanChangeCalculation {
 export async function calculatePlanChange(
   userId: number,
   newPlanId: string,
-  billingPeriod: BillingPeriod,
-  customPrice?: number // Если передан, используется вместо расчета из basePrice
+  billingPeriod: BillingPeriod
 ): Promise<PlanChangeCalculation> {
   // Получаем текущую активную подписку (не истекшую)
   const now = new Date();
@@ -52,28 +51,20 @@ export async function calculatePlanChange(
 
   if (!currentSubscription.length) {
     // Если нет активной подписки - просто возвращаем стоимость нового плана
-    let totalPrice: number;
+    const newPlan = await db
+      .select()
+      .from(subscriptionPlans)
+      .where(eq(subscriptionPlans.id, newPlanId))
+      .limit(1);
 
-    if (customPrice !== undefined) {
-      // Используем переданную custom цену
-      totalPrice = customPrice;
-    } else {
-      const newPlan = await db
-        .select()
-        .from(subscriptionPlans)
-        .where(eq(subscriptionPlans.id, newPlanId))
-        .limit(1);
-
-      if (!newPlan.length) {
-        throw new Error(`Plan ${newPlanId} not found`);
-      }
-
-      totalPrice = calculatePlanPrice({
-        baseMonthlyPrice: Number(newPlan[0].basePrice),
-        billingPeriod,
-        isCustom: false,
-      });
+    if (!newPlan.length) {
+      throw new Error(`Plan ${newPlanId} not found`);
     }
+
+    const totalPrice = calculatePlanPrice({
+      baseMonthlyPrice: Number(newPlan[0].basePrice),
+      billingPeriod,
+    });
 
     return {
       difference: totalPrice,
@@ -113,17 +104,10 @@ export async function calculatePlanChange(
 
   if (remainingDays <= 0) {
     // Подписка уже истекла - просто возвращаем стоимость нового плана
-    let totalPrice: number;
-
-    if (customPrice !== undefined) {
-      totalPrice = customPrice;
-    } else {
-      totalPrice = calculatePlanPrice({
-        baseMonthlyPrice: Number(newPlan[0].basePrice),
-        billingPeriod,
-        isCustom: false,
-      });
-    }
+    const totalPrice = calculatePlanPrice({
+      baseMonthlyPrice: Number(newPlan[0].basePrice),
+      billingPeriod,
+    });
 
     return {
       difference: totalPrice,
@@ -140,21 +124,15 @@ export async function calculatePlanChange(
   const oldPlanTotalPrice = calculatePlanPrice({
     baseMonthlyPrice: Number(oldPlan.basePrice),
     billingPeriod: oldBillingPeriod,
-    isCustom: false,
   });
   const oldPlanDailyPrice = oldPlanTotalPrice / totalDays;
   const usedAmount = oldPlanDailyPrice * usedDays;
 
-  // Вычисляем стоимость оставшихся дней нового плана
-  // Используем custom цену если передан, иначе рассчитываем из basePrice
-  const newPlanTotalPrice =
-    customPrice !== undefined
-      ? customPrice
-      : calculatePlanPrice({
-          baseMonthlyPrice: Number(newPlan[0].basePrice),
-          billingPeriod,
-          isCustom: false,
-        });
+  // Вычисляем стоимость оставшихся дней нового плана на основе basePrice
+  const newPlanTotalPrice = calculatePlanPrice({
+    baseMonthlyPrice: Number(newPlan[0].basePrice),
+    billingPeriod,
+  });
   const daysInNewPeriod = billingPeriod === 'year' ? 365 : 30;
   const newPlanDailyPrice = newPlanTotalPrice / daysInNewPeriod;
   const remainingCost = newPlanDailyPrice * remainingDays;
@@ -179,10 +157,6 @@ export async function applyPlanChange(
   userId: number,
   newPlanId: string,
   billingPeriod: BillingPeriod,
-  customConfig: {
-    weeklyMinutes: number;
-    totalPrice: number;
-  } | null,
   calculation: PlanChangeCalculation,
   sourcePlatform: 'web' | 'ios' | 'android' = 'web',
   checkout?: {
@@ -252,7 +226,6 @@ export async function applyPlanChange(
       userId,
       planId: newPlanId,
       billingPeriod: billingPeriod as BillingPeriod,
-      customConfig: customConfig || null,
       checkoutAmount: String(
         checkout?.checkoutAmount ?? calculation.toPay ?? 0
       ),
