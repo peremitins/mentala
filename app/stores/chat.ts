@@ -4,7 +4,8 @@ import { useLoadersStore } from '@/app/stores/loaders';
 import { nanoid } from 'nanoid';
 import { useRuntimeConfig } from 'nuxt/app';
 import { getCsrfTokenForHeader } from '@/app/utils/csrf';
-import type { ChatEntryContext } from '@/shared/dto';
+import type { ChatEntryContext, SuggestedChip } from '@/shared/dto';
+import { ChatStreamChunkDto } from '@/shared/dto';
 
 export const useChatStore = defineStore('chat', {
   state: () => ({
@@ -13,6 +14,7 @@ export const useChatStore = defineStore('chat', {
     provider: 'openai' as 'openai' | 'deepseek' | 'yandex',
     sessionId: '' as string,
     therapySessionId: null as number | null, // ID therapy сессии для биллинга
+    suggestedChips: [] as SuggestedChip[],
     currentChatAbortController: null as AbortController | null,
     lastActivityAt: null as Date | null, // Время последней активности для idle timeout
     lastPingAt: null as number | null, // Последний ping на сервер (throttle)
@@ -26,6 +28,7 @@ export const useChatStore = defineStore('chat', {
     },
     finishSession() {
       this.sessionId = '';
+      this.suggestedChips = [];
       // Завершаем therapy сессию при завершении чата (асинхронно, не блокируем)
       if (this.therapySessionId && !this.isEndingSession) {
         void this.endTherapySession();
@@ -182,12 +185,16 @@ export const useChatStore = defineStore('chat', {
     clearMessages() {
       this.messages = [];
       this.userText = '';
+      this.suggestedChips = [];
       this.stopChatStream();
       // Завершаем therapy сессию перед очисткой (асинхронно, не блокируем)
       if (this.therapySessionId && !this.isEndingSession) {
         void this.endTherapySession();
       }
       this.finishSession();
+    },
+    clearSuggestedChips() {
+      this.suggestedChips = [];
     },
     /**
      * Подготавливает параметры для API запроса
@@ -272,6 +279,29 @@ export const useChatStore = defineStore('chat', {
 
           try {
             const obj = JSON.parse(jsonText);
+            const parsed = ChatStreamChunkDto.safeParse(obj);
+
+            if (parsed.success) {
+              const data = parsed.data;
+
+              if (data.output_text_delta) {
+                const msg = this.messages[messageIdx];
+                if (msg) msg.content += data.output_text_delta;
+                // Обновляем активность при получении ответа
+                this.updateActivity();
+              }
+
+              if (data.chips) {
+                this.suggestedChips = data.chips;
+              }
+
+              if (data.error) {
+                throw new Error(data.error.message || 'Stream error');
+              }
+
+              continue;
+            }
+
             const delta =
               obj?.output_text_delta ||
               obj?.delta ||
@@ -310,6 +340,7 @@ export const useChatStore = defineStore('chat', {
       loaders.showLoader();
 
       this.userText = '';
+      this.clearSuggestedChips();
 
       // Начинаем therapy сессию для подсчета времени
       await this.startTherapySession();
@@ -404,6 +435,7 @@ export const useChatStore = defineStore('chat', {
     async sendMessage(text: string) {
       if (!this.sessionId) this.startSession();
       this.userText = '';
+      this.clearSuggestedChips();
       this.messages.push({ role: 'user', content: text });
 
       // Начинаем therapy сессию при отправке первого сообщения
@@ -447,6 +479,7 @@ export const useChatStore = defineStore('chat', {
             mode: apiParams.mode, // ВАЖНО: передаем mode для правильной работы памяти
             userPrompt: apiParams.userPrompt,
             lang: apiParams.lang,
+            entryContext: apiParams.entryContext,
           },
           responseType: 'stream',
           signal: abortController.signal, // Передаем signal для отмены запроса
@@ -490,6 +523,13 @@ export const useChatStore = defineStore('chat', {
         this.messages.push({ role: 'assistant', content: 'Ошибка ответа' });
         throw e;
       }
+    },
+    async sendSuggestedChip(text: string) {
+      const trimmed = text?.trim();
+      if (!trimmed) return { ok: false } as any;
+
+      // Чип — это готовое сообщение, поэтому отправляем сразу.
+      return await this.sendMessage(trimmed);
     },
     async finishAndSave(model?: string) {
       const { $api } = useNuxtApp();

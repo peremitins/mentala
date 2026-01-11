@@ -263,6 +263,76 @@ export const openaiProvider: LlmProviderPort = {
         process.env.OPENAI_ENABLE_ENCRYPTED_REASONING) ??
         'false') === 'true';
 
+    if (options?.scenario === 'chips') {
+      // Для чипов используем сырой prompt без чат-прелюда и памяти.
+      const input = mapToResponsesInput(messages || []);
+      const chipSchema = {
+        type: 'object',
+        additionalProperties: false,
+        required: ['chips'],
+        properties: {
+          chips: {
+            type: 'array',
+            maxItems: 5,
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['text', 'intent'],
+              properties: {
+                text: { type: 'string', minLength: 1, maxLength: 80 },
+                intent: {
+                  type: 'string',
+                  enum: [
+                    'clarify',
+                    'example',
+                    'apply_to_self',
+                    'action_step',
+                    'reflect',
+                    'reframe',
+                    'summarize',
+                    'support',
+                  ],
+                },
+              },
+            },
+          },
+        },
+      };
+      const body: any = {
+        model: usedModel,
+        input,
+        max_output_tokens: maxTokens,
+        temperature: options?.temperature ?? 0.7,
+        store: false,
+        metadata: { app: 'mentai', feature: 'suggested_chips' },
+        // Жестко требуем JSON по схеме, чтобы парсинг был стабильным.
+        text: {
+          format: {
+            type: 'json_schema',
+            name: 'suggested_chips',
+            strict: true,
+            schema: chipSchema,
+          },
+        },
+      };
+
+      const res: any = await $fetch(OPENAI_URL, {
+        method: 'POST',
+        timeout: 30_000,
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          ...(org ? { 'OpenAI-Organization': org } : {}),
+          ...(project ? { 'OpenAI-Project': project } : {}),
+          'Idempotency-Key': idempotencyKey,
+        },
+        body,
+      });
+
+      const content = extractText(res);
+      return { role: 'assistant', content, model: usedModel };
+    }
+
     // eslint-disable-next-line no-constant-condition
     while (true) {
       try {

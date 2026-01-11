@@ -1,8 +1,7 @@
 import { defineEventHandler, readBody, setResponseStatus } from 'h3';
-import { estimateCostUSD } from '../../application/llm.service';
+import { chatViaProvider, estimateCostUSD } from '../../application/llm.service';
 import { config } from '../../config';
 import { ChatRequestDto, ChatResponseDto } from '@/shared/dto';
-import { chatViaProvider } from '../../application/llm.service';
 import { getSessionUserWithRole } from '@/server/utils/require-role';
 import { db } from '@/server/infrastructure/db/client';
 import { therapySessions } from '@/server/infrastructure/db/schema';
@@ -10,6 +9,7 @@ import { eq, and, isNull } from 'drizzle-orm';
 import { getAiUsageGate } from '@/server/application/subscriptions/ai-usage.service';
 import { CHAT_IDLE_TIMEOUT_MS } from '@/server/config/subscription';
 import { endTherapySession } from '@/server/application/subscriptions/session-time.service';
+import { generateSuggestedChips } from '@/server/application/suggested-chips.service';
 
 export default defineEventHandler(async (event) => {
   try {
@@ -145,10 +145,28 @@ export default defineEventHandler(async (event) => {
         estimated,
       };
     }
+    const chips = await (async () => {
+      try {
+        return await generateSuggestedChips({
+          messages: parsed.messages,
+          assistantAnswer: result.content,
+          sessionId: parsed.sessionId,
+          userId: uid,
+          therapySessionId,
+          entryContext: parsed.entryContext,
+        });
+      } catch (chipsError) {
+        // Не ломаем основной ответ, если чипы не сгенерировались.
+        console.error('[Chat API] Failed to generate chips:', chipsError);
+        return [] as Array<{ text: string; intent: string }>;
+      }
+    })();
+
     const response = ChatResponseDto.parse({
       message: { role: 'assistant', content: result.content },
       provider: 'openai',
       model: result.model,
+      chips,
     });
     return response;
   } catch (e: any) {

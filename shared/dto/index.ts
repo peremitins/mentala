@@ -58,10 +58,42 @@ export const ChatRequestDto = z.object({
   entryContext: ChatEntryContextDto.optional(),
 });
 
+export const SuggestedChipIntentEnum = z.enum([
+  'clarify',
+  'example',
+  'apply_to_self',
+  'action_step',
+  'reflect',
+  'reframe',
+  'summarize',
+  'support',
+]);
+
+export const SuggestedChipDto = z.object({
+  text: z.string().min(1).max(80),
+  intent: SuggestedChipIntentEnum,
+});
+
+export const SuggestedChipsPayloadDto = z.object({
+  chips: z.array(SuggestedChipDto).max(5),
+});
+
+export const ChatStreamChunkDto = z.object({
+  output_text_delta: z.string().optional(),
+  chips: z.array(SuggestedChipDto).max(5).optional(),
+  error: z
+    .object({
+      code: z.string(),
+      message: z.string(),
+    })
+    .optional(),
+});
+
 export const ChatResponseDto = z.object({
   message: z.object({ role: z.enum(['assistant']), content: z.string() }),
   provider: z.enum(['openai', 'deepseek', 'yandex']),
   model: z.string().optional(),
+  chips: z.array(SuggestedChipDto).max(5).optional(),
 });
 
 export type UserDto = z.infer<typeof UserDto>;
@@ -69,6 +101,10 @@ export type ChatMessageDto = z.infer<typeof ChatMessageDto>;
 export type ChatRequestDto = z.infer<typeof ChatRequestDto>;
 export type ChatResponseDto = z.infer<typeof ChatResponseDto>;
 export type ChatEntryContext = z.infer<typeof ChatEntryContextDto>;
+export type SuggestedChipIntent = z.infer<typeof SuggestedChipIntentEnum>;
+export type SuggestedChip = z.infer<typeof SuggestedChipDto>;
+export type SuggestedChipsPayload = z.infer<typeof SuggestedChipsPayloadDto>;
+export type ChatStreamChunk = z.infer<typeof ChatStreamChunkDto>;
 
 // === Prompts DTO ===
 export const PromptTypeEnum = z.enum(['habits', 'therapy']);

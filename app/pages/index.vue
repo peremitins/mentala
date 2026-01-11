@@ -84,6 +84,13 @@
               :class="{ 'ml-auto': (m as any).role === 'user' }"
               v-html="m.content"
             />
+            <SuggestedChips
+              v-if="chat.suggestedChips.length"
+              class="max-w-[85%] animate-slide-up self-start"
+              :chips="chat.suggestedChips"
+              :disabled="isSending"
+              @select="handleChipSelect"
+            />
           </section>
         </div>
 
@@ -156,6 +163,8 @@ import {
 import PageHeader from '@/app/components/PageHeader.vue';
 import WelcomeScreen from '@/app/components/WelcomeScreen.vue';
 import AvatarVoiceControls from '@/app/components/AvatarVoiceControls.vue';
+import SuggestedChips from '@/app/components/chat/SuggestedChips.vue';
+import type { SuggestedChip } from '@/shared/dto';
 
 const emit = defineEmits<{ (e: 'send', text: string): void }>();
 
@@ -260,6 +269,10 @@ onFinal((t) => {
 watch(
   () => chat.userText,
   (newText) => {
+    if (newText?.trim() && chat.suggestedChips.length) {
+      chat.clearSuggestedChips();
+    }
+
     // Пропускаем изменения из-за голосового ввода
     if (isProcessingVoiceInput.value) return;
 
@@ -390,8 +403,9 @@ async function speakLastMessage(content: string) {
 
 const textareaRef = ref<InstanceType<typeof TextareaResize> | null>(null);
 
-const onSend = async () => {
-  if (!chat.userText?.trim()) return;
+const sendText = async (rawText: string) => {
+  const textToSend = rawText?.trim();
+  if (!textToSend) return;
 
   // Устанавливаем флаг отправки - блокируем обновление textarea из голосового ввода
   isSending.value = true;
@@ -400,9 +414,6 @@ const onSend = async () => {
   if (speechStore.isListening) {
     await stop();
   }
-
-  // Сохраняем текст перед очисткой
-  const textToSend = chat.userText.trim();
 
   // Очищаем состояние голосового ввода
   speechBase.value = '';
@@ -417,7 +428,7 @@ const onSend = async () => {
   try {
     res = await chat.sendMessage(JSON.parse(JSON.stringify(textToSend)));
   } catch (error) {
-    console.error('[onSend] Failed to send message:', error);
+    console.error('[sendText] Failed to send message:', error);
     isSending.value = false; // Сбрасываем флаг при ошибке
     return;
   }
@@ -442,6 +453,17 @@ const onSend = async () => {
   setTimeout(() => {
     isSending.value = false;
   }, 500);
+};
+
+const onSend = async () => {
+  if (!chat.userText?.trim()) return;
+  await sendText(chat.userText);
+};
+
+const handleChipSelect = async (chip: SuggestedChip) => {
+  // Чипы отправляются сразу, не заполняя textarea.
+  if (isSending.value) return;
+  await sendText(chip.text);
 };
 
 const combinedMessages = computed(() => chat?.messages || []);
@@ -603,6 +625,15 @@ onBeforeUnmount(() => {
 watch(
   () => combinedMessages.value.length,
   async () => {
+    await nextTick();
+    if (stickToBottom.value) scrollToBottom('smooth');
+  }
+);
+
+watch(
+  () => chat.suggestedChips.length,
+  async (chipsCount) => {
+    if (!chipsCount) return;
     await nextTick();
     if (stickToBottom.value) scrollToBottom('smooth');
   }

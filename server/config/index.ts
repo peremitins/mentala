@@ -9,7 +9,8 @@ export const config = {
       // Модели для разных сценариев
       models: {
         chat: 'gpt-4o', // Чат - более мощная модель
-        notifications: 'gpt-4o-mini', // Уведомления - экономичная модель
+        notifications: 'gpt-4o', // Уведомления - экономичная модель
+        chips: 'gpt-4o-mini', // Чипы - экономичная модель
       },
 
       // Настройки для разных сценариев
@@ -34,6 +35,11 @@ export const config = {
             return defaultCount * 250 + 5000; // Для 50 текстов = 17500 токенов
           })(),
           enableReasoning: false, // Не нужно для простых уведомлений (увеличивает стоимость и время)
+        },
+        chips: {
+          temperature: 0.7, // Нужна вариативность формулировок
+          maxOutputTokens: 400,
+          enableReasoning: false,
         },
       },
 
