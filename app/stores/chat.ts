@@ -4,7 +4,13 @@ import { useLoadersStore } from '@/app/stores/loaders';
 import { nanoid } from 'nanoid';
 import { useRuntimeConfig } from 'nuxt/app';
 import { getCsrfTokenForHeader } from '@/app/utils/csrf';
-import type { ChatEntryContext } from '@/shared/dto';
+import {
+  ChatResponseDto,
+  ChatStreamChunkDto,
+  type ChatEntryContext,
+  type SuggestedChip,
+} from '@/shared/dto';
+import { CHAT_STREAM_MODE } from '@/app/constants/chat';
 
 export const useChatStore = defineStore('chat', {
   state: () => ({
@@ -13,12 +19,14 @@ export const useChatStore = defineStore('chat', {
     provider: 'openai' as 'openai' | 'deepseek' | 'yandex',
     sessionId: '' as string,
     therapySessionId: null as number | null, // ID therapy сессии для биллинга
+    suggestedChips: [] as SuggestedChip[],
     currentChatAbortController: null as AbortController | null,
     lastActivityAt: null as Date | null, // Время последней активности для idle timeout
     lastPingAt: null as number | null, // Последний ping на сервер (throttle)
     idleTimeoutTimer: null as ReturnType<typeof setTimeout> | null, // Таймер для idle timeout чата
     isEndingSession: false as boolean, // Флаг для предотвращения множественных вызовов endTherapySession
     entryContext: null as ChatEntryContext | null,
+    isGenerating: false as boolean, // Флаг для отображения индикатора загрузки при генерации ответа
   }),
   actions: {
     startSession(sessionId?: string) {
@@ -26,6 +34,7 @@ export const useChatStore = defineStore('chat', {
     },
     finishSession() {
       this.sessionId = '';
+      this.suggestedChips = [];
       // Завершаем therapy сессию при завершении чата (асинхронно, не блокируем)
       if (this.therapySessionId && !this.isEndingSession) {
         void this.endTherapySession();
@@ -182,12 +191,16 @@ export const useChatStore = defineStore('chat', {
     clearMessages() {
       this.messages = [];
       this.userText = '';
+      this.suggestedChips = [];
       this.stopChatStream();
       // Завершаем therapy сессию перед очисткой (асинхронно, не блокируем)
       if (this.therapySessionId && !this.isEndingSession) {
         void this.endTherapySession();
       }
       this.finishSession();
+    },
+    clearSuggestedChips() {
+      this.suggestedChips = [];
     },
     /**
      * Подготавливает параметры для API запроса
@@ -240,60 +253,137 @@ export const useChatStore = defineStore('chat', {
       const reader = (resp as any)?.getReader?.();
       const decoder = new TextDecoder();
 
-      if (!reader) return;
+      if (!reader) {
+        throw new Error('Stream reader not available');
+      }
 
-      while (!this.currentChatAbortController?.signal.aborted) {
-        // Проверяем, не был ли запрос отменен
-        if (this.currentChatAbortController?.signal.aborted) {
-          try {
-            reader.cancel();
-          } catch (cancelErr) {
-            console.warn(
-              '[Chat Store] Failed to cancel stream reader:',
-              cancelErr
-            );
+      // Флаг для отслеживания первого чанка
+      let isFirstChunk = true;
+      let hasReceivedData = false; // Флаг для отслеживания получения хоть каких-то данных
+
+      try {
+        while (!this.currentChatAbortController?.signal.aborted) {
+          // Проверяем, не был ли запрос отменен
+          if (this.currentChatAbortController?.signal.aborted) {
+            try {
+              reader.cancel();
+            } catch (cancelErr) {
+              console.warn(
+                '[Chat Store] Failed to cancel stream reader:',
+                cancelErr
+              );
+            }
+            break;
           }
-          break;
+
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+          // SSE формата: "data: {json}\n\n"
+          const lines = chunk.split(/\n\n/);
+
+          for (const block of lines) {
+            const line = block.trim();
+            if (!line.startsWith('data:')) continue;
+
+            const jsonText = line.replace(/^data:\s*/, '');
+            if (jsonText === '[DONE]') continue;
+
+            try {
+              const obj = JSON.parse(jsonText);
+              const parsed = ChatStreamChunkDto.safeParse(obj);
+
+              if (parsed.success) {
+                const data = parsed.data;
+
+                if (data.output_text_delta) {
+                  hasReceivedData = true;
+                  const msg = this.messages[messageIdx];
+                  if (msg) msg.content += data.output_text_delta;
+                  // Сбрасываем флаг генерации при получении первого чанка
+                  if (isFirstChunk) {
+                    this.isGenerating = false;
+                    isFirstChunk = false;
+                  }
+                  // Обновляем активность при получении ответа
+                  this.updateActivity();
+                }
+
+                if (data.chips) {
+                  this.suggestedChips = data.chips;
+                }
+
+                if (data.error) {
+                  throw new Error(data.error.message || 'Stream error');
+                }
+
+                continue;
+              }
+
+              const delta =
+                obj?.output_text_delta ||
+                obj?.delta ||
+                obj?.response?.output_text ||
+                '';
+
+              if (delta) {
+                hasReceivedData = true;
+                const msg = this.messages[messageIdx];
+                if (msg) msg.content += delta;
+                // Сбрасываем флаг генерации при получении первого чанка
+                if (isFirstChunk) {
+                  this.isGenerating = false;
+                  isFirstChunk = false;
+                }
+                // Обновляем активность при получении ответа
+                this.updateActivity();
+              }
+
+              // Обработка ошибок
+              if (obj?.error) {
+                throw new Error(obj.error.message || 'Stream error');
+              }
+            } catch (parseErr) {
+              console.warn(
+                '[Chat Store] Failed to parse stream chunk:',
+                parseErr
+              );
+              continue;
+            }
+          }
         }
-
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value, { stream: true });
-        // SSE формата: "data: {json}\n\n"
-        const lines = chunk.split(/\n\n/);
-
-        for (const block of lines) {
-          const line = block.trim();
-          if (!line.startsWith('data:')) continue;
-
-          const jsonText = line.replace(/^data:\s*/, '');
-          if (jsonText === '[DONE]') continue;
-
-          try {
-            const obj = JSON.parse(jsonText);
-            const delta =
-              obj?.output_text_delta ||
-              obj?.delta ||
-              obj?.response?.output_text ||
-              '';
-
-            if (delta) {
-              const msg = this.messages[messageIdx];
-              if (msg) msg.content += delta;
-              // Обновляем активность при получении ответа
-              this.updateActivity();
-            }
-
-            // Обработка ошибок
-            if (obj?.error) {
-              throw new Error(obj.error.message || 'Stream error');
-            }
-          } catch {
-            continue;
-          }
+      } catch (error) {
+        console.error('[Chat Store] Stream processing error:', error);
+        // Сбрасываем флаг генерации при ошибке
+        this.isGenerating = false;
+        throw error; // Пробрасываем ошибку дальше для обработки в вызывающем коде
+      } finally {
+        // Если не получили никаких данных, сбрасываем флаг генерации
+        if (!hasReceivedData) {
+          this.isGenerating = false;
         }
       }
+    },
+    /**
+     * Обрабатывает обычный (не-стрим) ответ от API
+     */
+    async _processNonStreamResponse(resp: any, messageIdx: number) {
+      const parsed = ChatResponseDto.safeParse(resp);
+      if (!parsed.success) {
+        throw new Error('Invalid chat response');
+      }
+
+      const msg = this.messages[messageIdx];
+      if (msg) {
+        msg.content = parsed.data.message.content;
+      }
+
+      // Сбрасываем флаг генерации после получения полного ответа
+      this.isGenerating = false;
+
+      this.suggestedChips = parsed.data.chips || [];
+      this.updateActivity();
     },
     /**
      * Начинает диалог от ассистента (без user-сообщения)
@@ -310,6 +400,7 @@ export const useChatStore = defineStore('chat', {
       loaders.showLoader();
 
       this.userText = '';
+      this.clearSuggestedChips();
 
       // Начинаем therapy сессию для подсчета времени
       await this.startTherapySession();
@@ -322,12 +413,15 @@ export const useChatStore = defineStore('chat', {
         return { ok: false } as any;
       }
 
+      // Устанавливаем флаг генерации
+      this.isGenerating = true;
+
       // НЕ добавляем user-сообщение!
-      // Создаем пустое assistant-сообщение для стриминга ответа
-      const idx = this.messages.push({ role: 'assistant', content: '' }) - 1;
+      // НЕ создаем пустое assistant-сообщение заранее - оно будет создано при получении первого чанка
+      let idx = -1;
 
       try {
-        // Отменяем предыдущий stream запрос, если он активен
+        // Отменяем предыдущий запрос, если он активен
         this.stopChatStream();
 
         // Создаем новый AbortController для этого запроса
@@ -337,24 +431,49 @@ export const useChatStore = defineStore('chat', {
         const nuxt = useNuxtApp();
         const apiParams = this._prepareApiParams(options);
 
-        // Вызываем API с ПУСТЫМ массивом messages - это триггер для старта от ассистента
-        const resp = await nuxt.$api('/api/chat/stream', {
-          method: 'POST',
-          body: {
-            provider: 'openai',
-            messages: [], // ПУСТОЙ массив - старт от ассистента
-            sessionId: this.sessionId,
-            therapySessionId: this.therapySessionId,
-            mode: apiParams.mode, // Передаем mode (включая 'talk')
-            userPrompt: apiParams.userPrompt,
-            lang: apiParams.lang,
-            entryContext: apiParams.entryContext,
-          },
-          responseType: 'stream',
-          signal: abortController.signal, // Передаем signal для отмены запроса
-        } as any);
+        if (CHAT_STREAM_MODE) {
+          // Вызываем API с ПУСТЫМ массивом messages - это триггер для старта от ассистента
+          const resp = await nuxt.$api('/api/chat/stream', {
+            method: 'POST',
+            body: {
+              provider: 'openai',
+              messages: [], // ПУСТОЙ массив - старт от ассистента
+              sessionId: this.sessionId,
+              therapySessionId: this.therapySessionId,
+              mode: apiParams.mode, // Передаем mode (включая 'talk')
+              userPrompt: apiParams.userPrompt,
+              lang: apiParams.lang,
+              entryContext: apiParams.entryContext,
+            },
+            responseType: 'stream',
+            signal: abortController.signal, // Передаем signal для отмены запроса
+          } as any);
 
-        await this._processStreamResponse(resp, idx);
+          // Создаем пустое assistant-сообщение только после успешного старта запроса
+          idx = this.messages.push({ role: 'assistant', content: '' }) - 1;
+
+          await this._processStreamResponse(resp, idx);
+        } else {
+          const resp = await nuxt.$api('/api/chat', {
+            method: 'POST',
+            body: {
+              provider: 'openai',
+              messages: [], // ПУСТОЙ массив - старт от ассистента
+              sessionId: this.sessionId,
+              therapySessionId: this.therapySessionId,
+              mode: apiParams.mode,
+              userPrompt: apiParams.userPrompt,
+              lang: apiParams.lang,
+              entryContext: apiParams.entryContext,
+            },
+            signal: abortController.signal,
+          } as any);
+
+          // Создаем пустое assistant-сообщение только после успешного старта запроса
+          idx = this.messages.push({ role: 'assistant', content: '' }) - 1;
+
+          await this._processNonStreamResponse(resp, idx);
+        }
 
         // Очищаем AbortController после успешного завершения
         if (this.currentChatAbortController === abortController) {
@@ -373,6 +492,9 @@ export const useChatStore = defineStore('chat', {
           this.currentChatAbortController = null;
         }
 
+        // Сбрасываем флаг генерации
+        this.isGenerating = false;
+
         // Игнорируем ошибки отмены запроса (AbortError или другие признаки отмены)
         if (
           e?.name === 'AbortError' ||
@@ -381,29 +503,47 @@ export const useChatStore = defineStore('chat', {
           wasAborted
         ) {
           // Удаляем пустое сообщение если оно было создано
-          if (this.messages[idx]?.content === '') {
+          if (idx >= 0 && this.messages[idx]?.content === '') {
             this.messages.splice(idx, 1);
           }
           return { ok: false } as any;
         }
 
-        // В случае ошибки заменяем пустое сообщение на ошибку
-        const errorMsg = this.messages[idx];
-        if (errorMsg) {
-          errorMsg.content = 'Ошибка начала диалога. Попробуйте еще раз.';
+        // В случае ошибки заменяем пустое сообщение на текст ошибки
+        const errorMessage = e?.message?.includes('quota')
+          ? 'Превышен лимит запросов. Пожалуйста, попробуйте позже.'
+          : e?.message?.includes('network') || e?.message?.includes('fetch')
+            ? 'Ошибка сети. Проверьте подключение к интернету.'
+            : 'Не удалось получить ответ. Попробуйте еще раз.';
+
+        if (idx >= 0) {
+          const errorMsg = this.messages[idx];
+          if (errorMsg) {
+            errorMsg.content = errorMessage;
+          } else {
+            this.messages.push({
+              role: 'assistant',
+              content: errorMessage,
+            });
+          }
         } else {
           this.messages.push({
             role: 'assistant',
-            content: 'Ошибка начала диалога. Попробуйте еще раз.',
+            content: errorMessage,
           });
         }
+
+        return { ok: false } as any;
       } finally {
         loaders.hideLoader();
+        // Гарантированно сбрасываем флаг генерации
+        this.isGenerating = false;
       }
     },
     async sendMessage(text: string) {
       if (!this.sessionId) this.startSession();
       this.userText = '';
+      this.clearSuggestedChips();
       this.messages.push({ role: 'user', content: text });
 
       // Начинаем therapy сессию при отправке первого сообщения
@@ -422,11 +562,14 @@ export const useChatStore = defineStore('chat', {
         this.updateActivity();
       }
 
-      // Добавляем пустое ответное сообщение, будем наполнять построчно
-      const idx = this.messages.push({ role: 'assistant', content: '' }) - 1;
+      // Устанавливаем флаг генерации
+      this.isGenerating = true;
+
+      // НЕ добавляем пустое ответное сообщение заранее - оно будет создано при получении первого чанка
+      let idx = -1;
 
       try {
-        // Отменяем предыдущий stream запрос, если он активен
+        // Отменяем предыдущий запрос, если он активен
         this.stopChatStream();
 
         // Создаем новый AbortController для этого запроса
@@ -436,26 +579,55 @@ export const useChatStore = defineStore('chat', {
         const nuxt = useNuxtApp();
         const apiParams = this._prepareApiParams();
 
-        // Вызываем API с полным массивом messages
-        const resp = await nuxt.$api('/api/chat/stream', {
-          method: 'POST',
-          body: {
-            provider: 'openai',
-            messages: this.messages,
-            sessionId: this.sessionId,
-            therapySessionId: this.therapySessionId,
-            mode: apiParams.mode, // ВАЖНО: передаем mode для правильной работы памяти
-            userPrompt: apiParams.userPrompt,
-            lang: apiParams.lang,
-          },
-          responseType: 'stream',
-          signal: abortController.signal, // Передаем signal для отмены запроса
-        } as any);
+        if (CHAT_STREAM_MODE) {
+          // Вызываем API с полным массивом messages
+          const resp = await nuxt.$api('/api/chat/stream', {
+            method: 'POST',
+            body: {
+              provider: 'openai',
+              messages: this.messages,
+              sessionId: this.sessionId,
+              therapySessionId: this.therapySessionId,
+              mode: apiParams.mode, // ВАЖНО: передаем mode для правильной работы памяти
+              userPrompt: apiParams.userPrompt,
+              lang: apiParams.lang,
+              entryContext: apiParams.entryContext,
+            },
+            responseType: 'stream',
+            signal: abortController.signal, // Передаем signal для отмены запроса
+          } as any);
 
-        const loaders = useLoadersStore();
-        loaders.hideLoader();
+          const loaders = useLoadersStore();
+          loaders.hideLoader();
 
-        await this._processStreamResponse(resp, idx);
+          // Создаем пустое assistant-сообщение только после успешного старта запроса
+          idx = this.messages.push({ role: 'assistant', content: '' }) - 1;
+
+          await this._processStreamResponse(resp, idx);
+        } else {
+          const resp = await nuxt.$api('/api/chat', {
+            method: 'POST',
+            body: {
+              provider: 'openai',
+              messages: this.messages,
+              sessionId: this.sessionId,
+              therapySessionId: this.therapySessionId,
+              mode: apiParams.mode,
+              userPrompt: apiParams.userPrompt,
+              lang: apiParams.lang,
+              entryContext: apiParams.entryContext,
+            },
+            signal: abortController.signal,
+          } as any);
+
+          const loaders = useLoadersStore();
+          loaders.hideLoader();
+
+          // Создаем пустое assistant-сообщение только после успешного старта запроса
+          idx = this.messages.push({ role: 'assistant', content: '' }) - 1;
+
+          await this._processNonStreamResponse(resp, idx);
+        }
 
         // Очищаем AbortController после успешного завершения
         if (this.currentChatAbortController === abortController) {
@@ -473,6 +645,9 @@ export const useChatStore = defineStore('chat', {
           this.currentChatAbortController = null;
         }
 
+        // Сбрасываем флаг генерации
+        this.isGenerating = false;
+
         // Игнорируем ошибки отмены запроса (AbortError или другие признаки отмены)
         if (
           e?.name === 'AbortError' ||
@@ -481,15 +656,37 @@ export const useChatStore = defineStore('chat', {
           wasAborted
         ) {
           // Удаляем пустое сообщение если оно было создано
-          if (this.messages[idx]?.content === '') {
+          if (idx >= 0 && this.messages[idx]?.content === '') {
             this.messages.splice(idx, 1);
           }
           return { ok: false } as any;
         }
 
-        this.messages.push({ role: 'assistant', content: 'Ошибка ответа' });
-        throw e;
+        // В случае ошибки заполняем сообщение текстом ошибки
+        const errorMessage = e?.message?.includes('quota')
+          ? 'Превышен лимит запросов. Пожалуйста, попробуйте позже.'
+          : e?.message?.includes('network') || e?.message?.includes('fetch')
+            ? 'Ошибка сети. Проверьте подключение к интернету.'
+            : 'Не удалось получить ответ. Попробуйте еще раз.';
+
+        if (idx >= 0 && this.messages[idx]) {
+          const msg = this.messages[idx];
+          if (msg) {
+            msg.content = errorMessage;
+          }
+        } else {
+          this.messages.push({ role: 'assistant', content: errorMessage });
+        }
+
+        return { ok: false } as any;
       }
+    },
+    async sendSuggestedChip(text: string) {
+      const trimmed = text?.trim();
+      if (!trimmed) return { ok: false } as any;
+
+      // Чип — это готовое сообщение, поэтому отправляем сразу.
+      return await this.sendMessage(trimmed);
     },
     async finishAndSave(model?: string) {
       const { $api } = useNuxtApp();

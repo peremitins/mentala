@@ -11,6 +11,7 @@ import { getAiUsageGate } from '@/server/application/subscriptions/ai-usage.serv
 import { CHAT_IDLE_TIMEOUT_MS } from '@/server/config/subscription';
 import { endTherapySession } from '@/server/application/subscriptions/session-time.service';
 import type { ChatEntryContext } from '@/shared/dto';
+import { generateSuggestedChips } from '@/server/application/suggested-chips.service';
 
 export default defineEventHandler(async (event) => {
   // Не логируем ключи API (чувствительные данные)
@@ -37,17 +38,26 @@ export default defineEventHandler(async (event) => {
   setHeader(event, 'Connection', 'keep-alive');
 
   const res = event.node.res;
+  const CHIPS_EARLY_START_CHARS = 240;
+  const writeSseError = (
+    code: string,
+    message: string,
+    data?: Record<string, any>
+  ) => {
+    // Отправляем ошибку в стандартизированном виде.
+    res.write(
+      `data: ${JSON.stringify({
+        error: { code, message, ...(data ? { data } : {}) },
+      })}\n\n`
+    );
+  };
 
   try {
     // Добавляем память только для авторизованных пользователей
     const sessionResult = await getSessionUserWithRole(event);
     const uid = sessionResult?.id ? String(sessionResult.id) : undefined;
     if (!uid) {
-      res.write(
-        `data: ${JSON.stringify({
-          error: { message: 'Unauthorized' },
-        })}\n\n`
-      );
+      writeSseError('E_AUTH', 'Unauthorized');
       return;
     }
 
@@ -61,11 +71,7 @@ export default defineEventHandler(async (event) => {
       typeof body?.therapySessionId === 'number' ? body.therapySessionId : null;
 
     if (!therapySessionId) {
-      res.write(
-        `data: ${JSON.stringify({
-          error: { message: 'therapySessionId is required' },
-        })}\n\n`
-      );
+      writeSseError('E_VALIDATION', 'therapySessionId is required');
       return;
     }
 
@@ -86,31 +92,19 @@ export default defineEventHandler(async (event) => {
 
     const session = sessionRows[0];
     if (!session || session.userId !== Number(uid)) {
-      res.write(
-        `data: ${JSON.stringify({
-          error: { message: 'Therapy session not found' },
-        })}\n\n`
-      );
+      writeSseError('E_NOT_FOUND', 'Therapy session not found');
       return;
     }
 
     if (session.endedAt) {
-      res.write(
-        `data: ${JSON.stringify({
-          error: { message: 'Therapy session already ended' },
-        })}\n\n`
-      );
+      writeSseError('E_CONFLICT', 'Therapy session already ended');
       return;
     }
 
     const last = session.lastActivityAt || session.startedAt;
     if (now.getTime() - last.getTime() > CHAT_IDLE_TIMEOUT_MS) {
       await endTherapySession(session.id);
-      res.write(
-        `data: ${JSON.stringify({
-          error: { message: 'Therapy session expired, start a new one' },
-        })}\n\n`
-      );
+      writeSseError('E_CONFLICT', 'Therapy session expired, start a new one');
       return;
     }
 
@@ -129,26 +123,15 @@ export default defineEventHandler(async (event) => {
     // Серверная проверка доступа к AI и лимита минут
     const gate = await getAiUsageGate(Number(uid), sessionResult.role);
     if (gate.status === 'no_ai_access') {
-      res.write(
-        `data: ${JSON.stringify({
-          error: { message: 'AI access is not available for your plan' },
-        })}\n\n`
-      );
+      writeSseError('E_FORBIDDEN', 'AI access is not available for your plan');
       return;
     }
     if (gate.status === 'weekly_limit_reached') {
-      res.write(
-        `data: ${JSON.stringify({
-          error: {
-            message: 'Weekly minutes limit exceeded',
-            data: {
-              weeklyLimit: gate.weeklyLimit,
-              usedMinutes: gate.usedMinutes,
-              overdraftUsed: gate.overdraftUsed,
-            },
-          },
-        })}\n\n`
-      );
+      writeSseError('E_RATE', 'Weekly minutes limit exceeded', {
+        weeklyLimit: gate.weeklyLimit,
+        usedMinutes: gate.usedMinutes,
+        overdraftUsed: gate.overdraftUsed,
+      });
       return;
     }
 
@@ -219,19 +202,58 @@ export default defineEventHandler(async (event) => {
 
       // console.log('[Stream API] chatStreamViaProvider returned stream, starting for-await loop');
 
+      let assistantText = '';
+      let chipsPromise:
+        | Promise<Array<{ text: string; intent: string }>>
+        | null = null;
       for await (const delta of stream) {
+        assistantText += delta;
         res.write(`data: ${JSON.stringify({ output_text_delta: delta })}\n\n`);
+
+        if (!chipsPromise && assistantText.length >= CHIPS_EARLY_START_CHARS) {
+          // Запускаем генерацию чипов заранее, чтобы отдать их сразу после стрима.
+          chipsPromise = generateSuggestedChips({
+            messages: (body?.messages || []).filter(
+              (m) => String(m?.content || '').trim().length > 0
+            ),
+            assistantAnswer: assistantText,
+            sessionId: body?.sessionId,
+            userId: uid,
+            therapySessionId,
+            entryContext: body?.entryContext,
+          });
+        }
+      }
+
+      if (assistantText.trim()) {
+        try {
+          const chips = chipsPromise
+            ? await chipsPromise
+            : await generateSuggestedChips({
+                messages: (body?.messages || []).filter(
+                  (m) => String(m?.content || '').trim().length > 0
+                ),
+                assistantAnswer: assistantText,
+                sessionId: body?.sessionId,
+                userId: uid,
+                therapySessionId,
+                entryContext: body?.entryContext,
+              });
+
+          if (chips.length) {
+            res.write(`data: ${JSON.stringify({ chips })}\n\n`);
+          }
+        } catch (chipsError) {
+          // Не ломаем поток, если чипы не сгенерировались.
+          console.error('[Stream API] Failed to generate chips:', chipsError);
+        }
       }
 
       // console.log('[Stream API] Stream finished normally');
     } catch (e: any) {
       console.error('[Stream API] OpenAI / chatStreamViaProvider error:', e);
       try {
-        res.write(
-          `data: ${JSON.stringify({
-            error: { message: e?.message || 'Stream failed' },
-          })}\n\n`
-        );
+        writeSseError('E_UPSTREAM', e?.message || 'Stream failed');
       } catch (writeErr) {
         console.error(
           '[Stream API] Failed to write SSE error chunk:',
@@ -241,11 +263,7 @@ export default defineEventHandler(async (event) => {
     }
   } catch (e: any) {
     try {
-      res.write(
-        `data: ${JSON.stringify({
-          error: { message: e?.message || 'Stream failed' },
-        })}\n\n`
-      );
+      writeSseError('E_UNKNOWN', e?.message || 'Stream failed');
     } catch (writeErr) {
       console.error('[Stream API] Failed to write SSE error chunk:', writeErr);
     }

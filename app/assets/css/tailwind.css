@@ -239,6 +239,51 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  /* Стилизация скроллбара для всего приложения */
+  * {
+    /* Firefox */
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--primary) / 0.3) transparent;
+  }
+
+  /* Webkit браузеры (Chrome, Safari, Edge) */
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+    border-radius: 10px;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: hsl(var(--primary) / 0.3);
+    border-radius: 10px;
+    transition: background 0.2s ease;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--primary) / 0.5);
+  }
+
+  *::-webkit-scrollbar-thumb:active {
+    background: hsl(var(--primary) / 0.6);
+  }
+
+  /* Для темной темы делаем скроллбар немного светлее */
+  .dark *::-webkit-scrollbar-thumb {
+    background: hsl(var(--primary) / 0.4);
+  }
+
+  .dark *::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--primary) / 0.6);
+  }
+
+  .dark *::-webkit-scrollbar-thumb:active {
+    background: hsl(var(--primary) / 0.7);
+  }
 }
 
 @layer utilities {
@@ -276,4 +321,19 @@
 }
 @utility animate-dropdown-out {
   animation: dropdown-out 0.2s ease-in both;
+}
+
+@keyframes slide-up {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@utility animate-slide-up {
+  animation: slide-up 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }

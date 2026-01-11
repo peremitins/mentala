@@ -19,12 +19,15 @@ export function getProvider(id?: LlmProviderPort['id']): LlmProviderPort {
 export async function chatViaProvider(params: {
   provider?: LlmProviderPort['id'];
   model?: string;
-  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+  messages: Array<{
+    role: 'system' | 'user' | 'assistant' | 'developer';
+    content: string;
+  }>;
   options?: {
     sessionId?: string;
     temperature?: number;
     maxOutputTokens?: number; // Для Responses API
-    scenario?: 'chat' | 'notifications'; // Сценарий использования
+    scenario?: 'chat' | 'notifications' | 'chips'; // Сценарий использования
     lang?: string;
     user_locale?: string;
     user_name?: string;
@@ -74,7 +77,10 @@ function isRetryableStatus(status?: number) {
 export async function chatWithFallback(params: {
   provider?: LlmProviderPort['id'];
   model?: string;
-  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+  messages: Array<{
+    role: 'system' | 'user' | 'assistant' | 'developer';
+    content: string;
+  }>;
 }): Promise<{
   content: string;
   model?: string;
@@ -131,7 +137,7 @@ export function chatStreamViaProvider(params: {
     sessionId?: string;
     temperature?: number;
     maxOutputTokens?: number; // Для Responses API
-    scenario?: 'chat' | 'notifications'; // Сценарий использования
+    scenario?: 'chat' | 'notifications' | 'chips'; // Сценарий использования
     lang?: string;
     user_locale?: string;
     user_name?: string;
