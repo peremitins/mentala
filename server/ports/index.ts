@@ -8,13 +8,16 @@ export interface LoggerPort {
 export interface LlmProviderPort {
   id: 'openai' | 'deepseek' | 'yandex';
   chat: (params: {
-    messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+    messages: Array<{
+      role: 'system' | 'user' | 'assistant' | 'developer';
+      content: string;
+    }>;
     model?: string;
     options?: {
       sessionId?: string;
       temperature?: number;
       maxOutputTokens?: number; // Для Responses API
-      scenario?: 'chat' | 'notifications'; // Сценарий использования
+      scenario?: 'chat' | 'notifications' | 'chips'; // Сценарий использования
       lang?: string;
       user_locale?: string;
       user_name?: string;
@@ -28,13 +31,16 @@ export interface LlmProviderPort {
   }) => Promise<{ role: 'assistant'; content: string; model?: string }>;
   // Optional streaming interface: yields text deltas
   chatStream?: (params: {
-    messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+    messages: Array<{
+      role: 'system' | 'user' | 'assistant' | 'developer';
+      content: string;
+    }>;
     model?: string;
     options?: {
       sessionId?: string;
       temperature?: number;
       maxOutputTokens?: number; // Для Responses API
-      scenario?: 'chat' | 'notifications'; // Сценарий использования
+      scenario?: 'chat' | 'notifications' | 'chips'; // Сценарий использования
       lang?: string;
       user_locale?: string;
       user_name?: string;

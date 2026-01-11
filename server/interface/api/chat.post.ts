@@ -1,8 +1,11 @@
 import { defineEventHandler, readBody, setResponseStatus } from 'h3';
-import { estimateCostUSD } from '../../application/llm.service';
+import {
+  chatStreamViaProvider,
+  chatViaProvider,
+  estimateCostUSD,
+} from '../../application/llm.service';
 import { config } from '../../config';
 import { ChatRequestDto, ChatResponseDto } from '@/shared/dto';
-import { chatViaProvider } from '../../application/llm.service';
 import { getSessionUserWithRole } from '@/server/utils/require-role';
 import { db } from '@/server/infrastructure/db/client';
 import { therapySessions } from '@/server/infrastructure/db/schema';
@@ -10,6 +13,7 @@ import { eq, and, isNull } from 'drizzle-orm';
 import { getAiUsageGate } from '@/server/application/subscriptions/ai-usage.service';
 import { CHAT_IDLE_TIMEOUT_MS } from '@/server/config/subscription';
 import { endTherapySession } from '@/server/application/subscriptions/session-time.service';
+import { generateSuggestedChips } from '@/server/application/suggested-chips.service';
 
 export default defineEventHandler(async (event) => {
   try {
@@ -24,15 +28,13 @@ export default defineEventHandler(async (event) => {
 
     const uid = Number(sessionResult.id);
     const userName =
-      (sessionResult as any)?.name ||
-      (parsed as any)?.user_name ||
-      undefined;
+      (sessionResult as any)?.name || parsed.user_name || undefined;
     const userGender = (sessionResult as any)?.gender || undefined;
 
     // Требуем валидный therapySessionId, чтобы нельзя было обойти биллинг прямыми вызовами /api/chat
     const therapySessionId =
-      typeof (parsed as any)?.therapySessionId === 'number'
-        ? (parsed as any).therapySessionId
+      typeof parsed.therapySessionId === 'number'
+        ? parsed.therapySessionId
         : null;
 
     if (!therapySessionId) {
@@ -110,22 +112,51 @@ export default defineEventHandler(async (event) => {
         usedMinutes: gate.usedMinutes,
       } as const;
     }
-    const result = await chatViaProvider({
-      provider: 'openai',
-      model: parsed.model,
-      messages: parsed.messages,
-      options: {
-        sessionId: parsed.sessionId,
-        lang: (parsed as any)?.lang,
-        user_locale: (parsed as any)?.user_locale,
-        user_name: userName,
-        user_gender: userGender,
-        userId: uid, // серверный стабильный uid
-        isFirstSession: undefined, // рассчитывается в других местах при стриминге
-        userPrompt: (parsed as any)?.userPrompt,
-        entryContext: (parsed as any)?.entryContext,
-      },
-    });
+    const commonOptions = {
+      sessionId: parsed.sessionId,
+      lang: parsed.lang,
+      user_locale: parsed.user_locale,
+      user_name: userName,
+      user_gender: userGender,
+      userId: uid, // серверный стабильный uid
+      isFirstSession: undefined, // рассчитывается в других местах при стриминге
+      userPrompt: parsed.userPrompt,
+      entryContext: parsed.entryContext ?? undefined, // Преобразуем null в undefined
+      mode: parsed.mode,
+    };
+
+    let result: { content: string; model?: string };
+
+    if (parsed.messages.length === 0) {
+      if (!parsed.mode) {
+        setResponseStatus(event, 400);
+        return { error: true, message: 'mode is required' } as const;
+      }
+
+      const stream = chatStreamViaProvider({
+        provider: 'openai',
+        model: parsed.model,
+        messages: parsed.messages,
+        options: commonOptions,
+      });
+
+      let content = '';
+      for await (const delta of stream) {
+        content += delta;
+      }
+
+      result = {
+        content,
+        model: parsed.model || config.llm.openai.defaultModel,
+      };
+    } else {
+      result = await chatViaProvider({
+        provider: 'openai',
+        model: parsed.model,
+        messages: parsed.messages,
+        options: commonOptions,
+      });
+    }
     // simple guard: roughly estimate tokens by characters (very rough ~4 chars per token)
     const tokensIn = Math.ceil(
       parsed.messages.reduce((s, m) => s + m.content.length, 0) / 4
@@ -145,10 +176,28 @@ export default defineEventHandler(async (event) => {
         estimated,
       };
     }
+    const chips = await (async () => {
+      try {
+        return await generateSuggestedChips({
+          messages: parsed.messages,
+          assistantAnswer: result.content,
+          sessionId: parsed.sessionId,
+          userId: uid,
+          therapySessionId,
+          entryContext: parsed.entryContext,
+        });
+      } catch (chipsError) {
+        // Не ломаем основной ответ, если чипы не сгенерировались.
+        console.error('[Chat API] Failed to generate chips:', chipsError);
+        return [] as Array<{ text: string; intent: string }>;
+      }
+    })();
+
     const response = ChatResponseDto.parse({
       message: { role: 'assistant', content: result.content },
       provider: 'openai',
       model: result.model,
+      chips,
     });
     return response;
   } catch (e: any) {

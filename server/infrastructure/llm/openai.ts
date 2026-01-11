@@ -263,6 +263,76 @@ export const openaiProvider: LlmProviderPort = {
         process.env.OPENAI_ENABLE_ENCRYPTED_REASONING) ??
         'false') === 'true';
 
+    if (options?.scenario === 'chips') {
+      // Для чипов используем сырой prompt без чат-прелюда и памяти.
+      const input = mapToResponsesInput(messages || []);
+      const chipSchema = {
+        type: 'object',
+        additionalProperties: false,
+        required: ['chips'],
+        properties: {
+          chips: {
+            type: 'array',
+            maxItems: 5,
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['text', 'intent'],
+              properties: {
+                text: { type: 'string', minLength: 1, maxLength: 80 },
+                intent: {
+                  type: 'string',
+                  enum: [
+                    'clarify',
+                    'example',
+                    'apply_to_self',
+                    'action_step',
+                    'reflect',
+                    'reframe',
+                    'summarize',
+                    'support',
+                  ],
+                },
+              },
+            },
+          },
+        },
+      };
+      const body: any = {
+        model: usedModel,
+        input,
+        max_output_tokens: maxTokens,
+        temperature: options?.temperature ?? 0.7,
+        store: false,
+        metadata: { app: 'mentai', feature: 'suggested_chips' },
+        // Жестко требуем JSON по схеме, чтобы парсинг был стабильным.
+        text: {
+          format: {
+            type: 'json_schema',
+            name: 'suggested_chips',
+            strict: true,
+            schema: chipSchema,
+          },
+        },
+      };
+
+      const res: any = await $fetch(OPENAI_URL, {
+        method: 'POST',
+        timeout: 30_000,
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          ...(org ? { 'OpenAI-Organization': org } : {}),
+          ...(project ? { 'OpenAI-Project': project } : {}),
+          'Idempotency-Key': idempotencyKey,
+        },
+        body,
+      });
+
+      const content = extractText(res);
+      return { role: 'assistant', content, model: usedModel };
+    }
+
     // eslint-disable-next-line no-constant-condition
     while (true) {
       try {
@@ -309,7 +379,7 @@ export const openaiProvider: LlmProviderPort = {
 
         if (hasSummary && options?.userId != null) {
           try {
-            const all = await summaryStore.getSummaries(options.userId, 10); // Лимит последних 10
+            const all = await summaryStore.getSummaries(options.userId, 4); // Лимит последних 4 для оптимизации токенов
             if (all && all.length > 0) {
               sessionMemoryText = buildSessionMemoryText(
                 all,
@@ -397,7 +467,9 @@ export const openaiProvider: LlmProviderPort = {
                 },
               ]
             : []),
-          ...mapToResponsesInput(messages || []),
+          // Ограничиваем количество сообщений для оптимизации токенов
+          // Берем последние 30 сообщений (15 пар user-assistant)
+          ...mapToResponsesInput((messages || []).slice(-30)),
         ];
         const body: any = {
           model: usedModel,
@@ -437,7 +509,9 @@ export const openaiProvider: LlmProviderPort = {
           hasPreviousResponseId: Boolean(previousResponseId),
           hasSessionMemory: Boolean(sessionMemoryText),
           messagesCount: (messages || []).length,
+          messagesInContext: Math.min((messages || []).length, 30), // Ограничено до 30
           userMessagesCount,
+          summariesCount: sessionMemoryText ? 4 : 0, // Теперь максимум 4
           temperature: body.temperature,
           maxOutputTokens: maxTokens,
           store: body.store,
@@ -1011,7 +1085,10 @@ export const openaiProvider: LlmProviderPort = {
             },
           ]
         : []),
-      ...mapToResponsesInput(messages || []),
+      // Ограничиваем количество сообщений для оптимизации токенов
+      // Берем последние 30 сообщений (15 пар user-assistant)
+      // previous_response_id уже содержит контекст, поэтому можно безопасно обрезать
+      ...mapToResponsesInput((messages || []).slice(-30)),
     ];
 
     // ВАЖНО: Когда используется previous_response_id, OpenAI восстанавливает контекст из предыдущего ответа.
@@ -1052,7 +1129,9 @@ export const openaiProvider: LlmProviderPort = {
         hasPreviousResponseId: Boolean(previousResponseId),
         hasSessionMemory: Boolean(sessionMemoryText),
         messagesCount: (messages || []).length,
+        messagesInContext: Math.min((messages || []).length, 30), // Ограничено до 30
         userMessagesCount,
+        summariesCount: sessionMemoryText ? 4 : 0, // Теперь максимум 4
         responseNumber,
         hasEntryContext: Boolean(contextNote),
         hasUserPrompt: Boolean(options?.userPrompt),

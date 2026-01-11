@@ -9,14 +9,15 @@ export const config = {
       // Модели для разных сценариев
       models: {
         chat: 'gpt-4o', // Чат - более мощная модель
-        notifications: 'gpt-4o-mini', // Уведомления - экономичная модель
+        notifications: 'gpt-4o', // Уведомления - экономичная модель
+        chips: 'gpt-4o-mini', // Чипы - экономичная модель
       },
 
       // Настройки для разных сценариев
       settings: {
         chat: {
           temperature: 0.3,
-          maxOutputTokens: 2048,
+          maxOutputTokens: 1024, // Уменьшено с 2048 для оптимизации токенов (≈2-3 абзаца)
           enableReasoning: false, // опционально
         },
         notifications: {
@@ -35,6 +36,11 @@ export const config = {
           })(),
           enableReasoning: false, // Не нужно для простых уведомлений (увеличивает стоимость и время)
         },
+        chips: {
+          temperature: 0.7, // Нужна вариативность формулировок
+          maxOutputTokens: 400,
+          enableReasoning: false,
+        },
       },
 
       pricingUSDPerMTok: {
@@ -44,7 +50,7 @@ export const config = {
         // Когда появится GPT-5:
         // 'gpt-5': { in: 10.0, out: 30.0 },
       },
-      defaultMaxOutputTokens: 512,
+      defaultMaxOutputTokens: 800, // Уменьшено с 512 для лучшего баланса между качеством и стоимостью
     },
     limits: {
       maxRequestUSD: Number(
