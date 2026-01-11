@@ -166,6 +166,14 @@ const THEMED_IMAGES: Record<NotificationKind, Record<string, ThemeImages>> = {
       ],
     },
     junk_food: {
+      male: [
+        'habits/junk_food/male/junk_food_01.jpg',
+        'habits/junk_food/male/junk_food_02.jpg',
+      ],
+      female: [
+        'habits/junk_food/female/junk_food_01.jpg',
+        'habits/junk_food/female/junk_food_02.jpg',
+      ],
       neutral: [
         'habits/junk_food/neutral/junk_food_01.jpg',
         'habits/junk_food/neutral/junk_food_02.jpg',
@@ -178,8 +186,6 @@ const THEMED_IMAGES: Record<NotificationKind, Record<string, ThemeImages>> = {
         'habits/junk_food/neutral/junk_food_09.jpg',
         'habits/junk_food/neutral/junk_food_10.jpg',
         'habits/junk_food/neutral/junk_food_11.jpg',
-        'habits/junk_food/neutral/junk_food_12.jpg',
-        'habits/junk_food/neutral/junk_food_13.jpg',
       ],
     },
     water: {

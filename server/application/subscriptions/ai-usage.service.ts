@@ -67,9 +67,7 @@ export async function getAiUsageGate(
   const sub = activeSubscription[0]?.subscription;
   const plan = activeSubscription[0]?.plan;
 
-  const subscriptionForFeatures = sub
-    ? { planId: sub.planId, customConfig: sub.customConfig || undefined }
-    : null;
+  const subscriptionForFeatures = sub ? { planId: sub.planId } : null;
 
   const features = user
     ? await getFeatures(

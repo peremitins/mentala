@@ -16,7 +16,7 @@ export function isTrialActive(user: { trialEndedAt: Date | null }): boolean {
  * Доступ есть если:
  * - Пользователь имеет служебную роль (admin, moderator, support)
  * - ИЛИ Trial активен (trialActive = true)
- * - ИЛИ план pro, premium, custom
+ * - ИЛИ план pro, premium
  */
 export async function hasAIAccess(
   user: { id: number; trialEndedAt: Date | null },
@@ -33,7 +33,7 @@ export async function hasAIAccess(
   const trialActive = isTrialActive(user);
   if (trialActive) return true;
 
-  return ['pro', 'premium', 'custom'].includes(subscription.planId);
+  return ['pro', 'premium'].includes(subscription.planId);
 }
 
 /**
@@ -42,13 +42,11 @@ export async function hasAIAccess(
  * - Basic с Trial: DEFAULT_WEEKLY_MINUTES_LIMIT минут (как Premium)
  * - Basic без Trial: 0 минут
  * - PRO/Premium: из плана или DEFAULT_WEEKLY_MINUTES_LIMIT
- * - Custom: из customConfig.weeklyMinutes
  */
 export async function getWeeklyMinutesLimit(
   user: { id: number; trialEndedAt: Date | null },
   subscription: {
     planId: string;
-    customConfig?: { weeklyMinutes?: number };
   } | null,
   plan?: { weeklyMinutesLimit: number } | null,
   userRole?: string // Передавать роль из сессии
@@ -75,13 +73,6 @@ export async function getWeeklyMinutesLimit(
     return 0;
   }
 
-  // Custom: из конфигурации
-  if (subscription.planId === 'custom') {
-    return (
-      subscription.customConfig?.weeklyMinutes || DEFAULT_WEEKLY_MINUTES_LIMIT
-    );
-  }
-
   // PRO/Premium: из плана
   return plan?.weeklyMinutesLimit || DEFAULT_WEEKLY_MINUTES_LIMIT;
 }
@@ -93,7 +84,6 @@ export async function getFeatures(
   user: { id: number; trialEndedAt: Date | null },
   subscription: {
     planId: string;
-    customConfig?: { weeklyMinutes?: number };
   } | null,
   plan?: { weeklyMinutesLimit: number } | null,
   userRole?: string // Добавить параметр роли

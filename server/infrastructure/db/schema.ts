@@ -524,26 +524,11 @@ export const trialUsageTracking = pgTable(
 
 // Тарифные планы (конфигурация)
 export const subscriptionPlans = pgTable('subscription_plans', {
-  id: varchar('id', { length: 50 }).primaryKey(), // 'basic', 'pro', 'premium', 'custom'
-  name: varchar('name', { length: 20 }).notNull(), // 'basic' | 'pro' | 'premium' | 'custom'
+  id: varchar('id', { length: 50 }).primaryKey(), // 'basic', 'pro', 'premium'
+  name: varchar('name', { length: 20 }).notNull(), // 'basic' | 'pro' | 'premium'
   basePrice: numeric('base_price', { precision: 10, scale: 2 }).notNull(), // базовая месячная цена в рублях
   weeklyMinutesLimit: integer('weekly_minutes_limit').notNull(), // лимит минут в неделю
   avatarEnabled: boolean('avatar_enabled').default(false).notNull(), // доступен ли аватар
-  pricePerMinuteGPT: numeric('price_per_minute_gpt', {
-    precision: 10,
-    scale: 4,
-  })
-    .default('0.66')
-    .notNull(), // для расчета Custom
-  pricePerMinuteAvatar: numeric('price_per_minute_avatar', {
-    precision: 10,
-    scale: 4,
-  })
-    .default('0.9')
-    .notNull(), // для расчета Custom
-  isCustomConfigurable: boolean('is_custom_configurable')
-    .default(false)
-    .notNull(),
   isVisibleInUI: boolean('is_visible_in_ui').default(true).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
@@ -567,10 +552,6 @@ export const userSubscriptions = pgTable(
     billingPeriod: varchar('billing_period', { length: 10 })
       .notNull()
       .default('month'), // 'month' | 'year'
-    customConfig: jsonb('custom_config').$type<{
-      weeklyMinutes: number;
-      totalPrice: number;
-    }>(), // опционально, только для Custom
     // Checkout fields (для безопасной валидации webhook и корректного учёта billingCredit)
     checkoutAmount: numeric('checkout_amount', { precision: 10, scale: 2 })
       .default('0')

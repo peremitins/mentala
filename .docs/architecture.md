@@ -139,7 +139,7 @@ server/
 💳 Подписки, минуты и биллинг
 
 • Данные и таблицы:
-• `subscription_plans` — конфигурация тарифов (`basic/pro/premium/custom`), лимиты минут, фичи.
+• `subscription_plans` — конфигурация тарифов (`basic/pro/premium`), лимиты минут, фичи.
 • `user_subscriptions` — периоды подписок пользователя + статус оплаты (`active/pending/expired/canceled`) + `billing_period`.
 • `subscription_events` — аудит/аналитика (trial_started, checkout_started, purchase_success/failed, subscription_canceled и т.д.).
 • `payments` — идемпотентность webhook по `payment.id` YooKassa (PK = text).
@@ -176,6 +176,8 @@ server/
 • Сервер жёстко проверяет доступ к AI и недельный лимит минут (с overdraft `WEEKLY_OVERDRAFT_MINUTES`).
 • `/api/therapy/session/start` откажет, если нет доступа к AI или лимит исчерпан.
 • `/api/chat/stream` требует `therapySessionId`, обновляет `last_activity_at` на сервере и проверяет лимиты перед запросом к LLM.
+• Suggested replies (чипы): возвращаются отдельным финальным SSE‑чанком в `/api/chat/stream` перед `[DONE]`, формат и поля описываются в Zod‑DTO.
+• Генерация чипов: сервис `suggested-chips.service.ts` с анти‑повторами (in‑memory store последних N=30 на сессию), без fallback‑чипов, с одним ретраем.
 • Summary сессий сохраняется только при наличии достаточных ответов пользователя; без фактов из сообщений пользователя summary не генерируется.
 • Welcome‑приветствия в повторных сессиях формулируются нейтрально и не утверждают факт обсуждения конкретной темы.
 
