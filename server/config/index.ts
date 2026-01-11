@@ -17,7 +17,7 @@ export const config = {
       settings: {
         chat: {
           temperature: 0.3,
-          maxOutputTokens: 2048,
+          maxOutputTokens: 1024, // Уменьшено с 2048 для оптимизации токенов (≈2-3 абзаца)
           enableReasoning: false, // опционально
         },
         notifications: {
@@ -50,7 +50,7 @@ export const config = {
         // Когда появится GPT-5:
         // 'gpt-5': { in: 10.0, out: 30.0 },
       },
-      defaultMaxOutputTokens: 512,
+      defaultMaxOutputTokens: 800, // Уменьшено с 512 для лучшего баланса между качеством и стоимостью
     },
     limits: {
       maxRequestUSD: Number(

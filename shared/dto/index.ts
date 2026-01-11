@@ -43,10 +43,12 @@ export const ChatRequestDto = z.object({
         content: z.string(),
       })
     )
-    .min(1),
+    .min(0),
   provider: z.enum(['openai', 'deepseek', 'yandex']).optional(),
   model: z.string().optional(),
   sessionId: z.string().optional(),
+  therapySessionId: z.number().optional(),
+  mode: z.enum(['therapy', 'habits', 'talk']).optional(),
   // расширенные опции
   userId: z.union([z.number(), z.string()]).optional(),
   isFirstSession: z.boolean().optional(),
@@ -55,7 +57,8 @@ export const ChatRequestDto = z.object({
   user_locale: z.string().optional(),
   user_name: z.string().optional(),
   user_gender: z.string().optional(),
-  entryContext: ChatEntryContextDto.optional(),
+  // допускаем null или отсутствие контекста, если он не выбран в UI
+  entryContext: ChatEntryContextDto.nullish(),
 });
 
 export const SuggestedChipIntentEnum = z.enum([

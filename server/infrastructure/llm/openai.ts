@@ -379,7 +379,7 @@ export const openaiProvider: LlmProviderPort = {
 
         if (hasSummary && options?.userId != null) {
           try {
-            const all = await summaryStore.getSummaries(options.userId, 10); // Лимит последних 10
+            const all = await summaryStore.getSummaries(options.userId, 4); // Лимит последних 4 для оптимизации токенов
             if (all && all.length > 0) {
               sessionMemoryText = buildSessionMemoryText(
                 all,
@@ -467,7 +467,9 @@ export const openaiProvider: LlmProviderPort = {
                 },
               ]
             : []),
-          ...mapToResponsesInput(messages || []),
+          // Ограничиваем количество сообщений для оптимизации токенов
+          // Берем последние 30 сообщений (15 пар user-assistant)
+          ...mapToResponsesInput((messages || []).slice(-30)),
         ];
         const body: any = {
           model: usedModel,
@@ -507,7 +509,9 @@ export const openaiProvider: LlmProviderPort = {
           hasPreviousResponseId: Boolean(previousResponseId),
           hasSessionMemory: Boolean(sessionMemoryText),
           messagesCount: (messages || []).length,
+          messagesInContext: Math.min((messages || []).length, 30), // Ограничено до 30
           userMessagesCount,
+          summariesCount: sessionMemoryText ? 4 : 0, // Теперь максимум 4
           temperature: body.temperature,
           maxOutputTokens: maxTokens,
           store: body.store,
@@ -1081,7 +1085,10 @@ export const openaiProvider: LlmProviderPort = {
             },
           ]
         : []),
-      ...mapToResponsesInput(messages || []),
+      // Ограничиваем количество сообщений для оптимизации токенов
+      // Берем последние 30 сообщений (15 пар user-assistant)
+      // previous_response_id уже содержит контекст, поэтому можно безопасно обрезать
+      ...mapToResponsesInput((messages || []).slice(-30)),
     ];
 
     // ВАЖНО: Когда используется previous_response_id, OpenAI восстанавливает контекст из предыдущего ответа.
@@ -1122,7 +1129,9 @@ export const openaiProvider: LlmProviderPort = {
         hasPreviousResponseId: Boolean(previousResponseId),
         hasSessionMemory: Boolean(sessionMemoryText),
         messagesCount: (messages || []).length,
+        messagesInContext: Math.min((messages || []).length, 30), // Ограничено до 30
         userMessagesCount,
+        summariesCount: sessionMemoryText ? 4 : 0, // Теперь максимум 4
         responseNumber,
         hasEntryContext: Boolean(contextNote),
         hasUserPrompt: Boolean(options?.userPrompt),

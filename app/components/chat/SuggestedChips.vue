@@ -19,7 +19,7 @@ const handleSelect = (chip: SuggestedChip) => {
 </script>
 
 <template>
-  <div v-if="props.chips.length" class="flex flex-wrap gap-2 pt-2">
+  <div v-if="props.chips.length" class="flex flex-wrap gap-2">
     <Button
       v-for="chip in props.chips"
       :key="`${chip.intent}-${chip.text}`"

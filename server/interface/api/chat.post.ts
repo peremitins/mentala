@@ -1,5 +1,9 @@
 import { defineEventHandler, readBody, setResponseStatus } from 'h3';
-import { chatViaProvider, estimateCostUSD } from '../../application/llm.service';
+import {
+  chatStreamViaProvider,
+  chatViaProvider,
+  estimateCostUSD,
+} from '../../application/llm.service';
 import { config } from '../../config';
 import { ChatRequestDto, ChatResponseDto } from '@/shared/dto';
 import { getSessionUserWithRole } from '@/server/utils/require-role';
@@ -24,15 +28,13 @@ export default defineEventHandler(async (event) => {
 
     const uid = Number(sessionResult.id);
     const userName =
-      (sessionResult as any)?.name ||
-      (parsed as any)?.user_name ||
-      undefined;
+      (sessionResult as any)?.name || parsed.user_name || undefined;
     const userGender = (sessionResult as any)?.gender || undefined;
 
     // Требуем валидный therapySessionId, чтобы нельзя было обойти биллинг прямыми вызовами /api/chat
     const therapySessionId =
-      typeof (parsed as any)?.therapySessionId === 'number'
-        ? (parsed as any).therapySessionId
+      typeof parsed.therapySessionId === 'number'
+        ? parsed.therapySessionId
         : null;
 
     if (!therapySessionId) {
@@ -110,22 +112,51 @@ export default defineEventHandler(async (event) => {
         usedMinutes: gate.usedMinutes,
       } as const;
     }
-    const result = await chatViaProvider({
-      provider: 'openai',
-      model: parsed.model,
-      messages: parsed.messages,
-      options: {
-        sessionId: parsed.sessionId,
-        lang: (parsed as any)?.lang,
-        user_locale: (parsed as any)?.user_locale,
-        user_name: userName,
-        user_gender: userGender,
-        userId: uid, // серверный стабильный uid
-        isFirstSession: undefined, // рассчитывается в других местах при стриминге
-        userPrompt: (parsed as any)?.userPrompt,
-        entryContext: (parsed as any)?.entryContext,
-      },
-    });
+    const commonOptions = {
+      sessionId: parsed.sessionId,
+      lang: parsed.lang,
+      user_locale: parsed.user_locale,
+      user_name: userName,
+      user_gender: userGender,
+      userId: uid, // серверный стабильный uid
+      isFirstSession: undefined, // рассчитывается в других местах при стриминге
+      userPrompt: parsed.userPrompt,
+      entryContext: parsed.entryContext ?? undefined, // Преобразуем null в undefined
+      mode: parsed.mode,
+    };
+
+    let result: { content: string; model?: string };
+
+    if (parsed.messages.length === 0) {
+      if (!parsed.mode) {
+        setResponseStatus(event, 400);
+        return { error: true, message: 'mode is required' } as const;
+      }
+
+      const stream = chatStreamViaProvider({
+        provider: 'openai',
+        model: parsed.model,
+        messages: parsed.messages,
+        options: commonOptions,
+      });
+
+      let content = '';
+      for await (const delta of stream) {
+        content += delta;
+      }
+
+      result = {
+        content,
+        model: parsed.model || config.llm.openai.defaultModel,
+      };
+    } else {
+      result = await chatViaProvider({
+        provider: 'openai',
+        model: parsed.model,
+        messages: parsed.messages,
+        options: commonOptions,
+      });
+    }
     // simple guard: roughly estimate tokens by characters (very rough ~4 chars per token)
     const tokensIn = Math.ceil(
       parsed.messages.reduce((s, m) => s + m.content.length, 0) / 4

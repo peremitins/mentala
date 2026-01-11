@@ -38,6 +38,7 @@ export default defineEventHandler(async (event) => {
   setHeader(event, 'Connection', 'keep-alive');
 
   const res = event.node.res;
+  const CHIPS_EARLY_START_CHARS = 240;
   const writeSseError = (
     code: string,
     message: string,
@@ -202,25 +203,42 @@ export default defineEventHandler(async (event) => {
       // console.log('[Stream API] chatStreamViaProvider returned stream, starting for-await loop');
 
       let assistantText = '';
+      let chipsPromise:
+        | Promise<Array<{ text: string; intent: string }>>
+        | null = null;
       for await (const delta of stream) {
         assistantText += delta;
         res.write(`data: ${JSON.stringify({ output_text_delta: delta })}\n\n`);
-      }
 
-      const contextMessages = (body?.messages || []).filter(
-        (m) => String(m?.content || '').trim().length > 0
-      );
+        if (!chipsPromise && assistantText.length >= CHIPS_EARLY_START_CHARS) {
+          // Запускаем генерацию чипов заранее, чтобы отдать их сразу после стрима.
+          chipsPromise = generateSuggestedChips({
+            messages: (body?.messages || []).filter(
+              (m) => String(m?.content || '').trim().length > 0
+            ),
+            assistantAnswer: assistantText,
+            sessionId: body?.sessionId,
+            userId: uid,
+            therapySessionId,
+            entryContext: body?.entryContext,
+          });
+        }
+      }
 
       if (assistantText.trim()) {
         try {
-      const chips = await generateSuggestedChips({
-        messages: contextMessages,
-        assistantAnswer: assistantText,
-        sessionId: body?.sessionId,
-        userId: uid,
-        therapySessionId,
-        entryContext: body?.entryContext,
-      });
+          const chips = chipsPromise
+            ? await chipsPromise
+            : await generateSuggestedChips({
+                messages: (body?.messages || []).filter(
+                  (m) => String(m?.content || '').trim().length > 0
+                ),
+                assistantAnswer: assistantText,
+                sessionId: body?.sessionId,
+                userId: uid,
+                therapySessionId,
+                entryContext: body?.entryContext,
+              });
 
           if (chips.length) {
             res.write(`data: ${JSON.stringify({ chips })}\n\n`);
