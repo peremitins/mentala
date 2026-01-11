@@ -13,7 +13,7 @@ export function useMarkdown() {
 
   function renderMarkdown(text: string): string {
     if (!text) return '';
-    
+
     try {
       // Конвертируем markdown в HTML
       const html = marked.parse(text) as string;
