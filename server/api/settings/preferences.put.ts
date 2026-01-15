@@ -50,6 +50,17 @@ export default defineEventHandler(
       });
     }
 
+    if (body.meditationTimerMinutes !== undefined) {
+      const timer = body.meditationTimerMinutes;
+      const allowedTimers = [10, 20, 30];
+      if (timer !== null && !allowedTimers.includes(timer)) {
+        throw createError({
+          statusCode: 400,
+          message: 'Invalid meditation timer value',
+        });
+      }
+    }
+
     // Пытаемся найти существующие настройки
     const [existing] = await db
       .select()
@@ -58,12 +69,17 @@ export default defineEventHandler(
       .limit(1);
 
     if (existing) {
+      const nextMeditationTimer =
+        body.meditationTimerMinutes !== undefined
+          ? body.meditationTimerMinutes
+          : existing.meditationTimerMinutes ?? null;
       // Обновляем существующие
       const [updated] = await db
         .update(userPreferences)
         .set({
           addressing: body.addressing ?? existing.addressing,
           tone: body.tone ?? existing.tone,
+          meditationTimerMinutes: nextMeditationTimer,
           updatedAt: new Date(),
         })
         .where(eq(userPreferences.userId, userId))
@@ -78,6 +94,7 @@ export default defineEventHandler(
           | 'resolute'
           | 'demanding'
           | 'unknown',
+        meditationTimerMinutes: updated.meditationTimerMinutes ?? null,
       };
     } else {
       // Создаём новые
@@ -88,6 +105,7 @@ export default defineEventHandler(
           userId,
           addressing: body.addressing ?? 'informal',
           tone: body.tone ?? 'neutral',
+          meditationTimerMinutes: body.meditationTimerMinutes ?? null,
         })
         .returning();
 
@@ -100,6 +118,7 @@ export default defineEventHandler(
           | 'resolute'
           | 'demanding'
           | 'unknown',
+        meditationTimerMinutes: created.meditationTimerMinutes ?? null,
       };
     }
   }

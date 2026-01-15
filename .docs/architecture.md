@@ -7,6 +7,7 @@
 • Валидация и схемы: Zod (в связке с @vee-validate/zod).
 • Логи и мониторинг: Pino + Sentry.
 • Миграции БД: Drizzle Kit (SQL файлы хранятся для совместимости с будущими системами).
+• Медитации v1: аудио и обложки в `public/meditations/*` (сервисная таблица в БД — источник метаданных, для плеера используем `backgroundPath`; секции каталога: Избранное, Сон, Стресс, Тревога, Фокус, Самооценка, Эмоции, Поддержка).
 
 Система проектируется так, чтобы в будущем можно было безболезненно перенести бэкенд на Laravel (PHP), сохранив API-контракты и миграции.
 
@@ -17,6 +18,8 @@
 • auth (центрирование форм).
 • Страницы:
 index, onboarding, chat (layout blank), therapy, habits, profile/\*, billing.
+• Медитации:
+• Страницы `/meditations` и `/meditations/:id`.
 • Состояния: компонент StateBlock отображает idle/loading/empty/error.
 • Сторы Pinia:
 • ui
@@ -60,7 +63,7 @@ server/
 • cors (whitelist origins из env),
 • csrf (для cookie-канала, state-changing методы).
 • Логирование security events (csrf_mismatch, origin_mismatch, ip_mismatch и т.д.).
-• Email-верификация: коды в Redis (`auth:email_verification:*`), hash `sha256(code+secret)`, TTL 15 минут, 5 попыток, rate limit по IP/email.
+• Email‑верификация: коды в Redis (`auth:email_verification:*`), hash `sha256(code+secret)`, TTL 15 минут, 5 попыток, rate limit по IP/email.
 • Временный пароль до верификации: `auth:email_verification_password:*` (TTL 15 минут), перенос в БД только после подтверждения.
 • OAuth-линковка: временные данные `auth:oauth_link:*` + код `auth:oauth_link_code:*`, TTL 15 минут, до 5 попыток.
 • OAuth redirect в dev: если configured `PUBLIC_APP_ORIGIN` не совпадает с origin запроса, используется origin текущего запроса (нужно для ngrok/туннелей и мобильного dev).
@@ -73,6 +76,10 @@ server/
 • Нативный Google Sign-In (Capacitor): клиент получает `idToken` и отправляет в `/api/auth/google/native`, сервер валидирует через `google-auth-library` и создаёт сессию.
 • Диагностика Google Sign-In на мобильных: клиент валидирует Web Client ID и показывает понятные ошибки по типовым кодам Google (DEVELOPER_ERROR, отмена входа, сеть).
 • Capacitor dev CORS: при запуске через `server.url` в dev клиент использует `window.location.origin` как API baseURL, чтобы избегать CORS между ngrok/локальным доменом.
+• Медитации v1:
+• Таблицы: `meditation_tracks` (каталог), `meditation_favorites` (избранное).
+• Настройки пользователя: `user_preferences.meditation_timer_minutes`.
+• Плеер мини/детальной страницы: кнопки «Назад/Вперёд» для треков, при переключении активного трека во время воспроизведения автоплей не прерывается (следующий/предыдущий трек стартует сразу); для `isLoop` треков используется Web Audio API (AudioBufferSourceNode + loopStart/loopEnd) для бесшовного лупа без пауз, с fallback на HTMLAudio при недоступности Web Audio. Фон детальной медитации подтягивается из `backgroundPath` на уровне layout `default.vue`, тянется на весь экран, выше aurora-слоя и без затемнения. Для одной медитации поддерживается несколько тем через массив `topicKeys`, поэтому трек может появляться в нескольких секциях, но в «Все» остаётся один раз.
 
 ⸻
 
@@ -220,6 +227,7 @@ server/
 • `.docs/mentai_tz_product.md` - Общие требования к продукту
 • `.docs/mentai_tz_frontend.md` - Требования к фронтенду
 • `.docs/mentai_tz_backend.md` - Требования к бэкенду
+• `.docs/meditation_page_redesign_tz.md` - ТЗ на редизайн страницы медитаций
 • `.docs/security_requirements.md` - Требования к безопасности
 
 ⸻

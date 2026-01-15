@@ -21,6 +21,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "seed:subscription-plans": "tsx server/infrastructure/db/seed-subscription-plans.ts",
+    "seed:meditations": "tsx server/infrastructure/db/seed-meditations.ts",
     "cap:add:android": "npx cap add android",
     "cap:sync": "npx cap sync && node scripts/fix-capacitor-config.js",
     "cap:sync:emulator": "./scripts/setup-capacitor-dev.sh emulator",

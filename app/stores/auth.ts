@@ -5,6 +5,7 @@ import { useSpeechStore } from '@/app/stores/speech';
 import { useSubscriptionStore } from '@/app/stores/subscription';
 import { useUserHabitsStore } from '@/app/stores/userHabits';
 import { useTherapyTopicsStore } from '@/app/stores/therapyTopics';
+import { useMeditationsStore } from '@/app/stores/meditations';
 import { useLoadersStore } from '@/app/stores/loaders';
 import { usePromptsStore } from '@/app/stores/prompts';
 import { useNotificationsStore } from '@/app/stores/notifications';
@@ -466,6 +467,7 @@ export const useAuthStore = defineStore('auth', {
         useSubscriptionStore().$reset();
         useUserHabitsStore().$reset();
         useTherapyTopicsStore().$reset();
+        useMeditationsStore().$reset();
         useLoadersStore().$reset();
         usePromptsStore().$reset();
         useNotificationsStore().$reset();

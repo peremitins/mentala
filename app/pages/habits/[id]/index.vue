@@ -85,6 +85,17 @@
           <IconMessageCircle class="mr-2 h-5 w-5" />
           Поговорить об этом
         </Button>
+
+        <Button
+          v-if="isMeditationHabit"
+          class="mt-3 w-full justify-center !py-3 text-base font-semibold"
+          variant="outline"
+          size="lg"
+          @click="goToMeditations"
+        >
+          <IconLeaf class="mr-2 h-5 w-5" />
+          Открыть медитации
+        </Button>
       </div>
 
       <NotificationsSummaryCard
@@ -110,6 +121,7 @@ import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/shadcn/input';
 import InputComponent from '@/app/components/ui/shadcn/input/Input.vue';
 import IconMessageCircle from '~icons/lucide/message-circle';
+import IconLeaf from '~icons/lucide/leaf';
 import { useNotificationsSettings } from '@/app/composables/useNotificationsSettings';
 import { useChatStore } from '@/app/stores/chat';
 import { useToast } from '@/app/composables/useToast';
@@ -148,6 +160,9 @@ const habitGradients: Record<string, string> = {
 
 const entityData = computed(() => catalogHabit.value || customHabit.value);
 const isCustom = computed(() => !!customHabit.value && !catalogHabit.value);
+const isMeditationHabit = computed(
+  () => catalogHabit.value?.habitKey === 'meditation'
+);
 
 const isEditingTitle = ref(false);
 const titleDraft = ref('');
@@ -200,6 +215,10 @@ function goBack() {
     | undefined;
   const intent = intentFromQuery || resolvedIntentForFilters.value || 'build';
   navigateTo(`/habits?intent=${intent}`);
+}
+
+function goToMeditations() {
+  navigateTo('/meditations');
 }
 
 function startEditTitle() {

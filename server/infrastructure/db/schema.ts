@@ -251,6 +251,55 @@ export const therapyTopicsCustom = pgTable('therapy_topics_custom', {
     .notNull(),
 });
 
+// Каталог медитаций (источник метаданных, аудио лежит в public/)
+export const meditationTracks = pgTable(
+  'meditation_tracks',
+  {
+    id: text('id').primaryKey(),
+    title: varchar('title', { length: 160 }).notNull(),
+    description: text('description'),
+    topicKey: varchar('topic_key', { length: 40 }).notNull(),
+    topicKeys: text('topic_keys')
+      .array()
+      .notNull()
+      .default(sql`ARRAY[]::text[]`),
+    audioPath: text('audio_path').notNull(),
+    coverPath: text('cover_path'),
+    backgroundPath: text('background_path'),
+    isLoop: boolean('is_loop').default(false).notNull(),
+    durationSeconds: integer('duration_seconds'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    topicKeyIndex: index('idx_meditation_tracks_topic_key').on(table.topicKey),
+  })
+);
+
+// Избранное медитаций (по пользователю)
+export const meditationFavorites = pgTable(
+  'meditation_favorites',
+  {
+    userId: integer('user_id').notNull(),
+    trackId: text('track_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    userIndex: index('idx_meditation_favorites_user').on(table.userId),
+    trackIndex: index('idx_meditation_favorites_track').on(table.trackId),
+    uniqueUserTrack: unique('uk_meditation_favorites_user_track').on(
+      table.userId,
+      table.trackId
+    ),
+  })
+);
+
 // Глобальные настройки пользователя (addressing, tone)
 export const userPreferences = pgTable('user_preferences', {
   id: text('id').primaryKey(),
@@ -259,6 +308,7 @@ export const userPreferences = pgTable('user_preferences', {
     .notNull()
     .default('informal'), // 'informal' | 'formal'
   tone: varchar('tone', { length: 20 }).notNull().default('neutral'), // 'delicate' | 'neutral' | 'uplifting' | 'resolute' | 'demanding'
+  meditationTimerMinutes: integer('meditation_timer_minutes'),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull(),

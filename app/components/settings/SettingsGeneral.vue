@@ -30,6 +30,17 @@
         Тон не выбран — сейчас используется нейтральный.
       </p>
 
+      <!-- Таймер медитации по умолчанию -->
+      <ToggleButtonGroup
+        v-model="meditationTimerValue"
+        :options="meditationTimerOptions"
+        label="Таймер медитации по умолчанию"
+        size="sm"
+        variant="outline"
+        description="Используется при запуске медитации (можно изменить перед стартом)."
+        item-max-width="200px"
+      />
+
       <!-- Кнопка сохранения -->
       <button
         type="button"
@@ -70,6 +81,7 @@ const { fetchGlobalPreferences, updateGlobalPreferences } =
 
 const addressing = ref<Addressing>('informal');
 const tone = ref<Tone>('neutral');
+const meditationTimerValue = ref('off');
 const savingGlobal = ref(false);
 const toneWasUnknown = ref(false);
 
@@ -86,6 +98,13 @@ const toneOptions = [
   { value: 'demanding' as Tone, label: 'Требовательный' },
 ];
 
+const meditationTimerOptions = [
+  { value: 'off', label: 'Без таймера' },
+  { value: '10', label: '10 мин' },
+  { value: '20', label: '20 мин' },
+  { value: '30', label: '30 мин' },
+];
+
 onMounted(async () => {
   const prefs = await fetchGlobalPreferences();
   if (prefs) {
@@ -96,14 +115,23 @@ onMounted(async () => {
     } else {
       tone.value = prefs.tone;
     }
+    // Конвертируем число в строку для ToggleButtonGroup
+    meditationTimerValue.value = prefs.meditationTimerMinutes
+      ? String(prefs.meditationTimerMinutes)
+      : 'off';
   }
 });
 
 async function saveGlobalPreferences() {
   savingGlobal.value = true;
+  const meditationTimerMinutes =
+    meditationTimerValue.value === 'off'
+      ? null
+      : Number(meditationTimerValue.value);
   const result = await updateGlobalPreferences({
     addressing: addressing.value,
     tone: tone.value,
+    meditationTimerMinutes,
   });
   savingGlobal.value = false;
 
