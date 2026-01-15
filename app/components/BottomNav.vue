@@ -1,5 +1,9 @@
 <template>
-  <div v-bind="$attrs" class="flex-[0_0_auto] inset-x-0 mt-2 sticky bottom-0">
+  <div
+    v-bind="$attrs"
+    class="flex-[0_0_auto] inset-x-0 mt-2 sticky bottom-0"
+    :style="isMeditationPlayer ? { backdropFilter: 'blur(1px)' } : undefined"
+  >
     <section class="glass-deep px-0 py-3">
       <ul class="grid grid-cols-5 gap-1 text-xs">
         <li class="flex flex-col items-center gap-1 w-full">
@@ -99,6 +103,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import IconMessageCircleHeart from '~icons/lucide/message-circle-heart';
 import IconBrain from '~icons/lucide/brain';
 import IconListCheck from '~icons/lucide/list-check';
@@ -107,6 +112,11 @@ import IconSettings from '~icons/lucide/settings';
 
 const route = useRoute();
 const router = useRouter();
+
+// Размываем нижнюю панель только на странице плеера медитации.
+const isMeditationPlayer = computed(() => {
+  return route.path.startsWith('/meditations/') && Boolean(route.params?.id);
+});
 
 const isActive = (path: string) => {
   if (path === '/') return route.path === '/';

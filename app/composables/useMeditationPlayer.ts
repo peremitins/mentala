@@ -24,16 +24,22 @@ const globalState = {
   currentTrack: ref<MeditationTrackDto | null>(null),
   isPlaying: ref(false),
   isBuffering: ref(false),
-  isRepeating: ref(false),
+  // По умолчанию повтор трека включён.
+  isRepeating: ref(true),
   currentTime: ref(0),
   duration: ref(0),
   timerMinutes: ref<number | null>(null),
   timerEndsAt: ref<number | null>(null),
   timerRemainingMs: ref<number | null>(null),
+  // Выбранная длительность таймера, сохраняется между треками.
+  preferredTimerMinutes: ref<number | null>(null),
   sessionEnded: ref(false),
+  queueIds: ref<string[]>([]),
+  queueKey: ref<string | null>(null),
   fadeInterval: null as ReturnType<typeof setInterval> | null,
   progressInterval: null as ReturnType<typeof setInterval> | null,
   timerInterval: null as ReturnType<typeof setInterval> | null,
+  playbackActionId: 0,
   loopResetTriggered: false,
 };
 
@@ -94,9 +100,9 @@ async function loadAudioBuffer(
 
 async function prepareWebAudioTrack(
   track: MeditationTrackDto
-): Promise<boolean> {
+): Promise<AudioBuffer | null> {
   const context = ensureAudioContext();
-  if (!context) return false;
+  if (!context) return null;
 
   if (context.state === 'suspended') {
     await context.resume();
@@ -109,10 +115,8 @@ async function prepareWebAudioTrack(
   }
 
   ensureAudioGain(context);
-  globalState.playbackMode = 'webaudio';
-  globalState.currentTrack.value = track;
-  globalState.duration.value = globalState.audioBuffer?.duration ?? 0;
-  return true;
+  // Буфер кэшируем, а состояние трека выставляем только после проверки актуальности.
+  return globalState.audioBuffer;
 }
 
 function stopWebAudioSource() {
@@ -125,6 +129,29 @@ function stopWebAudioSource() {
   globalState.audioSource.disconnect();
   globalState.audioSource = null;
   globalState.webAudioStartTime = 0;
+}
+
+function stopDetachedAudio(audio: HTMLAudioElement) {
+  // Останавливаем "осиротевший" audio, не трогая глобальное состояние.
+  try {
+    audio.pause();
+  } catch {
+    // Если элемент уже остановлен — ничего не делаем.
+  }
+}
+
+function stopDetachedWebAudio(source: AudioBufferSourceNode) {
+  // Аналогично для Web Audio, чтобы не пересекаться с актуальным плеером.
+  try {
+    source.stop();
+  } catch {
+    // Источник мог уже остановиться.
+  }
+  try {
+    source.disconnect();
+  } catch {
+    // На всякий случай игнорируем повторное отключение.
+  }
 }
 
 function updateWebAudioOffset() {
@@ -162,11 +189,13 @@ function getWebAudioCurrentTime(): number {
   return Math.min(total, duration);
 }
 
-function createWebAudioSource(offsetSeconds: number) {
+function createWebAudioSource(
+  offsetSeconds: number
+): AudioBufferSourceNode | null {
   const context = globalState.audioContext;
   const buffer = globalState.audioBuffer;
   const gain = globalState.audioGain;
-  if (!context || !buffer || !gain) return;
+  if (!context || !buffer || !gain) return null;
 
   const source = context.createBufferSource();
   source.buffer = buffer;
@@ -189,6 +218,7 @@ function createWebAudioSource(offsetSeconds: number) {
   globalState.webAudioStartTime = context.currentTime;
   const safeOffset = Math.min(Math.max(0, offsetSeconds), buffer.duration || 0);
   source.start(0, safeOffset);
+  return source;
 }
 
 function clearIntervalSafe(timer: ReturnType<typeof setInterval> | null) {
@@ -213,6 +243,15 @@ function resetProgress() {
 
 function resetLoopGuard() {
   globalState.loopResetTriggered = false;
+}
+
+function bumpPlaybackActionId() {
+  globalState.playbackActionId += 1;
+  return globalState.playbackActionId;
+}
+
+function isPlaybackActionActive(actionId: number) {
+  return globalState.playbackActionId === actionId;
 }
 
 function getPlaybackSnapshot() {
@@ -342,11 +381,17 @@ function clearTimer() {
   globalState.timerInterval = null;
 }
 
+function setPreferredTimer(minutes: number | null) {
+  globalState.preferredTimerMinutes.value = minutes;
+}
+
 function setTimer(minutes: number | null) {
   if (!minutes) {
+    setPreferredTimer(null);
     clearTimer();
     return;
   }
+  setPreferredTimer(minutes);
   globalState.timerMinutes.value = minutes;
   globalState.timerRemainingMs.value = minutes * 60 * 1000;
   globalState.timerEndsAt.value =
@@ -368,7 +413,14 @@ function resumeTimer() {
   startTimerCountdown();
 }
 
-async function stop(withFade = true) {
+async function stop(
+  withFade = true,
+  options: { keepActionId?: boolean } = {}
+) {
+  if (!options.keepActionId) {
+    bumpPlaybackActionId();
+  }
+  globalState.isBuffering.value = false;
   if (globalState.playbackMode === 'webaudio') {
     if (withFade) {
       await fadeTo(0, FADE_OUT_MS);
@@ -393,7 +445,6 @@ async function stop(withFade = true) {
   globalState.audio = null;
   globalState.isPlaying.value = false;
   globalState.currentTrack.value = null;
-  globalState.isRepeating.value = false;
   globalState.playbackMode = null;
   stopIntervals();
   clearTimer();
@@ -401,6 +452,8 @@ async function stop(withFade = true) {
 }
 
 async function pause() {
+  bumpPlaybackActionId();
+  globalState.isBuffering.value = false;
   if (globalState.playbackMode === 'webaudio') {
     if (!globalState.audioSource) return;
     await fadeTo(0, PAUSE_FADE_MS);
@@ -422,6 +475,9 @@ async function pause() {
 async function play(track: MeditationTrackDto, timerMinutes?: number | null) {
   if (!isDocumentAvailable()) return;
 
+  const actionId = bumpPlaybackActionId();
+  const isActionActive = () => isPlaybackActionActive(actionId);
+
   resetLoopGuard();
 
   const sameTrack = globalState.currentTrack.value?.id === track.id;
@@ -431,7 +487,8 @@ async function play(track: MeditationTrackDto, timerMinutes?: number | null) {
 
   if (!sameTrack || globalState.playbackMode !== mode) {
     // Останавливаем предыдущий трек перед запуском нового
-    await stop(false);
+    await stop(false, { keepActionId: true });
+    if (!isActionActive()) return;
   }
 
   globalState.sessionEnded.value = false;
@@ -439,11 +496,30 @@ async function play(track: MeditationTrackDto, timerMinutes?: number | null) {
   startProgressTracking();
 
   let started = false;
+  let localAudio: HTMLAudioElement | null = null;
+  let localSource: AudioBufferSourceNode | null = null;
+
+  const abortIfStale = () => {
+    if (isActionActive()) return false;
+    if (localAudio) {
+      stopDetachedAudio(localAudio);
+    }
+    if (localSource) {
+      stopDetachedWebAudio(localSource);
+    }
+    return true;
+  };
+
   try {
     if (mode === 'webaudio') {
-      const prepared = await prepareWebAudioTrack(track);
-      if (!prepared) {
+      const buffer = await prepareWebAudioTrack(track);
+      if (abortIfStale()) return;
+      if (!buffer) {
         mode = 'html';
+      } else {
+        globalState.playbackMode = 'webaudio';
+        globalState.currentTrack.value = track;
+        globalState.duration.value = buffer.duration ?? 0;
       }
     }
 
@@ -451,11 +527,13 @@ async function play(track: MeditationTrackDto, timerMinutes?: number | null) {
       if (typeof Audio === 'undefined') return;
       if (!globalState.audio || !sameTrack) {
         const audio = new Audio(resolveMediaUrl(track.audioPath));
+        localAudio = audio;
         audio.loop = Boolean(track.isLoop);
         audio.preload = 'auto';
         audio.volume = 0;
 
         audio.onended = () => {
+          if (globalState.audio !== audio) return;
           if (globalState.isRepeating.value || audio.loop) {
             audio.currentTime = 0;
             void audio.play();
@@ -469,29 +547,42 @@ async function play(track: MeditationTrackDto, timerMinutes?: number | null) {
         };
 
         audio.onloadedmetadata = () => {
+          if (globalState.audio !== audio) return;
           globalState.duration.value = Number.isFinite(audio.duration)
             ? audio.duration
             : 0;
         };
 
-        audio.ontimeupdate = () => handleGaplessLoop(audio);
+        audio.ontimeupdate = () => {
+          if (globalState.audio !== audio) return;
+          handleGaplessLoop(audio);
+        };
 
         audio.onerror = () => {
+          if (globalState.audio !== audio) return;
           globalState.isPlaying.value = false;
         };
 
+        if (abortIfStale()) return;
         globalState.audio = audio;
         globalState.currentTrack.value = track;
         globalState.playbackMode = 'html';
       } else if (globalState.audio) {
-        globalState.audio.ontimeupdate = () =>
-          handleGaplessLoop(globalState.audio!);
+        const activeAudio = globalState.audio;
+        localAudio = activeAudio;
+        activeAudio.ontimeupdate = () => {
+          if (globalState.audio !== activeAudio) return;
+          handleGaplessLoop(activeAudio);
+        };
       }
 
+      if (abortIfStale()) return;
       await globalState.audio?.play();
+      if (abortIfStale()) return;
       globalState.isPlaying.value = true;
       started = true;
       await fadeTo(1, FADE_IN_MS);
+      if (abortIfStale()) return;
     } else {
       globalState.playbackMode = 'webaudio';
       const context = globalState.audioContext;
@@ -500,24 +591,34 @@ async function play(track: MeditationTrackDto, timerMinutes?: number | null) {
         globalState.audioGain.gain.setValueAtTime(0, context.currentTime);
       }
       if (!globalState.audioSource) {
-        createWebAudioSource(globalState.webAudioOffset);
+        localSource = createWebAudioSource(globalState.webAudioOffset);
+      } else {
+        localSource = globalState.audioSource;
       }
+      if (abortIfStale()) return;
       globalState.isPlaying.value = true;
       started = true;
       await fadeTo(1, FADE_IN_MS);
+      if (abortIfStale()) return;
     }
   } catch (error) {
-    globalState.isPlaying.value = false;
+    if (isActionActive()) {
+      globalState.isPlaying.value = false;
+    }
     console.error('[MeditationPlayer] Failed to start playback:', error);
   } finally {
-    globalState.isBuffering.value = false;
+    if (isActionActive()) {
+      globalState.isBuffering.value = false;
+    }
   }
 
-  if (started) {
+  if (started && isActionActive()) {
     if (timerMinutes !== undefined) {
       setTimer(timerMinutes);
     } else if (globalState.timerMinutes.value) {
       resumeTimer();
+    } else if (globalState.preferredTimerMinutes.value) {
+      setTimer(globalState.preferredTimerMinutes.value);
     }
   }
 }
@@ -576,8 +677,10 @@ function seekTo(positionSeconds: number) {
     globalState.currentTime.value = next;
     if (globalState.audioSource) {
       stopWebAudioSource();
-      createWebAudioSource(next);
-      globalState.isPlaying.value = true;
+      const source = createWebAudioSource(next);
+      if (source) {
+        globalState.isPlaying.value = true;
+      }
     }
     return;
   }
@@ -593,6 +696,16 @@ function acknowledgeSession() {
   globalState.sessionEnded.value = false;
 }
 
+function setQueue(ids: string[], key?: string | null) {
+  globalState.queueIds.value = Array.from(new Set(ids));
+  globalState.queueKey.value = key ?? null;
+}
+
+function clearQueue() {
+  globalState.queueIds.value = [];
+  globalState.queueKey.value = null;
+}
+
 export function useMeditationPlayer() {
   return {
     currentTrack: computed(() => globalState.currentTrack.value),
@@ -603,17 +716,25 @@ export function useMeditationPlayer() {
     duration: computed(() => globalState.duration.value),
     timerMinutes: computed(() => globalState.timerMinutes.value),
     timerRemainingMs: computed(() => globalState.timerRemainingMs.value),
+    preferredTimerMinutes: computed(
+      () => globalState.preferredTimerMinutes.value
+    ),
     sessionEnded: computed(() => globalState.sessionEnded.value),
+    queueIds: computed(() => globalState.queueIds.value),
+    queueKey: computed(() => globalState.queueKey.value),
     play,
     pause,
     stop,
     toggle,
     setTimer,
+    setPreferredTimer,
     clearTimer,
     seekBy,
     seekTo,
     setRepeat,
     toggleRepeat,
     acknowledgeSession,
+    setQueue,
+    clearQueue,
   };
 }

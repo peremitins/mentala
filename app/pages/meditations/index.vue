@@ -22,7 +22,7 @@
             ? (section.key as MeditationTopicKey)
             : undefined
         "
-        @open="openTrack"
+        @open="openTrack($event, section.key, section.tracks)"
         @favorite="toggleFavorite"
         @view-all="openViewAll(section.key)"
       />
@@ -44,7 +44,7 @@
             :key="track.id"
             type="button"
             class="group flex w-full items-center gap-3 rounded-2xl bg-white/5 p-3 text-left transition hover:bg-white/10"
-            @click="openTrack(track.id)"
+            @click="openTrack(track.id, dialogTopicKey || 'all', dialogTracks)"
           >
             <div class="relative h-16 w-16 overflow-hidden rounded-2xl">
               <div
@@ -85,6 +85,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
+import { formatInTimeZone } from 'date-fns-tz';
 import PageHeader from '@/app/components/PageHeader.vue';
 import StateBlock from '@/app/components/StateBlock.vue';
 import Skeleton from '@/app/components/ui/Skeleton.vue';
@@ -110,7 +111,7 @@ import {
 const router = useRouter();
 const meditationsStore = useMeditationsStore();
 const loaders = useLoadersStore();
-const { currentTrack } = useMeditationPlayer();
+const { currentTrack, setQueue } = useMeditationPlayer();
 
 type SectionKey = MeditationTopicKey | 'favorites' | 'all';
 type Section = {
@@ -192,7 +193,9 @@ const sections = computed<Section[]>(() => {
         ? tracks
         : section.key === 'favorites'
           ? tracks.filter((t) => t.isFavorite)
-          : tracks.filter((t) => trackTopics(t).includes(section.key));
+          : tracks.filter((t) =>
+              trackTopics(t).includes(section.key as MeditationTopicKey)
+            );
 
     return {
       key: section.key,
@@ -254,8 +257,10 @@ function topicGradient(key: MeditationTopicKey) {
 
 function formatDuration(durationSeconds?: number | null) {
   if (!durationSeconds) return '∞';
-  const minutes = Math.round(durationSeconds / 60);
-  return `${minutes} мин`;
+  const safeSeconds = Math.max(0, Math.floor(durationSeconds));
+  const formatMask = safeSeconds >= 3600 ? 'H:mm:ss' : 'mm:ss';
+  // Форматируем в UTC, чтобы не зависеть от часового пояса устройства.
+  return formatInTimeZone(new Date(safeSeconds * 1000), 'UTC', formatMask);
 }
 
 function resolveMediaUrl(path?: string | null) {
@@ -267,7 +272,25 @@ function resolveMediaUrl(path?: string | null) {
   return path;
 }
 
-function openTrack(trackId: string) {
+function openTrack(
+  trackId: string,
+  sectionKey?: SectionKey,
+  list?: MeditationTrackDto[]
+) {
+  if (list?.length) {
+    setQueue(
+      list.map((t) => t.id),
+      sectionKey ?? null
+    );
+  } else if (sectionKey) {
+    const section = sections.value.find((item) => item.key === sectionKey);
+    if (section?.tracks?.length) {
+      setQueue(
+        section.tracks.map((t) => t.id),
+        sectionKey
+      );
+    }
+  }
   router.push(`/meditations/${trackId}`);
 }
 

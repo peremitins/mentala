@@ -20,7 +20,7 @@
     <!-- </div> -->
     <ClientOnly>
       <MiniMeditationPlayer
-        v-if="currentTrack && isPlaying && !isMeditationDetail"
+        v-if="currentTrack && !isMeditationDetail"
         :track="currentTrack"
         :progress="progressPercent"
         :is-playing="isPlaying"

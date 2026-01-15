@@ -55,17 +55,11 @@
       </div>
 
       <div class="flex flex-wrap items-center gap-2 text-[11px] mt-auto">
-        <Badge variant="secondary" class="bg-white/15 text-white/90">
-          {{ topicLabel }}
-        </Badge>
         <Badge
-          v-if="track.isLoop"
+          v-if="!track.isLoop"
           variant="secondary"
-          class="border-primary/60 bg-primary/15 text-primary-foreground/90"
+          class="bg-white/10 text-white/80"
         >
-          Бесконечно
-        </Badge>
-        <Badge v-else variant="secondary" class="bg-white/10 text-white/80">
           {{ formatDuration(track.durationSeconds) }}
         </Badge>
       </div>
@@ -84,6 +78,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import IconHeart from '~icons/lucide/heart';
+import { formatInTimeZone } from 'date-fns-tz';
 import { Badge } from '@/app/components/ui/shadcn/badge';
 import type { MeditationTrackDto } from '@/shared/dto/meditations';
 
@@ -114,7 +109,9 @@ const coverUrl = computed(() => {
 
 function formatDuration(durationSeconds?: number | null) {
   if (!durationSeconds) return '∞';
-  const minutes = Math.round(durationSeconds / 60);
-  return `${minutes} мин`;
+  const safeSeconds = Math.max(0, Math.floor(durationSeconds));
+  const formatMask = safeSeconds >= 3600 ? 'H:mm:ss' : 'mm:ss';
+  // Форматируем в UTC, чтобы не зависеть от часового пояса устройства.
+  return formatInTimeZone(new Date(safeSeconds * 1000), 'UTC', formatMask);
 }
 </script>

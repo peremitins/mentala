@@ -25,28 +25,33 @@
         class="glass-deep space-y-4 p-4 text-elevated-strong"
         :style="{ backdropFilter: 'blur(1px)' }"
       >
-        <div
-          class="relative h-2 w-full cursor-pointer overflow-hidden rounded-full border border-white/75"
-          ref="progressRef"
-          @click="onProgressClick"
-        >
+        <div v-if="!isLoopTrack" class="space-y-2">
           <div
-            class="h-full rounded-full bg-gradient-to-r from-primary via-cyan-400 to-emerald-400 transition-all duration-300"
-            :style="{ width: `${progressPercent}%` }"
-          />
-        </div>
-        <div class="flex items-center justify-between text-xs text-white/70">
-          <span>{{ formatPlaybackTime(displayCurrentTime) }}</span>
-          <span>{{ formatPlaybackTime(displayDuration) }}</span>
+            class="relative h-2 w-full cursor-pointer overflow-hidden rounded-full border border-white/75"
+            ref="progressRef"
+            @click="onProgressClick"
+          >
+            <div
+              class="h-full rounded-full bg-gradient-to-r from-primary via-cyan-400 to-emerald-400 transition-all duration-300"
+              :style="{ width: `${progressPercent}%` }"
+            />
+          </div>
+          <div class="flex items-center justify-between text-xs text-white/70">
+            <span>{{ formatPlaybackTime(displayCurrentTime) }}</span>
+            <span>{{ formatPlaybackTime(displayDuration) }}</span>
+          </div>
         </div>
 
         <div class="flex items-center justify-between gap-3">
-          <div class="flex items-center gap-2 text-[11px] text-white/70">
+          <div
+            v-if="isLoopTrack"
+            class="flex items-center gap-2 text-[11px] text-white/70"
+          >
             <Badge variant="secondary" class="bg-white/10 text-white/80">
-              {{ formatDuration(track?.durationSeconds) }}
+              ∞
             </Badge>
           </div>
-          <div class="text-xs text-white/70">
+          <div class="text-xs text-white/70 ml-auto">
             <span v-if="timerRemainingLabel"
               >Таймер: {{ timerRemainingLabel }}</span
             >
@@ -111,22 +116,9 @@
 
         <div class="flex flex-wrap items-center gap-2 text-xs text-white/80">
           <span class="text-white/60">Таймер:</span>
-          <button
-            type="button"
-            class="rounded-full border px-3 py-1 transition"
-            :class="
-              !selectedTimer
-                ? 'border-primary/60 bg-primary/80 text-primary-foreground'
-                : 'border-white/15 bg-white/5 text-white/70 hover:border-white/30 hover:text-white'
-            "
-            @click="applyTimer(null)"
-          >
-            Без таймера
-          </button>
           <TimePicker
-            v-model:model-value="customTimerValue"
+            v-model:model-value="timerPickerValue"
             label=""
-            class="ml-1"
             @update:model-value="(val) => applyTimer(val)"
           >
             <template #trigger="{ formattedTime }">
@@ -134,15 +126,12 @@
                 type="button"
                 class="rounded-full border px-3 py-1 transition"
                 :class="
-                  selectedTimer !== null
+                  isTimerEnabled
                     ? 'border-white/30 bg-white/15 text-white shadow-sm'
                     : 'border-white/15 bg-white/5 text-white/70 hover:border-white/30 hover:text-white'
                 "
               >
-                <span v-if="selectedTimer !== null">{{
-                  `${selectedTimer} мин`
-                }}</span>
-                <span v-else class="text-white/70">Задать время</span>
+                <span>{{ timerTriggerLabel }}</span>
               </button>
             </template>
           </TimePicker>
@@ -186,6 +175,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 import { useMediaQuery, useWindowSize } from '@vueuse/core';
+import { formatInTimeZone } from 'date-fns-tz';
 import StateBlock from '@/app/components/StateBlock.vue';
 import { Badge } from '@/app/components/ui/shadcn/badge';
 import TimePicker from '@/app/components/TimePicker.vue';
@@ -231,23 +221,27 @@ const {
   isRepeating,
   currentTime,
   duration,
-  timerMinutes,
   timerRemainingMs,
+  preferredTimerMinutes,
   sessionEnded,
+  queueIds,
+  queueKey,
   toggle,
   play,
   pause,
   stop,
   setTimer,
+  setPreferredTimer,
   seekBy,
   seekTo,
   toggleRepeat,
   acknowledgeSession,
 } = useMeditationPlayer();
 
-const DEFAULT_TIMER_MINUTES = 10;
-const selectedTimer = ref<number | null>(null);
-const customTimerValue = ref<number>(DEFAULT_TIMER_MINUTES);
+const timerPickerValue = computed({
+  get: () => preferredTimerMinutes.value ?? 0,
+  set: (value) => applyTimer(value),
+});
 
 const isActive = computed(() => currentTrack.value?.id === track.value?.id);
 const isLoopTrack = computed(() => Boolean(track.value?.isLoop));
@@ -271,6 +265,15 @@ const timerRemainingLabel = computed(() => {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
+});
+
+const isTimerEnabled = computed(() => preferredTimerMinutes.value !== null);
+
+const timerTriggerLabel = computed(() => {
+  if (preferredTimerMinutes.value !== null) {
+    return `${preferredTimerMinutes.value} мин`;
+  }
+  return 'Без таймера';
 });
 
 function buildVariants(path?: string | null, portraitFirst = false) {
@@ -325,12 +328,6 @@ const topicName = computed(() =>
   track.value ? topicLabel(track.value.topicKey) : 'Медитация'
 );
 
-function formatDuration(durationSeconds?: number | null) {
-  if (!durationSeconds) return '∞';
-  const minutes = Math.round(durationSeconds / 60);
-  return `${minutes} мин`;
-}
-
 function formatPlaybackTime(value: number) {
   if (!value || !Number.isFinite(value)) return '0:00';
   const minutes = Math.floor(value / 60);
@@ -339,11 +336,11 @@ function formatPlaybackTime(value: number) {
 }
 
 function applyTimer(value: number | null) {
-  // 0, null, undefined считаем выключенным таймером
-  const minutes = value ?? null;
-  const normalized = minutes !== null && minutes > 0 ? minutes : null;
-  selectedTimer.value = normalized;
-  customTimerValue.value = normalized ?? DEFAULT_TIMER_MINUTES;
+  // 00:00 или пустое значение = таймер выключен.
+  const safeValue = Number.isFinite(value) ? (value as number) : 0;
+  const clamped = Math.max(0, Math.floor(safeValue));
+  const normalized = clamped > 0 ? clamped : null;
+  setPreferredTimer(normalized);
   if (isActive.value) {
     setTimer(normalized);
   }
@@ -353,24 +350,58 @@ function togglePlay() {
   if (!track.value) return;
   // Если играет другой трек, сразу запускаем текущий, а не ставим на паузу глобальный плеер
   if (!isActive.value) {
-    void play(track.value, selectedTimer.value);
+    void play(track.value, preferredTimerMinutes.value);
     return;
   }
   if (isPlaying.value) {
     void pause();
   } else {
-    void play(track.value, selectedTimer.value);
+    void play(track.value, preferredTimerMinutes.value);
   }
+}
+
+function trackTopics(source?: MeditationTrackDto | null): MeditationTopicKey[] {
+  if (!source) return [];
+  const topics = new Set<MeditationTopicKey>();
+  if (source.topicKey) topics.add(source.topicKey);
+  if (source.topicKeys?.length) {
+    source.topicKeys.forEach((key) => topics.add(key));
+  }
+  return Array.from(topics);
+}
+
+function resolveQueuePool(): MeditationTrackDto[] {
+  if (!track.value) return [];
+  const ids = queueIds.value;
+  if (!ids.length) return [];
+  if (!ids.includes(track.value.id)) return [];
+  // Собираем в порядке очереди, пропуская отсутствующие элементы
+  return ids
+    .map((id) => meditationsStore.byId(id))
+    .filter((item): item is MeditationTrackDto => Boolean(item));
+}
+
+function resolveTopicPool(): MeditationTrackDto[] {
+  if (!track.value) return [];
+  const topics = trackTopics(track.value);
+  if (!topics.length) return [];
+  return meditationsStore.tracks.filter((item) =>
+    trackTopics(item).some((key) => topics.includes(key))
+  );
 }
 
 function findSiblingTrack(direction: 1 | -1) {
   if (!track.value) return null;
-  // Берём треки по теме, иначе весь список
-  const list = meditationsStore.tracks.filter(
-    (t) => t.topicKey === track.value?.topicKey
-  );
+  const queuePool = resolveQueuePool();
+  if (queuePool.length) {
+    const idx = queuePool.findIndex((item) => item.id === track.value?.id);
+    const nextIndex = (idx + direction + queuePool.length) % queuePool.length;
+    return queuePool[nextIndex];
+  }
+
+  const topicPool = resolveTopicPool();
   const fallback = meditationsStore.tracks;
-  const pool = list.length ? list : fallback;
+  const pool = topicPool.length ? topicPool : fallback;
   const idx = pool.findIndex((item) => item.id === track.value?.id);
   if (!pool.length) return null;
   const nextIndex = (idx + direction + pool.length) % pool.length;
@@ -382,17 +413,21 @@ async function changeTrack(direction: 1 | -1) {
   const target = findSiblingTrack(direction);
   if (!target) return;
 
-  const shouldAutoplay = isPlaying.value;
+  // Учитываем буферизацию, чтобы быстрые клики не сбивали автоплей.
+  const shouldAutoplay = isPlaying.value || isBuffering.value;
   track.value = target;
 
   // Сразу меняем URL, чтобы не ждать загрузки/анимаций плеера и убрать визуальный лаг
   void router.replace(`/meditations/${target.id}`);
 
-  // Автовоспроизведение, если уже играло; иначе переключаем трек и ставим на паузу
-  await play(target, selectedTimer.value);
+  // Если воспроизведение было остановлено, не запускаем новый трек.
   if (!shouldAutoplay) {
-    await pause();
+    await stop(false);
+    return;
   }
+
+  // Автовоспроизведение, если уже играло.
+  await play(target, preferredTimerMinutes.value);
 }
 
 function playNext() {
@@ -429,6 +464,13 @@ onMounted(async () => {
     const trackId = String(route.params.id || '');
     acknowledgeSession();
     track.value = await meditationsStore.fetchTrack(trackId);
+    if (
+      track.value &&
+      !(isActive.value && (isPlaying.value || isBuffering.value))
+    ) {
+      // Автостарт при входе на страницу, если трек ещё не играет.
+      void play(track.value, preferredTimerMinutes.value);
+    }
   } catch (err: any) {
     error.value = err?.message || 'Не удалось загрузить медитацию';
   } finally {
