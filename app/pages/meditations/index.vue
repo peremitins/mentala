@@ -96,6 +96,7 @@ import { useMeditationPlayer } from '@/app/composables/useMeditationPlayer';
 import { MEDITATION_TOPICS } from '@/shared/constants/meditations';
 import type { MeditationTopic } from '@/shared/constants/meditations';
 import { MEDITATION_TOPIC_GRADIENTS } from '@/app/lib/meditations';
+import { resolveMediaUrl } from '@/app/utils/media';
 import type {
   MeditationTopicKey,
   MeditationTrackDto,
@@ -261,15 +262,6 @@ function formatDuration(durationSeconds?: number | null) {
   const formatMask = safeSeconds >= 3600 ? 'H:mm:ss' : 'mm:ss';
   // Форматируем в UTC, чтобы не зависеть от часового пояса устройства.
   return formatInTimeZone(new Date(safeSeconds * 1000), 'UTC', formatMask);
-}
-
-function resolveMediaUrl(path?: string | null) {
-  if (!path) return '';
-  if (/^https?:\/\//i.test(path)) return path;
-  if (typeof window !== 'undefined' && window.location?.origin) {
-    return new URL(path, window.location.origin).toString();
-  }
-  return path;
 }
 
 function openTrack(

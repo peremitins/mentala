@@ -91,11 +91,27 @@
           </button>
           <button
             type="button"
-            class="flex h-14 items-center justify-center rounded-full bg-primary/80 text-primary-foreground shadow-lg transition hover:bg-primary"
+            class="flex h-14 items-center justify-center rounded-full bg-primary/80 text-primary-foreground shadow-lg transition hover:bg-primary disabled:cursor-not-allowed disabled:opacity-70"
             :class="{ 'opacity-80': isBuffering }"
+            :disabled="isBuffering"
+            :aria-busy="isBuffering"
             @click="togglePlay"
           >
-            <IconPause v-if="isActive && isPlaying" class="h-6 w-6" />
+            <svg
+              v-if="isBuffering"
+              class="h-6 w-6 animate-spin"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+              />
+            </svg>
+            <IconPause v-else-if="isActive && isPlaying" class="h-6 w-6" />
             <IconPlay v-else class="h-6 w-6" />
           </button>
           <button
@@ -191,6 +207,7 @@ import { useMeditationsStore } from '@/app/stores/meditations';
 import { useMeditationPlayer } from '@/app/composables/useMeditationPlayer';
 import { useNotificationsSettings } from '@/app/composables/useNotificationsSettings';
 import { MEDITATION_TOPICS } from '@/shared/constants/meditations';
+import { resolveMediaUrl } from '@/app/utils/media';
 import type {
   MeditationTopicKey,
   MeditationTrackDto,
@@ -309,15 +326,6 @@ const backgroundUrl = computed(() => {
 
 function goBack() {
   router.push('/meditations');
-}
-
-function resolveMediaUrl(path: string) {
-  if (!path) return '';
-  if (/^https?:\/\//i.test(path)) return path;
-  if (typeof window !== 'undefined' && window.location?.origin) {
-    return new URL(path, window.location.origin).toString();
-  }
-  return path;
 }
 
 function topicLabel(key: MeditationTopicKey) {

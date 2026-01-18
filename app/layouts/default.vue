@@ -24,6 +24,7 @@
         :track="currentTrack"
         :progress="progressPercent"
         :is-playing="isPlaying"
+        :is-buffering="isBuffering"
         @toggle="togglePlayback"
         @stop="stopPlayback"
         @open="openDetail"
@@ -41,9 +42,17 @@ import BottomNav from '@/app/components/BottomNav.vue';
 import MiniMeditationPlayer from '@/app/components/meditations/MiniMeditationPlayer.vue';
 import { useMeditationPlayer } from '@/app/composables/useMeditationPlayer';
 import { useMeditationsStore } from '@/app/stores/meditations';
+import { resolveMediaUrl } from '@/app/utils/media';
 
-const { currentTrack, currentTime, duration, isPlaying, toggle, stop } =
-  useMeditationPlayer();
+const {
+  currentTrack,
+  currentTime,
+  duration,
+  isPlaying,
+  isBuffering,
+  toggle,
+  stop,
+} = useMeditationPlayer();
 const meditationsStore = useMeditationsStore();
 const isPortraitQuery = useMediaQuery('(orientation: portrait)');
 const { width, height } = useWindowSize();
@@ -66,15 +75,6 @@ const routeTrack = computed(() => {
   if (!id) return null;
   return meditationsStore.byId(id) || null;
 });
-
-function resolveMediaUrl(path?: string | null) {
-  if (!path) return '';
-  if (/^https?:\/\//i.test(path)) return path;
-  if (typeof window !== 'undefined' && window.location?.origin) {
-    return new URL(path, window.location.origin).toString();
-  }
-  return path;
-}
 
 function buildVariants(path?: string | null) {
   if (!path) return [];

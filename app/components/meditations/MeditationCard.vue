@@ -80,6 +80,7 @@ import { computed } from 'vue';
 import IconHeart from '~icons/lucide/heart';
 import { formatInTimeZone } from 'date-fns-tz';
 import { Badge } from '@/app/components/ui/shadcn/badge';
+import { resolveMediaUrl } from '@/app/utils/media';
 import type { MeditationTrackDto } from '@/shared/dto/meditations';
 
 const props = defineProps<{
@@ -93,15 +94,6 @@ const emit = defineEmits<{
   (e: 'open', id: string): void;
   (e: 'favorite', id: string): void;
 }>();
-
-function resolveMediaUrl(path?: string | null) {
-  if (!path) return '';
-  if (/^https?:\/\//i.test(path)) return path;
-  if (typeof window !== 'undefined' && window.location?.origin) {
-    return new URL(path, window.location.origin).toString();
-  }
-  return path;
-}
 
 const coverUrl = computed(() => {
   return resolveMediaUrl(props.track.coverPath || '');

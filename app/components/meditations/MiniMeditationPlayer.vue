@@ -36,10 +36,26 @@
           <div class="flex items-center gap-2">
             <button
               type="button"
-              class="rounded-full bg-primary/80 p-3 text-primary-foreground transition hover:bg-primary"
+              class="rounded-full bg-primary/80 p-3 text-primary-foreground transition hover:bg-primary disabled:cursor-not-allowed disabled:opacity-70"
+              :disabled="isBuffering"
+              :aria-busy="isBuffering"
               @click.stop="emit('toggle')"
             >
-              <IconPause v-if="isPlaying" class="h-4 w-4" />
+              <svg
+                v-if="isBuffering"
+                class="h-4 w-4 animate-spin"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                />
+              </svg>
+              <IconPause v-else-if="isPlaying" class="h-4 w-4" />
               <IconPlay v-else class="h-4 w-4" />
             </button>
             <button
@@ -69,6 +85,7 @@ import IconPause from '~icons/lucide/pause';
 import IconX from '~icons/lucide/x';
 import { MEDITATION_TOPICS } from '@/shared/constants/meditations';
 import { MEDITATION_TOPIC_GRADIENTS } from '@/app/lib/meditations';
+import { resolveMediaUrl } from '@/app/utils/media';
 import type {
   MeditationTopicKey,
   MeditationTrackDto,
@@ -78,6 +95,7 @@ const props = defineProps<{
   track: MeditationTrackDto | null;
   progress: number;
   isPlaying: boolean;
+  isBuffering: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -97,14 +115,6 @@ function topicGradient(key: MeditationTopicKey) {
   );
 }
 
-function resolveMediaUrl(path?: string | null) {
-  if (!path) return '';
-  if (/^https?:\/\//i.test(path)) return path;
-  if (typeof window !== 'undefined' && window.location?.origin) {
-    return new URL(path, window.location.origin).toString();
-  }
-  return path;
-}
 </script>
 
 <style scoped>

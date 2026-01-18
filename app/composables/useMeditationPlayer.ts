@@ -1,5 +1,6 @@
 import { computed, ref } from 'vue';
 import { isDocumentAvailable } from '@/app/utils/document';
+import { resolveMediaUrl } from '@/app/utils/media';
 import type { MeditationTrackDto } from '@/shared/dto/meditations';
 
 const FADE_IN_MS = 1500;
@@ -42,15 +43,6 @@ const globalState = {
   playbackActionId: 0,
   loopResetTriggered: false,
 };
-
-function resolveMediaUrl(path: string): string {
-  if (!path) return '';
-  if (/^https?:\/\//i.test(path)) return path;
-  if (typeof window !== 'undefined' && window.location?.origin) {
-    return new URL(path, window.location.origin).toString();
-  }
-  return path;
-}
 
 function getAudioContextCtor(): typeof AudioContext | null {
   if (typeof window === 'undefined') return null;
@@ -580,6 +572,8 @@ async function play(track: MeditationTrackDto, timerMinutes?: number | null) {
       await globalState.audio?.play();
       if (abortIfStale()) return;
       globalState.isPlaying.value = true;
+      // Снимаем лоадер сразу после старта воспроизведения (play() уже зарезолвился).
+      globalState.isBuffering.value = false;
       started = true;
       await fadeTo(1, FADE_IN_MS);
       if (abortIfStale()) return;
@@ -597,6 +591,8 @@ async function play(track: MeditationTrackDto, timerMinutes?: number | null) {
       }
       if (abortIfStale()) return;
       globalState.isPlaying.value = true;
+      // WebAudio стартует сразу после source.start(), лоадер можно скрыть.
+      globalState.isBuffering.value = false;
       started = true;
       await fadeTo(1, FADE_IN_MS);
       if (abortIfStale()) return;

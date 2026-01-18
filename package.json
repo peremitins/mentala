@@ -28,7 +28,7 @@
     "cap:sync:device": "./scripts/setup-capacitor-dev.sh device",
     "cap:open:android": "npx cap open android",
     "build:mobile": "nuxt generate && npx cap sync",
-    "upload:media": "aws s3 sync frontend/public/meditations s3://mentala/meditations --endpoint-url=https://storage.yandexcloud.net --acl public-read"
+    "upload:media": "aws s3 sync public/meditations s3://mentala/meditations --endpoint-url=https://storage.yandexcloud.net --acl public-read"
   },
   "dependencies": {
     "@capacitor-community/speech-recognition": "^7.0.1",
