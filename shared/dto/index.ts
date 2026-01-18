@@ -1,6 +1,7 @@
 import { z } from 'zod';
 export * from './auth';
 export * from './onboarding';
+export * from './meditations';
 
 export const UserDto = z.object({
   id: z.string().uuid().optional(),
@@ -72,10 +73,41 @@ export const SuggestedChipIntentEnum = z.enum([
   'support',
 ]);
 
-export const SuggestedChipDto = z.object({
-  text: z.string().min(1).max(80),
-  intent: SuggestedChipIntentEnum,
+export const SuggestedChipKindEnum = z.enum(['text', 'action']);
+
+export const SuggestedChipActionEnum = z.enum([
+  'open_meditations',
+  'open_meditation_track',
+  'open_meditations_collection',
+]);
+
+export const SuggestedChipActionParamsDto = z.object({
+  trackId: z.string().optional(),
+  collectionId: z.string().optional(),
 });
+
+export const SuggestedChipDto = z
+  .object({
+    text: z.string().min(1).max(80),
+    intent: SuggestedChipIntentEnum,
+    kind: SuggestedChipKindEnum.optional().default('text'),
+    action: SuggestedChipActionEnum.optional(),
+    params: SuggestedChipActionParamsDto.optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.kind === 'action' && !value.action) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'action is required for action chips',
+      });
+    }
+    if (value.kind === 'text' && value.action) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'action is not allowed for text chips',
+      });
+    }
+  });
 
 export const SuggestedChipsPayloadDto = z.object({
   chips: z.array(SuggestedChipDto).max(5),
@@ -105,6 +137,11 @@ export type ChatRequestDto = z.infer<typeof ChatRequestDto>;
 export type ChatResponseDto = z.infer<typeof ChatResponseDto>;
 export type ChatEntryContext = z.infer<typeof ChatEntryContextDto>;
 export type SuggestedChipIntent = z.infer<typeof SuggestedChipIntentEnum>;
+export type SuggestedChipKind = z.infer<typeof SuggestedChipKindEnum>;
+export type SuggestedChipAction = z.infer<typeof SuggestedChipActionEnum>;
+export type SuggestedChipActionParams = z.infer<
+  typeof SuggestedChipActionParamsDto
+>;
 export type SuggestedChip = z.infer<typeof SuggestedChipDto>;
 export type SuggestedChipsPayload = z.infer<typeof SuggestedChipsPayloadDto>;
 export type ChatStreamChunk = z.infer<typeof ChatStreamChunkDto>;

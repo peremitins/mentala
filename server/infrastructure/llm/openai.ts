@@ -293,6 +293,26 @@ export const openaiProvider: LlmProviderPort = {
                     'support',
                   ],
                 },
+                kind: {
+                  type: 'string',
+                  enum: ['text', 'action'],
+                },
+                action: {
+                  type: 'string',
+                  enum: [
+                    'open_meditations',
+                    'open_meditation_track',
+                    'open_meditations_collection',
+                  ],
+                },
+                params: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    trackId: { type: 'string' },
+                    collectionId: { type: 'string' },
+                  },
+                },
               },
             },
           },
@@ -316,21 +336,90 @@ export const openaiProvider: LlmProviderPort = {
         },
       };
 
-      const res: any = await $fetch(OPENAI_URL, {
-        method: 'POST',
-        timeout: 30_000,
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-          ...(org ? { 'OpenAI-Organization': org } : {}),
-          ...(project ? { 'OpenAI-Project': project } : {}),
-          'Idempotency-Key': idempotencyKey,
-        },
-        body,
-      });
+      try {
+        const res: any = await $fetch(OPENAI_URL, {
+          method: 'POST',
+          timeout: 30_000,
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+            ...(org ? { 'OpenAI-Organization': org } : {}),
+            ...(project ? { 'OpenAI-Project': project } : {}),
+            'Idempotency-Key': idempotencyKey,
+          },
+          body,
+        });
 
-      const content = extractText(res);
-      return { role: 'assistant', content, model: usedModel };
+        const content = extractText(res);
+        return { role: 'assistant', content, model: usedModel };
+      } catch (err: any) {
+        const status = err?.response?.status || err?.status || 500;
+        const openaiMessage =
+          err?.data?.error?.message ||
+          err?.data?.message ||
+          err?.message ||
+          'Unknown error';
+
+        // Логируем краткую диагностику, чтобы понимать причину 400/422 от OpenAI.
+        // Важно: не логируем весь prompt, чтобы не утекали пользовательские данные.
+        console.error('[OpenAI chips] Request failed:', {
+          status,
+          model: usedModel,
+          maxOutputTokens: maxTokens,
+          temperature: body.temperature,
+          inputItems: Array.isArray(input) ? input.length : 0,
+          hasJsonSchema: Boolean(body?.text?.format?.schema),
+          message: openaiMessage,
+          errorType: err?.data?.error?.type,
+          errorCode: err?.data?.error?.code,
+        });
+
+        // Fallback: если OpenAI отклонил structured output (json_schema),
+        // пробуем повторить запрос без `text.format`, чтобы чипы не "умирали" целиком в dev.
+        // Парсинг JSON будет выполнен на уровне suggested-chips.service.ts как и раньше.
+        if (status === 400 || status === 422) {
+          try {
+            const fallbackBody = {
+              ...body,
+              text: {}, // без structured output
+            };
+            const fallbackRes: any = await $fetch(OPENAI_URL, {
+              method: 'POST',
+              timeout: 30_000,
+              headers: {
+                Authorization: `Bearer ${apiKey}`,
+                'Content-Type': 'application/json',
+                ...(org ? { 'OpenAI-Organization': org } : {}),
+                ...(project ? { 'OpenAI-Project': project } : {}),
+                'Idempotency-Key': idempotencyKey,
+              },
+              body: fallbackBody,
+            });
+            const content = extractText(fallbackRes);
+            console.warn(
+              '[OpenAI chips] Fallback without json_schema succeeded'
+            );
+            return { role: 'assistant', content, model: usedModel };
+          } catch (fallbackErr: any) {
+            const fallbackStatus =
+              fallbackErr?.response?.status || fallbackErr?.status || status;
+            const fallbackMessage =
+              fallbackErr?.data?.error?.message ||
+              fallbackErr?.data?.message ||
+              fallbackErr?.message ||
+              openaiMessage;
+            throw createError({
+              statusCode: fallbackStatus,
+              message: `OpenAI chips error (fallback failed): ${fallbackStatus} ${fallbackMessage}`,
+            });
+          }
+        }
+
+        throw createError({
+          statusCode: status,
+          message: `OpenAI chips error: ${status} ${openaiMessage}`,
+        });
+      }
     }
 
     // eslint-disable-next-line no-constant-condition

@@ -8,7 +8,11 @@
  */
 
 import { eq, and, lte, asc } from 'drizzle-orm';
-import { db } from '@/server/infrastructure/db/client';
+import {
+  db,
+  isDbConnectionError,
+  resetDbPool,
+} from '@/server/infrastructure/db/client';
 import {
   notificationSlots,
   userDevices,
@@ -509,21 +513,20 @@ export async function processDueSlots(): Promise<void> {
     );
   } catch (error: any) {
     // Улучшенная обработка ошибок подключения к БД
-    const errorMessage = error?.message || String(error);
-    const errorCode = error?.code;
+    const rootError = error?.cause ?? error;
+    const errorMessage = rootError?.message || error?.message || String(error);
+    const errorCode = rootError?.code || error?.code;
 
-    if (errorCode === 'ECONNREFUSED' || errorMessage.includes('ECONNREFUSED')) {
+    if (isDbConnectionError(error)) {
       console.error(
-        '[DeliveryWorker] ❌ Database connection refused. Check:',
-        '\n  1. Is PostgreSQL running?',
-        '\n  2. Is SSH tunnel active? (if using remote DB)',
-        '\n  3. Is NUXT_PRIVATE_DB_URL set correctly in .env.development?'
+        '[DeliveryWorker] ❌ Database connection error:',
+        errorMessage,
+        errorCode ? `(code: ${errorCode})` : ''
       );
-    } else if (errorCode === 'ETIMEDOUT' || errorMessage.includes('timeout')) {
-      console.error(
-        '[DeliveryWorker] ❌ Database connection timeout. Check network connection and DB availability.'
-      );
-    } else if (errorMessage.includes('NUXT_PRIVATE_DB_URL')) {
+      await resetDbPool('DeliveryWorker: connection error');
+      return;
+    }
+    if (errorMessage.includes('NUXT_PRIVATE_DB_URL')) {
       console.error(
         '[DeliveryWorker] ❌ Database URL not configured. Set NUXT_PRIVATE_DB_URL in .env.development'
       );

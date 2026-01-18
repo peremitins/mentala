@@ -49,11 +49,13 @@ export type HabitSubtype = NotificationSubtype;
 export interface UserPreferencesDto {
   addressing: Addressing;
   tone: Tone;
+  meditationTimerMinutes?: number | null;
 }
 
 export interface UpdateUserPreferencesDto {
   addressing?: Addressing;
   tone?: Tone;
+  meditationTimerMinutes?: number | null;
 }
 
 // ==========================================

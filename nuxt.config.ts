@@ -111,6 +111,8 @@ export default defineNuxtConfig({
       // Если не задано, будет пустая строка = относительные пути
       apiBase: process.env.NUXT_PUBLIC_API_SERVER_URL || '',
       appUrl: process.env.NUXT_PRIVATE_API_BASE || 'http://localhost:3000',
+      mediaBaseUrl:
+        process.env.NUXT_PUBLIC_MEDIA_BASE_URL || 'https://media.mentala.app',
       googleWebClientId:
         process.env.NUXT_PUBLIC_GOOGLE_WEB_CLIENT_ID ||
         process.env.NUXT_OAUTH_GOOGLE_CLIENT_ID ||

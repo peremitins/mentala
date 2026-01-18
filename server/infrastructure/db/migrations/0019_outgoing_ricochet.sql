@@ -1,0 +1,1 @@
+ALTER TABLE "meditation_tracks" ADD COLUMN "background_path" text;

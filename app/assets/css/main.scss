@@ -197,6 +197,30 @@ a {
     1px 1px 3px rgba(0, 0, 0, 0.1);
 }
 
+/* Глобальный класс для скрытия скроллбаров при сохранении прокрутки */
+.no-scrollbar {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none; /* Chrome, Safari */
+}
+
+/* Универсальные текстовые тени для читаемости на ярких фото/видео */
+.text-elevated {
+  text-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.35),
+    0 0 1px rgba(0, 0, 0, 0.5);
+}
+
+.text-elevated-strong {
+  text-shadow:
+    0 3px 14px rgba(0, 0, 0, 0.45),
+    0 1px 4px rgba(0, 0, 0, 0.35),
+    0 0 1px rgba(0, 0, 0, 0.55);
+}
+
 /* Global hover rules for buttons/links (excluding bottom nav) */
 button,
 .glass,

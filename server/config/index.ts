@@ -8,8 +8,8 @@ export const config = {
 
       // Модели для разных сценариев
       models: {
-        chat: 'gpt-4o', // Чат - более мощная модель
-        notifications: 'gpt-4o', // Уведомления - экономичная модель
+        chat: 'gpt-4o-mini', // Чат - более мощная модель
+        notifications: 'gpt-4o-mini', // Уведомления - экономичная модель
         chips: 'gpt-4o-mini', // Чипы - экономичная модель
       },
 
