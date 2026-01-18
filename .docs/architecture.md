@@ -26,6 +26,7 @@ index, onboarding, chat (layout blank), therapy, habits, profile/\*, billing.
 • user
 • chat
 • DTO (Zod): shared/dto/index.ts.
+• shadcn-nuxt auto-import опирается на `index.ts` в директориях компонентов `app/components/ui/shadcn/*` (реэкспорт), поэтому все компоненты имеют index-файлы.
 
 ⸻
 
@@ -48,6 +49,7 @@ server/
     •	ORM: Drizzle ORM
     •	преимущества: типобезопасность, простые миграции, готовые SQL.
     •	легко заменить на Eloquent (Laravel) при необходимости.
+    •	Пул Postgres: keepAlive + idle/connection timeouts + maxLifetimeSeconds; при ошибках соединения фоновые задачи пересоздают пул через `resetDbPool`, чтобы воркеры восстанавливались после рестарта БД.
 
 ⸻
 

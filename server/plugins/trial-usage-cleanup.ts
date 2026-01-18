@@ -1,4 +1,8 @@
 import { cleanupTrialUsageTracking } from '@/server/application/subscriptions/trial-usage-cleanup';
+import {
+  isDbConnectionError,
+  resetDbPool,
+} from '@/server/infrastructure/db/client';
 
 export default defineNitroPlugin(() => {
   const enabled = process.env.TRIAL_USAGE_CLEANUP_ENABLED !== 'false';
@@ -15,6 +19,26 @@ export default defineNitroPlugin(() => {
         );
       }
     } catch (error) {
+      // Если БД недоступна — пересоздаём пул, чтобы восстановить работу фоновой задачи.
+      if (isDbConnectionError(error)) {
+        const rootError = (error as { cause?: unknown; code?: string })
+          ?.cause ?? error;
+        const errorMessage =
+          (rootError as { message?: string })?.message ||
+          (error as { message?: string })?.message ||
+          String(error);
+        const errorCode =
+          (rootError as { code?: string })?.code ||
+          (error as { code?: string })?.code;
+
+        console.error(
+          '[TrialUsageCleanup] ❌ Database connection error:',
+          errorMessage,
+          errorCode ? `(code: ${errorCode})` : ''
+        );
+        await resetDbPool('TrialUsageCleanup: connection error');
+        return;
+      }
       console.error('[TrialUsageCleanup] Cleanup failed:', error);
     }
   };
