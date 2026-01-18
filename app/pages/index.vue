@@ -184,6 +184,7 @@ import AvatarVoiceControls from '@/app/components/AvatarVoiceControls.vue';
 import SuggestedChips from '@/app/components/chat/SuggestedChips.vue';
 import ChatLoadingIndicator from '@/app/components/chat/ChatLoadingIndicator.vue';
 import type { SuggestedChip } from '@/shared/dto';
+import { useToast } from '@/app/composables/useToast';
 
 const emit = defineEmits<{ (e: 'send', text: string): void }>();
 
@@ -483,7 +484,39 @@ const onSend = async () => {
 const handleChipSelect = async (chip: SuggestedChip) => {
   // Чипы отправляются сразу, не заполняя textarea.
   if (isSending.value) return;
+  if (chip.kind === 'action') {
+    await handleActionChip(chip);
+    return;
+  }
   await sendText(chip.text);
+};
+
+const handleActionChip = async (chip: SuggestedChip) => {
+  if (!chip.action) return;
+
+  // Скрываем текущие чипы, чтобы не дублировать навигацию
+  chat.clearSuggestedChips();
+
+  if (chip.action === 'open_meditations') {
+    await router.push('/meditations');
+    useToast('Открываю медитации');
+    return;
+  }
+
+  if (chip.action === 'open_meditation_track' && chip.params?.trackId) {
+    await router.push(`/meditations/${chip.params.trackId}`);
+    useToast('Открываю медитацию');
+    return;
+  }
+
+  if (
+    chip.action === 'open_meditations_collection' &&
+    chip.params?.collectionId
+  ) {
+    // collectionId трактуем как ключ темы медитаций
+    await router.push(`/meditations?topic=${chip.params.collectionId}`);
+    useToast('Открываю подборку');
+  }
 };
 
 const combinedMessages = computed(() => chat?.messages || []);

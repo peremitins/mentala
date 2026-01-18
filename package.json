@@ -21,12 +21,14 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "seed:subscription-plans": "tsx server/infrastructure/db/seed-subscription-plans.ts",
+    "seed:meditations": "tsx server/infrastructure/db/seed-meditations.ts",
     "cap:add:android": "npx cap add android",
     "cap:sync": "npx cap sync && node scripts/fix-capacitor-config.js",
     "cap:sync:emulator": "./scripts/setup-capacitor-dev.sh emulator",
     "cap:sync:device": "./scripts/setup-capacitor-dev.sh device",
     "cap:open:android": "npx cap open android",
-    "build:mobile": "nuxt generate && npx cap sync"
+    "build:mobile": "nuxt generate && npx cap sync",
+    "upload:media": "aws s3 sync public/meditations s3://mentala/meditations --endpoint-url=https://storage.yandexcloud.net --acl public-read"
   },
   "dependencies": {
     "@capacitor-community/speech-recognition": "^7.0.1",

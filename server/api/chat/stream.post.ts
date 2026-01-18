@@ -10,7 +10,7 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { getAiUsageGate } from '@/server/application/subscriptions/ai-usage.service';
 import { CHAT_IDLE_TIMEOUT_MS } from '@/server/config/subscription';
 import { endTherapySession } from '@/server/application/subscriptions/session-time.service';
-import type { ChatEntryContext } from '@/shared/dto';
+import type { ChatEntryContext, SuggestedChip } from '@/shared/dto';
 import { generateSuggestedChips } from '@/server/application/suggested-chips.service';
 
 export default defineEventHandler(async (event) => {
@@ -203,9 +203,7 @@ export default defineEventHandler(async (event) => {
       // console.log('[Stream API] chatStreamViaProvider returned stream, starting for-await loop');
 
       let assistantText = '';
-      let chipsPromise:
-        | Promise<Array<{ text: string; intent: string }>>
-        | null = null;
+      let chipsPromise: Promise<SuggestedChip[]> | null = null;
       for await (const delta of stream) {
         assistantText += delta;
         res.write(`data: ${JSON.stringify({ output_text_delta: delta })}\n\n`);

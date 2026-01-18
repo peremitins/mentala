@@ -4,9 +4,14 @@ import {
   SuggestedChipDto,
   SuggestedChipsPayloadDto,
   SuggestedChipIntentEnum,
+  SuggestedChipActionEnum,
+  SuggestedChipKindEnum,
+  SuggestedChipActionParamsDto,
   type ChatEntryContext,
   type SuggestedChip,
   type SuggestedChipIntent,
+  type SuggestedChipKind,
+  type SuggestedChipAction,
 } from '@/shared/dto';
 import {
   buildSuggestedChipsUserPrompt,
@@ -69,9 +74,44 @@ function normalizeIntent(value: string | undefined): SuggestedChipIntent {
   return parsed.success ? parsed.data : 'clarify';
 }
 
+function normalizeKind(value: string | undefined): SuggestedChipKind {
+  if (!value) return 'text';
+  const parsed = SuggestedChipKindEnum.safeParse(value);
+  return parsed.success ? parsed.data : 'text';
+}
+
+function normalizeAction(value: string | undefined): SuggestedChipAction | null {
+  if (!value) return null;
+  const parsed = SuggestedChipActionEnum.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
+function normalizeActionParams(
+  action: SuggestedChipAction,
+  params: unknown
+): { trackId?: string; collectionId?: string } | undefined {
+  if (!params || typeof params !== 'object') return undefined;
+  const parsed = SuggestedChipActionParamsDto.safeParse(params);
+  if (!parsed.success) return undefined;
+
+  if (action === 'open_meditation_track' && !parsed.data.trackId) {
+    return undefined;
+  }
+  if (
+    action === 'open_meditations_collection' &&
+    !parsed.data.collectionId
+  ) {
+    return undefined;
+  }
+  return parsed.data;
+}
+
 function normalizeChip(raw: {
   text?: string;
   intent?: string;
+  kind?: string;
+  action?: string;
+  params?: unknown;
 }): SuggestedChip | null {
   const text = String(raw?.text || '')
     .trim()
@@ -79,18 +119,51 @@ function normalizeChip(raw: {
   if (!text || text.length > 80) return null;
 
   const intent = normalizeIntent(raw?.intent);
+  const kind = normalizeKind(raw?.kind);
+
+  if (kind === 'action') {
+    const action = normalizeAction(raw?.action);
+    if (!action) return null;
+    const params = normalizeActionParams(action, raw?.params);
+    if (action === 'open_meditation_track' && !params?.trackId) {
+      return null;
+    }
+    if (action === 'open_meditations_collection' && !params?.collectionId) {
+      return null;
+    }
+    return SuggestedChipDto.safeParse({
+      text,
+      intent,
+      kind,
+      action,
+      params,
+    }).success
+      ? { text, intent, kind, action, params }
+      : null;
+  }
+
   return SuggestedChipDto.safeParse({
     text,
     intent,
+    kind,
   }).success
-    ? { text, intent }
+    ? { text, intent, kind }
     : null;
 }
 
 function filterBySimilarity(chips: SuggestedChip[], recentChips: string[]) {
   const unique: SuggestedChip[] = [];
+  const actionKeys = new Set<string>();
 
   for (const chip of chips) {
+    if (chip.kind === 'action') {
+      const actionKey = `${chip.action || 'action'}:${chip.params?.trackId || ''}:${chip.params?.collectionId || ''}`;
+      if (actionKeys.has(actionKey)) continue;
+      actionKeys.add(actionKey);
+      unique.push(chip);
+      continue;
+    }
+
     const hasDupInSet = unique.some((existing) =>
       isTooSimilar(existing.text, chip.text, SIMILARITY_WITHIN_SET)
     );

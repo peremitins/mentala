@@ -5,7 +5,7 @@ import {
   estimateCostUSD,
 } from '../../application/llm.service';
 import { config } from '../../config';
-import { ChatRequestDto, ChatResponseDto } from '@/shared/dto';
+import { ChatRequestDto, ChatResponseDto, type SuggestedChip } from '@/shared/dto';
 import { getSessionUserWithRole } from '@/server/utils/require-role';
 import { db } from '@/server/infrastructure/db/client';
 import { therapySessions } from '@/server/infrastructure/db/schema';
@@ -189,7 +189,7 @@ export default defineEventHandler(async (event) => {
       } catch (chipsError) {
         // Не ломаем основной ответ, если чипы не сгенерировались.
         console.error('[Chat API] Failed to generate chips:', chipsError);
-        return [] as Array<{ text: string; intent: string }>;
+        return [] as SuggestedChip[];
       }
     })();
 

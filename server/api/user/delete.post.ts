@@ -12,6 +12,7 @@ import {
   dailyAdherence,
   habits,
   idempotencyKeys,
+  meditationFavorites,
   notificationInteractions,
   notificationPreferences,
   notificationSlots,
@@ -149,6 +150,9 @@ export default defineEventHandler(async (event) => {
           tx.delete(userPrompts).where(eq(userPrompts.userId, userId)),
           tx.delete(welcomePrompts).where(eq(welcomePrompts.userId, userId)),
           tx.delete(habits).where(eq(habits.userId, userId)),
+          tx
+            .delete(meditationFavorites)
+            .where(eq(meditationFavorites.userId, userId)),
           tx
             .delete(therapyTopicsCustom)
             .where(eq(therapyTopicsCustom.userId, userId)),

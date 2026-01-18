@@ -31,6 +31,7 @@ export default defineEventHandler(
       return {
         addressing: 'informal',
         tone: 'neutral',
+        meditationTimerMinutes: null,
       };
     }
 
@@ -43,6 +44,7 @@ export default defineEventHandler(
         | 'resolute'
         | 'demanding'
         | 'unknown',
+      meditationTimerMinutes: prefs.meditationTimerMinutes ?? null,
     };
   }
 );

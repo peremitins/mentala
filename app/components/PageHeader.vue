@@ -1,5 +1,8 @@
 <template>
-  <div class="glass-deep sticky top-0 flex min-h-[50px] items-center py-2 z-50">
+  <div
+    class="glass-deep sticky top-0 flex min-h-[50px] items-center py-2 z-50"
+    :style="isMeditationPlayer ? { backdropFilter: 'blur(1px)' } : undefined"
+  >
     <div class="flex items-center w-full">
       <Button
         v-if="props.showBackButton"
@@ -27,6 +30,9 @@
 
 <script lang="ts" setup>
 import IconChevronLeft from '~icons/lucide/chevron-left';
+import { useRoute } from 'vue-router';
+
+const route = useRoute();
 
 interface Props {
   title: string;
@@ -44,4 +50,9 @@ const emit = defineEmits<{
 const handleGoBack = () => {
   emit('go-back');
 };
+
+// Размываем нижнюю панель только на странице плеера медитации.
+const isMeditationPlayer = computed(() => {
+  return route.path.startsWith('/meditations/') && Boolean(route.params?.id);
+});
 </script>

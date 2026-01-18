@@ -82,6 +82,17 @@
           <IconMessageCircle class="mr-2 h-5 w-5" />
           Поговорить об этом
         </Button>
+
+        <Button
+          v-if="meditationTopicKey"
+          class="mt-3 w-full justify-center !py-3 text-base font-semibold"
+          variant="outline"
+          size="lg"
+          @click="goToMeditations"
+        >
+          <IconLeaf class="mr-2 h-5 w-5" />
+          Попробовать практику
+        </Button>
       </div>
 
       <NotificationsSummaryCard
@@ -106,6 +117,7 @@ import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/shadcn/input';
 import InputComponent from '@/app/components/ui/shadcn/input/Input.vue';
 import IconMessageCircle from '~icons/lucide/message-circle';
+import IconLeaf from '~icons/lucide/leaf';
 import { useNotificationsSettings } from '@/app/composables/useNotificationsSettings';
 import { useChatStore } from '@/app/stores/chat';
 import { useLoadersStore } from '@/app/stores/loaders';
@@ -120,6 +132,7 @@ import type {
 import type { ChatEntryContext } from '@/shared/dto';
 import { onClickOutside } from '@vueuse/core';
 import { useTherapyTopicsStore } from '@/app/stores/therapyTopics';
+import { mapTherapyToMeditationTopic } from '@/app/lib/meditations';
 
 const route = useRoute();
 const chat = useChatStore();
@@ -142,6 +155,9 @@ const notificationError = ref<string | null>(null);
 
 const entityData = computed(() => catalogTopic.value || customTopic.value);
 const isCustom = computed(() => !!customTopic.value && !catalogTopic.value);
+const meditationTopicKey = computed(() =>
+  mapTherapyToMeditationTopic(entityKey.value)
+);
 
 const isEditingTitle = ref(false);
 const titleDraft = ref('');
@@ -190,6 +206,11 @@ function goBack() {
 
 function goToNotifications() {
   navigateTo(`/therapy/${entityKey.value}/notifications`);
+}
+
+function goToMeditations() {
+  if (!meditationTopicKey.value) return;
+  navigateTo(`/meditations?topic=${meditationTopicKey.value}`);
 }
 
 function startEditTitle() {
