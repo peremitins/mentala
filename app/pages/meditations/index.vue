@@ -1,95 +1,124 @@
 <template>
-  <div class="relative h-full overflow-y-auto space-y-4 pb-[140px]">
-    <PageHeader title="🧘‍♀️&nbsp;Медитации" />
+  <div
+    class="space-y-4 relative h-full overflow-y-auto rounded-lg"
+    :class="selectedTrackId ? '' : 'pb-[100px]'"
+  >
+    <MeditationDetailView
+      v-if="selectedTrackId"
+      :track-id="selectedTrackId"
+      @close="closeDetail"
+    />
 
-    <Skeleton v-if="loaders.isSkeletonLoading" type="list-item" :count="6" />
-
-    <StateBlock v-else-if="meditationsStore.error" state="error" class="px-4">
-      <p class="text-sm text-center">{{ meditationsStore.error }}</p>
-    </StateBlock>
-
-    <div v-else class="space-y-6">
-      <MeditationSection
-        v-for="section in visibleSections"
-        :key="section.key"
-        :title="section.title"
-        :subtitle="section.subtitle"
-        :emoji="section.emoji"
-        :tracks="section.tracks"
-        :active-id="currentTrack?.id || null"
-        :section-topic-key="
-          section.key !== 'all' && section.key !== 'favorites'
-            ? (section.key as MeditationTopicKey)
-            : undefined
-        "
-        @open="openTrack($event, section.key, section.tracks)"
-        @favorite="toggleFavorite"
-        @view-all="openViewAll(section.key)"
+    <template v-else>
+      <PageHeader
+        title="🧘‍♀️&nbsp;Медитации"
+        :show-back-button="true"
+        @go-back="goBack"
       />
-    </div>
 
-    <Dialog v-model:open="dialogOpen">
-      <DialogContent
-        class="max-w-3xl bg-gradient-to-b from-slate-900 via-indigo-950 to-slate-950 text-white border-white/10"
-      >
-        <DialogHeader>
-          <DialogTitle>{{ dialogTitle }}</DialogTitle>
-          <DialogDescription class="text-white/70">
-            Полный список треков раздела.
-          </DialogDescription>
-        </DialogHeader>
-        <div class="mt-4 grid gap-3 md:grid-cols-2">
-          <button
-            v-for="track in dialogTracks"
-            :key="track.id"
-            type="button"
-            class="group flex w-full items-center gap-3 rounded-2xl bg-white/5 p-3 text-left transition hover:bg-white/10"
-            @click="openTrack(track.id, dialogTopicKey || 'all', dialogTracks)"
-          >
-            <div class="relative h-16 w-16 overflow-hidden rounded-2xl">
-              <div
-                v-if="!track.coverPath"
-                class="absolute inset-0 bg-gradient-to-br"
-                :class="topicGradient(track.topicKey)"
-              />
-              <img
-                v-else
-                :src="resolveMediaUrl(track.coverPath)"
-                :alt="track.title"
-                class="h-full w-full object-cover transition group-hover:scale-105"
-                loading="lazy"
-                decoding="async"
-              />
-            </div>
-            <div class="min-w-0 flex-1">
-              <p class="text-xs text-white/60">
-                {{ topicLabel(track.topicKey) }}
-              </p>
-              <p class="truncate text-sm font-semibold text-white">
-                {{ track.title }}
-              </p>
-              <p class="line-clamp-2 text-xs text-white/70">
-                {{ track.description || 'Мягкий фон для паузы' }}
-              </p>
-            </div>
-            <div class="text-[11px] text-white/60">
-              {{ formatDuration(track.durationSeconds) }}
-            </div>
-          </button>
-        </div>
-      </DialogContent>
-    </Dialog>
+      <Skeleton
+        v-if="loaders.isSkeletonLoading"
+        type="practice-page"
+        :count="5"
+        :with-wrapper="false"
+      />
+
+      <StateBlock v-else-if="meditationsStore.error" state="error" class="px-4">
+        <p class="text-sm text-center">{{ meditationsStore.error }}</p>
+      </StateBlock>
+
+      <div v-else class="space-y-6">
+        <MeditationSection
+          v-for="(section, index) in visibleSections"
+          :key="section.key"
+          :title="section.title"
+          :subtitle="section.subtitle"
+          :emoji="section.emoji"
+          :tracks="section.tracks"
+          :active-id="currentTrack?.id || null"
+          :section-topic-key="
+            section.key !== 'all' && section.key !== 'favorites'
+              ? (section.key as MeditationTopicKey)
+              : undefined
+          "
+          :class="!wasSkeletonShown ? 'animate-slide-up' : ''"
+          :style="
+            !wasSkeletonShown
+              ? `animation-delay: ${index * 0.05}s; animation-fill-mode: both`
+              : ''
+          "
+          @open="openTrack($event, section.key, section.tracks)"
+          @favorite="toggleFavorite"
+          @view-all="openViewAll(section.key)"
+        />
+      </div>
+
+      <Dialog v-model:open="dialogOpen">
+        <DialogContent
+          class="max-w-3xl bg-gradient-to-b from-slate-900 via-indigo-950 to-slate-950 text-white border-white/10"
+        >
+          <DialogHeader>
+            <DialogTitle>{{ dialogTitle }}</DialogTitle>
+            <DialogDescription class="text-white/70">
+              Полный список треков раздела.
+            </DialogDescription>
+          </DialogHeader>
+          <div class="mt-4 grid gap-3 md:grid-cols-2">
+            <button
+              v-for="track in dialogTracks"
+              :key="track.id"
+              type="button"
+              class="group flex w-full items-center gap-3 rounded-2xl bg-white/5 p-3 text-left transition hover:bg-white/10"
+              @click="
+                openTrack(track.id, dialogTopicKey || 'all', dialogTracks)
+              "
+            >
+              <div class="relative h-16 w-16 overflow-hidden rounded-2xl">
+                <div
+                  v-if="!track.coverPath"
+                  class="absolute inset-0 bg-gradient-to-br"
+                  :class="topicGradient(track.topicKey)"
+                />
+                <img
+                  v-else
+                  :src="resolveMediaUrl(track.coverPath)"
+                  :alt="track.title"
+                  class="h-full w-full object-cover transition group-hover:scale-105"
+                  loading="lazy"
+                  decoding="async"
+                />
+              </div>
+              <div class="min-w-0 flex-1">
+                <p class="text-xs text-white/60">
+                  {{ topicLabel(track.topicKey) }}
+                </p>
+                <p class="truncate text-sm font-semibold text-white">
+                  {{ track.title }}
+                </p>
+                <p class="line-clamp-2 text-xs text-white/70">
+                  {{ track.description || 'Мягкий фон для паузы' }}
+                </p>
+              </div>
+              <div class="text-[11px] text-white/60">
+                {{ formatDuration(track.durationSeconds) }}
+              </div>
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { formatInTimeZone } from 'date-fns-tz';
 import PageHeader from '@/app/components/PageHeader.vue';
 import StateBlock from '@/app/components/StateBlock.vue';
 import Skeleton from '@/app/components/ui/Skeleton.vue';
 import MeditationSection from '@/app/components/meditations/MeditationSection.vue';
+import MeditationDetailView from '@/app/components/meditations/MeditationDetailView.vue';
 import { useMeditationsStore } from '@/app/stores/meditations';
 import { useLoadersStore } from '@/app/stores/loaders';
 import { useMeditationPlayer } from '@/app/composables/useMeditationPlayer';
@@ -109,10 +138,13 @@ import {
   DialogTitle,
 } from '@/app/components/ui/dialog';
 
+const route = useRoute();
 const router = useRouter();
 const meditationsStore = useMeditationsStore();
 const loaders = useLoadersStore();
 const { currentTrack, setQueue } = useMeditationPlayer();
+
+const wasSkeletonShown = ref(false);
 
 type SectionKey = MeditationTopicKey | 'favorites' | 'all';
 type Section = {
@@ -232,12 +264,42 @@ const dialogTitle = computed(() => {
   return topic?.name || 'Подборка';
 });
 
+const selectedTrackId = computed(() => {
+  const raw = route.query.trackId;
+  if (Array.isArray(raw)) return raw[0]?.trim() || '';
+  if (typeof raw === 'string') return raw.trim();
+  return '';
+});
+
+function goBack() {
+  navigateTo('/practices');
+}
+
 onMounted(async () => {
   await meditationsStore.fetchAll();
 });
 
 watch(
   () => meditationsStore.error,
+  (value) => {
+    if (value) {
+      dialogOpen.value = false;
+    }
+  }
+);
+
+watch(
+  () => loaders.isSkeletonLoading,
+  (isLoading) => {
+    if (isLoading) {
+      wasSkeletonShown.value = true;
+    }
+  },
+  { immediate: true }
+);
+
+watch(
+  () => selectedTrackId.value,
   (value) => {
     if (value) {
       dialogOpen.value = false;
@@ -264,7 +326,7 @@ function formatDuration(durationSeconds?: number | null) {
   return formatInTimeZone(new Date(safeSeconds * 1000), 'UTC', formatMask);
 }
 
-function openTrack(
+async function openTrack(
   trackId: string,
   sectionKey?: SectionKey,
   list?: MeditationTrackDto[]
@@ -283,7 +345,32 @@ function openTrack(
       );
     }
   }
-  router.push(`/meditations/${trackId}`);
+
+  const targetTrack =
+    list?.find((item) => item.id === trackId) ||
+    meditationsStore.byId(trackId) ||
+    null;
+  const nextQuery = {
+    ...route.query,
+    trackId,
+  } as Record<string, string | string[]>;
+
+  if (targetTrack?.title) {
+    nextQuery.title = targetTrack.title;
+  } else {
+    delete nextQuery.title;
+  }
+
+  // Открываем детальный плеер через query, без перехода на отдельную страницу.
+  await router.push({ path: '/meditations', query: nextQuery });
+}
+
+async function closeDetail() {
+  const nextQuery = { ...route.query } as Record<string, string | string[]>;
+  delete nextQuery.trackId;
+  delete nextQuery.title;
+  // Возвращаемся к каталогу, не меняя страницу.
+  await router.replace({ path: '/meditations', query: nextQuery });
 }
 
 function toggleFavorite(trackId: string) {

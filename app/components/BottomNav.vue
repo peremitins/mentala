@@ -10,91 +10,106 @@
           <NuxtLink
             to="/"
             @click="handleChatClick"
-            class="flex flex-col items-center justify-center icon-disc-wrapper"
+            class="group flex flex-col items-center justify-center icon-disc-wrapper"
             :class="{ 'text-foreground': isActive('/') }"
           >
             <span
               :class="[
-                'icon-disc w-12 h-12 flex items-center justify-center',
+                'glass-deep icon-disc w-12 h-12 flex items-center justify-center mb-1',
                 { 'icon-disc-active': isActive('/') },
               ]"
               :style="{ borderRadius: 'var(--radius-icon)' }"
             >
               <IconMessageCircleHeart class="w-5 h-5" />
             </span>
-            <span class="w-full text-center text-foreground">Чат</span>
+            <span
+              class="w-full text-center text-foreground text-[10px] group-hover:text-primary transition-all duration-300"
+              >Чат</span
+            >
           </NuxtLink>
         </li>
         <li class="flex flex-col items-center gap-1 w-full">
           <NuxtLink
             to="/therapy"
-            class="flex flex-col items-center justify-center icon-disc-wrapper"
+            class="group flex flex-col items-center justify-center icon-disc-wrapper"
             :class="{ 'text-foreground': isActive('/therapy') }"
           >
             <span
               :class="[
-                'icon-disc w-12 h-12 flex items-center justify-center',
+                'glass-deep icon-disc w-12 h-12 flex items-center justify-center mb-1',
                 { 'icon-disc-active': isActive('/therapy') },
               ]"
               :style="{ borderRadius: 'var(--radius-icon)' }"
             >
               <IconBrain class="w-5 h-5" />
             </span>
-            <span class="w-full text-center text-foreground">Терапия</span>
+            <span
+              class="w-full text-center text-foreground text-[10px] group-hover:text-primary transition-all duration-300"
+              >Терапия</span
+            >
           </NuxtLink>
         </li>
         <li class="flex flex-col items-center gap-1 w-full">
           <NuxtLink
             to="/habits"
-            class="flex flex-col items-center justify-center icon-disc-wrapper"
+            class="group flex flex-col items-center justify-center icon-disc-wrapper"
             :class="{ 'text-foreground': isActive('/habits') }"
           >
             <span
               :class="[
-                'icon-disc w-12 h-12 flex items-center justify-center',
+                'glass-deep icon-disc w-12 h-12 flex items-center justify-center mb-1',
                 { 'icon-disc-active': isActive('/habits') },
               ]"
               :style="{ borderRadius: 'var(--radius-icon)' }"
             >
               <IconListCheck class="w-5 h-5" />
             </span>
-            <span class="w-full text-center text-foreground">Привычки</span>
+            <span
+              class="w-full text-center text-foreground text-[10px] group-hover:text-primary transition-all duration-300"
+              >Привычки</span
+            >
           </NuxtLink>
         </li>
         <li class="flex flex-col items-center gap-1 w-full">
           <NuxtLink
-            to="/meditations"
-            class="flex flex-col items-center justify-center icon-disc-wrapper"
-            :class="{ 'text-foreground': isActive('/meditations') }"
+            to="/practices"
+            class="group flex flex-col items-center justify-center icon-disc-wrapper"
+            :class="{ 'text-foreground': isPracticesActive }"
           >
             <span
               :class="[
-                'icon-disc w-12 h-12 flex items-center justify-center',
-                { 'icon-disc-active': isActive('/meditations') },
+                'glass-deep icon-disc w-12 h-12 flex items-center justify-center mb-1',
+                { 'icon-disc-active': isPracticesActive },
               ]"
               :style="{ borderRadius: 'var(--radius-icon)' }"
             >
-              <IconLeaf class="w-5 h-5" />
+              <IconWind class="w-5 h-5" />
             </span>
-            <span class="w-full text-center text-foreground">Медитации</span>
+            <span
+              class="w-full text-center text-foreground text-[10px] group-hover:text-primary transition-all duration-300"
+              >Практики</span
+            >
           </NuxtLink>
         </li>
         <li class="flex flex-col items-center gap-1 w-full">
           <NuxtLink
             to="/settings"
-            class="flex flex-col items-center justify-center icon-disc-wrapper"
+            class="group flex flex-col items-center justify-center icon-disc-wrapper"
             :class="{ 'text-foreground': isActive('/settings') }"
           >
             <span
               :class="[
-                'icon-disc w-12 h-12 flex items-center justify-center',
+                'glass-deep icon-disc w-12 h-12 flex items-center justify-center mb-1',
                 { 'icon-disc-active': isActive('/settings') },
               ]"
               :style="{ borderRadius: 'var(--radius-icon)' }"
             >
               <IconSettings class="w-5 h-5" />
             </span>
-            <span class="w-full text-center text-foreground">Настройки</span>
+            <span
+              class="w-full text-center text-foreground text-[10px] group-hover:text-primary transition-all duration-300"
+              >Настройки</span
+            >
           </NuxtLink>
         </li>
       </ul>
@@ -107,21 +122,36 @@ import { computed } from 'vue';
 import IconMessageCircleHeart from '~icons/lucide/message-circle-heart';
 import IconBrain from '~icons/lucide/brain';
 import IconListCheck from '~icons/lucide/list-check';
-import IconLeaf from '~icons/lucide/leaf';
+import IconWind from '~icons/lucide/wind';
 import IconSettings from '~icons/lucide/settings';
 
 const route = useRoute();
 const router = useRouter();
 
+const detailTrackId = computed(() => {
+  const raw = route.query.trackId;
+  if (Array.isArray(raw)) return raw[0]?.trim() || '';
+  if (typeof raw === 'string') return raw.trim();
+  return '';
+});
+
 // Размываем нижнюю панель только на странице плеера медитации.
 const isMeditationPlayer = computed(() => {
-  return route.path.startsWith('/meditations/') && Boolean(route.params?.id);
+  return route.path.startsWith('/meditations') && Boolean(detailTrackId.value);
 });
 
 const isActive = (path: string) => {
   if (path === '/') return route.path === '/';
   return route.path === path || route.path.startsWith(`${path}/`);
 };
+
+const isPracticesActive = computed(() => {
+  return (
+    route.path.startsWith('/practices') ||
+    route.path.startsWith('/meditations') ||
+    route.path.startsWith('/breath-practices')
+  );
+});
 
 // Обработчик клика на кнопку "Чат"
 function handleChatClick(event: MouseEvent) {

@@ -1,23 +1,25 @@
 <template>
   <div class="h-dvh w-full flex flex-col min-h-dvh p-2 overflow-hidden">
-    <!-- <div
+    <div
       v-if="isMeditationDetail && detailBackground"
-      class="pointer-events-none fixed inset-0 z-0 bg-center bg-cover"
-      :style="{ backgroundImage: `url(${detailBackground})` }"
-    /> -->
-    <img
-      v-if="isMeditationDetail && detailBackground"
-      :src="detailBackground"
-      alt=""
-      aria-hidden="true"
-      class="pointer-events-none fixed inset-0 z-0 h-full w-full object-cover"
-      loading="lazy"
-      decoding="async"
-    />
+      class="pointer-events-none fixed inset-0 z-0 overflow-hidden"
+    >
+      <div class="meditation-bg-pan-x h-full w-full">
+        <div class="meditation-bg-pan-y h-full w-full">
+          <img
+            :src="detailBackground"
+            alt=""
+            aria-hidden="true"
+            class="meditation-bg-media h-full w-full"
+            loading="lazy"
+            decoding="async"
+          />
+        </div>
+      </div>
+    </div>
 
-    <!-- <div class="flex flex-col flex-[1_1_auto] h-dvh"> -->
     <slot />
-    <!-- </div> -->
+
     <ClientOnly>
       <MiniMeditationPlayer
         v-if="currentTrack && !isMeditationDetail"
@@ -65,13 +67,20 @@ const isPortraitMode = computed(() => {
 
 const route = useRoute();
 
+const detailTrackId = computed(() => {
+  const raw = route.query.trackId;
+  if (Array.isArray(raw)) return raw[0]?.trim() || '';
+  if (typeof raw === 'string') return raw.trim();
+  return '';
+});
+
 const isMeditationDetail = computed(() => {
   const path = route.path || '';
-  return path.startsWith('/meditations/') && Boolean(route.params?.id);
+  return path.startsWith('/meditations') && Boolean(detailTrackId.value);
 });
 
 const routeTrack = computed(() => {
-  const id = route.params?.id ? String(route.params.id) : '';
+  const id = detailTrackId.value;
   if (!id) return null;
   return meditationsStore.byId(id) || null;
 });
@@ -108,8 +117,7 @@ const detailBackground = computed(() => {
   const track =
     routeTrack.value ||
     currentTrack.value ||
-    meditationsStore.byId(String(route.params?.id || '')) ||
-    null;
+    (detailTrackId.value ? meditationsStore.byId(detailTrackId.value) : null);
 
   if (!track) return '';
 
@@ -138,6 +146,138 @@ function stopPlayback() {
 
 function openDetail() {
   if (!currentTrack.value) return;
-  navigateTo(`/meditations/${currentTrack.value.id}`);
+  const nextQuery = {
+    ...route.query,
+    trackId: currentTrack.value.id,
+    title: currentTrack.value.title,
+  } as Record<string, string | string[]>;
+  void navigateTo({ path: '/meditations', query: nextQuery });
 }
 </script>
+
+<style scoped>
+.meditation-bg-media {
+  object-fit: cover;
+  /* Держим запас по краям, чтобы при панорамировании не вскрывались полосы. */
+  transform: scale(1.12);
+  transform-origin: center;
+  will-change: transform;
+  background: #000;
+}
+
+.meditation-bg-pan-x {
+  position: absolute;
+  inset: -10%;
+  width: 120%;
+  height: 120%;
+  animation: meditation-pan-x 70s linear infinite;
+  will-change: transform;
+}
+
+.meditation-bg-pan-y {
+  position: absolute;
+  inset: 0;
+  animation: meditation-pan-y 80s linear infinite;
+  will-change: transform;
+}
+
+/* На всякий случай фиксируем подложку и отсечение краёв. */
+.meditation-bg-pan-x,
+.meditation-bg-pan-y {
+  overflow: hidden;
+  background: #000;
+}
+
+/* Плавная траектория без остановок и резких углов. */
+@keyframes meditation-pan-x {
+  0% {
+    transform: translate3d(0px, 0, 0);
+  }
+  8.333% {
+    transform: translate3d(14px, 0, 0);
+  }
+  16.667% {
+    transform: translate3d(26px, 0, 0);
+  }
+  25% {
+    transform: translate3d(30px, 0, 0);
+  }
+  33.333% {
+    transform: translate3d(22px, 0, 0);
+  }
+  41.667% {
+    transform: translate3d(6px, 0, 0);
+  }
+  50% {
+    transform: translate3d(-12px, 0, 0);
+  }
+  58.333% {
+    transform: translate3d(-26px, 0, 0);
+  }
+  66.667% {
+    transform: translate3d(-32px, 0, 0);
+  }
+  75% {
+    transform: translate3d(-24px, 0, 0);
+  }
+  83.333% {
+    transform: translate3d(-8px, 0, 0);
+  }
+  91.667% {
+    transform: translate3d(10px, 0, 0);
+  }
+  100% {
+    transform: translate3d(0px, 0, 0);
+  }
+}
+
+@keyframes meditation-pan-y {
+  0% {
+    transform: translate3d(0, -22px, 0);
+  }
+  8.333% {
+    transform: translate3d(0, -12px, 0);
+  }
+  16.667% {
+    transform: translate3d(0, 2px, 0);
+  }
+  25% {
+    transform: translate3d(0, 18px, 0);
+  }
+  33.333% {
+    transform: translate3d(0, 30px, 0);
+  }
+  41.667% {
+    transform: translate3d(0, 24px, 0);
+  }
+  50% {
+    transform: translate3d(0, 8px, 0);
+  }
+  58.333% {
+    transform: translate3d(0, -8px, 0);
+  }
+  66.667% {
+    transform: translate3d(0, -22px, 0);
+  }
+  75% {
+    transform: translate3d(0, -30px, 0);
+  }
+  83.333% {
+    transform: translate3d(0, -20px, 0);
+  }
+  91.667% {
+    transform: translate3d(0, -6px, 0);
+  }
+  100% {
+    transform: translate3d(0, -22px, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .meditation-bg-pan-x,
+  .meditation-bg-pan-y {
+    animation: none;
+    transform: none;
+  }
+}
+</style>
