@@ -1,5 +1,5 @@
 <template>
-  <section class="space-y-3">
+  <section class="space-y-1">
     <div class="flex items-center justify-between gap-3 px-1">
       <div>
         <p class="text-xs uppercase tracking-[0.08em] text-white/50">
@@ -22,7 +22,7 @@
 
     <div class="relative">
       <div
-        class="flex gap-4 overflow-x-auto pb-4 pl-2 pr-6 no-scrollbar"
+        class="flex gap-4 overflow-x-auto pb-1 pl-2 pr-6 no-scrollbar"
         data-lenis-prevent
         style="touch-action: pan-y pan-x"
       >

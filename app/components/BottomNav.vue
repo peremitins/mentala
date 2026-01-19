@@ -22,7 +22,7 @@
             >
               <IconMessageCircleHeart class="w-5 h-5" />
             </span>
-            <span class="w-full text-center text-foreground">Чат</span>
+            <span class="w-full text-center text-foreground text-[10px]">Чат</span>
           </NuxtLink>
         </li>
         <li class="flex flex-col items-center gap-1 w-full">
@@ -40,7 +40,7 @@
             >
               <IconBrain class="w-5 h-5" />
             </span>
-            <span class="w-full text-center text-foreground">Терапия</span>
+            <span class="w-full text-center text-foreground text-[10px]">Терапия</span>
           </NuxtLink>
         </li>
         <li class="flex flex-col items-center gap-1 w-full">
@@ -58,25 +58,25 @@
             >
               <IconListCheck class="w-5 h-5" />
             </span>
-            <span class="w-full text-center text-foreground">Привычки</span>
+            <span class="w-full text-center text-foreground text-[10px]">Привычки</span>
           </NuxtLink>
         </li>
         <li class="flex flex-col items-center gap-1 w-full">
           <NuxtLink
-            to="/meditations"
+            to="/practices"
             class="flex flex-col items-center justify-center icon-disc-wrapper"
-            :class="{ 'text-foreground': isActive('/meditations') }"
+            :class="{ 'text-foreground': isPracticesActive }"
           >
             <span
               :class="[
                 'icon-disc w-12 h-12 flex items-center justify-center',
-                { 'icon-disc-active': isActive('/meditations') },
+                { 'icon-disc-active': isPracticesActive },
               ]"
               :style="{ borderRadius: 'var(--radius-icon)' }"
             >
-              <IconLeaf class="w-5 h-5" />
+              <IconWind class="w-5 h-5" />
             </span>
-            <span class="w-full text-center text-foreground">Медитации</span>
+            <span class="w-full text-center text-foreground text-[10px]">Практики</span>
           </NuxtLink>
         </li>
         <li class="flex flex-col items-center gap-1 w-full">
@@ -94,7 +94,7 @@
             >
               <IconSettings class="w-5 h-5" />
             </span>
-            <span class="w-full text-center text-foreground">Настройки</span>
+            <span class="w-full text-center text-foreground text-[10px]">Настройки</span>
           </NuxtLink>
         </li>
       </ul>
@@ -107,7 +107,7 @@ import { computed } from 'vue';
 import IconMessageCircleHeart from '~icons/lucide/message-circle-heart';
 import IconBrain from '~icons/lucide/brain';
 import IconListCheck from '~icons/lucide/list-check';
-import IconLeaf from '~icons/lucide/leaf';
+import IconWind from '~icons/lucide/wind';
 import IconSettings from '~icons/lucide/settings';
 
 const route = useRoute();
@@ -122,6 +122,14 @@ const isActive = (path: string) => {
   if (path === '/') return route.path === '/';
   return route.path === path || route.path.startsWith(`${path}/`);
 };
+
+const isPracticesActive = computed(() => {
+  return (
+    route.path.startsWith('/practices') ||
+    route.path.startsWith('/meditations') ||
+    route.path.startsWith('/breath-practices')
+  );
+});
 
 // Обработчик клика на кнопку "Чат"
 function handleChatClick(event: MouseEvent) {

@@ -1,6 +1,6 @@
 <template>
-  <div class="relative h-full overflow-y-auto space-y-4 pb-[140px]">
-    <PageHeader title="🧘‍♀️&nbsp;Медитации" />
+  <div class="space-y-4 relative h-full overflow-y-auto  rounded-lg pb-[100px]">
+    <PageHeader title="🧘‍♀️&nbsp;Медитации" :show-back-button="true" @go-back="goBack" />
 
     <Skeleton v-if="loaders.isSkeletonLoading" type="list-item" :count="6" />
 
@@ -231,6 +231,10 @@ const dialogTitle = computed(() => {
   const topic = topicsMap.value.find((t) => t.key === dialogTopicKey.value);
   return topic?.name || 'Подборка';
 });
+
+function goBack() {
+  navigateTo('/practices');
+}
 
 onMounted(async () => {
   await meditationsStore.fetchAll();

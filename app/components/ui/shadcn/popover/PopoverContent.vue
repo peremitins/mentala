@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import type { PopoverContentEmits, PopoverContentProps } from 'radix-vue';
+import type {
+  PopoverContentEmits,
+  PopoverContentProps,
+  PopoverPortalProps,
+} from 'radix-vue';
 import type { HTMLAttributes } from 'vue';
 import { cn } from '@/app/lib/utils';
 import { PopoverContent, PopoverPortal, useForwardPropsEmits } from 'radix-vue';
@@ -10,7 +14,10 @@ defineOptions({
 });
 
 const props = withDefaults(
-  defineProps<PopoverContentProps & { class?: HTMLAttributes['class'] }>(),
+  defineProps<PopoverContentProps & {
+    class?: HTMLAttributes['class'];
+    portal?: PopoverPortalProps;
+  }>(),
   {
     align: 'center',
     sideOffset: 4,
@@ -19,7 +26,7 @@ const props = withDefaults(
 const emits = defineEmits<PopoverContentEmits>();
 
 const delegatedProps = computed(() => {
-  const { class: _, ...delegated } = props;
+  const { class: _, portal, ...delegated } = props;
 
   return delegated;
 });
@@ -28,7 +35,7 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits);
 </script>
 
 <template>
-  <PopoverPortal>
+  <PopoverPortal v-bind="props.portal">
     <PopoverContent
       v-bind="{ ...forwarded, ...$attrs }"
       :class="

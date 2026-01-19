@@ -17,7 +17,16 @@
 • blank (fullscreen),
 • auth (центрирование форм).
 • Страницы:
-index, onboarding, chat (layout blank), therapy, habits, profile/\*, billing.
+index, onboarding, chat (layout blank), therapy, habits, practices, breath-practices, profile/\*, billing.
+• Практики:
+• Хаб `/practices` объединяет дыхательные практики и медитации.
+• Дыхательные практики: страницы `/breath-practices` и `/breath-practices/:slug`, каталог в `app/lib/breathPracticesCatalog.ts`.
+• Кастомные практики и настройки хранятся в `app/stores/breathPractices.ts` через `app/utils/persistentStorage.ts` (web: localStorage, mobile: Capacitor Preferences).
+• Тренажёр использует `app/composables/useBreathPracticePlayer.ts` (тайминг фаз, отсчёт; при уходе в фон не ставим паузу).
+• Звуки фаз лежат в `public/breath/sounds/`: `inhale.m4a`, `exhale.m4a`, `wait.m4a` (задержка), `pause.m4a` (пауза).
+• Howler для дыхательных cue инициализируется заранее (prepare при монтировании/включении), чтобы мобильный auto‑unlock срабатывал на первом тапе; при `playerror` идёт повтор после `unlock`. Сигнал играет полностью, но при старте следующей фазы плавно кроссфейдится (~200 мс). При паузе/стопе звук быстро затухает через fade (~120 мс). Изменение громкости применяется к активному звуку, плюс есть небольшой volume‑boost для тихих файлов.
+• Ограничение кастомных фаз: 1–30 секунд, 2–4 фазы.
+• Длительность сессии выбирается через `TimePicker` в режиме минут (1–60 минут) в настройках практики; поповер портируется в контейнер диалога, чтобы не ломать скролл.
 • Медитации:
 • Страницы `/meditations` и `/meditations/:id`.
 • Состояния: компонент StateBlock отображает idle/loading/empty/error.
