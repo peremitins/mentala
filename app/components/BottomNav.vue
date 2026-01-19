@@ -113,9 +113,16 @@ import IconSettings from '~icons/lucide/settings';
 const route = useRoute();
 const router = useRouter();
 
+const detailTrackId = computed(() => {
+  const raw = route.query.trackId;
+  if (Array.isArray(raw)) return raw[0]?.trim() || '';
+  if (typeof raw === 'string') return raw.trim();
+  return '';
+});
+
 // Размываем нижнюю панель только на странице плеера медитации.
 const isMeditationPlayer = computed(() => {
-  return route.path.startsWith('/meditations/') && Boolean(route.params?.id);
+  return route.path.startsWith('/meditations') && Boolean(detailTrackId.value);
 });
 
 const isActive = (path: string) => {
