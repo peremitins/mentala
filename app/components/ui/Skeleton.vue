@@ -50,6 +50,25 @@
         </div>
       </div>
 
+      <!-- Скелетон для страниц медитаций и дыхательных практик -->
+      <div v-else-if="type === 'practice-page'" class="space-y-4">
+        <div class="flex items-center justify-between gap-3">
+          <div class="space-y-2">
+            <div class="h-3 bg-skeleton rounded w-40"></div>
+            <div class="h-5 bg-skeleton rounded w-28"></div>
+          </div>
+        </div>
+
+        <div class="flex gap-4">
+          <div class="flex-1 space-y-3">
+            <div class="h-24 bg-skeleton rounded-2xl"></div>
+          </div>
+          <div class="flex-1 space-y-3">
+            <div class="h-24 bg-skeleton rounded-2xl"></div>
+          </div>
+        </div>
+      </div>
+
       <!-- Скелетон для статуса подписки -->
       <div v-else-if="type === 'subscription-status'" class="space-y-3">
         <!-- Заголовок -->
@@ -117,7 +136,8 @@ const props = withDefaults(
       | 'list-item'
       | 'subscription-status'
       | 'plan-card'
-      | 'simple-text';
+      | 'simple-text'
+      | 'practice-page';
     count?: number;
     roundedSize?: 'sm' | 'md' | 'lg' | 'xl';
     withWrapper?: boolean;

@@ -1,5 +1,8 @@
 <template>
-  <div class="space-y-4 relative h-full overflow-y-auto rounded-lg">
+  <div
+    class="space-y-4 relative h-full overflow-y-auto rounded-lg"
+    :class="selectedTrackId ? '' : 'pb-[100px]'"
+  >
     <MeditationDetailView
       v-if="selectedTrackId"
       :track-id="selectedTrackId"
@@ -13,7 +16,12 @@
         @go-back="goBack"
       />
 
-      <Skeleton v-if="loaders.isSkeletonLoading" type="list-item" :count="6" />
+      <Skeleton
+        v-if="loaders.isSkeletonLoading"
+        type="practice-page"
+        :count="5"
+        :with-wrapper="false"
+      />
 
       <StateBlock v-else-if="meditationsStore.error" state="error" class="px-4">
         <p class="text-sm text-center">{{ meditationsStore.error }}</p>
@@ -21,7 +29,7 @@
 
       <div v-else class="space-y-6">
         <MeditationSection
-          v-for="section in visibleSections"
+          v-for="(section, index) in visibleSections"
           :key="section.key"
           :title="section.title"
           :subtitle="section.subtitle"
@@ -32,6 +40,12 @@
             section.key !== 'all' && section.key !== 'favorites'
               ? (section.key as MeditationTopicKey)
               : undefined
+          "
+          :class="!wasSkeletonShown ? 'animate-slide-up' : ''"
+          :style="
+            !wasSkeletonShown
+              ? `animation-delay: ${index * 0.05}s; animation-fill-mode: both`
+              : ''
           "
           @open="openTrack($event, section.key, section.tracks)"
           @favorite="toggleFavorite"
@@ -129,6 +143,8 @@ const router = useRouter();
 const meditationsStore = useMeditationsStore();
 const loaders = useLoadersStore();
 const { currentTrack, setQueue } = useMeditationPlayer();
+
+const wasSkeletonShown = ref(false);
 
 type SectionKey = MeditationTopicKey | 'favorites' | 'all';
 type Section = {
@@ -270,6 +286,16 @@ watch(
       dialogOpen.value = false;
     }
   }
+);
+
+watch(
+  () => loaders.isSkeletonLoading,
+  (isLoading) => {
+    if (isLoading) {
+      wasSkeletonShown.value = true;
+    }
+  },
+  { immediate: true }
 );
 
 watch(

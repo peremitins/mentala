@@ -10,91 +10,106 @@
           <NuxtLink
             to="/"
             @click="handleChatClick"
-            class="flex flex-col items-center justify-center icon-disc-wrapper"
+            class="group flex flex-col items-center justify-center icon-disc-wrapper"
             :class="{ 'text-foreground': isActive('/') }"
           >
             <span
               :class="[
-                'icon-disc w-12 h-12 flex items-center justify-center',
+                'glass-deep icon-disc w-12 h-12 flex items-center justify-center mb-1',
                 { 'icon-disc-active': isActive('/') },
               ]"
               :style="{ borderRadius: 'var(--radius-icon)' }"
             >
               <IconMessageCircleHeart class="w-5 h-5" />
             </span>
-            <span class="w-full text-center text-foreground text-[10px]">Чат</span>
+            <span
+              class="w-full text-center text-foreground text-[10px] group-hover:text-primary transition-all duration-300"
+              >Чат</span
+            >
           </NuxtLink>
         </li>
         <li class="flex flex-col items-center gap-1 w-full">
           <NuxtLink
             to="/therapy"
-            class="flex flex-col items-center justify-center icon-disc-wrapper"
+            class="group flex flex-col items-center justify-center icon-disc-wrapper"
             :class="{ 'text-foreground': isActive('/therapy') }"
           >
             <span
               :class="[
-                'icon-disc w-12 h-12 flex items-center justify-center',
+                'glass-deep icon-disc w-12 h-12 flex items-center justify-center mb-1',
                 { 'icon-disc-active': isActive('/therapy') },
               ]"
               :style="{ borderRadius: 'var(--radius-icon)' }"
             >
               <IconBrain class="w-5 h-5" />
             </span>
-            <span class="w-full text-center text-foreground text-[10px]">Терапия</span>
+            <span
+              class="w-full text-center text-foreground text-[10px] group-hover:text-primary transition-all duration-300"
+              >Терапия</span
+            >
           </NuxtLink>
         </li>
         <li class="flex flex-col items-center gap-1 w-full">
           <NuxtLink
             to="/habits"
-            class="flex flex-col items-center justify-center icon-disc-wrapper"
+            class="group flex flex-col items-center justify-center icon-disc-wrapper"
             :class="{ 'text-foreground': isActive('/habits') }"
           >
             <span
               :class="[
-                'icon-disc w-12 h-12 flex items-center justify-center',
+                'glass-deep icon-disc w-12 h-12 flex items-center justify-center mb-1',
                 { 'icon-disc-active': isActive('/habits') },
               ]"
               :style="{ borderRadius: 'var(--radius-icon)' }"
             >
               <IconListCheck class="w-5 h-5" />
             </span>
-            <span class="w-full text-center text-foreground text-[10px]">Привычки</span>
+            <span
+              class="w-full text-center text-foreground text-[10px] group-hover:text-primary transition-all duration-300"
+              >Привычки</span
+            >
           </NuxtLink>
         </li>
         <li class="flex flex-col items-center gap-1 w-full">
           <NuxtLink
             to="/practices"
-            class="flex flex-col items-center justify-center icon-disc-wrapper"
+            class="group flex flex-col items-center justify-center icon-disc-wrapper"
             :class="{ 'text-foreground': isPracticesActive }"
           >
             <span
               :class="[
-                'icon-disc w-12 h-12 flex items-center justify-center',
+                'glass-deep icon-disc w-12 h-12 flex items-center justify-center mb-1',
                 { 'icon-disc-active': isPracticesActive },
               ]"
               :style="{ borderRadius: 'var(--radius-icon)' }"
             >
               <IconWind class="w-5 h-5" />
             </span>
-            <span class="w-full text-center text-foreground text-[10px]">Практики</span>
+            <span
+              class="w-full text-center text-foreground text-[10px] group-hover:text-primary transition-all duration-300"
+              >Практики</span
+            >
           </NuxtLink>
         </li>
         <li class="flex flex-col items-center gap-1 w-full">
           <NuxtLink
             to="/settings"
-            class="flex flex-col items-center justify-center icon-disc-wrapper"
+            class="group flex flex-col items-center justify-center icon-disc-wrapper"
             :class="{ 'text-foreground': isActive('/settings') }"
           >
             <span
               :class="[
-                'icon-disc w-12 h-12 flex items-center justify-center',
+                'glass-deep icon-disc w-12 h-12 flex items-center justify-center mb-1',
                 { 'icon-disc-active': isActive('/settings') },
               ]"
               :style="{ borderRadius: 'var(--radius-icon)' }"
             >
               <IconSettings class="w-5 h-5" />
             </span>
-            <span class="w-full text-center text-foreground text-[10px]">Настройки</span>
+            <span
+              class="w-full text-center text-foreground text-[10px] group-hover:text-primary transition-all duration-300"
+              >Настройки</span
+            >
           </NuxtLink>
         </li>
       </ul>

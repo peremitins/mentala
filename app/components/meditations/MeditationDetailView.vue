@@ -62,7 +62,7 @@
         <div class="grid grid-cols-6 items-center gap-3">
           <button
             type="button"
-            class="flex h-12 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+            class="flex h-12 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20 opacity-100"
             :class="
               isLoopTrack
                 ? 'cursor-not-allowed opacity-50 hover:bg-white/10'
@@ -77,21 +77,21 @@
           </button>
           <button
             type="button"
-            class="flex h-12 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+            class="flex h-12 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20 opacity-100"
             @click="playPrev"
           >
             <IconSkipBack class="h-5 w-5" />
           </button>
           <button
             type="button"
-            class="flex h-12 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+            class="flex h-12 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20 opacity-100"
             @click="seekBy(-15)"
           >
             <IconUndo2 class="h-5 w-5" />
           </button>
           <button
             type="button"
-            class="flex h-14 items-center justify-center rounded-full bg-primary/80 text-primary-foreground shadow-lg transition hover:bg-primary disabled:cursor-not-allowed disabled:opacity-70"
+            class="flex h-14 items-center justify-center rounded-full bg-primary/80 text-primary-foreground shadow-lg transition hover:bg-primary disabled:cursor-not-allowed disabled:opacity-70 opacity-100"
             :class="{ 'opacity-80': isBuffering }"
             :disabled="isBuffering"
             :aria-busy="isBuffering"
@@ -116,14 +116,14 @@
           </button>
           <button
             type="button"
-            class="flex h-12 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+            class="flex h-12 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20 opacity-100"
             @click="seekBy(15)"
           >
             <IconRedo2 class="h-5 w-5" />
           </button>
           <button
             type="button"
-            class="flex h-12 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+            class="flex h-12 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20 opacity-100"
             @click="playNext"
           >
             <IconSkipForward class="h-5 w-5" />

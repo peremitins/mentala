@@ -1,23 +1,30 @@
 <template>
-  <div class="space-y-4 relative h-full overflow-y-auto  rounded-lg pb-[100px]">
-    <PageHeader title="🌬️&nbsp;Дыхательные практики" :show-back-button="true" @go-back="goBack" />
+  <div class="space-y-4 relative h-full overflow-y-auto rounded-lg pb-[100px]">
+    <PageHeader
+      title="🌬️&nbsp;Дыхательные практики"
+      :show-back-button="true"
+      @go-back="goBack"
+    />
 
-    <div class="space-y-6 ">
-
-
+    <div class="space-y-6">
       <BreathPracticeSection
-        v-for="section in builtInSections"
+        v-for="(section, index) in builtInSections"
         :key="section.key"
         :title="section.title"
         :subtitle="section.subtitle"
         :emoji="section.emoji"
         :items="section.items"
         :show-view-all="section.items.length > 4"
+        class="animate-slide-up"
+        :style="animationStyle(index)"
         @open="openPractice"
         @view-all="openViewAll(section.key)"
       />
 
-      <section class="space-y-3">
+      <section
+        class="space-y-3 animate-slide-up"
+        :style="animationStyle(builtInSections.length)"
+      >
         <div class="flex items-center justify-between gap-3 px-1">
           <div>
             <p class="text-xs uppercase tracking-[0.08em] text-white/50">
@@ -59,14 +66,14 @@
               class="absolute -right-8 -top-6 h-24 w-24 rounded-full bg-gradient-to-br from-fuchsia-500/25 via-purple-500/10 to-transparent blur-2xl"
             />
           </div>
-          <div class="relative w-full z-10 flex items-center justify-between gap-4">
+          <div
+            class="relative w-full z-10 flex items-center justify-between gap-4"
+          >
             <div class="space-y-1">
               <p class="text-base font-semibold text-foreground">
                 Создать свою практику
               </p>
-              <p class="text-xs text-foreground/60">
-                2–4 фазы, 1–30 секунд
-              </p>
+              <p class="text-xs text-foreground/60">2–4 фазы, 1–30 секунд</p>
             </div>
             <div class="flex items-center gap-2 text-xs text-foreground/70">
               <span class="rounded-full bg-white/10 px-2 py-1">Открыть</span>
@@ -191,8 +198,8 @@ const dialogSectionKey = ref<BreathPracticeTag | null>(null);
 
 const builtInSections = computed(() =>
   SECTION_META.map((section) => {
-    const items: BreathPracticeCardItem[] = BREATH_PRACTICES.filter((practice) =>
-      practice.tags.includes(section.key)
+    const items: BreathPracticeCardItem[] = BREATH_PRACTICES.filter(
+      (practice) => practice.tags.includes(section.key)
     ).map((practice) => ({
       practice,
       accentClass: TAG_GRADIENTS[section.key],
@@ -213,20 +220,26 @@ const customItems = computed<BreathPracticeCardItem[]>(() =>
   }))
 );
 
+function animationStyle(index: number) {
+  return `animation-delay: ${index * 0.05}s; animation-fill-mode: both`;
+}
+
 const dialogItems = computed<BreathPracticeCardItem[]>(() => {
   if (!dialogSectionKey.value) return [];
   const key = dialogSectionKey.value;
-  return BREATH_PRACTICES.filter((practice) =>
-    practice.tags.includes(key)
-  ).map((practice) => ({
-    practice,
-    accentClass: TAG_GRADIENTS[key],
-  }));
+  return BREATH_PRACTICES.filter((practice) => practice.tags.includes(key)).map(
+    (practice) => ({
+      practice,
+      accentClass: TAG_GRADIENTS[key],
+    })
+  );
 });
 
 const dialogTitle = computed(() => {
   if (!dialogSectionKey.value) return 'Подборка';
-  const section = SECTION_META.find((item) => item.key === dialogSectionKey.value);
+  const section = SECTION_META.find(
+    (item) => item.key === dialogSectionKey.value
+  );
   return section?.title || 'Подборка';
 });
 

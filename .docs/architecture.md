@@ -30,6 +30,7 @@ index, onboarding, chat (layout blank), therapy, habits, practices, breath-pract
 • Медитации:
 • Страницы `/meditations` (каталог + детальный плеер через query `trackId`), `/meditations/:id` — только редирект в query.
 • Состояния: компонент StateBlock отображает idle/loading/empty/error.
+• Скелетоны: в `Skeleton.vue` есть общий тип `practice-page` для медитаций и дыхательных практик.
 • Сторы Pinia:
 • ui
 • user
