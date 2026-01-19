@@ -160,41 +160,13 @@ a {
   background: hsl(var(--background) / 0.07);
 }
 
-.icon-disc-wrapper {
-  &:hover,
-  &.router-link-active {
-    .icon-disc {
-      transform: translateY(-2px);
-      background: hsl(var(--card) / 0.95);
-      border-color: hsl(var(--border));
-      box-shadow: var(--shadow-md);
-    }
-  }
-}
-
 .dark .icon-disc-wrapper {
   &:hover,
   &.router-link-active {
     .icon-disc {
-      background: hsl(var(--background) / 0.1);
-      border-color: hsl(var(--background) / 0.2);
+      color: hsl(var(--primary));
     }
   }
-}
-
-.icon-disc-active {
-  background: hsl(var(--card) / 1);
-  border-color: hsl(var(--border));
-  box-shadow: var(--shadow-sm);
-  background-clip: padding-box;
-}
-
-.dark .icon-disc-active {
-  background: hsl(var(--background) / 0.14);
-  border-color: hsl(var(--background) / 0.28);
-  box-shadow:
-    inset 1px 1px 0.12px rgba(255, 255, 255, 0.4),
-    1px 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 /* Глобальный класс для скрытия скроллбаров при сохранении прокрутки */

@@ -6,11 +6,16 @@ import type { MeditationTrackDto } from '@/shared/dto/meditations';
 const FADE_IN_MS = 1500;
 const FADE_OUT_MS = 2500;
 const PAUSE_FADE_MS = 600;
+const PLAY_START_TIMEOUT_MS = 1200;
 const TICK_MS = 500;
 const LOOP_THRESHOLD_SEC = 0.12; // небольшой зазор перед концом для мгновенного рестарта
 const LOOP_REARM_SEC = 0.3; // окно, в котором разрешаем снова сработать триггер
 
 type PlaybackMode = 'html' | 'webaudio';
+type PendingGesturePlay = {
+  track: MeditationTrackDto;
+  timerMinutes?: number | null;
+};
 
 const globalState = {
   audio: null as HTMLAudioElement | null,
@@ -25,6 +30,8 @@ const globalState = {
   currentTrack: ref<MeditationTrackDto | null>(null),
   isPlaying: ref(false),
   isBuffering: ref(false),
+  pendingGesturePlay: null as PendingGesturePlay | null,
+  gestureUnlockCleanup: null as (() => void) | null,
   // По умолчанию повтор трека включён.
   isRepeating: ref(true),
   currentTime: ref(0),
@@ -56,6 +63,76 @@ function getAudioContextCtor(): typeof AudioContext | null {
 
 function isWebAudioAvailable() {
   return isDocumentAvailable() && Boolean(getAudioContextCtor());
+}
+
+function clearGestureUnlock() {
+  if (globalState.gestureUnlockCleanup) {
+    globalState.gestureUnlockCleanup();
+    globalState.gestureUnlockCleanup = null;
+  }
+  globalState.pendingGesturePlay = null;
+}
+
+function scheduleGestureUnlock(
+  track: MeditationTrackDto,
+  timerMinutes?: number | null
+) {
+  if (!isDocumentAvailable() || typeof window === 'undefined') return;
+  clearGestureUnlock();
+
+  globalState.pendingGesturePlay = { track, timerMinutes };
+
+  const handler = () => {
+    const pending = globalState.pendingGesturePlay;
+    clearGestureUnlock();
+    if (!pending) return;
+    // Стартуем по первому пользовательскому жесту.
+    void play(pending.track, pending.timerMinutes ?? null);
+  };
+
+  const options: AddEventListenerOptions = { passive: true };
+  window.addEventListener('pointerdown', handler, options);
+  window.addEventListener('touchstart', handler, options);
+  window.addEventListener('keydown', handler);
+
+  globalState.gestureUnlockCleanup = () => {
+    window.removeEventListener('pointerdown', handler, options);
+    window.removeEventListener('touchstart', handler, options);
+    window.removeEventListener('keydown', handler);
+  };
+}
+
+async function attemptHtmlPlayback(audio: HTMLAudioElement) {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  try {
+    const playPromise = audio.play();
+    if (!playPromise) return { started: true };
+
+    const result = await Promise.race([
+      playPromise.then(() => 'started' as const),
+      new Promise<'timeout'>((resolve) => {
+        timeoutId = setTimeout(() => resolve('timeout'), PLAY_START_TIMEOUT_MS);
+      }),
+    ]);
+
+    if (result === 'timeout') {
+      // Если промис завис — прерываем, чтобы не держать лоадер вечно.
+      try {
+        audio.pause();
+      } catch {
+        // Если уже не играет — игнорируем.
+      }
+      return { started: false, timedOut: true };
+    }
+
+    return { started: true };
+  } catch (error) {
+    return { started: false, error };
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
 }
 
 function ensureAudioContext(): AudioContext | null {
@@ -97,7 +174,15 @@ async function prepareWebAudioTrack(
   if (!context) return null;
 
   if (context.state === 'suspended') {
-    await context.resume();
+    try {
+      await context.resume();
+    } catch {
+      // Без пользовательского жеста WebAudio может не стартовать.
+      return null;
+    }
+  }
+  if (context.state !== 'running') {
+    return null;
   }
 
   const url = resolveMediaUrl(track.audioPath);
@@ -412,6 +497,7 @@ async function stop(
   if (!options.keepActionId) {
     bumpPlaybackActionId();
   }
+  clearGestureUnlock();
   globalState.isBuffering.value = false;
   if (globalState.playbackMode === 'webaudio') {
     if (withFade) {
@@ -445,6 +531,7 @@ async function stop(
 
 async function pause() {
   bumpPlaybackActionId();
+  clearGestureUnlock();
   globalState.isBuffering.value = false;
   if (globalState.playbackMode === 'webaudio') {
     if (!globalState.audioSource) return;
@@ -469,6 +556,7 @@ async function play(track: MeditationTrackDto, timerMinutes?: number | null) {
 
   const actionId = bumpPlaybackActionId();
   const isActionActive = () => isPlaybackActionActive(actionId);
+  clearGestureUnlock();
 
   resetLoopGuard();
 
@@ -569,12 +657,22 @@ async function play(track: MeditationTrackDto, timerMinutes?: number | null) {
       }
 
       if (abortIfStale()) return;
-      await globalState.audio?.play();
+      if (!globalState.audio) return;
+      const playbackResult = await attemptHtmlPlayback(globalState.audio);
       if (abortIfStale()) return;
+      if (!playbackResult.started) {
+        if (!isActionActive()) return;
+        globalState.isPlaying.value = false;
+        globalState.isBuffering.value = false;
+        // Браузер ждёт жест — ставим отложенный старт.
+        scheduleGestureUnlock(track, timerMinutes ?? null);
+        return;
+      }
       globalState.isPlaying.value = true;
       // Снимаем лоадер сразу после старта воспроизведения (play() уже зарезолвился).
       globalState.isBuffering.value = false;
       started = true;
+      clearGestureUnlock();
       await fadeTo(1, FADE_IN_MS);
       if (abortIfStale()) return;
     } else {
@@ -594,6 +692,7 @@ async function play(track: MeditationTrackDto, timerMinutes?: number | null) {
       // WebAudio стартует сразу после source.start(), лоадер можно скрыть.
       globalState.isBuffering.value = false;
       started = true;
+      clearGestureUnlock();
       await fadeTo(1, FADE_IN_MS);
       if (abortIfStale()) return;
     }

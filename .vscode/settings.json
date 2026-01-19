@@ -1,0 +1,156 @@
+{
+  "workbench.startupEditor": "newUntitledFile",
+  "files.autoSave": "onFocusChange",
+  "editor.smoothScrolling": true,
+  "editor.tabSize": 2,
+  "editor.mouseWheelZoom": true,
+  "liveSassCompile.settings.generateMap": false,
+  "css.link.emptyRules": "ignore",
+  "editor.inlineSuggest.enabled": true,
+  "git.enableSmartCommit": true,
+  "CodeGPT.query.language": "Russian",
+  "explorer.confirmDelete": false,
+  "liveServer.settings.donotShowInfoMsg": true,
+  "editor.tabCompletion": "on",
+  "explorer.confirmDragAndDrop": false,
+  "terminal.integrated.shell.windows": "C:\\Program Files\\Git\\bin\\bash.exe",
+  "editor.smartSelect.selectLeadingAndTrailingWhitespace": false,
+  "javascript.format.insertSpaceAfterSemicolonInForStatements": false,
+  "typescript.format.insertSpaceAfterSemicolonInForStatements": false,
+  "editor.detectIndentation": false,
+  "prettier.tabWidth": 2,
+  "prettier.vueIndentScriptAndStyle": true,
+  "prettier.useTabs": false,
+  "diffEditor.ignoreTrimWhitespace": false,
+  "editor.renderWhitespace": "all",
+  "editor.trimAutoWhitespace": false,
+  "editor.multiCursorModifier": "ctrlCmd",
+  "editor.semanticHighlighting.enabled": true,
+  "sync.autoUpload": true,
+  "sync.autoDownload": true,
+  "prettier.singleQuote": true,
+  "security.workspace.trust.untrustedFiles": "open",
+  "javascript.validate.enable": true,
+  "typescript.validate.enable": true,
+  "eslint.validate": [
+    "vue",
+    "javascript",
+    "typescript"
+  ],
+  "eslint.run": "onSave",
+  "eslint.workingDirectories": [
+    {
+      "mode": "auto"
+    }
+  ],
+  "volar.format.initialIndent": {
+    "html": true
+  },
+  "[html]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[vue]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[css]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[scss]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "workbench.colorCustomizations": {
+    "editorWarning.foreground": "#00000000",
+    "editorInfo.foreground": "#00000000"
+  },
+  "workbench.editorAssociations": {
+    "*.svg": "default"
+  },
+  "liveSassCompile.settings.formats": [
+    {
+      "format": "expanded",
+      "autoprefix": "last 5 versions",
+      "extensionName": ".css",
+      "savePath": "css"
+    }
+  ],
+  "files.associations": {
+    "*.vue": "vue"
+  },
+  "vue.updateImportsOnFileMove.enabled": true,
+  "svg.preview.mode": "svg",
+  "CodeGPT.apiKey": "CodeGPT Plus Beta",
+  "git.confirmSync": false,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit",
+    "source.fixAll.stylelint": "explicit"
+  },
+  "[yaml]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "prettier.singleQuote": false
+  },
+  "github.copilot.editor.enableAutoCompletions": true,
+  "gitlens.views.branches.branches.layout": "list",
+  "gitlens.views.scm.grouped.views": {
+    "stashes": false,
+    "commits": false,
+    "tags": false,
+    "branches": false
+  },
+  "settingsSync.ignoredExtensions": [],
+  "settingsSync.ignoredSettings": [],
+  "tabnine.experimentalAutoImports": true,
+  "docker.extension.enableComposeLanguageServer": false,
+  "editor.accessibilitySupport": "off",
+  "accessibility.signals.editsKept": {
+    "sound": "off",
+    "announcement": "off"
+  },
+  "accessibility.signals.editsUndone": {
+    "sound": "off",
+    "announcement": "off"
+  },
+  // Включаем Flat Config для ESLint 9
+  "eslint.useFlatConfig": true,
+  // Форматирование и фикс ESLint/Stylelint на каждый save
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": true,
+    "source.fixAll.stylelint": true
+  },
+  "[dockercompose]": {
+    "editor.insertSpaces": true,
+    "editor.tabSize": 2,
+    "editor.autoIndent": "advanced",
+    "editor.quickSuggestions": {
+      "other": true,
+      "comments": false,
+      "strings": true
+    },
+    "editor.defaultFormatter": "redhat.vscode-yaml"
+  },
+  "[github-actions-workflow]": {
+    "editor.defaultFormatter": "redhat.vscode-yaml"
+  },
+  "cursor.inlineDiff.enablePerformanceProtection": false,
+  "cursor.composer.shouldChimeAfterChatFinishes": true,
+  "notebook.defaultFormatter": "esbenp.prettier-vscode",
+  "docker.languageserver.formatter.ignoreMultilineInstructions": true
+  // Какие языки должен обслуживать ESLint
+  // "eslint.validate": ["javascript", "typescript", "vue"],
+  // // Включаем Stylelint для CSS/SCSS/Vue и отключаем встроенные валидаторы,
+  // // чтобы не было дублей и конфликтов
+  // "stylelint.validate": ["css", "scss", "vue"],
+  // "css.validate": false,
+  // "scss.validate": false,
+  // // (опционально) Режим запуска ESLint — на сохранение
+  // "eslint.run": "onSave",
+  // // Остальное можешь оставить как есть
+  // "files.autoSave": "onFocusChange",
+  // "editor.defaultFormatter": "esbenp.prettier-vscode"
+}

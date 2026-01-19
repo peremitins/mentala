@@ -17,10 +17,22 @@
         </slot>
       </PopoverTrigger>
 
-      <PopoverContent class="w-auto p-0 glass-deep" align="start">
+      <PopoverContent
+        class="p-0 glass-deep z-[70] w-[var(--reka-popper-anchor-width)] min-w-[var(--reka-popper-anchor-width)] max-w-[var(--reka-popper-anchor-width)]"
+        align="start"
+        :portal="portalProps"
+        :style="{
+          width: 'var(--reka-popper-anchor-width)',
+          minWidth: 'var(--reka-popper-anchor-width)',
+          maxWidth: 'var(--reka-popper-anchor-width)',
+        }"
+      >
         <div class="flex items-center">
           <!-- Часы -->
-          <div class="flex flex-col items-center border-r border-border">
+          <div
+            v-if="isTimeMode"
+            class="flex flex-col items-center border-r border-border"
+          >
             <!-- Кнопка вверх для часов (уменьшаем) -->
             <button
               type="button"
@@ -69,7 +81,12 @@
           </div>
 
           <!-- Минуты -->
-          <div class="flex flex-col items-center">
+          <div
+            :class="[
+              'flex flex-col items-center',
+              isTimeMode ? '' : 'w-full',
+            ]"
+          >
             <!-- Кнопка вверх для минут (уменьшаем) -->
             <button
               type="button"
@@ -80,22 +97,27 @@
             </button>
 
             <!-- Список минут с нативным скроллом -->
-            <div ref="minutesContainer" class="h-40 w-16">
+            <div
+              ref="minutesContainer"
+              :class="isTimeMode ? 'h-40 w-16' : 'h-44 w-full'"
+            >
               <ScrollArea
                 class="h-full [&>div>div]:overflow-y-auto [&_[data-radix-scroll-area-scrollbar]]:hidden"
               >
                 <div class="flex flex-col">
-                  <button
-                    v-for="minute in minutesList"
-                    :key="`minute-${minute}`"
-                    :data-minute="minute"
-                    type="button"
-                    :class="[
-                      'flex h-10 w-full items-center justify-center text-sm transition-colors',
-                      minute === minutes
-                        ? 'bg-primary font-semibold text-primary-foreground'
-                        : 'hover:bg-muted',
-                    ]"
+              <button
+                v-for="minute in minutesList"
+                :key="`minute-${minute}`"
+                :data-minute="minute"
+                type="button"
+                :class="[
+                  'flex h-10 w-full items-center justify-center text-sm transition-colors',
+                  minute === minutes
+                    ? 'bg-primary font-semibold text-primary-foreground'
+                    : isTimeMode
+                      ? 'hover:bg-muted'
+                      : 'text-white/80 hover:bg-white/10',
+                ]"
                     @click="
                       updateTime(hours, minute);
                       scrollToValue('minutes', minute);
@@ -135,9 +157,17 @@ import IconChevronUp from '~icons/lucide/chevron-up';
 import IconChevronDown from '~icons/lucide/chevron-down';
 import IconClock from '~icons/lucide/clock';
 
+type TimePickerMode = 'time' | 'minutes';
+
 interface Props {
-  modelValue: number; // Время в минутах от начала дня (0-1439)
+  modelValue: number; // Время в минутах от начала дня (time) или минутная длительность (minutes)
   label?: string;
+  mode?: TimePickerMode;
+  minuteMin?: number;
+  minuteMax?: number;
+  minuteStep?: number;
+  portalTo?: string;
+  portalDisabled?: boolean;
 }
 
 interface Emits {
@@ -146,18 +176,58 @@ interface Emits {
 
 const props = withDefaults(defineProps<Props>(), {
   label: 'Время',
+  mode: 'time',
+  minuteMin: 0,
+  minuteMax: 55,
+  minuteStep: 5,
+  portalDisabled: false,
 });
 
 const emit = defineEmits<Emits>();
 
 const isOpen = ref(false);
 
+// Режим определяет один столбец (минуты) или два (часы+минуты).
+const isTimeMode = computed(() => props.mode === 'time');
+const portalProps = computed(() => {
+  if (props.portalDisabled) {
+    return { disabled: true };
+  }
+  if (props.portalTo) {
+    return { to: props.portalTo };
+  }
+  return undefined;
+});
+const effectiveMinuteMin = computed(() =>
+  isTimeMode.value ? props.minuteMin : 1
+);
+const effectiveMinuteMax = computed(() =>
+  isTimeMode.value ? props.minuteMax : 60
+);
+const effectiveMinuteStep = computed(() =>
+  isTimeMode.value ? props.minuteStep : 1
+);
+
 // Разделяем время на часы и минуты
-const hours = computed(() => Math.floor(props.modelValue / 60));
-const minutes = computed(() => props.modelValue % 60);
+const hours = computed(() =>
+  isTimeMode.value ? Math.floor(props.modelValue / 60) : 0
+);
+const minutes = computed(() => {
+  if (isTimeMode.value) {
+    return props.modelValue % 60;
+  }
+  return clampNumber(
+    props.modelValue,
+    effectiveMinuteMin.value,
+    effectiveMinuteMax.value
+  );
+});
 
 // Форматируем время для отображения
 const formattedTime = computed(() => {
+  if (!isTimeMode.value) {
+    return `${minutes.value} мин`;
+  }
   const h = hours.value.toString().padStart(2, '0');
   const m = minutes.value.toString().padStart(2, '0');
   return `${h}:${m}`;
@@ -165,10 +235,27 @@ const formattedTime = computed(() => {
 
 // Списки для выбора
 const hoursList = Array.from({ length: 24 }, (_, i) => i);
-const minutesList = Array.from({ length: 12 }, (_, i) => i * 5); // Шаг 5 минут
+const minutesList = computed(() => {
+  const min = effectiveMinuteMin.value;
+  const max = effectiveMinuteMax.value;
+  const step = Math.max(1, effectiveMinuteStep.value);
+  const size = Math.floor((max - min) / step) + 1;
+  return Array.from({ length: size }, (_, index) => min + index * step);
+});
 
 // Обновление времени
 function updateTime(newHours: number, newMinutes: number) {
+  if (!isTimeMode.value) {
+    emit(
+      'update:modelValue',
+      clampNumber(
+        newMinutes,
+        effectiveMinuteMin.value,
+        effectiveMinuteMax.value
+      )
+    );
+    return;
+  }
   const totalMinutes = newHours * 60 + newMinutes;
   emit('update:modelValue', totalMinutes);
 }
@@ -188,7 +275,7 @@ function setupViewports() {
     minutesViewport.removeEventListener('scroll', handleMinutesScroll);
   }
 
-  if (hoursContainer.value) {
+  if (isTimeMode.value && hoursContainer.value) {
     hoursViewport = hoursContainer.value.querySelector(
       '[data-radix-scroll-area-viewport]'
     ) as HTMLElement;
@@ -244,6 +331,7 @@ let hoursScrollTimeout: ReturnType<typeof setTimeout> | null = null;
 let minutesScrollTimeout: ReturnType<typeof setTimeout> | null = null;
 
 function handleHoursScroll() {
+  if (!isTimeMode.value) return;
   if (hoursScrollTimeout) {
     clearTimeout(hoursScrollTimeout);
   }
@@ -281,19 +369,30 @@ function handleMinutesScroll() {
 
 // Стрелка вверх - уменьшаем (14 → 13 → 12...)
 function decrementHours() {
+  if (!isTimeMode.value) return;
   const newHours = (hours.value - 1 + 24) % 24;
   scrollToValue('hours', newHours);
 }
 
 // Стрелка вниз - увеличиваем (12 → 13 → 14...)
 function incrementHours() {
+  if (!isTimeMode.value) return;
   const newHours = (hours.value + 1) % 24;
   scrollToValue('hours', newHours);
 }
 
 // Стрелка вверх - уменьшаем
 function decrementMinutes() {
-  let newMinutes = minutes.value - 5;
+  const step = Math.max(1, effectiveMinuteStep.value);
+  let newMinutes = minutes.value - step;
+
+  if (!isTimeMode.value) {
+    const safe = Math.max(effectiveMinuteMin.value, newMinutes);
+    updateTime(0, safe);
+    scrollToValue('minutes', safe);
+    return;
+  }
+
   let newHours = hours.value;
   if (newMinutes < 0) {
     newMinutes += 60;
@@ -308,7 +407,16 @@ function decrementMinutes() {
 
 // Стрелка вниз - увеличиваем
 function incrementMinutes() {
-  let newMinutes = minutes.value + 5;
+  const step = Math.max(1, effectiveMinuteStep.value);
+  let newMinutes = minutes.value + step;
+
+  if (!isTimeMode.value) {
+    const safe = Math.min(effectiveMinuteMax.value, newMinutes);
+    updateTime(0, safe);
+    scrollToValue('minutes', safe);
+    return;
+  }
+
   let newHours = hours.value;
   if (newMinutes >= 60) {
     newMinutes -= 60;
@@ -324,6 +432,7 @@ function incrementMinutes() {
 // Функция для скролла к значению
 async function scrollToValue(type: 'hours' | 'minutes', value: number) {
   await nextTick();
+  if (!isTimeMode.value && type === 'hours') return;
   const selector =
     type === 'hours' ? `[data-hour="${value}"]` : `[data-minute="${value}"]`;
   const container =
@@ -339,9 +448,11 @@ watch(isOpen, async (open) => {
     setupViewports();
     setTimeout(() => {
       // Скроллим к выбранным значениям
-      const hourElement = hoursContainer.value?.querySelector(
-        `[data-hour="${hours.value}"]`
-      ) as HTMLElement | null;
+      const hourElement = isTimeMode.value
+        ? (hoursContainer.value?.querySelector(
+            `[data-hour="${hours.value}"]`
+          ) as HTMLElement | null)
+        : null;
       const minuteElement = minutesContainer.value?.querySelector(
         `[data-minute="${minutes.value}"]`
       ) as HTMLElement | null;
@@ -351,6 +462,11 @@ watch(isOpen, async (open) => {
     }, 100);
   }
 });
+
+function clampNumber(value: number, min: number, max: number) {
+  const safe = Number.isFinite(value) ? value : min;
+  return Math.min(max, Math.max(min, Math.floor(safe)));
+}
 
 onUnmounted(() => {
   if (hoursViewport) {

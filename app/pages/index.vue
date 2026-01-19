@@ -504,7 +504,10 @@ const handleActionChip = async (chip: SuggestedChip) => {
   }
 
   if (chip.action === 'open_meditation_track' && chip.params?.trackId) {
-    await router.push(`/meditations/${chip.params.trackId}`);
+    await router.push({
+      path: '/meditations',
+      query: { trackId: chip.params.trackId },
+    });
     useToast('Открываю медитацию');
     return;
   }
