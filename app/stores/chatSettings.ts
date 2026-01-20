@@ -4,8 +4,6 @@ import { useLoadersStore } from '@/app/stores/loaders';
 export const useChatSettingsStore = defineStore('chatSettings', {
   state: () => ({
     theme: 'dark' as 'dark' | 'light',
-    // Режим работы ассистента
-    mode: 'therapy' as 'therapy' | 'habits' | 'talk',
     // Голос/озвучка ответа ассистента
     voice: true,
     // Визуальный аватар (видео)
@@ -15,12 +13,6 @@ export const useChatSettingsStore = defineStore('chatSettings', {
     // Долгосрочная память (Summary)
     enableSummary: true,
     isFirstSession: false,
-    // Активные промпты по типам
-    // Примечание: 'talk' не хранится отдельно, мапится на 'therapy'
-    activePromptsByType: {
-      habits: null,
-      therapy: null,
-    } as Record<'habits' | 'therapy', any | null>,
   }),
   actions: {
     async getChatSettings() {
@@ -29,15 +21,9 @@ export const useChatSettingsStore = defineStore('chatSettings', {
           method: 'GET',
         });
 
-        // Безопасно применяем патч, сохраняя структуру activePromptsByType
         if (data?.settings) {
           this.$patch({
             ...data.settings,
-            // Убеждаемся, что activePromptsByType всегда имеет правильную структуру
-            activePromptsByType: {
-              habits: data.settings.activePromptsByType?.habits || null,
-              therapy: data.settings.activePromptsByType?.therapy || null,
-            },
           });
         }
 
@@ -58,21 +44,9 @@ export const useChatSettingsStore = defineStore('chatSettings', {
           body: payload,
         });
 
-        // Безопасно применяем патч, сохраняя структуру activePromptsByType
         if (data?.settings) {
           this.$patch({
             ...data.settings,
-            // Убеждаемся, что activePromptsByType всегда имеет правильную структуру
-            activePromptsByType: {
-              habits:
-                data.settings.activePromptsByType?.habits ||
-                this.activePromptsByType?.habits ||
-                null,
-              therapy:
-                data.settings.activePromptsByType?.therapy ||
-                this.activePromptsByType?.therapy ||
-                null,
-            },
           });
         }
 

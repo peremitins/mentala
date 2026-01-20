@@ -49,7 +49,6 @@ export const ChatRequestDto = z.object({
   model: z.string().optional(),
   sessionId: z.string().optional(),
   therapySessionId: z.number().optional(),
-  mode: z.enum(['therapy', 'habits', 'talk']).optional(),
   // расширенные опции
   userId: z.union([z.number(), z.string()]).optional(),
   isFirstSession: z.boolean().optional(),
@@ -197,7 +196,6 @@ export type ResponseType =
   | 'support'
   | 'recommendation'
   | 'synthesis';
-export type ChatMode = 'therapy' | 'habits' | 'talk';
 
 /**
  * Дополняем существующий ChatSession интерфейс

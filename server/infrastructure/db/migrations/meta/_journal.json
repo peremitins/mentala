@@ -127,6 +127,13 @@
       "when": 1768831627590,
       "tag": "0021_motionless_thunderbolt_ross",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1768929645016,
+      "tag": "0022_hard_johnny_blaze",
+      "breakpoints": true
     }
   ]
 }

@@ -19,6 +19,7 @@
 • UI‑настройки: `useUiSettingsStore` хранит локальные параметры интерфейса (яркость фона) в `persistentStorage` (web: localStorage, mobile: Capacitor Preferences). Яркость применяется к aurora‑слою и к затемнению фоновых изображений сцен (overlay).
 • Страницы:
 index, onboarding, chat (layout blank), therapy, habits, practices, breath-practices, profile/\*, billing.
+• Чат: welcome‑ответ стартует при пустом `messages`, параметр `mode` удалён; `entryContext` приходит из разделов `/habits` и `/therapy` и учитывается в prompt.
 • Практики:
 • Хаб `/practices` объединяет дыхательные практики и медитации.
 • Дыхательные практики: страницы `/breath-practices` и `/breath-practices/:slug`, каталог в `app/lib/breathPracticesCatalog.ts`.
@@ -61,6 +62,7 @@ server/
     •	PK: BIGINT AUTO INCREMENT (совместимость с Laravel)
     •	хранение миграций в SQL
     •	ORM: Drizzle ORM
+    •	chat_settings хранит только UI/память (без mode), welcome_prompts содержит тексты по признаку первой сессии и языку.
     •	преимущества: типобезопасность, простые миграции, готовые SQL.
     •	легко заменить на Eloquent (Laravel) при необходимости.
     •	Пул Postgres: keepAlive + idle/connection timeouts + maxLifetimeSeconds; при ошибках соединения фоновые задачи пересоздают пул через `resetDbPool`, чтобы воркеры восстанавливались после рестарта БД.

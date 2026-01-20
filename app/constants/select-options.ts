@@ -1,8 +1,3 @@
-export const AI_WORK_MODE_OPTIONS = [
-  { label: '💛 &nbsp;Терапия', value: 'therapy' },
-  { label: '💪 &nbsp;Привычки', value: 'habits' },
-];
-
 export const INTENT_OPTIONS = [
   { label: 'Приобрести', value: 'build' },
   { label: 'Избавиться', value: 'quit' },

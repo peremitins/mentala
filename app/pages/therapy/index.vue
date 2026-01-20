@@ -249,7 +249,7 @@ async function handleTherapyQuickChat(item: NotificationIndexItem) {
   chat.entryContext = buildTherapyEntryContext(item);
 
   try {
-    startEntryChat({ mode: 'therapy' });
+    startEntryChat();
   } catch {
     // useEntryChat уже показал toast
   }

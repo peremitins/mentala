@@ -19,7 +19,7 @@
 
       <WelcomeScreen
         v-if="showWelcomeScreen"
-        @select="(mode, userPrompt) => handleWelcomeSelect(mode, userPrompt)"
+        @select="handleWelcomeSelect"
         class="flex-1"
       />
 
@@ -235,14 +235,8 @@ watch(
 );
 
 // Функция для обновления URL с query параметрами
-function updateURL(
-  screen: 'welcome' | 'chat',
-  mode?: 'therapy' | 'habits' | 'talk'
-) {
+function updateURL(screen: 'welcome' | 'chat') {
   const query: Record<string, string> = { screen };
-  if (mode) {
-    query.mode = mode;
-  }
 
   // Используем replace, чтобы не создавать новую запись в истории
   router
@@ -256,23 +250,15 @@ function updateURL(
 }
 
 // Обработчик выбора на приветственном экране
-async function handleWelcomeSelect(
-  mode: 'therapy' | 'habits' | 'talk',
-  userPrompt?: string
-) {
-  // Режим уже установлен в WelcomeScreen компоненте
-  // Обновляем URL с параметрами screen=chat и mode
-  updateURL('chat', mode);
+async function handleWelcomeSelect() {
+  updateURL('chat');
 
   // Начинаем диалог от ассистента (без user-сообщения "Привет")
   try {
     chat.startSession();
 
     // Вызываем новый метод startConversation - он НЕ добавляет user-сообщение
-    const res = await chat.startConversation({
-      mode,
-      userPrompt,
-    });
+    const res = await chat.startConversation();
 
     if (res?.ok) {
       // Озвучим ответ ассистента после получения
@@ -516,32 +502,6 @@ const handleScroll = () => {
 // Флаг для предотвращения циклических обновлений URL
 const isUpdatingURL = ref(false);
 
-// Watch на route.query для реакции на изменение URL (например, при навигации назад/вперед)
-watch(
-  () => route.query,
-  (newQuery) => {
-    if (isUpdatingURL.value) return;
-
-    const screenParam = newQuery.screen as string | undefined;
-    const modeParam = newQuery.mode as
-      | 'therapy'
-      | 'habits'
-      | 'talk'
-      | undefined;
-
-    // Если в URL указан режим и экран чата, восстанавливаем режим
-    if (screenParam === 'chat' && modeParam) {
-      // Устанавливаем режим в настройках (маппим talk на therapy для внутреннего использования)
-      if (modeParam === 'talk') {
-        chatSettings.mode = 'therapy';
-      } else if (modeParam === 'therapy' || modeParam === 'habits') {
-        chatSettings.mode = modeParam;
-      }
-    }
-  },
-  { immediate: false }
-);
-
 // Watch на chat.messages для синхронизации URL
 watch(
   () => chat.messages.length,
@@ -552,10 +512,8 @@ watch(
 
     // Если сообщения появились и screen не chat - обновляем URL
     if (messageCount > 0 && screenParam !== 'chat') {
-      const currentMode = chatSettings.mode;
-      const modeForURL = currentMode === 'therapy' ? 'therapy' : currentMode;
       isUpdatingURL.value = true;
-      updateURL('chat', modeForURL as 'therapy' | 'habits' | 'talk');
+      updateURL('chat');
       nextTick(() => {
         isUpdatingURL.value = false;
       });
@@ -582,28 +540,11 @@ onMounted(async () => {
 
   // Восстанавливаем состояние из query параметров
   const screenParam = route.query.screen as string | undefined;
-  const modeParam = route.query.mode as
-    | 'therapy'
-    | 'habits'
-    | 'talk'
-    | undefined;
-
-  // Если в URL указан режим и экран чата, восстанавливаем режим
-  if (screenParam === 'chat' && modeParam) {
-    // Устанавливаем режим в настройках (маппим talk на therapy для внутреннего использования)
-    if (modeParam === 'talk') {
-      chatSettings.mode = 'therapy';
-    } else if (modeParam === 'therapy' || modeParam === 'habits') {
-      chatSettings.mode = modeParam;
-    }
-  }
 
   // Если screen не указан в URL, но есть сообщения - устанавливаем screen=chat
   if (!screenParam && chat.messages.length > 0) {
-    const currentMode = chatSettings.mode;
-    const modeForURL = currentMode === 'therapy' ? 'therapy' : currentMode;
     isUpdatingURL.value = true;
-    updateURL('chat', modeForURL as 'therapy' | 'habits' | 'talk');
+    updateURL('chat');
     nextTick(() => {
       isUpdatingURL.value = false;
     });
@@ -618,10 +559,8 @@ onMounted(async () => {
   }
   // Если есть entryContext (переход с другой страницы), но screen не указан - устанавливаем screen=chat
   else if (!screenParam && chat.entryContext) {
-    const currentMode = chatSettings.mode || 'therapy';
-    const modeForURL = currentMode === 'therapy' ? 'therapy' : currentMode;
     isUpdatingURL.value = true;
-    updateURL('chat', modeForURL as 'therapy' | 'habits' | 'talk');
+    updateURL('chat');
     nextTick(() => {
       isUpdatingURL.value = false;
     });
@@ -752,21 +691,6 @@ watch(
   }
 );
 
-// автосохранение режима AI при изменении
-watch(
-  () => chatSettings.mode,
-  async (newMode) => {
-    if (
-      newMode &&
-      (newMode === 'therapy' || newMode === 'habits' || newMode === 'talk')
-    ) {
-      // Сохраняем только если режим валидный (talk сохраняется как 'therapy' на бэкенде)
-      const modeToSave = newMode === 'talk' ? 'therapy' : newMode;
-      await chatSettings.updateChatSettings({ mode: modeToSave }, false);
-    }
-  },
-  { immediate: false }
-);
 </script>
 
 <style scoped>

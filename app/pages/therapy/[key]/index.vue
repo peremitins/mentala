@@ -319,17 +319,14 @@ async function startConversation() {
     chat.entryContext = entryContext.value;
     chat.startSession();
 
-    // Запускаем разговор с правильным режимом
-    chat.startConversation({
-      mode: 'therapy',
-    });
+    // Запускаем разговор без режима
+    chat.startConversation();
 
     // Переходим на главную страницу с правильными query параметрами
     navigateTo({
       path: '/',
       query: {
         screen: 'chat',
-        mode: 'therapy',
       },
     });
   } catch (error: any) {

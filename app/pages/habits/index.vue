@@ -266,7 +266,7 @@ async function handleHabitQuickChat(item: NotificationIndexItem) {
   chat.entryContext = buildHabitEntryContext(item);
 
   try {
-    await startEntryChat({ mode: 'habits' });
+    await startEntryChat();
   } catch {
     // useEntryChat уже показал toast
   }

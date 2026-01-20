@@ -122,17 +122,11 @@ export default defineEventHandler(async (event) => {
       isFirstSession: undefined, // рассчитывается в других местах при стриминге
       userPrompt: parsed.userPrompt,
       entryContext: parsed.entryContext ?? undefined, // Преобразуем null в undefined
-      mode: parsed.mode,
     };
 
     let result: { content: string; model?: string };
 
     if (parsed.messages.length === 0) {
-      if (!parsed.mode) {
-        setResponseStatus(event, 400);
-        return { error: true, message: 'mode is required' } as const;
-      }
-
       const stream = chatStreamViaProvider({
         provider: 'openai',
         model: parsed.model,

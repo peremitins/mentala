@@ -227,6 +227,8 @@ import IconSunDim from '~icons/lucide/sun-dim';
 const sceneSettings = useSceneSettingsStore();
 const uiSettings = useUiSettingsStore();
 
+const router = useRouter();
+
 const volume = computed({
   get: () => sceneSettings.volume,
   set: (value: number) => {
@@ -303,7 +305,7 @@ function setVolumeMax() {
 }
 
 function goBack() {
-  navigateTo('/');
+  router.back();
 }
 
 onMounted(async () => {

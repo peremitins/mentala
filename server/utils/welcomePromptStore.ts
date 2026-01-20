@@ -7,16 +7,14 @@ import { and, eq } from 'drizzle-orm';
  */
 export const welcomePromptStore = {
   /**
-   * Получить welcome-промпт для пользователя по режиму и флагу первой сессии
+   * Получить welcome-промпт для пользователя по флагу первой сессии
    * @param userId - ID пользователя
-   * @param mode - Режим: 'therapy' | 'habits' | 'talk'
    * @param isFirstSession - true для первой сессии, false для повторных
    * @param lang - Язык (по умолчанию 'ru')
    * @returns Promise<string | null> - Содержимое промпта или null, если не найден
    */
   async get(
     userId: string | number,
-    mode: 'therapy' | 'habits' | 'talk',
     isFirstSession: boolean,
     lang: string = 'ru'
   ): Promise<string | null> {
@@ -27,7 +25,6 @@ export const welcomePromptStore = {
         .where(
           and(
             eq(welcomePrompts.userId, Number(userId)),
-            eq(welcomePrompts.mode, mode),
             eq(welcomePrompts.isFirstSession, isFirstSession),
             eq(welcomePrompts.lang, lang),
             eq(welcomePrompts.isActive, true)
@@ -46,14 +43,12 @@ export const welcomePromptStore = {
   },
 
   /**
-   * Получить дефолтный welcome-промпт для режима (для пользователя с userId=0 или null)
-   * @param mode - Режим: 'therapy' | 'habits' | 'talk'
+   * Получить дефолтный welcome-промпт (для пользователя с userId=0 или null)
    * @param isFirstSession - true для первой сессии, false для повторных
    * @param lang - Язык (по умолчанию 'ru')
    * @returns Promise<string | null>
    */
   async getDefault(
-    mode: 'therapy' | 'habits' | 'talk',
     isFirstSession: boolean,
     lang: string = 'ru'
   ): Promise<string | null> {
@@ -65,7 +60,6 @@ export const welcomePromptStore = {
         .where(
           and(
             eq(welcomePrompts.userId, 0),
-            eq(welcomePrompts.mode, mode),
             eq(welcomePrompts.isFirstSession, isFirstSession),
             eq(welcomePrompts.lang, lang),
             eq(welcomePrompts.isActive, true)
@@ -91,7 +85,6 @@ export const welcomePromptStore = {
    */
   async save(
     userId: string | number,
-    mode: 'therapy' | 'habits' | 'talk',
     isFirstSession: boolean,
     content: string,
     lang: string = 'ru'
@@ -101,7 +94,6 @@ export const welcomePromptStore = {
         .insert(welcomePrompts)
         .values({
           userId: Number(userId),
-          mode,
           isFirstSession,
           content,
           lang,
@@ -110,7 +102,6 @@ export const welcomePromptStore = {
         .onConflictDoUpdate({
           target: [
             welcomePrompts.userId,
-            welcomePrompts.mode,
             welcomePrompts.isFirstSession,
             welcomePrompts.lang,
           ],

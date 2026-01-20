@@ -80,7 +80,9 @@ async function unlockAudioContext(): Promise<boolean> {
   const context = ensureAudioContext();
   if (!context) return false;
 
-  if (context.state === 'running') {
+  const state = context.state as AudioContextState;
+  // Явно приводим тип состояния, чтобы не терять значение 'running'.
+  if (state === 'running') {
     globalState.audioUnlocked = true;
     return true;
   }
@@ -567,10 +569,7 @@ function resumeTimer() {
   startTimerCountdown();
 }
 
-async function stop(
-  withFade = true,
-  options: { keepActionId?: boolean } = {}
-) {
+async function stop(withFade = true, options: { keepActionId?: boolean } = {}) {
   if (!options.keepActionId) {
     bumpPlaybackActionId();
   }

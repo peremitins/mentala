@@ -26,7 +26,6 @@ export interface LlmProviderPort {
       isFirstSession?: boolean;
       userPrompt?: string;
       entryContext?: ChatEntryContext;
-      mode?: 'therapy' | 'habits' | 'talk'; // Режим чата для ротации типов ответов
     };
   }) => Promise<{ role: 'assistant'; content: string; model?: string }>;
   // Optional streaming interface: yields text deltas
@@ -49,7 +48,6 @@ export interface LlmProviderPort {
       isFirstSession?: boolean;
       userPrompt?: string;
       entryContext?: ChatEntryContext;
-      mode?: 'therapy' | 'habits' | 'talk'; // Режим чата для ротации типов ответов
     };
   }) => AsyncIterable<string>;
   finishSession?: (params: {

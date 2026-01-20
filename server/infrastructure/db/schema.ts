@@ -188,7 +188,7 @@ export const sessions = pgTable('sessions', {
 export const userPrompts = pgTable('user_prompts', {
   id: serial('id').primaryKey(),
   userId: integer('user_id').notNull(),
-  type: varchar('type', { length: 16 }).notNull(), // habits | therapy | talk
+  type: varchar('type', { length: 16 }).notNull(), // habits | therapy
   title: text('title').notNull(),
   content: text('content').notNull(),
   lang: varchar('lang', { length: 8 }).default('ru').notNull(),
@@ -202,11 +202,10 @@ export const userPrompts = pgTable('user_prompts', {
 });
 
 // === Welcome Prompts ===
-// Стартовые промпты для приветствия ассистента при выборе режима на welcome-экране
+// Стартовые промпты для приветствия ассистента на welcome-экране
 export const welcomePrompts = pgTable('welcome_prompts', {
   id: serial('id').primaryKey(),
   userId: integer('user_id').notNull(),
-  mode: varchar('mode', { length: 16 }).notNull(), // therapy | habits | talk
   isFirstSession: boolean('is_first_session').default(true).notNull(),
   content: text('content').notNull(),
   lang: varchar('lang', { length: 8 }).default('ru').notNull(),
@@ -319,11 +318,10 @@ export const userPreferences = pgTable('user_preferences', {
     .notNull(),
 });
 
-// Настройки чата (theme, mode, voice, avatar, enablePreviousResponseId, enableSummary)
+// Настройки чата (theme, voice, avatar, enablePreviousResponseId, enableSummary)
 export const chatSettings = pgTable('chat_settings', {
   userId: integer('user_id').primaryKey().notNull(),
   theme: varchar('theme', { length: 10 }).notNull().default('dark'), // 'dark' | 'light'
-  mode: varchar('mode', { length: 20 }).notNull().default('therapy'), // 'therapy' | 'habits'
   voice: boolean('voice').notNull().default(true),
   avatar: boolean('avatar').notNull().default(true),
   enablePreviousResponseId: boolean('enable_previous_response_id')

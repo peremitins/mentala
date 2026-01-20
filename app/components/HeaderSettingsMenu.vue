@@ -18,16 +18,6 @@
           class="z-50 min-w-[260px] rounded-3xl glass-deep p-3 space-y-4"
         >
           <div class="flex items-center justify-between gap-0.5 h-10">
-            <div class="text-sm text-foreground">Режим</div>
-            <Combobox
-              class="max-w-[170px]"
-              v-model="displayMode"
-              :options="AI_WORK_MODE_OPTIONS"
-              placeholder="Выберите режим"
-            />
-          </div>
-
-          <div class="flex items-center justify-between gap-0.5 h-10">
             <div class="text-sm text-foreground">Тема</div>
             <Combobox
               class="max-w-[170px]"
@@ -55,7 +45,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { ref } from 'vue';
 import { useColorMode } from '#imports';
 import {
   PopoverContent,
@@ -63,26 +53,11 @@ import {
   PopoverRoot,
   PopoverTrigger,
 } from 'radix-vue';
-import { useChatSettingsStore } from '@/app/stores/chatSettings';
-import {
-  AI_WORK_MODE_OPTIONS,
-  THEME_OPTIONS,
-} from '@/app/constants/select-options';
+import { THEME_OPTIONS } from '@/app/constants/select-options';
 import Combobox from '@/app/components/Combobox.vue';
 import IconSettings from '~icons/lucide/settings';
 import IconSparkles from '~icons/lucide/sparkles';
 
 const settingsOpen = ref(false);
-const chatSettings = useChatSettingsStore();
 const colorMode = useColorMode();
-
-const displayMode = computed({
-  get: () => (chatSettings.mode === 'talk' ? 'therapy' : chatSettings.mode),
-  set: (value: string) => {
-    if (value === 'therapy' || value === 'habits') {
-      chatSettings.mode = value;
-    }
-  },
-});
-
 </script>
