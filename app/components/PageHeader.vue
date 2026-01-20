@@ -15,10 +15,7 @@
           <IconChevronLeft />
         </Button>
 
-        <div
-          v-if="$slots.custom"
-          class="overflow-hidden min-w-0 flex-1 pr-2"
-        >
+        <div v-if="$slots.custom" class="overflow-hidden min-w-0 flex-1 pr-2">
           <slot name="custom" />
         </div>
         <h1
@@ -29,17 +26,25 @@
           {{ props.title }}
         </h1>
       </div>
-      <HeaderSettingsMenu />
+      <button
+        type="button"
+        class="flex h-9 w-9 mr-2 items-center justify-center rounded-full border border-white/10 text-foreground/80 transition hover:border-white/20 hover:text-foreground"
+        aria-label="Настройки атмосферы"
+        @click="openSceneSelection"
+      >
+        <IconSlidersHorizontal class="h-4 w-4" />
+      </button>
     </div>
   </div>
 </template>
 
 <script lang="ts" setup>
 import IconChevronLeft from '~icons/lucide/chevron-left';
-import { useRoute } from 'vue-router';
-import HeaderSettingsMenu from '@/app/components/HeaderSettingsMenu.vue';
+import IconSlidersHorizontal from '~icons/lucide/sliders-horizontal';
+import { useRoute, useRouter } from 'vue-router';
 
 const route = useRoute();
+const router = useRouter();
 
 interface Props {
   title: string;
@@ -56,6 +61,11 @@ const emit = defineEmits<{
 
 const handleGoBack = () => {
   emit('go-back');
+};
+
+const openSceneSelection = async () => {
+  // Открываем страницу настроек атмосферы напрямую.
+  await router.push('/scene-selection');
 };
 
 const detailTrackId = computed(() => {
