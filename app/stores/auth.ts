@@ -10,6 +10,7 @@ import { useLoadersStore } from '@/app/stores/loaders';
 import { usePromptsStore } from '@/app/stores/prompts';
 import { useNotificationsStore } from '@/app/stores/notifications';
 import { useUserStore } from '@/app/stores/user';
+import { useSceneSettingsStore } from '@/app/stores/sceneSettings';
 import { useTTS } from '@/app/composables/useTTS';
 import { useSpeechEngine } from '@/app/composables/useSpeechEngine';
 
@@ -48,6 +49,13 @@ export const useAuthStore = defineStore('auth', {
       isBlocked?: boolean;
       emailVerifiedAt?: string | null;
       hasPassword?: boolean;
+      // Настройки фоновой сцены приложения (страница Scene Selection).
+      sceneSettings?: {
+        sceneId?: string | null;
+        volume?: number | null;
+        backgroundPlayMinutes?: number | null;
+        animateBackground?: boolean | null;
+      };
     } | null,
     loading: false,
     isLoggedIn: false,
@@ -472,6 +480,7 @@ export const useAuthStore = defineStore('auth', {
         usePromptsStore().$reset();
         useNotificationsStore().$reset();
         useUserStore().$reset();
+        useSceneSettingsStore().$reset();
       } catch (err) {
         console.error('[Auth Store] Ошибка сброса стора:', err);
         // Продолжаем выполнение даже если какой-то store не удалось сбросить

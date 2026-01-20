@@ -44,6 +44,18 @@
                       placeholder="Тема"
                     />
                   </div>
+
+                  <NuxtLink
+                    to="/scene-selection"
+                    class="flex items-center justify-between gap-2 rounded-2xl px-3 py-2 text-sm text-foreground transition hover:bg-white/10"
+                    @click="settingsOpen = false"
+                  >
+                    <div class="flex items-center gap-2">
+                      <IconSparkles class="h-4 w-4" />
+                      <span>Атмосфера</span>
+                    </div>
+                    <span class="text-xs text-foreground/60">Открыть</span>
+                  </NuxtLink>
                 </PopoverContent>
               </PopoverPortal>
             </PopoverRoot>
@@ -172,6 +184,7 @@ import TextareaResize from '@/app/components/ui/TextareaResize.vue';
 import IconMic from '~icons/lucide/mic';
 import IconSend from '~icons/lucide/send';
 import IconSettings from '~icons/lucide/settings';
+import IconSparkles from '~icons/lucide/sparkles';
 import {
   PopoverRoot,
   PopoverTrigger,

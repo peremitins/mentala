@@ -1,6 +1,6 @@
 <template>
   <div>
-    <div class="aurora-outer"></div>
+    <div v-if="showAurora" class="aurora-outer"></div>
     <NuxtLoadingIndicator />
     <NuxtLayout>
       <div class="h-full flex flex-col z-0">
@@ -32,11 +32,33 @@
 </template>
 
 <script lang="ts" setup>
+import { computed, onMounted } from 'vue';
+import { useRoute } from 'vue-router';
 import { Toaster } from 'vue-sonner';
 import { useLoadersStore } from '@/app/stores/loaders';
 import PageLoader from '@/app/components/ui/PageLoader.vue';
+import { useSceneSettingsStore } from '@/app/stores/sceneSettings';
+import { DEFAULT_SCENE_ID } from '@/app/lib/sceneSelectionCatalog';
 
 const loaders = useLoadersStore();
+const sceneSettings = useSceneSettingsStore();
+const route = useRoute();
+
+const isBreathPracticeDetail = computed(() => {
+  const path = route.path || '';
+  return path.startsWith('/breath-practices/');
+});
+
+// Если выбран «стандартный фон» или открыта практика — показываем aurora.
+const showAurora = computed(() => {
+  return (
+    sceneSettings.sceneId === DEFAULT_SCENE_ID || isBreathPracticeDetail.value
+  );
+});
+
+onMounted(async () => {
+  await sceneSettings.ensureLoaded();
+});
 </script>
 
 <style lang="scss" scoped>

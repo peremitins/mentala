@@ -5,11 +5,11 @@
     <div class="grid gap-4 grid-cols-1 xxs:grid-cols-2">
       <NuxtLink
         to="/breath-practices"
-        class="group relative overflow-hidden rounded-lg border border-white/10 bg-white/5 p-6 transition hover:-translate-y-1 hover:border-white/20 animate-slide-up"
+        class="glass-deep p-5 group relative overflow-hidden transition hover:-translate-y-1 animate-slide-up"
         style="animation-delay: 0s; animation-fill-mode: both"
       >
         <div
-          class="pointer-events-none absolute inset-0 opacity-70 transition group-hover:opacity-100"
+          class="pointer-events-none absolute inset-0 transition group-hover:opacity-100"
         >
           <div
             class="tile-orb tile-orb--slow absolute -right-14 -top-10 h-40 w-40 rounded-full bg-gradient-to-br from-cyan-400/40 via-sky-400/20 to-transparent blur-2xl"
@@ -34,11 +34,11 @@
 
       <NuxtLink
         to="/meditations"
-        class="group relative overflow-hidden rounded-lg border border-white/10 bg-white/5 p-6 transition hover:-translate-y-1 hover:border-white/20 animate-slide-up"
+        class="glass-deep p-5 group relative overflow-hidden transition hover:-translate-y-1 animate-slide-up"
         style="animation-delay: 0.05s; animation-fill-mode: both"
       >
         <div
-          class="pointer-events-none absolute inset-0 opacity-70 transition group-hover:opacity-100"
+          class="pointer-events-none absolute inset-0 transition group-hover:opacity-100"
         >
           <div
             class="tile-orb absolute -right-16 -bottom-8 h-44 w-44 rounded-full bg-gradient-to-br from-amber-400/35 via-rose-400/20 to-transparent blur-2xl"

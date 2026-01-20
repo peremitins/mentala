@@ -34,6 +34,8 @@ export const users = pgTable('users', {
   gender: varchar('gender', { length: 10 }),
   ageRange: varchar('age_range', { length: 20 }),
   onboarding: jsonb('onboarding').notNull().default({}),
+  // Настройки фоновой сцены (обои, звук, анимация).
+  sceneSettings: jsonb('scene_settings').notNull().default({}),
   email: varchar('email', { length: 255 }).unique().notNull(),
   emailVerifiedAt: timestamp('email_verified_at'),
   passwordHash: text('password_hash'),

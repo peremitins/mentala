@@ -21,7 +21,7 @@
         {{ option.label }}
       </ToggleGroupItem>
     </ToggleGroup>
-    <p v-if="description" class="text-xs text-muted-foreground">
+    <p v-if="description" class="text-xs text-white">
       {{ description }}
     </p>
   </div>

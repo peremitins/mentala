@@ -1,8 +1,30 @@
 <template>
   <div class="h-dvh w-full flex flex-col min-h-dvh p-2 overflow-hidden">
+    <Transition name="scene-bg-fade" mode="out-in">
+      <div
+        v-if="showSceneBackground && sceneBackground"
+        :key="sceneBackground"
+        class="pointer-events-none fixed inset-0 z-[1] overflow-hidden"
+        :class="{ 'scene-bg-static': !sceneSettings.animateBackground }"
+      >
+        <div class="meditation-bg-pan-x h-full w-full">
+          <div class="meditation-bg-pan-y h-full w-full">
+            <img
+              :src="sceneBackground"
+              alt=""
+              aria-hidden="true"
+              class="meditation-bg-media h-full w-full"
+              loading="lazy"
+              decoding="async"
+            />
+          </div>
+        </div>
+        <div class="scene-bg-overlay" />
+      </div>
+    </Transition>
     <div
       v-if="isMeditationDetail && detailBackground"
-      class="pointer-events-none fixed inset-0 z-0 overflow-hidden"
+      class="pointer-events-none fixed inset-0 z-[2] overflow-hidden"
     >
       <div class="meditation-bg-pan-x h-full w-full">
         <div class="meditation-bg-pan-y h-full w-full">
@@ -17,33 +39,37 @@
         </div>
       </div>
     </div>
+    <div class="relative z-10 flex min-h-0 flex-1 flex-col">
+      <slot />
 
-    <slot />
-
-    <ClientOnly>
-      <MiniMeditationPlayer
-        v-if="currentTrack && !isMeditationDetail"
-        :track="currentTrack"
-        :progress="progressPercent"
-        :is-playing="isPlaying"
-        :is-buffering="isBuffering"
-        @toggle="togglePlayback"
-        @stop="stopPlayback"
-        @open="openDetail"
-      />
-    </ClientOnly>
-    <BottomNav />
+      <ClientOnly>
+        <MiniMeditationPlayer
+          v-if="currentTrack && !isMeditationDetail"
+          :track="currentTrack"
+          :progress="progressPercent"
+          :is-playing="isPlaying"
+          :is-buffering="isBuffering"
+          @toggle="togglePlayback"
+          @stop="stopPlayback"
+          @open="openDetail"
+        />
+      </ClientOnly>
+      <BottomNav />
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onMounted, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useMediaQuery, useWindowSize } from '@vueuse/core';
 import BottomNav from '@/app/components/BottomNav.vue';
 import MiniMeditationPlayer from '@/app/components/meditations/MiniMeditationPlayer.vue';
 import { useMeditationPlayer } from '@/app/composables/useMeditationPlayer';
 import { useMeditationsStore } from '@/app/stores/meditations';
+import { useSceneSettingsStore } from '@/app/stores/sceneSettings';
+import { useSceneAudio } from '@/app/composables/useSceneAudio';
+import { findSceneTrack } from '@/app/lib/sceneSelectionCatalog';
 import { resolveMediaUrl } from '@/app/utils/media';
 
 const {
@@ -66,6 +92,8 @@ const isPortraitMode = computed(() => {
 });
 
 const route = useRoute();
+const sceneSettings = useSceneSettingsStore();
+const sceneAudio = useSceneAudio();
 
 const detailTrackId = computed(() => {
   const raw = route.query.trackId;
@@ -130,6 +158,44 @@ const detailBackground = computed(() => {
   return resolveMediaUrl(chosen || '');
 });
 
+const currentScene = computed(() =>
+  findSceneTrack(sceneSettings.sceneId) || null
+);
+
+const sceneBackground = computed(() => {
+  if (!currentScene.value) return '';
+  const ordered = orientationVariants(
+    currentScene.value.backgroundPath || '',
+    isPortraitMode.value
+  );
+  const chosen = ordered.find(Boolean);
+  return resolveMediaUrl(chosen || '');
+});
+
+const showSceneBackground = computed(() => {
+  return (
+    !isMeditationDetail.value &&
+    !isBreathPracticePage.value &&
+    Boolean(sceneBackground.value)
+  );
+});
+
+const isMeditationAudioActive = computed(() => Boolean(currentTrack.value));
+const isBreathPracticePage = computed(() => {
+  const path = route.path || '';
+  // Глушим фон только на детальной практике, например /breath-practices/4-7-8
+  return path.startsWith('/breath-practices/');
+});
+
+const shouldMuteSceneAudio = computed(() => {
+  // Пока открыт трек медитации, активен мини‑плеер или открыты дыхательные практики — фон сцены молчит.
+  return (
+    isMeditationDetail.value ||
+    isMeditationAudioActive.value ||
+    isBreathPracticePage.value
+  );
+});
+
 const progressPercent = computed(() => {
   if (!duration.value) return 0;
   return Math.min(100, (currentTime.value / duration.value) * 100);
@@ -153,9 +219,85 @@ function openDetail() {
   } as Record<string, string | string[]>;
   void navigateTo({ path: '/meditations', query: nextQuery });
 }
+
+onMounted(async () => {
+  await sceneSettings.ensureLoaded();
+  if (currentScene.value && !shouldMuteSceneAudio.value) {
+    await sceneAudio.play(currentScene.value);
+  }
+  sceneAudio.setVolume(sceneSettings.volume / 100);
+  sceneAudio.setBackgroundPlayMinutes(sceneSettings.backgroundPlayMinutes);
+});
+
+watch(
+  () => currentScene.value?.id,
+  async (nextId, prevId) => {
+    if (!nextId || nextId === prevId) return;
+    if (!currentScene.value) return;
+    await sceneAudio.setScene(currentScene.value);
+    if (shouldMuteSceneAudio.value) return;
+    await sceneAudio.play(currentScene.value);
+  }
+);
+
+watch(
+  () => sceneSettings.volume,
+  (value) => {
+    sceneAudio.setVolume(value / 100);
+  }
+);
+
+watch(
+  () => sceneSettings.backgroundPlayMinutes,
+  (value) => {
+    sceneAudio.setBackgroundPlayMinutes(value);
+  }
+);
+
+watch(
+  () => shouldMuteSceneAudio.value,
+  async (shouldMute) => {
+    // Пока открыт трек медитации или активен мини‑плеер — фоновые звуки выключены.
+    if (shouldMute) {
+      await sceneAudio.suspend();
+      return;
+    }
+    await sceneAudio.resume();
+  }
+);
 </script>
 
 <style scoped>
+.scene-bg-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(10, 10, 20, 0.35) 0%,
+    rgba(10, 10, 20, 0.55) 100%
+  );
+}
+
+.scene-bg-fade-enter-active,
+.scene-bg-fade-leave-active {
+  transition: opacity 0.6s ease;
+}
+
+.scene-bg-fade-enter-from,
+.scene-bg-fade-leave-to {
+  opacity: 0;
+}
+
+.scene-bg-static .meditation-bg-pan-x,
+.scene-bg-static .meditation-bg-pan-y {
+  animation: none;
+  transform: none;
+}
+
+.scene-bg-static .meditation-bg-media {
+  transform: none;
+}
+
 .meditation-bg-media {
   object-fit: cover;
   /* Держим запас по краям, чтобы при панорамировании не вскрывались полосы. */

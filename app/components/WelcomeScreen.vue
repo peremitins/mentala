@@ -5,7 +5,7 @@
     <!-- Приветственный блок -->
     <div class="text-center space-y-2 animate-fade-in">
       <h1 class="text-3xl font-bold text-foreground">Привет!</h1>
-      <p class="text-lg text-muted-foreground">О чём поговорим сейчас?</p>
+      <p class="text-lg text-white/80">О чём поговорим сейчас?</p>
     </div>
 
     <!-- Плитки действий -->

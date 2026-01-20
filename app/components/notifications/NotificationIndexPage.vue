@@ -2,8 +2,8 @@
   <div class="space-y-4 h-full overflow-y-auto rounded-lg">
     <PageHeader :title="title" />
 
-    <div class="px-2">
-      <p class="text-sm text-muted-foreground">
+    <div class="glass-deep p-4">
+      <p class="text-sm text-white">
         {{ description }}
       </p>
     </div>
