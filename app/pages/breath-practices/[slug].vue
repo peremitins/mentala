@@ -155,7 +155,30 @@
             </div>
           </div>
 
-          <div class="grid grid-cols-3 gap-3">
+          <div
+            :class="[
+              'grid gap-3',
+              canNavigateGroup ? 'grid-cols-5' : 'grid-cols-3',
+            ]"
+          >
+            <button
+              type="button"
+              class="flex h-12 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+              :disabled="Boolean(prepCountdown)"
+              @click="settingsOpen = true"
+            >
+              <IconSettings class="h-5 w-5" />
+            </button>
+
+            <button
+              v-if="canNavigateGroup"
+              type="button"
+              class="flex h-12 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+              @click="goToPrevPractice"
+            >
+              <IconSkipBack class="h-5 w-5" />
+            </button>
+
             <button
               type="button"
               class="flex h-12 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
@@ -176,12 +199,12 @@
             </button>
 
             <button
+              v-if="canNavigateGroup"
               type="button"
               class="flex h-12 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
-              :disabled="Boolean(prepCountdown)"
-              @click="settingsOpen = true"
+              @click="goToNextPractice"
             >
-              <IconSettings class="h-5 w-5" />
+              <IconSkipForward class="h-5 w-5" />
             </button>
           </div>
         </div>
@@ -303,15 +326,19 @@ import {
 } from '@/app/components/ui/dialog';
 import IconPlay from '~icons/lucide/play';
 import IconPause from '~icons/lucide/pause';
+import IconSkipBack from '~icons/lucide/skip-back';
+import IconSkipForward from '~icons/lucide/skip-forward';
 import IconSquare from '~icons/lucide/square';
 import IconSettings from '~icons/lucide/settings';
 import { useToast } from '@/app/composables/useToast';
 import { useBreathPracticesStore } from '@/app/stores/breathPractices';
 import {
+  BREATH_PRACTICES,
   buildCustomPhases,
   findBreathPractice,
   formatBreathSteps,
   mapCustomPractice,
+  type BreathPracticeTag,
   type BreathPhase,
 } from '@/app/lib/breathPracticesCatalog';
 import { useBreathPracticePlayer } from '@/app/composables/useBreathPracticePlayer';
@@ -337,6 +364,38 @@ const slug = computed(() => String(route.params.slug || ''));
 const isBuilder = computed(() => slug.value === 'custom');
 const customId = computed(() =>
   slug.value.startsWith('custom-') ? slug.value.slice('custom-'.length) : null
+);
+
+type BreathPracticeGroupKey = BreathPracticeTag | 'custom';
+
+const groupKey = computed<BreathPracticeGroupKey | null>(() => {
+  const raw = route.query.group;
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (!value || typeof value !== 'string') return null;
+  const normalized = value.trim();
+  if (!normalized) return null;
+  if (normalized === 'custom') return 'custom';
+  if (['popular', 'sleep', 'anxiety', 'focus'].includes(normalized)) {
+    return normalized as BreathPracticeTag;
+  }
+  return null;
+});
+
+const groupSlugs = computed(() => {
+  const key = groupKey.value;
+  if (!key) return [];
+  if (key === 'custom') {
+    return store.customPractices.map((practice) => `custom-${practice.id}`);
+  }
+  // Здесь key уже строго BreathPracticeTag.
+  return BREATH_PRACTICES.filter((practice) =>
+    practice.tags.includes(key)
+  ).map((practice) => practice.slug);
+});
+
+const groupIndex = computed(() => groupSlugs.value.indexOf(slug.value));
+const canNavigateGroup = computed(
+  () => !isBuilder.value && groupSlugs.value.length > 1 && groupIndex.value >= 0
 );
 
 const builtInPractice = computed(() =>
@@ -438,6 +497,26 @@ const showHoldWarning = computed(() =>
 
 function goBack() {
   navigateTo('/breath-practices');
+}
+
+// Перелистываем практики внутри выбранной группы без выхода из плеера.
+async function goToGroupSibling(direction: 1 | -1) {
+  if (!canNavigateGroup.value) return;
+  const list = groupSlugs.value;
+  const currentIndex = groupIndex.value;
+  if (!list.length || currentIndex < 0) return;
+  const nextIndex = (currentIndex + direction + list.length) % list.length;
+  const nextSlug = list[nextIndex];
+  const query = groupKey.value ? { group: groupKey.value } : undefined;
+  await navigateTo({ path: `/breath-practices/${nextSlug}`, query });
+}
+
+function goToPrevPractice() {
+  void goToGroupSibling(-1);
+}
+
+function goToNextPractice() {
+  void goToGroupSibling(1);
 }
 
 function formatSeconds(seconds: number) {

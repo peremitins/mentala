@@ -10,6 +10,8 @@
       @select="handleGoalSelect"
       @remove="handleHabitDelete"
       @quick-chat="handleHabitQuickChat"
+      @quick-meditation="handleHabitQuickMeditation"
+      @quick-breath="handleHabitQuickBreath"
     />
 
     <CustomEntityModal
@@ -42,6 +44,7 @@ import { storeToRefs } from 'pinia';
 import NotificationIndexPage, {
   type NotificationIndexItem,
 } from '@/app/components/notifications/NotificationIndexPage.vue';
+import { BREATH_PRACTICES } from '@/app/lib/breathPracticesCatalog';
 import { HABITS_CATALOG, type HabitCatalogItem } from '@/app/lib/habitsCatalog';
 import { useUserHabitsStore } from '@/app/stores/userHabits';
 import { useLoadersStore } from '@/app/stores/loaders';
@@ -52,6 +55,13 @@ import { useToast } from '@/app/composables/useToast';
 import ConfirmModal from '@/app/components/ui/ConfirmModal.vue';
 import type { ChatEntryContext } from '@/shared/dto';
 import { useEntryChat } from '@/app/composables/useEntryChat';
+import type { RouteLocationRaw } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
+import { mapHabitToMeditationTopic } from '@/app/lib/meditations';
+import {
+  isHabitPracticeHidden,
+  mapHabitToBreathGroup,
+} from '@/app/lib/practiceActions';
 
 const intentColors: Record<string, string> = {
   build: 'from-blue-500 to-cyan-500',
@@ -70,6 +80,22 @@ onMounted(async () => {
   await userHabitsStore.fetchAll();
 });
 
+function buildHabitQuickActions(habitKey: string, isCustom: boolean) {
+  if (isCustom) {
+    return { chat: true };
+  }
+
+  if (isHabitPracticeHidden(habitKey)) {
+    return { chat: true };
+  }
+
+  return {
+    chat: true,
+    meditation: Boolean(mapHabitToMeditationTopic(habitKey)),
+    breath: Boolean(mapHabitToBreathGroup(habitKey)),
+  };
+}
+
 const baseHabitItems = computed(() =>
   HABITS_CATALOG.map((goal) => ({
     id: goal.habitKey,
@@ -81,6 +107,7 @@ const baseHabitItems = computed(() =>
       intentColors.custom ||
       'from-gray-500 to-slate-500',
     payload: { ...goal, intent: goal.intent },
+    quickActions: buildHabitQuickActions(goal.habitKey, false),
   }))
 );
 
@@ -99,6 +126,8 @@ const customHabitItems = computed(() =>
         'from-gray-500 to-slate-500',
       payload: { ...habit, type: 'user', intent: normalizedIntent },
       canDelete: true,
+      // Кастомные привычки — только чат.
+      quickActions: buildHabitQuickActions(habit.id, true),
     };
   })
 );
@@ -112,6 +141,7 @@ const createCard: NotificationIndexItem = {
   payload: {
     action: 'create-habit',
   },
+  quickActions: {},
 };
 
 const habitItems = computed(() => [
@@ -132,17 +162,22 @@ const defaultIntent = computed<'build' | 'quit'>(() =>
 
 const { startEntryChat } = useEntryChat();
 
-async function safeNavigate(path: string) {
+async function safeNavigate(target: RouteLocationRaw) {
   try {
-    await router.push(path);
+    await router.push(target);
     await nextTick();
-    if (router.currentRoute.value.fullPath === path) return;
+    const resolvedPath =
+      typeof target === 'string' ? target : router.resolve(target).fullPath;
+    if (router.currentRoute.value.fullPath === resolvedPath) return;
   } catch (error) {
     console.error('[Habits] Router navigation failed:', error);
   }
 
   if (typeof window !== 'undefined' && window.location) {
-    window.location.href = path;
+    // Фолбэк на прямой переход, если роутер не сработал.
+    const fallbackHref =
+      typeof target === 'string' ? target : router.resolve(target).href;
+    window.location.href = fallbackHref;
   }
 }
 
@@ -235,5 +270,52 @@ async function handleHabitQuickChat(item: NotificationIndexItem) {
   } catch {
     // useEntryChat уже показал toast
   }
+}
+
+function resolveHabitKey(item: NotificationIndexItem): string | null {
+  // Достаём ключ системной привычки, чтобы маппить практики.
+  const payload = item.payload as
+    | { action?: string; habitKey?: string; type?: string }
+    | undefined;
+  if (payload?.action) return null;
+  return payload?.habitKey || (payload?.type === 'catalog' ? item.id : null);
+}
+
+async function handleHabitQuickMeditation(item: NotificationIndexItem) {
+  const habitKey = resolveHabitKey(item);
+  if (!habitKey) return;
+  const meditationTopicKey = mapHabitToMeditationTopic(habitKey);
+  if (!meditationTopicKey) {
+    useToast('Подборка медитаций пока недоступна');
+    return;
+  }
+
+  await safeNavigate({
+    path: '/meditations',
+    query: { topic: meditationTopicKey },
+  });
+}
+
+async function handleHabitQuickBreath(item: NotificationIndexItem) {
+  const habitKey = resolveHabitKey(item);
+  if (!habitKey) return;
+  const groupKey = mapHabitToBreathGroup(habitKey);
+  if (!groupKey) {
+    useToast('Подборка дыхательных практик пока недоступна');
+    return;
+  }
+
+  const firstPractice = BREATH_PRACTICES.find((practice) =>
+    practice.tags.includes(groupKey)
+  );
+  if (!firstPractice) {
+    useToast('Практика не найдена');
+    return;
+  }
+
+  await safeNavigate({
+    path: `/breath-practices/${firstPractice.slug}`,
+    query: { group: groupKey },
+  });
 }
 </script>

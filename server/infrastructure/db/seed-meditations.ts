@@ -110,17 +110,6 @@ async function runSeed() {
 
     // --- ANXIETY (Тревога) ---
     {
-      id: 'deep-calm',
-      title: 'Глубокое спокойствие',
-      description: 'Неспешный фон для снижения тревоги',
-      topicKey: 'anxiety',
-      audioPath: '/meditations/audio/music/deep-calm.m4a',
-      coverPath: '/meditations/covers/deep-calm.webp',
-      backgroundPath: '/meditations/backgrounds/deep-calm.webp',
-      isLoop: true,
-      durationSeconds: null,
-    },
-    {
       id: 'steady-breath',
       title: 'Ровное дыхание',
       description: 'Мягкий фон для настройки дыхания',
@@ -128,6 +117,17 @@ async function runSeed() {
       audioPath: '/meditations/audio/music/steady-breath.m4a',
       coverPath: '/meditations/covers/steady-breath.webp',
       backgroundPath: '/meditations/backgrounds/steady-breath.webp',
+      isLoop: true,
+      durationSeconds: null,
+    },
+    {
+      id: 'deep-calm',
+      title: 'Глубокое спокойствие',
+      description: 'Неспешный фон для снижения тревоги',
+      topicKey: 'anxiety',
+      audioPath: '/meditations/audio/music/deep-calm.m4a',
+      coverPath: '/meditations/covers/deep-calm.webp',
+      backgroundPath: '/meditations/backgrounds/deep-calm.webp',
       isLoop: true,
       durationSeconds: null,
     },

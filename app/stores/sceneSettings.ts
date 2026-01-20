@@ -4,6 +4,9 @@ import { DEFAULT_SCENE_ID, findSceneTrack } from '@/app/lib/sceneSelectionCatalo
 
 const SAVE_DEBOUNCE_MS = 600;
 let saveTimeout: ReturnType<typeof setTimeout> | null = null;
+let saveVersion = 0;
+let changeVersion = 0;
+let saveAbortController: AbortController | null = null;
 
 interface SceneSettingsState {
   sceneId: string | null;
@@ -80,6 +83,8 @@ export const useSceneSettingsStore = defineStore('sceneSettings', {
     },
     updateSettings(payload: SceneSettingsPayload) {
       this.applySettings(payload);
+      // Фиксируем локальное изменение сразу, чтобы отсечь устаревшие ответы.
+      changeVersion += 1;
       this.schedulePersist();
     },
     schedulePersist() {
@@ -94,6 +99,14 @@ export const useSceneSettingsStore = defineStore('sceneSettings', {
       const auth = useAuthStore();
       if (!auth.user) return;
       this.saving = true;
+      const changeSnapshot = changeVersion;
+      const currentVersion = (saveVersion += 1);
+      if (saveAbortController) {
+        saveAbortController.abort();
+      }
+      const controller =
+        typeof AbortController !== 'undefined' ? new AbortController() : null;
+      saveAbortController = controller;
       try {
         const payload = {
           sceneSettings: {
@@ -106,7 +119,16 @@ export const useSceneSettingsStore = defineStore('sceneSettings', {
         const response: any = await useAPI('/api/user/me', {
           method: 'PATCH',
           body: payload,
+          signal: controller?.signal,
         });
+        if (changeSnapshot !== changeVersion) {
+          // Если настройки уже поменялись, ответ больше не актуален.
+          return;
+        }
+        if (currentVersion !== saveVersion) {
+          // При быстрых переключениях игнорируем устаревший ответ.
+          return;
+        }
         if (response?.user) {
           auth.user = response.user;
         } else {
@@ -114,9 +136,15 @@ export const useSceneSettingsStore = defineStore('sceneSettings', {
           (auth.user as any).sceneSettings = payload.sceneSettings;
         }
       } catch (error) {
+        if ((error as { name?: string })?.name === 'AbortError') {
+          return;
+        }
         console.error('[SceneSettings] Не удалось сохранить настройки:', error);
       } finally {
-        this.saving = false;
+        if (saveAbortController === controller) {
+          saveAbortController = null;
+          this.saving = false;
+        }
       }
     },
   },

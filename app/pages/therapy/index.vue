@@ -10,6 +10,8 @@
       @select="handleTopicSelect"
       @remove="handleTopicRemove"
       @quick-chat="handleTherapyQuickChat"
+      @quick-meditation="handleTherapyQuickMeditation"
+      @quick-breath="handleTherapyQuickBreath"
     />
 
     <CustomEntityModal
@@ -43,6 +45,7 @@ import { useChatStore } from '@/app/stores/chat';
 import NotificationIndexPage, {
   type NotificationIndexItem,
 } from '@/app/components/notifications/NotificationIndexPage.vue';
+import { BREATH_PRACTICES } from '@/app/lib/breathPracticesCatalog';
 import { THERAPY_TOPICS } from '@/app/lib/therapyCatalog';
 import CustomEntityModal from '@/app/components/modals/CustomEntityModal.vue';
 import ConfirmModal from '@/app/components/ui/ConfirmModal.vue';
@@ -52,7 +55,13 @@ import type { TherapyTopicDto } from '@/shared/dto/notifications';
 import { useToast } from '@/app/composables/useToast';
 import { useEntryChat } from '@/app/composables/useEntryChat';
 import type { ChatEntryContext } from '@/shared/dto';
+import type { RouteLocationRaw } from 'vue-router';
 import { useRouter, useRoute } from 'vue-router';
+import { mapTherapyToMeditationTopic } from '@/app/lib/meditations';
+import {
+  isTherapyPracticeHidden,
+  mapTherapyToBreathGroup,
+} from '@/app/lib/practiceActions';
 
 const colorSchemes: Record<string, string> = {
   blue: 'from-blue-500 to-cyan-500',
@@ -79,6 +88,22 @@ onMounted(async () => {
   await therapyStore.fetchAll();
 });
 
+function buildTherapyQuickActions(topicKey: string, isCustom: boolean) {
+  if (isCustom) {
+    return { chat: true };
+  }
+
+  if (isTherapyPracticeHidden(topicKey)) {
+    return { chat: true };
+  }
+
+  return {
+    chat: true,
+    meditation: Boolean(mapTherapyToMeditationTopic(topicKey)),
+    breath: Boolean(mapTherapyToBreathGroup(topicKey)),
+  };
+}
+
 const customTopicItems = computed<NotificationIndexItem[]>(() =>
   userTopics.value.map((topic) => {
     return {
@@ -89,6 +114,8 @@ const customTopicItems = computed<NotificationIndexItem[]>(() =>
       gradientClass: 'from-gray-500 to-gray-700',
       payload: { ...topic, type: 'custom' },
       canDelete: true,
+      // Показываем только чат для кастомных тем.
+      quickActions: buildTherapyQuickActions(topic.id, true),
     };
   })
 );
@@ -101,6 +128,7 @@ const baseTopicItems = computed<NotificationIndexItem[]>(() =>
     emoji: topic.emoji,
     gradientClass: colorSchemes[topic.color] ?? 'from-blue-500 to-cyan-500',
     payload: { type: 'catalog', topicKey: topic.key, topicName: topic.name },
+    quickActions: buildTherapyQuickActions(topic.key, false),
   }))
 );
 
@@ -111,6 +139,7 @@ const createCard: NotificationIndexItem = {
   emoji: '✨',
   gradientClass: 'from-gray-500 to-gray-700',
   payload: { action: 'create-topic' },
+  quickActions: {},
 };
 
 const topicItems = computed<NotificationIndexItem[]>(() => [
@@ -124,17 +153,22 @@ const deleteModalRef = ref<InstanceType<typeof ConfirmModal> | null>(null);
 const pendingDeleteItem = ref<NotificationIndexItem | null>(null);
 const { startEntryChat } = useEntryChat();
 
-async function safeNavigate(path: string) {
+async function safeNavigate(target: RouteLocationRaw) {
   try {
-    await router.push(path);
+    await router.push(target);
     await nextTick();
-    if (router.currentRoute.value.fullPath === path) return;
+    const resolvedPath =
+      typeof target === 'string' ? target : router.resolve(target).fullPath;
+    if (router.currentRoute.value.fullPath === resolvedPath) return;
   } catch (error) {
     console.error('[Therapy] Router navigation failed:', error);
   }
 
   if (typeof window !== 'undefined' && window.location) {
-    window.location.href = path;
+    // Фолбэк на прямой переход, если роутер не сработал.
+    const fallbackHref =
+      typeof target === 'string' ? target : router.resolve(target).href;
+    window.location.href = fallbackHref;
   }
 }
 
@@ -219,5 +253,53 @@ async function handleTherapyQuickChat(item: NotificationIndexItem) {
   } catch {
     // useEntryChat уже показал toast
   }
+}
+
+function resolveTherapyTopicKey(item: NotificationIndexItem): string | null {
+  // Достаём ключ системной темы, чтобы маппить практики.
+  const payload = item.payload as
+    | { action?: string; type?: string; topicKey?: string }
+    | undefined;
+  if (payload?.action) return null;
+  return payload?.topicKey || (payload?.type === 'catalog' ? item.id : null);
+}
+
+async function handleTherapyQuickMeditation(item: NotificationIndexItem) {
+  const topicKey = resolveTherapyTopicKey(item);
+  if (!topicKey) return;
+  const meditationTopicKey = mapTherapyToMeditationTopic(topicKey);
+  if (!meditationTopicKey) {
+    useToast('Подборка медитаций пока недоступна');
+    return;
+  }
+
+  await safeNavigate({
+    path: '/meditations',
+    query: { topic: meditationTopicKey },
+  });
+}
+
+async function handleTherapyQuickBreath(item: NotificationIndexItem) {
+  const topicKey = resolveTherapyTopicKey(item);
+  if (!topicKey) return;
+  const groupKey = mapTherapyToBreathGroup(topicKey);
+  if (!groupKey) {
+    useToast('Подборка дыхательных практик пока недоступна');
+    return;
+  }
+
+  const firstPractice = BREATH_PRACTICES.find((practice) =>
+    practice.tags.includes(groupKey)
+  );
+
+  if (!firstPractice) {
+    useToast('Практика не найдена');
+    return;
+  }
+
+  await safeNavigate({
+    path: `/breath-practices/${firstPractice.slug}`,
+    query: { group: groupKey },
+  });
 }
 </script>

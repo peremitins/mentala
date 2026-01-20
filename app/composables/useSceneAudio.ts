@@ -32,6 +32,7 @@ const globalState = {
   fadeInterval: null as ReturnType<typeof setInterval> | null,
   pendingPlay: null as PendingPlay | null,
   gestureUnlockCleanup: null as (() => void) | null,
+  globalUnlockCleanup: null as (() => void) | null,
   backgroundPlayMinutes: ref(0),
   backgroundTimeout: null as ReturnType<typeof setTimeout> | null,
   visibilityBound: false,
@@ -40,6 +41,8 @@ const globalState = {
   wasPlayingBeforeBackground: false,
   isSuspended: ref(false),
   wasPlayingBeforeSuspend: false,
+  audioUnlocked: false,
+  playbackActionId: 0,
 };
 
 function clampNumber(value: number, min: number, max: number) {
@@ -55,17 +58,80 @@ function clearGestureUnlock() {
   globalState.pendingPlay = null;
 }
 
+async function unlockAudioContext(): Promise<boolean> {
+  if (!isDocumentAvailable() || typeof window === 'undefined') return false;
+  const context = ensureAudioContext();
+  if (!context) return false;
+
+  if (context.state === 'running') {
+    globalState.audioUnlocked = true;
+    return true;
+  }
+
+  try {
+    await context.resume();
+  } catch {
+    return false;
+  }
+
+  if (context.state === 'running') {
+    globalState.audioUnlocked = true;
+    return true;
+  }
+  return false;
+}
+
+function ensureGlobalGestureUnlock() {
+  if (!isDocumentAvailable() || typeof window === 'undefined') return;
+  if (globalState.audioUnlocked) return;
+  if (globalState.globalUnlockCleanup) return;
+
+  const handler = () => {
+    void (async () => {
+      // Разрешаем запуск WebAudio только после пользовательского жеста.
+      const unlocked = await unlockAudioContext();
+      if (!unlocked) return;
+
+      const pending = globalState.pendingPlay;
+      if (pending) {
+        clearGestureUnlock();
+        await play(pending.scene);
+      }
+
+      if (globalState.globalUnlockCleanup) {
+        globalState.globalUnlockCleanup();
+        globalState.globalUnlockCleanup = null;
+      }
+    })();
+  };
+
+  const options: AddEventListenerOptions = { passive: true };
+  window.addEventListener('pointerdown', handler, options);
+  window.addEventListener('touchstart', handler, options);
+  window.addEventListener('keydown', handler);
+
+  globalState.globalUnlockCleanup = () => {
+    window.removeEventListener('pointerdown', handler, options);
+    window.removeEventListener('touchstart', handler, options);
+    window.removeEventListener('keydown', handler);
+  };
+}
+
 function scheduleGestureUnlock(scene: SceneTrack) {
   if (!isDocumentAvailable() || typeof window === 'undefined') return;
   clearGestureUnlock();
+  ensureGlobalGestureUnlock();
 
   globalState.pendingPlay = { scene };
 
   const handler = () => {
-    const pending = globalState.pendingPlay;
-    clearGestureUnlock();
-    if (!pending) return;
-    void play(pending.scene);
+    void (async () => {
+      const pending = globalState.pendingPlay;
+      clearGestureUnlock();
+      if (!pending) return;
+      await unlockAudioContext();
+      await play(pending.scene);
+    })();
   };
 
   const options: AddEventListenerOptions = { passive: true };
@@ -85,6 +151,16 @@ function clearFade() {
     clearInterval(globalState.fadeInterval);
     globalState.fadeInterval = null;
   }
+}
+
+function bumpPlaybackActionId() {
+  // Нужен для защиты от гонок при быстром переключении сцен.
+  globalState.playbackActionId += 1;
+  return globalState.playbackActionId;
+}
+
+function isActionActive(actionId: number) {
+  return actionId === globalState.playbackActionId;
 }
 
 async function fadeTo(targetVolume: number, durationMs: number) {
@@ -207,10 +283,19 @@ async function loadAudioBuffer(
 }
 
 async function prepareWebAudioScene(scene: SceneTrack): Promise<AudioBuffer | null> {
+  if (!globalState.audioUnlocked) {
+    // Не создаём контекст до первого жеста, чтобы избежать autoplay‑ошибок.
+    return null;
+  }
+
   const context = ensureAudioContext();
   if (!context) return null;
 
   if (context.state === 'suspended') {
+    if (!globalState.audioUnlocked) {
+      // Ждём пользовательский жест, чтобы снять блокировку автозапуска.
+      return null;
+    }
     try {
       await context.resume();
     } catch {
@@ -245,6 +330,27 @@ function stopWebAudioSource() {
     // Игнорируем повторное отключение.
   }
   globalState.audioSource = null;
+}
+
+function stopDetachedAudio(audio: HTMLAudioElement) {
+  try {
+    audio.pause();
+  } catch {
+    // Игнорируем, если уже остановлено.
+  }
+}
+
+function stopDetachedWebAudio(source: AudioBufferSourceNode) {
+  try {
+    source.stop();
+  } catch {
+    // Источник мог уже остановиться.
+  }
+  try {
+    source.disconnect();
+  } catch {
+    // На всякий случай игнорируем повторное отключение.
+  }
 }
 
 function updateWebAudioOffset() {
@@ -403,6 +509,7 @@ async function handleBackgroundExit() {
 }
 
 async function pause(withFade = true) {
+  bumpPlaybackActionId();
   clearGestureUnlock();
   globalState.isBuffering.value = false;
   if (globalState.playbackMode === 'webaudio') {
@@ -428,7 +535,10 @@ async function pause(withFade = true) {
   globalState.isPlaying.value = false;
 }
 
-async function stop(withFade = true) {
+async function stop(withFade = true, options: { keepActionId?: boolean } = {}) {
+  if (!options.keepActionId) {
+    bumpPlaybackActionId();
+  }
   clearGestureUnlock();
   clearBackgroundTimeout();
   globalState.isBuffering.value = false;
@@ -460,15 +570,18 @@ async function stop(withFade = true) {
 }
 
 async function play(scene: SceneTrack) {
+  const actionId = bumpPlaybackActionId();
   if (!isDocumentAvailable()) return;
   if (typeof Audio === 'undefined') return;
+  ensureGlobalGestureUnlock();
   ensureVisibilityListener();
   ensureAppStateListener();
 
   const sameScene = globalState.currentScene.value?.id === scene.id;
   if (!sameScene) {
     // Обновляем выбранную сцену и сбрасываем старый звук перед проигрыванием.
-    await stop(false);
+    await stop(false, { keepActionId: true });
+    if (!isActionActive(actionId)) return;
     globalState.audio = null;
     globalState.audioBuffer = null;
     globalState.audioBufferUrl = '';
@@ -481,18 +594,24 @@ async function play(scene: SceneTrack) {
   if (mode === 'webaudio') {
     try {
       const buffer = await prepareWebAudioScene(scene);
+      if (!isActionActive(actionId)) return;
       if (!buffer) {
         mode = 'html';
       } else {
         globalState.playbackMode = 'webaudio';
         globalState.isBuffering.value = true;
         if (!globalState.audioSource) {
-          createWebAudioSource(globalState.webAudioOffset);
+          const source = createWebAudioSource(globalState.webAudioOffset);
+          if (!isActionActive(actionId) && source) {
+            stopDetachedWebAudio(source);
+            return;
+          }
         }
         globalState.isPlaying.value = true;
         globalState.isBuffering.value = false;
         clearGestureUnlock();
         await fadeTo(globalState.volume.value, FADE_IN_MS);
+        if (!isActionActive(actionId)) return;
         return;
       }
     } catch (error) {
@@ -502,7 +621,11 @@ async function play(scene: SceneTrack) {
   }
 
   if (mode === 'html') {
-    if (!sameScene || globalState.playbackMode !== 'html' || !globalState.audio) {
+    if (
+      !sameScene ||
+      globalState.playbackMode !== 'html' ||
+      !globalState.audio
+    ) {
       const audioUrl = resolveMediaUrl(scene.audioPath);
       if (!audioUrl) return;
       const audio = new Audio(audioUrl);
@@ -522,6 +645,10 @@ async function play(scene: SceneTrack) {
     globalState.playbackMode = 'html';
     globalState.isBuffering.value = true;
     const playbackResult = await attemptHtmlPlayback(audio);
+    if (!isActionActive(actionId)) {
+      stopDetachedAudio(audio);
+      return;
+    }
     if (!playbackResult.started) {
       globalState.isBuffering.value = false;
       scheduleGestureUnlock(scene);
@@ -532,6 +659,10 @@ async function play(scene: SceneTrack) {
     globalState.isPlaying.value = true;
     clearGestureUnlock();
     await fadeTo(globalState.volume.value, FADE_IN_MS);
+    if (!isActionActive(actionId)) {
+      stopDetachedAudio(audio);
+      return;
+    }
   }
 }
 
@@ -591,6 +722,8 @@ async function resume() {
 }
 
 export function useSceneAudio() {
+  // Регистрируем слушатель жестов заранее, чтобы после логина звук стартовал сразу.
+  ensureGlobalGestureUnlock();
   return {
     currentScene: globalState.currentScene,
     isPlaying: globalState.isPlaying,

@@ -11,6 +11,48 @@
         <div class="flex items-center justify-between gap-4">
           <div class="space-y-1">
             <p class="text-xs uppercase tracking-[0.08em] text-foreground/60">
+              Яркость фона
+            </p>
+            <p class="text-xs text-foreground/70">
+              Отрегулируйте яркость атмосферы и обоев.
+            </p>
+          </div>
+          <span class="text-xs text-foreground/60">
+            {{ brightnessPercent }}%
+          </span>
+        </div>
+        <div class="flex items-center gap-3">
+          <button
+            type="button"
+            class="text-foreground/60 transition hover:text-foreground"
+            aria-label="Минимальная яркость"
+            @click="setBrightnessMin"
+          >
+            <IconSunDim class="h-4 w-4" />
+          </button>
+          <input
+            v-model.number="backgroundBrightness"
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            class="w-full accent-cyan-300"
+          />
+          <button
+            type="button"
+            class="text-foreground/70 transition hover:text-foreground"
+            aria-label="Максимальная яркость"
+            @click="setBrightnessMax"
+          >
+            <IconSun class="h-4 w-4" />
+          </button>
+        </div>
+      </section>
+
+      <section class="glass-deep p-4 space-y-4">
+        <div class="flex items-center justify-between gap-4">
+          <div class="space-y-1">
+            <p class="text-xs uppercase tracking-[0.08em] text-foreground/60">
               Громкость сцены
             </p>
             <p class="text-xs text-foreground/70">
@@ -20,7 +62,14 @@
           <span class="text-xs text-foreground/60">{{ volume }}%</span>
         </div>
         <div class="flex items-center gap-3">
-          <IconVolumeX class="h-4 w-4 text-foreground/60" />
+          <button
+            type="button"
+            class="text-foreground/60 transition hover:text-foreground"
+            aria-label="Отключить звук"
+            @click="setVolumeMin"
+          >
+            <IconVolumeX class="h-4 w-4" />
+          </button>
           <input
             v-model.number="volume"
             type="range"
@@ -29,7 +78,14 @@
             step="1"
             class="w-full accent-cyan-300"
           />
-          <IconVolume2 class="h-4 w-4 text-foreground/60" />
+          <button
+            type="button"
+            class="text-foreground/60 transition hover:text-foreground"
+            aria-label="Максимальная громкость"
+            @click="setVolumeMax"
+          >
+            <IconVolume2 class="h-4 w-4" />
+          </button>
         </div>
       </section>
 
@@ -154,6 +210,7 @@ import PageHeader from '@/app/components/PageHeader.vue';
 import TimePicker from '@/app/components/TimePicker.vue';
 import { Switch } from '@/app/components/ui/shadcn/switch';
 import { useSceneSettingsStore } from '@/app/stores/sceneSettings';
+import { useUiSettingsStore } from '@/app/stores/uiSettings';
 import {
   DEFAULT_SCENE_ID,
   SCENE_TRACKS,
@@ -164,8 +221,11 @@ import IconVolumeX from '~icons/lucide/volume-x';
 import IconCheck from '~icons/lucide/check';
 import IconClock from '~icons/lucide/clock';
 import IconSparkles from '~icons/lucide/sparkles';
+import IconSun from '~icons/lucide/sun';
+import IconSunDim from '~icons/lucide/sun-dim';
 
 const sceneSettings = useSceneSettingsStore();
+const uiSettings = useUiSettingsStore();
 
 const volume = computed({
   get: () => sceneSettings.volume,
@@ -173,6 +233,17 @@ const volume = computed({
     sceneSettings.updateSettings({ volume: value });
   },
 });
+
+const backgroundBrightness = computed({
+  get: () => uiSettings.auroraOpacity,
+  set: (value: number) => {
+    uiSettings.updateAuroraOpacity(value);
+  },
+});
+
+const brightnessPercent = computed(() =>
+  Math.round(backgroundBrightness.value * 100)
+);
 
 const backgroundPlayMinutes = computed({
   get: () => sceneSettings.backgroundPlayMinutes,
@@ -213,11 +284,29 @@ function backgroundPlayLabel(formattedTime: string) {
   return formattedTime;
 }
 
+function setBrightnessMin() {
+  // Минимальная яркость фона.
+  backgroundBrightness.value = 0;
+}
+
+function setBrightnessMax() {
+  // Максимальная яркость фона.
+  backgroundBrightness.value = 1;
+}
+
+function setVolumeMin() {
+  volume.value = 0;
+}
+
+function setVolumeMax() {
+  volume.value = 100;
+}
+
 function goBack() {
   navigateTo('/');
 }
 
 onMounted(async () => {
-  await sceneSettings.ensureLoaded();
+  await Promise.all([sceneSettings.ensureLoaded(), uiSettings.ensureLoaded()]);
 });
 </script>

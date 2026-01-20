@@ -3,63 +3,10 @@
     <!-- Хеддер -->
     <PageHeader title="Ассистент">
       <template #custom>
-        <div class="flex items-center justify-between w-full">
-          <div class="flex items-center gap-2 px-4">
-            <h1 class="text-xl font-bold text-foreground">
-              💞&nbsp;&nbsp;Ассистент
-            </h1>
-          </div>
-          <!-- Кнопка настроек в правом верхнем углу -->
-          <div class="flex z-10">
-            <PopoverRoot v-model:open="settingsOpen">
-              <PopoverTrigger as-child>
-                <button class="w-7 h-7">
-                  <IconSettings class="w-full h-full" />
-                </button>
-              </PopoverTrigger>
-              <PopoverPortal>
-                <PopoverContent
-                  side="bottom"
-                  align="end"
-                  :side-offset="8"
-                  class="z-50 min-w-[260px] rounded-3xl glass-deep p-3 space-y-4"
-                >
-                  <div class="flex items-center justify-between gap-0.5 h-10">
-                    <div class="text-sm text-foreground">Режим</div>
-                    <Combobox
-                      class="max-w-[170px]"
-                      v-model="displayMode"
-                      :options="AI_WORK_MODE_OPTIONS"
-                      placeholder="Выберите режим"
-                    />
-                  </div>
-
-                  <div class="flex items-center justify-between gap-0.5 h-10">
-                    <div class="text-sm text-foreground">Тема</div>
-
-                    <Combobox
-                      class="max-w-[170px]"
-                      v-model="colorMode.preference"
-                      :options="THEME_OPTIONS"
-                      placeholder="Тема"
-                    />
-                  </div>
-
-                  <NuxtLink
-                    to="/scene-selection"
-                    class="flex items-center justify-between gap-2 rounded-2xl px-3 py-2 text-sm text-foreground transition hover:bg-white/10"
-                    @click="settingsOpen = false"
-                  >
-                    <div class="flex items-center gap-2">
-                      <IconSparkles class="h-4 w-4" />
-                      <span>Атмосфера</span>
-                    </div>
-                    <span class="text-xs text-foreground/60">Открыть</span>
-                  </NuxtLink>
-                </PopoverContent>
-              </PopoverPortal>
-            </PopoverRoot>
-          </div>
+        <div class="flex items-center gap-2 px-4">
+          <h1 class="text-xl font-bold text-foreground">
+            💞&nbsp;&nbsp;Ассистент
+          </h1>
         </div>
       </template>
     </PageHeader>
@@ -173,24 +120,11 @@ import { useChatStore } from '@/app/stores/chat';
 import { useSpeechStore } from '@/app/stores/speech';
 import { useChatSettingsStore } from '@/app/stores/chatSettings';
 import { useSubscriptionStore } from '@/app/stores/subscription';
-import { useColorMode } from '#imports';
-import {
-  AI_WORK_MODE_OPTIONS,
-  THEME_OPTIONS,
-} from '@/app/constants/select-options';
 import { CHAT_STREAM_MODE } from '@/app/constants/chat';
 import TextareaResize from '@/app/components/ui/TextareaResize.vue';
 
 import IconMic from '~icons/lucide/mic';
 import IconSend from '~icons/lucide/send';
-import IconSettings from '~icons/lucide/settings';
-import IconSparkles from '~icons/lucide/sparkles';
-import {
-  PopoverRoot,
-  PopoverTrigger,
-  PopoverPortal,
-  PopoverContent,
-} from 'radix-vue';
 import PageHeader from '@/app/components/PageHeader.vue';
 import WelcomeScreen from '@/app/components/WelcomeScreen.vue';
 import AvatarVoiceControls from '@/app/components/AvatarVoiceControls.vue';
@@ -203,7 +137,6 @@ const emit = defineEmits<{ (e: 'send', text: string): void }>();
 
 const route = useRoute();
 const router = useRouter();
-const colorMode = useColorMode();
 
 // Определяем экран на основе query параметра и состояния чата
 const showWelcomeScreen = computed(() => {
@@ -224,20 +157,6 @@ const showWelcomeScreen = computed(() => {
   return chat.messages.length === 0;
 });
 
-// Computed для отображения режима в Combobox (маппим 'talk' на 'therapy')
-const displayMode = computed({
-  get: () => {
-    // Если mode === 'talk', отображаем 'therapy' в Combobox
-    return chatSettings.mode === 'talk' ? 'therapy' : chatSettings.mode;
-  },
-  set: (value: string) => {
-    // При изменении через Combobox всегда сохраняем в store
-    if (value === 'therapy' || value === 'habits') {
-      chatSettings.mode = value;
-    }
-  },
-});
-
 // База для наращивания текста во время голосового ввода
 const speechBase = ref('');
 const lastPartial = ref(''); // Последний partial для сохранения в базу
@@ -249,8 +168,6 @@ const chatSettings = useChatSettingsStore();
 // Управление TTS озвучкой
 const { speak: speakTTS } = useTTS();
 const { renderMarkdown } = useMarkdown();
-
-const settingsOpen = ref(false);
 
 // Отслеживаем ручные изменения текста для синхронизации speechBase
 // Очищаем speechBase если пользователь полностью удалил текст

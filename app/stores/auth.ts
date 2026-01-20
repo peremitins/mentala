@@ -13,6 +13,8 @@ import { useUserStore } from '@/app/stores/user';
 import { useSceneSettingsStore } from '@/app/stores/sceneSettings';
 import { useTTS } from '@/app/composables/useTTS';
 import { useSpeechEngine } from '@/app/composables/useSpeechEngine';
+import { useMeditationPlayer } from '@/app/composables/useMeditationPlayer';
+import { useSceneAudio } from '@/app/composables/useSceneAudio';
 
 const SESSION_TOKEN_KEY = 'mentai.session.token';
 const GOOGLE_WEB_CLIENT_ID_REGEX = /\.apps\.googleusercontent\.com$/i;
@@ -59,6 +61,8 @@ export const useAuthStore = defineStore('auth', {
     } | null,
     loading: false,
     isLoggedIn: false,
+    // Флаг, чтобы безопасно блокировать фоновые эффекты во время logout.
+    isLoggingOut: false,
   }),
   actions: {
     async me() {
@@ -107,6 +111,15 @@ export const useAuthStore = defineStore('auth', {
         if (response?.user) {
           this.user = response.user;
           this.isLoggedIn = true;
+        }
+
+        try {
+          // Подтягиваем полный профиль, чтобы забрать sceneSettings и прочие данные.
+          await this.me();
+          const sceneSettings = useSceneSettingsStore();
+          await sceneSettings.loadFromUser();
+        } catch {
+          // Если профайл не загрузился, всё равно пускаем в приложение.
         }
 
         // Переходим на главную
@@ -199,6 +212,15 @@ export const useAuthStore = defineStore('auth', {
           this.isLoggedIn = true;
         }
 
+        try {
+          // Подтягиваем полный профиль, чтобы забрать sceneSettings и прочие данные.
+          await this.me();
+          const sceneSettings = useSceneSettingsStore();
+          await sceneSettings.loadFromUser();
+        } catch {
+          // Игнорируем, чтобы не ломать логин.
+        }
+
         await navigateTo('/');
         return response;
       } catch (error) {
@@ -253,6 +275,15 @@ export const useAuthStore = defineStore('auth', {
         if ((response as any)?.user) {
           this.user = (response as any).user;
           this.isLoggedIn = true;
+        }
+
+        try {
+          // Подтягиваем полный профиль, чтобы забрать sceneSettings и прочие данные.
+          await this.me();
+          const sceneSettings = useSceneSettingsStore();
+          await sceneSettings.loadFromUser();
+        } catch {
+          // Игнорируем, чтобы не блокировать верификацию.
         }
 
         const redirectTo =
@@ -445,6 +476,12 @@ export const useAuthStore = defineStore('auth', {
           const { stop: stopSpeech } = useSpeechEngine();
           await stopSpeech();
         }
+
+        // 4. Гарантированно выключаем фон и медитации перед logout.
+        const { stop: stopMeditation } = useMeditationPlayer();
+        const { stop: stopSceneAudio } = useSceneAudio();
+        await stopSceneAudio(false);
+        await stopMeditation(false);
       } catch (err) {
         console.error('[Auth Store] Ошибка остановки активных запросов:', err);
       }
@@ -505,28 +542,51 @@ export const useAuthStore = defineStore('auth', {
     },
 
     async logout() {
-      // 1. Останавливаем все активные запросы и озвучки
-      await this._stopAllActiveRequests();
+      this.isLoggingOut = true;
+      let logoutRequest: Promise<void> | null = null;
 
-      // 2. Сохраняем текущую сессию в фоне (не блокируем logout)
-      this._saveSessionInBackground();
+      try {
+        // 1. Останавливаем все активные запросы и озвучки
+        await this._stopAllActiveRequests();
 
-      // 3. Сбрасываем все stores
-      this._resetAllStores();
+        // 2. Сохраняем текущую сессию в фоне (не блокируем logout)
+        this._saveSessionInBackground();
 
-      // 4. Выполняем запрос на разлогин
-      await useAPI('/api/auth/logout', {
-        method: 'POST',
-      });
+        // 3. Делаем запрос на разлогин в фоне, чтобы UI не зависал.
+        logoutRequest = (async () => {
+          try {
+            await useAPI('/api/auth/logout', {
+              method: 'POST',
+            });
+          } catch (error) {
+            console.error('[Auth Store] Ошибка logout:', error);
+          }
+        })();
 
-      // 5. Очищаем токен из localStorage
-      this._clearSessionToken();
+        // 4. Сбрасываем auth-состояние заранее, чтобы не запускался фон.
+        this._resetAuthState();
 
-      // 6. Сбрасываем состояние auth store
-      this._resetAuthState();
+        // 5. Сбрасываем все stores
+        this._resetAllStores();
 
-      // 7. Переходим на страницу авторизации
-      navigateTo('/auth');
+        // 6. Очищаем токен из localStorage
+        this._clearSessionToken();
+
+        // 7. Переходим на страницу авторизации
+        await navigateTo('/auth');
+      } catch (error) {
+        console.error('[Auth Store] Logout завершился с ошибкой:', error);
+        try {
+          await navigateTo('/auth');
+        } catch {
+          // Игнорируем, если роутер недоступен.
+        }
+      } finally {
+        this.isLoggingOut = false;
+        if (logoutRequest) {
+          void logoutRequest;
+        }
+      }
     },
     oauth(provider: string, locale?: string) {
       if (typeof window === 'undefined') return;

@@ -17,7 +17,7 @@
         :show-view-all="section.items.length > 4"
         class="animate-slide-up"
         :style="animationStyle(index)"
-        @open="openPractice"
+        @open="openPracticeInGroup(section.key, $event)"
         @view-all="openViewAll(section.key)"
       />
 
@@ -48,7 +48,7 @@
               :practice="item.practice"
               :accent-class="item.accentClass"
               :is-custom="item.isCustom"
-              @open="openPractice"
+              @open="openPracticeInGroup('custom', $event)"
             />
           </div>
         </div>
@@ -100,7 +100,7 @@
             :key="item.practice.slug"
             type="button"
             class="group flex w-full items-center gap-3 rounded-2xl bg-white/5 p-3 text-left transition hover:bg-white/10"
-            @click="openPractice(item.practice.slug)"
+            @click="openPracticeInGroup(dialogSectionKey, item.practice.slug)"
           >
             <div
               class="relative h-16 w-16 overflow-hidden rounded-2xl bg-gradient-to-br"
@@ -196,6 +196,8 @@ const SECTION_META = [
 const dialogOpen = ref(false);
 const dialogSectionKey = ref<BreathPracticeTag | null>(null);
 
+type BreathPracticeGroupKey = BreathPracticeTag | 'custom';
+
 const builtInSections = computed(() =>
   SECTION_META.map((section) => {
     const items: BreathPracticeCardItem[] = BREATH_PRACTICES.filter(
@@ -243,9 +245,14 @@ const dialogTitle = computed(() => {
   return section?.title || 'Подборка';
 });
 
-function openPractice(slug: string) {
+function openPracticeInGroup(
+  groupKey: BreathPracticeGroupKey | null | undefined,
+  slug: string
+) {
   dialogOpen.value = false;
-  navigateTo(`/breath-practices/${slug}`);
+  // Передаём группу, чтобы в плеере работали кнопки назад/вперёд.
+  const query = groupKey ? { group: groupKey } : undefined;
+  navigateTo({ path: `/breath-practices/${slug}`, query });
 }
 
 function openViewAll(key: BreathPracticeTag) {

@@ -6,6 +6,7 @@
         :key="sceneBackground"
         class="pointer-events-none fixed inset-0 z-[1] overflow-hidden"
         :class="{ 'scene-bg-static': !sceneSettings.animateBackground }"
+        :style="{ opacity: uiSettings.auroraOpacity }"
       >
         <div class="meditation-bg-pan-x h-full w-full">
           <div class="meditation-bg-pan-y h-full w-full">
@@ -19,7 +20,6 @@
             />
           </div>
         </div>
-        <div class="scene-bg-overlay" />
       </div>
     </Transition>
     <div
@@ -68,9 +68,11 @@ import MiniMeditationPlayer from '@/app/components/meditations/MiniMeditationPla
 import { useMeditationPlayer } from '@/app/composables/useMeditationPlayer';
 import { useMeditationsStore } from '@/app/stores/meditations';
 import { useSceneSettingsStore } from '@/app/stores/sceneSettings';
+import { useUiSettingsStore } from '@/app/stores/uiSettings';
 import { useSceneAudio } from '@/app/composables/useSceneAudio';
 import { findSceneTrack } from '@/app/lib/sceneSelectionCatalog';
 import { resolveMediaUrl } from '@/app/utils/media';
+import { useAuthStore } from '@/app/stores/auth';
 
 const {
   currentTrack,
@@ -92,8 +94,14 @@ const isPortraitMode = computed(() => {
 });
 
 const route = useRoute();
+const auth = useAuthStore();
 const sceneSettings = useSceneSettingsStore();
+const uiSettings = useUiSettingsStore();
 const sceneAudio = useSceneAudio();
+const canPlaySceneAudio = computed(() => {
+  // Во время logout фон не должен стартовать заново.
+  return auth.isLoggedIn && !auth.isLoggingOut;
+});
 
 const detailTrackId = computed(() => {
   const raw = route.query.trackId;
@@ -158,8 +166,8 @@ const detailBackground = computed(() => {
   return resolveMediaUrl(chosen || '');
 });
 
-const currentScene = computed(() =>
-  findSceneTrack(sceneSettings.sceneId) || null
+const currentScene = computed(
+  () => findSceneTrack(sceneSettings.sceneId) || null
 );
 
 const sceneBackground = computed(() => {
@@ -222,23 +230,10 @@ function openDetail() {
 
 onMounted(async () => {
   await sceneSettings.ensureLoaded();
-  if (currentScene.value && !shouldMuteSceneAudio.value) {
-    await sceneAudio.play(currentScene.value);
-  }
   sceneAudio.setVolume(sceneSettings.volume / 100);
   sceneAudio.setBackgroundPlayMinutes(sceneSettings.backgroundPlayMinutes);
+  await syncSceneAudioState();
 });
-
-watch(
-  () => currentScene.value?.id,
-  async (nextId, prevId) => {
-    if (!nextId || nextId === prevId) return;
-    if (!currentScene.value) return;
-    await sceneAudio.setScene(currentScene.value);
-    if (shouldMuteSceneAudio.value) return;
-    await sceneAudio.play(currentScene.value);
-  }
-);
 
 watch(
   () => sceneSettings.volume,
@@ -254,16 +249,37 @@ watch(
   }
 );
 
-watch(
-  () => shouldMuteSceneAudio.value,
-  async (shouldMute) => {
-    // Пока открыт трек медитации или активен мини‑плеер — фоновые звуки выключены.
-    if (shouldMute) {
-      await sceneAudio.suspend();
-      return;
-    }
-    await sceneAudio.resume();
+async function syncSceneAudioState() {
+  // На неавторизованных экранах фон всегда выключен.
+  if (!canPlaySceneAudio.value) {
+    await sceneAudio.stop(false);
+    return;
   }
+  await sceneSettings.ensureLoaded();
+  if (!currentScene.value) return;
+  // Обновляем текущую сцену, чтобы не было рассинхрона при смене.
+  await sceneAudio.setScene(currentScene.value);
+  // Пока открыт трек медитации или активен мини‑плеер — фоновые звуки выключены.
+  if (shouldMuteSceneAudio.value) {
+    await sceneAudio.suspend();
+    return;
+  }
+  await sceneAudio.resume();
+  if (!sceneAudio.isPlaying.value) {
+    await sceneAudio.play(currentScene.value);
+  }
+}
+
+watch(
+  [
+    () => shouldMuteSceneAudio.value,
+    () => canPlaySceneAudio.value,
+    () => currentScene.value?.id,
+  ],
+  () => {
+    void syncSceneAudioState();
+  },
+  { immediate: true }
 );
 </script>
 
