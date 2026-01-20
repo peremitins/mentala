@@ -16,16 +16,11 @@
         :disabled="loading"
         @click="$emit('edit')"
       >
-        Изменить
+        Настроить
       </Button>
     </div>
 
     <div class="mt-4 space-y-2">
-      <!-- <div v-if="loading" class="space-y-2 animate-pulse">
-        <div class="h-4 rounded-md bg-muted" />
-        <div class="h-4 rounded-md bg-muted" />
-        <div class="h-4 rounded-md bg-muted w-3/4" />
-      </div> -->
       <Skeleton
         v-if="loading"
         type="simple-text"

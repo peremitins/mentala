@@ -2,7 +2,8 @@
   <div class="h-full flex flex-col z-0">
     <NotificationIndexPage
       title="🧠&nbsp;&nbsp;Терапия"
-      description="Здесь вы найдёте готовые темы поддержки и сможете добавить свои, чтобы получать именно те уведомления, которые вам подходят"
+      description="Выберите тему, которая сейчас волнует. <br />
+Мы поможем через разговор, практики и напоминания, которые можно настроить под себя."
       mentai-mode="therapy"
       :items="topicItems"
       :loading="loadersStore.isSkeletonLoading"

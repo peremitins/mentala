@@ -67,9 +67,6 @@
     <div v-else class="flex-1 overflow-y-auto space-y-4">
       <div class="glass-deep p-5" :class="heroGradient">
         <div class="space-y-3">
-          <h2 class="text-2xl font-bold text-foreground">
-            {{ entityName }}
-          </h2>
           <p class="text-sm text-muted-foreground">
             {{ entityDescription }}
           </p>

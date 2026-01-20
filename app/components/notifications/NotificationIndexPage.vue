@@ -3,9 +3,7 @@
     <PageHeader :title="title" />
 
     <div class="glass-deep p-4">
-      <p class="text-sm text-white">
-        {{ description }}
-      </p>
+      <p class="text-sm text-white" v-html="description" />
     </div>
 
     <div v-if="mentaiMode === 'habits'" class="px-2">
@@ -110,7 +108,7 @@
               @click.stop="handleQuickChat(item)"
             >
               <IconMessageCircle class="h-4 w-4" />
-              ИИ чат
+              Поговорить
             </button>
           </div>
         </div>
