@@ -8,7 +8,7 @@
     >
       <IconVideo
         v-show="chatSettings.avatar"
-        class="w-5 h-5 transition-all text-primary drop-shadow-[0_0_8px_rgba(34,197,94,0.6)]"
+        class="w-5 h-5 transition-all text-primary-ui drop-shadow-[0_0_8px_rgba(34,197,94,0.6)]"
       />
 
       <IconVideoOff
@@ -17,7 +17,7 @@
       />
       <span
         class="text-sm font-medium whitespace-nowrap text-foreground"
-        :class="chatSettings.avatar ? 'text-primary' : ''"
+        :class="chatSettings.avatar ? 'text-primary-ui' : ''"
       >
         {{ chatSettings.avatar ? 'Аватар включён' : 'Аватар выключен' }}
       </span>
@@ -28,11 +28,11 @@
       @click="toggleVoice"
       class="flex-1 glass-deep rounded-xl px-4 py-3 flex items-center justify-center gap-2 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
     >
-      <IconVolume2 v-if="chatSettings.voice" class="w-5 h-5 text-primary" />
+      <IconVolume2 v-if="chatSettings.voice" class="w-5 h-5 text-primary-ui" />
       <IconVolumeX v-else class="w-5 h-5 text-foreground" />
       <span
         class="text-sm font-medium"
-        :class="chatSettings.voice ? 'text-primary' : ''"
+        :class="chatSettings.voice ? 'text-primary-ui' : ''"
       >
         {{ chatSettings.voice ? 'Звук включён' : 'Звук выключен' }}
       </span>

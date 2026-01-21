@@ -3,7 +3,6 @@ import { useLoadersStore } from '@/app/stores/loaders';
 
 export const useChatSettingsStore = defineStore('chatSettings', {
   state: () => ({
-    theme: 'dark' as 'dark' | 'light',
     // Голос/озвучка ответа ассистента
     voice: true,
     // Визуальный аватар (видео)

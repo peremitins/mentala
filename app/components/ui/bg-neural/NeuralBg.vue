@@ -3,8 +3,7 @@
     ref="canvasRef"
     :class="
       cn(
-        'absolute inset-0 w-full h-full pointer-events-none',
-        colorMode.value === 'dark' ? 'opacity-35' : 'opacity-35',
+        'absolute inset-0 w-full h-full pointer-events-none opacity-35',
         props.class
       )
     "
@@ -23,7 +22,6 @@ import {
 } from 'vue';
 import { Renderer, Camera, Transform, Program, Mesh, Plane } from 'ogl';
 import { cn } from '~/lib/utils';
-import { useColorMode } from '#imports';
 
 interface Props {
   hue?: number;
@@ -34,33 +32,19 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  hue: undefined, // Автоматически определяется по теме
-  saturation: undefined, // Автоматически определяется по теме
-  chroma: undefined, // Автоматически определяется по теме
+  hue: undefined, // Автоматически определяется (тёмная тема по умолчанию)
+  saturation: undefined, // Автоматически определяется (тёмная тема по умолчанию)
+  chroma: undefined, // Автоматически определяется (тёмная тема по умолчанию)
   animationSpeed: 1.0, // Скорость анимации (0.1 - 2.0)
 });
 
-const colorMode = useColorMode();
-
-// Определяем цвета в зависимости от темы
+// Фиксированная тёмная палитра (единственный режим)
 const themeColors = computed(() => {
-  const isDark = colorMode.value === 'dark';
-
-  if (isDark) {
-    // Для тёмной темы: более приглушённые цвета
-    return {
-      hue: props.hue ?? 200, // Синий оттенок
-      saturation: props.saturation ?? 0.7, // Меньше насыщенность
-      chroma: props.chroma ?? 0.4, // Меньше яркость
-    };
-  } else {
-    // Для светлой темы: очень нейтральные, почти незаметные цвета (не желтые!)
-    return {
-      hue: props.hue ?? 220, // Холодный синий (не желтый)
-      saturation: props.saturation ?? 0.15, // Очень низкая насыщенность
-      chroma: props.chroma ?? 0.15, // Очень низкая яркость
-    };
-  }
+  return {
+    hue: props.hue ?? 200, // Синий оттенок
+    saturation: props.saturation ?? 0.7, // Меньше насыщенность
+    chroma: props.chroma ?? 0.4, // Меньше яркость
+  };
 });
 
 const canvasRef = ref<HTMLCanvasElement | null>(null);
@@ -350,26 +334,6 @@ watch(
     const mesh = meshRef.value;
     if (mesh && mesh.program && mesh.program.uniforms.u_animation_speed) {
       mesh.program.uniforms.u_animation_speed.value = newSpeed;
-    }
-  }
-);
-
-// Watch for theme changes
-watch(
-  () => colorMode.value,
-  () => {
-    const mesh = meshRef.value;
-    if (mesh && mesh.program && mesh.program.uniforms) {
-      const colors = themeColors.value;
-      if (mesh.program.uniforms.u_hue) {
-        mesh.program.uniforms.u_hue.value = colors.hue;
-      }
-      if (mesh.program.uniforms.u_saturation) {
-        mesh.program.uniforms.u_saturation.value = colors.saturation;
-      }
-      if (mesh.program.uniforms.u_chroma) {
-        mesh.program.uniforms.u_chroma.value = colors.chroma;
-      }
     }
   }
 );

@@ -70,7 +70,7 @@
 
         <div v-if="!track.isLoop" class="h-1 w-full bg-white/10">
           <div
-            class="h-full bg-gradient-to-r from-primary via-cyan-400 to-emerald-400"
+            class="h-full bg-gradient-to-r from-primary-ui via-cyan-400 to-emerald-400"
             :style="{ width: `${progress}%` }"
           />
         </div>

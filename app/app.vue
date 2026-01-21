@@ -57,6 +57,10 @@ const route = useRoute();
 
 const isBreathPracticeDetail = computed(() => {
   const path = route.path || '';
+  // Исключаем страницу создания кастомной практики из показа синего фона
+  if (path === '/breath-practices/custom') {
+    return false;
+  }
   return path.startsWith('/breath-practices/');
 });
 
@@ -76,10 +80,7 @@ const showAurora = computed(() => {
 const auroraOpacity = computed(() => uiSettings.auroraOpacity);
 
 onMounted(async () => {
-  await Promise.all([
-    sceneSettings.ensureLoaded(),
-    uiSettings.ensureLoaded(),
-  ]);
+  await Promise.all([sceneSettings.ensureLoaded(), uiSettings.ensureLoaded()]);
 });
 
 watch([() => auth.user?.id, () => auth.user?.sceneSettings], async () => {

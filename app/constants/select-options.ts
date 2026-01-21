@@ -62,12 +62,6 @@ export const SUBTYPE_OPTIONS_BUILD_WITHOUT_MIXED = SUBTYPE_OPTIONS_BUILD.filter(
   (opt) => opt.value !== 'mixed'
 );
 
-export const THEME_OPTIONS = [
-  { label: 'Системная', value: 'system' },
-  { label: 'Тёмная', value: 'dark' },
-  { label: 'Светлая', value: 'light' },
-];
-
 // Опции для источника текстов уведомлений (для готовых шаблонов)
 export const TEXT_SOURCE_OPTIONS = [
   {

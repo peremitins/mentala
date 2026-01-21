@@ -9,7 +9,7 @@
         >
           {{ headerTitle }}
         </DialogTitle>
-        <DialogDescription class="text-xs sm:text-sm text-muted-foreground">
+        <DialogDescription class="text-xs sm:text-sm text-foreground">
           {{ headerSubtitle }}
         </DialogDescription>
       </DialogHeader>
@@ -44,25 +44,6 @@
           </ToggleGroup>
         </div>
 
-        <div
-          v-if="showHero && heroTitle"
-          class="flex items-start gap-2 sm:gap-4 p-2.5 sm:p-3 rounded-xl sm:rounded-lg border border-primary bg-transparent transition-all duration-300"
-        >
-          <div
-            class="flex items-start rounded-2xl text-2xl transition-transform duration-300"
-          >
-            {{ emoji?.trim() || defaultEmojiValue }}
-          </div>
-          <div class="space-y-1">
-            <p class="text-base font-semibold text-foreground">
-              {{ heroTitle }}
-            </p>
-            <p class="text-sm text-muted-foreground">
-              {{ heroSubtitle }}
-            </p>
-          </div>
-        </div>
-
         <div class="flex flex-col gap-2">
           <div
             class="flex items-end gap-2 sm:gap-3"
@@ -77,7 +58,7 @@
                 type="text"
                 :maxlength="4"
                 :placeholder="emojiPlaceholder"
-                class="text-sm sm:text-base text-center h-9 sm:h-10"
+                class="text-sm sm:text-base text-center"
                 :show-clear-button="false"
               />
             </div>
@@ -176,9 +157,6 @@ const props = withDefaults(
     defaultIntent?: HabitIntent;
     headerTitle?: string;
     headerSubtitle?: string;
-    heroTitle?: string;
-    heroSubtitle?: string;
-    showHero?: boolean;
     submitLabel?: string;
     namePlaceholder?: string;
     descriptionPlaceholder?: string;
@@ -187,7 +165,6 @@ const props = withDefaults(
   }>(),
   {
     defaultIntent: 'build',
-    showHero: true,
   }
 );
 
@@ -260,19 +237,6 @@ const headerSubtitle = computed(
       : 'Создайте тему под свои запросы: название, описание и эмодзи')
 );
 
-const heroTitle = computed(
-  () =>
-    props.heroTitle ??
-    (props.mentaiMode === 'habits' ? 'Персонализируйте тему' : '')
-);
-const heroSubtitle = computed(
-  () =>
-    props.heroSubtitle ??
-    (props.mentaiMode === 'habits'
-      ? 'Эмодзи поможет быстрее находить её в списке'
-      : '')
-);
-
 const submitLabel = computed(
   () =>
     props.submitLabel ??
@@ -283,7 +247,9 @@ const namePlaceholder = computed(
   () =>
     props.namePlaceholder ??
     (props.mentaiMode === 'habits'
-      ? 'Например, «Осознанное утро»'
+      ? intent.value === 'quit'
+        ? 'Например, «Не залипать в телефоне»'
+        : 'Например, «Короткая прогулка днём»'
       : 'Например, «Поддержка перед выступлением»')
 );
 

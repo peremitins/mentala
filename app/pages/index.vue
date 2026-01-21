@@ -85,7 +85,7 @@
               :style="{ borderRadius: 'var(--radius-icon)' }"
             >
               <IconMic
-                :class="speechStore.isListening ? 'text-primary' : ''"
+                :class="speechStore.isListening ? 'text-primary-ui' : ''"
                 class="w-5 h-5"
               />
             </button>
@@ -831,7 +831,7 @@ watch(
 }
 
 .markdown-content :deep(blockquote) {
-  border-left: 3px solid hsl(var(--primary) / 0.5);
+  border-left: 3px solid hsl(var(--primary-ui) / 0.5);
   padding-left: 1em;
   margin: 0.75em 0;
   color: hsl(var(--muted-foreground));
@@ -839,7 +839,7 @@ watch(
 }
 
 .markdown-content :deep(a) {
-  color: hsl(var(--primary));
+  color: hsl(var(--primary-ui));
   text-decoration: underline;
 }
 

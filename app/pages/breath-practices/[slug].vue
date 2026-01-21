@@ -1,6 +1,6 @@
 <template>
   <div
-    class="space-y-4 h-dvh overflow-y-auto no-scrollbar pb-[100px] rounded-lg"
+    class="space-y-2 h-dvh overflow-y-auto no-scrollbar pb-[100px] rounded-lg"
   >
     <div
       class="flex h-full flex-col justify-between space-y-4 overflow-y-auto no-scrollbar"
@@ -143,7 +143,7 @@
               class="relative h-2 w-full overflow-hidden rounded-full border border-white/70"
             >
               <div
-                class="h-full rounded-full bg-gradient-to-r from-primary via-cyan-400 to-emerald-400 transition-all duration-300"
+                class="h-full rounded-full bg-gradient-to-r from-primary-ui via-cyan-400 to-emerald-400 transition-all duration-300"
                 :style="{ width: `${sessionProgress}%` }"
               />
             </div>
@@ -388,9 +388,9 @@ const groupSlugs = computed(() => {
     return store.customPractices.map((practice) => `custom-${practice.id}`);
   }
   // Здесь key уже строго BreathPracticeTag.
-  return BREATH_PRACTICES.filter((practice) =>
-    practice.tags.includes(key)
-  ).map((practice) => practice.slug);
+  return BREATH_PRACTICES.filter((practice) => practice.tags.includes(key)).map(
+    (practice) => practice.slug
+  );
 });
 
 const groupIndex = computed(() => groupSlugs.value.indexOf(slug.value));

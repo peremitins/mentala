@@ -1,11 +1,13 @@
 <template>
-  <section class="space-y-3">
-    <div class="flex items-center justify-between gap-3 px-1">
+  <section class="">
+    <div class="flex items-center justify-between gap-3 pt-4 pb-2 px-4">
       <div>
-        <p class="text-xs uppercase tracking-[0.08em] text-white/50">
+        <p
+          class="text-[10px] uppercase tracking-[0.08em] text-foreground/80 leading-snug"
+        >
           {{ subtitle }}
         </p>
-        <h3 class="text-xl font-semibold text-white">
+        <h3 class="text-lg font-semibold text-foreground leading-snug">
           {{ title }} &nbsp;
           <span v-if="emoji" class="mr-2">{{ emoji }}</span>
         </h3>
@@ -14,7 +16,7 @@
         v-if="showViewAll"
         variant="ghost"
         size="sm"
-        class="text-xs text-white/80 hover:text-white"
+        class="text-xs text-foreground/80 hover:text-foreground"
         @click="emit('view-all')"
       >
         Смотреть все
@@ -23,7 +25,7 @@
 
     <div class="relative">
       <div
-        class="flex gap-4 overflow-x-auto pb-1 pl-2 pr-6 no-scrollbar"
+        class="flex gap-4 overflow-x-auto pb-4 pl-4 pr-6 no-scrollbar"
         data-lenis-prevent
         style="touch-action: pan-y pan-x"
       >
@@ -50,6 +52,7 @@ export interface BreathPracticeCardItem {
   practice: BreathPractice;
   accentClass: string;
   isCustom?: boolean;
+  customId?: string; // ID кастомной практики для удаления
 }
 
 defineProps<{

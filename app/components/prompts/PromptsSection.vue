@@ -20,7 +20,7 @@
       Промптов пока нет.
       <button
         @click="handleAdd"
-        class="text-primary cursor-pointer hover:text-primary/80 transition-colors underline"
+        class="text-primary-ui cursor-pointer hover:text-primary-ui/80 transition-colors underline"
       >
         Добавьте свой
       </button>
@@ -32,7 +32,7 @@
       <div
         v-for="(prompt, index) in prompts"
         :key="prompt.id"
-        class="group relative overflow-hidden rounded-xl border-2 border-border bg-card p-4 transition-all duration-200 [:has([data-state=checked])]:border-primary/50 hover:border-primary/50 hover:-translate-y-0.5 hover:shadow-lg outline-none animate-slide-up"
+        class="group relative overflow-hidden rounded-xl border-2 border-border bg-card p-4 transition-all duration-200 [:has([data-state=checked])]:border-primary-ui/50 hover:border-primary-ui/50 hover:-translate-y-0.5 hover:shadow-lg outline-none animate-slide-up"
         :style="`animation-delay: ${index * 0.05}s; animation-fill-mode: both`"
       >
         <div class="flex gap-2 w-full">
@@ -55,7 +55,7 @@
             <ExpandableText
               :text="prompt.content"
               :id="`${uid}-${prompt.id}-desc`"
-              class="text-muted-foreground"
+              class="text-foreground"
             />
             <Separator class="mt-2" />
             <div class="flex justify-end z-1" @click.stop>

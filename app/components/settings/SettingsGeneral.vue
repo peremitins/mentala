@@ -26,7 +26,7 @@
         description="Эти параметры влияют на стиль общения AI-ассистента и текст всех уведомлений."
         item-max-width="200px"
       />
-      <p v-if="toneWasUnknown" class="text-xs text-muted-foreground">
+      <p v-if="toneWasUnknown" class="text-xs text-foreground">
         Тон не выбран — сейчас используется нейтральный.
       </p>
 
@@ -57,7 +57,7 @@
     <!-- Остальные настройки -->
     <section class="space-y-3">
       <NuxtLink
-        class="underline text-foreground hover:text-primary"
+        class="underline text-foreground hover:text-primary-ui"
         to="/privacy"
       >
         Конфиденциальность

@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-6 h-dvh overflow-y-auto">
+  <div class="space-y-2 h-dvh overflow-y-auto">
     <PageHeader
       title="🔒&nbsp;&nbsp;Конфиденциальность"
       :show-back-button="true"

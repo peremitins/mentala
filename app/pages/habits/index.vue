@@ -20,8 +20,6 @@
       :default-intent="defaultIntent"
       header-title="Новая привычка"
       header-subtitle="Настройте свою привычку: выберите цель, добавьте описание и сохраните"
-      hero-title="Персонализируйте тему"
-      hero-subtitle="Эмодзи поможет быстрее находить её в списке"
       submit-label="Создать и настроить"
       @update:open="createModalOpen = $event"
       @created="handleHabitCreated"

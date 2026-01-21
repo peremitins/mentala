@@ -9,7 +9,7 @@
         <slot name="trigger" :formatted-time="formattedTime">
           <Button
             variant="outline"
-            class="w-full justify-start text-left font-normal border-primary rounded-lg bg-transparent"
+            class="w-full justify-start text-left font-normal border-primary-ui rounded-lg bg-transparent"
           >
             <IconClock class="mr-2 h-4 w-4 opacity-50" />
             {{ formattedTime }}

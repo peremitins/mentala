@@ -1,6 +1,6 @@
 <template>
   <div class="relative h-full overflow-hidden rounded-lg">
-    <div class="flex h-full flex-col justify-between space-y-4 overflow-y-auto">
+    <div class="flex h-full flex-col justify-between space-y-2 overflow-y-auto">
       <PageHeader
         :title="topicName"
         :show-back-button="true"
@@ -32,7 +32,7 @@
             @click="onProgressClick"
           >
             <div
-              class="h-full rounded-full bg-gradient-to-r from-primary via-cyan-400 to-emerald-400 transition-all duration-300"
+              class="h-full rounded-full bg-gradient-to-r from-primary-ui via-cyan-400 to-emerald-400 transition-all duration-300"
               :style="{ width: `${progressPercent}%` }"
             />
           </div>
@@ -55,7 +55,7 @@
             @click="handleRepeat"
           >
             <IconRepeat
-              :class="['h-5 w-5', isRepeating ? 'text-primary' : '']"
+              :class="['h-5 w-5', isRepeating ? 'text-primary-ui' : '']"
             />
           </button>
           <button

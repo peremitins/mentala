@@ -3,7 +3,6 @@ import { getSessionUser } from '@@/server/application/auth/session';
 import { writeChatSettings } from '@/server/utils/storage';
 import { summaryStore } from '@/server/utils/summaryStore';
 type Payload = Partial<{
-  theme: 'dark' | 'light';
   voice: boolean;
   avatar: boolean;
   enablePreviousResponseId: boolean;

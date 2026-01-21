@@ -10,87 +10,10 @@
     --radius-icon: 14px;
     --radius: 0.5rem; /* для совместимости с Tailwind */
 
-    /* === Тени (светлая тема) === */
-    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
-      0 2px 4px -1px rgba(0, 0, 0, 0.06);
-    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1),
-      0 4px 6px -2px rgba(0, 0, 0, 0.05);
-    --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1),
-      0 10px 10px -5px rgba(0, 0, 0, 0.04);
-
-    /* === Overlay === */
-    --overlay: 0 0% 0%;
-    --overlay-opacity: 80%;
-
-    /* === Базовые цвета === */
-    --background: 0 0% 100%;
-    --foreground: 222.2 47.4% 11.2%;
-
-    /* === Поверхности === */
-    --card: 204 38% 98%;
-    --card-foreground: 222.2 47.4% 11.2%;
-
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 47.4% 11.2%;
-
-    --surface-subtle: 270 80% 98%;
-    --surface-subtle-foreground: 270 80% 98%;
-
-    --surface-raised: 270 80% 96%;
-    --surface-raised-foreground: color-mix(
-      in hsl,
-      hsl(var(--primary)) 100%,
-      transparent
-    );
-    --surface-raised-subtitle: color-mix(
-      in hsl,
-      hsl(var(--primary)) 90%,
-      white
-    );
-    --surface-inactive-foreground: 222 16% 40%;
-    --surface-raised-border: 275 25% 85%;
-    --surface-raised-inactive-border: 215 16% 34%;
-
-    /* === Семантические цвета === */
-    --primary: 270 80% 64%;
-    --primary-foreground: 0 0% 100%;
-
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222 28% 25%;
-
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-
-    --destructive: 0 100% 50%;
-    --destructive-foreground: 210 40% 98%;
-
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-
-    /* === Скелетоны === */
-    --skeleton: 214 32% 88%;
-
-    /* === Границы и инпуты === */
-    --border: 214.3 31.8% 91.4%;
-    --border-secondary: 275 25% 85%;
-    --input: 214.3 31.8% 91.4%;
-
-    /* === Состояния === */
-    --inactive: 215 30% 17%;
-    --inactive-foreground: 222.2 47.4% 11.2%;
-
-    --button-active-soft: 270 80% 96%;
-
-    --ring: 188 100% 49%;
-  }
-
-  .dark {
     /* === Тени (темная тема) === */
     --shadow-sm: 0 2px 24px rgba(0, 0, 0, 0.35);
     --shadow-md: 0 4px 24px rgba(0, 0, 0, 0.35);
     --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.35);
-    --shadow-xl: 0 12px 24px rgba(0, 0, 0, 0.35);
 
     /* === Overlay === */
     --overlay: 0 0% 0%;
@@ -107,27 +30,15 @@
     --popover: 240 10% 3.9%;
     --popover-foreground: 0 0% 98%;
 
-    --surface-subtle: 226 30% 9%;
-    --surface-subtle-foreground: 226 30% 9%;
-
-    --surface-raised: 274 59% 13%;
-    --surface-raised-foreground: color-mix(
-      in hsl,
-      hsl(var(--primary)) 100%,
-      transparent
-    );
-    --surface-raised-subtitle: color-mix(
-      in hsl,
-      hsl(var(--primary)) 80%,
-      white
-    );
-    --surface-inactive-foreground: 0 0% 65%;
-    --surface-raised-border: 275 84% 38%;
-    --surface-raised-inactive-border: 215 16% 34%;
+    --surface-raised-foreground: 0 0% 100%;
+    --surface-inactive-foreground: 0 0% 98%;
 
     /* === Семантические цвета === */
-    --primary: 270 90% 70%;
+    --primary: 265 55% 50%;
     --primary-foreground: 0 0% 98%;
+
+    /* === UI элементы (белый цвет для интерактивных элементов) === */
+    --primary-ui: 0 0% 100%;
 
     --secondary: 240 3.7% 15.9%;
     --secondary-foreground: 0 0% 98%;
@@ -145,22 +56,14 @@
     --skeleton: 0 0% 76%;
 
     /* === Границы и инпуты === */
-    --border: 0 0% 65%;
-    --border-secondary: 217 21% 27%;
+    --border: 0 0% 100%;
     --input: 240 3.7% 15.9%;
 
     /* === Состояния === */
-    --inactive: 215 30% 17%;
-    --inactive-foreground: 0 0% 88%;
-
-    --button-active-soft: 217 21% 27%;
-
     --ring: 188 100% 55%;
-  }
 
-  /* === Color scheme для браузеров === */
-  :root {
-    color-scheme: light dark;
+    /* === Color scheme для браузеров === */
+    color-scheme: dark;
   }
 }
 
@@ -181,21 +84,15 @@
   --color-popover: hsl(var(--popover));
   --color-popover-foreground: hsl(var(--popover-foreground));
 
-  --color-surface-subtle: hsl(var(--surface-subtle));
-  --color-surface-subtle-foreground: hsl(var(--surface-subtle-foreground));
-
-  --color-surface-raised: hsl(var(--surface-raised));
   --color-surface-raised-foreground: var(--surface-raised-foreground);
-  --color-surface-raised-subtitle: var(--surface-raised-subtitle);
   --color-surface-inactive-foreground: hsl(var(--surface-inactive-foreground));
-  --color-surface-raised-border: hsl(var(--surface-raised-border));
-  --color-surface-raised-inactive-border: hsl(
-    var(--surface-raised-inactive-border)
-  );
 
   /* === Семантические цвета === */
   --color-primary: hsl(var(--primary));
   --color-primary-foreground: hsl(var(--primary-foreground));
+
+  /* === UI элементы === */
+  --color-primary-ui: hsl(var(--primary-ui));
 
   --color-secondary: hsl(var(--secondary));
   --color-secondary-foreground: hsl(var(--secondary-foreground));
@@ -214,15 +111,9 @@
 
   /* === Границы и инпуты === */
   --color-border: hsl(var(--border));
-  --color-border-secondary: hsl(var(--border-secondary));
   --color-input: hsl(var(--input));
 
   /* === Состояния === */
-  --color-inactive: hsl(var(--inactive));
-  --color-inactive-foreground: hsl(var(--inactive-foreground));
-
-  --color-button-active-soft: hsl(var(--button-active-soft));
-
   --color-ring: hsl(var(--ring));
 
   /* === Overlay === */
@@ -244,7 +135,7 @@
   * {
     /* Firefox */
     scrollbar-width: thin;
-    scrollbar-color: hsl(var(--primary) / 0.3) transparent;
+    scrollbar-color: hsl(var(--primary-ui) / 0.3) transparent;
   }
 
   /* Webkit браузеры (Chrome, Safari, Edge) */
@@ -259,30 +150,30 @@
   }
 
   *::-webkit-scrollbar-thumb {
-    background: hsl(var(--primary) / 0.3);
+    background: hsl(var(--primary-ui) / 0.3);
     border-radius: 10px;
     transition: background 0.2s ease;
   }
 
   *::-webkit-scrollbar-thumb:hover {
-    background: hsl(var(--primary) / 0.5);
+    background: hsl(var(--primary-ui) / 0.5);
   }
 
   *::-webkit-scrollbar-thumb:active {
-    background: hsl(var(--primary) / 0.6);
+    background: hsl(var(--primary-ui) / 0.6);
   }
 
-  /* Для темной темы делаем скроллбар немного светлее */
-  .dark *::-webkit-scrollbar-thumb {
-    background: hsl(var(--primary) / 0.4);
+  /* Скроллбар для темной темы (единственный режим) */
+  *::-webkit-scrollbar-thumb {
+    background: hsl(var(--primary-ui) / 0.4);
   }
 
-  .dark *::-webkit-scrollbar-thumb:hover {
-    background: hsl(var(--primary) / 0.6);
+  *::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--primary-ui) / 0.6);
   }
 
-  .dark *::-webkit-scrollbar-thumb:active {
-    background: hsl(var(--primary) / 0.7);
+  *::-webkit-scrollbar-thumb:active {
+    background: hsl(var(--primary-ui) / 0.7);
   }
 }
 

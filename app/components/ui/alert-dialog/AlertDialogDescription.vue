@@ -1,7 +1,7 @@
 <template>
   <AlertDialogDescription
     v-bind="delegatedProps"
-    :class="cn('text-sm text-muted-foreground', props.class)"
+    :class="cn('text-sm text-foreground', props.class)"
   >
     <slot />
   </AlertDialogDescription>

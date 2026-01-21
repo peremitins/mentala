@@ -187,6 +187,10 @@ const showSceneBackground = computed(() => {
 const isMeditationAudioActive = computed(() => Boolean(currentTrack.value));
 const isBreathPracticePage = computed(() => {
   const path = route.path || '';
+  // Исключаем страницу создания кастомной практики, чтобы показывать фон обоев
+  if (path === '/breath-practices/custom') {
+    return false;
+  }
   // Глушим фон только на детальной практике, например /breath-practices/4-7-8
   return path.startsWith('/breath-practices/');
 });

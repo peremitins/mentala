@@ -1,6 +1,6 @@
 <template>
   <div
-    class="space-y-4 relative h-full overflow-y-auto rounded-lg"
+    class="space-y-2 relative h-full overflow-y-auto rounded-lg"
     :class="selectedTrackId ? '' : 'pb-[100px]'"
   >
     <MeditationDetailView
@@ -21,13 +21,14 @@
         type="practice-page"
         :count="5"
         :with-wrapper="false"
+        class="glass-deep p-4"
       />
 
       <StateBlock v-else-if="meditationsStore.error" state="error" class="px-4">
         <p class="text-sm text-center">{{ meditationsStore.error }}</p>
       </StateBlock>
 
-      <div v-else class="space-y-6">
+      <div v-else class="glass-deep">
         <MeditationSection
           v-for="(section, index) in visibleSections"
           :key="section.key"

@@ -318,10 +318,9 @@ export const userPreferences = pgTable('user_preferences', {
     .notNull(),
 });
 
-// Настройки чата (theme, voice, avatar, enablePreviousResponseId, enableSummary)
+// Настройки чата (voice, avatar, enablePreviousResponseId, enableSummary)
 export const chatSettings = pgTable('chat_settings', {
   userId: integer('user_id').primaryKey().notNull(),
-  theme: varchar('theme', { length: 10 }).notNull().default('dark'), // 'dark' | 'light'
   voice: boolean('voice').notNull().default(true),
   avatar: boolean('avatar').notNull().default(true),
   enablePreviousResponseId: boolean('enable_previous_response_id')

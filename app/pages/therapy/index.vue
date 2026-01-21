@@ -19,8 +19,6 @@
       :open="createModalOpen"
       header-title="Новая тема терапии"
       header-subtitle="Создайте тему под свои запросы: название, описание и эмодзи"
-      hero-title="Персонализируйте тему"
-      hero-subtitle="Эмодзи поможет быстрее находить её в списке"
       submit-label="Создать и настроить"
       name-placeholder="Например, «Поддержка перед выступлением»"
       @update:open="createModalOpen = $event"

@@ -8,7 +8,7 @@
         <div class="glass-deep p-6">
           <div class="text-center mb-6">
             <div class="text-2xl font-semibold text-foreground">Mentala</div>
-            <div class="text-sm text-muted-foreground">привязка аккаунта</div>
+            <div class="text-sm text-foreground">привязка аккаунта</div>
           </div>
 
           <div v-if="!linkingToken" class="text-sm text-destructive">
@@ -18,13 +18,13 @@
 
           <div v-else class="space-y-4">
             <div class="rounded-2xl border border-border/30 bg-muted/30 p-4">
-              <div class="text-sm text-muted-foreground">
+              <div class="text-sm text-foreground">
                 Мы нашли аккаунт с email
                 <span class="text-foreground font-medium">{{
                   linkingEmail
                 }}</span>
               </div>
-              <div class="text-xs text-muted-foreground mt-1">
+              <div class="text-xs text-foreground mt-1">
                 Подтвердите владение аккаунтом, чтобы связать Google.
               </div>
             </div>
@@ -84,7 +84,7 @@
                 </div>
 
                 <div
-                  class="text-xs text-muted-foreground"
+                  class="text-xs text-foreground"
                   v-if="attemptsLeft !== null"
                 >
                   Осталось попыток: {{ attemptsLeft }}
@@ -103,7 +103,7 @@
 
             <button
               type="button"
-              class="w-full py-2 rounded-xl text-muted-foreground hover:text-foreground border border-border/40 transition"
+              class="w-full py-2 rounded-xl text-foreground hover:text-foreground border border-border/40 transition"
               @click="cancelLinking"
             >
               Отмена

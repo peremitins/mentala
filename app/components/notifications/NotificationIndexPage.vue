@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-4 h-full overflow-y-auto rounded-lg">
+  <div class="space-y-2 h-full overflow-y-auto rounded-lg">
     <PageHeader :title="title" />
 
     <div class="glass-deep p-4">
@@ -66,9 +66,9 @@
                 {{ item.emoji }}
               </div>
 
-              <div class="flex-1 min-w-0 space-y-0.5">
+              <div class="text-elevated flex-1 min-w-0 space-y-0.5">
                 <div
-                  class="flex items-center justify-between gap-2 text-muted-foreground"
+                  class="flex items-center justify-between gap-2 text-foreground"
                 >
                   <h3
                     class="text-base font-semibold text-card-foreground truncate"
@@ -78,7 +78,7 @@
                   <button
                     v-if="item.canDelete"
                     type="button"
-                    class="rounded-full p-1 text-muted-foreground transition hover:text-destructive hover:bg-destructive/10"
+                    class="rounded-full p-1 text-foreground transition hover:text-destructive hover:bg-destructive/10"
                     title="Удалить"
                     @click.stop="handleRemove(item)"
                   >
@@ -86,9 +86,9 @@
                   </button>
                 </div>
                 <div
-                  class="flex items-center justify-between gap-2 text-muted-foreground"
+                  class="flex items-center justify-between gap-2 text-foreground"
                 >
-                  <p class="text-sm text-muted-foreground line-clamp-2">
+                  <p class="text-sm text-foreground line-clamp-2">
                     {{ item.description }}
                   </p>
                   <IconChevronRight class="h-4 w-4 opacity-50 flex-shrink-0" />
@@ -100,7 +100,7 @@
               <button
                 v-if="item.canDelete"
                 type="button"
-                class="rounded-full p-1 text-muted-foreground transition hover:text-destructive hover:bg-destructive/10"
+                    class="rounded-full p-1 text-foreground transition hover:text-destructive hover:bg-destructive/10"
                 title="Удалить"
                 @click.stop="handleRemove(item)"
               >

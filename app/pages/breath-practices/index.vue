@@ -1,12 +1,12 @@
 <template>
-  <div class="space-y-4 relative h-full overflow-y-auto rounded-lg pb-[100px]">
+  <div class="space-y-2 relative h-full overflow-y-auto rounded-lg pb-[100px]">
     <PageHeader
       title="🌬️&nbsp;Дыхательные практики"
       :show-back-button="true"
       @go-back="goBack"
     />
 
-    <div class="space-y-6">
+    <div class="glass-deep">
       <BreathPracticeSection
         v-for="(section, index) in builtInSections"
         :key="section.key"
@@ -22,15 +22,15 @@
       />
 
       <section
-        class="space-y-3 animate-slide-up"
+        class="animate-slide-up"
         :style="animationStyle(builtInSections.length)"
       >
-        <div class="flex items-center justify-between gap-3 px-1">
+        <div class="flex items-center justify-between gap-3 pb-2 pt-4 px-4">
           <div>
-            <p class="text-xs uppercase tracking-[0.08em] text-white/50">
+            <p class="text-[10px] uppercase tracking-[0.08em] text-foreground">
               Персональные
             </p>
-            <h3 class="text-xl font-semibold text-white">
+            <h3 class="text-lg font-semibold text-foreground">
               Мои практики &nbsp;<span class="mr-2">✨</span>
             </h3>
           </div>
@@ -38,7 +38,7 @@
 
         <div v-if="customItems.length" class="relative">
           <div
-            class="flex gap-4 overflow-x-auto pb-4 pl-2 pr-6 no-scrollbar"
+            class="flex gap-4 overflow-x-auto pb-4 pl-4 pr-6 no-scrollbar"
             data-lenis-prevent
             style="touch-action: pan-y pan-x"
           >
@@ -48,18 +48,20 @@
               :practice="item.practice"
               :accent-class="item.accentClass"
               :is-custom="item.isCustom"
+              :custom-id="item.customId"
               @open="openPracticeInGroup('custom', $event)"
+              @delete="handleDeletePractice"
             />
           </div>
         </div>
 
-        <div v-else class="glass-deep p-4 text-sm text-foreground/70">
-          Пока нет сохранённых практик. Собери свою — она появится здесь.
+        <div v-else class="glass-deep p-4 text-sm text-foreground/80 mb-4 mx-4">
+          Пока нет сохранённых практик. Собери свою!
         </div>
 
         <NuxtLink
           to="/breath-practices/custom"
-          class="flex group relative overflow-hidden rounded-lg border border-dashed border-white/20 bg-white/5 p-5 transition hover:-translate-y-0.5 hover:border-white/30"
+          class="flex group relative overflow-hidden rounded-lg border border-dashed border-white/20 bg-white/5 p-5 m-4 transition hover:-translate-y-0.5 hover:border-white/30"
         >
           <div class="pointer-events-none absolute inset-0">
             <div
@@ -73,9 +75,9 @@
               <p class="text-base font-semibold text-foreground">
                 Создать свою практику
               </p>
-              <p class="text-xs text-foreground/60">2–4 фазы, 1–30 секунд</p>
+              <p class="text-xs text-foreground/80">2–4 фазы, 1–30 секунд</p>
             </div>
-            <div class="flex items-center gap-2 text-xs text-foreground/70">
+            <div class="flex items-center gap-2 text-xs text-foreground/80">
               <span class="rounded-full bg-white/10 px-2 py-1">Открыть</span>
               <IconPlus class="h-3.5 w-3.5" />
             </div>
@@ -128,6 +130,15 @@
         </div>
       </DialogContent>
     </Dialog>
+
+    <!-- Модальное окно подтверждения удаления -->
+    <ConfirmModal
+      ref="deleteModalRef"
+      title="Удалить практику?"
+      confirm-label="Удалить"
+      cancel-label="Отмена"
+      @confirm="confirmDeletePractice"
+    />
   </div>
 </template>
 
@@ -153,6 +164,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/app/components/ui/dialog';
+import ConfirmModal from '@/app/components/ui/ConfirmModal.vue';
+import { useToast } from '@/app/composables/useToast';
 
 const store = useBreathPracticesStore();
 
@@ -195,6 +208,8 @@ const SECTION_META = [
 
 const dialogOpen = ref(false);
 const dialogSectionKey = ref<BreathPracticeTag | null>(null);
+const deleteModalRef = ref<InstanceType<typeof ConfirmModal> | null>(null);
+const pendingDeleteId = ref<string | null>(null);
 
 type BreathPracticeGroupKey = BreathPracticeTag | 'custom';
 
@@ -219,6 +234,7 @@ const customItems = computed<BreathPracticeCardItem[]>(() =>
     practice: mapCustomPractice(practice),
     accentClass: CUSTOM_GRADIENT,
     isCustom: true,
+    customId: practice.id, // Сохраняем ID для удаления
   }))
 );
 
@@ -262,6 +278,26 @@ function openViewAll(key: BreathPracticeTag) {
 
 function goBack() {
   navigateTo('/practices');
+}
+
+function handleDeletePractice(id: string) {
+  pendingDeleteId.value = id;
+  deleteModalRef.value?.open();
+}
+
+async function confirmDeletePractice() {
+  const id = pendingDeleteId.value;
+  if (!id) return;
+
+  try {
+    await store.removeCustom(id);
+    useToast('Практика удалена');
+  } catch (error: any) {
+    console.error('[BreathPractices] Failed to delete practice:', error);
+    useToast(error?.message || 'Не удалось удалить практику');
+  } finally {
+    pendingDeleteId.value = null;
+  }
 }
 
 onMounted(async () => {

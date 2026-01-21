@@ -2,7 +2,7 @@
   <div class="glass-deep p-5">
     <div class="flex items-start justify-between gap-3">
       <div>
-        <p class="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+        <p class="text-xs uppercase tracking-[0.2em] text-foreground">
           Уведомления
         </p>
         <p class="text-lg font-semibold text-foreground">
@@ -11,7 +11,7 @@
       </div>
       <Button
         size="sm"
-        variant="default"
+        variant="outline"
         class="text-[12px]"
         :disabled="loading"
         @click="$emit('edit')"
@@ -30,27 +30,27 @@
 
       <template v-else>
         <div v-if="preference">
-          <p class="text-sm text-muted-foreground">
+          <p class="text-sm text-foreground">
             Частота:
             <span class="font-medium text-foreground">
               {{ preference.timesPerDay }}
               {{ preference.timesPerDay === 1 ? 'раз' : 'раза' }} в день
             </span>
           </p>
-          <p class="text-sm text-muted-foreground">
+          <p class="text-sm text-foreground">
             Окно:
             <span class="font-medium text-foreground">
               {{ windowText }}
             </span>
           </p>
-          <p class="text-sm text-muted-foreground">
+          <p class="text-sm text-foreground">
             Дни:
             <span class="font-medium text-foreground">
               {{ daysText }}
             </span>
           </p>
         </div>
-        <p v-else class="text-sm text-muted-foreground">
+        <p v-else class="text-sm text-foreground">
           Уведомления ещё не настроены.
         </p>
       </template>

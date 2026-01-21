@@ -94,7 +94,7 @@ defineExpose({
           'flex h-10 w-full rounded-lg border-2 border-border bg-transparent px-3  text-sm',
           'ring-offset-background ',
           'placeholder:text-muted-foreground',
-          'focus-visible:outline-none focus:border-primary ',
+          'focus-visible:outline-none focus:border-primary-ui ',
           'disabled:cursor-not-allowed disabled:opacity-50',
           'transition-colors',
           showClear && hasValue ? 'pr-9' : '',

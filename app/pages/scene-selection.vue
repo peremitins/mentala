@@ -1,30 +1,28 @@
 <template>
-  <div class="space-y-4 h-full overflow-y-auto pb-[100px] rounded-lg">
+  <div class="space-y-2 h-full overflow-y-auto pb-[100px] rounded-lg">
     <PageHeader
       title="🌌 Атмосфера"
       :show-back-button="true"
       @go-back="goBack"
     />
 
-    <div class="space-y-6">
+    <div class="space-y-2">
       <section class="glass-deep p-4 space-y-4">
         <div class="flex items-center justify-between gap-4">
           <div class="space-y-1">
-            <p class="text-xs uppercase tracking-[0.08em] text-foreground/60">
-              Яркость фона
-            </p>
-            <p class="text-xs text-foreground/70">
+            <p class="text-sm text-foreground">Яркость фона</p>
+            <p class="text-xs text-foreground/80">
               Отрегулируйте яркость атмосферы и обоев.
             </p>
           </div>
-          <span class="text-xs text-foreground/60">
+          <span class="text-xs text-foreground/80">
             {{ brightnessPercent }}%
           </span>
         </div>
         <div class="flex items-center gap-3">
           <button
             type="button"
-            class="text-foreground/60 transition hover:text-foreground"
+            class="text-foreground transition hover:text-foreground"
             aria-label="Минимальная яркость"
             @click="setBrightnessMin"
           >
@@ -40,7 +38,7 @@
           />
           <button
             type="button"
-            class="text-foreground/70 transition hover:text-foreground"
+            class="text-foreground transition hover:text-foreground"
             aria-label="Максимальная яркость"
             @click="setBrightnessMax"
           >
@@ -52,19 +50,17 @@
       <section class="glass-deep p-4 space-y-4">
         <div class="flex items-center justify-between gap-4">
           <div class="space-y-1">
-            <p class="text-xs uppercase tracking-[0.08em] text-foreground/60">
-              Громкость сцены
-            </p>
-            <p class="text-xs text-foreground/70">
+            <p class="text-sm text-foreground">Громкость сцены</p>
+            <p class="text-xs text-foreground/80">
               Управляй уровнем фонового звучания.
             </p>
           </div>
-          <span class="text-xs text-foreground/60">{{ volume }}%</span>
+          <span class="text-xs text-foreground/80">{{ volume }}%</span>
         </div>
         <div class="flex items-center gap-3">
           <button
             type="button"
-            class="text-foreground/60 transition hover:text-foreground"
+            class="text-foreground transition hover:text-foreground"
             aria-label="Отключить звук"
             @click="setVolumeMin"
           >
@@ -80,7 +76,7 @@
           />
           <button
             type="button"
-            class="text-foreground/60 transition hover:text-foreground"
+            class="text-foreground transition hover:text-foreground"
             aria-label="Максимальная громкость"
             @click="setVolumeMax"
           >
@@ -93,7 +89,7 @@
         <div class="flex items-center justify-between gap-4">
           <div class="space-y-1">
             <p class="text-sm font-semibold text-foreground">Анимация обоев</p>
-            <p class="text-xs text-foreground/60">
+            <p class="text-xs text-foreground/80">
               Плавное движение фона для эффекта присутствия.
             </p>
           </div>
@@ -107,7 +103,7 @@
             <p class="text-sm font-semibold text-foreground">
               Воспроизведение звука вне приложения
             </p>
-            <p class="text-xs text-foreground/60">
+            <p class="text-xs text-foreground/80">
               После сворачивания звук отключится через выбранное время
             </p>
           </div>
@@ -122,7 +118,7 @@
           <template #trigger="{ formattedTime }">
             <button
               type="button"
-              class="flex w-full items-center justify-between rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-foreground/90 transition hover:bg-white/10"
+              class="flex w-full items-center justify-between rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-foreground transition hover:bg-white/10"
             >
               <span>{{ backgroundPlayLabel(formattedTime) }}</span>
               <IconClock class="h-4 w-4 opacity-70" />
@@ -131,7 +127,7 @@
         </TimePicker>
       </section>
 
-      <section class="space-y-3">
+      <section class="space-y-3 mt-6">
         <div class="px-1">
           <p class="text-xs uppercase tracking-[0.08em] text-foreground/60">
             Сцены
@@ -152,7 +148,7 @@
               class="relative overflow-hidden rounded-2xl border transition-all"
               :class="
                 isSelected(scene.id)
-                  ? 'border-primary/70 ring-2 ring-primary/30'
+                  ? 'border-primary-ui/70 ring-2 ring-primary-ui/30'
                   : 'border-white/10 hover:border-white/20'
               "
             >

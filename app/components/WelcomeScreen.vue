@@ -24,7 +24,7 @@
           <div class="text-base font-semibold text-foreground mb-1">
             Поговорить
           </div>
-          <div class="text-sm text-muted-foreground">
+          <div class="text-sm text-foreground">
             Начать диалог и получить поддержку
           </div>
         </div>

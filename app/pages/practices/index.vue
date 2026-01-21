@@ -1,5 +1,5 @@
 <template>
-  <div class="relative h-full overflow-y-auto space-y-4 pb-[100px]">
+  <div class="relative h-full overflow-y-auto space-y-2 pb-[100px]">
     <PageHeader title="Практики" />
 
     <div class="grid gap-4 grid-cols-1 xxs:grid-cols-2">
@@ -22,8 +22,8 @@
         <div class="relative z-10 space-y-3">
           <span class="text-3xl">🧘‍♀️</span>
           <div class="space-y-1">
-            <h2 class="text-xl font-semibold text-foreground">Медитации</h2>
-            <p class="text-sm text-foreground/70">
+            <h2 class="text-lg font-semibold text-foreground">Медитации</h2>
+            <p class="text-sm text-foreground/80">
               Музыка и звуки для отдыха и концентрации
             </p>
           </div>
@@ -49,10 +49,10 @@
         <div class="relative z-10 space-y-3">
           <span class="text-3xl">🌬️</span>
           <div class="space-y-1">
-            <h2 class="text-xl font-semibold text-foreground">
+            <h2 class="text-lg font-semibold text-foreground">
               Дыхательные практики
             </h2>
-            <p class="text-sm text-foreground/70">
+            <p class="text-sm text-foreground/80">
               Готовые практики + настройка под себя
             </p>
           </div>

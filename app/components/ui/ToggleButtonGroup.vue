@@ -41,12 +41,12 @@ const toggleItemVariants = cva(
     'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
     'disabled:pointer-events-none disabled:opacity-50',
     // Стили для активного состояния (через data-атрибуты Radix)
-    'data-[state=on]:border-primary data-[state=on]:bg-primary ',
-    'data-[state=on]:bg-primary/20 data-[state=on]:shadow-sm data-[state=on]:text-foreground  ',
+    'data-[state=on]:border-primary-ui data-[state=on]:bg-primary-ui ',
+    'data-[state=on]:bg-primary-ui/20 data-[state=on]:shadow-sm data-[state=on]:text-foreground  ',
     // Стили для неактивного состояния
     'data-[state=off]:border-border data-[state=off]:bg-card ',
     'data-[state=off]:hover:bg-transparent',
-    'data-[state=off]:hover:border-primary data-[state=off]:hover:text-foreground ',
+    'data-[state=off]:hover:border-primary-ui data-[state=off]:hover:text-foreground ',
     'data-[state=off]:text-surface-inactive-foreground ',
   ],
   {
