@@ -6,6 +6,7 @@ import type { MeditationTrackDto } from '@/shared/dto/meditations';
 const FADE_IN_MS = 1500;
 const FADE_OUT_MS = 2500;
 const PAUSE_FADE_MS = 600;
+const QUICK_STOP_FADE_MS = 80;
 const TICK_MS = 500;
 const LOOP_THRESHOLD_SEC = 0.12; // небольшой зазор перед концом для мгновенного рестарта
 const LOOP_REARM_SEC = 0.3; // окно, в котором разрешаем снова сработать триггер
@@ -15,6 +16,12 @@ type PendingGesturePlay = {
   track: MeditationTrackDto;
   timerMinutes?: number | null;
 };
+
+function shouldPreferWebAudio(track: MeditationTrackDto) {
+  if (!track?.isLoop) return false;
+  // Для бесшовного лупа используем WebAudio, если доступен.
+  return isWebAudioAvailable();
+}
 
 const globalState = {
   audio: null as HTMLAudioElement | null,
@@ -265,6 +272,7 @@ async function prepareWebAudioTrack(
   }
 
   const url = resolveMediaUrl(track.audioPath);
+  if (!url) return null;
   if (!globalState.audioBuffer || globalState.audioBufferUrl !== url) {
     globalState.audioBuffer = await loadAudioBuffer(url, context);
     globalState.audioBufferUrl = url;
@@ -569,7 +577,10 @@ function resumeTimer() {
   startTimerCountdown();
 }
 
-async function stop(withFade = true, options: { keepActionId?: boolean } = {}) {
+async function stop(
+  withFade = true,
+  options: { keepActionId?: boolean; quickFadeMs?: number } = {}
+) {
   if (!options.keepActionId) {
     bumpPlaybackActionId();
   }
@@ -578,6 +589,9 @@ async function stop(withFade = true, options: { keepActionId?: boolean } = {}) {
   if (globalState.playbackMode === 'webaudio') {
     if (withFade) {
       await fadeTo(0, FADE_OUT_MS);
+    } else if (options.quickFadeMs) {
+      // Быстро приглушаем, чтобы избежать щелчка при смене трека.
+      await fadeTo(0, options.quickFadeMs);
     }
     stopWebAudioSource();
     globalState.webAudioOffset = 0;
@@ -586,6 +600,9 @@ async function stop(withFade = true, options: { keepActionId?: boolean } = {}) {
     if (audio) {
       if (withFade) {
         await fadeTo(0, FADE_OUT_MS);
+      } else if (options.quickFadeMs) {
+        // Быстро приглушаем, чтобы избежать щелчка при смене трека.
+        await fadeTo(0, options.quickFadeMs);
       }
       audio.pause();
       audio.currentTime = 0;
@@ -637,14 +654,26 @@ async function play(track: MeditationTrackDto, timerMinutes?: number | null) {
 
   resetLoopGuard();
 
+  const shouldUseWebAudio = Boolean(track.isLoop) && isWebAudioAvailable();
+  if (shouldUseWebAudio) {
+    const unlocked = await unlockAudioContext();
+    if (!unlocked) {
+      // Для лупов не падаем на HTML, чтобы не было слышимого шва.
+      globalState.isPlaying.value = false;
+      globalState.isBuffering.value = false;
+      scheduleGestureUnlock(track, timerMinutes ?? null);
+      return;
+    }
+  }
+
   const sameTrack = globalState.currentTrack.value?.id === track.id;
   // Для бесконечных эмбиентов включаем Web Audio, чтобы убрать паузу на лупе.
-  const preferWebAudio = Boolean(track.isLoop) && isWebAudioAvailable();
+  const preferWebAudio = shouldPreferWebAudio(track);
   let mode: PlaybackMode = preferWebAudio ? 'webaudio' : 'html';
 
   if (!sameTrack || globalState.playbackMode !== mode) {
     // Останавливаем предыдущий трек перед запуском нового
-    await stop(false, { keepActionId: true });
+    await stop(false, { keepActionId: true, quickFadeMs: QUICK_STOP_FADE_MS });
     if (!isActionActive()) return;
   }
 
@@ -669,7 +698,18 @@ async function play(track: MeditationTrackDto, timerMinutes?: number | null) {
 
   try {
     if (mode === 'webaudio') {
-      const buffer = await prepareWebAudioTrack(track);
+      let buffer: AudioBuffer | null = null;
+      try {
+        buffer = await prepareWebAudioTrack(track);
+      } catch (error) {
+        console.warn(
+          '[MeditationPlayer] WebAudio failed, fallback to HTML:',
+          error
+        );
+        globalState.audioBuffer = null;
+        globalState.audioBufferUrl = '';
+        buffer = null;
+      }
       if (abortIfStale()) return;
       if (!buffer) {
         mode = 'html';
@@ -683,7 +723,17 @@ async function play(track: MeditationTrackDto, timerMinutes?: number | null) {
     if (mode === 'html') {
       if (typeof Audio === 'undefined') return;
       if (!globalState.audio || !sameTrack) {
-        const audio = new Audio(resolveMediaUrl(track.audioPath));
+        const audioUrl = resolveMediaUrl(track.audioPath);
+        if (!audioUrl) {
+          // Без валидного URL нет смысла запускать воспроизведение.
+          globalState.isBuffering.value = false;
+          console.error('[MeditationPlayer] Missing audio URL:', {
+            trackId: track.id,
+            audioPath: track.audioPath,
+          });
+          return;
+        }
+        const audio = new Audio(audioUrl);
         localAudio = audio;
         audio.loop = Boolean(track.isLoop);
         audio.preload = 'auto';
@@ -717,6 +767,11 @@ async function play(track: MeditationTrackDto, timerMinutes?: number | null) {
 
         audio.onerror = () => {
           if (globalState.audio !== audio) return;
+          console.error('[MeditationPlayer] Audio error:', {
+            trackId: track.id,
+            src: audio.currentSrc || audio.src,
+            code: audio.error?.code,
+          });
           globalState.isPlaying.value = false;
         };
 

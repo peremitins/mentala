@@ -8,28 +8,9 @@
         :class="{ 'scene-bg-static': !sceneSettings.animateBackground }"
         :style="{ opacity: uiSettings.auroraOpacity }"
       >
-        <div class="meditation-bg-pan-x h-full w-full">
-          <div class="meditation-bg-pan-y h-full w-full">
-            <img
-              :src="sceneBackground"
-              alt=""
-              aria-hidden="true"
-              class="meditation-bg-media h-full w-full"
-              loading="lazy"
-              decoding="async"
-            />
-          </div>
-        </div>
-      </div>
-    </Transition>
-    <div
-      v-if="isMeditationDetail && detailBackground"
-      class="pointer-events-none fixed inset-0 z-[2] overflow-hidden"
-    >
-      <div class="meditation-bg-pan-x h-full w-full">
-        <div class="meditation-bg-pan-y h-full w-full">
+        <div class="meditation-bg-pan h-full w-full">
           <img
-            :src="detailBackground"
+            :src="sceneBackground"
             alt=""
             aria-hidden="true"
             class="meditation-bg-media h-full w-full"
@@ -37,6 +18,21 @@
             decoding="async"
           />
         </div>
+      </div>
+    </Transition>
+    <div
+      v-if="isMeditationDetail && detailBackground"
+      class="pointer-events-none fixed inset-0 z-[2] overflow-hidden"
+    >
+      <div class="meditation-bg-pan h-full w-full">
+        <img
+          :src="detailBackground"
+          alt=""
+          aria-hidden="true"
+          class="meditation-bg-media h-full w-full"
+          loading="lazy"
+          decoding="async"
+        />
       </div>
     </div>
     <div class="relative z-10 flex min-h-0 flex-1 flex-col">
@@ -304,8 +300,7 @@ watch(
   opacity: 0;
 }
 
-.scene-bg-static .meditation-bg-pan-x,
-.scene-bg-static .meditation-bg-pan-y {
+.scene-bg-static .meditation-bg-pan {
   animation: none;
   transform: none;
 }
@@ -323,117 +318,32 @@ watch(
   background: #000;
 }
 
-.meditation-bg-pan-x {
+.meditation-bg-pan {
   position: absolute;
   inset: -10%;
   width: 120%;
   height: 120%;
-  animation: meditation-pan-x 70s linear infinite;
+  animation: meditation-pan-diagonal 70s linear infinite;
   will-change: transform;
-}
-
-.meditation-bg-pan-y {
-  position: absolute;
-  inset: 0;
-  animation: meditation-pan-y 80s linear infinite;
-  will-change: transform;
-}
-
-/* На всякий случай фиксируем подложку и отсечение краёв. */
-.meditation-bg-pan-x,
-.meditation-bg-pan-y {
   overflow: hidden;
   background: #000;
 }
 
 /* Плавная траектория без остановок и резких углов. */
-@keyframes meditation-pan-x {
+@keyframes meditation-pan-diagonal {
   0% {
-    transform: translate3d(0px, 0, 0);
-  }
-  8.333% {
-    transform: translate3d(14px, 0, 0);
-  }
-  16.667% {
-    transform: translate3d(26px, 0, 0);
-  }
-  25% {
-    transform: translate3d(30px, 0, 0);
-  }
-  33.333% {
-    transform: translate3d(22px, 0, 0);
-  }
-  41.667% {
-    transform: translate3d(6px, 0, 0);
+    transform: scale(1.11) translate3d(0px, 0px, 0);
   }
   50% {
-    transform: translate3d(-12px, 0, 0);
-  }
-  58.333% {
-    transform: translate3d(-26px, 0, 0);
-  }
-  66.667% {
-    transform: translate3d(-32px, 0, 0);
-  }
-  75% {
-    transform: translate3d(-24px, 0, 0);
-  }
-  83.333% {
-    transform: translate3d(-8px, 0, 0);
-  }
-  91.667% {
-    transform: translate3d(10px, 0, 0);
+    transform: scale(1.13) translate3d(44px, 40px, 0);
   }
   100% {
-    transform: translate3d(0px, 0, 0);
-  }
-}
-
-@keyframes meditation-pan-y {
-  0% {
-    transform: translate3d(0, -22px, 0);
-  }
-  8.333% {
-    transform: translate3d(0, -12px, 0);
-  }
-  16.667% {
-    transform: translate3d(0, 2px, 0);
-  }
-  25% {
-    transform: translate3d(0, 18px, 0);
-  }
-  33.333% {
-    transform: translate3d(0, 30px, 0);
-  }
-  41.667% {
-    transform: translate3d(0, 24px, 0);
-  }
-  50% {
-    transform: translate3d(0, 8px, 0);
-  }
-  58.333% {
-    transform: translate3d(0, -8px, 0);
-  }
-  66.667% {
-    transform: translate3d(0, -22px, 0);
-  }
-  75% {
-    transform: translate3d(0, -30px, 0);
-  }
-  83.333% {
-    transform: translate3d(0, -20px, 0);
-  }
-  91.667% {
-    transform: translate3d(0, -6px, 0);
-  }
-  100% {
-    transform: translate3d(0, -22px, 0);
+    transform: scale(1.11) translate3d(0px, 0px, 0);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .meditation-bg-pan-x,
-  .meditation-bg-pan-y {
+  .meditation-bg-pan {
     animation: none;
     transform: none;
   }

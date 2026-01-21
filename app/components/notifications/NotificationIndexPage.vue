@@ -67,18 +67,36 @@
               </div>
 
               <div class="flex-1 min-w-0 space-y-0.5">
-                <h3
-                  class="text-base font-semibold text-card-foreground truncate"
+                <div
+                  class="flex items-center justify-between gap-2 text-muted-foreground"
                 >
-                  {{ item.name }}
-                </h3>
-                <p class="text-sm text-muted-foreground line-clamp-2">
-                  {{ item.description }}
-                </p>
+                  <h3
+                    class="text-base font-semibold text-card-foreground truncate"
+                  >
+                    {{ item.name }}
+                  </h3>
+                  <button
+                    v-if="item.canDelete"
+                    type="button"
+                    class="rounded-full p-1 text-muted-foreground transition hover:text-destructive hover:bg-destructive/10"
+                    title="Удалить"
+                    @click.stop="handleRemove(item)"
+                  >
+                    <IconTrash class="h-4 w-4" />
+                  </button>
+                </div>
+                <div
+                  class="flex items-center justify-between gap-2 text-muted-foreground"
+                >
+                  <p class="text-sm text-muted-foreground line-clamp-2">
+                    {{ item.description }}
+                  </p>
+                  <IconChevronRight class="h-4 w-4 opacity-50 flex-shrink-0" />
+                </div>
               </div>
             </div>
 
-            <div class="flex items-center gap-2 text-muted-foreground">
+            <!-- <div class="flex items-center gap-2 text-muted-foreground">
               <button
                 v-if="item.canDelete"
                 type="button"
@@ -89,10 +107,13 @@
                 <IconTrash class="h-4 w-4" />
               </button>
               <IconChevronRight class="h-4 w-4 opacity-50" />
-            </div>
+            </div> -->
           </div>
 
-          <Separator v-if="hasQuickActions(item)" class="mx-4 opacity-60" />
+          <Separator
+            v-if="hasQuickActions(item)"
+            class="mx-4 w-auto opacity-60"
+          />
 
           <div
             v-if="hasQuickActions(item)"
@@ -248,7 +269,9 @@ type ResolvedQuickActions = {
   breath: boolean;
 };
 
-function resolveQuickActions(item: NotificationIndexItem): ResolvedQuickActions {
+function resolveQuickActions(
+  item: NotificationIndexItem
+): ResolvedQuickActions {
   if (item.quickActions) {
     return {
       chat: Boolean(item.quickActions.chat),

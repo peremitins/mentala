@@ -6,6 +6,8 @@ import type { SceneTrack } from '@/app/lib/sceneSelectionCatalog';
 const FADE_IN_MS = 1200;
 const FADE_OUT_MS = 1200;
 const PLAY_START_TIMEOUT_MS = 1200;
+// На мобильных даём больше времени на старт (медленные сети/буферизация).
+const PLAY_START_TIMEOUT_MOBILE_MS = 5000;
 // В режиме обоев все сцены должны повторяться бесконечно.
 const SCENE_LOOP_ENABLED = true;
 
@@ -14,6 +16,30 @@ type PlaybackMode = 'html' | 'webaudio';
 type PendingPlay = {
   scene: SceneTrack;
 };
+
+function getUserAgent() {
+  if (typeof navigator === 'undefined') return '';
+  return navigator.userAgent || '';
+}
+
+function isMobileUserAgent() {
+  const ua = getUserAgent();
+  if (!ua) return false;
+  return /iphone|ipad|ipod|android/i.test(ua);
+}
+
+function shouldPreferWebAudio() {
+  if (!isWebAudioAvailable()) return false;
+  // На мобильных WebAudio часто нестабилен и более затратный по CPU.
+  if (isMobileUserAgent()) return false;
+  return true;
+}
+
+function getPlayStartTimeoutMs() {
+  return isMobileUserAgent()
+    ? PLAY_START_TIMEOUT_MOBILE_MS
+    : PLAY_START_TIMEOUT_MS;
+}
 
 const globalState = {
   audio: null as HTMLAudioElement | null,
@@ -202,14 +228,23 @@ async function fadeTo(targetVolume: number, durationMs: number) {
 }
 
 async function attemptHtmlPlayback(audio: HTMLAudioElement) {
+  let onPlaying: (() => void) | null = null;
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
   try {
     const playPromise = audio.play();
     if (!playPromise) return { started: true };
+    const playingPromise = new Promise<'playing'>((resolve) => {
+      onPlaying = () => resolve('playing');
+      audio.addEventListener('playing', onPlaying, { once: true });
+    });
     const result = await Promise.race([
       playPromise.then(() => 'started' as const),
+      playingPromise,
       new Promise<'timeout'>((resolve) => {
-        timeoutId = setTimeout(() => resolve('timeout'), PLAY_START_TIMEOUT_MS);
+        timeoutId = setTimeout(
+          () => resolve('timeout'),
+          getPlayStartTimeoutMs()
+        );
       }),
     ]);
     if (result === 'timeout') {
@@ -224,6 +259,9 @@ async function attemptHtmlPlayback(audio: HTMLAudioElement) {
   } catch (error) {
     return { started: false, error };
   } finally {
+    if (onPlaying) {
+      audio.removeEventListener('playing', onPlaying);
+    }
     if (timeoutId) {
       clearTimeout(timeoutId);
     }
@@ -282,7 +320,9 @@ async function loadAudioBuffer(
   return await context.decodeAudioData(arrayBuffer);
 }
 
-async function prepareWebAudioScene(scene: SceneTrack): Promise<AudioBuffer | null> {
+async function prepareWebAudioScene(
+  scene: SceneTrack
+): Promise<AudioBuffer | null> {
   if (!globalState.audioUnlocked) {
     // Не создаём контекст до первого жеста, чтобы избежать autoplay‑ошибок.
     return null;
@@ -590,7 +630,7 @@ async function play(scene: SceneTrack) {
     globalState.currentScene.value = scene;
   }
 
-  let mode: PlaybackMode = isWebAudioAvailable() ? 'webaudio' : 'html';
+  let mode: PlaybackMode = shouldPreferWebAudio() ? 'webaudio' : 'html';
   if (mode === 'webaudio') {
     try {
       const buffer = await prepareWebAudioScene(scene);
@@ -635,6 +675,11 @@ async function play(scene: SceneTrack) {
       audio.onerror = () => {
         globalState.isBuffering.value = false;
         globalState.isPlaying.value = false;
+        console.error('[SceneAudio] Audio error:', {
+          sceneId: scene.id,
+          src: audio.currentSrc || audio.src,
+          code: audio.error?.code,
+        });
       };
       globalState.audio = audio;
     }
