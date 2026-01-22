@@ -1,78 +1,57 @@
 <template>
-  <div class="space-y-6">
+  <div class="space-y-2">
     <section class="space-y-4">
-      <div v-if="loading" class="text-sm text-foreground">
-        Загрузка...
-      </div>
+      <div v-if="loading" class="text-sm text-foreground">Загрузка...</div>
 
       <div v-else-if="user" class="space-y-4">
-        <!-- ID -->
-        <div class="space-y-2">
-          <label class="text-sm font-medium text-foreground"> ID </label>
-          <Input
-            :model-value="String(user.id)"
-            disabled
-            :show-clear-button="false"
-          />
-        </div>
+        <section class="scroll-mt-24 rounded-lg glass-deep p-4 space-y-4">
+          <!-- Email -->
+          <div class="space-y-2">
+            <label class="text-sm font-medium text-foreground"> Email </label>
+            <Input
+              :model-value="user.email || 'Не указан'"
+              type="email"
+              disabled
+              :show-clear-button="false"
+            />
+          </div>
 
-        <!-- Email -->
-        <div class="space-y-2">
-          <label class="text-sm font-medium text-foreground"> Email </label>
-          <Input
-            :model-value="user.email || 'Не указан'"
-            type="email"
-            disabled
-            :show-clear-button="false"
-          />
-        </div>
+          <!-- Name -->
+          <div class="space-y-2">
+            <label class="text-sm font-medium text-foreground"> Имя </label>
+            <Input
+              v-model="editableName"
+              type="text"
+              maxlength="40"
+              :show-clear-button="false"
+              placeholder="Имя или никнейм"
+            />
+            <p v-if="nameError" class="text-xs text-destructive">
+              {{ nameError }}
+            </p>
+          </div>
 
-        <!-- Name -->
-        <div class="space-y-2">
-          <label class="text-sm font-medium text-foreground"> Имя </label>
-          <Input
-            v-model="editableName"
-            type="text"
-            maxlength="40"
-            :show-clear-button="false"
-            placeholder="Имя или никнейм"
-          />
-          <p v-if="nameError" class="text-xs text-destructive">
-            {{ nameError }}
-          </p>
-        </div>
+          <!-- Gender -->
+          <div class="space-y-2">
+            <label class="text-sm font-medium text-foreground"> Пол </label>
+            <ToggleButtonGroup
+              v-model="gender"
+              :options="genderOptions"
+              layout="flex"
+              size="sm"
+              variant="outline"
+              item-max-width="200px"
+            />
+          </div>
 
-        <!-- Gender -->
-        <div class="space-y-2">
-          <label class="text-sm font-medium text-foreground"> Пол </label>
-          <ToggleButtonGroup
-            v-model="gender"
-            :options="genderOptions"
-            layout="flex"
-            size="sm"
-            variant="outline"
-            item-max-width="200px"
-          />
-        </div>
-
-        <Button
-          class="w-fit"
-          :disabled="!canSaveProfile || savingProfile"
-          @click="saveProfile"
-        >
-          {{ savingProfile ? 'Сохранение...' : 'Сохранить' }}
-        </Button>
-
-        <!-- Locale -->
-        <div class="space-y-2">
-          <label class="text-sm font-medium text-foreground"> Локаль </label>
-          <Input
-            :model-value="user.locale || 'Не указана'"
-            type="text"
-            disabled
-            :show-clear-button="false"
-          />
-        </div>
+          <Button
+            class="w-fit bg-primary text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+            :disabled="!canSaveProfile"
+            @click="saveProfile"
+          >
+            {{ savingProfile ? 'Сохранение...' : 'Сохранить' }}
+          </Button>
+        </section>
       </div>
 
       <div v-else class="text-sm text-destructive">
@@ -81,7 +60,10 @@
     </section>
 
     <!-- Email verification -->
-    <section class="space-y-4 border-t border-border pt-6" v-if="user">
+    <section
+      v-if="user"
+      class="scroll-mt-24 rounded-lg glass-deep p-4 space-y-4"
+    >
       <div class="space-y-2">
         <h3 class="text-sm font-semibold text-foreground">Email</h3>
         <div class="flex items-center gap-2">
@@ -126,10 +108,7 @@
             @input="onEmailCodeInput"
           />
         </div>
-        <div
-          class="text-xs text-foreground"
-          v-if="emailAttemptsLeft !== null"
-        >
+        <div class="text-xs text-foreground" v-if="emailAttemptsLeft !== null">
           Осталось попыток: {{ emailAttemptsLeft }}
         </div>
         <Button
@@ -142,7 +121,10 @@
     </section>
 
     <!-- Password management -->
-    <section class="space-y-4 border-t border-border pt-6" v-if="user">
+    <section
+      v-if="user"
+      class="scroll-mt-24 rounded-lg glass-deep p-4 space-y-4"
+    >
       <div class="space-y-2">
         <h3 class="text-sm font-semibold text-foreground">Пароль</h3>
         <p class="text-sm text-foreground">
@@ -216,45 +198,6 @@
         </Button>
       </div>
     </section>
-
-    <!-- Удаление аккаунта -->
-    <section class="space-y-4 border-t border-border pt-6">
-      <div class="space-y-2">
-        <h3 class="text-sm font-semibold text-foreground">Удаление аккаунта</h3>
-        <p class="text-sm text-foreground">
-          Удаление аккаунта необратимо. Все ваши данные будут удалены.
-        </p>
-      </div>
-
-      <AlertDialog
-        :open="showDeleteDialog"
-        @update:open="showDeleteDialog = $event"
-      >
-        <AlertDialogTrigger as-child>
-          <Button variant="destructive" :disabled="isDeleting">
-            Удалить аккаунт
-          </Button>
-        </AlertDialogTrigger>
-        <AlertDialogContent class="glass-deep">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Удалить аккаунт?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Вы уверены, что хотите удалить свой аккаунт?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel :disabled="isDeleting">Отмена</AlertDialogCancel>
-            <AlertDialogAction
-              :class="buttonVariants({ variant: 'destructive' })"
-              @click="handleDeleteAccount"
-              :disabled="isDeleting"
-            >
-              {{ isDeleting ? 'Удаление...' : 'Да, удалить аккаунт' }}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </section>
   </div>
 </template>
 
@@ -265,31 +208,18 @@ import { useAuthStore } from '@/app/stores/auth';
 import { Input } from '@/app/components/ui/shadcn/input';
 import { Button } from '@/app/components/ui/button';
 import ToggleButtonGroup from '@/app/components/ui/ToggleButtonGroup.vue';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/app/components/ui/alert-dialog';
 import { useToast } from '@/app/composables/useToast';
-import { useRouter } from 'vue-router';
-import { buttonVariants } from '@/app/components/ui/button';
 import type { Gender } from '@/shared/dto/onboarding';
 
 const auth = useAuthStore();
-const router = useRouter();
 const user = ref<any>(null);
 const loading = ref(true);
-const showDeleteDialog = ref(false);
-const isDeleting = ref(false);
 const editableName = ref('');
 const gender = ref<Gender | null>(null);
 const savingProfile = ref(false);
+const initialProfile = ref<{ name: string; gender: Gender | null } | null>(
+  null
+);
 
 const emailCode = ref('');
 const emailAttemptsLeft = ref<number | null>(null);
@@ -309,14 +239,27 @@ const {
 
 const emailVerified = computed(() => !!user.value?.emailVerifiedAt);
 const hasPassword = computed(() => !!user.value?.hasPassword);
+const normalizedName = computed(() => editableName.value.trim());
 const nameError = computed(() => {
-  const trimmed = editableName.value.trim();
+  const trimmed = normalizedName.value;
   if (!trimmed) return 'Имя не может быть пустым';
   if (trimmed.length > 40) return 'Максимум 40 символов';
   return '';
 });
+const isProfileDirty = computed(() => {
+  if (!initialProfile.value) return false;
+  return (
+    normalizedName.value !== initialProfile.value.name ||
+    gender.value !== initialProfile.value.gender
+  );
+});
 const canSaveProfile = computed(() => {
-  return !nameError.value && !!gender.value && !savingProfile.value;
+  return (
+    !nameError.value &&
+    !!gender.value &&
+    !savingProfile.value &&
+    isProfileDirty.value
+  );
 });
 
 const genderOptions = [
@@ -332,6 +275,10 @@ onMounted(async () => {
     user.value = auth.user;
     editableName.value = user.value?.name || '';
     gender.value = (user.value as any)?.gender || null;
+    initialProfile.value = {
+      name: normalizedName.value,
+      gender: gender.value,
+    };
   } catch (error) {
     console.error('Не удалось загрузить данные пользователя:', error);
   } finally {
@@ -373,6 +320,10 @@ async function saveProfile() {
         (auth.user as any).ageRange =
           updated.ageRange ?? (auth.user as any).ageRange;
       }
+      initialProfile.value = {
+        name: normalizedName.value,
+        gender: gender.value,
+      };
       useToast('Сохранено', 'Профиль обновлён');
     } else {
       useToast('Ошибка', 'Не удалось обновить профиль', 'error');
@@ -521,50 +472,6 @@ async function handleChangePassword() {
     useToast('Ошибка', String(message), 'error');
   } finally {
     passwordLoading.value = false;
-  }
-}
-
-async function handleDeleteAccount() {
-  if (isDeleting.value) return;
-
-  isDeleting.value = true;
-
-  try {
-    const response = await useAPI<{
-      ok?: boolean;
-      error?: boolean;
-      message?: string;
-      jobId?: string;
-      loggedOut?: boolean;
-      canRestore?: boolean;
-    }>('/api/user/delete', {
-      method: 'POST',
-    });
-
-    if (response.error) {
-      useToast('Ошибка', response.message || 'Не удалось удалить аккаунт');
-      showDeleteDialog.value = false;
-      return;
-    }
-
-    if (response.ok && response.loggedOut) {
-      showDeleteDialog.value = false;
-
-      useToast('Аккаунт удалён');
-
-      await auth.logout();
-      await router.push('/');
-    }
-  } catch (error: any) {
-    console.error('Не удалось удалить аккаунт:', error);
-    const errorMessage =
-      error?.response?.data?.message ||
-      error?.message ||
-      'Не удалось удалить аккаунт';
-    useToast('Ошибка', errorMessage);
-    showDeleteDialog.value = false;
-  } finally {
-    isDeleting.value = false;
   }
 }
 </script>

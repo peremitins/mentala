@@ -1,6 +1,6 @@
 <template>
-  <div class="space-y-2">
-    <label v-if="label" class="text-sm font-medium text-foreground">
+  <div class="space-y-3">
+    <label v-if="label" class="text-sm font-medium text-foreground flex">
       {{ label }}
     </label>
     <ToggleGroup
