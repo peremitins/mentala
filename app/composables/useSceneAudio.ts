@@ -69,6 +69,7 @@ const globalState = {
   wasPlayingBeforeBackground: false,
   isSuspended: ref(false),
   wasPlayingBeforeSuspend: false,
+  playbackAllowed: ref(true),
   audioUnlocked: false,
   playbackActionId: 0,
 };
@@ -76,6 +77,14 @@ const globalState = {
 function clampNumber(value: number, min: number, max: number) {
   const safe = Number.isFinite(value) ? value : min;
   return Math.min(max, Math.max(min, safe));
+}
+
+async function setPlaybackAllowed(allowed: boolean) {
+  globalState.playbackAllowed.value = allowed;
+  if (allowed) return;
+  // На публичных экранах полностью блокируем запуск звука и чистим хвосты.
+  clearGestureUnlock();
+  await stop(false);
 }
 
 function clearGestureUnlock() {
@@ -148,6 +157,7 @@ function ensureGlobalGestureUnlock() {
 
 function scheduleGestureUnlock(scene: SceneTrack) {
   if (!isDocumentAvailable() || typeof window === 'undefined') return;
+  if (!globalState.playbackAllowed.value) return;
   clearGestureUnlock();
   ensureGlobalGestureUnlock();
 
@@ -560,6 +570,7 @@ function isPlaybackPaused() {
 }
 
 async function attemptForegroundResume() {
+  if (!globalState.playbackAllowed.value) return;
   const scene = globalState.currentScene.value;
   if (!scene) return;
   if (!shouldResumeOnForeground(scene)) return;
@@ -673,6 +684,12 @@ async function play(scene: SceneTrack) {
   const actionId = bumpPlaybackActionId();
   if (!isDocumentAvailable()) return;
   if (typeof Audio === 'undefined') return;
+  if (!globalState.playbackAllowed.value) {
+    // Защита от автозапуска на публичных маршрутах.
+    clearGestureUnlock();
+    globalState.isBuffering.value = false;
+    return;
+  }
   ensureGlobalGestureUnlock();
   ensureVisibilityListener();
   ensureAppStateListener();
@@ -917,6 +934,7 @@ async function suspend() {
 async function resume() {
   if (!globalState.isSuspended.value) return;
   globalState.isSuspended.value = false;
+  if (!globalState.playbackAllowed.value) return;
   if (globalState.wasPlayingBeforeSuspend && globalState.currentScene.value) {
     await play(globalState.currentScene.value);
   }
@@ -937,5 +955,6 @@ export function useSceneAudio() {
     setBackgroundPlayMinutes,
     suspend,
     resume,
+    setPlaybackAllowed,
   };
 }

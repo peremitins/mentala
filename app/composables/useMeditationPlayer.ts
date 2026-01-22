@@ -79,6 +79,7 @@ const globalState = {
   // Выбранная длительность таймера, сохраняется между треками.
   preferredTimerMinutes: ref<number | null>(null),
   sessionEnded: ref(false),
+  playbackAllowed: ref(true),
   queueIds: ref<string[]>([]),
   queueKey: ref<string | null>(null),
   fadeInterval: null as ReturnType<typeof setInterval> | null,
@@ -110,6 +111,14 @@ function clearGestureUnlock() {
     globalState.gestureUnlockCleanup = null;
   }
   globalState.pendingGesturePlay = null;
+}
+
+async function setPlaybackAllowed(allowed: boolean) {
+  globalState.playbackAllowed.value = allowed;
+  if (allowed) return;
+  // На публичных экранах полностью блокируем запуск звука и очищаем очередь.
+  clearGestureUnlock();
+  await stop(false);
 }
 
 async function unlockAudioContext(): Promise<boolean> {
@@ -178,6 +187,7 @@ function scheduleGestureUnlock(
   timerMinutes?: number | null
 ) {
   if (!isDocumentAvailable() || typeof window === 'undefined') return;
+  if (!globalState.playbackAllowed.value) return;
   clearGestureUnlock();
   ensureGlobalGestureUnlock();
 
@@ -742,6 +752,12 @@ async function pause() {
 
 async function play(track: MeditationTrackDto, timerMinutes?: number | null) {
   if (!isDocumentAvailable()) return;
+  if (!globalState.playbackAllowed.value) {
+    // Защита от автозапуска на публичных маршрутах.
+    clearGestureUnlock();
+    globalState.isBuffering.value = false;
+    return;
+  }
 
   const actionId = bumpPlaybackActionId();
   const isActionActive = () => isPlaybackActionActive(actionId);
@@ -1029,6 +1045,7 @@ async function play(track: MeditationTrackDto, timerMinutes?: number | null) {
 }
 
 async function toggle(track: MeditationTrackDto, timerMinutes?: number | null) {
+  if (!globalState.playbackAllowed.value) return;
   if (globalState.isPlaying.value) {
     await pause();
     return;
@@ -1143,5 +1160,6 @@ export function useMeditationPlayer() {
     acknowledgeSession,
     setQueue,
     clearQueue,
+    setPlaybackAllowed,
   };
 }

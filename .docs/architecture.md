@@ -16,6 +16,7 @@
 • default (со встроенным BottomNav),
 • blank (fullscreen),
 • auth (центрирование форм; при входе на auth экран фоновые звуки и медитации принудительно выключаются).
+• Глобальная защита аудио: `app/plugins/audio-playback-guard.client.ts` отслеживает auth/роуты и через `setPlaybackAllowed` в `useSceneAudio` и `useMeditationPlayer` блокирует любой звук на публичных страницах и при разлогине.
 • UI‑настройки: `useUiSettingsStore` хранит локальные параметры интерфейса (яркость фона) в `persistentStorage` (web: localStorage, mobile: Capacitor Preferences). Яркость применяется к aurora‑слою и к затемнению фоновых изображений сцен (overlay).
 • Тема интерфейса: приложение использует только тёмную тему (dark theme) по умолчанию. Переключение между светлой и тёмной темой не поддерживается. Все CSS-переменные настроены на тёмную палитру в `:root`, класс `.dark` не используется. PWA manifest (`site.webmanifest`) и favicon настроены на тёмные цвета.
 • Страницы:
