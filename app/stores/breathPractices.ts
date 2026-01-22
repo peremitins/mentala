@@ -1,120 +1,113 @@
 import { defineStore } from 'pinia';
-import { nanoid } from 'nanoid';
 import type { BreathCustomPractice, BreathPhase } from '@/app/lib/breathPracticesCatalog';
-import {
-  getPersistentItem,
-  setPersistentItem,
-} from '@/app/utils/persistentStorage';
-
-const CUSTOM_PRACTICES_KEY = 'breath_practices_custom';
-const SETTINGS_KEY = 'breath_practices_settings';
-
-export type BreathCueMode = 'cue';
-
-export interface BreathPracticeSettings {
-  sessionMinutes: number;
-  soundEnabled: boolean;
-  volume: number;
-  hapticsEnabled: boolean;
-  cueMode: BreathCueMode;
-}
+import { useLoadersStore } from '@/app/stores/loaders';
+import { useToast } from '@/app/composables/useToast';
 
 interface BreathPracticesState {
   customPractices: BreathCustomPractice[];
-  settings: BreathPracticeSettings;
-  isLoaded: boolean;
+  error: string | null;
+  hasFetched: boolean; // Флаг что данные уже загружались хотя бы раз
 }
-
-const DEFAULT_SETTINGS: BreathPracticeSettings = {
-  sessionMinutes: 5,
-  soundEnabled: true,
-  volume: 100,
-  hapticsEnabled: true,
-  cueMode: 'cue',
-};
 
 export const useBreathPracticesStore = defineStore('breath-practices', {
   state: (): BreathPracticesState => ({
     customPractices: [],
-    settings: { ...DEFAULT_SETTINGS },
-    isLoaded: false,
+    error: null,
+    hasFetched: false,
   }),
   getters: {
     customById: (state) => (id: string) =>
       state.customPractices.find((practice) => practice.id === id) || null,
   },
   actions: {
-    async load(): Promise<void> {
-      if (this.isLoaded) return;
+    async load(force = false) {
+      const loaders = useLoadersStore();
 
-      // Загружаем кастомные практики и настройки в одном запросе к storage.
-      const [customRaw, settingsRaw] = await Promise.all([
-        getPersistentItem(CUSTOM_PRACTICES_KEY),
-        getPersistentItem(SETTINGS_KEY),
-      ]);
-
-      if (customRaw) {
-        try {
-          const parsed = JSON.parse(customRaw) as BreathCustomPractice[];
-          this.customPractices = Array.isArray(parsed) ? parsed : [];
-        } catch (error) {
-          console.error('[BreathPracticesStore] Failed to parse custom list:', error);
-          this.customPractices = [];
-        }
+      // Защита от одновременных вызовов
+      if (loaders.isSkeletonLoading) {
+        return;
       }
 
-      if (settingsRaw) {
-        try {
-          const parsed = JSON.parse(settingsRaw) as BreathPracticeSettings;
-          this.settings = {
-            ...DEFAULT_SETTINGS,
-            ...parsed,
-          };
-        } catch (error) {
-          console.error('[BreathPracticesStore] Failed to parse settings:', error);
-          this.settings = { ...DEFAULT_SETTINGS };
-        }
+      // Если уже загружали данные и не принудительное обновление - пропускаем
+      if (!force && this.hasFetched) {
+        return;
       }
 
-      this.isLoaded = true;
-    },
-
-    async saveSettings(partial: Partial<BreathPracticeSettings>): Promise<void> {
-      this.settings = {
-        ...this.settings,
-        ...partial,
-      };
-
-      await setPersistentItem(SETTINGS_KEY, JSON.stringify(this.settings));
+      this.error = null;
+      try {
+        const { $api } = useNuxtApp();
+        const data = await $api<BreathCustomPractice[]>('/api/breath-practices/custom');
+        this.customPractices = data;
+        this.hasFetched = true;
+      } catch (error: any) {
+        this.error = error?.message || 'Не удалось загрузить практики';
+        console.error('[BreathPracticesStore] load error:', error);
+        // Не показываем toast при первой загрузке, если пользователь не авторизован
+        if (error?.statusCode !== 401) {
+          useToast(error?.message || 'Не удалось загрузить практики');
+        }
+      }
     },
 
     async addCustom(name: string, phases: BreathPhase[]): Promise<BreathCustomPractice> {
-      const now = new Date().toISOString();
-      const practice: BreathCustomPractice = {
-        id: nanoid(),
-        name,
-        phases,
-        createdAt: now,
-        updatedAt: now,
-      };
+      const { $api } = useNuxtApp();
+      try {
+        const practice = await $api<BreathCustomPractice>('/api/breath-practices/custom', {
+          method: 'POST',
+          body: { name, phases },
+        });
+        this.customPractices.unshift(practice);
+        return practice;
+      } catch (error: any) {
+        console.error('[BreathPracticesStore] addCustom error:', error);
+        useToast(error?.message || 'Не удалось сохранить практику');
+        throw error;
+      }
+    },
 
-      this.customPractices = [practice, ...this.customPractices];
-      await setPersistentItem(
-        CUSTOM_PRACTICES_KEY,
-        JSON.stringify(this.customPractices)
-      );
-
-      return practice;
+    async updateCustom(
+      id: string,
+      payload: { name?: string; phases?: BreathPhase[] }
+    ): Promise<BreathCustomPractice> {
+      const { $api } = useNuxtApp();
+      try {
+        const updated = await $api<BreathCustomPractice>(
+          `/api/breath-practices/custom/${id}`,
+          {
+            method: 'PUT',
+            body: payload,
+          }
+        );
+        this.updateLocal(updated);
+        return updated;
+      } catch (error: any) {
+        console.error('[BreathPracticesStore] updateCustom error:', error);
+        useToast(error?.message || 'Не удалось обновить практику');
+        throw error;
+      }
     },
 
     async removeCustom(id: string): Promise<void> {
-      this.customPractices = this.customPractices.filter(
-        (practice) => practice.id !== id
-      );
-      await setPersistentItem(
-        CUSTOM_PRACTICES_KEY,
-        JSON.stringify(this.customPractices)
-      );
+      const { $api } = useNuxtApp();
+      try {
+        await $api(`/api/breath-practices/custom/${id}`, { method: 'DELETE' });
+        this.customPractices = this.customPractices.filter(
+          (practice) => practice.id !== id
+        );
+      } catch (error: any) {
+        console.error('[BreathPracticesStore] removeCustom error:', error);
+        useToast(error?.message || 'Не удалось удалить практику');
+        throw error;
+      }
+    },
+
+    updateLocal(practice: BreathCustomPractice) {
+      const index = this.customPractices.findIndex((p) => p.id === practice.id);
+      if (index !== -1) {
+        this.customPractices[index] = practice;
+      } else {
+        this.customPractices.push(practice);
+      }
     },
   },
 });

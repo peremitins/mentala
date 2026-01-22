@@ -28,8 +28,10 @@ function isMobileUserAgent() {
   return /iphone|ipad|ipod|android/i.test(ua);
 }
 
-function shouldPreferWebAudio() {
+function shouldPreferWebAudio(scene: SceneTrack | null) {
   if (!isWebAudioAvailable()) return false;
+  // Для loop-треков всегда используем WebAudio для бесшовного зацикливания
+  if (scene?.isLoop) return true;
   // На мобильных WebAudio часто нестабилен и более затратный по CPU.
   if (isMobileUserAgent()) return false;
   return true;
@@ -100,7 +102,8 @@ async function unlockAudioContext(): Promise<boolean> {
     return false;
   }
 
-  if (context.state === 'running') {
+  const state = context.state as AudioContextState;
+  if (state === 'running') {
     globalState.audioUnlocked = true;
     return true;
   }
@@ -312,12 +315,51 @@ async function loadAudioBuffer(
   url: string,
   context: AudioContext
 ): Promise<AudioBuffer> {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Failed to load audio: ${response.status}`);
+  // Добавляем таймаут для предотвращения зависания на мобильных
+  const controller = new AbortController();
+  const timeoutMs = isMobileUserAgent() ? 30000 : 15000;
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      throw new Error(`Failed to load audio: ${response.status}`);
+    }
+
+    // Проверяем размер файла перед загрузкой на мобильных
+    const contentLength = response.headers.get('content-length');
+    const MAX_SIZE_MB = 50;
+    if (contentLength && isMobileUserAgent()) {
+      const sizeMB = parseInt(contentLength, 10) / (1024 * 1024);
+      if (sizeMB > MAX_SIZE_MB) {
+        throw new Error(
+          `Audio file too large for mobile: ${sizeMB.toFixed(2)}MB`
+        );
+      }
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+
+    // Дополнительная проверка размера после загрузки
+    if (isMobileUserAgent()) {
+      const sizeMB = arrayBuffer.byteLength / (1024 * 1024);
+      if (sizeMB > MAX_SIZE_MB) {
+        throw new Error(
+          `Audio buffer too large for mobile: ${sizeMB.toFixed(2)}MB`
+        );
+      }
+    }
+
+    return await context.decodeAudioData(arrayBuffer);
+  } catch (error: any) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      throw new Error(`Audio load timeout after ${timeoutMs}ms`);
+    }
+    throw error;
   }
-  const arrayBuffer = await response.arrayBuffer();
-  return await context.decodeAudioData(arrayBuffer);
 }
 
 async function prepareWebAudioScene(
@@ -397,13 +439,18 @@ function updateWebAudioOffset() {
   const context = globalState.audioContext;
   const buffer = globalState.audioBuffer;
   if (!context || !buffer) return;
-  const elapsed = Math.max(0, context.currentTime - globalState.webAudioStartTime);
+  const elapsed = Math.max(
+    0,
+    context.currentTime - globalState.webAudioStartTime
+  );
   const total = globalState.webAudioOffset + elapsed;
   const duration = buffer.duration || 0;
   globalState.webAudioOffset = duration ? total % duration : total;
 }
 
-function createWebAudioSource(offsetSeconds: number): AudioBufferSourceNode | null {
+function createWebAudioSource(
+  offsetSeconds: number
+): AudioBufferSourceNode | null {
   const context = globalState.audioContext;
   const buffer = globalState.audioBuffer;
   const gain = globalState.audioGain;
@@ -443,9 +490,12 @@ async function scheduleBackgroundStop() {
     await stop(true);
     return;
   }
-  globalState.backgroundTimeout = setTimeout(() => {
-    void stop(true);
-  }, minutes * 60 * 1000);
+  globalState.backgroundTimeout = setTimeout(
+    () => {
+      void stop(true);
+    },
+    minutes * 60 * 1000
+  );
 }
 
 function handleVisibilityChange() {
@@ -529,7 +579,10 @@ async function handleBackgroundEnter() {
     if (globalState.isPlaying.value) {
       await pause(true);
     }
-    if (globalState.audioContext && globalState.audioContext.state === 'running') {
+    if (
+      globalState.audioContext &&
+      globalState.audioContext.state === 'running'
+    ) {
       try {
         await globalState.audioContext.suspend();
       } catch {
@@ -590,6 +643,13 @@ async function stop(withFade = true, options: { keepActionId?: boolean } = {}) {
     globalState.webAudioOffset = 0;
     globalState.isPlaying.value = false;
     globalState.playbackMode = null;
+
+    // Очищаем WebAudio буферы для освобождения памяти (критично для мобильных)
+    if (isMobileUserAgent()) {
+      globalState.audioBuffer = null;
+      globalState.audioBufferUrl = '';
+    }
+
     return;
   }
 
@@ -630,13 +690,41 @@ async function play(scene: SceneTrack) {
     globalState.currentScene.value = scene;
   }
 
-  let mode: PlaybackMode = shouldPreferWebAudio() ? 'webaudio' : 'html';
+  // Для loop-треков всегда используем WebAudio для бесшовного зацикливания
+  const shouldUseWebAudio = Boolean(scene.isLoop) && isWebAudioAvailable();
+  if (shouldUseWebAudio) {
+    const unlocked = await unlockAudioContext();
+    if (!unlocked) {
+      // Для лупов не падаем на HTML, чтобы не было слышимого шва.
+      globalState.isPlaying.value = false;
+      globalState.isBuffering.value = false;
+      scheduleGestureUnlock(scene);
+      return;
+    }
+  }
+
+  const preferWebAudio = shouldPreferWebAudio(scene);
+  let mode: PlaybackMode = preferWebAudio ? 'webaudio' : 'html';
+
+  // Если это loop-трек, принудительно используем WebAudio
+  if (scene.isLoop && isWebAudioAvailable()) {
+    mode = 'webaudio';
+  }
+
   if (mode === 'webaudio') {
     try {
       const buffer = await prepareWebAudioScene(scene);
       if (!isActionActive(actionId)) return;
       if (!buffer) {
-        mode = 'html';
+        // Если WebAudio не удалось загрузить и это не loop-трек, пробуем HTML
+        if (!scene.isLoop) {
+          mode = 'html';
+        } else {
+          // Для loop-треков не падаем на HTML
+          globalState.isBuffering.value = false;
+          scheduleGestureUnlock(scene);
+          return;
+        }
       } else {
         globalState.playbackMode = 'webaudio';
         globalState.isBuffering.value = true;
@@ -656,7 +744,14 @@ async function play(scene: SceneTrack) {
       }
     } catch (error) {
       console.error('[SceneAudio] Ошибка WebAudio:', error);
-      mode = 'html';
+      // Если WebAudio не удалось и это не loop-трек, пробуем HTML
+      if (!scene.isLoop) {
+        mode = 'html';
+      } else {
+        globalState.isBuffering.value = false;
+        scheduleGestureUnlock(scene);
+        return;
+      }
     }
   }
 
@@ -689,6 +784,58 @@ async function play(scene: SceneTrack) {
 
     globalState.playbackMode = 'html';
     globalState.isBuffering.value = true;
+
+    // Ждём готовности файла перед воспроизведением (критично для мобильных)
+    if (audio.readyState < HTMLMediaElement.HAVE_ENOUGH_DATA) {
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const timeoutMs = isMobileUserAgent() ? 30000 : 15000;
+          const timeoutId = setTimeout(() => {
+            audio.removeEventListener('canplaythrough', onCanPlay);
+            audio.removeEventListener('error', onError);
+            reject(new Error(`Audio load timeout after ${timeoutMs}ms`));
+          }, timeoutMs);
+
+          const onCanPlay = () => {
+            clearTimeout(timeoutId);
+            audio.removeEventListener('canplaythrough', onCanPlay);
+            audio.removeEventListener('error', onError);
+            resolve();
+          };
+
+          const onError = () => {
+            clearTimeout(timeoutId);
+            audio.removeEventListener('canplaythrough', onCanPlay);
+            audio.removeEventListener('error', onError);
+            reject(
+              new Error(`Audio load error: ${audio.error?.code || 'unknown'}`)
+            );
+          };
+
+          if (audio.readyState >= HTMLMediaElement.HAVE_ENOUGH_DATA) {
+            clearTimeout(timeoutId);
+            resolve();
+            return;
+          }
+
+          audio.addEventListener('canplaythrough', onCanPlay, { once: true });
+          audio.addEventListener('error', onError, { once: true });
+        });
+      } catch (error) {
+        console.error('[SceneAudio] Audio ready check failed:', error);
+        if (!isActionActive(actionId)) {
+          stopDetachedAudio(audio);
+          return;
+        }
+        // Пробуем воспроизвести даже если не все данные загружены
+      }
+    }
+
+    if (!isActionActive(actionId)) {
+      stopDetachedAudio(audio);
+      return;
+    }
+
     const playbackResult = await attemptHtmlPlayback(audio);
     if (!isActionActive(actionId)) {
       stopDetachedAudio(audio);
@@ -696,6 +843,15 @@ async function play(scene: SceneTrack) {
     }
     if (!playbackResult.started) {
       globalState.isBuffering.value = false;
+      if (playbackResult.timedOut) {
+        console.error(
+          '[SceneAudio] Playback timeout, file may be corrupted or too large'
+        );
+        // Пробуем перезагрузить файл
+        if (audio.src) {
+          audio.load();
+        }
+      }
       scheduleGestureUnlock(scene);
       return;
     }

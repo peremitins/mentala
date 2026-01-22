@@ -333,6 +333,10 @@ import IconSettings from '~icons/lucide/settings';
 import { useToast } from '@/app/composables/useToast';
 import { useBreathPracticesStore } from '@/app/stores/breathPractices';
 import {
+  loadBreathPracticeSettings,
+  saveBreathPracticeSettings,
+} from '@/app/utils/breathPracticeSettings';
+import {
   BREATH_PRACTICES,
   buildCustomPhases,
   findBreathPractice,
@@ -610,10 +614,12 @@ async function saveCustom() {
 onMounted(async () => {
   await store.load();
 
-  soundEnabled.value = store.settings.soundEnabled;
-  soundVolume.value = store.settings.volume;
-  hapticsEnabled.value = store.settings.hapticsEnabled;
-  sessionMinutes.value = clampNumber(store.settings.sessionMinutes, 1, 60);
+  // Загружаем настройки из локального хранилища
+  const settings = await loadBreathPracticeSettings();
+  soundEnabled.value = settings.soundEnabled;
+  soundVolume.value = settings.volume;
+  hapticsEnabled.value = settings.hapticsEnabled;
+  sessionMinutes.value = clampNumber(settings.sessionMinutes, 1, 60);
 
   if (soundEnabled.value) {
     await prepareAudio();
@@ -643,12 +649,12 @@ watch(
       return;
     }
     player.setSessionDuration(safe * 60);
-    void store.saveSettings({ sessionMinutes: safe });
+    void saveBreathPracticeSettings({ sessionMinutes: safe });
   }
 );
 
 watch(soundEnabled, (value) => {
-  void store.saveSettings({ soundEnabled: value });
+  void saveBreathPracticeSettings({ soundEnabled: value });
   if (value) {
     void prepareAudio();
     setVolume(soundVolume.value / 100);
@@ -657,11 +663,11 @@ watch(soundEnabled, (value) => {
 
 watch(soundVolume, (value) => {
   setVolume(clampNumber(value, 0, 100) / 100);
-  void store.saveSettings({ volume: clampNumber(value, 0, 100) });
+  void saveBreathPracticeSettings({ volume: clampNumber(value, 0, 100) });
 });
 
 watch(hapticsEnabled, (value) => {
-  void store.saveSettings({ hapticsEnabled: value });
+  void saveBreathPracticeSettings({ hapticsEnabled: value });
 });
 
 onBeforeUnmount(() => {

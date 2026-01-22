@@ -252,6 +252,26 @@ export const therapyTopicsCustom = pgTable('therapy_topics_custom', {
     .notNull(),
 });
 
+// Пользовательские дыхательные практики
+export const breathPracticesCustom = pgTable(
+  'breath_practices_custom',
+  {
+    id: text('id').primaryKey(),
+    userId: integer('user_id').notNull(),
+    name: varchar('name', { length: 120 }).notNull(),
+    phases: jsonb('phases').notNull(), // Массив BreathPhase
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    userIndex: index('idx_breath_practices_custom_user').on(table.userId),
+  })
+);
+
 // Каталог медитаций (источник метаданных, аудио лежит в public/)
 export const meditationTracks = pgTable(
   'meditation_tracks',

@@ -8,7 +8,7 @@
       />
 
       <div class="mt-1 flex flex-col items-center gap-2 text-center">
-        <h1 class="text-xl font-semibold leading-tight text-elevated-strong">
+        <h1 class="text-xl font-semibold leading-tight text-elevated">
           {{ track?.title || 'Медитация' }}
         </h1>
         <p class="max-w-xl text-sm text-white text-elevated">

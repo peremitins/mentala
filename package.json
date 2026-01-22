@@ -15,6 +15,7 @@
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
     "lint": "eslint .",
+    "media:check": "node scripts/check-media-hashes.mjs",
     "test": "vitest run",
     "test:ui": "vitest --ui",
     "prepare": "husky",
@@ -28,7 +29,7 @@
     "cap:sync:device": "./scripts/setup-capacitor-dev.sh device",
     "cap:open:android": "npx cap open android",
     "build:mobile": "nuxt generate && npx cap sync",
-    "upload:media": "aws s3 sync public/meditations s3://mentala/meditations --endpoint-url=https://storage.yandexcloud.net --acl public-read"
+    "upload:media": "aws s3 sync public/meditations s3://mentala/meditations --endpoint-url=https://storage.yandexcloud.net --acl public-read --exclude \"*.DS_Store\" --exclude \"**/.DS_Store\""
   },
   "dependencies": {
     "@capacitor-community/speech-recognition": "^7.0.1",
