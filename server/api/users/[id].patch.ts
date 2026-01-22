@@ -25,6 +25,7 @@ export default defineEventHandler(async (event) => {
     name?: string;
     gender?: 'male' | 'female';
     ageRange?: 'under_30' | '30_45' | '45_plus' | 'unknown';
+    locale?: 'ru' | 'en';
     password?: string;
     roleId?: string; // Только для админов
     isBlocked?: boolean; // Запрещено - использовать отдельный endpoint
@@ -55,6 +56,13 @@ export default defineEventHandler(async (event) => {
     });
   }
 
+  if (body?.locale && !['ru', 'en'].includes(body.locale)) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Invalid locale',
+    });
+  }
+
   let trimmedName: string | undefined = undefined;
   if (body?.name !== undefined) {
     trimmedName = body.name.trim();
@@ -79,6 +87,7 @@ export default defineEventHandler(async (event) => {
     if (trimmedName !== undefined) patch.name = trimmedName;
     if (body?.gender !== undefined) patch.gender = body.gender;
     if (body?.ageRange !== undefined) patch.ageRange = body.ageRange;
+    if (body?.locale !== undefined) patch.locale = body.locale;
     if (body?.password && body.password.length >= 6) {
       patch.passwordHash = await argon2.hash(body.password, {
         type: argon2.argon2id,
@@ -91,6 +100,7 @@ export default defineEventHandler(async (event) => {
       if (trimmedName !== undefined) patch.name = trimmedName;
       if (body?.gender !== undefined) patch.gender = body.gender;
       if (body?.ageRange !== undefined) patch.ageRange = body.ageRange;
+      if (body?.locale !== undefined) patch.locale = body.locale;
       if (body?.password && body.password.length >= 6) {
         patch.passwordHash = await argon2.hash(body.password, {
           type: argon2.argon2id,

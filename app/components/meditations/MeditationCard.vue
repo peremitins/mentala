@@ -21,7 +21,7 @@
       class="absolute inset-0 bg-gradient-to-t from-black/55 via-black/35 to-black/5"
     />
 
-    <div class="relative z-10 flex h-full flex-col p-3">
+    <div class="relative z-10 flex h-full flex-col p-3 min-h-[120px]">
       <div class="flex items-start justify-between">
         <div class="space-y-1">
           <p
@@ -34,9 +34,9 @@
           >
             {{ track.title }}
           </h4>
-          <p class="line-clamp-2 text-sm text-foreground/80 drop-shadow mb-2">
+          <!-- <p class="line-clamp-2 text-sm text-foreground/80 drop-shadow mb-2">
             {{ track.description || 'Мягкий фон для короткой паузы' }}
-          </p>
+          </p> -->
         </div>
         <button
           type="button"

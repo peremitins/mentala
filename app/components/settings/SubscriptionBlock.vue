@@ -1,5 +1,5 @@
 <template>
-  <div class="glass-deep rounded-lg border border-border p-4 space-y-3">
+  <div class="glass-deep p-4 space-y-3">
     <div class="flex items-center justify-between">
       <h3 class="text-sm font-semibold">Подписка</h3>
       <span v-if="subscription?.plan?.name === 'premium'" class="text-lg"

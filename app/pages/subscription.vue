@@ -6,7 +6,7 @@
       @go-back="goBack()"
     />
 
-    <div class="space-y-4 pb-[100px]">
+    <div class="space-y-2 pb-[100px]">
       <div class="" style="animation-delay: 0.1s">
         <p class="text-sm text-muted-foreground">
           Подберите план, который подойдёт именно вам. Вы всегда можете изменить
@@ -112,14 +112,15 @@
       <!-- Карточки тарифов -->
       <div
         v-if="subscriptionStore.loading.plans"
-        class="grid grid-cols-1 md:grid-cols-3 gap-4"
+        class="grid grid-cols-1 md:grid-cols-3 gap-2"
       >
         <Skeleton type="plan-card" :count="4" rounded-size="lg" />
       </div>
-      <div v-else class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div v-else class="grid grid-cols-1 md:grid-cols-3 gap-2">
         <PlanCard
           v-for="(plan, index) in subscriptionStore.visiblePlans"
           :key="plan.id"
+          z
           :plan="plan"
           :billing-period="getBillingPeriod(plan.id)"
           :is-selected="selectedPlanId === plan.id"

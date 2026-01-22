@@ -6,7 +6,7 @@
       @go-back="goBack"
     />
 
-    <section class="flex-1 overflow-y-auto space-y-4 pb-[100px]">
+    <section class="flex-1 overflow-y-auto space-y-2 pb-[100px]">
       <!-- Заголовок с информацией -->
       <div>
         <h2 class="text-lg font-semibold text-foreground">
