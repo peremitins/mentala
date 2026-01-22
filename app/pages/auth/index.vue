@@ -18,7 +18,7 @@
           <Transition name="fade" mode="out-in">
             <div v-if="step === 'verify'" key="verify" class="space-y-4">
               <div class="rounded-2xl border border-border/30 bg-muted/30 p-4">
-                <div class="text-sm text-muted-foreground">
+                <div class="text-sm text-foreground">
                   <template v-if="isRateLimited">
                     Сейчас нельзя отправить новый код для
                     <span class="text-foreground font-medium">
@@ -89,7 +89,7 @@
                 </button>
                 <button
                   type="button"
-                  class="py-2 rounded-xl border border-border/40 text-[12px] text-muted-foreground hover:text-foreground hover:bg-muted/40 transition"
+                  class="py-2 rounded-xl border border-border/40 text-[12px] text-foreground hover:text-foreground hover:bg-muted/40 transition"
                   @click="resetVerification"
                 >
                   Изменить email
@@ -104,7 +104,7 @@
                     'py-2 rounded-lg text-sm transition',
                     mode === 'signin'
                       ? 'bg-background shadow text-foreground font-medium'
-                      : 'text-muted-foreground hover:text-foreground',
+                      : 'text-foreground hover:text-foreground',
                   ]"
                   @click="mode = 'signin'"
                 >
@@ -115,7 +115,7 @@
                     'py-2 rounded-lg text-sm transition',
                     mode === 'signup'
                       ? 'bg-background shadow text-foreground font-medium'
-                      : 'text-muted-foreground hover:text-foreground',
+                      : 'text-foreground hover:text-foreground',
                   ]"
                   @click="mode = 'signup'"
                 >
@@ -182,14 +182,14 @@
                         >Я принимаю
                         <NuxtLink
                           to="/legal/terms"
-                          class="underline text-primary hover:text-primary/80"
+                          class="underline text-primary-ui hover:text-primary-ui/80"
                         >
                           Условия
                         </NuxtLink>
                         и
                         <NuxtLink
                           to="/legal/privacy"
-                          class="underline text-primary hover:text-primary/80"
+                          class="underline text-primary-ui hover:text-primary-ui/80"
                         >
                           Политику
                         </NuxtLink>
@@ -252,7 +252,7 @@
               <div class="mt-6 text-center text-sm text-muted-foreground">
                 {{ mode === 'signin' ? 'Нет аккаунта?' : 'Уже есть аккаунт?' }}
                 <button
-                  class="underline text-primary hover:text-primary/80 transition"
+                  class="underline text-primary-ui hover:text-primary-ui/80 transition"
                   @click="mode = mode === 'signin' ? 'signup' : 'signin'"
                 >
                   {{ mode === 'signin' ? 'Создать' : 'Войти' }}
@@ -267,7 +267,7 @@
           (zero-trust). Подробнее в
           <NuxtLink
             to="/legal/privacy"
-            class="underline text-primary hover:text-primary/80"
+            class="underline text-primary-ui hover:text-primary-ui/80"
           >
             политике
           </NuxtLink>

@@ -23,7 +23,7 @@
               <IconMessageCircleHeart class="w-5 h-5" />
             </span>
             <span
-              class="w-full text-center text-foreground text-[10px] group-hover:text-primary transition-all duration-300"
+              class="w-full text-center text-foreground text-[10px] group-hover:text-primary-ui transition-all duration-300"
               >Чат</span
             >
           </NuxtLink>
@@ -44,7 +44,7 @@
               <IconBrain class="w-5 h-5" />
             </span>
             <span
-              class="w-full text-center text-foreground text-[10px] group-hover:text-primary transition-all duration-300"
+              class="w-full text-center text-foreground text-[10px] group-hover:text-primary-ui transition-all duration-300"
               >Терапия</span
             >
           </NuxtLink>
@@ -65,7 +65,7 @@
               <IconListCheck class="w-5 h-5" />
             </span>
             <span
-              class="w-full text-center text-foreground text-[10px] group-hover:text-primary transition-all duration-300"
+              class="w-full text-center text-foreground text-[10px] group-hover:text-primary-ui transition-all duration-300"
               >Привычки</span
             >
           </NuxtLink>
@@ -86,7 +86,7 @@
               <IconWind class="w-5 h-5" />
             </span>
             <span
-              class="w-full text-center text-foreground text-[10px] group-hover:text-primary transition-all duration-300"
+              class="w-full text-center text-foreground text-[10px] group-hover:text-primary-ui transition-all duration-300"
               >Практики</span
             >
           </NuxtLink>
@@ -107,7 +107,7 @@
               <IconSettings class="w-5 h-5" />
             </span>
             <span
-              class="w-full text-center text-foreground text-[10px] group-hover:text-primary transition-all duration-300"
+              class="w-full text-center text-foreground text-[10px] group-hover:text-primary-ui transition-all duration-300"
               >Настройки</span
             >
           </NuxtLink>

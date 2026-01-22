@@ -1,15 +1,18 @@
 <template>
-  <div class="space-y-4 h-dvh overflow-y-auto pb-[100px] rounded-lg">
-    <div class="flex h-full flex-col justify-between space-y-4 overflow-y-auto">
+  <div
+    class="space-y-2 h-dvh overflow-y-auto no-scrollbar pb-[100px] rounded-lg"
+  >
+    <div
+      class="flex h-full flex-col justify-between space-y-4 overflow-y-auto no-scrollbar"
+    >
       <PageHeader
         :title="headerTitle"
         :show-back-button="true"
         @go-back="goBack"
       />
 
-      <div v-if="isBuilder" class="flex flex-col space-y-2 h-full ">
+      <div v-if="isBuilder" class="flex flex-col space-y-2 h-full">
         <div class="glass-deep relative p-4">
-
           <div class="flex space-x-2 relative z-10 space-y-3">
             <div class="text-xl">✨</div>
             <div class="space-y-1">
@@ -17,8 +20,8 @@
                 Своя дыхательная практика
               </h2>
               <p class="text-sm text-foreground/70">
-                Выбери 2–4 фазы, укажи секунды и сохрани.
-                Практика всегда будет под рукой.
+                Выбери 2–4 фазы, укажи секунды и сохрани. Практика всегда будет
+                под рукой.
               </p>
             </div>
           </div>
@@ -37,7 +40,7 @@
               placeholder="Например, «Спокойствие перед сном»"
             />
           </div>
-          
+
           <div class="space-y-2">
             <p class="text-xs uppercase tracking-[0.08em] text-white/60">
               Количество фаз
@@ -104,7 +107,10 @@
         </div>
       </div>
 
-      <div v-else-if="practice" class="flex flex-col space-y-2 justify-between h-full ">
+      <div
+        v-else-if="practice"
+        class="flex flex-col space-y-2 justify-between h-full"
+      >
         <div class="flex flex-col items-center gap-2 text-center">
           <p class="max-w-xl text-sm text-white/85 text-elevated">
             {{ practice.description }}
@@ -114,11 +120,7 @@
 
         <div class="flex flex-col items-center gap-2 justify-center">
           <div class="relative flex items-center justify-center">
-            <div
-              class="breath-orb"
-              :class="phaseClass"
-              :style="sphereStyle"
-            >
+            <div class="breath-orb" :class="phaseClass" :style="sphereStyle">
               <div class="breath-orb__glow" />
             </div>
           </div>
@@ -141,17 +143,42 @@
               class="relative h-2 w-full overflow-hidden rounded-full border border-white/70"
             >
               <div
-                class="h-full rounded-full bg-gradient-to-r from-primary via-cyan-400 to-emerald-400 transition-all duration-300"
+                class="h-full rounded-full bg-gradient-to-r from-primary-ui via-cyan-400 to-emerald-400 transition-all duration-300"
                 :style="{ width: `${sessionProgress}%` }"
               />
             </div>
-            <div class="flex items-center justify-between text-xs text-white/70">
+            <div
+              class="flex items-center justify-between text-xs text-white/70"
+            >
               <span>Осталось: {{ sessionRemainingLabel }}</span>
               <span>{{ sessionTotalLabel }}</span>
             </div>
           </div>
 
-          <div class="grid grid-cols-3 gap-3">
+          <div
+            :class="[
+              'grid gap-3',
+              canNavigateGroup ? 'grid-cols-5' : 'grid-cols-3',
+            ]"
+          >
+            <button
+              type="button"
+              class="flex h-12 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+              :disabled="Boolean(prepCountdown)"
+              @click="settingsOpen = true"
+            >
+              <IconSettings class="h-5 w-5" />
+            </button>
+
+            <button
+              v-if="canNavigateGroup"
+              type="button"
+              class="flex h-12 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+              @click="goToPrevPractice"
+            >
+              <IconSkipBack class="h-5 w-5" />
+            </button>
+
             <button
               type="button"
               class="flex h-12 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
@@ -160,7 +187,7 @@
             >
               <IconSquare class="h-5 w-5" />
             </button>
-            
+
             <button
               type="button"
               class="flex h-12 items-center justify-center rounded-full bg-primary/80 text-primary-foreground shadow-lg transition hover:bg-primary disabled:cursor-not-allowed disabled:opacity-70"
@@ -172,34 +199,34 @@
             </button>
 
             <button
+              v-if="canNavigateGroup"
               type="button"
               class="flex h-12 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
-              :disabled="Boolean(prepCountdown)"
-              @click="settingsOpen = true"
+              @click="goToNextPractice"
             >
-              <IconSettings class="h-5 w-5" />
+              <IconSkipForward class="h-5 w-5" />
             </button>
           </div>
-
-
         </div>
       </div>
 
-      <div v-else class="px-4 ">
+      <div v-else class="px-4">
         <StateBlock state="error" class="px-4">
           <p class="text-sm text-center">Практика не найдена</p>
         </StateBlock>
       </div>
-</div>
-    <div
-      v-if="prepCountdown"
-      class="absolute inset-0 z-30 flex flex-col items-center justify-center gap-2 bg-black/70 text-white backdrop-blur"
-    >
-      <p class="text-sm uppercase tracking-[0.2em] text-white/70">
-        Подготовьтесь
-      </p>
-      <p class="text-5xl font-semibold">{{ prepCountdown }}</p>
     </div>
+    <Transition name="fade">
+      <div
+        v-if="prepCountdown"
+        class="fixed inset-0 z-30 flex flex-col items-center justify-center gap-2 bg-black/70 text-white backdrop-blur"
+      >
+        <p class="text-sm uppercase tracking-[0.2em] text-white/70">
+          Подготовьтесь
+        </p>
+        <p class="text-5xl font-semibold">{{ prepCountdown }}</p>
+      </div>
+    </Transition>
 
     <div
       v-if="isCompleted"
@@ -223,7 +250,6 @@
 
         <div class="space-y-5">
           <div class="space-y-2">
-
             <TimePicker
               v-model="sessionMinutes"
               mode="minutes"
@@ -252,7 +278,9 @@
               <Switch v-model:checked="soundEnabled" />
             </div>
             <div class="space-y-2">
-              <div class="flex items-center justify-between text-xs text-white/60">
+              <div
+                class="flex items-center justify-between text-xs text-white/60"
+              >
                 <span>Громкость</span>
                 <span>{{ soundVolume }}%</span>
               </div>
@@ -298,15 +326,23 @@ import {
 } from '@/app/components/ui/dialog';
 import IconPlay from '~icons/lucide/play';
 import IconPause from '~icons/lucide/pause';
+import IconSkipBack from '~icons/lucide/skip-back';
+import IconSkipForward from '~icons/lucide/skip-forward';
 import IconSquare from '~icons/lucide/square';
 import IconSettings from '~icons/lucide/settings';
 import { useToast } from '@/app/composables/useToast';
 import { useBreathPracticesStore } from '@/app/stores/breathPractices';
 import {
+  loadBreathPracticeSettings,
+  saveBreathPracticeSettings,
+} from '@/app/utils/breathPracticeSettings';
+import {
+  BREATH_PRACTICES,
   buildCustomPhases,
   findBreathPractice,
   formatBreathSteps,
   mapCustomPractice,
+  type BreathPracticeTag,
   type BreathPhase,
 } from '@/app/lib/breathPracticesCatalog';
 import { useBreathPracticePlayer } from '@/app/composables/useBreathPracticePlayer';
@@ -320,14 +356,50 @@ const MAX_CUSTOM_SECONDS = 30;
 
 const route = useRoute();
 const store = useBreathPracticesStore();
-const { playCue, prepare: prepareAudio, stopAll: stopAudio, setVolume } =
-  useBreathPracticeAudio();
+const {
+  playCue,
+  prepare: prepareAudio,
+  stopAll: stopAudio,
+  setVolume,
+} = useBreathPracticeAudio();
 const { trigger: triggerHaptic } = useBreathPracticeHaptics();
 
 const slug = computed(() => String(route.params.slug || ''));
 const isBuilder = computed(() => slug.value === 'custom');
 const customId = computed(() =>
   slug.value.startsWith('custom-') ? slug.value.slice('custom-'.length) : null
+);
+
+type BreathPracticeGroupKey = BreathPracticeTag | 'custom';
+
+const groupKey = computed<BreathPracticeGroupKey | null>(() => {
+  const raw = route.query.group;
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (!value || typeof value !== 'string') return null;
+  const normalized = value.trim();
+  if (!normalized) return null;
+  if (normalized === 'custom') return 'custom';
+  if (['popular', 'sleep', 'anxiety', 'focus'].includes(normalized)) {
+    return normalized as BreathPracticeTag;
+  }
+  return null;
+});
+
+const groupSlugs = computed(() => {
+  const key = groupKey.value;
+  if (!key) return [];
+  if (key === 'custom') {
+    return store.customPractices.map((practice) => `custom-${practice.id}`);
+  }
+  // Здесь key уже строго BreathPracticeTag.
+  return BREATH_PRACTICES.filter((practice) => practice.tags.includes(key)).map(
+    (practice) => practice.slug
+  );
+});
+
+const groupIndex = computed(() => groupSlugs.value.indexOf(slug.value));
+const canNavigateGroup = computed(
+  () => !isBuilder.value && groupSlugs.value.length > 1 && groupIndex.value >= 0
 );
 
 const builtInPractice = computed(() =>
@@ -392,12 +464,11 @@ const sphereStyle = computed(() => {
   const type = currentPhase.value?.type || 'inhale';
   // Держим сферу компактной до старта, а затем увеличиваем на вдохе/задержке.
   const isPhaseActive = isRunning.value && prepCountdown.value === 0;
-  const scale =
-    !isPhaseActive
-      ? 0.4
-      : type === 'inhale' || type === 'hold'
-        ? 1
-        : 0.4;
+  const scale = !isPhaseActive
+    ? 0.4
+    : type === 'inhale' || type === 'hold'
+      ? 1
+      : 0.4;
 
   return {
     transform: `scale(${scale})`,
@@ -424,13 +495,32 @@ const previewSteps = computed(() => formatBreathSteps(customPhases.value));
 const showHoldWarning = computed(() =>
   customPhases.value.some(
     (phase) =>
-      (phase.type === 'hold' || phase.type === 'pause') &&
-      phase.seconds >= 20
+      (phase.type === 'hold' || phase.type === 'pause') && phase.seconds >= 20
   )
 );
 
 function goBack() {
   navigateTo('/breath-practices');
+}
+
+// Перелистываем практики внутри выбранной группы без выхода из плеера.
+async function goToGroupSibling(direction: 1 | -1) {
+  if (!canNavigateGroup.value) return;
+  const list = groupSlugs.value;
+  const currentIndex = groupIndex.value;
+  if (!list.length || currentIndex < 0) return;
+  const nextIndex = (currentIndex + direction + list.length) % list.length;
+  const nextSlug = list[nextIndex];
+  const query = groupKey.value ? { group: groupKey.value } : undefined;
+  await navigateTo({ path: `/breath-practices/${nextSlug}`, query });
+}
+
+function goToPrevPractice() {
+  void goToGroupSibling(-1);
+}
+
+function goToNextPractice() {
+  void goToGroupSibling(1);
 }
 
 function formatSeconds(seconds: number) {
@@ -476,7 +566,9 @@ function handlePhaseCount(value?: string | string[]) {
 
   // Сохраняем секунды из уже заполненных фаз.
   customPhases.value = next.map((phase) => {
-    const existing = customPhases.value.find((item) => item.type === phase.type);
+    const existing = customPhases.value.find(
+      (item) => item.type === phase.type
+    );
     return existing ? { ...phase, seconds: existing.seconds } : phase;
   });
 }
@@ -496,8 +588,6 @@ function adjustPhase(index: number, delta: number) {
   const safe = clampNumber(numeric + delta, 1, MAX_CUSTOM_SECONDS);
   customPhases.value[index] = { ...phase, seconds: safe };
 }
-
-
 
 function clampNumber(value: number, min: number, max: number) {
   const safe = Number.isFinite(value) ? value : min;
@@ -524,10 +614,12 @@ async function saveCustom() {
 onMounted(async () => {
   await store.load();
 
-  soundEnabled.value = store.settings.soundEnabled;
-  soundVolume.value = store.settings.volume;
-  hapticsEnabled.value = store.settings.hapticsEnabled;
-  sessionMinutes.value = clampNumber(store.settings.sessionMinutes, 1, 60);
+  // Загружаем настройки из локального хранилища
+  const settings = await loadBreathPracticeSettings();
+  soundEnabled.value = settings.soundEnabled;
+  soundVolume.value = settings.volume;
+  hapticsEnabled.value = settings.hapticsEnabled;
+  sessionMinutes.value = clampNumber(settings.sessionMinutes, 1, 60);
 
   if (soundEnabled.value) {
     await prepareAudio();
@@ -557,12 +649,12 @@ watch(
       return;
     }
     player.setSessionDuration(safe * 60);
-    void store.saveSettings({ sessionMinutes: safe });
+    void saveBreathPracticeSettings({ sessionMinutes: safe });
   }
 );
 
 watch(soundEnabled, (value) => {
-  void store.saveSettings({ soundEnabled: value });
+  void saveBreathPracticeSettings({ soundEnabled: value });
   if (value) {
     void prepareAudio();
     setVolume(soundVolume.value / 100);
@@ -571,11 +663,11 @@ watch(soundEnabled, (value) => {
 
 watch(soundVolume, (value) => {
   setVolume(clampNumber(value, 0, 100) / 100);
-  void store.saveSettings({ volume: clampNumber(value, 0, 100) });
+  void saveBreathPracticeSettings({ volume: clampNumber(value, 0, 100) });
 });
 
 watch(hapticsEnabled, (value) => {
-  void store.saveSettings({ hapticsEnabled: value });
+  void saveBreathPracticeSettings({ hapticsEnabled: value });
 });
 
 onBeforeUnmount(() => {
@@ -590,7 +682,12 @@ onBeforeUnmount(() => {
   width: 240px;
   height: 240px;
   border-radius: 9999px;
-  background: radial-gradient(circle at 30% 20%, rgba(56, 189, 248, 0.7), rgba(79, 70, 229, 0.45), rgba(15, 23, 42, 0.6));
+  background: radial-gradient(
+    circle at 30% 20%,
+    rgba(56, 189, 248, 0.7),
+    rgba(79, 70, 229, 0.45),
+    rgba(15, 23, 42, 0.6)
+  );
   box-shadow:
     0 0 40px rgba(56, 189, 248, 0.35),
     inset 0 0 40px rgba(255, 255, 255, 0.12);

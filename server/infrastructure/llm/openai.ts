@@ -507,7 +507,6 @@ export const openaiProvider: LlmProviderPort = {
             user_locale: options?.user_locale,
             user_name: options?.user_name,
             user_gender: options?.user_gender,
-            mode: options?.mode || 'therapy',
           },
           {
             isFirstSession: isFirst,
@@ -591,7 +590,6 @@ export const openaiProvider: LlmProviderPort = {
         // Логирование запроса терапии в OpenAI
         console.log('[OpenAI chat()] Отправка запроса терапии:', {
           model: usedModel,
-          mode: options?.mode || 'therapy',
           userId: options?.userId || 'unknown',
           sessionId: sessionId || 'none',
           isFirstSession: isFirst,
@@ -877,8 +875,8 @@ export const openaiProvider: LlmProviderPort = {
     const maxOutputTokens =
       options?.maxOutputTokens || config.llm.openai.defaultMaxOutputTokens;
 
-    // Проверяем, является ли это стартом с welcome-экрана (messages пустой и есть mode)
-    const isWelcomeStart = (messages?.length || 0) === 0 && options?.mode;
+    // Проверяем, является ли это стартом с welcome-экрана (messages пустой)
+    const isWelcomeStart = (messages?.length || 0) === 0;
 
     // Важно: isFirst должен учитывать не только summary, но и previous_response_id
     // Если хотя бы один механизм памяти включен и есть данные - это не первая сессия
@@ -920,7 +918,6 @@ export const openaiProvider: LlmProviderPort = {
         try {
           welcomePromptContent = await welcomePromptStore.get(
             options.userId,
-            options.mode as 'therapy' | 'habits' | 'talk',
             isFirst,
             lang
           );
@@ -933,7 +930,6 @@ export const openaiProvider: LlmProviderPort = {
       if (!welcomePromptContent) {
         try {
           welcomePromptContent = await welcomePromptStore.getDefault(
-            options.mode as 'therapy' | 'habits' | 'talk',
             isFirst,
             lang
           );
@@ -947,7 +943,6 @@ export const openaiProvider: LlmProviderPort = {
 
       // Формируем стартовый промпт
       const welcomePrompt = buildWelcomePrompt({
-        mode: options.mode as 'therapy' | 'habits' | 'talk',
         isFirstSession: isFirst,
         sessionMemoryText: sessionMemoryText,
         lang,
@@ -967,7 +962,6 @@ export const openaiProvider: LlmProviderPort = {
           user_locale: options?.user_locale,
           user_name: options?.user_name,
           user_gender: options?.user_gender,
-          mode: options?.mode || 'therapy',
         },
         {
           isFirstSession: isFirst,
@@ -1015,7 +1009,6 @@ export const openaiProvider: LlmProviderPort = {
         '[OpenAI chatStream()] Отправка запроса терапии (welcome-старт):',
         {
           model: usedModel,
-          mode: options?.mode || 'therapy',
           userId: options?.userId || 'unknown',
           sessionId: options?.sessionId || 'none',
           isFirstSession: isFirst,
@@ -1092,7 +1085,7 @@ export const openaiProvider: LlmProviderPort = {
       return; // Выходим из функции после welcome-старта
     }
 
-    // ОБЫЧНЫЙ РЕЖИМ ДИАЛОГА (messages не пустые или нет mode)
+    // ОБЫЧНЫЙ РЕЖИМ ДИАЛОГА (messages не пустые)
     // Вычисляем responseNumber для ротации типов ответов
     const userMessagesCount = (messages || []).filter(
       (m: { role: string; content: string }) => m.role === 'user'
@@ -1111,7 +1104,6 @@ export const openaiProvider: LlmProviderPort = {
         user_locale: options?.user_locale,
         user_name: options?.user_name,
         user_gender: options?.user_gender,
-        mode: options?.mode || 'therapy',
       },
       {
         isFirstSession: isFirst,
@@ -1211,7 +1203,6 @@ export const openaiProvider: LlmProviderPort = {
       '[OpenAI chatStream()] Отправка запроса терапии (обычный режим):',
       {
         model: usedModel,
-        mode: options?.mode || 'therapy',
         userId: options?.userId || 'unknown',
         sessionId: options?.sessionId || 'none',
         isFirstSession: isFirst,

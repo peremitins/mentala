@@ -37,11 +37,11 @@
               </Badge>
             </template>
 
-            <span v-else class="text-muted-foreground">Выберите фреймворк</span>
+            <span v-else class="text-foreground">Выберите фреймворк</span>
           </div>
 
           <IconChevronsUpDown
-            class="w-4 h-4 text-muted-foreground/80 shrink-0"
+            class="w-4 h-4 text-foreground shrink-0"
           />
         </Button>
       </PopoverTrigger>

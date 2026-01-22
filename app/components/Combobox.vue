@@ -12,12 +12,12 @@
           <span v-if="selectedOption?.label" class="flex gap-2 truncate">
             <span class="font-medium truncate" v-html="selectedOption.label" />
           </span>
-          <span v-else class="text-muted-foreground">{{
+          <span v-else class="text-foreground">{{
             placeholder || 'Выберите опцию'
           }}</span>
 
           <IconChevronsUpDown
-            class="size-4 shrink-0 text-muted-foreground/80"
+            class="size-4 shrink-0 text-foreground"
             aria-hidden="true"
           />
         </Button>

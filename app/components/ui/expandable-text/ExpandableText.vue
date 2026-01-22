@@ -8,7 +8,7 @@
       <p
         :id="id"
         :class="textClass"
-        class="text-muted-foreground text-xs leading-relaxed whitespace-pre-line"
+        class="text-foreground text-xs leading-relaxed whitespace-pre-line"
         ref="textElement"
         v-html="text"
       />
@@ -17,7 +17,7 @@
     <button
       v-if="hasOverflow"
       @click="toggleExpanded"
-      class="relative mt-1 text-xs text-primary flex items-center gap-1 outline-none rounded-none px-1 py-0.5"
+      class="relative mt-1 text-xs text-primary-ui flex items-center gap-1 outline-none rounded-none px-1 py-0.5"
       :aria-expanded="isExpanded"
       :aria-controls="id"
     >

@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-4 h-full overflow-y-auto rounded-lg">
+  <div class="space-y-2 h-full overflow-y-auto rounded-lg">
     <PageHeader
       :title="'Управление подпиской'"
       :show-back-button="true"
@@ -49,10 +49,10 @@
                 v-if="trialActive && currentSubscription.plan.name === 'basic'"
                 class="mt-2 space-y-1"
               >
-                <p class="text-xs text-muted-foreground">
+                <p class="text-xs text-foreground">
                   Доступен полный функционал Premium: AI-чат, 100 минут в неделю
                 </p>
-                <p class="text-xs text-muted-foreground">
+                <p class="text-xs text-foreground">
                   Пробный период действует до:
                   {{ formatTrialDate(trialExpiresAt) }}
                 </p>
@@ -68,23 +68,23 @@
                 </p>
                 <p
                   v-else-if="currentSubscription.paymentStatus === 'active'"
-                  class="text-sm text-muted-foreground mt-1"
+                  class="text-sm text-foreground mt-1"
                 >
                   Действует до: {{ formatDate(currentSubscription.endDate) }}
                 </p>
                 <p
                   v-else-if="currentSubscription.paymentStatus === 'expired'"
-                  class="text-sm text-muted-foreground mt-1"
+                  class="text-sm text-foreground mt-1"
                 >
                   Истекла: {{ formatDate(currentSubscription.endDate) }}
                 </p>
-                <p v-else class="text-sm text-muted-foreground mt-1">
+                <p v-else class="text-sm text-foreground mt-1">
                   Статус:
                   {{ getPaymentStatusText(currentSubscription.paymentStatus) }}
                 </p>
                 <p
                   v-if="currentSubscription.paymentStatus === 'pending'"
-                  class="text-xs text-muted-foreground mt-2"
+                  class="text-xs text-foreground mt-2"
                 >
                   Завершите оплату, чтобы активировать подписку. Если вы уже
                   оплатили, подождите несколько минут — статус обновится
@@ -100,7 +100,7 @@
               <p class="text-sm font-medium">
                 <strong>Сейчас:</strong> нет активной подписки
               </p>
-              <p class="text-sm text-muted-foreground">
+              <p class="text-sm text-foreground">
                 Чтобы продолжить пользоваться Mentala, выберите один из тарифов
                 ниже.
               </p>

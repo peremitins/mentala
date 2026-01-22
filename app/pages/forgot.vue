@@ -8,14 +8,14 @@
         <div class="glass-deep p-6">
           <div class="text-center mb-6">
             <div class="text-2xl font-semibold text-foreground">Mentala</div>
-            <div class="text-sm text-muted-foreground">
+            <div class="text-sm text-foreground">
               Восстановление пароля
             </div>
           </div>
 
           <Transition name="fade" mode="out-in">
             <div v-if="!emailSent" key="form" class="space-y-4">
-              <p class="text-sm text-muted-foreground text-center">
+              <p class="text-sm text-foreground text-center">
                 Введите email, и мы отправим ссылку для восстановления пароля
               </p>
 
@@ -45,7 +45,7 @@
               <div class="text-center">
                 <NuxtLink
                   to="/auth"
-                  class="text-sm text-muted-foreground hover:text-foreground transition"
+                  class="text-sm text-foreground hover:text-foreground transition"
                 >
                   Вспомнили пароль? Войти
                 </NuxtLink>
@@ -54,7 +54,7 @@
 
             <div v-else key="success" class="space-y-4">
               <div class="rounded-2xl border border-border/30 bg-muted/30 p-4">
-                <div class="text-sm text-muted-foreground text-center">
+                <div class="text-sm text-foreground text-center">
                   <template v-if="isRateLimited">
                     Слишком много запросов. Повторите через
                     <span class="text-foreground font-medium">
@@ -74,7 +74,7 @@
               <div class="text-center">
                 <NuxtLink
                   to="/auth"
-                  class="text-sm text-muted-foreground hover:text-foreground transition"
+                  class="text-sm text-foreground hover:text-foreground transition"
                 >
                   Вспомнили пароль? Войти
                 </NuxtLink>

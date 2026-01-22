@@ -24,13 +24,13 @@ const delegatedProps = computed(() => {
         'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
         'disabled:pointer-events-none disabled:opacity-50',
         // Стили для активного состояния
-        'data-[state=on]:border-primary data-[state=on]:bg-transparent ',
-        'data-[state=on]:bg-primary/20 data-[state=on]:shadow-sm data-[state=on]:text-foreground  ',
+        'data-[state=on]:border-primary-ui data-[state=on]:bg-transparent ',
+        'data-[state=on]:bg-primary-ui/20 data-[state=on]:shadow-sm data-[state=on]:text-foreground  ',
 
         // Стили для неактивного состояния
         'data-[state=off]:border-border data-[state=off]:bg-transparent ',
         'data-[state=off]:hover:bg-transparent',
-        'data-[state=off]:border-border/60 data-[state=off]:hover:border-primary data-[state=off]:hover:text-foreground ',
+        'data-[state=off]:border-border/60 data-[state=off]:hover:border-primary-ui data-[state=off]:hover:text-foreground ',
         'data-[state=off]:text-surface-inactive-foreground ',
         props.class
       )

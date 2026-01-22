@@ -12,7 +12,7 @@
       </AlertDialogHeader>
       <AlertDialogFooter>
         <AlertDialogCancel
-          class="bg-transparent hover:bg-transparent hover:text-primary hover:border-primary"
+          class="bg-transparent hover:bg-transparent hover:text-primary-ui hover:border-primary-ui"
         >
           {{ cancelLabel }}
         </AlertDialogCancel>

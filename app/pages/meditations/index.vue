@@ -1,6 +1,6 @@
 <template>
   <div
-    class="space-y-4 relative h-full overflow-y-auto rounded-lg"
+    class="space-y-2 relative h-full overflow-y-auto rounded-lg"
     :class="selectedTrackId ? '' : 'pb-[100px]'"
   >
     <MeditationDetailView
@@ -21,13 +21,14 @@
         type="practice-page"
         :count="5"
         :with-wrapper="false"
+        class="glass-deep p-4"
       />
 
       <StateBlock v-else-if="meditationsStore.error" state="error" class="px-4">
         <p class="text-sm text-center">{{ meditationsStore.error }}</p>
       </StateBlock>
 
-      <div v-else class="space-y-6">
+      <div v-else class="glass-deep">
         <MeditationSection
           v-for="(section, index) in visibleSections"
           :key="section.key"
@@ -168,6 +169,9 @@ type TopicMetaLite = {
 const TOPIC_META: TopicMetaLite[] =
   (MEDITATION_TOPICS as unknown as TopicMetaLite[]) || [];
 
+// Ключи тем, чтобы валидировать входящие query-параметры.
+const TOPIC_KEYS = new Set(TOPIC_META.map((topic) => topic.key));
+
 const TOPIC_SECTIONS: BaseSection[] = [];
 
 TOPIC_META.forEach((topic) => {
@@ -271,6 +275,17 @@ const selectedTrackId = computed(() => {
   return '';
 });
 
+const selectedTopicKey = computed<MeditationTopicKey | null>(() => {
+  const raw = route.query.topic;
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (!value || typeof value !== 'string') return null;
+  const normalized = value.trim();
+  if (!normalized || !TOPIC_KEYS.has(normalized)) return null;
+  return normalized as MeditationTopicKey;
+});
+
+const autoOpenTopicKey = ref<MeditationTopicKey | null>(null);
+
 function goBack() {
   navigateTo('/practices');
 }
@@ -305,6 +320,31 @@ watch(
       dialogOpen.value = false;
     }
   }
+);
+
+watch(
+  [
+    () => selectedTopicKey.value,
+    () => selectedTrackId.value,
+    () => meditationsStore.tracks,
+  ],
+  async ([topicKey, trackId, tracks]) => {
+    if (!topicKey || trackId) return;
+    if (!tracks.length) return;
+    if (autoOpenTopicKey.value === topicKey) return;
+
+    // Автооткрытие первой медитации выбранной темы из query.
+    const topicTracks = tracks.filter((track) =>
+      trackTopics(track).includes(topicKey)
+    );
+    autoOpenTopicKey.value = topicKey;
+
+    const firstTrack = topicTracks.at(0);
+    // Защищаемся от пустого списка перед обращением к первому элементу.
+    if (!firstTrack) return;
+    await openTrack(firstTrack.id, topicKey, topicTracks);
+  },
+  { immediate: true }
 );
 
 function topicLabel(key: MeditationTopicKey) {

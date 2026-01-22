@@ -1,6 +1,6 @@
 <template>
   <div
-    class="group relative overflow-hidden rounded-xl border-2 border-border bg-card p-4 space-y-2 transition-all duration-200 hover:border-primary/50 hover:-translate-y-0.5 hover:shadow-lg animate-slide-up"
+    class="group relative overflow-hidden rounded-xl border-2 border-border bg-card p-4 space-y-2 transition-all duration-200 hover:border-primary-ui/50 hover:-translate-y-0.5 hover:shadow-lg animate-slide-up"
     :style="`animation-delay: ${(index ?? 0) * 0.05}s; animation-fill-mode: both`"
   >
     <div class="flex items-center justify-between">
@@ -9,7 +9,7 @@
     <div class="space-y-2">
       <ExpandableText
         :text="item.content"
-        class="text-sm text-muted-foreground"
+        class="text-sm text-foreground"
         :max-lines="3"
       />
     </div>

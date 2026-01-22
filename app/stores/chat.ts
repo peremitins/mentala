@@ -1,5 +1,4 @@
 import { defineStore } from 'pinia';
-import { useChatSettingsStore } from '@/app/stores/chatSettings';
 import { useLoadersStore } from '@/app/stores/loaders';
 import { nanoid } from 'nanoid';
 import { useRuntimeConfig } from 'nuxt/app';
@@ -206,28 +205,9 @@ export const useChatStore = defineStore('chat', {
      * Подготавливает параметры для API запроса
      * Унифицированная логика для startConversation и sendMessage
      */
-    _prepareApiParams(options?: {
-      mode?: 'therapy' | 'habits' | 'talk';
-      userPrompt?: string;
-    }) {
-      const settings = useChatSettingsStore();
-
-      // Определяем mode: из options или из settings
-      const mode = options?.mode || settings.mode || 'therapy';
-
-      // Определяем type для получения userPrompt (маппим talk на therapy)
-      const type = mode === 'habits' || mode === 'therapy' ? mode : 'therapy';
-
-      // Получаем userPrompt: из options или из settings
-      const userPrompt =
-        options?.userPrompt ||
-        (type === 'habits' || type === 'therapy'
-          ? settings.activePromptsByType?.[type]?.content || ''
-          : '');
-
+    _prepareApiParams(options?: { userPrompt?: string }) {
       return {
-        mode,
-        userPrompt,
+        userPrompt: options?.userPrompt,
         lang: 'ru' as const,
         entryContext: this.entryContext,
       };
@@ -389,10 +369,7 @@ export const useChatStore = defineStore('chat', {
      * Начинает диалог от ассистента (без user-сообщения)
      * Используется при выборе режима на welcome-экране
      */
-    async startConversation(options: {
-      mode: 'therapy' | 'habits' | 'talk';
-      userPrompt?: string;
-    }) {
+    async startConversation() {
       if (!this.sessionId) this.startSession();
 
       const loaders = useLoadersStore();
@@ -429,7 +406,7 @@ export const useChatStore = defineStore('chat', {
         this.currentChatAbortController = abortController;
 
         const nuxt = useNuxtApp();
-        const apiParams = this._prepareApiParams(options);
+        const apiParams = this._prepareApiParams();
 
         if (CHAT_STREAM_MODE) {
           // Вызываем API с ПУСТЫМ массивом messages - это триггер для старта от ассистента
@@ -440,7 +417,6 @@ export const useChatStore = defineStore('chat', {
               messages: [], // ПУСТОЙ массив - старт от ассистента
               sessionId: this.sessionId,
               therapySessionId: this.therapySessionId,
-              mode: apiParams.mode, // Передаем mode (включая 'talk')
               userPrompt: apiParams.userPrompt,
               lang: apiParams.lang,
               entryContext: apiParams.entryContext,
@@ -461,7 +437,6 @@ export const useChatStore = defineStore('chat', {
               messages: [], // ПУСТОЙ массив - старт от ассистента
               sessionId: this.sessionId,
               therapySessionId: this.therapySessionId,
-              mode: apiParams.mode,
               userPrompt: apiParams.userPrompt,
               lang: apiParams.lang,
               entryContext: apiParams.entryContext,
@@ -588,7 +563,6 @@ export const useChatStore = defineStore('chat', {
               messages: this.messages,
               sessionId: this.sessionId,
               therapySessionId: this.therapySessionId,
-              mode: apiParams.mode, // ВАЖНО: передаем mode для правильной работы памяти
               userPrompt: apiParams.userPrompt,
               lang: apiParams.lang,
               entryContext: apiParams.entryContext,
@@ -612,7 +586,6 @@ export const useChatStore = defineStore('chat', {
               messages: this.messages,
               sessionId: this.sessionId,
               therapySessionId: this.therapySessionId,
-              mode: apiParams.mode,
               userPrompt: apiParams.userPrompt,
               lang: apiParams.lang,
               entryContext: apiParams.entryContext,

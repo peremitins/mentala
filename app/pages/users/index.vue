@@ -9,14 +9,14 @@
       <!-- Scroll area for list only -->
       <div class="relative" :style="{ height: 'calc(100dvh - 210px)' }">
         <div class="absolute inset-0 overflow-y-auto pr-1 pb-28">
-          <div v-if="loading" class="opacity-70 p-2 text-muted-foreground">
+          <div v-if="loading" class="opacity-70 p-2 text-foreground">
             Загрузка…
           </div>
           <div v-else-if="error" class="text-destructive p-2">{{ error }}</div>
           <div v-else>
             <div
               v-if="!users.length"
-              class="opacity-70 p-2 text-muted-foreground"
+              class="opacity-70 p-2 text-foreground"
             >
               Пока нет пользователей
             </div>
@@ -24,7 +24,7 @@
               <div
                 v-for="(u, index) in users"
                 :key="u.id"
-                class="group relative overflow-hidden rounded-xl border-2 border-border bg-card p-4 transition-all duration-200 hover:border-primary/50 hover:-translate-y-0.5 hover:shadow-lg outline-none animate-slide-up cursor-pointer"
+                class="group relative overflow-hidden rounded-xl border-2 border-border bg-card p-4 transition-all duration-200 hover:border-primary-ui/50 hover:-translate-y-0.5 hover:shadow-lg outline-none animate-slide-up cursor-pointer"
                 :style="`animation-delay: ${index * 0.05}s; animation-fill-mode: both`"
                 :class="{
                   'cursor-pointer': canManageUsers,
@@ -37,7 +37,7 @@
                   <div class="flex items-center gap-3 w-full">
                     <!-- Столбец 1: Имя (фиксированная ширина) -->
                     <span
-                      class="text-muted-foreground text-sm font-medium shrink-1 min-w-[50px] truncate"
+                      class="text-foreground text-sm font-medium shrink-1 min-w-[50px] truncate"
                       :title="u.name || ''"
                     >
                       {{ u.name || 'Без имени' }}
@@ -51,7 +51,7 @@
                     </span>
                     <!-- Столбец 3: Роль (фиксированная ширина) -->
                     <span
-                      class="text-muted-foreground text-xs capitalize shrink-0 w-[50px] truncate"
+                      class="text-foreground text-xs capitalize shrink-0 w-[50px] truncate"
                       :title="String(u.roleId)"
                     >
                       {{ u.roleId }}

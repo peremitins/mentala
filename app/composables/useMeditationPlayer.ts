@@ -6,16 +6,52 @@ import type { MeditationTrackDto } from '@/shared/dto/meditations';
 const FADE_IN_MS = 1500;
 const FADE_OUT_MS = 2500;
 const PAUSE_FADE_MS = 600;
-const PLAY_START_TIMEOUT_MS = 1200;
+const QUICK_STOP_FADE_MS = 80;
 const TICK_MS = 500;
 const LOOP_THRESHOLD_SEC = 0.12; // небольшой зазор перед концом для мгновенного рестарта
 const LOOP_REARM_SEC = 0.3; // окно, в котором разрешаем снова сработать триггер
+// Максимальный размер файла для WebAudio на мобильных (50MB)
+const MAX_WEB_AUDIO_SIZE_MB = 50;
+
+function getUserAgent() {
+  if (typeof navigator === 'undefined') return '';
+  return navigator.userAgent || '';
+}
+
+function isMobileUserAgent() {
+  const ua = getUserAgent();
+  if (!ua) return false;
+  return /iphone|ipad|ipod|android/i.test(ua);
+}
+
+// Таймаут загрузки аудио файла (30 секунд для мобильных, 15 для десктопа)
+function getAudioLoadTimeout() {
+  return isMobileUserAgent() ? 30000 : 15000;
+}
 
 type PlaybackMode = 'html' | 'webaudio';
 type PendingGesturePlay = {
   track: MeditationTrackDto;
   timerMinutes?: number | null;
 };
+
+function shouldPreferWebAudio(track: MeditationTrackDto) {
+  if (!track?.isLoop) {
+    // Для не-loop треков всегда используем HTML Audio (более эффективно для больших файлов)
+    return false;
+  }
+  // Для бесшовного лупа используем WebAudio, если доступен.
+  // Но на мобильных для больших файлов лучше использовать HTML Audio
+  if (
+    isMobileUserAgent() &&
+    track.durationSeconds &&
+    track.durationSeconds > 300
+  ) {
+    // Для файлов больше 5 минут на мобильных используем HTML Audio
+    return false;
+  }
+  return isWebAudioAvailable();
+}
 
 const globalState = {
   audio: null as HTMLAudioElement | null,
@@ -32,6 +68,7 @@ const globalState = {
   isBuffering: ref(false),
   pendingGesturePlay: null as PendingGesturePlay | null,
   gestureUnlockCleanup: null as (() => void) | null,
+  globalUnlockCleanup: null as (() => void) | null,
   // По умолчанию повтор трека включён.
   isRepeating: ref(true),
   currentTime: ref(0),
@@ -47,6 +84,8 @@ const globalState = {
   fadeInterval: null as ReturnType<typeof setInterval> | null,
   progressInterval: null as ReturnType<typeof setInterval> | null,
   timerInterval: null as ReturnType<typeof setInterval> | null,
+  // Флаг, что пользователь уже разрешил запуск WebAudio.
+  audioUnlocked: false,
   playbackActionId: 0,
   loopResetTriggered: false,
 };
@@ -73,21 +112,86 @@ function clearGestureUnlock() {
   globalState.pendingGesturePlay = null;
 }
 
+async function unlockAudioContext(): Promise<boolean> {
+  if (!isDocumentAvailable() || typeof window === 'undefined') return false;
+  const context = ensureAudioContext();
+  if (!context) return false;
+
+  const state = context.state as AudioContextState;
+  // Явно приводим тип состояния, чтобы не терять значение 'running'.
+  if (state === 'running') {
+    globalState.audioUnlocked = true;
+    return true;
+  }
+
+  try {
+    await context.resume();
+  } catch {
+    return false;
+  }
+
+  if (context.state === 'running') {
+    globalState.audioUnlocked = true;
+    return true;
+  }
+  return false;
+}
+
+function ensureGlobalGestureUnlock() {
+  if (!isDocumentAvailable() || typeof window === 'undefined') return;
+  if (globalState.audioUnlocked) return;
+  if (globalState.globalUnlockCleanup) return;
+
+  const handler = () => {
+    void (async () => {
+      // WebAudio можно резюмить только после пользовательского жеста.
+      const unlocked = await unlockAudioContext();
+      if (!unlocked) return;
+
+      const pending = globalState.pendingGesturePlay;
+      if (pending) {
+        clearGestureUnlock();
+        await play(pending.track, pending.timerMinutes ?? null);
+      }
+
+      if (globalState.globalUnlockCleanup) {
+        globalState.globalUnlockCleanup();
+        globalState.globalUnlockCleanup = null;
+      }
+    })();
+  };
+
+  const options: AddEventListenerOptions = { passive: true };
+  window.addEventListener('pointerdown', handler, options);
+  window.addEventListener('touchstart', handler, options);
+  window.addEventListener('keydown', handler);
+
+  globalState.globalUnlockCleanup = () => {
+    window.removeEventListener('pointerdown', handler, options);
+    window.removeEventListener('touchstart', handler, options);
+    window.removeEventListener('keydown', handler);
+  };
+}
+
 function scheduleGestureUnlock(
   track: MeditationTrackDto,
   timerMinutes?: number | null
 ) {
   if (!isDocumentAvailable() || typeof window === 'undefined') return;
   clearGestureUnlock();
+  ensureGlobalGestureUnlock();
 
   globalState.pendingGesturePlay = { track, timerMinutes };
 
   const handler = () => {
-    const pending = globalState.pendingGesturePlay;
-    clearGestureUnlock();
-    if (!pending) return;
-    // Стартуем по первому пользовательскому жесту.
-    void play(pending.track, pending.timerMinutes ?? null);
+    void (async () => {
+      const pending = globalState.pendingGesturePlay;
+      clearGestureUnlock();
+      if (!pending) return;
+      await unlockAudioContext();
+      // Стартуем по первому пользовательскому жесту.
+      await play(pending.track, pending.timerMinutes ?? null);
+    })();
   };
 
   const options: AddEventListenerOptions = { passive: true };
@@ -103,24 +207,34 @@ function scheduleGestureUnlock(
 }
 
 async function attemptHtmlPlayback(audio: HTMLAudioElement) {
+  let onPlaying: (() => void) | null = null;
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
   try {
     const playPromise = audio.play();
     if (!playPromise) return { started: true };
 
+    const playingPromise = new Promise<'playing'>((resolve) => {
+      onPlaying = () => resolve('playing');
+      audio.addEventListener('playing', onPlaying, { once: true });
+    });
+
+    const timeoutMs = getAudioLoadTimeout();
+    const timeoutPromise = new Promise<'timeout'>((resolve) => {
+      timeoutId = setTimeout(() => resolve('timeout'), timeoutMs);
+    });
+
     const result = await Promise.race([
       playPromise.then(() => 'started' as const),
-      new Promise<'timeout'>((resolve) => {
-        timeoutId = setTimeout(() => resolve('timeout'), PLAY_START_TIMEOUT_MS);
-      }),
+      playingPromise,
+      timeoutPromise,
     ]);
 
     if (result === 'timeout') {
-      // Если промис завис — прерываем, чтобы не держать лоадер вечно.
       try {
         audio.pause();
       } catch {
-        // Если уже не играет — игнорируем.
+        // Игнорируем, если уже не играет
       }
       return { started: false, timedOut: true };
     }
@@ -129,10 +243,27 @@ async function attemptHtmlPlayback(audio: HTMLAudioElement) {
   } catch (error) {
     return { started: false, error };
   } finally {
+    if (onPlaying) {
+      audio.removeEventListener('playing', onPlaying);
+    }
     if (timeoutId) {
       clearTimeout(timeoutId);
     }
   }
+}
+
+function isAutoplayBlockedError(error: unknown) {
+  if (!error || typeof error !== 'object') return false;
+  const name = (error as { name?: string }).name || '';
+  const message = String(
+    (error as { message?: string }).message || ''
+  ).toLowerCase();
+  return (
+    name === 'NotAllowedError' ||
+    message.includes('not allowed') ||
+    message.includes('user gesture') ||
+    message.includes('user interaction')
+  );
 }
 
 function ensureAudioContext(): AudioContext | null {
@@ -159,17 +290,60 @@ async function loadAudioBuffer(
   context: AudioContext
 ): Promise<AudioBuffer> {
   // Загружаем и декодируем аудио для точного лупа без зазоров.
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Failed to load audio: ${response.status}`);
+  // Добавляем таймаут для предотвращения зависания на мобильных
+  const controller = new AbortController();
+  const timeoutMs = getAudioLoadTimeout();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      throw new Error(`Failed to load audio: ${response.status}`);
+    }
+
+    // Проверяем размер файла перед загрузкой на мобильных
+    const contentLength = response.headers.get('content-length');
+    if (contentLength && isMobileUserAgent()) {
+      const sizeMB = parseInt(contentLength, 10) / (1024 * 1024);
+      if (sizeMB > MAX_WEB_AUDIO_SIZE_MB) {
+        throw new Error(
+          `Audio file too large for mobile: ${sizeMB.toFixed(2)}MB`
+        );
+      }
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+
+    // Дополнительная проверка размера после загрузки
+    if (isMobileUserAgent()) {
+      const sizeMB = arrayBuffer.byteLength / (1024 * 1024);
+      if (sizeMB > MAX_WEB_AUDIO_SIZE_MB) {
+        throw new Error(
+          `Audio buffer too large for mobile: ${sizeMB.toFixed(2)}MB`
+        );
+      }
+    }
+
+    return await context.decodeAudioData(arrayBuffer);
+  } catch (error: any) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      throw new Error(`Audio load timeout after ${timeoutMs}ms`);
+    }
+    throw error;
   }
-  const arrayBuffer = await response.arrayBuffer();
-  return await context.decodeAudioData(arrayBuffer);
 }
 
 async function prepareWebAudioTrack(
   track: MeditationTrackDto
 ): Promise<AudioBuffer | null> {
+  if (!globalState.audioUnlocked) {
+    // Не создаём контекст до первого жеста, чтобы избежать autoplay-ошибок.
+    return null;
+  }
+
   const context = ensureAudioContext();
   if (!context) return null;
 
@@ -186,6 +360,7 @@ async function prepareWebAudioTrack(
   }
 
   const url = resolveMediaUrl(track.audioPath);
+  if (!url) return null;
   if (!globalState.audioBuffer || globalState.audioBufferUrl !== url) {
     globalState.audioBuffer = await loadAudioBuffer(url, context);
     globalState.audioBufferUrl = url;
@@ -492,7 +667,7 @@ function resumeTimer() {
 
 async function stop(
   withFade = true,
-  options: { keepActionId?: boolean } = {}
+  options: { keepActionId?: boolean; quickFadeMs?: number } = {}
 ) {
   if (!options.keepActionId) {
     bumpPlaybackActionId();
@@ -502,6 +677,9 @@ async function stop(
   if (globalState.playbackMode === 'webaudio') {
     if (withFade) {
       await fadeTo(0, FADE_OUT_MS);
+    } else if (options.quickFadeMs) {
+      // Быстро приглушаем, чтобы избежать щелчка при смене трека.
+      await fadeTo(0, options.quickFadeMs);
     }
     stopWebAudioSource();
     globalState.webAudioOffset = 0;
@@ -510,6 +688,9 @@ async function stop(
     if (audio) {
       if (withFade) {
         await fadeTo(0, FADE_OUT_MS);
+      } else if (options.quickFadeMs) {
+        // Быстро приглушаем, чтобы избежать щелчка при смене трека.
+        await fadeTo(0, options.quickFadeMs);
       }
       audio.pause();
       audio.currentTime = 0;
@@ -524,6 +705,14 @@ async function stop(
   globalState.isPlaying.value = false;
   globalState.currentTrack.value = null;
   globalState.playbackMode = null;
+
+  // Очищаем WebAudio буферы для освобождения памяти (критично для мобильных)
+  if (isMobileUserAgent()) {
+    globalState.audioBuffer = null;
+    globalState.audioBufferUrl = '';
+    globalState.webAudioOffset = 0;
+  }
+
   stopIntervals();
   clearTimer();
   resetProgress();
@@ -557,17 +746,48 @@ async function play(track: MeditationTrackDto, timerMinutes?: number | null) {
   const actionId = bumpPlaybackActionId();
   const isActionActive = () => isPlaybackActionActive(actionId);
   clearGestureUnlock();
+  ensureGlobalGestureUnlock();
 
   resetLoopGuard();
 
   const sameTrack = globalState.currentTrack.value?.id === track.id;
   // Для бесконечных эмбиентов включаем Web Audio, чтобы убрать паузу на лупе.
-  const preferWebAudio = Boolean(track.isLoop) && isWebAudioAvailable();
+  const preferWebAudio = shouldPreferWebAudio(track);
   let mode: PlaybackMode = preferWebAudio ? 'webaudio' : 'html';
+
+  // Для больших не-loop файлов на мобильных принудительно используем HTML Audio
+  if (
+    mode === 'webaudio' &&
+    isMobileUserAgent() &&
+    !track.isLoop &&
+    track.durationSeconds &&
+    track.durationSeconds > 300
+  ) {
+    console.warn(
+      '[MeditationPlayer] Large non-loop file detected, forcing HTML Audio on mobile:',
+      {
+        trackId: track.id,
+        duration: track.durationSeconds,
+      }
+    );
+    mode = 'html';
+  }
+
+  const shouldUseWebAudio = mode === 'webaudio' && isWebAudioAvailable();
+  if (shouldUseWebAudio) {
+    const unlocked = await unlockAudioContext();
+    if (!unlocked) {
+      // Для лупов не падаем на HTML, чтобы не было слышимого шва.
+      globalState.isPlaying.value = false;
+      globalState.isBuffering.value = false;
+      scheduleGestureUnlock(track, timerMinutes ?? null);
+      return;
+    }
+  }
 
   if (!sameTrack || globalState.playbackMode !== mode) {
     // Останавливаем предыдущий трек перед запуском нового
-    await stop(false, { keepActionId: true });
+    await stop(false, { keepActionId: true, quickFadeMs: QUICK_STOP_FADE_MS });
     if (!isActionActive()) return;
   }
 
@@ -592,9 +812,29 @@ async function play(track: MeditationTrackDto, timerMinutes?: number | null) {
 
   try {
     if (mode === 'webaudio') {
-      const buffer = await prepareWebAudioTrack(track);
+      let buffer: AudioBuffer | null = null;
+      try {
+        buffer = await prepareWebAudioTrack(track);
+      } catch (error) {
+        console.warn(
+          '[MeditationPlayer] WebAudio failed, fallback to HTML:',
+          error
+        );
+        globalState.audioBuffer = null;
+        globalState.audioBufferUrl = '';
+        buffer = null;
+      }
       if (abortIfStale()) return;
       if (!buffer) {
+        if (track.isLoop) {
+          // Для loop-треков не падаем на HTML, чтобы не было слышимого шва.
+          globalState.isBuffering.value = false;
+          console.error('[MeditationPlayer] WebAudio buffer is not ready:', {
+            trackId: track.id,
+            audioPath: track.audioPath,
+          });
+          return;
+        }
         mode = 'html';
       } else {
         globalState.playbackMode = 'webaudio';
@@ -606,7 +846,17 @@ async function play(track: MeditationTrackDto, timerMinutes?: number | null) {
     if (mode === 'html') {
       if (typeof Audio === 'undefined') return;
       if (!globalState.audio || !sameTrack) {
-        const audio = new Audio(resolveMediaUrl(track.audioPath));
+        const audioUrl = resolveMediaUrl(track.audioPath);
+        if (!audioUrl) {
+          // Без валидного URL нет смысла запускать воспроизведение.
+          globalState.isBuffering.value = false;
+          console.error('[MeditationPlayer] Missing audio URL:', {
+            trackId: track.id,
+            audioPath: track.audioPath,
+          });
+          return;
+        }
+        const audio = new Audio(audioUrl);
         localAudio = audio;
         audio.loop = Boolean(track.isLoop);
         audio.preload = 'auto';
@@ -640,6 +890,11 @@ async function play(track: MeditationTrackDto, timerMinutes?: number | null) {
 
         audio.onerror = () => {
           if (globalState.audio !== audio) return;
+          console.error('[MeditationPlayer] Audio error:', {
+            trackId: track.id,
+            src: audio.currentSrc || audio.src,
+            code: audio.error?.code,
+          });
           globalState.isPlaying.value = false;
         };
 
@@ -658,14 +913,69 @@ async function play(track: MeditationTrackDto, timerMinutes?: number | null) {
 
       if (abortIfStale()) return;
       if (!globalState.audio) return;
-      const playbackResult = await attemptHtmlPlayback(globalState.audio);
+
+      // Ждём готовности файла перед воспроизведением (критично для мобильных)
+      const audio = globalState.audio;
+      if (audio.readyState < HTMLMediaElement.HAVE_ENOUGH_DATA) {
+        // Ждём загрузки достаточного количества данных
+        await new Promise<void>((resolve, reject) => {
+          const timeoutMs = getAudioLoadTimeout();
+          const timeoutId = setTimeout(() => {
+            audio.removeEventListener('canplaythrough', onCanPlay);
+            audio.removeEventListener('error', onError);
+            reject(new Error(`Audio load timeout after ${timeoutMs}ms`));
+          }, timeoutMs);
+
+          const onCanPlay = () => {
+            clearTimeout(timeoutId);
+            audio.removeEventListener('canplaythrough', onCanPlay);
+            audio.removeEventListener('error', onError);
+            resolve();
+          };
+
+          const onError = () => {
+            clearTimeout(timeoutId);
+            audio.removeEventListener('canplaythrough', onCanPlay);
+            audio.removeEventListener('error', onError);
+            reject(
+              new Error(`Audio load error: ${audio.error?.code || 'unknown'}`)
+            );
+          };
+
+          if (audio.readyState >= HTMLMediaElement.HAVE_ENOUGH_DATA) {
+            clearTimeout(timeoutId);
+            resolve();
+            return;
+          }
+
+          audio.addEventListener('canplaythrough', onCanPlay, { once: true });
+          audio.addEventListener('error', onError, { once: true });
+        }).catch((error) => {
+          console.error('[MeditationPlayer] Audio ready check failed:', error);
+          if (abortIfStale()) return;
+          // Пробуем воспроизвести даже если не все данные загружены
+        });
+      }
+
+      if (abortIfStale()) return;
+      const playbackResult = await attemptHtmlPlayback(audio);
       if (abortIfStale()) return;
       if (!playbackResult.started) {
         if (!isActionActive()) return;
         globalState.isPlaying.value = false;
         globalState.isBuffering.value = false;
-        // Браузер ждёт жест — ставим отложенный старт.
-        scheduleGestureUnlock(track, timerMinutes ?? null);
+        if (isAutoplayBlockedError(playbackResult.error)) {
+          // Браузер ждёт жест — ставим отложенный старт.
+          scheduleGestureUnlock(track, timerMinutes ?? null);
+        } else if (playbackResult.timedOut) {
+          console.error(
+            '[MeditationPlayer] Playback timeout, file may be corrupted or too large'
+          );
+          // Пробуем перезагрузить файл
+          if (audio.src) {
+            audio.load();
+          }
+        }
         return;
       }
       globalState.isPlaying.value = true;
@@ -802,6 +1112,8 @@ function clearQueue() {
 }
 
 export function useMeditationPlayer() {
+  // Регистрируем слушатель жестов заранее, чтобы автозапуск был стабильнее.
+  ensureGlobalGestureUnlock();
   return {
     currentTrack: computed(() => globalState.currentTrack.value),
     isPlaying: computed(() => globalState.isPlaying.value),

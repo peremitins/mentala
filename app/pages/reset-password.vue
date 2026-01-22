@@ -8,12 +8,12 @@
         <div class="glass-deep p-6">
           <div class="text-center mb-6">
             <div class="text-2xl font-semibold text-foreground">Mentala</div>
-            <div class="text-sm text-muted-foreground">Новый пароль</div>
+            <div class="text-sm text-foreground">Новый пароль</div>
           </div>
 
           <Transition name="fade" mode="out-in">
             <div v-if="tokenValid === null" key="loading" class="space-y-4">
-              <div class="text-center text-sm text-muted-foreground">
+              <div class="text-center text-sm text-foreground">
                 Проверка ссылки...
               </div>
             </div>
@@ -42,7 +42,7 @@
             </div>
 
             <div v-else key="form" class="space-y-4">
-              <p class="text-sm text-muted-foreground text-center">
+              <p class="text-sm text-foreground text-center">
                 Введите новый пароль для вашего аккаунта
                 <span v-if="maskedEmail" class="font-medium text-foreground">
                   {{ maskedEmail }}

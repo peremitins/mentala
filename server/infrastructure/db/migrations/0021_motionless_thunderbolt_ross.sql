@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "scene_settings" jsonb DEFAULT '{}'::jsonb NOT NULL;

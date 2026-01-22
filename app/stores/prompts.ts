@@ -1,7 +1,6 @@
 import { defineStore } from 'pinia';
 
 import type { UserPrompt, AiWorkMode, IPromptsStore } from '@/app/types';
-import { useChatSettingsStore } from '@/app/stores/chatSettings';
 
 export const usePromptsStore = defineStore('prompts', {
   state: (): IPromptsStore => ({
@@ -84,12 +83,6 @@ export const usePromptsStore = defineStore('prompts', {
             x.type === type ? { ...x, isActive: x.id === id } : x
           );
 
-          // Обновим активные промпты в chatSettings
-          const chatSettings = useChatSettingsStore();
-          // Проверяем, что type это 'habits' или 'therapy' (talk не хранится в activePromptsByType)
-          if (type === 'habits' || type === 'therapy') {
-            chatSettings.activePromptsByType[type] = res.item;
-          }
         }
         return res?.item as UserPrompt;
       } catch (error) {

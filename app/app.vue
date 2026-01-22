@@ -1,6 +1,10 @@
 <template>
   <div>
-    <div class="aurora-outer"></div>
+    <div
+      v-if="showAurora"
+      class="aurora-outer"
+      :style="{ opacity: auroraOpacity }"
+    ></div>
     <NuxtLoadingIndicator />
     <NuxtLayout>
       <div class="h-full flex flex-col z-0">
@@ -32,11 +36,58 @@
 </template>
 
 <script lang="ts" setup>
+import { computed, onMounted, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { Toaster } from 'vue-sonner';
 import { useLoadersStore } from '@/app/stores/loaders';
 import PageLoader from '@/app/components/ui/PageLoader.vue';
+import { useAuthStore } from '@/app/stores/auth';
+import { useSceneSettingsStore } from '@/app/stores/sceneSettings';
+import { useUiSettingsStore } from '@/app/stores/uiSettings';
+import {
+  DEFAULT_SCENE_ID,
+  findSceneTrack,
+} from '@/app/lib/sceneSelectionCatalog';
 
 const loaders = useLoadersStore();
+const auth = useAuthStore();
+const sceneSettings = useSceneSettingsStore();
+const uiSettings = useUiSettingsStore();
+const route = useRoute();
+
+const isBreathPracticeDetail = computed(() => {
+  const path = route.path || '';
+  // Исключаем страницу создания кастомной практики из показа синего фона
+  if (path === '/breath-practices/custom') {
+    return false;
+  }
+  return path.startsWith('/breath-practices/');
+});
+
+// Если выбран «стандартный фон» или открыта практика — показываем aurora.
+const showAurora = computed(() => {
+  const scene = findSceneTrack(sceneSettings.sceneId);
+  // "Стандартный фон" = нет кастомного изображения, показываем aurora.
+  const isStandardBackground =
+    sceneSettings.sceneId === 'default' || !scene?.backgroundPath;
+  return (
+    sceneSettings.sceneId === DEFAULT_SCENE_ID ||
+    isStandardBackground ||
+    isBreathPracticeDetail.value
+  );
+});
+
+const auroraOpacity = computed(() => uiSettings.auroraOpacity);
+
+onMounted(async () => {
+  await Promise.all([sceneSettings.ensureLoaded(), uiSettings.ensureLoaded()]);
+});
+
+watch([() => auth.user?.id, () => auth.user?.sceneSettings], async () => {
+  if (!auth.user) return;
+  // Следим за сменой пользователя и настройками сцены после авторизации.
+  await sceneSettings.loadFromUser();
+});
 </script>
 
 <style lang="scss" scoped>

@@ -1,7 +1,7 @@
 <template>
   <div class="space-y-6">
     <section class="space-y-4">
-      <div v-if="loading" class="text-sm text-muted-foreground">
+      <div v-if="loading" class="text-sm text-foreground">
         Загрузка...
       </div>
 
@@ -127,7 +127,7 @@
           />
         </div>
         <div
-          class="text-xs text-muted-foreground"
+          class="text-xs text-foreground"
           v-if="emailAttemptsLeft !== null"
         >
           Осталось попыток: {{ emailAttemptsLeft }}
@@ -145,7 +145,7 @@
     <section class="space-y-4 border-t border-border pt-6" v-if="user">
       <div class="space-y-2">
         <h3 class="text-sm font-semibold text-foreground">Пароль</h3>
-        <p class="text-sm text-muted-foreground">
+        <p class="text-sm text-foreground">
           {{
             hasPassword
               ? 'Измените пароль для входа по email.'
@@ -221,7 +221,7 @@
     <section class="space-y-4 border-t border-border pt-6">
       <div class="space-y-2">
         <h3 class="text-sm font-semibold text-foreground">Удаление аккаунта</h3>
-        <p class="text-sm text-muted-foreground">
+        <p class="text-sm text-foreground">
           Удаление аккаунта необратимо. Все ваши данные будут удалены.
         </p>
       </div>

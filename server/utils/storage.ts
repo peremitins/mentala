@@ -4,8 +4,6 @@ import { chatSettings } from '@@/server/infrastructure/db/schema';
 import { eq } from 'drizzle-orm';
 
 type ChatSettings = {
-  theme: 'dark' | 'light';
-  mode: 'therapy' | 'habits';
   voice: boolean;
   avatar: boolean;
   enablePreviousResponseId: boolean;
@@ -13,8 +11,6 @@ type ChatSettings = {
 };
 
 const DEFAULT_SETTINGS: ChatSettings = {
-  theme: 'dark',
-  mode: 'therapy',
   voice: true,
   avatar: false,
   enablePreviousResponseId: true,
@@ -40,8 +36,6 @@ export async function readChatSettings(uid: string): Promise<ChatSettings> {
 
     const row = result[0];
     return {
-      theme: (row.theme as 'dark' | 'light') || 'dark',
-      mode: (row.mode as 'therapy' | 'habits') || 'therapy',
       voice: row.voice ?? true,
       avatar: row.avatar ?? true,
       enablePreviousResponseId: row.enablePreviousResponseId ?? true,
@@ -70,8 +64,6 @@ export async function writeChatSettings(
       .insert(chatSettings)
       .values({
         userId,
-        theme: next.theme,
-        mode: next.mode,
         voice: next.voice,
         avatar: next.avatar,
         enablePreviousResponseId: next.enablePreviousResponseId,
@@ -81,8 +73,6 @@ export async function writeChatSettings(
       .onConflictDoUpdate({
         target: chatSettings.userId,
         set: {
-          theme: next.theme,
-          mode: next.mode,
           voice: next.voice,
           avatar: next.avatar,
           enablePreviousResponseId: next.enablePreviousResponseId,

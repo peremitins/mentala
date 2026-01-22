@@ -1,7 +1,7 @@
 <template>
   <button
     type="button"
-    class="group relative flex w-[78vw] min-w-[240px] max-w-[240px] sm:w-72 flex-col overflow-hidden rounded-3xl text-left transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-primary/60"
+    class="group relative flex w-[78vw] min-w-[240px] max-w-[240px] sm:w-72 flex-col overflow-hidden rounded-xl text-left transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-primary-ui/60"
     @click="emit('open', track.id)"
   >
     <img
@@ -21,11 +21,11 @@
       class="absolute inset-0 bg-gradient-to-t from-black/55 via-black/35 to-black/5"
     />
 
-    <div class="relative z-10 flex h-full flex-col p-4">
+    <div class="relative z-10 flex h-full flex-col p-3">
       <div class="flex items-start justify-between">
         <div class="space-y-1">
           <p
-            class="text-[11px] uppercase tracking-[0.08em] text-white/70 drop-shadow"
+            class="text-[11px] uppercase tracking-[0.08em] text-foreground/80 drop-shadow"
           >
             {{ topicLabel }}
           </p>
@@ -34,13 +34,13 @@
           >
             {{ track.title }}
           </h4>
-          <p class="line-clamp-2 text-sm text-white/85 drop-shadow mb-2">
+          <p class="line-clamp-2 text-sm text-foreground/80 drop-shadow mb-2">
             {{ track.description || 'Мягкий фон для короткой паузы' }}
           </p>
         </div>
         <button
           type="button"
-          class="rounded-full bg-black/55 p-2 text-white transition hover:bg-black/70"
+          class="absolute top-1 right-1 z-20 rounded-full bg-black/55 p-2 text-white transition hover:bg-black/70"
           @click.stop="emit('favorite', track.id)"
         >
           <IconHeart
@@ -68,7 +68,7 @@
     <div v-if="active" class="absolute inset-0 z-0 bg-black/25">
       <div class="absolute inset-0 flex items-center justify-center">
         <div
-          class="h-3 w-3 rounded-full bg-primary shadow-[0_0_18px_rgba(56,189,248,0.9)] animate-pulse"
+          class="h-3 w-3 rounded-full bg-primary-ui shadow-[0_0_18px_rgba(56,189,248,0.9)] animate-pulse"
         />
       </div>
     </div>

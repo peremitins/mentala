@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-4 h-full overflow-y-auto rounded-lg pb-[80px]">
+  <div class="space-y-2 h-full overflow-y-auto rounded-lg pb-[80px]">
     <PageHeader
       title="Тексты уведомлений"
       :show-back-button="true"
@@ -12,7 +12,7 @@
         <h2 class="text-lg font-semibold text-foreground">
           {{ entityName }} — Тексты уведомлений
         </h2>
-        <p class="text-sm text-muted-foreground">
+        <p class="text-sm text-foreground">
           {{ filteredTextsCount }} текстов • Источник: Шаблоны + ваши
         </p>
       </div>
@@ -73,9 +73,9 @@
           v-for="(text, index) in localTexts"
           :key="text.id || text.tempId"
           :data-text-id="text.id || text.tempId"
-          class="rounded-lg border border-border bg-transparent p-3 transition-all shadow-sm relative overflow-hidden list-item hover:border-primary"
+          class="rounded-lg border border-border bg-transparent p-3 transition-all shadow-sm relative overflow-hidden list-item hover:border-primary-ui"
           :class="{
-            'border-primary ring-2 ring-primary/20':
+            'border-primary-ui ring-2 ring-primary-ui/20':
               editingId === (text.id || text.tempId),
             'opacity-50': text.toDelete,
           }"
@@ -83,7 +83,7 @@
           <!-- Цветная полоска слева -->
           <div
             v-if="text.source === 'user'"
-            class="absolute left-0 top-0 bottom-0 w-1 bg-primary"
+            class="absolute left-0 top-0 bottom-0 w-1 bg-primary-ui"
           />
 
           <!-- Компактный режим -->
@@ -97,7 +97,7 @@
             </div>
             <div class="flex items-center gap-1">
               <button
-                class="inline-flex items-center justify-center rounded-md p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                class="inline-flex items-center justify-center rounded-md p-1.5 text-foreground hover:text-primary-ui hover:bg-primary-ui/10 transition-colors"
                 aria-label="Редактировать"
               >
                 <svg
@@ -118,7 +118,7 @@
                 class="delete-button inline-flex items-center justify-center rounded-md p-1.5 transition-colors"
                 :class="{
                   'text-destructive bg-destructive/10': text.toDelete,
-                  'text-muted-foreground': !text.toDelete,
+                  'text-foreground': !text.toDelete,
                 }"
                 @click.stop="markForDelete(text)"
                 aria-label="Удалить"
@@ -153,14 +153,14 @@
               :max-length="MAX_NOTIFICATION_TEXT_LENGTH"
             />
             <div class="flex items-center justify-between text-xs">
-              <span class="text-muted-foreground">
+              <span class="text-foreground">
                 Можно использовать {name} для подстановки имени
               </span>
               <span
                 :class="{
                   'text-destructive':
                     editModel?.length > MAX_NOTIFICATION_TEXT_LENGTH,
-                  'text-muted-foreground':
+                  'text-foreground':
                     editModel?.length <= MAX_NOTIFICATION_TEXT_LENGTH,
                 }"
               >
@@ -173,7 +173,7 @@
 
       <!-- Кнопка добавления -->
       <button
-        class="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-transparent px-4 py-2.5 text-sm font-medium text-foreground hover:border-primary hover:text-primary transition-colors w-full"
+        class="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-transparent px-4 py-2.5 text-sm font-medium text-foreground hover:border-primary-ui hover:text-primary-ui transition-colors w-full"
         @click="addNewText"
       >
         <svg
@@ -206,11 +206,11 @@
             Сохранить мои тексты ({{ userTextsCount }})
           </label>
         </div>
-        <p class="text-xs text-muted-foreground">
+        <p class="text-xs text-foreground">
           Ваши тексты останутся, дефолтные будут добавлены обратно
         </p>
         <button
-          class="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-transparent px-4 py-2.5 text-sm font-medium text-foreground hover:border-primary hover:text-primary transition-colors w-full"
+          class="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-transparent px-4 py-2.5 text-sm font-medium text-foreground hover:border-primary-ui hover:text-primary-ui transition-colors w-full"
           @click="handleReset"
         >
           <svg
@@ -947,9 +947,9 @@ onMounted(() => {
     opacity: 0.8;
   }
 
-  /* Если элемент НЕ помечен на удаление, при активном нажатии остаемся серым */
-  .delete-button.text-muted-foreground:active {
-    color: hsl(var(--muted-foreground)) !important;
+  /* Если элемент НЕ помечен на удаление, при активном нажатии остаемся белым */
+  .delete-button.text-foreground:active {
+    color: hsl(var(--foreground)) !important;
     background-color: transparent !important;
   }
 

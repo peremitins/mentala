@@ -1,7 +1,7 @@
 <template>
   <DialogDescription
     v-bind="forwardedProps"
-    :class="cn('text-sm text-muted-foreground', props.class)"
+    :class="cn('text-sm text-foreground', props.class)"
   >
     <slot />
   </DialogDescription>

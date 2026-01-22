@@ -1,6 +1,6 @@
 <template>
   <div class="relative h-full overflow-hidden rounded-lg">
-    <div class="flex h-full flex-col justify-between space-y-4 overflow-y-auto">
+    <div class="flex h-full flex-col justify-between space-y-2 overflow-y-auto">
       <PageHeader
         :title="topicName"
         :show-back-button="true"
@@ -8,7 +8,7 @@
       />
 
       <div class="mt-1 flex flex-col items-center gap-2 text-center">
-        <h1 class="text-xl font-semibold leading-tight text-elevated-strong">
+        <h1 class="text-xl font-semibold leading-tight text-elevated">
           {{ track?.title || 'Медитация' }}
         </h1>
         <p class="max-w-xl text-sm text-white text-elevated">
@@ -32,30 +32,13 @@
             @click="onProgressClick"
           >
             <div
-              class="h-full rounded-full bg-gradient-to-r from-primary via-cyan-400 to-emerald-400 transition-all duration-300"
+              class="h-full rounded-full bg-gradient-to-r from-primary-ui via-cyan-400 to-emerald-400 transition-all duration-300"
               :style="{ width: `${progressPercent}%` }"
             />
           </div>
           <div class="flex items-center justify-between text-xs text-white">
             <span>{{ formatPlaybackTime(displayCurrentTime) }}</span>
             <span>{{ formatPlaybackTime(displayDuration) }}</span>
-          </div>
-        </div>
-
-        <div class="flex items-center justify-between gap-3">
-          <div
-            v-if="isLoopTrack"
-            class="flex items-center gap-2 text-[11px] text-white"
-          >
-            <Badge variant="secondary" class="bg-white/10 text-white">
-              ∞
-            </Badge>
-          </div>
-          <div class="text-xs text-white ml-auto">
-            <span v-if="timerRemainingLabel"
-              >Таймер: {{ timerRemainingLabel }}</span
-            >
-            <span v-else>Таймер: выкл</span>
           </div>
         </div>
 
@@ -72,7 +55,7 @@
             @click="handleRepeat"
           >
             <IconRepeat
-              :class="['h-5 w-5', isRepeating ? 'text-primary' : '']"
+              :class="['h-5 w-5', isRepeating ? 'text-primary-ui' : '']"
             />
           </button>
           <button
@@ -131,26 +114,34 @@
         </div>
 
         <div class="flex flex-wrap items-center gap-2 text-xs text-white">
-          <span class="text-white">Таймер:</span>
-          <TimePicker
-            v-model:model-value="timerPickerValue"
-            label=""
-            @update:model-value="(val) => applyTimer(val)"
-          >
-            <template #trigger="{ formattedTime }">
-              <button
-                type="button"
-                class="rounded-full border px-3 py-1 transition"
-                :class="
-                  isTimerEnabled
-                    ? 'border-white/30 bg-white/15 text-white shadow-sm'
-                    : 'border-white/15 bg-white/5 text-white hover:border-white/30 hover:text-white'
-                "
+          <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2">
+              <span class="text-white">Таймер:</span>
+              <TimePicker
+                v-model:model-value="timerPickerValue"
+                label=""
+                @update:model-value="(val) => applyTimer(val)"
               >
-                <span>{{ timerTriggerLabel }}</span>
-              </button>
-            </template>
-          </TimePicker>
+                <template #trigger="{ formattedTime }">
+                  <button
+                    type="button"
+                    class="rounded-full border px-3 py-1 transition"
+                    :class="
+                      isTimerEnabled
+                        ? 'border-white/30 bg-white/15 text-white shadow-sm'
+                        : 'border-white/15 bg-white/5 text-white hover:border-white/30 hover:text-white'
+                    "
+                  >
+                    <span>{{ timerTriggerLabel }}</span>
+                  </button>
+                </template>
+              </TimePicker>
+              <span class="text-white">
+                {{ timerRemainingLabel }}
+              </span>
+            </div>
+          </div>
+
           <button
             type="button"
             class="rounded-full px-3 py-1 transition ml-auto"
@@ -197,7 +188,10 @@ import IconSkipForward from '~icons/lucide/skip-forward';
 import IconRepeat from '~icons/lucide/repeat';
 import { useMeditationsStore } from '@/app/stores/meditations';
 import { useMeditationPlayer } from '@/app/composables/useMeditationPlayer';
-import { MEDITATION_TOPICS } from '@/shared/constants/meditations';
+import {
+  isMeditationTopicKey,
+  MEDITATION_TOPICS,
+} from '@/shared/constants/meditations';
 import type {
   MeditationTopicKey,
   MeditationTrackDto,
@@ -229,6 +223,7 @@ const {
   timerRemainingMs,
   preferredTimerMinutes,
   queueIds,
+  queueKey,
   toggle,
   play,
   pause,
@@ -287,9 +282,31 @@ function topicLabel(key: MeditationTopicKey) {
   return MEDITATION_TOPICS.find((topic) => topic.key === key)?.name || 'Тема';
 }
 
-const topicName = computed(() =>
-  track.value ? topicLabel(track.value.topicKey) : 'Медитация'
-);
+const contextTopicKey = computed<MeditationTopicKey | null>(() => {
+  // Берём контекст секции (queueKey) или query, чтобы мульти-треки показывали правильную тему.
+  const queueValue = queueKey.value;
+  if (queueValue && isMeditationTopicKey(queueValue)) {
+    return queueValue;
+  }
+
+  const rawQueryTopic = route.query.topic;
+  const queryValue = Array.isArray(rawQueryTopic)
+    ? rawQueryTopic[0]
+    : rawQueryTopic;
+  if (typeof queryValue === 'string') {
+    const normalized = queryValue.trim();
+    if (normalized && isMeditationTopicKey(normalized)) {
+      return normalized;
+    }
+  }
+
+  return track.value?.topicKey || null;
+});
+
+const topicName = computed(() => {
+  const key = contextTopicKey.value;
+  return key ? topicLabel(key) : 'Медитация';
+});
 
 function formatPlaybackTime(value: number) {
   if (!value || !Number.isFinite(value)) return '0:00';

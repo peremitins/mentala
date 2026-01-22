@@ -4,7 +4,7 @@
       'rounded-lg border p-6 space-y-4 transition-all',
       isSelected
         ? 'border-primary bg-primary/5'
-        : 'border-border bg-transparent hover:border-primary/50',
+        : 'border-border bg-transparent hover:border-primary-ui/50',
     ]"
   >
     <div class="flex items-start justify-between gap-2">
@@ -12,14 +12,14 @@
       <div class="flex items-center gap-2">
         <span
           v-if="plan.name === 'basic' && props.trialActive"
-          class="text-xs bg-primary/10 text-primary px-2 py-1 rounded font-medium text-end"
+          class="text-xs bg-primary-ui/10 text-primary-ui px-2 py-1 rounded font-medium text-end"
         >
           Бесплатный пробный период
         </span>
         <span v-if="plan.name === 'premium'" class="text-xl">👑</span>
         <span
           v-if="plan.name === 'premium'"
-          class="text-xs bg-primary/10 text-primary px-2 py-1 rounded"
+          class="text-xs bg-primary-ui/10 text-primary-ui px-2 py-1 rounded"
         >
           Рекомендуем
         </span>
@@ -33,7 +33,7 @@
           'px-2.5 py-1 text-xs rounded-md transition-colors border ',
           billingPeriod === 'month'
             ? 'bg-primary text-primary-foreground'
-            : 'bg-transparent text-muted-foreground hover:bg-primary/10 border border-border',
+            : 'bg-transparent text-foreground hover:bg-primary/10 border border-border',
         ]"
         @click.stop="handlePeriodChange('month')"
       >
@@ -44,7 +44,7 @@
           'px-2.5 py-1 text-xs rounded-md transition-colors border ',
           billingPeriod === 'year'
             ? 'bg-primary text-primary-foreground'
-            : 'bg-transparent text-muted-foreground hover:bg-primary/10 border border-border',
+            : 'bg-transparent text-foreground hover:bg-primary/10 border border-border',
         ]"
         @click.stop="handlePeriodChange('year')"
       >
@@ -55,10 +55,10 @@
 
     <div class="space-y-1">
       <p class="text-3xl font-bold">{{ getPrice() }} ₽</p>
-      <p v-if="plan.name !== 'basic'" class="text-sm text-muted-foreground">
+      <p v-if="plan.name !== 'basic'" class="text-sm text-foreground">
         {{ billingPeriod === 'year' ? 'в год' : 'в месяц' }}
       </p>
-      <p v-else class="text-sm text-muted-foreground">бесплатно</p>
+      <p v-else class="text-sm text-foreground">бесплатно</p>
     </div>
 
     <ul class="space-y-2 text-sm">
@@ -67,7 +67,7 @@
         :key="feature"
         class="flex items-start gap-2"
       >
-        <span class="text-primary mt-0.5">✓</span>
+        <span class="text-primary-ui mt-0.5">✓</span>
         <span>{{ feature }}</span>
       </li>
     </ul>
@@ -79,7 +79,7 @@
           ? 'bg-primary text-primary-foreground cursor-not-allowed opacity-75'
           : isSelected
             ? 'bg-primary text-primary-foreground hover:opacity-90'
-            : 'bg-primary/10 text-primary hover:bg-primary/20',
+            : 'bg-primary-ui/10 text-primary-ui hover:bg-primary-ui/20',
       ]"
       :disabled="isCurrent"
       @click.stop="handleButtonClick"
