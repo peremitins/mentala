@@ -1,9 +1,9 @@
 <template>
   <div
     :class="[
-      'rounded-lg border p-6 space-y-4 transition-all',
+      'rounded-lg glass-deep p-4 space-y-4 transition-all',
       isSelected
-        ? 'border-primary bg-primary/5'
+        ? '!border-primary !bg-primary/5'
         : 'border-border bg-transparent hover:border-primary-ui/50',
     ]"
   >
@@ -90,7 +90,6 @@
 </template>
 
 <script setup lang="ts">
-
 interface Plan {
   id: string;
   name: string;

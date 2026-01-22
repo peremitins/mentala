@@ -55,9 +55,7 @@
       </div>
 
       <Dialog v-model:open="dialogOpen">
-        <DialogContent
-          class="max-w-3xl bg-gradient-to-b from-slate-900 via-indigo-950 to-slate-950 text-white border-white/10"
-        >
+        <DialogContent class="glass-deep max-w-3xl text-white">
           <DialogHeader>
             <DialogTitle>{{ dialogTitle }}</DialogTitle>
             <DialogDescription class="text-white/70">

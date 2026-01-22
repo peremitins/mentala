@@ -46,11 +46,12 @@
           <button
             type="button"
             class="flex h-12 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20 opacity-100"
-            :class="
+            :class="[
               isLoopTrack
                 ? 'cursor-not-allowed opacity-50 hover:bg-white/10'
-                : ''
-            "
+                : '',
+              isRepeating ? '!bg-primary/50' : '',
+            ]"
             :disabled="isLoopTrack"
             @click="handleRepeat"
           >
@@ -122,7 +123,7 @@
                 label=""
                 @update:model-value="(val) => applyTimer(val)"
               >
-                <template #trigger="{ formattedTime }">
+                <template #trigger>
                   <button
                     type="button"
                     class="rounded-full border px-3 py-1 transition"
@@ -175,7 +176,6 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import StateBlock from '@/app/components/StateBlock.vue';
-import { Badge } from '@/app/components/ui/shadcn/badge';
 import TimePicker from '@/app/components/TimePicker.vue';
 import PageHeader from '@/app/components/PageHeader.vue';
 import IconHeart from '~icons/lucide/heart';
@@ -224,7 +224,6 @@ const {
   preferredTimerMinutes,
   queueIds,
   queueKey,
-  toggle,
   play,
   pause,
   stop,
@@ -320,10 +319,11 @@ function applyTimer(value: number | null) {
   const safeValue = Number.isFinite(value) ? (value as number) : 0;
   const clamped = Math.max(0, Math.floor(safeValue));
   const normalized = clamped > 0 ? clamped : null;
-  setPreferredTimer(normalized);
   if (isActive.value) {
     setTimer(normalized);
+    return;
   }
+  setPreferredTimer(normalized);
 }
 
 function togglePlay() {

@@ -116,6 +116,44 @@
         <div class="h-10 bg-skeleton rounded-md w-full"></div>
       </div>
 
+      <!-- Скелетон для страницы настроек -->
+      <div v-else-if="type === 'settings-page'" class="space-y-2">
+        <!-- Карточка профиля -->
+        <div class="flex items-center gap-3">
+          <div class="h-12 w-12 rounded-full bg-skeleton"></div>
+          <div class="flex-1 space-y-2">
+            <div class="h-4 bg-skeleton rounded w-1/3"></div>
+            <div class="h-3 bg-skeleton rounded w-1/2"></div>
+          </div>
+          <div class="h-4 w-4 bg-skeleton rounded"></div>
+        </div>
+
+        <!-- Карточка подписки -->
+        <div class="space-y-2">
+          <div class="h-4 bg-skeleton rounded w-1/4"></div>
+          <div class="h-3 bg-skeleton rounded w-2/3"></div>
+          <div class="h-3 bg-skeleton rounded w-1/2"></div>
+        </div>
+
+        <!-- Блоки списка -->
+        <div class="space-y-3">
+          <div class="h-3 bg-skeleton rounded w-1/3"></div>
+          <div class="space-y-2">
+            <div class="h-10 bg-skeleton rounded-lg"></div>
+            <div class="h-10 bg-skeleton rounded-lg"></div>
+            <div class="h-10 bg-skeleton rounded-lg"></div>
+          </div>
+        </div>
+
+        <div class="space-y-3">
+          <div class="h-3 bg-skeleton rounded w-1/3"></div>
+          <div class="space-y-2">
+            <div class="h-10 bg-skeleton rounded-lg"></div>
+            <div class="h-10 bg-skeleton rounded-lg"></div>
+          </div>
+        </div>
+      </div>
+
       <div v-else-if="type === 'simple-text'" class="space-y-3">
         <div class="h-3 bg-skeleton rounded w-full" />
         <div class="h-3 bg-skeleton rounded w-full" />
@@ -137,7 +175,8 @@ const props = withDefaults(
       | 'subscription-status'
       | 'plan-card'
       | 'simple-text'
-      | 'practice-page';
+      | 'practice-page'
+      | 'settings-page';
     count?: number;
     roundedSize?: 'sm' | 'md' | 'lg' | 'xl';
     withWrapper?: boolean;
