@@ -28,7 +28,7 @@ const handleSelect = (chip: SuggestedChip) => {
       size="sm"
       :disabled="props.disabled"
       class="group rounded-full glass-deep border-white/10 bg-white/10 text-foreground/90 shadow-sm backdrop-blur-md transition-all duration-200 hover:-translate-y-0.5 hover:bg-white/20 hover:text-foreground active:translate-y-0 active:scale-[0.98]"
-      :class="chip.kind === 'action' ? 'border-primary/40 text-primary' : ''"
+      :class="chip.kind === 'action' ? 'border-primary-ui/40 text-primary-ui' : ''"
       @click="handleSelect(chip)"
     >
       <span class="flex items-center gap-1 text-[13px] leading-tight">

@@ -13,7 +13,6 @@
 import type {
   ChatEntryContext,
   TherapyApproach,
-  ChatMode,
   ResponseType,
 } from '@/shared/dto';
 
@@ -449,33 +448,6 @@ export const systemCore = `Ты — заботливый помощник по �
 ────────────────────────────────────────────────────────────────────────────`;
 
 // ===================================================================
-// РЕЖИМ-СПЕЦИФИЧНЫЕ ДОПОЛНЕНИЯ
-// ===================================================================
-
-export const modeSpecificAddons = {
-  therapy: `
-[РЕЖИМ "ТЕРАПИЯ"]
-Фокус: Эмоции, тревога, стресс, внутренние конфликты, психологическое благополучие.
-Подход: Глубокое исследование через вопросы + конкретная микрополезность.
-Время: 15-30 минут исследования.
-Цель: Понимание проблемы + опора для размышления + домашнее упражнение.`,
-
-  habits: `
-[РЕЖИМ "ПРИВЫЧКИ"]
-Фокус: Формирование и отказ от привычек, поведение, мотивация.
-Подход: Исследование триггеров и вознаграждений + конкретная опора.
-Структура: Триггер → Поведение → Результат.
-Цель: Осознание привычки + опора для размышления + упражнение.`,
-
-  talk: `
-[РЕЖИМ "РАЗГОВОР"]
-Фокус: Эмоциональная разгрузка, поддержка, общение.
-Подход: Активное слушание и исследование без жесткой структуры.
-Настроение: Более свободное, больше пространства для выражения.
-Цель: Быть услышанным и понятым + конкретная опора.`,
-};
-
-// ===================================================================
 // ONBOARDING (без markdown)
 // ===================================================================
 
@@ -729,22 +701,16 @@ export function buildChatPrelude(vars: {
   user_locale?: string;
   user_name?: string;
   user_gender?: string;
-  mode?: ChatMode;
   responseNumber?: number;
   approachHint?: TherapyApproach;
 }): string {
   const responseNumber = vars.responseNumber || 1;
-  const mode = vars.mode || 'therapy';
   const responseTypeInfo = getResponseTypeByNumber(responseNumber);
-
-  const modeAddon = modeSpecificAddons[mode] || '';
 
   const userContext = buildUserContext(vars);
   const systemPrompt = `${systemCore}
 
 ${userContext}
-
-${modeAddon}
 
 ────────────────────────────────────────────────────────────────────────────
 
@@ -755,8 +721,6 @@ ${modeAddon}
 
 Структура для этого ответа:
 ${responseTypeInfo.structure}
-
-Режим: ${mode.toUpperCase()}
 
 ────────────────────────────────────────────────────────────────────────────`;
 
@@ -797,7 +761,6 @@ export function buildChatPreludeWithMemory(
     user_locale?: string;
     user_name?: string;
     user_gender?: string;
-    mode?: ChatMode;
   },
   ctx: {
     isFirstSession?: boolean;
@@ -813,7 +776,6 @@ export function buildChatPreludeWithMemory(
   const systemPrelude = buildChatPrelude({
     ...vars,
     responseNumber,
-    mode: vars.mode || 'therapy',
   });
 
   const memoryBlock =
@@ -876,7 +838,6 @@ export function buildEntryContextDescription(
 }
 
 export function buildWelcomePrompt(options: {
-  mode: 'therapy' | 'habits' | 'talk';
   isFirstSession: boolean;
   sessionMemoryText?: string;
   lang?: string;
@@ -888,7 +849,6 @@ export function buildWelcomePrompt(options: {
 }): string {
   const lang = options.lang || 'ru';
   const isFirst = options.isFirstSession;
-  const mode = options.mode;
   const sessionMemoryText = options.sessionMemoryText || '';
   const contextNote = options.entryContext
     ? buildEntryContextDescription(options.entryContext)
@@ -901,7 +861,6 @@ export function buildWelcomePrompt(options: {
     prompt = prompt.replace(/{{user_gender}}/g, options.user_gender || '');
     prompt = prompt.replace(/{{user_locale}}/g, options.user_locale || '');
     prompt = prompt.replace(/{{lang}}/g, lang);
-    prompt = prompt.replace(/{{mode}}/g, mode);
 
     if (!isFirst && sessionMemoryText) {
       prompt = prompt + '\n\nКонтекст прошлых бесед:\n' + sessionMemoryText;
@@ -914,9 +873,8 @@ export function buildWelcomePrompt(options: {
     return contextNote ? `${contextNote}\n\n${prompt}` : prompt;
   }
 
-  const modeDescriptions: Record<string, { first: string; repeat: string }> = {
-    therapy: {
-      first: `Пользователь выбрал режим "Терапия". Это его первая сессия.
+  const templates = {
+    first: `Это первая сессия пользователя.
 
 Сгенерируй приветствие (2-3 предложения):
 - Представься и объясни чем помогаешь
@@ -925,7 +883,7 @@ export function buildWelcomePrompt(options: {
 
 Без форматирования (**, ---, эмодзи). Просто текст.`,
 
-      repeat: `Пользователь выбрал режим "Терапия". Это не первая сессия.
+    repeat: `Это не первая сессия пользователя.
 
 Контекст прошлых сессий:
 {{sessionMemoryText}}
@@ -937,59 +895,9 @@ export function buildWelcomePrompt(options: {
 - Завершается 1 открытым вопросом
 
 Без форматирования. Просто текст.`,
-    },
-    habits: {
-      first: `Пользователь выбрал режим "Привычки". Это его первая сессия.
-
-Сгенерируй приветствие (2-3 предложения):
-- Представься и объясни чем помогаешь с привычками
-- Добавь 1 конкретную опору (например: "часто помогает выбрать: это привычка которую ты хочешь начать, или от которой избавиться?")
-- Затем 1 открытый вопрос
-
-Без форматирования. Просто текст.`,
-
-      repeat: `Пользователь выбрал режим "Привычки". Это не первая сессия.
-
-Контекст прошлых сессий:
-{{sessionMemoryText}}
-
-Сгенерируй приветствие (2-3 предложения), которое:
-- Не утверждает, что вы уже обсуждали конкретно эту тему; формулируй нейтрально
-- Добавляет 1 конкретную опору
-- Мягко предлагает вернуться или перейти к новым
-- Завершается 1 открытым вопросом
-
-Без форматирования. Просто текст.`,
-    },
-    talk: {
-      first: `Пользователь выбрал свободный диалог. Это его первая сессия.
-
-Сгенерируй приветствие (2-3 предложения):
-- Представься и предложи пообщаться
-- Добавь 1 конкретную опору (может быть просто: "если хочешь помощи с чем-то конкретным - скажи")
-- Затем 1 открытый вопрос
-
-Без форматирования. Просто текст.`,
-
-      repeat: `Пользователь выбрал свободный диалог. Это не первая сессия.
-
-Контекст прошлых сессий:
-{{sessionMemoryText}}
-
-Сгенерируй приветствие (2-3 предложения), которое:
-- Не утверждает, что вы уже обсуждали конкретно эту тему; формулируй нейтрально
-- Добавляет 1 конкретную опору
-- Мягко предлагает вернуться или перейти к новым
-- Завершается 1 открытым вопросом
-
-Без форматирования. Просто текст.`,
-    },
   };
 
-  const template = isFirst
-    ? modeDescriptions[mode]?.first || modeDescriptions.therapy.first
-    : modeDescriptions[mode]?.repeat || modeDescriptions.therapy.repeat;
-
+  const template = isFirst ? templates.first : templates.repeat;
   let prompt = template;
 
   prompt = prompt.replace(/{{user_name}}/g, options.user_name || '');

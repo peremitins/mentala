@@ -15,7 +15,7 @@
               ? [
                   'rounded-lg border-2 border-border bg-transparent px-3 py-2 text-sm',
                   'ring-offset-background',
-                  'focus-visible:outline-none focus:border-primary',
+                  'focus-visible:outline-none focus:border-primary-ui',
                   'transition-colors',
                 ]
               : 'textarea-styled px-3 py-2',
@@ -253,7 +253,7 @@ onMounted(() => {
 
 /* Состояние фокуса */
 .textarea-styled:focus {
-  border-color: hsl(var(--primary) / 0.6);
+  border-color: hsl(var(--primary-ui) / 0.6);
   /* background: hsl(var(--background) / 0.12); */
   /* box-shadow:
     inset 0 1px 2px rgba(255, 255, 255, 0.15),

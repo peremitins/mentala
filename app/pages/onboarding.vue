@@ -11,7 +11,7 @@
     >
       <div class="mx-auto flex w-full max-w-2xl flex-col gap-4">
         <div
-          class="glass-deep rounded-2xl px-4 py-3 text-sm text-muted-foreground transition-all duration-300 ease-out"
+          class="glass-deep rounded-2xl px-4 py-3 text-sm text-foreground transition-all duration-300 ease-out"
           :class="
             showProgress
               ? 'opacity-100 translate-y-0'
@@ -28,7 +28,7 @@
             class="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted/40"
           >
             <div
-              class="h-full rounded-full bg-primary transition-all duration-500"
+              class="h-full rounded-full bg-primary-ui transition-all duration-500"
               :style="{ width: `${progressPercent}%` }"
             ></div>
           </div>
@@ -46,7 +46,7 @@
             <button
               v-if="showBack"
               type="button"
-              class="inline-flex items-center gap-2 text-xs text-muted-foreground transition-colors hover:text-foreground"
+              class="inline-flex items-center gap-2 text-xs text-foreground transition-colors hover:text-foreground"
               @click="goBack"
             >
               <IconArrowLeft class="h-4 w-4" />
@@ -58,7 +58,7 @@
                 <h1 class="text-2xl font-semibold text-foreground sm:text-3xl">
                   Добро пожаловать в Mentala
                 </h1>
-                <p class="text-sm text-muted-foreground">
+                <p class="text-sm text-foreground">
                   Давай быстро настроим приложение под тебя. Это займёт меньше
                   минуты.
                 </p>
@@ -71,7 +71,7 @@
                 <h2 class="text-2xl font-semibold text-foreground">
                   Как к вам обращаться?
                 </h2>
-                <p class="text-sm text-muted-foreground">
+                <p class="text-sm text-foreground">
                   Можно имя или никнейм. Как вам комфортно.
                 </p>
               </div>
@@ -105,7 +105,7 @@
                 <h2 class="text-2xl font-semibold text-foreground">
                   Укажите ваш пол
                 </h2>
-                <p class="text-sm text-muted-foreground">
+                <p class="text-sm text-foreground">
                   Это нужно для корректных обращений в текстах.
                 </p>
               </div>
@@ -132,7 +132,7 @@
                 <h2 class="text-2xl font-semibold text-foreground">
                   Сколько вам лет?
                 </h2>
-                <p class="text-sm text-muted-foreground">
+                <p class="text-sm text-foreground">
                   Это поможет тоньше настроить рекомендации.
                 </p>
               </div>
@@ -170,7 +170,7 @@
                 <h2 class="text-2xl font-semibold text-foreground">
                   Какой тон общения вам ближе?
                 </h2>
-                <p class="text-sm text-muted-foreground">
+                <p class="text-sm text-foreground">
                   Этот тон применяется к ассистенту и уведомлениям.
                 </p>
               </div>
@@ -208,7 +208,7 @@
                 <h2 class="text-2xl font-semibold text-foreground">
                   Готово, {{ finalName }}
                 </h2>
-                <p class="text-sm text-muted-foreground">
+                <p class="text-sm text-foreground">
                   Mentala настроена под вас. Можно начинать.
                 </p>
               </div>

@@ -14,7 +14,7 @@
           <div class="flex-1 space-y-1">
             <div class="flex items-center justify-between">
               <label class="text-xs text-foreground opacity-90">Название</label>
-              <span class="text-[10px] text-muted-foreground opacity-70">
+              <span class="text-[10px] text-foreground opacity-70">
                 {{ form.title.length }}/120
               </span>
             </div>
@@ -35,7 +35,7 @@
         <div class="space-y-1">
           <div class="flex items-center justify-between">
             <div class="text-xs text-foreground opacity-90">Текст промпта</div>
-            <span class="text-[10px] text-muted-foreground opacity-70">
+            <span class="text-[10px] text-foreground opacity-70">
               {{ (form.content || '').length }}/8000
             </span>
           </div>

@@ -1,22 +1,17 @@
-import { ref } from 'vue';
 import { useChatStore } from '@/app/stores/chat';
 import { useToast } from '@/app/composables/useToast';
 import { navigateTo } from '#app';
-import type { ChatMode } from '@/shared/dto';
 
 export function useEntryChat() {
   const chat = useChatStore();
 
-  async function startEntryChat(options: { mode: ChatMode }) {
+  async function startEntryChat() {
     try {
-      chat.startConversation({
-        mode: options.mode,
-      });
+      chat.startConversation();
       navigateTo({
         path: '/',
         query: {
           screen: 'chat',
-          mode: options.mode,
         },
       });
     } catch (error: any) {

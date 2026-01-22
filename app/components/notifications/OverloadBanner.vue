@@ -1,7 +1,7 @@
 <template>
   <div
     :class="[
-      'rounded-lg px-3 py-2 text-sm border transition-all duration-300 ease-in-out overflow-hidden',
+      'rounded-2xl px-3 py-2 text-sm border transition-all duration-300 ease-in-out overflow-hidden',
       isOver
         ? 'bg-destructive/10 border-destructive/50'
         : 'bg-muted/60 border-border/60',
@@ -10,17 +10,14 @@
     :aria-live="isOver ? 'assertive' : 'polite'"
   >
     <div class="flex items-start gap-2">
-      <span
-        class="text-base shrink-0 mt-0.5 transition-all duration-300"
-        :class="{ 'animate-pulse': isOver }"
-      >
+      <span class="" :class="{ 'animate-pulse': isOver }">
         {{ isOver ? '⚠️' : '💡' }}
       </span>
       <div class="flex-1 min-h-0">
         <!-- Счётчик уведомлений -->
         <div
-          class="text-xs font-semibold mb-1 transition-colors duration-300"
-          :class="isOver ? 'text-destructive' : 'text-muted-foreground'"
+          class="text-sm font-semibold"
+          :class="isOver ? 'text-destructive' : 'text-foreground'"
         >
           {{ pluralize(totalPerDay) }}: {{ totalPerDay }}
         </div>
@@ -28,7 +25,7 @@
         <div class="relative">
           <span
             :key="isOver ? 'over' : 'tip'"
-            class="block transition-all duration-300"
+            class="block transition-all duration-300 text-xs text-foreground mt-1"
             :class="{ 'font-medium': isOver }"
           >
             {{

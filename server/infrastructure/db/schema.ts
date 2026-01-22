@@ -34,6 +34,8 @@ export const users = pgTable('users', {
   gender: varchar('gender', { length: 10 }),
   ageRange: varchar('age_range', { length: 20 }),
   onboarding: jsonb('onboarding').notNull().default({}),
+  // Настройки фоновой сцены (обои, звук, анимация).
+  sceneSettings: jsonb('scene_settings').notNull().default({}),
   email: varchar('email', { length: 255 }).unique().notNull(),
   emailVerifiedAt: timestamp('email_verified_at'),
   passwordHash: text('password_hash'),
@@ -186,7 +188,7 @@ export const sessions = pgTable('sessions', {
 export const userPrompts = pgTable('user_prompts', {
   id: serial('id').primaryKey(),
   userId: integer('user_id').notNull(),
-  type: varchar('type', { length: 16 }).notNull(), // habits | therapy | talk
+  type: varchar('type', { length: 16 }).notNull(), // habits | therapy
   title: text('title').notNull(),
   content: text('content').notNull(),
   lang: varchar('lang', { length: 8 }).default('ru').notNull(),
@@ -200,11 +202,10 @@ export const userPrompts = pgTable('user_prompts', {
 });
 
 // === Welcome Prompts ===
-// Стартовые промпты для приветствия ассистента при выборе режима на welcome-экране
+// Стартовые промпты для приветствия ассистента на welcome-экране
 export const welcomePrompts = pgTable('welcome_prompts', {
   id: serial('id').primaryKey(),
   userId: integer('user_id').notNull(),
-  mode: varchar('mode', { length: 16 }).notNull(), // therapy | habits | talk
   isFirstSession: boolean('is_first_session').default(true).notNull(),
   content: text('content').notNull(),
   lang: varchar('lang', { length: 8 }).default('ru').notNull(),
@@ -250,6 +251,26 @@ export const therapyTopicsCustom = pgTable('therapy_topics_custom', {
     .defaultNow()
     .notNull(),
 });
+
+// Пользовательские дыхательные практики
+export const breathPracticesCustom = pgTable(
+  'breath_practices_custom',
+  {
+    id: text('id').primaryKey(),
+    userId: integer('user_id').notNull(),
+    name: varchar('name', { length: 120 }).notNull(),
+    phases: jsonb('phases').notNull(), // Массив BreathPhase
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    userIndex: index('idx_breath_practices_custom_user').on(table.userId),
+  })
+);
 
 // Каталог медитаций (источник метаданных, аудио лежит в public/)
 export const meditationTracks = pgTable(
@@ -317,11 +338,9 @@ export const userPreferences = pgTable('user_preferences', {
     .notNull(),
 });
 
-// Настройки чата (theme, mode, voice, avatar, enablePreviousResponseId, enableSummary)
+// Настройки чата (voice, avatar, enablePreviousResponseId, enableSummary)
 export const chatSettings = pgTable('chat_settings', {
   userId: integer('user_id').primaryKey().notNull(),
-  theme: varchar('theme', { length: 10 }).notNull().default('dark'), // 'dark' | 'light'
-  mode: varchar('mode', { length: 20 }).notNull().default('therapy'), // 'therapy' | 'habits'
   voice: boolean('voice').notNull().default(true),
   avatar: boolean('avatar').notNull().default(true),
   enablePreviousResponseId: boolean('enable_previous_response_id')

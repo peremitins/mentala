@@ -27,7 +27,6 @@ export default defineEventHandler(async (event) => {
     userId?: number | string;
     isFirstSession?: boolean;
     userPrompt?: string;
-    mode?: 'therapy' | 'habits' | 'talk'; // Режим для старта с welcome-экрана
     therapySessionId?: number; // для серверного обновления last_activity_at и биллинга
     entryContext?: ChatEntryContext;
   }>(event);
@@ -195,7 +194,6 @@ export default defineEventHandler(async (event) => {
           userId: uid,
           isFirstSession: serverIsFirst,
           userPrompt: body?.userPrompt,
-          mode: body?.mode, // Режим для старта с welcome-экрана
           entryContext: body?.entryContext,
         },
       });

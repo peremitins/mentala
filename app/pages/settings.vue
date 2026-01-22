@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-4 h-dvh overflow-y-auto pb-[100px] rounded-lg">
+  <div class="space-y-2 h-dvh overflow-y-auto pb-[100px] rounded-lg">
     <PageHeader title="⚙️&nbsp;&nbsp;Настройки" />
 
     <section

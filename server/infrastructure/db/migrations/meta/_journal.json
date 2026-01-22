@@ -120,6 +120,34 @@
       "when": 1768463004077,
       "tag": "0020_dapper_blue_marvel",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1768831627590,
+      "tag": "0021_motionless_thunderbolt_ross",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1768929645016,
+      "tag": "0022_hard_johnny_blaze",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1768985444175,
+      "tag": "0023_lonely_steve_rogers",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1769005875891,
+      "tag": "0024_same_marten_broadcloak",
+      "breakpoints": true
     }
   ]
 }

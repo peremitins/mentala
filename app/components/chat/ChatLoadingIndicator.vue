@@ -5,7 +5,7 @@
     <div class="flex items-center gap-2">
       <!-- Текст -->
       <span
-        class="text-sm text-muted-foreground/80 transition-opacity duration-300"
+        class="text-sm text-foreground transition-opacity duration-300"
       >
         {{ text }}
       </span>
@@ -14,7 +14,7 @@
         <span
           v-for="i in 3"
           :key="i"
-          class="w-2 h-2 rounded-full bg-primary/80 animate-pulse-smooth"
+          class="w-2 h-2 rounded-full bg-primary-ui/80 animate-pulse-smooth"
           :style="{
             animationDelay: `${(i - 1) * 0.15}s`,
             animationDuration: '1.2s',

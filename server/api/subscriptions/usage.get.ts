@@ -27,9 +27,10 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // Получаем данные пользователя (timezone и trialEndedAt)
+  // Получаем данные пользователя (timezone, trialEndedAt и id для доступа)
   const userData = await db
     .select({
+      id: users.id,
       timezone: users.timezone,
       trialEndedAt: users.trialEndedAt,
     })

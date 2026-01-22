@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-4 h-full overflow-y-auto rounded-lg pb-[100px]">
+  <div class="space-y-2 h-full overflow-y-auto rounded-lg">
     <PageHeader :title="entityName" :show-back-button="true" @go-back="goBack">
       <template #custom>
         <div class="flex items-center gap-2 flex-1 overflow-hidden">
@@ -26,7 +26,7 @@
                 <button
                   v-if="canEditCustomEntity"
                   type="button"
-                  class="text-muted-foreground hover:text-foreground transition"
+                  class="text-foreground hover:text-foreground transition"
                   @click="startEditTitle"
                   aria-label="Редактировать название"
                 >
@@ -51,392 +51,422 @@
       </template>
     </PageHeader>
 
-    <div class="">
-      <div
-        ref="subtitleInputContainerRef"
-        v-if="isEditingSubtitle"
-        class="space-y-2"
-      >
-        <TextareaResize
-          ref="subtitleInputRef"
-          v-model="subtitleDraft"
-          variant="form"
-          :placeholder="descriptionPlaceholder"
-          @esc-pressed="finishSubtitleEdit"
-        />
-      </div>
-      <div
-        v-else
-        class="flex items-start gap-3 rounded-lg px-3 py-2 border border-primary"
-      >
-        <p
-          class="text-sm text-foreground flex-1 border-2 border-transparent"
-          v-html="descriptionText"
-        />
-        <button
-          v-if="canEditCustomEntity"
-          type="button"
-          class="text-muted-foreground hover:text-foreground transition mt-1"
-          @click="startEditSubtitle"
-          aria-label="Редактировать описание"
-        >
-          <svg
-            class="h-4 w-4"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 013.536 3.536L6.5 20.5 3 21l.5-3.5L16.732 3.732z"
-            />
-          </svg>
-        </button>
-      </div>
-    </div>
-
-    <div class="space-y-6">
-      <div class="flex items-center justify-between">
-        <h3 class="text-base font-semibold">{{ 'Уведомления' }}</h3>
-        <Switch v-model:checked="enabled" />
-      </div>
-
-      <div class="space-y-4">
-        <WeekdaySelector v-model="activeDays" />
-        <TimeRangeSelector v-model="timeRange" />
-
-        <div class="space-y-2">
-          <label class="text-sm font-medium">
-            Частота: {{ timesPerDay }}
-            {{ timesPerDay === 1 ? 'раз' : 'раза' }} в день
-          </label>
-          <div class="px-[8px]">
-            <SliderRoot
-              v-model="timesPerDaySlider"
-              :min="1"
-              :max="5"
-              :step="1"
-              class="relative flex w-full touch-none select-none items-center py-3"
-              aria-label="Частота уведомлений"
-            >
-              <SliderTrack
-                class="relative h-2 w-full grow rounded-full bg-primary/20"
-              >
-                <SliderRange
-                  class="absolute h-full rounded-full bg-gradient-to-r from-primary to-primary"
-                />
-              </SliderTrack>
-              <SliderThumb
-                class="block h-5 w-5 rounded-full border-2 border-background/50 bg-primary shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-              />
-            </SliderRoot>
-          </div>
-          <div class="space-y-1.5">
-            <div class="flex flex-wrap justify-between gap-1 sm:gap-2">
-              <template v-for="slot in slotControls" :key="slot.index">
-                <div
-                  v-if="slot.isActive"
-                  class="flex flex-col items-center text-[11px] font-medium w-[32px] flex-shrink-0"
-                >
-                  <TimePicker
-                    :model-value="slot.minutes ?? timeRange.start"
-                    label=""
-                    @update:modelValue="
-                      (value) => setManualTime(slot.index, value)
-                    "
-                  >
-                    <template #trigger="{ formattedTime }">
-                      <button
-                        type="button"
-                        class="flex flex-col items-center gap-1 text-[10px] font-medium focus:outline-none"
-                      >
-                        <span
-                          :class="[
-                            'flex h-8 w-8 items-center justify-center rounded-full border text-sm transition-all',
-                            slot.isManual
-                              ? 'border-primary  text-surface-raised-foreground hover:opacity-75'
-                              : 'border-border  text-surface-inactive-foreground hover:border-primary hover:text-surface-raised-foreground',
-                          ]"
-                        >
-                          {{ slot.number }}
-                        </span>
-                        <span
-                          :class="[
-                            'text-center leading-tight text-[10px]',
-                            slot.isManual
-                              ? 'text-surface-raised-foreground'
-                              : 'text-surface-inactive-foreground',
-                          ]"
-                        >
-                          {{ slot.isManual ? formattedTime : 'Авто' }}
-                        </span>
-                      </button>
-                    </template>
-                  </TimePicker>
-                </div>
-                <div
-                  v-else
-                  class="flex flex-col items-center gap-1 text-[10px] font-medium text-muted-foreground opacity-50 w-[32px] flex-shrink-0"
-                >
-                  <span
-                    class="flex h-8 w-8 items-center justify-center rounded-full border border-dashed border-border text-sm"
-                  >
-                    {{ slot.number }}
-                  </span>
-                  <span class="text-center leading-tight whitespace-nowrap">
-                    Выкл
-                  </span>
-                </div>
-              </template>
-            </div>
-            <div
-              class="flex items-center justify-between text-[11px] text-muted-foreground"
-            >
-              <span>
-                Точное время уведомлений: по умолчанию равномерно, но можно
-                задать своё.
-              </span>
-              <button
-                v-if="hasCustomTimes"
-                type="button"
-                class="text-primary"
-                @click="resetAllSlotTimes"
-              >
-                Сбросить
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <OverloadBanner :total-per-day="currentTotalPerDay" />
-
-        <!-- Фокус уведомлений -->
-        <div class="space-y-2 mb-2">
-          <div class="flex items-center justify-between">
-            <div>
-              <p class="text-sm font-semibold text-foreground">
-                Фокус уведомлений
-              </p>
-              <p class="text-xs text-muted-foreground">
-                Выберите фокус и тип уведомлений
-              </p>
-            </div>
-          </div>
-
-          <ToggleGroup
-            :model-value="subtype || ''"
-            type="single"
-            class="inline-flex w-full gap-2 overflow-auto"
-            @update:model-value="
-              (value) => {
-                if (value && typeof value === 'string')
-                  subtype = value as NotificationSubtype;
-              }
-            "
-          >
-            <ToggleGroupItem
-              v-for="option in subtypeOptions"
-              :key="option.value"
-              :value="option.value"
-              class="flex-1 rounded-lg px-2 py-2 text-xs xs:text-sm whitespace-nowrap font-medium transition-all"
-            >
-              {{ option.icon }}&nbsp;{{ option.label }}
-            </ToggleGroupItem>
-          </ToggleGroup>
-        </div>
-
-        <!-- Информационный блок про фокус уведомлений -->
+    <div class="space-y-3 pb-[120px] animate-fade-in">
+      <!-- Карточка описания -->
+      <section class="glass-deep p-3 space-y-3">
+        <p class="text-sm font-semibold text-elevated-strong">Описание</p>
         <div
-          v-if="selectedSubtypeOption"
-          class="rounded-lg border border-primary p-4"
+          ref="subtitleInputContainerRef"
+          v-if="isEditingSubtitle"
+          class="space-y-2 rounded-2xl border border-white/10 bg-background/20 p-2"
         >
-          <div class="flex items-baseline gap-3">
-            <span class="">{{ selectedSubtypeOption.icon }}</span>
-            <div class="flex-1">
-              <p class="text-sm font-semibold text-foreground">
-                {{ selectedSubtypeOption.label }}
-              </p>
-              <p class="text-xs text-muted-foreground mt-1">
-                {{ selectedSubtypeOption.description }}
-              </p>
+          <TextareaResize
+            ref="subtitleInputRef"
+            v-model="subtitleDraft"
+            variant="form"
+            :placeholder="descriptionPlaceholder"
+            @esc-pressed="finishSubtitleEdit"
+          />
+        </div>
+        <div
+          v-else
+          class="flex items-start gap-3 rounded-2xl border border-white/10 bg-background/20 px-3 py-2"
+        >
+          <p
+            class="text-sm text-foreground/90 flex-1 border-2 border-transparent leading-relaxed"
+            v-html="descriptionText"
+          />
+          <button
+            v-if="canEditCustomEntity"
+            type="button"
+            class="text-foreground hover:text-foreground transition mt-1"
+            @click="startEditSubtitle"
+            aria-label="Редактировать описание"
+          >
+            <svg
+              class="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 013.536 3.536L6.5 20.5 3 21l.5-3.5L16.732 3.732z"
+              />
+            </svg>
+          </button>
+        </div>
+      </section>
+
+      <!-- Карточка расписания уведомлений -->
+      <section class="glass-deep p-3 space-y-4">
+        <div class="flex items-center justify-between">
+          <div class="space-y-1">
+            <h3 class="text-sm font-semibold text-elevated-strong">
+              {{ 'Уведомления' }}
+              <span class="text-xs font-normal">
+                ({{ enabled ? 'включены' : 'выключены' }})
+              </span>
+            </h3>
+            <p class="text-xs text-foreground">Дни, время и частота отправки</p>
+          </div>
+          <Switch v-model:checked="enabled" />
+        </div>
+
+        <div class="space-y-4">
+          <div class="rounded-2xl border border-white/10 bg-background/20 p-3">
+            <WeekdaySelector v-model="activeDays" />
+          </div>
+          <div class="rounded-2xl border border-white/10 bg-background/20 p-3">
+            <TimeRangeSelector v-model="timeRange" />
+          </div>
+
+          <div
+            class="rounded-2xl border border-white/10 bg-background/20 p-3 space-y-2"
+          >
+            <label class="text-sm font-medium text-foreground/90">
+              Частота: {{ timesPerDay }}
+              {{ timesPerDay === 1 ? 'раз' : 'раза' }} в день
+            </label>
+            <div class="px-[8px]">
+              <SliderRoot
+                v-model="timesPerDaySlider"
+                :min="1"
+                :max="5"
+                :step="1"
+                class="relative flex w-full touch-none select-none items-center py-3"
+                aria-label="Частота уведомлений"
+              >
+                <SliderTrack
+                  class="relative h-2 w-full grow rounded-full bg-primary-ui/20"
+                >
+                  <SliderRange
+                    class="absolute h-full rounded-full bg-gradient-to-r from-primary-ui to-primary-ui"
+                  />
+                </SliderTrack>
+                <SliderThumb
+                  class="block h-5 w-5 rounded-full border-2 border-primary-ui/10 bg-primary-ui shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-ui focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                />
+              </SliderRoot>
+            </div>
+            <div class="space-y-1.5">
+              <div class="flex flex-wrap justify-between gap-1 sm:gap-2">
+                <template v-for="slot in slotControls" :key="slot.index">
+                  <div
+                    v-if="slot.isActive"
+                    class="flex flex-col items-center text-[11px] font-medium w-[32px] flex-shrink-0"
+                  >
+                    <TimePicker
+                      :model-value="slot.minutes ?? timeRange.start"
+                      label=""
+                      @update:modelValue="
+                        (value) => setManualTime(slot.index, value)
+                      "
+                    >
+                      <template #trigger="{ formattedTime }">
+                        <button
+                          type="button"
+                          class="flex flex-col items-center gap-1 text-[10px] font-medium focus:outline-none"
+                        >
+                          <span
+                            :class="[
+                              'flex h-8 w-8 items-center justify-center rounded-full border text-sm transition-all',
+                              slot.isManual
+                                ? 'border-primary-ui  text-surface-raised-foreground hover:opacity-75'
+                                : 'border-border  text-surface-inactive-foreground hover:border-primary-ui hover:text-surface-raised-foreground',
+                            ]"
+                          >
+                            {{ slot.number }}
+                          </span>
+                          <span
+                            :class="[
+                              'text-center leading-tight text-[10px]',
+                              slot.isManual
+                                ? 'text-surface-raised-foreground'
+                                : 'text-surface-inactive-foreground',
+                            ]"
+                          >
+                            {{ slot.isManual ? formattedTime : 'Авто' }}
+                          </span>
+                        </button>
+                      </template>
+                    </TimePicker>
+                  </div>
+                  <div
+                    v-else
+                    class="flex flex-col items-center gap-1 text-[10px] font-medium text-foreground opacity-50 w-[32px] flex-shrink-0"
+                  >
+                    <span
+                      class="flex h-8 w-8 items-center justify-center rounded-full border border-dashed border-border text-sm"
+                    >
+                      {{ slot.number }}
+                    </span>
+                    <span class="text-center leading-tight whitespace-nowrap">
+                      Выкл
+                    </span>
+                  </div>
+                </template>
+              </div>
+              <div
+                class="flex items-center justify-between text-[11px] text-foreground"
+              >
+                <span>
+                  Точное время уведомлений: по умолчанию равномерно, но можно
+                  задать своё.
+                </span>
+                <button
+                  v-if="hasCustomTimes"
+                  type="button"
+                  class="text-primary-ui"
+                  @click="resetAllSlotTimes"
+                >
+                  Сбросить
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <OverloadBanner :total-per-day="currentTotalPerDay" />
+        </div>
+      </section>
+
+      <!-- Карточка контента уведомлений -->
+      <section class="space-y-3">
+        <div class="glass-deep p-3">
+          <div class="space-y-2 mb-2">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-semibold text-foreground">
+                  Фокус уведомлений
+                </p>
+                <!-- <p class="text-xs text-foreground">
+                  Выберите фокус и тип уведомлений
+                </p> -->
+              </div>
+            </div>
+
+            <ToggleGroup
+              :model-value="subtype || ''"
+              type="single"
+              class="inline-flex w-full gap-2 overflow-auto"
+              @update:model-value="
+                (value) => {
+                  if (value && typeof value === 'string')
+                    subtype = value as NotificationSubtype;
+                }
+              "
+            >
+              <ToggleGroupItem
+                v-for="option in subtypeOptions"
+                :key="option.value"
+                :value="option.value"
+                class="flex-1 rounded-lg px-2 py-2 text-xs xs:text-sm whitespace-nowrap font-medium transition-all"
+              >
+                {{ option.icon }}&nbsp;{{ option.label }}
+              </ToggleGroupItem>
+            </ToggleGroup>
+          </div>
+
+          <!-- Информационный блок про фокус уведомлений -->
+          <div
+            v-if="selectedSubtypeOption"
+            class="rounded-2xl border bg-muted/60 border-border/60 px-3 py-2"
+          >
+            <div class="flex items-baseline gap-2">
+              <span class="">{{ selectedSubtypeOption.icon }}</span>
+              <div class="flex-1">
+                <p class="text-sm font-semibold text-foreground">
+                  {{ selectedSubtypeOption.label }}
+                </p>
+                <p class="text-xs text-foreground mt-1">
+                  {{ selectedSubtypeOption.description }}
+                </p>
+              </div>
             </div>
           </div>
         </div>
 
         <!-- Стиль уведомлений -->
-        <div class="space-y-2 mb-2">
-          <div class="flex items-center justify-between">
-            <div>
-              <p class="text-sm font-semibold text-foreground">
-                Стиль уведомлений
-              </p>
-              <p class="text-xs text-muted-foreground">
-                Выберите стиль общения в уведомлениях
-              </p>
+        <div class="glass-deep p-3">
+          <div class="space-y-2 mb-2">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-semibold text-foreground">
+                  Стиль уведомлений
+                </p>
+                <!-- <p class="text-xs text-foreground">
+                  Выберите стиль общения в уведомлениях
+                </p> -->
+              </div>
             </div>
+
+            <ToggleGroup
+              :model-value="directness"
+              type="single"
+              class="inline-flex w-full gap-2 overflow-auto"
+              @update:model-value="
+                (value) => {
+                  if (value && typeof value === 'string')
+                    directness = value as Directness;
+                }
+              "
+            >
+              <ToggleGroupItem
+                v-for="option in DIRECTNESS_OPTIONS"
+                :key="option.value"
+                :value="option.value"
+                class="flex-1 rounded-lg px-2 py-2 text-xs xs:text-sm whitespace-nowrap font-medium transition-all"
+              >
+                {{ option.icon }} {{ option.label }}
+              </ToggleGroupItem>
+            </ToggleGroup>
           </div>
 
-          <ToggleGroup
-            :model-value="directness"
-            type="single"
-            class="inline-flex w-full gap-2 overflow-auto"
-            @update:model-value="
-              (value) => {
-                if (value && typeof value === 'string')
-                  directness = value as Directness;
-              }
-            "
+          <!-- Информационный блок про стиль уведомлений -->
+          <div
+            v-if="selectedDirectnessOption"
+            class="rounded-2xl border bg-muted/60 border-border/60 px-3 py-2"
           >
-            <ToggleGroupItem
-              v-for="option in DIRECTNESS_OPTIONS"
-              :key="option.value"
-              :value="option.value"
-              class="flex-1 rounded-lg px-2 py-2 text-xs xs:text-sm whitespace-nowrap font-medium transition-all"
-            >
-              {{ option.icon }} {{ option.label }}
-            </ToggleGroupItem>
-          </ToggleGroup>
-        </div>
-
-        <!-- Информационный блок про стиль уведомлений -->
-        <div
-          v-if="selectedDirectnessOption"
-          class="rounded-lg border border-primary p-4"
-        >
-          <div class="flex items-baseline gap-3">
-            <span class="">💬</span>
-            <div class="flex-1">
-              <p class="text-sm font-semibold text-foreground">
-                {{ selectedDirectnessOption.label }}
-              </p>
-              <p class="text-xs text-muted-foreground mt-1">
-                {{ selectedDirectnessOption.description }}
-              </p>
+            <div class="flex items-baseline gap-2">
+              <span class="">💬</span>
+              <div class="flex-1">
+                <p class="text-sm font-semibold text-foreground">
+                  {{ selectedDirectnessOption.label }}
+                </p>
+                <p class="text-xs text-foreground mt-1">
+                  {{ selectedDirectnessOption.description }}
+                </p>
+              </div>
             </div>
           </div>
         </div>
 
         <!-- Способ создания уведомлений  -->
-        <div class="space-y-2 mb-2">
-          <div class="flex items-center justify-between">
-            <div>
-              <p class="text-sm font-semibold text-foreground">
-                Способ создания
-              </p>
-              <p class="text-xs text-muted-foreground">
-                Выберите способ создания текстов уведомлений
-              </p>
+        <div class="glass-deep p-3">
+          <div class="space-y-2 mb-2">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-semibold text-foreground">
+                  Способ создания
+                </p>
+                <!-- <p class="text-xs text-foreground">
+                  Выберите способ создания текстов уведомлений
+                </p> -->
+              </div>
             </div>
+
+            <ToggleGroup
+              v-model="textSource"
+              type="single"
+              class="inline-flex w-full gap-2 overflow-auto"
+            >
+              <ToggleGroupItem
+                value="templates"
+                class="flex-1 rounded-lg px-3 py-2 text-xs xs:text-sm whitespace-nowrap font-medium transition-all"
+              >
+                ✍️ Шаблоны
+              </ToggleGroupItem>
+              <ToggleGroupItem
+                value="ai"
+                class="flex-1 rounded-lg px-3 py-2 text-xs xs:text-sm whitespace-nowrap font-medium transition-all"
+              >
+                ✨ ИИ
+              </ToggleGroupItem>
+              <ToggleGroupItem
+                value="hybrid"
+                class="flex-1 rounded-lg px-3 py-2 text-xs xs:text-sm whitespace-nowrap font-medium transition-all"
+              >
+                🔀 Гибридный
+              </ToggleGroupItem>
+            </ToggleGroup>
           </div>
 
-          <ToggleGroup
-            v-model="textSource"
-            type="single"
-            class="inline-flex w-full gap-2 overflow-auto"
+          <!-- Информационный блок для Шаблонов -->
+          <div
+            v-if="textSource === 'templates'"
+            class="rounded-2xl border bg-muted/60 border-border/60 px-3 py-2"
           >
-            <ToggleGroupItem
-              value="templates"
-              class="flex-1 rounded-lg px-3 py-2 text-xs xs:text-sm whitespace-nowrap font-medium transition-all"
-            >
-              ✍️ Шаблоны
-            </ToggleGroupItem>
-            <ToggleGroupItem
-              value="ai"
-              class="flex-1 rounded-lg px-3 py-2 text-xs xs:text-sm whitespace-nowrap font-medium transition-all"
-            >
-              ✨ ИИ
-            </ToggleGroupItem>
-            <ToggleGroupItem
-              value="hybrid"
-              class="flex-1 rounded-lg px-3 py-2 text-xs xs:text-sm whitespace-nowrap font-medium transition-all"
-            >
-              🔀 Гибридный
-            </ToggleGroupItem>
-          </ToggleGroup>
-        </div>
+            <div class="flex items-baseline gap-2">
+              <span class="">✍️</span>
+              <div class="flex-1">
+                <p class="text-sm font-semibold text-foreground">
+                  Использование шаблонов
+                </p>
+                <p class="text-xs text-foreground mt-1">
+                  Тексты уведомлений будут браться из готовых шаблонов с учетом
+                  всех параметров настроек (фокус, стиль, обращение).
+                </p>
+              </div>
+            </div>
+          </div>
 
-        <!-- Кнопка управления текстами -->
-        <div class="space-y-2">
-          <button
-            type="button"
-            class="btn btn-outline w-full"
-            @click="goToTextsEditor"
+          <!-- Информационный блок для ИИ -->
+          <div
+            v-if="textSource === 'ai'"
+            class="rounded-2xl border bg-muted/60 border-border/60 px-3 py-2"
           >
-            🔧 Управлять текстами уведомлений
-          </button>
-        </div>
-
-        <!-- Информационный блок для Шаблонов -->
-        <div
-          v-if="textSource === 'templates'"
-          class="rounded-lg border border-primary p-4"
-        >
-          <div class="flex items-baseline gap-3">
-            <span class="">✍️</span>
-            <div class="flex-1">
-              <p class="text-sm font-semibold text-foreground">
-                Использование шаблонов
-              </p>
-              <p class="text-xs text-muted-foreground mt-1">
-                Тексты уведомлений будут браться из готовых шаблонов с учетом
-                всех параметров настроек (фокус, стиль, обращение).
-              </p>
+            <div class="flex items-baseline gap-2">
+              <span class="">✨</span>
+              <div class="flex-1">
+                <p class="text-sm font-semibold text-foreground">
+                  Генерация через ИИ
+                </p>
+                <p class="text-xs text-foreground mt-1">
+                  Тексты уведомлений будут генерироваться ИИ с учетом всех
+                  параметров настроек (фокус, стиль, обращение).
+                </p>
+              </div>
             </div>
           </div>
-        </div>
 
-        <!-- Информационный блок для ИИ -->
-        <div
-          v-if="textSource === 'ai'"
-          class="rounded-lg border border-primary p-4"
-        >
-          <div class="flex items-baseline gap-3">
-            <span class="">✨</span>
-            <div class="flex-1">
-              <p class="text-sm font-semibold text-foreground">
-                Генерация через ИИ
-              </p>
-              <p class="text-xs text-muted-foreground mt-1">
-                Тексты уведомлений будут генерироваться ИИ с учетом всех
-                параметров настроек (фокус, стиль, обращение).
-              </p>
+          <!-- Информационный блок для Гибридного режима -->
+          <div
+            v-if="textSource === 'hybrid'"
+            class="rounded-2xl border bg-muted/60 border-border/60 px-3 py-2"
+          >
+            <div class="flex items-baseline gap-2">
+              <span class="">🔀</span>
+              <div class="flex-1">
+                <p class="text-sm font-semibold text-foreground">
+                  Гибридный режим
+                </p>
+                <p class="text-xs text-foreground mt-1">
+                  Тексты уведомлений будут чередоваться: часть будет взята из
+                  готовых шаблонов, часть создаст ИИ с учётом всех параметров
+                  настроек.
+                </p>
+              </div>
             </div>
           </div>
-        </div>
 
-        <!-- Информационный блок для Гибридного режима -->
-        <div
-          v-if="textSource === 'hybrid'"
-          class="rounded-lg border border-primary p-4"
-        >
-          <div class="flex items-baseline gap-3">
-            <span class="">🔀</span>
-            <div class="flex-1">
-              <p class="text-sm font-semibold text-foreground">
-                Гибридный режим
-              </p>
-              <p class="text-xs text-muted-foreground mt-1">
-                Тексты уведомлений будут чередоваться: часть будет взята из
-                готовых шаблонов, часть создаст ИИ с учётом всех параметров
-                настроек.
-              </p>
-            </div>
+          <!-- Блок управления текстами -->
+          <div
+            class="rounded-2xl border border-white/10 bg-background/20 p-3 mt-2"
+          >
+            <button
+              type="button"
+              class="btn btn-outline w-full"
+              @click="goToTextsEditor"
+            >
+              🔧 Управлять текстами уведомлений
+            </button>
           </div>
         </div>
-      </div>
+      </section>
 
-      <div class="flex flex-col gap-3">
+      <!-- Карточка сохранения -->
+      <section class="glass-deep p-3">
         <button
           type="button"
-          class="rounded-lg px-4 py-3 text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+          class="rounded-lg px-4 py-3 text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 w-full"
           :disabled="isSaveDisabled"
           @click="saveSettings"
         >
           {{ loading ? 'Сохранение...' : 'Сохранить' }}
         </button>
-      </div>
+      </section>
     </div>
   </div>
 </template>
@@ -1061,7 +1091,8 @@ onMounted(async () => {
     }
     if (globalPrefs) {
       addressing.value = globalPrefs.addressing;
-      tone.value = globalPrefs.tone === 'unknown' ? 'neutral' : globalPrefs.tone;
+      tone.value =
+        globalPrefs.tone === 'unknown' ? 'neutral' : globalPrefs.tone;
     }
 
     const prefsUrl = isHabits.value

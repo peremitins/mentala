@@ -55,7 +55,7 @@ const loaderSize = computed(() => {
   display: flex;
   align-items: center;
   /* font-size устанавливается через :style для гибкости */
-  filter: drop-shadow(0 0 0.67em hsla(var(--primary), 0.4));
+  filter: drop-shadow(0 0 0.67em hsla(var(--primary-ui), 0.4));
   animation: loader-appear 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
@@ -76,12 +76,12 @@ const loaderSize = computed(() => {
   height: 1em;
   margin: 0 0.11em; /* 2px при font-size: 18px */
   border-radius: 50% / 0.5em;
-  background-color: hsl(var(--primary));
+  background-color: hsl(var(--primary-ui));
 }
 
 .heart-piece::after,
 .heart-piece::before {
-  background-color: hsl(var(--primary));
+  background-color: hsl(var(--primary-ui));
   content: '';
   position: absolute;
   left: 0;

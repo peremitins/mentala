@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-4 h-full overflow-y-auto rounded-lg pb-[100px]">
+  <div class="space-y-2 h-full overflow-y-auto rounded-lg pb-[100px]">
     <PageHeader :title="entityName" :show-back-button="true" @go-back="goBack">
       <template #custom>
         <div class="flex items-center gap-2 flex-1 overflow-hidden">
@@ -26,7 +26,7 @@
                 <button
                   v-if="canEditCustomEntity"
                   type="button"
-                  class="text-muted-foreground hover:text-foreground transition"
+                  class="text-foreground hover:text-foreground transition"
                   @click="startEditTitle"
                   aria-label="Редактировать название"
                 >
@@ -67,7 +67,7 @@
     <div v-else class="flex-1 overflow-y-auto space-y-4">
       <div class="glass-deep p-5" :class="heroGradient">
         <div class="space-y-3">
-          <p class="text-sm text-muted-foreground">
+          <p class="text-sm text-foreground">
             {{ entityDescription }}
           </p>
         </div>
@@ -319,17 +319,14 @@ async function startConversation() {
     chat.entryContext = entryContext.value;
     chat.startSession();
 
-    // Запускаем разговор с правильным режимом
-    chat.startConversation({
-      mode: 'therapy',
-    });
+    // Запускаем разговор без режима
+    chat.startConversation();
 
     // Переходим на главную страницу с правильными query параметрами
     navigateTo({
       path: '/',
       query: {
         screen: 'chat',
-        mode: 'therapy',
       },
     });
   } catch (error: any) {

@@ -27,10 +27,10 @@
           "
           class="mt-2 space-y-1"
         >
-          <p class="text-xs text-muted-foreground">
+          <p class="text-xs text-foreground">
             Доступен полный функционал Premium: AI-чат, 100 минут в неделю
           </p>
-          <p class="text-xs text-muted-foreground">
+          <p class="text-xs text-foreground">
             Пробный период действует до:
             {{ formatTrialDate(subscriptionData.trialExpiresAt) }}
           </p>
@@ -46,17 +46,17 @@
           </p>
           <p
             v-else-if="subscription.paymentStatus === 'active'"
-            class="text-xs text-muted-foreground mt-1"
+            class="text-xs text-foreground mt-1"
           >
             Действует до: {{ formatDate(subscription.endDate) }}
           </p>
           <p
             v-else-if="subscription.paymentStatus === 'expired'"
-            class="text-xs text-muted-foreground mt-1"
+            class="text-xs text-foreground mt-1"
           >
             Истекла: {{ formatDate(subscription.endDate) }}
           </p>
-          <p v-else class="text-xs text-muted-foreground mt-1">
+          <p v-else class="text-xs text-foreground mt-1">
             Статус:
             {{ getPaymentStatusText(subscription.paymentStatus) }}
           </p>
@@ -66,13 +66,13 @@
       <!-- Прогресс-бар использования минут (только если есть доступ к ИИ) -->
       <div v-if="shouldShowProgressBar" class="space-y-1">
         <div class="flex items-center justify-between text-xs">
-          <span class="text-muted-foreground">Использовано:</span>
+          <span class="text-foreground">Использовано:</span>
           <span class="font-medium">
             {{ usage?.usedMinutes || 0 }} из {{ weeklyMinutesLimit }} минут на
             этой неделе
           </span>
         </div>
-        <div class="h-2 w-full rounded-full bg-primary/20 overflow-hidden">
+        <div class="h-2 w-full rounded-full bg-primary-ui/20 overflow-hidden">
           <div
             class="h-full transition-all duration-300"
             :class="
@@ -93,13 +93,13 @@
         v-if="shouldShowNoAccessInfo"
         class="rounded-md bg-muted/50 border border-border p-3 space-y-2"
       >
-        <p class="text-sm font-medium text-muted-foreground">
+        <p class="text-sm font-medium text-foreground">
           Функционал ИИ недоступен
         </p>
         <p class="text-xs text-muted-foreground">
           На тарифе Basic без пробного периода доступны только уведомления с
-          шаблонами. Выберите тариф PRO или Premium, чтобы получить
-          доступ к AI-чату.
+          шаблонами. Выберите тариф PRO или Premium, чтобы получить доступ к
+          AI-чату.
         </p>
       </div>
 
@@ -112,9 +112,7 @@
     </div>
 
     <div v-else class="space-y-2">
-      <p class="text-sm text-muted-foreground">
-        Текущий план: нет активной подписки
-      </p>
+      <p class="text-sm text-foreground">Текущий план: нет активной подписки</p>
       <NuxtLink
         to="/subscription"
         class="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 transition-opacity"

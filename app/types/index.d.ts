@@ -1,4 +1,4 @@
-export type AiWorkMode = 'therapy' | 'habits' | 'talk';
+export type AiWorkMode = 'therapy' | 'habits';
 
 export interface UserPrompt {
   id: number;

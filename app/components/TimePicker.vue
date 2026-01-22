@@ -9,7 +9,7 @@
         <slot name="trigger" :formatted-time="formattedTime">
           <Button
             variant="outline"
-            class="w-full justify-start text-left font-normal border-primary rounded-lg bg-transparent"
+            class="w-full justify-start text-left font-normal border-primary-ui rounded-lg bg-transparent"
           >
             <IconClock class="mr-2 h-4 w-4 opacity-50" />
             {{ formattedTime }}
@@ -82,10 +82,7 @@
 
           <!-- Минуты -->
           <div
-            :class="[
-              'flex flex-col items-center',
-              isTimeMode ? '' : 'w-full',
-            ]"
+            :class="['flex flex-col items-center', isTimeMode ? '' : 'w-full']"
           >
             <!-- Кнопка вверх для минут (уменьшаем) -->
             <button
@@ -105,19 +102,19 @@
                 class="h-full [&>div>div]:overflow-y-auto [&_[data-radix-scroll-area-scrollbar]]:hidden"
               >
                 <div class="flex flex-col">
-              <button
-                v-for="minute in minutesList"
-                :key="`minute-${minute}`"
-                :data-minute="minute"
-                type="button"
-                :class="[
-                  'flex h-10 w-full items-center justify-center text-sm transition-colors',
-                  minute === minutes
-                    ? 'bg-primary font-semibold text-primary-foreground'
-                    : isTimeMode
-                      ? 'hover:bg-muted'
-                      : 'text-white/80 hover:bg-white/10',
-                ]"
+                  <button
+                    v-for="minute in minutesList"
+                    :key="`minute-${minute}`"
+                    :data-minute="minute"
+                    type="button"
+                    :class="[
+                      'flex h-10 w-full items-center justify-center text-sm transition-colors',
+                      minute === minutes
+                        ? 'bg-primary font-semibold text-primary-foreground'
+                        : isTimeMode
+                          ? 'hover:bg-muted'
+                          : 'text-white/80 hover:bg-white/10',
+                    ]"
                     @click="
                       updateTime(hours, minute);
                       scrollToValue('minutes', minute);
@@ -198,9 +195,8 @@ const portalProps = computed(() => {
   }
   return undefined;
 });
-const effectiveMinuteMin = computed(() =>
-  isTimeMode.value ? props.minuteMin : 1
-);
+// В режиме минут учитываем минутный минимум, чтобы поддержать "0 минут".
+const effectiveMinuteMin = computed(() => props.minuteMin);
 const effectiveMinuteMax = computed(() =>
   isTimeMode.value ? props.minuteMax : 60
 );
