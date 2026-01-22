@@ -237,6 +237,10 @@ export interface RegisterTokenDto {
   platform: Platform;
 }
 
+export interface UnregisterTokenDto {
+  token: string;
+}
+
 // ==========================================
 // Слоты уведомлений
 // ==========================================

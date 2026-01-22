@@ -8,6 +8,7 @@ import {
   getUserTimezone,
   updateUserTimezone,
 } from '@/server/application/notifications/timezone.utils';
+import { scheduleNotificationSlotsAfterLogin } from '@/server/application/notifications/login-slots.service';
 import { getClientIp } from '@/server/utils/ip';
 import { checkRateLimit } from '@/server/application/auth/rate-limit';
 import { normalizeEmail } from '@/server/application/auth/verification';
@@ -125,6 +126,8 @@ export default defineEventHandler(async (event) => {
   // Ротация session ID при логине (защита от session fixation)
   const { rotateSessionId } = await import('@/server/application/auth/session');
   const sessionId = await rotateSessionId(event, existing[0].id, body.locale);
+  // После логина проверяем расписание уведомлений в фоне, чтобы не блокировать ответ
+  scheduleNotificationSlotsAfterLogin(existing[0].id);
 
   // Определяем, является ли запрос от native платформы (Capacitor)
   const platform = String(getHeader(event, 'x-platform') || '').toLowerCase();
