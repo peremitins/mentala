@@ -27,6 +27,9 @@ index, onboarding, chat (layout blank), therapy, habits, practices, breath-pract
 • `/settings/assistant` — тон/обращение.
 • `/settings/language` — выбор языка/локали (RU/EN).
 • `/privacy` — память и данные, ссылка на политику.
+• Юридические документы: статические HTML в `public/legal/` (`terms-of-service.html`, `privacy-policy.html`), ссылки используются в auth/settings/privacy.
+• Согласия с документами: в `users` храним `termsAcceptedAt`, `privacyAcceptedAt`, версии и источник принятия; маркетинговое согласие хранится отдельно (`marketingConsentAt`).
+• В настройках: переключатель «Маркетинговые сообщения» пишет согласие через `PATCH /api/user/me`.
 • ID пользователя показывается внизу `/settings` с копированием (useClipboard/Capacitor Clipboard с fallback).
 • Чат: welcome‑ответ стартует при пустом `messages`, параметр `mode` удалён; `entryContext` приходит из разделов `/habits` и `/therapy` и учитывается в prompt.
 • Практики:
@@ -90,7 +93,7 @@ server/
 • cors (whitelist origins из env),
 • csrf (для cookie-канала, state-changing методы).
 • Логирование security events (csrf_mismatch, origin_mismatch, ip_mismatch и т.д.).
-• Email‑верификация: коды в Redis (`auth:email_verification:*`), hash `sha256(code+secret)`, TTL 15 минут, 5 попыток, rate limit по IP/email.
+• Email‑верификация: коды в Redis (`auth:email_verification:*`), hash `sha256(code+secret)`, TTL 15 минут, 5 попыток; для регистрации (`/api/auth/email/register`) rate limit по IP/устройству (UA‑hash) — 15/час, без email, чтобы не раскрывать наличие аккаунта.
 • Временный пароль до верификации: `auth:email_verification_password:*` (TTL 15 минут), перенос в БД только после подтверждения.
 • OAuth-линковка: временные данные `auth:oauth_link:*` + код `auth:oauth_link_code:*`, TTL 15 минут, до 5 попыток.
 • OAuth redirect в dev: если configured `PUBLIC_APP_ORIGIN` не совпадает с origin запроса, используется origin текущего запроса (нужно для ngrok/туннелей и мобильного dev).

@@ -3,7 +3,10 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/server/infrastructure/db/client';
 import { users } from '@/server/infrastructure/db/schema';
 import { EmailResendCodeDto } from '@/shared/dto/auth';
-import { normalizeEmail, getEmailVerificationKey } from '@/server/application/auth/verification';
+import {
+  normalizeEmail,
+  getEmailVerificationKey,
+} from '@/server/application/auth/verification';
 import { checkRateLimit } from '@/server/application/auth/rate-limit';
 import { issueVerificationCode } from '@/server/application/auth/email-verification.service';
 import { getClientIp } from '@/server/utils/ip';
@@ -34,7 +37,7 @@ export default defineEventHandler(async (event) => {
   if (blocked && !blocked.allowed) {
     return {
       message:
-        'Если аккаунт существует, мы отправили письмо с кодом подтверждения',
+        'Мы отправили письмо с кодом подтверждения.\nЕсли вы уже использовали Mentala ранее, вы сможете войти или восстановить доступ',
       retryAfter: blocked.retryAfter,
     };
   }
@@ -51,6 +54,6 @@ export default defineEventHandler(async (event) => {
 
   return {
     message:
-      'Если аккаунт существует, мы отправили письмо с кодом подтверждения',
+      'Мы отправили письмо с кодом подтверждения.\nЕсли вы уже использовали Mentala ранее, вы сможете войти или восстановить доступ',
   };
 });

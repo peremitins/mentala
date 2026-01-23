@@ -51,6 +51,7 @@ export const useAuthStore = defineStore('auth', {
       isBlocked?: boolean;
       emailVerifiedAt?: string | null;
       hasPassword?: boolean;
+      marketingConsent?: boolean;
       // Настройки фоновой сцены приложения (страница Scene Selection).
       sceneSettings?: {
         sceneId?: string | null;
@@ -241,6 +242,11 @@ export const useAuthStore = defineStore('auth', {
       password: string;
       name?: string;
       locale?: string;
+      // Юридические согласия, обязательные для регистрации
+      acceptTerms: boolean;
+      acceptPrivacy: boolean;
+      // Маркетинговое согласие опционально
+      marketingConsent?: boolean;
     }) {
       this.loading = true;
       try {

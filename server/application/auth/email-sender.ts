@@ -1,5 +1,7 @@
 import nodemailer from 'nodemailer';
+import { createError } from 'h3';
 import { useRuntimeConfig } from '#imports';
+import { maskEmail } from '@/server/application/auth/verification';
 
 type SmtpConfig = {
   host: string;
@@ -39,6 +41,26 @@ function getSmtpConfig(): SmtpConfig {
   };
 }
 
+export function validateSmtpConfig(): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+  const cfg = useRuntimeConfig();
+
+  if (!cfg.smtpHost && !process.env.SMTP_HOST) {
+    errors.push('SMTP_HOST не настроен');
+  }
+  if (!cfg.smtpUser && !process.env.SMTP_USER) {
+    errors.push('SMTP_USER не настроен');
+  }
+  if (!cfg.smtpPassword && !process.env.SMTP_PASSWORD) {
+    errors.push('SMTP_PASSWORD не настроен');
+  }
+  if (!cfg.smtpFrom && !process.env.SMTP_FROM) {
+    errors.push('SMTP_FROM не настроен');
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
 function getTransporter(): nodemailer.Transporter {
   if (cachedTransporter) return cachedTransporter;
   const smtp = getSmtpConfig();
@@ -58,29 +80,59 @@ export async function sendVerificationEmail(
   to: string,
   code: string
 ): Promise<void> {
-  const smtp = getSmtpConfig();
-  const transporter = getTransporter();
+  let smtp: SmtpConfig | null = null;
 
-  const subject = 'Подтвердите ваш email — Mentala';
-  const text = `Ваш код подтверждения: ${code}. Код действителен 15 минут.`;
-  const html = `
-    <div style="font-family: Inter, Arial, sans-serif; line-height: 1.6; color: #0f172a;">
-      <h2 style="margin: 0 0 12px;">Подтвердите ваш email</h2>
-      <p style="margin: 0 0 16px;">Ваш код подтверждения:</p>
-      <div style="display: inline-block; font-size: 24px; letter-spacing: 6px; font-weight: 700; padding: 12px 16px; background: #f1f5f9; border-radius: 12px;">
-        ${code}
+  try {
+    smtp = getSmtpConfig();
+    const transporter = getTransporter();
+
+    const subject = 'Подтвердите ваш email — Mentala';
+    const text = `Ваш код подтверждения: ${code}. Код действителен 15 минут.`;
+    const html = `
+      <div style="font-family: Inter, Arial, sans-serif; line-height: 1.6; color: #0f172a;">
+        <h2 style="margin: 0 0 12px;">Подтвердите ваш email</h2>
+        <p style="margin: 0 0 16px;">Ваш код подтверждения:</p>
+        <div style="display: inline-block; font-size: 24px; letter-spacing: 6px; font-weight: 700; padding: 12px 16px; background: #f1f5f9; border-radius: 12px;">
+          ${code}
+        </div>
+        <p style="margin: 16px 0 0; color: #64748b;">Код действителен 15 минут.</p>
       </div>
-      <p style="margin: 16px 0 0; color: #64748b;">Код действителен 15 минут.</p>
-    </div>
-  `;
+    `;
 
-  await transporter.sendMail({
-    from: `${smtp.fromName} <${smtp.from}>`,
-    to,
-    subject,
-    text,
-    html,
-  });
+    await transporter.sendMail({
+      from: `${smtp.fromName} <${smtp.from}>`,
+      to,
+      subject,
+      text,
+      html,
+    });
+
+    // Логируем успешную отправку для мониторинга (без PII)
+    console.log(`[Email] ✅ Verification code sent to ${maskEmail(to)}`);
+  } catch (error: any) {
+    const errorMessage = error?.message || String(error);
+    const errorCode = error?.code || 'UNKNOWN';
+
+    console.error(
+      `[Email] ❌ Failed to send verification code to ${maskEmail(to)}:`,
+      {
+        error: errorMessage,
+        code: errorCode,
+        smtpHost: smtp?.host,
+        smtpPort: smtp?.port,
+      }
+    );
+
+    throw createError({
+      statusCode: 500,
+      statusMessage:
+        'Не удалось отправить письмо. Попробуйте позже или обратитесь в поддержку.',
+      data:
+        process.env.NODE_ENV === 'development'
+          ? { originalError: errorMessage }
+          : undefined,
+    });
+  }
 }
 
 export async function sendPasswordResetEmail(

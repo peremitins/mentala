@@ -20,16 +20,31 @@
               <div class="rounded-2xl border border-border/30 bg-muted/30 p-4">
                 <div class="text-sm text-foreground">
                   <template v-if="isRateLimited">
-                    Сейчас нельзя отправить новый код для
-                    <span class="text-foreground font-medium">
-                      {{ verificationEmail }}
-                    </span>
+                    Слишком много запросов. Подождите немного перед повтором.
                   </template>
                   <template v-else>
-                    Мы отправили код на
+                    Мы отправили письмо с кодом подтверждения на
                     <span class="text-foreground font-medium">
-                      {{ verificationEmail }}
-                    </span>
+                      {{ verificationEmail }} </span
+                    >.
+
+                    <div class="mt-2 text-xs text-muted-foreground">
+                      Если вы уже регистрировались ранее, вы сможете
+                      <button
+                        type="button"
+                        class="underline text-primary-ui hover:text-primary-ui/80 transition"
+                        @click="switchToSignin"
+                      >
+                        войти
+                      </button>
+                      или
+                      <NuxtLink
+                        to="/forgot"
+                        class="underline text-primary-ui hover:text-primary-ui/80 transition"
+                      >
+                        восстановить пароль </NuxtLink
+                      >.
+                    </div>
                   </template>
                 </div>
               </div>
@@ -180,27 +195,39 @@
                     <label for="agree" class="cursor-pointer">
                       <span
                         >Я принимаю
-                        <NuxtLink
-                          to="/legal/terms"
+                        <!-- Ссылки на каноничные HTML-документы из public/legal -->
+                        <a
+                          href="/legal/terms-of-service.html"
                           class="underline text-primary-ui hover:text-primary-ui/80"
                         >
-                          Условия
-                        </NuxtLink>
+                          Условия использования
+                        </a>
                         и
-                        <NuxtLink
-                          to="/legal/privacy"
+                        <a
+                          href="/legal/privacy-policy.html"
                           class="underline text-primary-ui hover:text-primary-ui/80"
                         >
-                          Политику
-                        </NuxtLink>
+                          Политику конфиденциальности
+                        </a>
                       </span>
+                    </label>
+                  </div>
+                  <div
+                    class="flex items-start gap-2 mt-3 text-muted-foreground"
+                  >
+                    <Checkbox
+                      id="marketing-consent"
+                      v-model:checked="marketingConsent"
+                    />
+                    <label for="marketing-consent" class="cursor-pointer">
+                      <span> Хочу получать новости и предложения Mentala </span>
                     </label>
                   </div>
                 </div>
 
                 <button
                   type="submit"
-                  :disabled="loading"
+                  :disabled="loading || (mode === 'signup' && !agree)"
                   class="w-full py-2.5 rounded-xl bg-primary text-primary-foreground hover:opacity-90 active:opacity-80 transition font-medium disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {{
@@ -263,15 +290,34 @@
         </div>
 
         <p class="mt-4 text-center text-xs text-muted-foreground">
-          Защита данных: end-to-end для приватных чатов, ключи разделены
-          (zero-trust). Подробнее в
-          <NuxtLink
-            to="/legal/privacy"
-            class="underline text-primary-ui hover:text-primary-ui/80"
-          >
-            политике
-          </NuxtLink>
-          .
+          <template v-if="mode === 'signin'">
+            Входя в аккаунт, вы подтверждаете согласие с
+            <a
+              href="/legal/terms-of-service.html"
+              class="underline text-primary-ui hover:text-primary-ui/80"
+            >
+              Условиями использования
+            </a>
+            и
+            <a
+              href="/legal/privacy-policy.html"
+              class="underline text-primary-ui hover:text-primary-ui/80"
+            >
+              Политикой конфиденциальности
+            </a>
+            .
+          </template>
+          <template v-else>
+            Защита данных: end-to-end для приватных чатов, ключи разделены
+            (zero-trust). Подробнее в
+            <a
+              href="/legal/privacy-policy.html"
+              class="underline text-primary-ui hover:text-primary-ui/80"
+            >
+              политике
+            </a>
+            .
+          </template>
         </p>
       </div>
     </div>
@@ -303,6 +349,7 @@ const email = ref('');
 const password = ref('');
 const name = ref('');
 const agree = ref(false);
+const marketingConsent = ref(false);
 const loading = ref(false);
 
 const verificationEmail = ref('');
@@ -360,9 +407,75 @@ function resetVerification() {
   resetCodeExpiryTimer(0);
 }
 
+function switchToSignin() {
+  // Возвращаем пользователя на форму входа без утечки информации
+  step.value = 'form';
+  mode.value = 'signin';
+  isRateLimited.value = false;
+  verificationCode.value = '';
+  attemptsLeft.value = null;
+}
+
+function getRetryAfterFromError(error: any): number | null {
+  const headerValue =
+    error?.response?.headers?.get?.('retry-after') ||
+    error?.response?.headers?.['retry-after'] ||
+    error?.response?.headers?.['Retry-After'];
+  const headerSeconds = headerValue ? Number(headerValue) : null;
+  if (headerSeconds && Number.isFinite(headerSeconds)) return headerSeconds;
+
+  const dataRetryAfter =
+    error?.data?.retryAfter || error?.response?._data?.retryAfter;
+  const dataSeconds = dataRetryAfter ? Number(dataRetryAfter) : null;
+  return dataSeconds && Number.isFinite(dataSeconds) ? dataSeconds : null;
+}
+
+function startVerificationFlow(options?: {
+  retryAfter?: number | null;
+  rateLimited?: boolean;
+}) {
+  verificationEmail.value = email.value;
+  step.value = 'verify';
+  attemptsLeft.value = null;
+  verificationCode.value = '';
+  // Запускаем таймер действия кода (15 минут = 900 секунд)
+  startCodeExpiryCountdown(900);
+
+  const retryAfter = options?.retryAfter ?? null;
+  if (options?.rateLimited) {
+    const safeRetryAfter =
+      retryAfter && Number.isFinite(retryAfter) && retryAfter > 0
+        ? retryAfter
+        : 60;
+    isRateLimited.value = true;
+    startResendTimer(safeRetryAfter);
+    const minutes = Math.floor(safeRetryAfter / 60);
+    const seconds = safeRetryAfter % 60;
+    useToast(
+      'Слишком много запросов',
+      `Повторите через ${minutes}:${seconds.toString().padStart(2, '0')}`,
+      'warning'
+    );
+    return;
+  }
+
+  isRateLimited.value = false;
+  startResendTimer(60);
+  useToast(
+    'Проверьте почту',
+    'Мы отправили письмо с кодом подтверждения.\nЕсли вы уже использовали Mentala ранее, вы сможете войти или восстановить доступ',
+    'info'
+  );
+}
+
 async function submit() {
   if (step.value === 'verify') {
     await confirmCode();
+    return;
+  }
+  if (mode.value === 'signup' && !agree.value) {
+    // Без согласия с документами регистрацию не продолжаем
+    useToast('Нужно согласие', 'Подтвердите условия и политику', 'warning');
     return;
   }
 
@@ -375,38 +488,26 @@ async function submit() {
         locale: locale.value,
       });
     } else {
-      const response: any = await auth.registerEmail({
+      await auth.registerEmail({
         email: email.value,
         password: password.value,
         name: name.value || undefined,
         locale: locale.value,
+        // Передаем согласия на документы и маркетинг
+        acceptTerms: agree.value,
+        acceptPrivacy: agree.value,
+        marketingConsent: marketingConsent.value,
       });
-      const retryAfter = response?.retryAfter
-        ? Number(response.retryAfter)
-        : null;
-      verificationEmail.value = email.value;
-      step.value = 'verify';
-      attemptsLeft.value = null;
-      verificationCode.value = '';
-      // Запускаем таймер действия кода (15 минут = 900 секунд)
-      startCodeExpiryCountdown(900);
-      if (retryAfter && Number.isFinite(retryAfter)) {
-        isRateLimited.value = true;
-        startResendTimer(retryAfter);
-        const minutes = Math.floor(retryAfter / 60);
-        const seconds = retryAfter % 60;
-        useToast(
-          'Слишком часто',
-          `Повторите через ${minutes}:${seconds.toString().padStart(2, '0')}`,
-          'warning'
-        );
-      } else {
-        isRateLimited.value = false;
-        startResendTimer(60);
-        useToast('Код отправлен', `Мы отправили код на ${email.value}`);
-      }
+      startVerificationFlow();
     }
   } catch (e: any) {
+    if (mode.value === 'signup') {
+      const statusCode = e?.statusCode || e?.response?.status || 500;
+      const retryAfter = getRetryAfterFromError(e);
+      const isLimited = statusCode === 429 || !!retryAfter;
+      startVerificationFlow({ retryAfter, rateLimited: isLimited });
+    }
+
     console.error('[Auth] Register error:', e);
   } finally {
     loading.value = false;
@@ -450,13 +551,17 @@ async function resendCode() {
       const minutes = Math.floor(retryAfter / 60);
       const seconds = retryAfter % 60;
       useToast(
-        'Слишком часто',
+        'Слишком много запросов',
         `Повторите через ${minutes}:${seconds.toString().padStart(2, '0')}`,
         'warning'
       );
     } else {
       isRateLimited.value = false;
-      useToast('Код отправлен', 'Проверьте вашу почту');
+      useToast(
+        'Проверьте почту',
+        'Мы отправили письмо с кодом подтверждения.\nЕсли вы уже использовали Mentala ранее, вы сможете войти или восстановить доступ',
+        'info'
+      );
     }
   } catch (e: any) {
     console.error('[Auth] Resend code error:', e);
@@ -484,7 +589,11 @@ async function requestVerification() {
         'warning'
       );
     } else {
-      useToast('Код отправлен', 'Если аккаунт существует, мы отправили код');
+      useToast(
+        'Проверьте почту',
+        'Мы отправили письмо с кодом подтверждения.\nЕсли вы уже использовали Mentala ранее, вы сможете войти или восстановить доступ',
+        'info'
+      );
     }
   } catch (e: any) {
     console.error('[Auth] Request verification error:', e);

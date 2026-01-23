@@ -13,6 +13,7 @@ import { getClientIp } from '@/server/utils/ip';
 import { checkRateLimit } from '@/server/application/auth/rate-limit';
 import { normalizeEmail } from '@/server/application/auth/verification';
 import { AuthLoginDto } from '@/shared/dto/auth';
+import { toIsoString } from '@/server/utils/serialize';
 
 export default defineEventHandler(async (event) => {
   const body = AuthLoginDto.parse(await readBody(event as any));
@@ -141,7 +142,7 @@ export default defineEventHandler(async (event) => {
       locale: body.locale ?? existing[0].locale,
       role: existing[0].roleId || 'user',
       isBlocked: existing[0].isBlocked || false,
-      emailVerifiedAt: existing[0].emailVerifiedAt,
+      emailVerifiedAt: toIsoString(existing[0].emailVerifiedAt),
       hasPassword: !!existing[0].passwordHash,
     },
     // Отдаем sessionToken только для native платформ (Capacitor)
