@@ -52,6 +52,16 @@ export const users = pgTable('users', {
     .default('0')
     .notNull(), // внутренний кредит в рублях
   timezone: varchar('timezone', { length: 100 }), // IANA timezone для расчета недель
+  // Юридические согласия и версии документов
+  termsAcceptedAt: timestamp('terms_accepted_at', { withTimezone: true }),
+  privacyAcceptedAt: timestamp('privacy_accepted_at', { withTimezone: true }),
+  termsVersion: varchar('terms_version', { length: 32 }),
+  privacyVersion: varchar('privacy_version', { length: 32 }),
+  acceptanceSource: varchar('acceptance_source', { length: 16 }),
+  acceptanceIp: text('acceptance_ip'),
+  acceptanceUserAgent: text('acceptance_user_agent'),
+  marketingConsentAt: timestamp('marketing_consent_at', { withTimezone: true }),
+  marketingConsentSource: varchar('marketing_consent_source', { length: 16 }),
   // Roles and permissions
   roleId: varchar('role_id', { length: 50 })
     .default('user')

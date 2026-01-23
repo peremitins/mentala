@@ -15,9 +15,10 @@
       </div>
 
       <div class="glass-deep p-3">
-        <a class="underline opacity-80" href="/docs/privacy" target="_blank"
-          >Как мы защищаем данные</a
-        >
+        <!-- Ссылка на каноничную политику конфиденциальности -->
+        <a class="underline opacity-80" href="/legal/privacy-policy.html">
+          Как мы защищаем данные
+        </a>
       </div>
     </section>
   </div>

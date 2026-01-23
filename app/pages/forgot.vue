@@ -8,9 +8,7 @@
         <div class="glass-deep p-6">
           <div class="text-center mb-6">
             <div class="text-2xl font-semibold text-foreground">Mentala</div>
-            <div class="text-sm text-foreground">
-              Восстановление пароля
-            </div>
+            <div class="text-sm text-foreground">Восстановление пароля</div>
           </div>
 
           <Transition name="fade" mode="out-in">
@@ -62,11 +60,10 @@
                     </span>
                   </template>
                   <template v-else>
-                    Если аккаунт существует, мы отправили письмо на
+                    Мы отправили письмо с кодом подтверждения на
                     <span class="text-foreground font-medium">
-                      {{ maskedEmail }}
-                    </span>
-                    . Проверьте почту.
+                      {{ maskedEmail }} </span
+                    >.
                   </template>
                 </div>
               </div>

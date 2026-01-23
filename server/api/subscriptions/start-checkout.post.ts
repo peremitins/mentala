@@ -97,7 +97,7 @@ export default defineEventHandler(async (event) => {
 
   try {
     const config = useRuntimeConfig(event);
-    const appUrl = config.public.appUrl || 'http://localhost:3000';
+    const appUrl = (config.public.appUrl || 'http://localhost:3000').replace(/\/+$/, '');
 
     // Получаем план
     const plan = await db

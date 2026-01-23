@@ -16,6 +16,7 @@ import { activateTrialForUser } from '@/server/application/subscriptions/trial.s
 import { getClientIp } from '@/server/utils/ip';
 import { getTimezoneFromRequest } from '@/server/application/notifications/timezone.utils';
 import { scheduleNotificationSlotsAfterLogin } from '@/server/application/notifications/login-slots.service';
+import { toIsoString } from '@/server/utils/serialize';
 
 export default defineEventHandler(async (event) => {
   const body = EmailVerifyDto.parse(await readBody(event as any));
@@ -102,7 +103,7 @@ export default defineEventHandler(async (event) => {
       locale: user.locale,
       role: user.roleId || 'user',
       isBlocked: user.isBlocked || false,
-      emailVerifiedAt: new Date(),
+      emailVerifiedAt: toIsoString(new Date()),
       hasPassword: true,
     },
     ...(isNative ? { sessionToken: sessionId } : {}),

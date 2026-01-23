@@ -76,7 +76,9 @@ export default defineEventHandler(async (event) => {
 
     // Получаем appUrl из конфига
     const config = useRuntimeConfig();
-    const appUrl = (config.public as any).appUrl || 'http://localhost:3000';
+    const appUrl = (
+      (config.public as any).appUrl || 'http://localhost:3000'
+    ).replace(/\/+$/, '');
     const resetUrl = `${appUrl}/reset-password?token=${token}`;
 
     // Отправляем email

@@ -1,15 +1,20 @@
 import { randomBytes } from 'node:crypto';
-import { setCookie, getCookie, deleteCookie, createError } from 'h3';
+import { setCookie, getCookie, deleteCookie, createError, getHeader } from 'h3';
 import { db } from '@/server/infrastructure/db/client';
 import { users, oauthAccounts } from '@/server/infrastructure/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { createSession } from './session';
 import { activateTrialForUser } from '@/server/application/subscriptions/trial.service';
 import {
+  LEGAL_PRIVACY_VERSION,
+  LEGAL_TERMS_VERSION,
+} from '@/shared/constants/legal';
+import {
   generateLinkingToken,
   storeLinkingData,
 } from '@/server/application/auth/oauth-linking';
 import { normalizeEmail } from '@/server/application/auth/verification';
+import { getClientIp } from '@/server/utils/ip';
 import {
   OAUTH_STATE_COOKIE_NAME,
   OAUTH_REDIRECT_COOKIE_NAME,
@@ -18,6 +23,31 @@ import {
 } from './cookie-names';
 
 const isProd = process.env.NODE_ENV === 'production';
+
+function detectAcceptanceSource(event: any): 'web' | 'ios' | 'android' {
+  const userAgent = getHeader(event, 'user-agent') || '';
+  if (/Android/i.test(userAgent)) return 'android';
+  if (/iPhone|iPad|iPod/i.test(userAgent)) return 'ios';
+  return 'web';
+}
+
+function buildLegalConsent(event: any) {
+  const now = new Date();
+  const userAgent = getHeader(event, 'user-agent') || null;
+  const acceptanceSource = detectAcceptanceSource(event);
+  return {
+    // Фиксируем согласие с документами при создании учетной записи через OAuth
+    termsAcceptedAt: now,
+    privacyAcceptedAt: now,
+    termsVersion: LEGAL_TERMS_VERSION,
+    privacyVersion: LEGAL_PRIVACY_VERSION,
+    acceptanceSource: acceptanceSource,
+    acceptanceIp: getClientIp(event) || null,
+    acceptanceUserAgent: userAgent,
+    marketingConsentAt: null,
+    marketingConsentSource: null,
+  };
+}
 
 export type Provider = 'google' | 'vk';
 export type OAuthResult =
@@ -171,6 +201,7 @@ export async function upsertUserWithOAuth(
             name: profile.name ?? null,
             avatarUrl: profile.avatarUrl ?? null,
             locale: profile.locale ?? null,
+            ...buildLegalConsent(event),
           })
           .returning();
         userId = createdUser.id;
@@ -263,6 +294,7 @@ export async function upsertUserWithOAuth(
         name: profile.name ?? null,
         avatarUrl: profile.avatarUrl ?? null,
         locale: profile.locale ?? null,
+        ...buildLegalConsent(event),
       })
       .returning();
     userId = createdUser.id;

@@ -276,7 +276,7 @@ type ImagePickParams = {
 };
 
 function normalizeBaseUrl(url: string): string {
-  return url.replace(/\/$/, '');
+  return url.replace(/\/+$/, '');
 }
 
 function resolvePublicBaseUrl(): string {

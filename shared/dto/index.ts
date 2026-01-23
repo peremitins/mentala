@@ -2,6 +2,7 @@ import { z } from 'zod';
 export * from './auth';
 export * from './onboarding';
 export * from './meditations';
+export * from './user';
 
 export const UserDto = z.object({
   id: z.string().uuid().optional(),

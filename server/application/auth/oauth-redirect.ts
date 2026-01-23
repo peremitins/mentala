@@ -2,8 +2,8 @@ import { getRequestURL } from 'h3';
 
 export function resolveAppUrl(event: any, configuredAppUrl?: string): string {
   const requestUrl = getRequestURL(event);
-  const requestOrigin = requestUrl.origin.replace(/\/$/, '');
-  const configured = (configuredAppUrl || '').replace(/\/$/, '');
+  const requestOrigin = requestUrl.origin.replace(/\/+$/, '');
+  const configured = (configuredAppUrl || '').replace(/\/+$/, '');
   const isProd = process.env.NODE_ENV === 'production';
 
   if (!configured) return requestOrigin;

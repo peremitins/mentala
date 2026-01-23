@@ -1,4 +1,5 @@
-import { setResponseHeader } from 'h3';
+import { createHash } from 'crypto';
+import { getHeader } from 'h3';
 import argon2 from 'argon2';
 import { eq } from 'drizzle-orm';
 import { db } from '@/server/infrastructure/db/client';
@@ -6,9 +7,14 @@ import { users } from '@/server/infrastructure/db/schema';
 import { getTimezoneFromRequest } from '@/server/application/notifications/timezone.utils';
 import { getClientIp } from '@/server/utils/ip';
 import {
+  LEGAL_PRIVACY_VERSION,
+  LEGAL_TERMS_VERSION,
+} from '@/shared/constants/legal';
+import {
   AUTH_CODE_TTL_SECONDS,
   getEmailPasswordKey,
   getEmailVerificationKey,
+  maskEmail,
   normalizeEmail,
   storeTempPasswordHash,
 } from '@/server/application/auth/verification';
@@ -16,33 +22,52 @@ import { checkRateLimit } from '@/server/application/auth/rate-limit';
 import { AuthRegisterDto } from '@/shared/dto/auth';
 import { issueVerificationCode } from '@/server/application/auth/email-verification.service';
 
+function detectAcceptanceSource(event: any): 'web' | 'ios' | 'android' {
+  const userAgent = getHeader(event, 'user-agent') || '';
+  if (/Android/i.test(userAgent)) return 'android';
+  if (/iPhone|iPad|iPod/i.test(userAgent)) return 'ios';
+  return 'web';
+}
+
+function getDeviceKey(userAgent: string | null): string {
+  if (!userAgent) return 'unknown';
+  // Хешируем UA, чтобы не хранить его целиком в ключах rate-limit
+  return createHash('sha256').update(userAgent).digest('hex').slice(0, 16);
+}
+
 export default defineEventHandler(async (event) => {
   const body = AuthRegisterDto.parse(await readBody(event as any));
   const email = normalizeEmail(body.email);
   const ip = getClientIp(event) || 'unknown';
+  const userAgent = getHeader(event, 'user-agent') || null;
+  const deviceKey = getDeviceKey(userAgent);
+  const acceptanceSource = detectAcceptanceSource(event);
+  const now = new Date();
+  const marketingConsentAt = body.marketingConsent ? now : null;
 
   const rateLimits = await Promise.all([
-    checkRateLimit(`auth:rate_limit:email_verification:ip:${ip}`, 5, 3600),
+    checkRateLimit(`auth:rate_limit:email_verification:ip:${ip}`, 15, 3600),
     checkRateLimit(
-      `auth:rate_limit:email_verification:email:${email}`,
-      3,
+      `auth:rate_limit:email_verification:device:${deviceKey}`,
+      15,
       3600
     ),
     checkRateLimit(
-      `auth:rate_limit:email_verification:ip_email:${ip}:${email}`,
-      5,
+      `auth:rate_limit:email_verification:ip_device:${ip}:${deviceKey}`,
+      15,
       3600
     ),
   ]);
   const blocked = rateLimits.find((limit) => !limit.allowed);
   if (blocked?.retryAfter) {
-    setResponseHeader(event, 'Retry-After', String(blocked.retryAfter));
+    event.res.headers.set('Retry-After', String(blocked.retryAfter));
   }
 
   if (blocked && !blocked.allowed) {
+    event.res.status = 429;
+    event.res.statusText = 'Too Many Requests';
     return {
-      message:
-        'Если аккаунт существует, мы отправили письмо с кодом подтверждения',
+      message: 'Слишком много запросов. Попробуйте позже.',
       retryAfter: blocked.retryAfter,
     };
   }
@@ -71,12 +96,38 @@ export default defineEventHandler(async (event) => {
           .where(eq(users.id, existing[0].id));
       }
 
-      await issueVerificationCode(getEmailVerificationKey(email), email);
+      // Обновляем юридические согласия для незавершенной регистрации
+      await db
+        .update(users)
+        .set({
+          termsAcceptedAt: now,
+          privacyAcceptedAt: now,
+          termsVersion: LEGAL_TERMS_VERSION,
+          privacyVersion: LEGAL_PRIVACY_VERSION,
+          acceptanceSource: acceptanceSource,
+          acceptanceIp: ip,
+          acceptanceUserAgent: userAgent,
+          marketingConsentAt: marketingConsentAt,
+          marketingConsentSource: marketingConsentAt ? acceptanceSource : null,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, existing[0].id));
+
+      try {
+        await issueVerificationCode(getEmailVerificationKey(email), email);
+      } catch (error: any) {
+        // Ошибка отправки не должна менять ответ, но должна быть залогирована
+        console.error('[Auth] Failed to send verification email:', {
+          email: maskEmail(email),
+          error: error?.message || String(error),
+          code: error?.code,
+        });
+      }
     }
 
     return {
       message:
-        'Если аккаунт существует, мы отправили письмо с кодом подтверждения',
+        'Мы отправили письмо с кодом подтверждения.\nЕсли вы уже использовали Mentala ранее, вы сможете войти или восстановить доступ',
     };
   }
 
@@ -89,6 +140,16 @@ export default defineEventHandler(async (event) => {
     passwordHash: null,
     locale: body.locale ?? null,
     timezone: timezone || 'Europe/Moscow',
+    // Фиксируем согласия на документы и маркетинг
+    termsAcceptedAt: now,
+    privacyAcceptedAt: now,
+    termsVersion: LEGAL_TERMS_VERSION,
+    privacyVersion: LEGAL_PRIVACY_VERSION,
+    acceptanceSource: acceptanceSource,
+    acceptanceIp: ip,
+    acceptanceUserAgent: userAgent,
+    marketingConsentAt: marketingConsentAt,
+    marketingConsentSource: marketingConsentAt ? acceptanceSource : null,
   });
 
   const passwordHash = await argon2.hash(body.password, {
@@ -100,10 +161,19 @@ export default defineEventHandler(async (event) => {
     AUTH_CODE_TTL_SECONDS
   );
 
-  await issueVerificationCode(getEmailVerificationKey(email), email);
+  try {
+    await issueVerificationCode(getEmailVerificationKey(email), email);
+  } catch (error: any) {
+    // Ошибка отправки не должна менять ответ, но должна быть залогирована
+    console.error('[Auth] Failed to send verification email:', {
+      email: maskEmail(email),
+      error: error?.message || String(error),
+      code: error?.code,
+    });
+  }
 
   return {
     message:
-      'Если аккаунт существует, мы отправили письмо с кодом подтверждения',
+      'Мы отправили письмо с кодом подтверждения.\nЕсли вы уже использовали Mentala ранее, вы сможете войти или восстановить доступ',
   };
 });
