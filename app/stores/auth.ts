@@ -122,6 +122,9 @@ export const useAuthStore = defineStore('auth', {
           // Если профайл не загрузился, всё равно пускаем в приложение.
         }
 
+        // Перепривязываем push-токен к текущей сессии (native)
+        await this._registerPushTokenForSession();
+
         // Переходим на главную
         await navigateTo('/');
       } catch (error) {
@@ -221,6 +224,9 @@ export const useAuthStore = defineStore('auth', {
           // Игнорируем, чтобы не ломать логин.
         }
 
+        // Перепривязываем push-токен к текущей сессии (native)
+        await this._registerPushTokenForSession();
+
         await navigateTo('/');
         return response;
       } catch (error) {
@@ -286,6 +292,9 @@ export const useAuthStore = defineStore('auth', {
           // Игнорируем, чтобы не блокировать верификацию.
         }
 
+        // Перепривязываем push-токен к текущей сессии (native)
+        await this._registerPushTokenForSession();
+
         const redirectTo =
           options && 'redirect' in options ? options.redirect : '/';
         if (redirectTo) {
@@ -338,6 +347,9 @@ export const useAuthStore = defineStore('auth', {
           this.isLoggedIn = true;
         }
 
+        // Перепривязываем push-токен к текущей сессии (native)
+        await this._registerPushTokenForSession();
+
         return response as any;
       } catch (error) {
         console.error('Ошибка привязки OAuth по паролю:', error);
@@ -389,6 +401,9 @@ export const useAuthStore = defineStore('auth', {
           this.isLoggedIn = true;
         }
 
+        // Перепривязываем push-токен к текущей сессии (native)
+        await this._registerPushTokenForSession();
+
         return response as any;
       } catch (error) {
         console.error('Ошибка восстановления пароля:', error);
@@ -426,6 +441,9 @@ export const useAuthStore = defineStore('auth', {
           this.user = (response as any).user;
           this.isLoggedIn = true;
         }
+
+        // Перепривязываем push-токен к текущей сессии (native)
+        await this._registerPushTokenForSession();
 
         return response;
       } catch (error) {
@@ -534,6 +552,67 @@ export const useAuthStore = defineStore('auth', {
     },
 
     /**
+     * Регистрирует push-токен для текущей сессии (только native)
+     */
+    async _registerPushTokenForSession() {
+      if (typeof window === 'undefined') return;
+
+      try {
+        const { Capacitor } = await import('@capacitor/core');
+        const platform = Capacitor.getPlatform();
+        if (platform !== 'ios' && platform !== 'android') return;
+
+        const token = window.localStorage.getItem('pushToken');
+        if (!token) return;
+        const sessionToken = window.localStorage.getItem(SESSION_TOKEN_KEY);
+        if (!sessionToken) return;
+
+        await useAPI('/api/notifications/register-token', {
+          method: 'POST',
+          body: {
+            token,
+            platform,
+          },
+          headers: {
+            'X-Session-Token': sessionToken,
+          },
+        });
+      } catch (error) {
+        console.error('[Auth Store] Не удалось зарегистрировать push-токен:', error);
+      }
+    },
+
+    /**
+     * Отключает push-уведомления на текущем устройстве (только native)
+     */
+    async _unregisterPushTokenForDevice() {
+      if (typeof window === 'undefined') return;
+
+      try {
+        const { Capacitor } = await import('@capacitor/core');
+        const platform = Capacitor.getPlatform();
+        if (platform !== 'ios' && platform !== 'android') return;
+
+        const token = window.localStorage.getItem('pushToken');
+        if (!token) return;
+        const sessionToken = window.localStorage.getItem(SESSION_TOKEN_KEY);
+        if (!sessionToken) return;
+
+        await useAPI('/api/notifications/unregister-token', {
+          method: 'POST',
+          body: {
+            token,
+          },
+          headers: {
+            'X-Session-Token': sessionToken,
+          },
+        });
+      } catch (error) {
+        console.error('[Auth Store] Не удалось отключить push-токен:', error);
+      }
+    },
+
+    /**
      * Сбрасывает состояние auth store
      */
     _resetAuthState() {
@@ -551,6 +630,9 @@ export const useAuthStore = defineStore('auth', {
 
         // 2. Сохраняем текущую сессию в фоне (не блокируем logout)
         this._saveSessionInBackground();
+
+        // 2.1 Отключаем push-уведомления на текущем устройстве до разлогина
+        await this._unregisterPushTokenForDevice();
 
         // 3. Делаем запрос на разлогин в фоне, чтобы UI не зависал.
         logoutRequest = (async () => {

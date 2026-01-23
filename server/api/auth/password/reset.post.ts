@@ -18,6 +18,7 @@ import {
 } from '@/server/application/auth/session';
 import { getClientIp } from '@/server/utils/ip';
 import { getTimezoneFromRequest } from '@/server/application/notifications/timezone.utils';
+import { scheduleNotificationSlotsAfterLogin } from '@/server/application/notifications/login-slots.service';
 
 export default defineEventHandler(async (event) => {
   const body = PasswordResetDto.parse(await readBody(event as any));
@@ -117,6 +118,8 @@ export default defineEventHandler(async (event) => {
 
   // Создаём новую сессию
   const sessionId = await createSession(event, user.id, user.locale ?? undefined);
+  // Проверяем слоты уведомлений в фоне после создания сессии
+  scheduleNotificationSlotsAfterLogin(user.id);
 
   // Логируем security event
   await logSecurityEvent(event, 'password_reset_success', {
@@ -164,4 +167,3 @@ async function logSecurityEvent(
     console.error('[Auth] Failed to log security event:', error);
   }
 }
-

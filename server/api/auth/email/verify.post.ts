@@ -15,6 +15,7 @@ import { createSession } from '@/server/application/auth/session';
 import { activateTrialForUser } from '@/server/application/subscriptions/trial.service';
 import { getClientIp } from '@/server/utils/ip';
 import { getTimezoneFromRequest } from '@/server/application/notifications/timezone.utils';
+import { scheduleNotificationSlotsAfterLogin } from '@/server/application/notifications/login-slots.service';
 
 export default defineEventHandler(async (event) => {
   const body = EmailVerifyDto.parse(await readBody(event as any));
@@ -88,6 +89,8 @@ export default defineEventHandler(async (event) => {
   }
 
   const sessionId = await createSession(event, user.id, user.locale ?? undefined);
+  // Проверяем слоты уведомлений в фоне после создания сессии
+  scheduleNotificationSlotsAfterLogin(user.id);
   const platform = String(getHeader(event, 'x-platform') || '').toLowerCase();
   const isNative = platform === 'ios' || platform === 'android';
 

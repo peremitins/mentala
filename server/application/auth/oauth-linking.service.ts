@@ -6,6 +6,7 @@ import { deleteLinkingData, getLinkCodeKey, OAuthLinkData } from './oauth-linkin
 import { deleteRedisKey } from './verification';
 import { createSession, getSessionUser } from './session';
 import { getClientIp } from '@/server/utils/ip';
+import { scheduleNotificationSlotsAfterLogin } from '@/server/application/notifications/login-slots.service';
 
 export async function finalizeOAuthLink(
   event: any,
@@ -80,6 +81,8 @@ export async function buildOAuthAuthResponse(event: any, userId: number) {
   let sessionId: string | null = null;
   if (!session?.user?.id) {
     sessionId = await createSession(event, userId);
+    // Проверяем слоты уведомлений в фоне после создания сессии
+    scheduleNotificationSlotsAfterLogin(userId);
   }
 
   const user = await db

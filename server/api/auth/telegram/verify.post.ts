@@ -10,6 +10,7 @@ import {
   getCookieName,
 } from '@/server/application/auth/cookie-names';
 import { normalizeEmail } from '@/server/application/auth/verification';
+import { scheduleNotificationSlotsAfterLogin } from '@/server/application/notifications/login-slots.service';
 
 function verifyTelegram(initData: Record<string, string>, botToken: string) {
   const { hash, ...data } = initData;
@@ -155,5 +156,7 @@ export default defineEventHandler(async (event) => {
   }
 
   await createSession(event, userId, locale);
+  // Проверяем слоты уведомлений в фоне после создания сессии
+  scheduleNotificationSlotsAfterLogin(userId);
   return { user: { id: userId, username, firstName, lastName } };
 });
