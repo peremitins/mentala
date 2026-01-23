@@ -7,6 +7,7 @@ import { deleteRedisKey } from './verification';
 import { createSession, getSessionUser } from './session';
 import { getClientIp } from '@/server/utils/ip';
 import { scheduleNotificationSlotsAfterLogin } from '@/server/application/notifications/login-slots.service';
+import { toIsoString } from '@/server/utils/serialize';
 
 export async function finalizeOAuthLink(
   event: any,
@@ -103,7 +104,7 @@ export async function buildOAuthAuthResponse(event: any, userId: number) {
       locale: safeUser.locale,
       role: safeUser.roleId || 'user',
       isBlocked: safeUser.isBlocked || false,
-      emailVerifiedAt: safeUser.emailVerifiedAt,
+      emailVerifiedAt: toIsoString(safeUser.emailVerifiedAt),
       hasPassword: !!safeUser.passwordHash,
     },
     ...(isNative && sessionId ? { sessionToken: sessionId } : {}),

@@ -36,8 +36,8 @@ function handleCheckedChange(checked: boolean) {
 
 const rootClasses = computed(() =>
   cn(
-    'peer h-4 w-4 shrink-0 rounded-sm border border-primary-ui bg-transparent cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50',
-    'data-[state=checked]:bg-primary-ui data-[state=checked]:text-primary-foreground data-[state=checked]:border-primary-ui',
+    'peer h-4 w-4 shrink-0 rounded-sm border border-primary bg-transparent cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50',
+    'data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground data-[state=checked]:border-primary',
     'transition-colors duration-200 ease-in-out',
     props.class
   )

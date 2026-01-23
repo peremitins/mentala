@@ -148,6 +148,13 @@
       "when": 1769005875891,
       "tag": "0024_same_marten_broadcloak",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1769168151072,
+      "tag": "0025_demonic_lilandra",
+      "breakpoints": true
     }
   ]
 }

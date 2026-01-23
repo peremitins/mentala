@@ -1,5 +1,5 @@
 <template>
-  <div class="h-dvh overflow-y-auto pb-[100px] space-y-2">
+  <div class="h-dvh overflow-y-auto pb-[100px] space-y-2 rounded-lg">
     <PageHeader title="⚙️&nbsp;&nbsp;Настройки" />
 
     <section class="">
@@ -11,6 +11,25 @@
       />
 
       <div v-else class="space-y-2">
+        <div v-if="isAdmin" class="glass-deep p-4">
+          <button
+            type="button"
+            class=""
+            :class="rowClass()"
+            @click="copyUserId"
+          >
+            <div class="">
+              <p class="text-sm font-medium">ID пользователя</p>
+              <p class="text-xs text-muted-foreground">
+                Нажмите, чтобы скопировать
+              </p>
+            </div>
+            <span class="text-xs text-muted-foreground">
+              {{ auth.user?.id }}
+            </span>
+          </button>
+        </div>
+
         <NuxtLink
           to="/settings/profile"
           class="glass-deep p-4 flex items-center justify-between gap-3"
@@ -95,21 +114,59 @@
 
             <Separator class="w-auto mx-4" />
 
-            <NuxtLink
-              to="/docs/privacy"
-              target="_blank"
-              rel="noopener noreferrer"
+            <div class="px-4 py-3" :class="rowClass()">
+              <div class="">
+                <p class="text-sm font-medium">Маркетинговые сообщения</p>
+                <p class="text-xs text-muted-foreground">
+                  Новости, обновления и предложения Mentala
+                </p>
+              </div>
+              <Switch
+                v-model:checked="marketingConsent"
+                class="flex-shrink-0"
+                @update:checked="handleMarketingConsentChange"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div class="glass-deep">
+          <p
+            class="text-xs font-semibold text-muted-foreground tracking-wide pt-4 pb-1 px-4"
+          >
+            ДОКУМЕНТЫ
+          </p>
+          <div class="">
+            <!-- Ссылки на каноничные HTML-документы из public/legal -->
+            <a
+              href="/legal/terms-of-service.html"
+              class="px-4 py-3"
+              :class="rowClass()"
+            >
+              <div class="">
+                <p class="text-sm font-medium">Условия использования</p>
+                <p class="text-xs text-muted-foreground">
+                  {{ legalDocsVersionLabel }}
+                </p>
+              </div>
+              <IconChevronRight class="h-4 w-4 text-muted-foreground" />
+            </a>
+
+            <Separator class="w-auto mx-4" />
+
+            <a
+              href="/legal/privacy-policy.html"
               class="px-4 py-3"
               :class="rowClass()"
             >
               <div class="">
                 <p class="text-sm font-medium">Политика конфиденциальности</p>
                 <p class="text-xs text-muted-foreground">
-                  Как мы защищаем данные
+                  {{ legalDocsVersionLabel }}
                 </p>
               </div>
               <IconChevronRight class="h-4 w-4 text-muted-foreground" />
-            </NuxtLink>
+            </a>
           </div>
         </div>
 
@@ -136,44 +193,8 @@
           </div>
         </div>
 
-        <div class="glass-deep">
-          <p
-            class="text-xs font-semibold text-muted-foreground tracking-wide pt-4 pb-1 px-4"
-          >
-            СЛУЖЕБНОЕ
-          </p>
-          <div class="">
-            <button
-              v-if="isAdmin"
-              type="button"
-              class="px-4 py-3"
-              :class="rowClass()"
-              @click="copyUserId"
-            >
-              <div class="">
-                <p class="text-sm font-medium">ID пользователя</p>
-                <p class="text-xs text-muted-foreground">
-                  Нажмите, чтобы скопировать
-                </p>
-              </div>
-              <span class="text-xs text-muted-foreground">
-                {{ auth.user?.id }}
-              </span>
-            </button>
-
-            <Separator class="w-auto mx-4" />
-
-            <button
-              type="button"
-              class="px-4 py-3"
-              :class="rowClass()"
-              @click="handleLogout"
-            >
-              <span class="text-sm font-medium">Выйти из аккаунта</span>
-            </button>
-
-            <Separator class="w-auto mx-4" />
-
+        <div class="glass-deep p-4">
+          <div class="flex justify-between">
             <AlertDialog
               :open="showDeleteDialog"
               @update:open="showDeleteDialog = $event"
@@ -182,8 +203,6 @@
                 <button
                   type="button"
                   :class="[
-                    rowClass(),
-                    'px-4 py-3',
                     'text-destructive hover:text-destructive hover:bg-destructive/10 hover:border-destructive/30',
                   ]"
                 >
@@ -213,6 +232,14 @@
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
+
+            <button
+              type="button"
+              class="whitespace-nowrap"
+              @click="handleLogout"
+            >
+              <span class="text-sm font-medium">Выйти из аккаунта</span>
+            </button>
           </div>
         </div>
       </div>
@@ -229,6 +256,7 @@ import { useCopyToClipboard } from '@/app/composables/useCopyToClipboard';
 import { useToast } from '@/app/composables/useToast';
 import SubscriptionBlock from '@/app/components/settings/SubscriptionBlock.vue';
 import Skeleton from '@/app/components/ui/Skeleton.vue';
+import { Switch } from '@/app/components/ui/shadcn/switch';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -246,6 +274,7 @@ import type {
   Tone,
   UserPreferencesDto,
 } from '@/shared/dto/notifications';
+import { LEGAL_DOCS_DATE_LABEL } from '@/shared/constants/legal';
 import IconChevronRight from '~icons/lucide/chevron-right';
 
 const auth = useAuthStore();
@@ -258,6 +287,7 @@ const loadingUser = ref(true);
 const loadingPreferences = ref(true);
 const showDeleteDialog = ref(false);
 const isDeleting = ref(false);
+const marketingConsent = ref(false);
 
 const isLoading = computed(() => loadingUser.value || loadingPreferences.value);
 const isAdmin = computed(() => auth.user?.role === 'admin');
@@ -296,6 +326,9 @@ const toneLabel = computed(() => {
   return toneLabels[value] || 'Нейтральный';
 });
 
+// Версия юридических документов для отображения в настройках
+const legalDocsVersionLabel = `Версия от ${LEGAL_DOCS_DATE_LABEL}`;
+
 const localeLabel = computed(() => {
   const value = (auth.user?.locale || locale.value || 'ru').toString();
   if (value === 'ru') return 'Русский';
@@ -321,6 +354,8 @@ onMounted(async () => {
     loadingUser.value = false;
   }
 
+  marketingConsent.value = Boolean(auth.user?.marketingConsent);
+
   loadingPreferences.value = true;
   try {
     preferences.value = await fetchGlobalPreferences();
@@ -330,6 +365,32 @@ onMounted(async () => {
     loadingPreferences.value = false;
   }
 });
+
+async function handleMarketingConsentChange(value: boolean) {
+  try {
+    await useAPI('/api/user/me', {
+      method: 'PATCH',
+      body: {
+        marketingConsent: value,
+      },
+    });
+    marketingConsent.value = value;
+    if (auth.user) {
+      auth.user.marketingConsent = value;
+    }
+    useToast(
+      value ? 'Маркетинг включён' : 'Маркетинг выключен',
+      value
+        ? 'Вы будете получать новости и предложения Mentala'
+        : 'Мы не будем отправлять промо‑сообщения',
+      'success'
+    );
+  } catch (error) {
+    console.error('Не удалось обновить маркетинговое согласие:', error);
+    marketingConsent.value = !value;
+    useToast('Ошибка', 'Не удалось сохранить настройку', 'error');
+  }
+}
 
 async function copyUserId() {
   if (!auth.user?.id) return;

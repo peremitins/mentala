@@ -19,6 +19,7 @@ import {
 import { getClientIp } from '@/server/utils/ip';
 import { getTimezoneFromRequest } from '@/server/application/notifications/timezone.utils';
 import { scheduleNotificationSlotsAfterLogin } from '@/server/application/notifications/login-slots.service';
+import { toIsoString } from '@/server/utils/serialize';
 
 export default defineEventHandler(async (event) => {
   const body = PasswordResetDto.parse(await readBody(event as any));
@@ -139,7 +140,7 @@ export default defineEventHandler(async (event) => {
       locale: user.locale,
       role: user.roleId || 'user',
       isBlocked: user.isBlocked || false,
-      emailVerifiedAt: user.emailVerifiedAt,
+      emailVerifiedAt: toIsoString(user.emailVerifiedAt),
       hasPassword: true,
     },
     ...(isNative ? { sessionToken: sessionId } : {}),

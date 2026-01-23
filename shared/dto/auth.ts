@@ -6,6 +6,11 @@ export const AuthRegisterDto = z.object({
   name: z.string().min(1).optional(),
   locale: z.string().min(2).max(8).optional(),
   timezone: z.string().optional(),
+  // Юридические согласия обязательны для регистрации
+  acceptTerms: z.literal(true),
+  acceptPrivacy: z.literal(true),
+  // Маркетинговое согласие опционально
+  marketingConsent: z.boolean().optional(),
 });
 
 export const AuthLoginDto = z.object({

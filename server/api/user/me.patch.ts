@@ -1,8 +1,17 @@
-import { readBody } from 'h3';
+import { getHeader, readBody } from 'h3';
 import { eq } from 'drizzle-orm';
 import { getSessionUserWithRole } from '@/server/utils/require-role';
 import { db } from '@/server/infrastructure/db/client';
 import { users } from '@/server/infrastructure/db/schema';
+import { UserMePatchDto, UserMeDto } from '@/shared/dto/user';
+import { toIsoString } from '@/server/utils/serialize';
+
+function detectMarketingSource(event: any): 'web' | 'ios' | 'android' {
+  const userAgent = getHeader(event, 'user-agent') || '';
+  if (/Android/i.test(userAgent)) return 'android';
+  if (/iPhone|iPad|iPod/i.test(userAgent)) return 'ios';
+  return 'web';
+}
 
 type SceneSettingsPayload = Partial<{
   sceneId: string | null;
@@ -13,6 +22,7 @@ type SceneSettingsPayload = Partial<{
 
 type Payload = Partial<{
   sceneSettings: SceneSettingsPayload;
+  marketingConsent: boolean;
 }>;
 
 function clampNumber(value: number, min: number, max: number) {
@@ -53,21 +63,32 @@ export default defineEventHandler(async (event) => {
     return { error: true, message: 'Unauthorized' } as const;
   }
 
-  const body = await readBody<Payload>(event);
+  const body = UserMePatchDto.parse(await readBody<Payload>(event));
   const patch = sanitizeSceneSettings(body?.sceneSettings ?? null);
   const currentSettings = (user as any)?.sceneSettings || {};
   const nextSettings = { ...currentSettings, ...patch };
+  const hasMarketingUpdate = typeof body.marketingConsent === 'boolean';
+  const marketingConsentAt = body.marketingConsent ? new Date() : null;
+  const marketingConsentSource = body.marketingConsent
+    ? detectMarketingSource(event)
+    : null;
 
   await db
     .update(users)
     .set({
       sceneSettings: nextSettings,
+      ...(hasMarketingUpdate
+        ? {
+            marketingConsentAt,
+            marketingConsentSource,
+          }
+        : {}),
       updatedAt: new Date(),
     })
     .where(eq(users.id, user.id));
 
   const onboarding = (user as any)?.onboarding || {};
-  return {
+  const response = {
     user: {
       id: user.id,
       email: user.email,
@@ -80,9 +101,14 @@ export default defineEventHandler(async (event) => {
       locale: user.locale,
       role: (user as any)?.role || 'user',
       isBlocked: user.isBlocked,
-      emailVerifiedAt: user.emailVerifiedAt,
+      emailVerifiedAt: toIsoString(user.emailVerifiedAt),
       hasPassword: !!user.passwordHash,
       sceneSettings: nextSettings,
+      marketingConsent: hasMarketingUpdate
+        ? body.marketingConsent
+        : Boolean((user as any)?.marketingConsentAt),
     },
   };
+
+  return UserMeDto.parse(response);
 });
