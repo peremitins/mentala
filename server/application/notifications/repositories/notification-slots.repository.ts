@@ -69,6 +69,31 @@ export async function countPlannedSlotsFromDate(
 }
 
 /**
+ * Подсчитывает количество planned и queued слотов начиная с указанной даты
+ * Используется для проверки наличия активного расписания после логина
+ * @param userId - ID пользователя
+ * @param from - дата начала подсчёта
+ * @returns количество слотов
+ */
+export async function countActiveSlotsFromDate(
+  userId: number,
+  from: Date
+): Promise<number> {
+  const [result] = await db
+    .select({ count: count() })
+    .from(notificationSlots)
+    .where(
+      and(
+        eq(notificationSlots.userId, userId),
+        sql`${notificationSlots.status} IN ('planned', 'queued')`,
+        gte(notificationSlots.scheduledAt, from)
+      )
+    );
+
+  return result?.count || 0;
+}
+
+/**
  * Подсчитывает количество planned слотов для ночного режима на завтра
  * @param userId - ID пользователя
  * @param from - дата начала подсчёта (обычно завтра 00:00)

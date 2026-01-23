@@ -7,8 +7,8 @@
     />
 
     <div class="space-y-2 pb-[100px]">
-      <div class="" style="animation-delay: 0.1s">
-        <p class="text-sm text-muted-foreground">
+      <div class="glass-deep p-4" style="animation-delay: 0.1s">
+        <p class="text-xs text-foreground">
           Подберите план, который подойдёт именно вам. Вы всегда можете изменить
           его позже.
         </p>
