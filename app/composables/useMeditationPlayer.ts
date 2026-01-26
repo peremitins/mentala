@@ -76,8 +76,8 @@ const globalState = {
   timerMinutes: ref<number | null>(null),
   timerEndsAt: ref<number | null>(null),
   timerRemainingMs: ref<number | null>(null),
-  // Выбранная длительность таймера, сохраняется между треками.
-  preferredTimerMinutes: ref<number | null>(null),
+  // Выбранная длительность таймера, сохраняется между треками. По умолчанию 30 минут.
+  preferredTimerMinutes: ref<number | null>(30),
   sessionEnded: ref(false),
   playbackAllowed: ref(true),
   queueIds: ref<string[]>([]),

@@ -2,16 +2,19 @@
   <div class="min-h-dvh">
     <NeuralBg />
     <div
-      class="container mx-auto px-4 py-8 flex items-center justify-center min-h-dvh relative z-10"
+      class="container mx-auto px-4 py-4 flex items-center justify-center min-h-dvh relative z-10"
     >
       <div class="w-full max-w-md">
         <div class="glass-deep p-6">
+          <div
+            class="flex w-[150px] h-auto items-center justify-center mb-6 mx-auto"
+          >
+            <BrandLogo class="signin__form-brand-logo-img" />
+          </div>
           <div class="text-center mb-6">
-            <div class="text-2xl font-semibold text-foreground">Mentala</div>
+            <!-- <div class="text-2xl font-semibold text-foreground">Mentala</div> -->
             <div class="text-sm text-muted-foreground">
-              {{
-                step === 'verify' ? 'подтверждение email' : 'вход и регистрация'
-              }}
+              {{ step === 'verify' ? 'подтверждение email' : '' }}
             </div>
           </div>
 
@@ -113,30 +116,16 @@
             </div>
 
             <div v-else key="form">
-              <div class="grid grid-cols-2 p-1 rounded-xl bg-muted/50 mb-6">
-                <button
-                  :class="[
-                    'py-2 rounded-lg text-sm transition',
-                    mode === 'signin'
-                      ? 'bg-background shadow text-foreground font-medium'
-                      : 'text-foreground hover:text-foreground',
-                  ]"
-                  @click="mode = 'signin'"
-                >
-                  Вход
-                </button>
-                <button
-                  :class="[
-                    'py-2 rounded-lg text-sm transition',
-                    mode === 'signup'
-                      ? 'bg-background shadow text-foreground font-medium'
-                      : 'text-foreground hover:text-foreground',
-                  ]"
-                  @click="mode = 'signup'"
-                >
-                  Регистрация
-                </button>
-              </div>
+              <Tabs
+                :model-value="mode"
+                @update:model-value="(v) => (mode = v as 'signin' | 'signup')"
+                class="w-full mb-6"
+              >
+                <TabsList class="grid grid-cols-2">
+                  <TabsTrigger value="signin">Вход</TabsTrigger>
+                  <TabsTrigger value="signup">Регистрация</TabsTrigger>
+                </TabsList>
+              </Tabs>
 
               <form class="space-y-4" @submit.prevent="submit">
                 <template v-if="mode === 'signup'">
@@ -332,8 +321,10 @@ import TelegramIcon from '~icons/mdi/telegram';
 import VkIcon from '~icons/simple-icons/vk';
 import GoogleIcon from '~icons/logos/google-icon';
 import NeuralBg from '@/app/components/ui/bg-neural/NeuralBg.vue';
+import BrandLogo from '@/app/assets/images/logo.svg';
 import { Input } from '@/app/components/ui/shadcn/input';
 import { Checkbox } from '@/app/components/ui/shadcn/checkbox';
+import { Tabs, TabsList, TabsTrigger } from '@/app/components/ui/shadcn/tabs';
 import { useToast } from '@/app/composables/useToast';
 
 definePageMeta({
@@ -612,7 +603,44 @@ function oauth(provider: string) {
   auth.oauth(provider, locale.value);
 }
 
-onMounted(() => {
+const handleSvg = () => {
+  const svg = document.querySelector(
+    '.signin__form-brand-logo-img'
+  ) as SVGSVGElement;
+  if (!svg) return;
+
+  const GAP_HUGE = 999999;
+  const textPath = svg.querySelector<SVGPathElement>('path.logo-text');
+  const iconPaths = svg.querySelectorAll<SVGPathElement>(
+    'path:not(.logo-text)'
+  );
+
+  try {
+    iconPaths.forEach((path) => path.classList.add('logo-icon'));
+    if (textPath) {
+      const len = textPath.getTotalLength();
+      textPath.style.setProperty('--path-length', String(len));
+      textPath.style.strokeDasharray = `${len} ${GAP_HUGE}`;
+      textPath.style.strokeDashoffset = String(len);
+      textPath.classList.add('logo-text-draw');
+    }
+  } catch (error) {
+    console.error('[Auth] SVG stroke setup error:', error);
+  }
+};
+
+const checkSvgLoaded = () => {
+  const svg = document.querySelector('.signin__form-brand-logo-img');
+  if (svg && svg.getClientRects().length > 0) {
+    handleSvg();
+  } else {
+    setTimeout(checkSvgLoaded, 50);
+  }
+};
+
+onMounted(async () => {
+  await nextTick();
+  checkSvgLoaded();
   if (route.query.error === 'email_not_verified') {
     useToast(
       'Ошибка',
@@ -630,7 +658,7 @@ onMounted(() => {
 });
 </script>
 
-<style scoped>
+<style lang="scss">
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.2s ease;
@@ -638,5 +666,54 @@ onMounted(() => {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+.signin__form-brand-logo-img {
+  width: 100%;
+  height: 100%;
+
+  path.logo-icon {
+    opacity: 0;
+    animation: logoFadeIn 2.7s ease-out forwards;
+  }
+
+  path.logo-text-draw {
+    fill: #f2f2f2;
+    fill-opacity: 0;
+    stroke: #f2f2f2;
+    stroke-width: 2px;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    animation:
+      drawStroke 2.7s ease-in-out forwards 0.9s,
+      logoTextFillReveal 2.25s ease-out forwards 1.7s;
+  }
+}
+
+@keyframes logoFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes drawStroke {
+  from {
+    stroke-dashoffset: var(--path-length, 0);
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes logoTextFillReveal {
+  from {
+    fill-opacity: 0;
+  }
+  to {
+    fill-opacity: 1;
+  }
 }
 </style>
