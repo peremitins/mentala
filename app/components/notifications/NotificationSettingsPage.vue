@@ -54,7 +54,7 @@
     <div class="space-y-3 pb-[120px] animate-fade-in">
       <!-- Карточка описания -->
       <section class="glass-deep p-3 space-y-3">
-        <p class="text-sm font-semibold text-elevated-strong">Описание</p>
+        <p class="text-sm font-semibold">Описание</p>
         <div
           ref="subtitleInputContainerRef"
           v-if="isEditingSubtitle"
@@ -104,7 +104,7 @@
       <section class="glass-deep p-3 space-y-4">
         <div class="flex items-center justify-between">
           <div class="space-y-1">
-            <h3 class="text-sm font-semibold text-elevated-strong">
+            <h3 class="text-sm font-semibold">
               {{ 'Уведомления' }}
               <span class="text-xs font-normal">
                 ({{ enabled ? 'включены' : 'выключены' }})
