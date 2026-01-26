@@ -88,7 +88,7 @@
       <section class="glass-deep p-4 space-y-3">
         <div class="flex items-center justify-between gap-4">
           <div class="space-y-1">
-            <p class="text-sm font-semibold text-foreground">Анимация обоев</p>
+            <p class="text-sm font-semibold text-foreground">Живой фон</p>
             <p class="text-xs text-foreground/80">
               Плавное движение фона для эффекта присутствия.
             </p>

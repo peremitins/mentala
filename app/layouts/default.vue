@@ -316,7 +316,7 @@ watch(
 .meditation-bg-media {
   object-fit: cover;
   /* Держим запас по краям, чтобы при панорамировании не вскрывались полосы. */
-  transform: scale(1.12);
+  transform: scale(1.1);
   transform-origin: center;
   will-change: transform;
   background: #000;
@@ -327,7 +327,7 @@ watch(
   inset: -10%;
   width: 120%;
   height: 120%;
-  animation: meditation-pan-diagonal 70s linear infinite;
+  animation: meditation-pan-diagonal 40s ease-in-out infinite;
   will-change: transform;
   overflow: hidden;
   background: #000;
@@ -336,13 +336,13 @@ watch(
 /* Плавная траектория без остановок и резких углов. */
 @keyframes meditation-pan-diagonal {
   0% {
-    transform: scale(1.11) translate3d(0px, 0px, 0);
+    transform: scale(1) translate3d(0px, 0px, 0);
   }
   50% {
-    transform: scale(1.13) translate3d(44px, 40px, 0);
+    transform: scale(1.1) translate3d(44px, 40px, 0);
   }
   100% {
-    transform: scale(1.11) translate3d(0px, 0px, 0);
+    transform: scale(1) translate3d(0px, 0px, 0);
   }
 }
 
