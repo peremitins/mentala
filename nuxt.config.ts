@@ -150,10 +150,7 @@ export default defineNuxtConfig({
       appUrl: process.env.NUXT_PRIVATE_API_BASE || 'http://localhost:3000',
       mediaBaseUrl:
         process.env.NUXT_PUBLIC_MEDIA_BASE_URL || 'https://media.mentala.app',
-      googleWebClientId:
-        process.env.NUXT_PUBLIC_GOOGLE_WEB_CLIENT_ID ||
-        process.env.NUXT_OAUTH_GOOGLE_CLIENT_ID ||
-        '',
+      googleWebClientId: process.env.NUXT_OAUTH_GOOGLE_CLIENT_ID || '',
       googleIosClientId: process.env.NUXT_PUBLIC_GOOGLE_IOS_CLIENT_ID || '',
       speechDefaultEngine:
         process.env.NUXT_PUBLIC_SPEECH_DEFAULT_ENGINE || 'auto', // auto | native | webspeech | whisper

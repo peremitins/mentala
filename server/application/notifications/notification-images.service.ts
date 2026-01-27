@@ -1,7 +1,10 @@
 import type { Gender } from '@/shared/dto/onboarding';
 import type { NotificationKind } from '@/shared/dto/notifications';
 
+import notificationImageMap from './notification-image-map.json';
+
 const IMAGE_BASE_PATH = '/notifications';
+const notificationImageMapLookup = notificationImageMap as Record<string, string>;
 
 type GenderedImageSet = {
   neutral?: string[];
@@ -280,9 +283,21 @@ function normalizeBaseUrl(url: string): string {
 }
 
 function resolvePublicBaseUrl(): string {
-  const baseUrl = process.env.NUXT_PRIVATE_API_BASE || 'http://localhost:3000';
+  // Используем NUXT_PUBLIC_MEDIA_BASE_URL для картинок в push-уведомлениях
+  // Это должно быть публично доступным доменом, чтобы Firebase Cloud Messaging мог скачать изображение
+  // В локальной разработке это должен быть публичный домен (например, https://media.mentala.app),
+  // а не локальный адрес (local.mentala.app), который недоступен из интернета
+  const baseUrl =
+    process.env.NUXT_PUBLIC_MEDIA_BASE_URL ||
+    process.env.NUXT_PRIVATE_API_BASE ||
+    'http://localhost:3000';
 
   return normalizeBaseUrl(baseUrl);
+}
+
+function resolveHashedNotificationPath(relative: string): string {
+  const candidate = `${IMAGE_BASE_PATH}/${relative}`;
+  return notificationImageMapLookup[candidate] ?? candidate;
 }
 
 function interleaveBalanced(primary: string[], secondary: string[]): string[] {
@@ -348,5 +363,5 @@ export function pickNotificationImage(params: ImagePickParams): string | null {
   const selected = sequence[safeIndex];
 
   const baseUrl = resolvePublicBaseUrl();
-  return `${baseUrl}${IMAGE_BASE_PATH}/${selected}`;
+  return `${baseUrl}${resolveHashedNotificationPath(selected)}`;
 }

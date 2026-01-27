@@ -29,7 +29,11 @@
     "cap:sync:device": "./scripts/setup-capacitor-dev.sh device",
     "cap:open:android": "npx cap open android",
     "build:mobile": "nuxt generate && npx cap sync",
-    "upload:media": "aws s3 sync public/meditations s3://mentala/meditations --endpoint-url=https://storage.yandexcloud.net --acl public-read --exclude \"*.DS_Store\" --exclude \"**/.DS_Store\""
+    "upload:media": "bash scripts/upload-media-safe.sh",
+    "hash:notification-images": "node scripts/hash-notification-images.mjs",
+    "upload:notification-images": "bash scripts/upload-notification-images.sh",
+    "upload:media:legacy": "aws s3 sync public/meditations s3://mentala/meditations --endpoint-url=https://storage.yandexcloud.net --acl public-read --exclude \"*.DS_Store\" --exclude \"**/.DS_Store\" --delete",
+    "cleanup:incomplete-uploads": "bash scripts/cleanup-incomplete-uploads.sh"
   },
   "dependencies": {
     "@capacitor-community/speech-recognition": "^7.0.1",

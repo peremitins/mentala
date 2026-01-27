@@ -200,7 +200,6 @@ AUTH_DELETE_GRACE_DAYS=7
 
 - `/api/user/delete` — включает 2‑фазное удаление и постановку задачи в очередь
 
-
 ### `AUTH_EMAIL_CODE_SECRET`
 
 **Описание:** Secret для хеширования 6-значных кодов подтверждения email.
@@ -301,9 +300,9 @@ SMTP_FROM_NAME=Mentala
 
 ---
 
-### `NUXT_PUBLIC_GOOGLE_WEB_CLIENT_ID`
+### `NUXT_OAUTH_GOOGLE_CLIENT_ID`
 
-**Описание:** Публичный Web Client ID для инициализации нативного Google Sign-In (Android/iOS).\nЕсли не задан, используется `NUXT_OAUTH_GOOGLE_CLIENT_ID`.
+**Описание:** Публичный Web Client ID для инициализации нативного Google Sign-In (Android/iOS).\nЕсли не задан, автоматически используется `NUXT_OAUTH_GOOGLE_CLIENT_ID`.\n\n**Примечание:** В большинстве случаев достаточно задать только `NUXT_OAUTH_GOOGLE_CLIENT_ID`, так как значения обычно одинаковые.
 
 ---
 

@@ -223,6 +223,10 @@ export async function sendFCMNotification(
       sound: 'default',
       channelId: 'mentai_high',
       clickAction: 'FLUTTER_NOTIFICATION_CLICK',
+      // Уникальный tag предотвращает замену уведомлений внутри группы Android
+      ...(payload.data?.slotId
+        ? { tag: `slot-${String(payload.data.slotId)}` }
+        : {}),
     };
 
     // Добавляем изображение для Android (Android 7+)

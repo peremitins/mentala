@@ -165,7 +165,7 @@ export const useAuthStore = defineStore('auth', {
 
         if (!webClientId || !GOOGLE_WEB_CLIENT_ID_REGEX.test(webClientId)) {
           throw new Error(
-            'Не задан или некорректен Google Web Client ID. Проверь NUXT_PUBLIC_GOOGLE_WEB_CLIENT_ID.'
+            'Не задан или некорректен Google Web Client ID. Проверь NUXT_OAUTH_GOOGLE_CLIENT_ID.'
           );
         }
 
@@ -584,7 +584,10 @@ export const useAuthStore = defineStore('auth', {
           },
         });
       } catch (error) {
-        console.error('[Auth Store] Не удалось зарегистрировать push-токен:', error);
+        console.error(
+          '[Auth Store] Не удалось зарегистрировать push-токен:',
+          error
+        );
       }
     },
 
