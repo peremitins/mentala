@@ -6,12 +6,17 @@
 export default defineNitroPlugin(() => {
   // Обрабатываем необработанные отклонения промисов
   process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
+    // Преобразуем reason в строку для проверки (может быть объектом или строкой)
+    const reasonStr = String(reason?.message || reason || '');
+    const reasonCode = reason?.code;
+    const reasonSyscall = reason?.syscall;
+
     // Игнорируем ошибки подключения к Nuxt dev socket (это нормально при перезапуске сервера)
     if (
-      reason?.code === 'ECONNREFUSED' &&
-      (reason?.message?.includes('nuxt-dev') ||
-        reason?.message?.includes('.sock') ||
-        reason?.syscall === 'connect')
+      (reasonCode === 'ECONNREFUSED' || reasonStr.includes('ECONNREFUSED')) &&
+      (reasonStr.includes('nuxt-dev') ||
+        reasonStr.includes('.sock') ||
+        reasonSyscall === 'connect')
     ) {
       // Это не критичная ошибка - просто игнорируем
       return;
@@ -19,20 +24,21 @@ export default defineNitroPlugin(() => {
 
     // Для остальных ошибок логируем, но не падаем
     console.error('[UnhandledRejection] Unhandled promise rejection:', {
-      reason: reason?.message || reason,
-      code: reason?.code,
-      syscall: reason?.syscall,
+      reason: reasonStr,
+      code: reasonCode,
+      syscall: reasonSyscall,
       stack: reason?.stack,
     });
   });
 
   // Обрабатываем необработанные исключения
   process.on('uncaughtException', (error: Error) => {
+    const errorMessage = String(error?.message || error || '');
+
     // Игнорируем ошибки подключения к Nuxt dev socket
     if (
-      error?.message?.includes('ECONNREFUSED') &&
-      (error?.message?.includes('nuxt-dev') ||
-        error?.message?.includes('.sock'))
+      errorMessage.includes('ECONNREFUSED') &&
+      (errorMessage.includes('nuxt-dev') || errorMessage.includes('.sock'))
     ) {
       return;
     }
