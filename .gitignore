@@ -39,3 +39,7 @@ logs
 
 # Docker volumes
 redis-data/
+
+certs/
+Caddyfile
+scripts/.notification-cache/
