@@ -1,0 +1,719 @@
+<template>
+  <div class="min-h-dvh">
+    <NeuralBg />
+    <div
+      class="container mx-auto px-4 py-4 flex items-center justify-center min-h-dvh relative z-10"
+    >
+      <div class="w-full max-w-md">
+        <div class="glass-deep p-6">
+          <div
+            class="flex w-[150px] h-auto items-center justify-center mb-6 mx-auto"
+          >
+            <BrandLogo class="signin__form-brand-logo-img" />
+          </div>
+          <div class="text-center mb-6">
+            <!-- <div class="text-2xl font-semibold text-foreground">Mentala</div> -->
+            <div class="text-sm text-muted-foreground">
+              {{ step === 'verify' ? 'подтверждение email' : '' }}
+            </div>
+          </div>
+
+          <Transition name="fade" mode="out-in">
+            <div v-if="step === 'verify'" key="verify" class="space-y-4">
+              <div class="rounded-2xl border border-border/30 bg-muted/30 p-4">
+                <div class="text-sm text-foreground">
+                  <template v-if="isRateLimited">
+                    Слишком много запросов. Подождите немного перед повтором.
+                  </template>
+                  <template v-else>
+                    Мы отправили письмо с кодом подтверждения на
+                    <span class="text-foreground font-medium">
+                      {{ verificationEmail }} </span
+                    >.
+
+                    <div class="mt-2 text-xs text-muted-foreground">
+                      Если вы уже регистрировались ранее, вы сможете
+                      <button
+                        type="button"
+                        class="underline text-primary-ui hover:text-primary-ui/80 transition"
+                        @click="switchToSignin"
+                      >
+                        войти
+                      </button>
+                      или
+                      <NuxtLink
+                        to="/forgot"
+                        class="underline text-primary-ui hover:text-primary-ui/80 transition"
+                      >
+                        восстановить пароль </NuxtLink
+                      >.
+                    </div>
+                  </template>
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-sm mb-1 text-foreground">
+                  Код подтверждения
+                </label>
+                <Input
+                  v-model="verificationCode"
+                  type="text"
+                  inputmode="numeric"
+                  autocomplete="one-time-code"
+                  maxlength="6"
+                  :show-clear-button="false"
+                  @input="onCodeInput"
+                />
+              </div>
+
+              <div
+                class="flex items-center justify-between text-xs text-muted-foreground"
+              >
+                <span v-if="attemptsLeft !== null">
+                  Осталось попыток: {{ attemptsLeft }}
+                </span>
+                <span v-else class="flex items-center gap-2">
+                  <span>Код действует 15 минут</span>
+                  <span
+                    v-if="codeExpiryRemaining && codeExpiryRemaining > 0"
+                    class="font-medium text-foreground"
+                  >
+                    {{ formatTimeRemaining(codeExpiryRemaining) }}
+                  </span>
+                </span>
+                <span v-if="resendRemaining > 0">
+                  Повтор через {{ resendRemaining }}с
+                </span>
+              </div>
+
+              <button
+                type="button"
+                :disabled="loading"
+                class="w-full py-2.5 rounded-xl bg-primary text-primary-foreground hover:opacity-90 active:opacity-80 transition font-medium disabled:opacity-60 disabled:cursor-not-allowed"
+                @click="confirmCode"
+              >
+                {{ loading ? '...' : 'Подтвердить' }}
+              </button>
+
+              <div class="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  class="py-2 rounded-xl border border-border/40 text-[12px] text-foreground hover:bg-muted/40 transition disabled:opacity-60"
+                  :disabled="resendRemaining > 0 || loading"
+                  @click="resendCode"
+                >
+                  Отправить повторно
+                </button>
+                <button
+                  type="button"
+                  class="py-2 rounded-xl border border-border/40 text-[12px] text-foreground hover:text-foreground hover:bg-muted/40 transition"
+                  @click="resetVerification"
+                >
+                  Изменить email
+                </button>
+              </div>
+            </div>
+
+            <div v-else key="form">
+              <Tabs
+                :model-value="mode"
+                @update:model-value="(v) => (mode = v as 'signin' | 'signup')"
+                class="w-full mb-6"
+              >
+                <TabsList class="grid grid-cols-2">
+                  <TabsTrigger value="signin">Вход</TabsTrigger>
+                  <TabsTrigger value="signup">Регистрация</TabsTrigger>
+                </TabsList>
+              </Tabs>
+
+              <form class="space-y-4" @submit.prevent="submit">
+                <template v-if="mode === 'signup'">
+                  <div>
+                    <label class="block text-sm mb-1 text-foreground"
+                      >Имя</label
+                    >
+                    <Input
+                      v-model="name"
+                      type="text"
+                      :show-clear-button="false"
+                    />
+                  </div>
+                </template>
+
+                <div>
+                  <label class="block text-sm mb-1 text-foreground"
+                    >Email</label
+                  >
+                  <Input
+                    v-model="email"
+                    type="email"
+                    required
+                    :show-clear-button="false"
+                  />
+                </div>
+
+                <div>
+                  <label class="block text-sm mb-1 text-foreground"
+                    >Пароль</label
+                  >
+                  <Input
+                    v-model="password"
+                    type="password"
+                    required
+                    minlength="8"
+                    :show-clear-button="false"
+                  />
+                </div>
+
+                <div
+                  class="flex items-center justify-end"
+                  v-if="mode === 'signin'"
+                >
+                  <NuxtLink
+                    to="/forgot"
+                    class="text-sm text-muted-foreground hover:text-foreground transition"
+                  >
+                    Забыли пароль?
+                  </NuxtLink>
+                </div>
+
+                <div v-else class="text-sm text-foreground">
+                  <div class="flex items-start gap-2">
+                    <Checkbox id="agree" v-model:checked="agree" required />
+                    <label for="agree" class="cursor-pointer">
+                      <span
+                        >Я принимаю
+                        <!-- Ссылки на каноничные HTML-документы из public/legal -->
+                        <a
+                          href="/legal/terms-of-service.html"
+                          class="underline text-primary-ui hover:text-primary-ui/80"
+                        >
+                          Условия использования
+                        </a>
+                        и
+                        <a
+                          href="/legal/privacy-policy.html"
+                          class="underline text-primary-ui hover:text-primary-ui/80"
+                        >
+                          Политику конфиденциальности
+                        </a>
+                      </span>
+                    </label>
+                  </div>
+                  <div
+                    class="flex items-start gap-2 mt-3 text-muted-foreground"
+                  >
+                    <Checkbox
+                      id="marketing-consent"
+                      v-model:checked="marketingConsent"
+                    />
+                    <label for="marketing-consent" class="cursor-pointer">
+                      <span> Хочу получать новости и предложения Mentala </span>
+                    </label>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  :disabled="loading || (mode === 'signup' && !agree)"
+                  class="w-full py-2.5 rounded-xl bg-primary text-primary-foreground hover:opacity-90 active:opacity-80 transition font-medium disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {{
+                    loading
+                      ? '...'
+                      : mode === 'signin'
+                        ? 'Войти'
+                        : 'Создать аккаунт'
+                  }}
+                </button>
+              </form>
+
+              <div class="flex items-center my-6">
+                <div class="flex-1 h-px bg-border"></div>
+                <div
+                  class="px-3 text-xs uppercase tracking-wider text-muted-foreground"
+                >
+                  или
+                </div>
+                <div class="flex-1 h-px bg-border"></div>
+              </div>
+
+              <div class="grid grid-cols-1 gap-2">
+                <!-- 1️⃣ Google -->
+                <button
+                  @click="loginWithGoogle"
+                  class="h-10 rounded-xl bg-white/80 hover:bg-white text-black flex items-center justify-center"
+                >
+                  <GoogleIcon class="w-full h-5" />
+                </button>
+
+                <!-- 7️⃣ VK -->
+                <!-- <button
+                  @click="oauth('vk')"
+                  class="h-10 rounded-xl bg-[#2787F5] hover:brightness-110 text-white flex items-center justify-center"
+                >
+                  <VkIcon class="w-5 h-5" />
+                </button> -->
+
+                <!-- 9️⃣ Telegram -->
+                <!-- <button
+                  @click="oauth('telegram')"
+                  class="h-10 rounded-xl bg-[#229ED9] hover:brightness-110 text-white flex items-center justify-center"
+                >
+                  <TelegramIcon class="w-5 h-5" />
+                </button> -->
+              </div>
+
+              <div class="mt-6 text-center text-sm text-muted-foreground">
+                {{ mode === 'signin' ? 'Нет аккаунта?' : 'Уже есть аккаунт?' }}
+                <button
+                  class="underline text-primary-ui hover:text-primary-ui/80 transition"
+                  @click="mode = mode === 'signin' ? 'signup' : 'signin'"
+                >
+                  {{ mode === 'signin' ? 'Создать' : 'Войти' }}
+                </button>
+              </div>
+            </div>
+          </Transition>
+        </div>
+
+        <p class="mt-4 text-center text-xs text-muted-foreground">
+          <template v-if="mode === 'signin'">
+            Входя в аккаунт, вы подтверждаете согласие с
+            <a
+              href="/legal/terms-of-service.html"
+              class="underline text-primary-ui hover:text-primary-ui/80"
+            >
+              Условиями использования
+            </a>
+            и
+            <a
+              href="/legal/privacy-policy.html"
+              class="underline text-primary-ui hover:text-primary-ui/80"
+            >
+              Политикой конфиденциальности
+            </a>
+            .
+          </template>
+          <template v-else>
+            Защита данных: end-to-end для приватных чатов, ключи разделены
+            (zero-trust). Подробнее в
+            <a
+              href="/legal/privacy-policy.html"
+              class="underline text-primary-ui hover:text-primary-ui/80"
+            >
+              политике
+            </a>
+            .
+          </template>
+        </p>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, onMounted, nextTick } from 'vue';
+import { useCountdown } from '@vueuse/core';
+import { useAuthStore } from '@/app/stores/auth';
+import TelegramIcon from '~icons/mdi/telegram';
+import VkIcon from '~icons/simple-icons/vk';
+import GoogleIcon from '~icons/logos/google-icon';
+import NeuralBg from '@/app/components/ui/bg-neural/NeuralBg.vue';
+import BrandLogo from '@/app/assets/images/logo.svg';
+import { Input } from '@/app/components/ui/shadcn/input';
+import { Checkbox } from '@/app/components/ui/shadcn/checkbox';
+import { Tabs, TabsList, TabsTrigger } from '@/app/components/ui/shadcn/tabs';
+import { useToast } from '@/app/composables/useToast';
+
+definePageMeta({
+  layout: 'auth',
+});
+
+const auth = useAuthStore();
+const route = useRoute();
+
+const mode = ref<'signin' | 'signup'>('signin');
+const step = ref<'form' | 'verify'>('form');
+const email = ref('');
+const password = ref('');
+const name = ref('');
+const agree = ref(false);
+const marketingConsent = ref(false);
+const loading = ref(false);
+
+const verificationEmail = ref('');
+const verificationCode = ref('');
+const attemptsLeft = ref<number | null>(null);
+const isRateLimited = ref(false);
+
+const { remaining: resendRemaining, start, reset } = useCountdown(0);
+const {
+  remaining: codeExpiryRemaining,
+  start: startCodeExpiryTimer,
+  reset: resetCodeExpiryTimer,
+} = useCountdown(0);
+
+const langCookie = useCookie<string | null>('mentai.lang', {
+  maxAge: 365 * 24 * 3600,
+  path: '/',
+});
+const locale = computed(() => langCookie.value || 'ru');
+
+function startResendTimer(seconds = 60) {
+  reset(seconds);
+  start();
+}
+
+function formatTimeRemaining(seconds: number): string {
+  const minutes = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${minutes}:${secs.toString().padStart(2, '0')}`;
+}
+
+function startCodeExpiryCountdown(seconds: number) {
+  if (seconds > 0) {
+    resetCodeExpiryTimer(seconds);
+    // Небольшая задержка перед start, чтобы reset успел примениться
+    nextTick(() => {
+      startCodeExpiryTimer();
+    });
+  }
+}
+
+function onCodeInput() {
+  verificationCode.value = verificationCode.value
+    .replace(/\D/g, '')
+    .slice(0, 6);
+}
+
+function resetVerification() {
+  step.value = 'form';
+  mode.value = 'signup';
+  verificationEmail.value = '';
+  verificationCode.value = '';
+  attemptsLeft.value = null;
+  isRateLimited.value = false;
+  resetCodeExpiryTimer(0);
+}
+
+function switchToSignin() {
+  // Возвращаем пользователя на форму входа без утечки информации
+  step.value = 'form';
+  mode.value = 'signin';
+  isRateLimited.value = false;
+  verificationCode.value = '';
+  attemptsLeft.value = null;
+}
+
+function getRetryAfterFromError(error: any): number | null {
+  const headerValue =
+    error?.response?.headers?.get?.('retry-after') ||
+    error?.response?.headers?.['retry-after'] ||
+    error?.response?.headers?.['Retry-After'];
+  const headerSeconds = headerValue ? Number(headerValue) : null;
+  if (headerSeconds && Number.isFinite(headerSeconds)) return headerSeconds;
+
+  const dataRetryAfter =
+    error?.data?.retryAfter || error?.response?._data?.retryAfter;
+  const dataSeconds = dataRetryAfter ? Number(dataRetryAfter) : null;
+  return dataSeconds && Number.isFinite(dataSeconds) ? dataSeconds : null;
+}
+
+function startVerificationFlow(options?: {
+  retryAfter?: number | null;
+  rateLimited?: boolean;
+}) {
+  verificationEmail.value = email.value;
+  step.value = 'verify';
+  attemptsLeft.value = null;
+  verificationCode.value = '';
+  // Запускаем таймер действия кода (15 минут = 900 секунд)
+  startCodeExpiryCountdown(900);
+
+  const retryAfter = options?.retryAfter ?? null;
+  if (options?.rateLimited) {
+    const safeRetryAfter =
+      retryAfter && Number.isFinite(retryAfter) && retryAfter > 0
+        ? retryAfter
+        : 60;
+    isRateLimited.value = true;
+    startResendTimer(safeRetryAfter);
+    const minutes = Math.floor(safeRetryAfter / 60);
+    const seconds = safeRetryAfter % 60;
+    useToast(
+      'Слишком много запросов',
+      `Повторите через ${minutes}:${seconds.toString().padStart(2, '0')}`,
+      'warning'
+    );
+    return;
+  }
+
+  isRateLimited.value = false;
+  startResendTimer(60);
+  useToast(
+    'Проверьте почту',
+    'Мы отправили письмо с кодом подтверждения.\nЕсли вы уже использовали Mentala ранее, вы сможете войти или восстановить доступ',
+    'info'
+  );
+}
+
+async function submit() {
+  if (step.value === 'verify') {
+    await confirmCode();
+    return;
+  }
+  if (mode.value === 'signup' && !agree.value) {
+    // Без согласия с документами регистрацию не продолжаем
+    useToast('Нужно согласие', 'Подтвердите условия и политику', 'warning');
+    return;
+  }
+
+  try {
+    loading.value = true;
+    if (mode.value === 'signin') {
+      await auth.loginEmail({
+        email: email.value,
+        password: password.value,
+        locale: locale.value,
+      });
+    } else {
+      await auth.registerEmail({
+        email: email.value,
+        password: password.value,
+        name: name.value || undefined,
+        locale: locale.value,
+        // Передаем согласия на документы и маркетинг
+        acceptTerms: agree.value,
+        acceptPrivacy: agree.value,
+        marketingConsent: marketingConsent.value,
+      });
+      startVerificationFlow();
+    }
+  } catch (e: any) {
+    if (mode.value === 'signup') {
+      const statusCode = e?.statusCode || e?.response?.status || 500;
+      const retryAfter = getRetryAfterFromError(e);
+      const isLimited = statusCode === 429 || !!retryAfter;
+      startVerificationFlow({ retryAfter, rateLimited: isLimited });
+    }
+
+    console.error('[Auth] Register error:', e);
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function confirmCode() {
+  const cleanCode = verificationCode.value.replace(/\D/g, '');
+  if (!verificationEmail.value || cleanCode.length !== 6) {
+    useToast('Ошибка', 'Введите 6-значный код', 'error');
+    return;
+  }
+
+  try {
+    loading.value = true;
+    await auth.verifyEmailCode({
+      email: verificationEmail.value,
+      code: cleanCode,
+    });
+  } catch (e: any) {
+    const payload = e?.data || e?.response?._data || {};
+    attemptsLeft.value = payload?.data?.attemptsLeft ?? attemptsLeft.value;
+    console.error('[Auth] Verify code error:', e);
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function resendCode() {
+  if (resendRemaining.value > 0 || !verificationEmail.value) return;
+  try {
+    const response: any = await auth.resendEmailCode({
+      email: verificationEmail.value,
+    });
+    const retryAfter = response?.retryAfter ? Number(response.retryAfter) : 60;
+    startResendTimer(Number.isFinite(retryAfter) ? retryAfter : 60);
+    // Перезапускаем таймер действия кода при повторной отправке (15 минут = 900 секунд)
+    startCodeExpiryCountdown(900);
+    if (response?.retryAfter) {
+      isRateLimited.value = true;
+      const minutes = Math.floor(retryAfter / 60);
+      const seconds = retryAfter % 60;
+      useToast(
+        'Слишком много запросов',
+        `Повторите через ${minutes}:${seconds.toString().padStart(2, '0')}`,
+        'warning'
+      );
+    } else {
+      isRateLimited.value = false;
+      useToast(
+        'Проверьте почту',
+        'Мы отправили письмо с кодом подтверждения.\nЕсли вы уже использовали Mentala ранее, вы сможете войти или восстановить доступ',
+        'info'
+      );
+    }
+  } catch (e: any) {
+    console.error('[Auth] Resend code error:', e);
+  }
+}
+
+async function requestVerification() {
+  if (!email.value) {
+    useToast('Ошибка', 'Введите email', 'error');
+    return;
+  }
+  try {
+    const response: any = await auth.requestEmailVerification({
+      email: email.value,
+    });
+    const retryAfter = response?.retryAfter
+      ? Number(response.retryAfter)
+      : null;
+    if (retryAfter) {
+      const minutes = Math.floor(retryAfter / 60);
+      const seconds = retryAfter % 60;
+      useToast(
+        'Слишком часто',
+        `Повторите через ${minutes}:${seconds.toString().padStart(2, '0')}`,
+        'warning'
+      );
+    } else {
+      useToast(
+        'Проверьте почту',
+        'Мы отправили письмо с кодом подтверждения.\nЕсли вы уже использовали Mentala ранее, вы сможете войти или восстановить доступ',
+        'info'
+      );
+    }
+  } catch (e: any) {
+    console.error('[Auth] Request verification error:', e);
+  }
+}
+
+async function loginWithGoogle() {
+  try {
+    await auth.loginWithGoogle(locale.value);
+  } catch (e: any) {
+    console.error('[Auth] Google login error:', e);
+  }
+}
+
+function oauth(provider: string) {
+  auth.oauth(provider, locale.value);
+}
+
+const handleSvg = () => {
+  const svg = document.querySelector(
+    '.signin__form-brand-logo-img'
+  ) as SVGSVGElement;
+  if (!svg) return;
+
+  const GAP_HUGE = 999999;
+  const textPath = svg.querySelector<SVGPathElement>('path.logo-text');
+  const iconPaths = svg.querySelectorAll<SVGPathElement>(
+    'path:not(.logo-text)'
+  );
+
+  try {
+    iconPaths.forEach((path) => path.classList.add('logo-icon'));
+    if (textPath) {
+      const len = textPath.getTotalLength();
+      textPath.style.setProperty('--path-length', String(len));
+      textPath.style.strokeDasharray = `${len} ${GAP_HUGE}`;
+      textPath.style.strokeDashoffset = String(len);
+      textPath.classList.add('logo-text-draw');
+    }
+  } catch (error) {
+    console.error('[Auth] SVG stroke setup error:', error);
+  }
+};
+
+const checkSvgLoaded = () => {
+  const svg = document.querySelector('.signin__form-brand-logo-img');
+  if (svg && svg.getClientRects().length > 0) {
+    handleSvg();
+  } else {
+    setTimeout(checkSvgLoaded, 50);
+  }
+};
+
+onMounted(async () => {
+  await nextTick();
+  checkSvgLoaded();
+  if (route.query.error === 'email_not_verified') {
+    useToast(
+      'Ошибка',
+      'Google не подтвердил ваш email. Подтвердите его в аккаунте Google.',
+      'error'
+    );
+  }
+  if (route.query.error === 'email_required') {
+    useToast(
+      'Ошибка',
+      'OAuth-провайдер не вернул email. Попробуйте другой способ входа.',
+      'error'
+    );
+  }
+});
+</script>
+
+<style lang="scss">
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+.signin__form-brand-logo-img {
+  width: 100%;
+  height: 100%;
+
+  path.logo-icon {
+    opacity: 0;
+    animation: logoFadeIn 2.7s ease-out forwards;
+  }
+
+  path.logo-text-draw {
+    fill: #f2f2f2;
+    fill-opacity: 0;
+    stroke: #f2f2f2;
+    stroke-width: 2px;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    animation:
+      drawStroke 2.7s ease-in-out forwards 0.9s,
+      logoTextFillReveal 2.25s ease-out forwards 1.7s;
+  }
+}
+
+@keyframes logoFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes drawStroke {
+  from {
+    stroke-dashoffset: var(--path-length, 0);
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes logoTextFillReveal {
+  from {
+    fill-opacity: 0;
+  }
+  to {
+    fill-opacity: 1;
+  }
+}
+</style>

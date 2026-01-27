@@ -1,0 +1,169 @@
+html,
+body,
+#__nuxt {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100dvh;
+  box-sizing: border-box;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+button,
+a {
+  cursor: pointer;
+}
+
+.glass {
+  border-radius: var(--radius-lg);
+  @apply border border-border/15 bg-background/10 shadow-lg backdrop-blur-md;
+}
+
+/* Deeper glass for panels */
+.glass-deep {
+  box-shadow:
+    inset 1px 1px 0.12px rgba(255, 255, 255, 0.4),
+    1px 1px 3px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(10px);
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: color-mix(in oklab, var(--color-background) 7%, transparent);
+  background: color-mix(in oklab, var(--color-background) 7%, #0000005c);
+  background-clip: padding-box;
+}
+
+.chat-fade {
+  mask-image: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 1) 0%,
+    rgba(0, 0, 0, 1) 0%,
+    rgba(0, 0, 0, 0) 60%,
+    rgba(0, 0, 0, 0) 100%
+  );
+}
+
+/* Fade transitions */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+/* Page transitions - основная анимация (плавное затухание) */
+.page-enter-active,
+.page-leave-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.page-enter-from {
+  opacity: 0;
+}
+
+.page-leave-to {
+  opacity: 0;
+}
+
+/* Welcome screen animations */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.4s ease-out;
+}
+
+.animate-slide-up {
+  animation: slide-up 0.5s ease-out;
+}
+
+/* Chat bubble style */
+.bubble {
+  border-radius: calc(var(--radius-md) + 2px);
+  @apply border border-border/15 backdrop-blur-xl px-4 py-2;
+  background: hsl(var(--background) / 0.07);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Input container */
+
+.icon-disc {
+  border-radius: var(--radius-icon);
+  @apply border border-border/10 backdrop-blur-xl grid place-items-center;
+  background: hsl(var(--background) / 0.07);
+  width: 44px;
+  height: 44px;
+  transition: all 0.3s ease;
+}
+
+.icon-disc-wrapper {
+  &:hover,
+  &.router-link-active {
+    .icon-disc {
+      color: hsl(var(--primary-ui));
+    }
+  }
+}
+
+/* Глобальный класс для скрытия скроллбаров при сохранении прокрутки */
+.no-scrollbar {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none; /* Chrome, Safari */
+}
+
+/* Универсальные текстовые тени для читаемости на ярких фото/видео */
+.text-elevated {
+  text-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.35),
+    0 0 1px rgba(0, 0, 0, 0.5);
+}
+
+.text-elevated-strong {
+  text-shadow:
+    0 3px 14px rgba(0, 0, 0, 1),
+    0 1px 4px rgba(0, 0, 0, 1),
+    0 0 1px rgba(0, 0, 0, 1);
+}
+
+/* Global hover rules for buttons/links (excluding bottom nav) */
+button,
+.glass,
+.btn,
+a[href] {
+  transition: all 0.5s ease;
+}
+
+.router-link-active {
+  // color: #00cbf8 !important;
+  span {
+    color: hsl(var(--primary-ui));
+  }
+}

@@ -1,0 +1,1 @@
+ALTER TABLE "meditation_tracks" ADD COLUMN "topic_keys" text[] DEFAULT ARRAY[]::text[] NOT NULL;

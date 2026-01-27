@@ -1,0 +1,186 @@
+<template>
+  <div class="space-y-4">
+    <div class="flex items-center justify-between w-full gap-2">
+      <NuxtLink
+        class="underline text-xs opacity-80 whitespace-nowrap"
+        :to="`/prompts/catalog?type=${type}`"
+      >
+        Каталог промптов
+      </NuxtLink>
+    </div>
+
+    <!-- Скелетоны при загрузке -->
+    <Skeleton v-if="promptsStore.loading" type="prompt" :count="3" />
+
+    <!-- Сообщение когда нет промптов -->
+    <div
+      v-else-if="!promptsStore.loading && prompts.length === 0"
+      class="text-sm opacity-70"
+    >
+      Промптов пока нет.
+      <button
+        @click="handleAdd"
+        class="text-primary-ui cursor-pointer hover:text-primary-ui/80 transition-colors underline"
+      >
+        Добавьте свой
+      </button>
+      или возьмите из каталога.
+    </div>
+
+    <!-- Список промптов -->
+    <RadioGroup v-else :model-value="activeId" class="w-full gap-3">
+      <div
+        v-for="(prompt, index) in prompts"
+        :key="prompt.id"
+        class="group relative overflow-hidden rounded-xl border-2 border-border bg-card p-4 transition-all duration-200 [:has([data-state=checked])]:border-primary-ui/50 hover:border-primary-ui/50 hover:-translate-y-0.5 hover:shadow-lg outline-none animate-slide-up"
+        :style="`animation-delay: ${index * 0.05}s; animation-fill-mode: both`"
+      >
+        <div class="flex gap-2 w-full">
+          <div class="flex items-start">
+            <RadioGroupItem
+              :value="String(prompt.id)"
+              :id="`${uid}-${prompt.id}`"
+              @click="handleActivate(prompt.id)"
+              :aria-describedby="`${uid}-${prompt.id}-desc`"
+              class="size-5 after:absolute after:inset-0 [&_svg]:size-3 cursor-pointer"
+            />
+          </div>
+          <div class="grid grow gap-1 z-1">
+            <Label
+              :for="`${uid}-${prompt.id}`"
+              class="leading-[20px] justify-between cursor-pointer"
+            >
+              <span class="font-medium">{{ prompt.title }}</span>
+            </Label>
+            <ExpandableText
+              :text="prompt.content"
+              :id="`${uid}-${prompt.id}-desc`"
+              class="text-foreground"
+            />
+            <Separator class="mt-2" />
+            <div class="flex justify-end z-1" @click.stop>
+              <Button
+                variant="ghost"
+                size="sm"
+                @click="handleEdit(prompt)"
+                title="Редактировать"
+                class="p-3 min-w-[44px] min-h-[44px]"
+              >
+                <IconEdit class="w-4 h-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                @click="handleRemove(prompt.id)"
+                title="Удалить"
+                class="p-3 min-w-[44px] min-h-[44px] text-destructive hover:text-destructive/80"
+              >
+                <IconTrash2 class="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </RadioGroup>
+
+    <button
+      v-tooltip.bottom="'Добавить промпт'"
+      class="fixed right-3 bottom-3 grid place-items-center z-10"
+      :style="{ borderRadius: 'var(--radius-icon)' }"
+      @click="handleAdd"
+      aria-label="Добавить промпт"
+    >
+      <IconCirclePlus class="w-5 h-5" />
+    </button>
+
+    <!-- Модальное окно редактора -->
+    <PromptEditorModal
+      :open="editorOpen"
+      :initial="editorItem"
+      @close="editorOpen = false"
+      @saved="onSaved"
+    />
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed } from 'vue';
+import { usePromptsStore } from '@/app/stores/prompts';
+import { useToast } from '@/app/composables/useToast';
+import { ExpandableText } from '@/app/components/ui/expandable-text';
+import { Label } from 'radix-vue';
+import type { UserPrompt } from '@/app/types';
+import IconEdit from '~icons/lucide/edit';
+import IconTrash2 from '~icons/lucide/trash-2';
+import {
+  RadioGroup,
+  RadioGroupItem,
+} from '@/app/components/ui/shadcn/radio-group';
+import { Separator } from '@/app/components/ui/shadcn/separator';
+import { Button } from '@/app/components/ui/button';
+import PromptEditorModal from '@/app/components/PromptEditorModal.vue';
+import IconCirclePlus from '~icons/lucide/circle-plus';
+import Skeleton from '@/app/components/ui/Skeleton.vue';
+
+// Props
+const props = defineProps<{
+  type: 'habits' | 'therapy';
+}>();
+
+const promptsStore = usePromptsStore();
+const uid = useId();
+
+// Внутреннее состояние для модального окна
+const editorOpen = ref(false);
+const editorItem = ref<Partial<UserPrompt> | null>(null);
+
+// Фильтруем промпты по типу
+const prompts = computed(() =>
+  promptsStore.items.filter((x) => x.type === props.type)
+);
+
+const activeId = computed(() => {
+  const active = prompts.value.find((p: any) => p.isActive);
+  return active
+    ? String(active.id)
+    : prompts.value[0]
+      ? String(prompts.value[0].id)
+      : '';
+});
+
+// Загружаем промпты при монтировании компонента с фильтром по типу
+onMounted(async () => {
+  await promptsStore.fetch(props.type);
+});
+
+// Методы
+async function handleActivate(id: number) {
+  const p = promptsStore.items.find((x) => x.id === id);
+  if (!p || id === Number(activeId.value)) return;
+  await promptsStore.activate(id);
+  if (p) useToast('Активный промпт обновлён', `Тип: ${p.type}`);
+}
+
+function handleEdit(prompt: UserPrompt) {
+  editorItem.value = prompt;
+  editorOpen.value = true;
+}
+
+async function handleRemove(id: number) {
+  const res = await promptsStore.remove(id);
+  if (res) {
+    useToast('Готово', 'Промпт удалён');
+  }
+}
+
+function handleAdd() {
+  editorItem.value = { type: props.type, lang: 'ru' } as any;
+  editorOpen.value = true;
+}
+
+async function onSaved(item: UserPrompt) {
+  // Промпт сохранён, обновляем список с фильтром по типу
+  // Это важно для мобильных устройств, чтобы синхронизация работала корректно
+  await promptsStore.fetch(props.type);
+}
+</script>

@@ -1,0 +1,1 @@
+ALTER TABLE "notification_slots" ADD COLUMN "scheduled_at_local" timestamp;
