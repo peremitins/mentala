@@ -211,6 +211,20 @@
       "when": 1769618484705,
       "tag": "0033_dapper_venom",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1769618799246,
+      "tag": "0034_next_stone_men",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1769618820867,
+      "tag": "0035_unusual_dazzler",
+      "breakpoints": true
     }
   ]
 }
