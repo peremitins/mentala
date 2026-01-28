@@ -13,6 +13,22 @@ export const AuthRegisterDto = z.object({
   marketingConsent: z.boolean().optional(),
 });
 
+// Ответ на регистрацию (breaking change)
+export const AuthRegisterResponseDto = z.object({
+  userId: z.number().int().positive(),
+  email: z.string().email(),
+});
+
+export const AuthRegisterValidationErrorDto = z.object({
+  error: z.literal('validation'),
+  issues: z.array(
+    z.object({
+      path: z.string(),
+      message: z.string(),
+    })
+  ),
+});
+
 export const AuthLoginDto = z.object({
   email: z.string().email(),
   password: z.string().min(1),
@@ -77,6 +93,10 @@ export const PasswordResetDto = z.object({
 });
 
 export type AuthRegisterDto = z.infer<typeof AuthRegisterDto>;
+export type AuthRegisterResponseDto = z.infer<typeof AuthRegisterResponseDto>;
+export type AuthRegisterValidationErrorDto = z.infer<
+  typeof AuthRegisterValidationErrorDto
+>;
 export type AuthLoginDto = z.infer<typeof AuthLoginDto>;
 export type EmailVerifyDto = z.infer<typeof EmailVerifyDto>;
 export type EmailResendCodeDto = z.infer<typeof EmailResendCodeDto>;

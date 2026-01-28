@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import { getHeader } from 'h3';
+import { getHeader, setResponseStatus } from 'h3';
 import argon2 from 'argon2';
 import { eq } from 'drizzle-orm';
 import { db } from '@/server/infrastructure/db/client';
@@ -36,7 +36,20 @@ function getDeviceKey(userAgent: string | null): string {
 }
 
 export default defineEventHandler(async (event) => {
-  const body = AuthRegisterDto.parse(await readBody(event as any));
+  // Валидируем без исключения, чтобы вернуть 400 с понятным телом
+  const bodyResult = AuthRegisterDto.safeParse(await readBody(event as any));
+  if (!bodyResult.success) {
+    setResponseStatus(event, 400, 'Bad Request');
+    return {
+      error: 'validation',
+      issues: bodyResult.error.issues.map((issue) => ({
+        path: issue.path.join('.') || 'root',
+        message: issue.message,
+      })),
+    };
+  }
+
+  const body = bodyResult.data;
   const email = normalizeEmail(body.email);
   const ip = getClientIp(event) || 'unknown';
   const userAgent = getHeader(event, 'user-agent') || null;
@@ -125,15 +138,18 @@ export default defineEventHandler(async (event) => {
       }
     }
 
+    setResponseStatus(event, 201, 'Created');
     return {
-      message:
-        'Мы отправили письмо с кодом подтверждения.\nЕсли вы уже использовали Mentala ранее, вы сможете войти или восстановить доступ',
+      userId: existing[0].id,
+      email,
     };
   }
 
   const timezone = getTimezoneFromRequest(event);
 
-  await db.insert(users).values({
+  const created = await db
+    .insert(users)
+    .values({
     name: body.name ?? null,
     email,
     emailVerifiedAt: null,
@@ -150,7 +166,8 @@ export default defineEventHandler(async (event) => {
     acceptanceUserAgent: userAgent,
     marketingConsentAt: marketingConsentAt,
     marketingConsentSource: marketingConsentAt ? acceptanceSource : null,
-  });
+    })
+    .returning({ id: users.id, email: users.email });
 
   const passwordHash = await argon2.hash(body.password, {
     type: argon2.argon2id,
@@ -172,8 +189,14 @@ export default defineEventHandler(async (event) => {
     });
   }
 
+  const createdUser = created[0];
+  if (!createdUser) {
+    throw new Error('Не удалось получить данные созданного пользователя.');
+  }
+
+  setResponseStatus(event, 201, 'Created');
   return {
-    message:
-      'Мы отправили письмо с кодом подтверждения.\nЕсли вы уже использовали Mentala ранее, вы сможете войти или восстановить доступ',
+    userId: createdUser.id,
+    email: createdUser.email,
   };
 });

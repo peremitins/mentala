@@ -155,6 +155,55 @@
       "when": 1769168151072,
       "tag": "0025_demonic_lilandra",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1769616367191,
+      "tag": "0011_add_onboarding_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1769616367192,
+      "tag": "0011_add_pg_trgm_extension",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1769616367193,
+      "tag": "0012_add_oauth_accounts_unique",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1769616367194,
+      "tag": "0013_backfill_email_verified_and_require_email",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1769616367195,
+      "tag": "0014_add_user_deletion_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1769616367196,
+      "tag": "0017_remove_deprecated_notification_keys",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1769616367197,
+      "tag": "0026_roles_baseline",
+      "breakpoints": true
     }
   ]
 }

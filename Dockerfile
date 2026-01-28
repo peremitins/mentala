@@ -18,6 +18,10 @@ COPY . .
 # Сборка Nuxt (Nitro складывает сервер в .output)
 RUN pnpm build
 
+# --- СТАДИЯ МИГРАЦИЙ ---
+FROM build AS migrate
+WORKDIR /app
+
 # --- СТАДИЯ РАНТАЙМА ---
 FROM node:20-alpine AS runner
 
