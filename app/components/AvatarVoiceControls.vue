@@ -34,7 +34,7 @@
         class="text-sm font-medium"
         :class="chatSettings.voice ? 'text-primary-ui' : ''"
       >
-        {{ chatSettings.voice ? 'Звук включён' : 'Звук выключен' }}
+        {{ chatSettings.voice ? 'Голос включён' : 'Голос выключен' }}
       </span>
     </button>
   </div>

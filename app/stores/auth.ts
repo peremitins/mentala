@@ -15,6 +15,7 @@ import { useTTS } from '@/app/composables/useTTS';
 import { useSpeechEngine } from '@/app/composables/useSpeechEngine';
 import { useMeditationPlayer } from '@/app/composables/useMeditationPlayer';
 import { useSceneAudio } from '@/app/composables/useSceneAudio';
+import { AuthRegisterResponseDto } from '@/shared/dto/auth';
 
 const SESSION_TOKEN_KEY = 'mentai.session.token';
 const GOOGLE_WEB_CLIENT_ID_REGEX = /\.apps\.googleusercontent\.com$/i;
@@ -254,7 +255,7 @@ export const useAuthStore = defineStore('auth', {
           method: 'POST',
           body: payload,
         });
-        return response as any;
+        return AuthRegisterResponseDto.parse(response);
       } catch (error) {
         console.error('Ошибка регистрации:', error);
         throw error;

@@ -1,19 +1,18 @@
 import { config } from 'dotenv';
 import { resolve } from 'node:path';
 
-// Загружаем переменные окружения из .env.development или .env
-const envFile =
-  process.env.NODE_ENV === 'production' ? '.env' : '.env.development';
-config({ path: resolve(process.cwd(), envFile) });
-// Также загружаем .env на случай, если .env.development не существует
-config({ path: resolve(process.cwd(), '.env') });
+// Загружаем env-файл только если он задан явно (DRIZZLE_ENV_FILE)
+const envFile = process.env.DRIZZLE_ENV_FILE;
+if (envFile) {
+  config({ path: resolve(process.cwd(), envFile) });
+}
 
 const dbUrl = process.env.NUXT_PRIVATE_DB_URL;
 
 if (!dbUrl) {
   throw new Error(
     '❌ NUXT_PRIVATE_DB_URL не найдена в переменных окружения. ' +
-      'Убедитесь, что файл .env.development или .env существует и содержит NUXT_PRIVATE_DB_URL.'
+      'Убедитесь, что задан DRIZZLE_ENV_FILE или переменная NUXT_PRIVATE_DB_URL.'
   );
 }
 
