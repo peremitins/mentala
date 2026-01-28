@@ -71,6 +71,8 @@ export const users = pgTable('users', {
   deletionRequestedAt: timestamp('deletion_requested_at', {
     withTimezone: true,
   }),
+  // Техническое поле для проверки цепочки миграций
+  test: text('test'),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
