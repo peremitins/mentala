@@ -494,6 +494,10 @@ async function submit() {
   } catch (e: any) {
     if (mode.value === 'signup') {
       const statusCode = e?.statusCode || e?.response?.status || 500;
+      if (statusCode === 400) {
+        // Ошибка валидации — не переходим в шаг подтверждения
+        return;
+      }
       const retryAfter = getRetryAfterFromError(e);
       const isLimited = statusCode === 429 || !!retryAfter;
       startVerificationFlow({ retryAfter, rateLimited: isLimited });

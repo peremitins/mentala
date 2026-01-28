@@ -83,7 +83,7 @@
               ]"
               :style="{ borderRadius: 'var(--radius-icon)' }"
             >
-              <IconWind class="w-5 h-5" />
+              <IconActivity class="w-5 h-5" />
             </span>
             <span
               class="w-full text-center text-foreground text-[10px] group-hover:text-primary-ui transition-all duration-300"
@@ -122,7 +122,7 @@ import { computed } from 'vue';
 import IconMessageCircleHeart from '~icons/lucide/message-circle-heart';
 import IconBrain from '~icons/lucide/brain';
 import IconListCheck from '~icons/lucide/list-check';
-import IconWind from '~icons/lucide/wind';
+import IconActivity from '~icons/lucide/activity';
 import IconSettings from '~icons/lucide/settings';
 
 const route = useRoute();
