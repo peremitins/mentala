@@ -75,15 +75,34 @@
                   >
                     {{ item.name }}
                   </h3>
-                  <button
-                    v-if="item.canDelete"
-                    type="button"
-                    class="rounded-full p-1 text-foreground transition hover:text-destructive hover:bg-destructive/10"
-                    title="Удалить"
-                    @click.stop="handleRemove(item)"
-                  >
-                    <IconTrash class="h-4 w-4" />
-                  </button>
+                  <div class="flex items-center gap-1 flex-shrink-0">
+                    <!-- Иконка состояния уведомлений: колокольчик вкл / перечёркнутый выкл -->
+                    <span
+                      v-if="item.notificationsEnabled !== undefined"
+                      class="flex items-center justify-center rounded-full p-1 text-foreground/80"
+                      :title="
+                        item.notificationsEnabled
+                          ? 'Уведомления включены'
+                          : 'Уведомления выключены'
+                      "
+                    >
+                      <IconBell
+                        v-if="item.notificationsEnabled"
+                        class="h-4 w-4"
+                        aria-hidden="true"
+                      />
+                      <IconBellOff v-else class="h-4 w-4" aria-hidden="true" />
+                    </span>
+                    <button
+                      v-if="item.canDelete"
+                      type="button"
+                      class="rounded-full p-1 text-foreground transition hover:text-destructive hover:bg-destructive/10"
+                      title="Удалить"
+                      @click.stop="handleRemove(item)"
+                    >
+                      <IconTrash class="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
                 <div
                   class="flex items-center justify-between gap-2 text-foreground"
@@ -170,6 +189,8 @@ import IconLeaf from '~icons/lucide/leaf';
 import IconMessageCircle from '~icons/lucide/message-circle';
 import IconTrash from '~icons/lucide/trash';
 import IconWind from '~icons/lucide/wind';
+import IconBell from '~icons/lucide/bell';
+import IconBellOff from '~icons/lucide/bell-off';
 import Skeleton from '@/app/components/ui/Skeleton.vue';
 import { useRoute, useRouter } from 'vue-router';
 
@@ -184,6 +205,8 @@ export interface NotificationIndexItem {
   gradientClass: string;
   payload?: unknown;
   canDelete?: boolean;
+  /** Включены ли уведомления по этой теме (undefined — не показывать иконку, напр. карточка «Создать») */
+  notificationsEnabled?: boolean;
   quickActions?: {
     chat?: boolean;
     meditation?: boolean;
