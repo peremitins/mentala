@@ -1,10 +1,9 @@
 import { config } from './config.js';
 import { buildServer } from './server.js';
 
-const app = buildServer();
-
 async function startServer() {
   try {
+    const app = await buildServer();
     const address = await app.listen({ port: config.port, host: '0.0.0.0' });
     app.log.info({ address }, 'ai-relay started');
   } catch (err) {

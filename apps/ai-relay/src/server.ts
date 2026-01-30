@@ -1,4 +1,5 @@
 import Fastify from 'fastify';
+import rawBody from 'fastify-raw-body';
 import { randomUUID } from 'node:crypto';
 import { config } from './config.js';
 import { verifyRelaySignature } from './auth.js';
@@ -7,7 +8,7 @@ import { proxySse } from './sse.js';
 import type { RelayPurpose } from './types.js';
 import { extractDiagnosticHeaders, readBodyBuffer } from './utils.js';
 
-export function buildServer() {
+export async function buildServer() {
   const app = Fastify({
     logger: true,
     bodyLimit: config.relay.maxBodyBytes,
@@ -17,32 +18,20 @@ export function buildServer() {
     connectionTimeout: 30_000,
   });
 
-  // Парсим JSON как Buffer, чтобы сохранить raw body для подписи.
-  app.addContentTypeParser(
-    /^application\/json(?:;|$)/,
-    { parseAs: 'buffer' },
-    (req, body, done) => {
-      const buffer = body as Buffer;
-      req.rawBody = buffer;
-      if (buffer.length === 0) {
-        done(null, {});
-        return;
-      }
-      try {
-        const json = JSON.parse(buffer.toString('utf-8'));
-        done(null, json);
-      } catch (err) {
-        const error = err as Error & { statusCode?: number };
-        error.statusCode = 400;
-        done(error);
-      }
-    }
-  );
+  // Подключаем raw-body до объявления маршрутов, чтобы Fastify корректно сохранил байты запроса.
+  await app.register(rawBody, {
+    field: 'rawBody',
+    global: false,
+    encoding: false,
+    runFirst: true,
+    routes: ['/v1/responses'],
+  });
 
   app.get('/health', async () => ({ ok: true }));
 
   app.post('/v1/responses', async (req, reply) => {
-    const rawBody = req.rawBody;
+    // В типах Fastify нет rawBody, поэтому приводим явно.
+    const rawBody = (req as typeof req & { rawBody?: Buffer }).rawBody;
     if (!rawBody) {
       throw Object.assign(new Error('Raw body is required'), {
         statusCode: 400,
