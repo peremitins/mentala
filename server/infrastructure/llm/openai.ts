@@ -28,6 +28,9 @@ const OPENAI_URL = 'https://api.openai.com/v1/responses';
 const MIN_SUMMARY_USER_MESSAGES = 1;
 const MIN_SUMMARY_USER_CHARS = 20;
 
+// Временно отключаем отправку запросов в OpenAI (чат и уведомления).
+const OPENAI_REQUESTS_DISABLED = true;
+
 // In-memory cache for current session encrypted reasoning
 const sessionCache = new Map<
   string,
@@ -46,8 +49,17 @@ type RelayPurpose =
   | 'notification'
   | 'other';
 
+function ensureOpenAiEnabled(context: string) {
+  if (!OPENAI_REQUESTS_DISABLED) return;
+  throw createError({
+    statusCode: 503,
+    message: `OpenAI временно отключен (${context})`,
+  });
+}
+
 // Создаем SDK-клиент с org/project, чтобы стрим учитывал настройки организации и проекта.
 function createOpenAiClient(apiKey: string) {
+  ensureOpenAiEnabled('sdk_client');
   const organization =
     process.env.NUXT_OPENAI_ORG_ID || process.env.OPENAI_ORG_ID;
   const project =
@@ -76,6 +88,7 @@ async function sendResponsesRequest(params: {
   idempotencyKey?: string;
   requestId?: string;
 }) {
+  ensureOpenAiEnabled('responses_request');
   if (isRelayEnabled()) {
     return await relayResponsesRequest({
       path: '/v1/responses',
@@ -325,6 +338,7 @@ export const openaiProvider: LlmProviderPort = {
   id: 'openai',
 
   async chat({ messages, model, options }: any) {
+    ensureOpenAiEnabled('chat');
     const useRelay = isRelayEnabled();
     const apiKey = useRelay ? undefined : process.env.NUXT_OPENAI_API_KEY;
 
@@ -750,8 +764,7 @@ export const openaiProvider: LlmProviderPort = {
 
         return { role: 'assistant', content, model: usedModel };
       } catch (err: any) {
-        const status =
-          err?.response?.status || err?.status || err?.statusCode;
+        const status = err?.response?.status || err?.status || err?.statusCode;
         const headers = err?.response?.headers;
         const messageText = err?.data?.error?.message || err?.message || '';
 
@@ -796,6 +809,7 @@ export const openaiProvider: LlmProviderPort = {
   },
 
   async finishSession({ sessionId, allMessages, userId, model }: any) {
+    ensureOpenAiEnabled('finish_session');
     if (!sessionId || !userId) {
       return;
     }
@@ -916,6 +930,7 @@ export const openaiProvider: LlmProviderPort = {
   },
 
   async *chatStream({ messages, model, options }: any): AsyncIterable<string> {
+    ensureOpenAiEnabled('chat_stream');
     const useRelay = isRelayEnabled();
     const apiKey = useRelay ? undefined : process.env.NUXT_OPENAI_API_KEY;
     if (!useRelay && !apiKey) {
@@ -1105,8 +1120,8 @@ export const openaiProvider: LlmProviderPort = {
           hasPreviousResponseIdInOptions: Boolean(
             streamOptions.previous_response_id
           ),
-        prompts: formatPromptsForLogging(input),
-      }
+          prompts: formatPromptsForLogging(input),
+        }
       );
 
       let responseId: string | undefined;
