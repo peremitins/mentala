@@ -275,7 +275,11 @@
               <div>
                 <p class="text-sm font-semibold">Звуковые сигналы</p>
               </div>
-              <Switch v-model:checked="soundEnabled" />
+              <Switch
+                :checked="soundEnabled"
+                :loading="soundSaving"
+                @update:checked="onSoundEnabledChange"
+              />
             </div>
             <div class="space-y-2">
               <div
@@ -300,7 +304,11 @@
             <div>
               <p class="text-sm font-semibold">Вибрация</p>
             </div>
-            <Switch v-model:checked="hapticsEnabled" />
+            <Switch
+              :checked="hapticsEnabled"
+              :loading="hapticsSaving"
+              @update:checked="onHapticsEnabledChange"
+            />
           </div>
         </div>
       </DialogContent>
@@ -481,6 +489,8 @@ const soundEnabled = ref(true);
 const soundVolume = ref(70);
 const hapticsEnabled = ref(true);
 const sessionMinutes = ref(5);
+const soundSaving = ref(false);
+const hapticsSaving = ref(false);
 
 const headerTitle = computed(() => {
   if (isBuilder.value) return 'Своя практика';
@@ -653,22 +663,34 @@ watch(
   }
 );
 
-watch(soundEnabled, (value) => {
-  void saveBreathPracticeSettings({ soundEnabled: value });
-  if (value) {
-    void prepareAudio();
-    setVolume(soundVolume.value / 100);
+async function onSoundEnabledChange(value: boolean) {
+  soundSaving.value = true;
+  try {
+    await saveBreathPracticeSettings({ soundEnabled: value });
+    soundEnabled.value = value;
+    if (value) {
+      await prepareAudio();
+      setVolume(soundVolume.value / 100);
+    }
+  } finally {
+    soundSaving.value = false;
   }
-});
+}
 
 watch(soundVolume, (value) => {
   setVolume(clampNumber(value, 0, 100) / 100);
   void saveBreathPracticeSettings({ volume: clampNumber(value, 0, 100) });
 });
 
-watch(hapticsEnabled, (value) => {
-  void saveBreathPracticeSettings({ hapticsEnabled: value });
-});
+async function onHapticsEnabledChange(value: boolean) {
+  hapticsSaving.value = true;
+  try {
+    await saveBreathPracticeSettings({ hapticsEnabled: value });
+    hapticsEnabled.value = value;
+  } finally {
+    hapticsSaving.value = false;
+  }
+}
 
 onBeforeUnmount(() => {
   stopAudio(0);

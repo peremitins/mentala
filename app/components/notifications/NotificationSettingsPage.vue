@@ -112,7 +112,10 @@
             </h3>
             <p class="text-xs text-foreground">Дни, время и частота отправки</p>
           </div>
-          <Switch v-model:checked="enabled" />
+          <Switch
+            v-model:checked="enabled"
+            :loading="loading"
+          />
         </div>
 
         <div class="space-y-4">

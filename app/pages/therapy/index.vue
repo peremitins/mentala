@@ -49,6 +49,7 @@ import CustomEntityModal from '@/app/components/modals/CustomEntityModal.vue';
 import ConfirmModal from '@/app/components/ui/ConfirmModal.vue';
 import { useTherapyTopicsStore } from '@/app/stores/therapyTopics';
 import { useLoadersStore } from '@/app/stores/loaders';
+import { useNotificationsStore } from '@/app/stores/notifications';
 import type { TherapyTopicDto } from '@/shared/dto/notifications';
 import { useToast } from '@/app/composables/useToast';
 import { useEntryChat } from '@/app/composables/useEntryChat';
@@ -76,6 +77,7 @@ const colorSchemes: Record<string, string> = {
 
 const therapyStore = useTherapyTopicsStore();
 const loadersStore = useLoadersStore();
+const notificationsStore = useNotificationsStore();
 const { topics: userTopics } = storeToRefs(therapyStore);
 const router = useRouter();
 const route = useRoute();
@@ -83,7 +85,7 @@ const route = useRoute();
 // Загружаем данные после монтирования компонента (с кэшированием)
 // Защита от двойного вызова реализована в store через isSkeletonLoading флаг
 onMounted(async () => {
-  await therapyStore.fetchAll();
+  await Promise.all([therapyStore.fetchAll(), notificationsStore.fetchAll()]);
 });
 
 function buildTherapyQuickActions(topicKey: string, isCustom: boolean) {
@@ -104,6 +106,9 @@ function buildTherapyQuickActions(topicKey: string, isCustom: boolean) {
 
 const customTopicItems = computed<NotificationIndexItem[]>(() =>
   userTopics.value.map((topic) => {
+    const pref = notificationsStore.getPreference('therapy', {
+      entityKey: topic.id,
+    });
     return {
       id: topic.id, // Используем ID
       name: topic.name,
@@ -112,22 +117,28 @@ const customTopicItems = computed<NotificationIndexItem[]>(() =>
       gradientClass: 'from-gray-500 to-gray-700',
       payload: { ...topic, type: 'custom' },
       canDelete: true,
-      // Показываем только чат для кастомных тем.
+      notificationsEnabled: pref?.enabled ?? false,
       quickActions: buildTherapyQuickActions(topic.id, true),
     };
   })
 );
 
 const baseTopicItems = computed<NotificationIndexItem[]>(() =>
-  THERAPY_TOPICS.map((topic) => ({
-    id: topic.key,
-    name: topic.name,
-    description: topic.description,
-    emoji: topic.emoji,
-    gradientClass: colorSchemes[topic.color] ?? 'from-blue-500 to-cyan-500',
-    payload: { type: 'catalog', topicKey: topic.key, topicName: topic.name },
-    quickActions: buildTherapyQuickActions(topic.key, false),
-  }))
+  THERAPY_TOPICS.map((topic) => {
+    const pref = notificationsStore.getPreference('therapy', {
+      entityKey: topic.key,
+    });
+    return {
+      id: topic.key,
+      name: topic.name,
+      description: topic.description,
+      emoji: topic.emoji,
+      gradientClass: colorSchemes[topic.color] ?? 'from-blue-500 to-cyan-500',
+      payload: { type: 'catalog', topicKey: topic.key, topicName: topic.name },
+      notificationsEnabled: pref?.enabled ?? false,
+      quickActions: buildTherapyQuickActions(topic.key, false),
+    };
+  })
 );
 
 const createCard: NotificationIndexItem = {

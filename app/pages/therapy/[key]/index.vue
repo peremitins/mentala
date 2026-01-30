@@ -98,7 +98,9 @@
       <NotificationsSummaryCard
         :preference="preference"
         :loading="prefLoading"
+        :toggle-loading="prefToggleLoading"
         @edit="goToNotifications"
+        @toggle="onToggleNotifications"
       />
 
       <StateBlock v-if="notificationError" state="error" class="mt-2">
@@ -138,7 +140,8 @@ const route = useRoute();
 const chat = useChatStore();
 const loaders = useLoadersStore();
 const therapyTopicsStore = useTherapyTopicsStore();
-const { fetchNotificationPreferences } = useNotificationsSettings();
+const { fetchNotificationPreferences, updateNotificationPreferences } =
+  useNotificationsSettings();
 const { $api } = useNuxtApp();
 
 const entityKey = computed(() => String(route.params.key || ''));
@@ -151,6 +154,7 @@ const entityError = ref<string | null>(null);
 
 const preference = ref<NotificationPreferencesDto | null>(null);
 const prefLoading = ref(true);
+const prefToggleLoading = ref(false);
 const notificationError = ref<string | null>(null);
 
 const entityData = computed(() => catalogTopic.value || customTopic.value);
@@ -304,6 +308,26 @@ async function loadPreference() {
       error?.message || 'Не удалось загрузить настройки уведомлений';
   } finally {
     prefLoading.value = false;
+  }
+}
+
+/** Обновление включено/выключено уведомлений по переключателю на карточке */
+async function onToggleNotifications(enabled: boolean) {
+  if (!entityKey.value) return;
+  notificationError.value = null;
+  prefToggleLoading.value = true;
+  try {
+    const data = await updateNotificationPreferences('therapy', {
+      enabled,
+      entityKey: entityKey.value,
+    });
+    if (data) preference.value = data;
+  } catch (error: any) {
+    console.error('[TherapyDetail] Toggle notifications failed:', error);
+    notificationError.value =
+      error?.message || 'Не удалось обновить настройки уведомлений';
+  } finally {
+    prefToggleLoading.value = false;
   }
 }
 
