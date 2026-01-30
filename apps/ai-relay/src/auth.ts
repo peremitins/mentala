@@ -1,6 +1,6 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import type { FastifyRequest } from 'fastify';
-import { config } from './config';
+import { config } from './config.js';
 
 const NONCE_TTL_MS = 120_000;
 

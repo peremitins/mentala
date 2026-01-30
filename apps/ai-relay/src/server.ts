@@ -1,11 +1,11 @@
 import Fastify from 'fastify';
 import { randomUUID } from 'node:crypto';
-import { config } from './config';
-import { verifyRelaySignature } from './auth';
-import { openaiResponsesRequest, openaiResponsesStream } from './openai';
-import { proxySse } from './sse';
-import type { RelayPurpose } from './types';
-import { extractDiagnosticHeaders, readBodyBuffer } from './utils';
+import { config } from './config.js';
+import { verifyRelaySignature } from './auth.js';
+import { openaiResponsesRequest, openaiResponsesStream } from './openai.js';
+import { proxySse } from './sse.js';
+import type { RelayPurpose } from './types.js';
+import { extractDiagnosticHeaders, readBodyBuffer } from './utils.js';
 
 export function buildServer() {
   const app = Fastify({

@@ -1,5 +1,5 @@
 import { request } from 'undici';
-import { config } from './config';
+import { config } from './config.js';
 
 export async function openaiResponsesRequest(body: unknown) {
   const url = `${config.openai.baseUrl}/v1/responses`;
