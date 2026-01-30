@@ -33,6 +33,19 @@ const DEFAULT_TEXT_COUNT =
     process.env.NUXT_AI_NOTIFICATIONS_DEFAULT_COUNT ||
       process.env.AI_NOTIFICATIONS_DEFAULT_COUNT
   ) || 50;
+const MAX_OUTPUT_TOKENS_CAP =
+  Number(
+    process.env.NUXT_AI_NOTIFICATIONS_MAX_OUTPUT_TOKENS ||
+      process.env.AI_NOTIFICATIONS_MAX_OUTPUT_TOKENS
+  ) || 12000;
+const ALLOW_AI_LOGS =
+  process.env.NODE_ENV === 'development' ||
+  process.env.AI_LOG_PROMPTS === 'true';
+const EMOJI_PREFIX = '✨ ';
+const MAX_NOTIFICATION_BODY_LENGTH = Math.max(
+  0,
+  MAX_NOTIFICATION_TEXT_LENGTH - EMOJI_PREFIX.length
+);
 
 interface GenerateNotificationTextsParams {
   userId: number;
@@ -82,6 +95,17 @@ function inferHabitIntentFromName(name: string): 'quit' | 'build' {
     return 'quit';
   }
   return 'build'; // По умолчанию считаем приобретением
+}
+
+function computeRefillLockKey(
+  userId: number,
+  preferenceId: string,
+  configHash: string
+): bigint {
+  // Формируем устойчивый bigint-ключ для advisory lock из стабильных параметров.
+  const rawKey = `${userId}:${preferenceId}:${configHash}`;
+  const hash = createHash('sha256').update(rawKey).digest();
+  return hash.readBigInt64BE(0);
 }
 
 /**
@@ -235,6 +259,39 @@ export function hashNotificationText(text: string): string {
   return createHash('sha256').update(normalized).digest('hex');
 }
 
+function normalizeNotificationTexts(
+  rawTexts: string[],
+  expectedCount: number
+): string[] {
+  const normalized = rawTexts
+    .filter((text): text is string => typeof text === 'string')
+    .map((text) => String(text).replace(/\s+/g, ' ').trim())
+    .filter((text) => text.length > 0)
+    .map((text) => {
+      if (text.startsWith(EMOJI_PREFIX)) {
+        return text;
+      }
+      if (text.length > MAX_NOTIFICATION_BODY_LENGTH) {
+        return '';
+      }
+      return `${EMOJI_PREFIX}${text}`;
+    })
+    .filter((text) => text.length > 0)
+    .filter((text) => text.length <= MAX_NOTIFICATION_TEXT_LENGTH);
+
+  return normalized.slice(0, expectedCount);
+}
+
+function extractJsonArrayCandidate(raw: string): string | null {
+  // Пробуем вытащить самый внешний JSON-массив, если модель отдала лишний текст.
+  const start = raw.indexOf('[');
+  const end = raw.lastIndexOf(']');
+  if (start === -1 || end === -1 || end <= start) {
+    return null;
+  }
+  return raw.slice(start, end + 1);
+}
+
 /**
  * Удаляет старые тексты с другим хешем конфигурации
  * Используется при перегенерации после изменения настроек
@@ -323,7 +380,12 @@ const DEFAULT_RETRY_CONFIG: RetryConfig = {
  */
 function isRetryableError(error: any, retryableCodes: string[]): boolean {
   const errorMessage = (error?.message || '').toLowerCase();
-  const errorCode = (error?.code || error?.statusCode || '').toString();
+  const errorCodeRaw = error?.code ?? error?.statusCode ?? error?.name ?? '';
+  const errorCode = String(errorCodeRaw).toLowerCase();
+
+  if (errorCode && retryableCodes.includes(errorCode)) {
+    return true;
+  }
 
   // Проверяем коды ошибок
   if (retryableCodes.some((code) => errorMessage.includes(code))) {
@@ -595,25 +657,28 @@ export async function generateNotificationTexts(
       )
       .limit(1);
 
-    // Добавляем эмодзи ✨ в начало каждого текста, если его еще нет
-    const textsWithEmoji = existingTexts.map((text) => {
-      if (!text.startsWith('✨')) {
-        return `✨ ${text}`;
-      }
-      return text;
-    });
+    const textsWithEmoji = normalizeNotificationTexts(
+      existingTexts,
+      existingTexts.length
+    );
 
     console.log(
       `[AI Generation] ✅ Using existing AI texts: userId: ${params.userId}, preferenceId: ${params.preferenceId}, configHash: ${configHash.substring(0, 8)}..., textsCount: ${textsWithEmoji.length}`
     );
 
-    return {
-      texts: textsWithEmoji,
-      provider: existing?.provider || 'openai',
-      model: existing?.model || '',
-      tokensUsed: existing?.tokensUsed || 0,
-      costUsd: Number(existing?.costUsd || 0),
-    };
+    if (textsWithEmoji.length > 0) {
+      return {
+        texts: textsWithEmoji,
+        provider: existing?.provider || 'openai',
+        model: existing?.model || '',
+        tokensUsed: existing?.tokensUsed || 0,
+        costUsd: Number(existing?.costUsd || 0),
+      };
+    }
+
+    console.warn(
+      `[AI Generation] ⚠️ Existing texts invalid after normalization, regenerating pool`
+    );
   }
 
   console.log(
@@ -670,15 +735,18 @@ export async function generateNotificationTexts(
   // Формула: каждый текст ~140-150 символов (русский текст) = ~90-120 токенов (кириллица кодируется менее эффективно)
   // Плюс JSON форматирование ~30-40 токенов на текст (кавычки, запятые, скобки, переносы строк, эмодзи ✨, пробелы)
   // Итого: ~130-160 токенов на текст, используем консервативный расчет
-  // Увеличиваем расчет: 250 токенов на текст + 5000 запас для гарантии получения всех текстов
-  // Это обеспечивает достаточное место для генерации полных текстов близко к максимуму (MAX_NOTIFICATION_TEXT_LENGTH символов)
-  // Для 50 текстов: 50 * 250 + 5000 = 17500 токенов
-  const dynamicMaxOutputTokens = count * 250 + 5000; // 250 токенов на текст + 5000 запас (увеличено для генерации более длинных текстов)
-  // Используем только динамическое значение - конфиг уже рассчитан на основе DEFAULT_COUNT
-  const maxOutputTokens = dynamicMaxOutputTokens;
+  // Формула: 180 токенов на текст + 1200 запас под формат JSON.
+  // Это достаточно для 140-150 символов текста с эмодзи ✨ и служебными кавычками.
+  // Для 50 текстов: 50 * 180 + 1200 = 10200 токенов
+  const dynamicMaxOutputTokens = count * 180 + 1200;
+  // Ограничиваем сверху, чтобы не выходить за лимиты модели и не раздувать стоимость.
+  const maxOutputTokens = Math.min(
+    dynamicMaxOutputTokens,
+    MAX_OUTPUT_TOKENS_CAP
+  );
 
   console.log(
-    `[AI Generation] 📊 Dynamic maxOutputTokens: ${maxOutputTokens} (calculated: ${dynamicMaxOutputTokens} for ${count} texts)`
+    `[AI Generation] 📊 Dynamic maxOutputTokens: ${dynamicMaxOutputTokens} (cap: ${MAX_OUTPUT_TOKENS_CAP}, final: ${maxOutputTokens} for ${count} texts)`
   );
 
   // Генерируем с retry механизмом
@@ -693,7 +761,7 @@ export async function generateNotificationTexts(
         },
         {
           role: 'user',
-          content: `Сгенерируй РОВНО ${count} вариантов текстов уведомлений в формате JSON массива строк. Верни массив с РОВНО ${count} элементами - не меньше, не больше!`,
+          content: `Сгенерируй ДО ${count} вариантов текстов уведомлений в формате JSON массива строк. Верни НЕ пустой массив строк. Если все варианты не помещаются, верни сколько поместится.`,
         },
       ],
       options: {
@@ -707,11 +775,20 @@ export async function generateNotificationTexts(
   // 7. Парсим и валидируем тексты
   // Эмодзи ✨ добавляется автоматически в функции parseAndValidateTexts
 
-  // ВАЖНО: Логируем исходный ответ для отладки
-  const responsePreview = result.content.substring(0, 500);
-  console.log(
-    `[AI Generation] 📝 Raw LLM response length: ${result.content.length} characters, preview: ${responsePreview}...`
-  );
+  // ВАЖНО: Логируем ответ только в dev, в проде — без содержимого.
+  if (ALLOW_AI_LOGS) {
+    const responsePreview = result.content.substring(0, 500);
+    console.log(
+      `[AI Generation] 📝 Raw LLM response length: ${result.content.length} characters, preview: ${responsePreview}...`
+    );
+  } else {
+    const responseHash = createHash('sha256')
+      .update(result.content)
+      .digest('hex');
+    console.log(
+      `[AI Generation] 📝 Raw LLM response length: ${result.content.length} characters, hash: ${responseHash}`
+    );
+  }
 
   const texts = parseAndValidateTexts(result.content, count);
 
@@ -724,10 +801,10 @@ export async function generateNotificationTexts(
     throw new Error('Failed to generate valid notification texts');
   }
 
-  // ВАЖНО: Если получили меньше текстов, чем запрашивали, это проблема
+  // ВАЖНО: Недобор допускается, просто логируем для наблюдения.
   if (texts.length < count) {
-    console.error(
-      `[AI Generation] ❌ ERROR: Generated only ${texts.length} texts instead of ${count} (missing ${count - texts.length} texts). This may indicate insufficient maxOutputTokens (current: ${maxOutputTokens}) or model limitations.`
+    console.warn(
+      `[AI Generation] ⚠️ Generated ${texts.length}/${count} texts (maxOutputTokens dynamic=${dynamicMaxOutputTokens}, cap=${MAX_OUTPUT_TOKENS_CAP}, final=${maxOutputTokens}). Accepting partial result.`
     );
   }
 
@@ -735,7 +812,7 @@ export async function generateNotificationTexts(
   // Примерная оценка токенов: ~4 символа на токен
   const promptText =
     systemPrompt +
-    `\nСгенерируй ${count} вариантов текстов уведомлений в формате JSON массива строк. Каждый текст должен быть примерно 140-${MAX_NOTIFICATION_TEXT_LENGTH} символов (желательно близко к максимуму для информативности).`;
+    `\nСгенерируй ДО ${count} вариантов текстов уведомлений в формате JSON массива строк. Каждый текст должен быть примерно 140-${MAX_NOTIFICATION_BODY_LENGTH} символов (сервер добавит префикс "${EMOJI_PREFIX}").`;
   const tokensIn = Math.ceil(promptText.length / 4);
   const tokensOut = Math.ceil(
     texts.reduce((sum, text) => sum + text.length, 0) / 4
@@ -1019,7 +1096,7 @@ ${params.subtype ? `- Фокус уведомления: ${subtypeMap[params.sub
 - Каждый из всех текстов должен соответствовать всем указанным параметрам и инструкциям из описания
 
 Требования:
-- Каждый текст должен быть примерно 140-${MAX_NOTIFICATION_TEXT_LENGTH} символов (желательно близко к максимуму для информативности и полноты)
+- Каждый текст должен быть примерно 140-${MAX_NOTIFICATION_BODY_LENGTH} символов (сервер добавит префикс "${EMOJI_PREFIX}" к каждому тексту)
 - Можно использовать плейсхолдер {name} для имени пользователя
 - Если имя не указано, не используй плейсхолдер {name}
 - Если пол не указан, используй нейтральные конструкции без рода
@@ -1043,7 +1120,7 @@ ${subtypeInstructions}
 - НЕ упоминай название привычки или темы напрямую в текстах, если это не является естественным (например, если название - это общее понятие типа "пить воду", можно использовать, но если название - это специфическое слово типа "Здарова", НЕ используй его)
 
 
-Формат ответа: JSON массив строк, например: ["текст 1", "текст 2", ..., "текст N"], где N - это РОВНО запрошенное количество.`;
+Формат ответа: JSON массив строк, например: ["текст 1", "текст 2", ..., "текст N"], где N - это запрошенное количество.`;
 }
 
 /**
@@ -1069,6 +1146,20 @@ function parseAndValidateTexts(
     console.warn(
       `[AI Generation] ⚠️ JSON parse failed, trying regex fallback: ${error.message}`
     );
+    // Попытка извлечь массив строк, если ответ содержит лишний текст.
+    const arrayCandidate = extractJsonArrayCandidate(content);
+    if (arrayCandidate) {
+      try {
+        texts = JSON.parse(arrayCandidate);
+        console.log(
+          `[AI Generation] ✅ Extracted JSON array: ${texts.length} texts found (expected: ${expectedCount})`
+        );
+      } catch (candidateError: any) {
+        console.warn(
+          `[AI Generation] ⚠️ JSON array candidate parse failed: ${candidateError.message}`
+        );
+      }
+    }
     // Fallback: пытаемся извлечь тексты через regex
     const matches = content.match(
       new RegExp(`"([^"]{1,${MAX_NOTIFICATION_TEXT_LENGTH}})"`, 'g')
@@ -1085,35 +1176,8 @@ function parseAndValidateTexts(
     }
   }
 
-  // Валидация и добавление эмодзи
-  return texts
-    .filter((text): text is string => typeof text === 'string')
-    .map((text) => text.trim())
-    .filter((text) => text.length > 0)
-    .map((text) => {
-      // Добавляем эмодзи ✨ в начало, если его еще нет
-      if (!text.startsWith('✨')) {
-        // Эмодзи "✨ " занимает 2 символа, поэтому проверяем длину с учетом эмодзи
-        const emojiPrefix = '✨ ';
-        const maxTextLength = MAX_NOTIFICATION_TEXT_LENGTH - emojiPrefix.length; // 148 символов для текста
-
-        // Если текст уже с эмодзи превышает лимит, обрезаем его
-        if (text.length > maxTextLength) {
-          return `${emojiPrefix}${text.slice(0, maxTextLength)}`;
-        }
-        return `${emojiPrefix}${text}`;
-      }
-      // Если эмодзи уже есть, проверяем общую длину
-      if (text.length > MAX_NOTIFICATION_TEXT_LENGTH) {
-        // Если текст с эмодзи превышает лимит, обрезаем его
-        return text.slice(0, MAX_NOTIFICATION_TEXT_LENGTH);
-      }
-      return text;
-    })
-    .filter(
-      (text) => text.length > 0 && text.length <= MAX_NOTIFICATION_TEXT_LENGTH
-    )
-    .slice(0, expectedCount);
+  // Валидация и добавление эмодзи (без обрезания текста)
+  return normalizeNotificationTexts(texts, expectedCount);
 }
 
 /**
@@ -1181,8 +1245,26 @@ export async function refillTextPool(
   textSource: 'ai' | 'hybrid',
   habitIntent?: 'quit' | 'build' | null // Intent привычки, переданный явно
 ): Promise<GenerationResult | null> {
+  let lockKey: bigint | null = null;
+  let lockAcquired = false;
   try {
-    // 1. Загружаем текущую запись с блокировкой (SELECT FOR UPDATE)
+    lockKey = computeRefillLockKey(userId, preferenceId, configHash);
+    const lockResult = await db.execute(
+      sql`select pg_try_advisory_lock(${lockKey}) as locked`
+    );
+    const isLocked = Boolean((lockResult as any)?.rows?.[0]?.locked);
+    if (!isLocked) {
+      console.log(
+        `[AI Generation] ⏳ Refill skipped: lock is busy (userId=${userId}, preferenceId=${preferenceId})`
+      );
+      return null;
+    }
+    lockAcquired = true;
+    console.log(
+      `[AI Generation] 🔒 Refill lock acquired (userId=${userId}, preferenceId=${preferenceId})`
+    );
+
+    // 1. Загружаем текущую запись под advisory lock (без удержания транзакции)
     const [currentRecord] = await db
       .select()
       .from(aiGeneratedNotificationTexts)
@@ -1341,13 +1423,15 @@ export async function refillTextPool(
     );
 
     // Вычисляем динамический maxOutputTokens на основе количества текстов
-    // Формула такая же, как в основной генерации: count * 250 + 5000
-    const dynamicMaxOutputTokens = toGenerate * 250 + 5000; // 250 токенов на текст + 5000 запас (увеличено для генерации более длинных текстов)
-    // Используем только динамическое значение
-    const maxOutputTokens = dynamicMaxOutputTokens;
+    // Формула такая же, как в основной генерации: count * 180 + 1200
+    const dynamicMaxOutputTokens = toGenerate * 180 + 1200;
+    const maxOutputTokens = Math.min(
+      dynamicMaxOutputTokens,
+      MAX_OUTPUT_TOKENS_CAP
+    );
 
     console.log(
-      `[AI Generation] 📊 Refill dynamic maxOutputTokens: ${maxOutputTokens} (calculated: ${dynamicMaxOutputTokens} for ${toGenerate} texts)`
+      `[AI Generation] 📊 Refill dynamic maxOutputTokens: ${dynamicMaxOutputTokens} (cap: ${MAX_OUTPUT_TOKENS_CAP}, final: ${maxOutputTokens} for ${toGenerate} texts)`
     );
 
     // Генерируем с retry механизмом
@@ -1362,7 +1446,7 @@ export async function refillTextPool(
           },
           {
             role: 'user',
-            content: `Сгенерируй РОВНО ${toGenerate} вариантов текстов уведомлений в формате JSON массива строк. Верни массив с РОВНО ${toGenerate} элементами - не меньше, не больше!`,
+            content: `Сгенерируй ДО ${toGenerate} вариантов текстов уведомлений в формате JSON массива строк. Верни НЕ пустой массив строк. Если все варианты не помещаются, верни сколько поместится.`,
           },
         ],
         options: {
@@ -1382,11 +1466,41 @@ export async function refillTextPool(
       );
       return null;
     }
+    if (newTexts.length < toGenerate) {
+      console.warn(
+        `[AI Generation] ⚠️ Refill produced only ${newTexts.length}/${toGenerate} texts, accepting partial result`
+      );
+    }
+
+    // Фильтруем дубликаты по содержанию, чтобы не раздувать пул одинаковыми текстами.
+    const existingHashes = new Set(
+      currentTexts.map((text) => hashNotificationText(text))
+    );
+    const uniqueTexts = newTexts.filter((text) => {
+      const textHash = hashNotificationText(text);
+      if (existingHashes.has(textHash)) {
+        return false;
+      }
+      existingHashes.add(textHash);
+      return true;
+    });
+
+    if (uniqueTexts.length === 0) {
+      console.warn(
+        `[AI Generation] ⚠️ Refill produced only duplicates, skipping update`
+      );
+      return null;
+    }
+    if (uniqueTexts.length < newTexts.length) {
+      console.warn(
+        `[AI Generation] ⚠️ Refill deduped ${newTexts.length - uniqueTexts.length} duplicate text(s)`
+      );
+    }
 
     // 4.5. Вычисляем стоимость
     const promptText =
       systemPrompt +
-      `\nСгенерируй ${toGenerate} вариантов текстов уведомлений в формате JSON массива строк. Каждый текст должен быть примерно 140-${MAX_NOTIFICATION_TEXT_LENGTH} символов (желательно близко к максимуму для информативности).`;
+      `\nСгенерируй ДО ${toGenerate} вариантов текстов уведомлений в формате JSON массива строк. Каждый текст должен быть примерно 140-${MAX_NOTIFICATION_BODY_LENGTH} символов (сервер добавит префикс "${EMOJI_PREFIX}").`;
     const tokensIn = Math.ceil(promptText.length / 4);
     const tokensOut = Math.ceil(
       newTexts.reduce((sum, text) => sum + text.length, 0) / 4
@@ -1400,7 +1514,7 @@ export async function refillTextPool(
     });
 
     const result: GenerationResult = {
-      texts: newTexts,
+      texts: uniqueTexts,
       provider,
       model: llmResult.model || model,
       tokensUsed: actualTokensUsed,
@@ -1443,5 +1557,18 @@ export async function refillTextPool(
     console.error(`[AI Generation] ❌ Error refilling text pool:`, error);
     // Не прерываем выполнение при ошибке догенерации
     return null;
+  } finally {
+    if (lockAcquired && lockKey !== null) {
+      try {
+        await db.execute(
+          sql`select pg_advisory_unlock(${lockKey}) as unlocked`
+        );
+      } catch (unlockError) {
+        console.error(
+          `[AI Generation] ⚠️ Failed to release advisory lock:`,
+          unlockError
+        );
+      }
+    }
   }
 }
