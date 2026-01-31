@@ -9,7 +9,6 @@
         <option value="auto">Auto</option>
         <option value="native">Native (iOS/Android)</option>
         <option value="webspeech">Web Speech (Browser)</option>
-        <option value="whisper">Whisper (Fallback)</option>
       </select>
 
       <label class="flex items-center gap-2 ml-4">

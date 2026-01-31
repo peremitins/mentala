@@ -29,7 +29,7 @@ const MIN_SUMMARY_USER_MESSAGES = 1;
 const MIN_SUMMARY_USER_CHARS = 20;
 
 // Временно отключаем отправку запросов в OpenAI (чат и уведомления).
-const OPENAI_REQUESTS_DISABLED = true;
+const OPENAI_REQUESTS_DISABLED = false;
 
 // In-memory cache for current session encrypted reasoning
 const sessionCache = new Map<
@@ -369,6 +369,16 @@ export const openaiProvider: LlmProviderPort = {
     if (options?.scenario === 'chips') {
       // Для чипов используем сырой prompt без чат-прелюда и памяти.
       const input = mapToResponsesInput(messages || []);
+      const chipIntents = [
+        'clarify',
+        'example',
+        'apply_to_self',
+        'action_step',
+        'reflect',
+        'reframe',
+        'summarize',
+        'support',
+      ];
       const chipSchema = {
         type: 'object',
         additionalProperties: false,
@@ -378,42 +388,23 @@ export const openaiProvider: LlmProviderPort = {
             type: 'array',
             maxItems: 5,
             items: {
+              // OpenAI strict json_schema не поддерживает oneOf.
+              // Поэтому требуем все поля, а необязательные допускаем как null.
               type: 'object',
               additionalProperties: false,
-              required: ['text', 'intent'],
+              required: ['text', 'intent', 'kind', 'action', 'params'],
               properties: {
                 text: { type: 'string', minLength: 1, maxLength: 80 },
-                intent: {
-                  type: 'string',
-                  enum: [
-                    'clarify',
-                    'example',
-                    'apply_to_self',
-                    'action_step',
-                    'reflect',
-                    'reframe',
-                    'summarize',
-                    'support',
-                  ],
-                },
-                kind: {
-                  type: 'string',
-                  enum: ['text', 'action'],
-                },
-                action: {
-                  type: 'string',
-                  enum: [
-                    'open_meditations',
-                    'open_meditation_track',
-                    'open_meditations_collection',
-                  ],
-                },
+                intent: { type: 'string', enum: chipIntents },
+                kind: { type: 'string', enum: ['text', 'action'] },
+                action: { type: ['string', 'null'] },
                 params: {
-                  type: 'object',
+                  type: ['object', 'null'],
                   additionalProperties: false,
+                  required: ['trackId', 'collectionId'],
                   properties: {
-                    trackId: { type: 'string' },
-                    collectionId: { type: 'string' },
+                    trackId: { type: ['string', 'null'] },
+                    collectionId: { type: ['string', 'null'] },
                   },
                 },
               },
