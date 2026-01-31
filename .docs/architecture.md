@@ -78,12 +78,14 @@ server/
     •	snake_case для таблиц и полей
     •	PK: BIGINT AUTO INCREMENT (совместимость с Laravel)
     •	хранение миграций в SQL
-•	ORM: Drizzle ORM
-•	chat_settings хранит только UI/память (без mode), welcome_prompts содержит тексты по признаку первой сессии и языку.
-•	преимущества: типобезопасность, простые миграции, готовые SQL.
-•	легко заменить на Eloquent (Laravel) при необходимости.
-    •	Пул Postgres: keepAlive + idle/connection timeouts + maxLifetimeSeconds; при ошибках соединения фоновые задачи пересоздают пул через `resetDbPool`, чтобы воркеры восстанавливались после рестарта БД.
-    •	AI Relay (проектирование): внутренний стрим — **дельты текста**, SSE формируется в `server/api/chat/stream.post.ts`; выбран вариант 1 — Relay проксирует raw SSE OpenAI, а `relayClient` парсит и возвращает дельты; `relayClient` отвечает за подпись HMAC, парсинг SSE и сохранение `response_id` для `previous_response_id`; Relay по умолчанию не удаляет summary/entryContext (качество), расширенные логи промптов допустимы только локально в dev (в проде — без контента/только хэш). Решения по Relay ТЗ: единый эндпоинт `POST /v1/responses`, TTL подписи 60 секунд, формат стрима без преобразования, подпись считается по raw body (Buffer), timestamp — epoch milliseconds. Org/project должны учитываться в non‑stream и stream (или на стороне Relay при включённом Relay). Клиентский флаг `CHAT_STREAM_MODE` сохраняет текущее поведение (/api/chat/stream vs /api/chat). Реализация Relay размещена в `apps/ai-relay` (Fastify, raw body parser для подписи через fastify-raw-body, byte‑to‑byte SSE proxy); в Fastify включены таймауты клиентских соединений (requestTimeout = streamTimeout + 10s, keepAliveTimeout 75s, connectionTimeout 30s), заголовок `X-Relay-Request-Id` единый для stream/non‑stream, для SSE добавлен `x-accel-buffering: no` (отключение буферизации у прокси), ESM‑импорты в `apps/ai-relay` используют расширение `.js` (требование Node.js при `"type": "module"`), Dockerfile ai‑relay использует `npm ci` + `package-lock.json` для детерминированной установки зависимостей; для suggested_chips используется строгая json_schema без `oneOf` (nullable поля + полный `required`), чтобы проходить валидацию OpenAI.
+
+• ORM: Drizzle ORM
+• chat_settings хранит только UI/память (без mode), welcome_prompts содержит тексты по признаку первой сессии и языку.
+• преимущества: типобезопасность, простые миграции, готовые SQL.
+• легко заменить на Eloquent (Laravel) при необходимости.
+• Пул Postgres: keepAlive + idle/connection timeouts + maxLifetimeSeconds; при ошибках соединения фоновые задачи пересоздают пул через `resetDbPool`, чтобы воркеры восстанавливались после рестарта БД.
+• AI Relay (проектирование): внутренний стрим — **дельты текста**, SSE формируется в `server/api/chat/stream.post.ts`; выбран вариант 1 — Relay проксирует raw SSE OpenAI, а `relayClient` парсит и возвращает дельты; `relayClient` отвечает за подпись HMAC, парсинг SSE и сохранение `response_id` для `previous_response_id`; Relay по умолчанию не удаляет summary/entryContext (качество), расширенные логи промптов допустимы только локально в dev (в проде — без контента/только хэш). Org/project должны учитываться в non‑stream и stream (или на стороне Relay при включённом Relay). Клиентский флаг `CHAT_STREAM_MODE` сохраняет текущее поведение (/api/chat/stream vs /api/chat).
+• Память чата (LLM): основной механизм — `previous_response_id` (Responses API) + `truncation: auto`; summary‑память управляется глобальным флагом и может быть полностью выключена (код summary остаётся как fallback).
 
 🧪 Инициализация БД (seed)
 • Для пустой базы используется общий скрипт `pnpm seed:required` (см. `scripts/seed-required.ts`).
