@@ -85,7 +85,7 @@ server/
 • легко заменить на Eloquent (Laravel) при необходимости.
 • Пул Postgres: keepAlive + idle/connection timeouts + maxLifetimeSeconds; при ошибках соединения фоновые задачи пересоздают пул через `resetDbPool`, чтобы воркеры восстанавливались после рестарта БД.
 • AI Relay (проектирование): внутренний стрим — **дельты текста**, SSE формируется в `server/api/chat/stream.post.ts`; выбран вариант 1 — Relay проксирует raw SSE OpenAI, а `relayClient` парсит и возвращает дельты; `relayClient` отвечает за подпись HMAC, парсинг SSE и сохранение `response_id` для `previous_response_id`; Relay по умолчанию не удаляет summary/entryContext (качество), расширенные логи промптов допустимы только локально в dev (в проде — без контента/только хэш). Org/project должны учитываться в non‑stream и stream (или на стороне Relay при включённом Relay). Клиентский флаг `CHAT_STREAM_MODE` сохраняет текущее поведение (/api/chat/stream vs /api/chat).
-• Память чата (LLM): основной механизм — `previous_response_id` (Responses API) + `truncation: auto`; summary‑память управляется глобальным флагом и может быть полностью выключена (код summary остаётся как fallback).
+• Память чата (LLM): единственный механизм — `previous_response_id` (Responses API) + `truncation: auto`; summary‑память отключена, история сообщений в запрос не передаётся; управление памятью — только через UI.
 
 🧪 Инициализация БД (seed)
 • Для пустой базы используется общий скрипт `pnpm seed:required` (см. `scripts/seed-required.ts`).
