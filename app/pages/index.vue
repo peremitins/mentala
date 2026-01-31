@@ -71,14 +71,32 @@
 
         <section class="glass-deep p-2 mt-auto z-100">
           <div class="flex items-center gap-3">
-            <TextareaResize
-              ref="textareaRef"
-              v-model.trim="chat.userText"
-              :resize="true"
-              :prevent-enter-default="true"
-              @enter-pressed="handleKeydown"
-              :placeholder="'Напишите сообщение…'"
-            />
+            <div class="relative flex-1">
+              <TextareaResize
+                ref="textareaRef"
+                v-model.trim="chat.userText"
+                :resize="true"
+                :prevent-enter-default="true"
+                @enter-pressed="handleKeydown"
+                :placeholder="'Напишите сообщение…'"
+                :class="
+                  isUserTextOverLimit
+                    ? 'ring-2 ring-red-500/60 !border-red-500/70 transition-colors duration-200'
+                    : 'ring-0 ring-transparent transition-colors duration-200'
+                "
+              />
+              <div
+                v-if="isUserTextOverLimit"
+                class="pointer-events-none absolute right-2 top-2 rounded-full px-2 py-0.5 text-[11px] font-medium backdrop-blur bg-black/30 text-white/80 transition-colors duration-200"
+                :class="
+                  isUserTextOverLimit
+                    ? 'text-red-200/95 bg-red-500/20'
+                    : 'text-white/70 bg-black/25'
+                "
+              >
+                {{ userTextCount }}/{{ MAX_USER_TEXT_LENGTH }}
+              </div>
+            </div>
             <div class="flex items-center">
               <button
                 type="button"
@@ -105,8 +123,9 @@
               type="button"
               @pointerdown.prevent="onSendPointer"
               @click="onSendClick"
-              class="chat-action-button flex items-center justify-center cursor-pointer flex-none"
+              class="chat-action-button flex items-center justify-center cursor-pointer flex-none disabled:cursor-not-allowed disabled:opacity-40"
               :style="{ borderRadius: 'var(--radius-icon)' }"
+              :disabled="isUserTextOverLimit"
             >
               <IconSend class="w-5 h-5" />
             </button>
@@ -177,6 +196,13 @@ const chat = useChatStore();
 const { settings, start, stop, onPartial, onFinal } = useSpeechEngine();
 const speechStore = useSpeechStore();
 const chatSettings = useChatSettingsStore();
+
+// Ограничение длины пользовательского ввода для защиты бюджета.
+const MAX_USER_TEXT_LENGTH = 2500;
+const userTextCount = computed(() => chat.userText?.length ?? 0);
+const isUserTextOverLimit = computed(
+  () => userTextCount.value > MAX_USER_TEXT_LENGTH
+);
 
 // Управление TTS озвучкой
 const { speak: speakTTS } = useTTS();
@@ -316,6 +342,7 @@ async function toggleMic() {
 
 function emitSend() {
   if (!chat.userText?.trim()) return;
+  if (isUserTextOverLimit.value) return;
   if (isSending.value) return;
   const finalText = chat.userText?.trim();
   emit('send', finalText);
@@ -323,6 +350,7 @@ function emitSend() {
 
 function handleKeydown(e: KeyboardEvent) {
   if (!chat.userText?.trim()) return;
+  if (isUserTextOverLimit.value) return;
   if (e.ctrlKey || e.metaKey) {
     // Ctrl+Enter или Cmd+Enter → добавить перенос строки
     e.preventDefault();
@@ -410,6 +438,7 @@ const sendText = async (rawText: string) => {
 
 const onSend = async () => {
   if (isSending.value) return;
+  if (isUserTextOverLimit.value) return;
   if (!chat.userText?.trim()) return;
   await sendText(chat.userText);
 };
