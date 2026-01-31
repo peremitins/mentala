@@ -8,9 +8,10 @@
       <div class="flex items-center justify-between">
         <div class="font-medium">Память ИИ</div>
         <Switch
-          v-model:checked="chatSettings.enablePreviousResponseId"
-          @update:checked="onPreviousResponseIdChange"
+          :checked="chatSettings.enablePreviousResponseId"
           class="flex-shrink-0"
+          :loading="previousResponseIdLoading"
+          @update:checked="onPreviousResponseIdChange"
         />
       </div>
       <div class="relative">
@@ -46,9 +47,10 @@
       <div class="flex items-center justify-between">
         <div class="font-medium">Память в приложении</div>
         <Switch
-          v-model:checked="chatSettings.enableSummary"
-          @update:checked="onSummaryChange"
+          :checked="chatSettings.enableSummary"
           class="flex-shrink-0"
+          :loading="summaryLoading"
+          @update:checked="onSummaryChange"
         />
       </div>
       <div class="relative">
@@ -91,12 +93,14 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue';
+import { onMounted, ref } from 'vue';
 import { useChatSettingsStore } from '@/app/stores/chatSettings';
 import { useToast } from '@/app/composables/useToast';
 import { Switch } from '@/app/components/ui/shadcn/switch';
 
 const chatSettings = useChatSettingsStore();
+const previousResponseIdLoading = ref(false);
+const summaryLoading = ref(false);
 
 onMounted(async () => {
   // Загружаем настройки при монтировании
@@ -108,6 +112,7 @@ onMounted(async () => {
 });
 
 async function onPreviousResponseIdChange(value: boolean) {
+  previousResponseIdLoading.value = true;
   try {
     await chatSettings.updateChatSettings({
       enablePreviousResponseId: value,
@@ -116,10 +121,13 @@ async function onPreviousResponseIdChange(value: boolean) {
   } catch (error) {
     console.error('Failed to update enablePreviousResponseId:', error);
     useToast('Ошибка при сохранении настройки');
+  } finally {
+    previousResponseIdLoading.value = false;
   }
 }
 
 async function onSummaryChange(value: boolean) {
+  summaryLoading.value = true;
   try {
     await chatSettings.updateChatSettings({
       enableSummary: value,
@@ -130,6 +138,8 @@ async function onSummaryChange(value: boolean) {
   } catch (error) {
     console.error('Failed to update enableSummary:', error);
     useToast('Ошибка при сохранении настройки');
+  } finally {
+    summaryLoading.value = false;
   }
 }
 </script>

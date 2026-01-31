@@ -232,6 +232,7 @@ export const useChatStore = defineStore('chat', {
     async _processStreamResponse(resp: any, messageIdx: number): Promise<void> {
       const reader = (resp as any)?.getReader?.();
       const decoder = new TextDecoder();
+      let buffer = '';
 
       if (!reader) {
         throw new Error('Stream reader not available');
@@ -259,15 +260,27 @@ export const useChatStore = defineStore('chat', {
           const { done, value } = await reader.read();
           if (done) break;
 
-          const chunk = decoder.decode(value, { stream: true });
-          // SSE формата: "data: {json}\n\n"
-          const lines = chunk.split(/\n\n/);
+          // Аккуратно буферизуем SSE, потому что события могут быть разрезаны по чанкам.
+          buffer += decoder.decode(value, { stream: true });
+          buffer = buffer.replace(/\r\n/g, '\n');
 
-          for (const block of lines) {
-            const line = block.trim();
-            if (!line.startsWith('data:')) continue;
+          while (true) {
+            const separatorIndex = buffer.indexOf('\n\n');
+            if (separatorIndex === -1) break;
 
-            const jsonText = line.replace(/^data:\s*/, '');
+            const rawEvent = buffer.slice(0, separatorIndex).trim();
+            buffer = buffer.slice(separatorIndex + 2);
+
+            if (!rawEvent) continue;
+
+            const dataLines = rawEvent
+              .split('\n')
+              .filter((line) => line.startsWith('data:'))
+              .map((line) => line.replace(/^data:\s?/, ''));
+
+            if (!dataLines.length) continue;
+
+            const jsonText = dataLines.join('\n');
             if (jsonText === '[DONE]') continue;
 
             try {
@@ -330,6 +343,47 @@ export const useChatStore = defineStore('chat', {
                 parseErr
               );
               continue;
+            }
+          }
+        }
+        // Дочитываем хвост буфера после завершения стрима (на случай, если последний блок без \n\n).
+        if (buffer.trim()) {
+          const rawEvent = buffer.trim();
+          const dataLines = rawEvent
+            .split('\n')
+            .filter((line) => line.startsWith('data:'))
+            .map((line) => line.replace(/^data:\s?/, ''));
+          if (dataLines.length) {
+            const jsonText = dataLines.join('\n');
+            if (jsonText !== '[DONE]') {
+              try {
+                const obj = JSON.parse(jsonText);
+                const parsed = ChatStreamChunkDto.safeParse(obj);
+                if (parsed.success) {
+                  const data = parsed.data;
+                  if (data.output_text_delta) {
+                    hasReceivedData = true;
+                    const msg = this.messages[messageIdx];
+                    if (msg) msg.content += data.output_text_delta;
+                    if (isFirstChunk) {
+                      this.isGenerating = false;
+                      isFirstChunk = false;
+                    }
+                    this.updateActivity();
+                  }
+                  if (data.chips) {
+                    this.suggestedChips = data.chips;
+                  }
+                  if (data.error) {
+                    throw new Error(data.error.message || 'Stream error');
+                  }
+                }
+              } catch (parseErr) {
+                console.warn(
+                  '[Chat Store] Failed to parse final stream chunk:',
+                  parseErr
+                );
+              }
             }
           }
         }

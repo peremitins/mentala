@@ -9,18 +9,17 @@
           {{ statusLabel }}
         </p>
       </div>
-      <Button
-        size="sm"
-        variant="outline"
-        class="text-[12px]"
+      <Switch
+        :checked="preference?.enabled ?? false"
         :disabled="loading"
-        @click="$emit('edit')"
-      >
-        Настроить
-      </Button>
+        :loading="toggleLoading"
+        @update:checked="$emit('toggle', $event)"
+      />
     </div>
 
-    <div class="mt-4 space-y-2">
+    <div class="my-2 border-t border-border" aria-hidden="true" />
+
+    <div class="space-y-2">
       <Skeleton
         v-if="loading"
         type="simple-text"
@@ -55,23 +54,40 @@
         </p>
       </template>
     </div>
+
+    <Button
+      size="sm"
+      variant="outline"
+      class="mt-4 w-full text-[12px] justify-between"
+      :disabled="loading"
+      @click="$emit('edit')"
+    >
+      Настройки уведомлений
+      <IconChevronRight class="h-4 w-4 text-muted-foreground" />
+    </Button>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue';
 import { Button } from '@/app/components/ui/button';
+import { Switch } from '@/app/components/ui/shadcn/switch';
 import type { NotificationPreferencesDto } from '@/shared/dto/notifications';
 import { formatMinutesToTime, formatActiveDays } from '@/app/utils/time';
 import Skeleton from '@/app/components/ui/Skeleton.vue';
+import IconChevronRight from '~icons/lucide/chevron-right';
 
 const props = defineProps<{
   preference: NotificationPreferencesDto | null;
+  /** Загрузка контента (скелетон) */
   loading?: boolean;
+  /** Загрузка при переключении тумблера (спиннер на кругляше) */
+  toggleLoading?: boolean;
 }>();
 
 const emit = defineEmits<{
   (e: 'edit'): void;
+  (e: 'toggle', value: boolean): void;
 }>();
 
 const windowText = computed(() => {

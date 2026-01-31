@@ -20,12 +20,18 @@ export function useSpeechEngine() {
   const currentEngineId = ref<SpeechEngineId | null>(null);
   const isActive = ref(false);
 
+  const resolveEngineId = (id: SpeechEngineId): SpeechEngineId =>
+    id === 'whisper' ? 'auto' : id;
+
   async function pickEngine(id: SpeechEngineId): Promise<SpeechEngine> {
     if (id === 'whisper') {
-      const { createWhisperEngine } = await import(
-        '@/app/composables/speech/engine.whisper'
-      );
-      return createWhisperEngine();
+      // Временно отключаем Whisper, даже как fallback.
+      // TODO: вернуть через ai_relay, когда появится безопасный прокси.
+      // const { createWhisperEngine } = await import(
+      //   '@/app/composables/speech/engine.whisper'
+      // );
+      // return createWhisperEngine();
+      throw new Error('Whisper временно отключен');
     }
     if (id === 'native') {
       const { createNativeEngine } = await import(
@@ -45,21 +51,27 @@ export function useSpeechEngine() {
         '@/app/composables/speech/engine.native'
       );
       const e = createNativeEngine();
-      return e.isAvailable()
-        ? e
-        : (
-            await import('@/app/composables/speech/engine.whisper')
-          ).createWhisperEngine();
+      if (!e.isAvailable()) {
+        // TODO: fallback на Whisper через ai_relay.
+        // return (
+        //   await import('@/app/composables/speech/engine.whisper')
+        // ).createWhisperEngine();
+        throw new Error('Native speech engine is not available');
+      }
+      return e;
     } else {
       const { createWebSpeechEngine } = await import(
         '@/app/composables/speech/engine.webspeech'
       );
       const e = createWebSpeechEngine();
-      return e.isAvailable()
-        ? e
-        : (
-            await import('@/app/composables/speech/engine.whisper')
-          ).createWhisperEngine();
+      if (!e.isAvailable()) {
+        // TODO: fallback на Whisper через ai_relay.
+        // return (
+        //   await import('@/app/composables/speech/engine.whisper')
+        // ).createWhisperEngine();
+        throw new Error('Web Speech API is not available');
+      }
+      return e;
     }
   }
 
@@ -74,9 +86,10 @@ export function useSpeechEngine() {
   }
 
   async function ensureEngine() {
-    if (!engine || currentEngineId.value !== settings.value.engine) {
+    const targetEngineId = resolveEngineId(settings.value.engine);
+    if (!engine || currentEngineId.value !== targetEngineId) {
       if (engine) await engine.stop().catch(() => {});
-      await createAndBindEngine(settings.value.engine);
+      await createAndBindEngine(targetEngineId);
     }
   }
 
@@ -88,21 +101,25 @@ export function useSpeechEngine() {
         silenceMs: settings.value.silenceMs,
       });
       isActive.value = true;
-    } catch {
-      const { createWhisperEngine } = await import(
-        '@/app/composables/speech/engine.whisper'
-      );
-      engine = createWhisperEngine();
-      for (const cb of partialListeners) engine.onPartial(cb);
-      for (const cb of finalListeners) engine.onFinal(cb);
-      await engine!.start({
-        language: settings.value.language,
-        silenceMs: settings.value.silenceMs,
-      });
-      speech.setEngine('whisper');
-      currentEngineId.value = 'whisper';
-      engineSingleton = engine;
-      isActive.value = true;
+    } catch (error) {
+      isActive.value = false;
+      // Временно не делаем fallback на Whisper.
+      // TODO: вернуть fallback через ai_relay.
+      // const { createWhisperEngine } = await import(
+      //   '@/app/composables/speech/engine.whisper'
+      // );
+      // engine = createWhisperEngine();
+      // for (const cb of partialListeners) engine.onPartial(cb);
+      // for (const cb of finalListeners) engine.onFinal(cb);
+      // await engine!.start({
+      //   language: settings.value.language,
+      //   silenceMs: settings.value.silenceMs,
+      // });
+      // speech.setEngine('whisper');
+      // currentEngineId.value = 'whisper';
+      // engineSingleton = engine;
+      // isActive.value = true;
+      throw error;
     }
   }
 
@@ -127,11 +144,18 @@ export function useSpeechEngine() {
   }
 
   async function setEngine(id: SpeechEngineId) {
-    if (speech.engine === id && engine) return;
-    speech.setEngine(id);
+    const target = resolveEngineId(id);
+    if (speech.engine === target && engine) return;
+    if (id === 'whisper') {
+      // Whisper отключен — мягко возвращаем на auto.
+      // TODO: вернуть через ai_relay.
+      speech.setEngine('auto');
+      return;
+    }
+    speech.setEngine(target);
     const wasActive = isActive.value;
     if (engine) await engine.stop().catch(() => {});
-    await createAndBindEngine(id);
+    await createAndBindEngine(target);
     if (wasActive) {
       await engine!.start({
         language: settings.value.language,

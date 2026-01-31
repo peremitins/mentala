@@ -24,7 +24,7 @@
   - finish session (summary);
   - генерация текстов уведомлений.
 
-Итого: один API — **Responses API**; стриминг в чате есть и активно используется (`CHAT_STREAM_MODE = true`). **Важно**: Nitro сейчас не проксирует raw SSE OpenAI — он получает от SDK поток дельт, сам собирает формат `data: {"output_text_delta":"..."}`, `data: {"chips":[...]}`, `data: [DONE]`. В ТЗ зафиксирован **вариант А**: Relay транслирует ответ OpenAI в этот же формат Mentala (см. раздел 6.1), чтобы Nitro почти не менялся — только читает стрим от Relay и пишет чанки как есть.
+Итого: один API — **Responses API**; стриминг в чате есть и активно используется (`CHAT_STREAM_MODE = true`). **Важно**: Nitro сейчас не проксирует raw SSE OpenAI — он получает от SDK поток дельт и сам собирает SSE‑формат `data: {"output_text_delta":"..."}`, `data: {"chips":[...]}`, `data: [DONE]`. Поэтому базовый контракт стрима внутри приложения — **дельты текста**, а SSE — ответственность API‑роута. Это влияет на Relay: при включённом Relay либо (а) Relay/relayClient должен отдавать **дельты**, либо (б) relayClient должен распарсить SSE OpenAI и преобразовать в дельты. Прямой passthrough SSE от Relay в `server/api/chat/stream.post.ts` без правок **неподходит** (он начнёт повторно оборачивать чанки). Также учитываем, что `server/interface/api/chat.post.ts` использует `chatStreamViaProvider` при `messages.length === 0` (welcome‑старт).
 
 ---
 
@@ -59,16 +59,22 @@
 
 Для MVP Relay достаточно **одного ключа** (и при необходимости org/project) на инстанс. Требование «несколько ключей (ротация или по окружениям)» заложено в ТЗ как **опциональное расширение**.
 
+**Важно по org/project (рекомендуемое поведение):**
+
+- Если Mentala работает **напрямую с OpenAI** (режим без Relay), то `OpenAI-Organization` и `OpenAI-Project` должны учитываться **и в non‑stream, и в stream**. Это предотвращает расхождения в биллинге/лимитах.
+- Если Mentala работает **через Relay**, то org/project должны учитываться **на стороне Relay** при вызовах OpenAI.
+- Реализацию в коде выполняем отдельно; в этом ТЗ фиксируем требование на уровне поведения.
+
 ---
 
 ### 5. Строгая изоляция: запрет передавать в OpenAI user id, email и т.д.?
 
 По текущей реализации (проверено по **телу запроса** к OpenAI, а не по логам):
 
-- **Формирование payload** в `server/infrastructure/llm/openai.ts`: для `chat` тело запроса собирается в переменную `body` (см. строки ~561–623): `model`, `input`, `max_output_tokens`, `temperature`, `store`, `metadata`, `text`, `truncation`, при необходимости `previous_response_id`, `include`, `reasoning`. Поля **userId**, **user**, **email** в этот объект не добавляются — они используются только на нашем бэкенде (responseIdStore, summaryStore, welcome prompt, chat_settings). В **input** попадают только тексты сообщений, в которых уже подставлены `user_name`, `user_gender` из промптов (`server/application/prompts`).
+- **Формирование payload** в `server/infrastructure/llm/openai.ts`: для `chat` тело запроса собирается в переменную `body` (см. строки ~561–623): `model`, `input`, `max_output_tokens`, `temperature`, `store`, `metadata`, `text`, `truncation`, при необходимости `previous_response_id`, `include`, `reasoning`. Поля **userId**, **user**, **email** в этот объект не добавляются — они используются только на нашем бэкенде (responseIdStore, summaryStore, welcome prompt, chat_settings). В **input** попадают тексты сообщений, а также **контекстные блоки**: summary‑память прошлых сессий, welcome‑промпт и `entryContext` (habit/topic) — всё это формируется в `server/infrastructure/llm/openai.ts` и `server/application/prompts`.
 - **В генерации уведомлений** в системный промпт попадают: имя пользователя, пол, тон, обращение, название/описание привычки или темы — без email и без числового id.
 
-Итого: **строгая изоляция «вообще не передавать идентификаторы и email»** при желании достижима, но потребует не передавать в OpenAI имя/пол в открытом виде (или только обезличенные значения). В ТЗ зафиксировано: **(1) минимизация в логах Relay** — не логировать контент сообщений и системные промпты в сыром виде; **(2) опциональный режим строгой минимизации** — флаг (например env или заголовок), при включении которого персонализация (имя, пол) в запросах к OpenAI отключается или обезличивается, чтобы можно было быстро закрутить гайки без переписывания промптов.
+Итого: **строгая изоляция «вообще не передавать идентификаторы и email»** при желании достижима, но потребует не передавать в OpenAI имя/пол в открытом виде и/или отключать персонализацию. Важно: **по умолчанию** качество должно сохраниться, поэтому summary‑память и `entryContext` **передаются**, а режим строгой минимизации — **опциональный** и выключен по умолчанию.
 
 ---
 
@@ -130,11 +136,12 @@
 ### 2.2. Что передаётся в OpenAI сейчас
 
 - В **input** (Responses API): сообщения с ролями `system`, `user`, `assistant`, `developer`; в текстах подставляются `user_name`, `user_gender` (из `server/application/prompts`). Числовой `userId` и email в запрос к OpenAI не попадают.
+- В **input** также попадает контекст качества: **summary‑память прошлых сессий**, **welcome‑промпт**, **entryContext (habit/topic)** — это часть промптов в `server/infrastructure/llm/openai.ts` и `server/application/prompts`.
 - **Поля тела запроса Responses API по сценариям** (все читаются/формируются в `server/infrastructure/llm/openai.ts`):
   - **Всегда**: `model`, `input`, `temperature`, `max_output_tokens` (или из конфига по сценарию).
   - **Чат (stream и non-stream)**: плюс `store`, `truncation`, опционально `previous_response_id`, `metadata`, при включённом reasoning — `include`, `reasoning`.
   - **Только чипы**: плюс `text.format` с `json_schema` (при fallback без schema — `text: {}`).
-  - **Finish session**: тот же Responses API, отдельный вызов с промптом под summary и structured output.
+  - **Finish session**: тот же Responses API, отдельный вызов с промптом под summary и требованием «валидный JSON» (без `json_schema`).
   - **Уведомления**: через `chatViaProvider` — те же поля, что чат (без previous_response_id), модель и лимиты из `config.llm.openai.settings.notifications`.
 
 ### 2.3. Переменные окружения (Яндекс сегодня)
@@ -184,11 +191,16 @@
   4. значение `X-Relay-Nonce`
   5. hex-строка SHA-256 от **raw body запроса** (если тела нет — пустая строка)
   6. значение `X-Relay-Client`
-  Формат: `METHOD\nPATH\nTIMESTAMP\nNONCE\nBODY_SHA256_HEX\nCLIENT_ID`.
+     Формат: `METHOD\nPATH\nTIMESTAMP\nNONCE\nBODY_SHA256_HEX\nCLIENT_ID`.
 - **Практические нюансы (иначе 401 в проде):**
   1. **Хеш тела** считается от **сырых байт тела**, а не от «объекта после своего JSON.stringify внутри $fetch». На стороне Mentala (relayClient): явно сформировать `const rawBody = JSON.stringify(body)` (один раз), этим же `rawBody` отправить запрос (body: rawBody или эквивалент) и от **этих же байт** посчитать SHA-256 для канонической строки. Иначе одна сторона подпишет один объём, другая проверит другой — подпись не сойдётся.
   2. **Кодировка**: зафиксировать `Content-Type: application/json; charset=utf-8` при отправке и при проверке на Relay, чтобы байты тела были однозначны.
+  3. **Raw body на Relay**: Relay обязан брать тело запроса в байтах **до парсинга** (fastify raw body plugin или `preParsing` hook), сохранять как `Buffer` и хешировать именно этот `Buffer`.
+  4. **SHA-256 считается от Buffer**, а не от строки.
+- **Важно по заголовкам:** канонические имена — `X-Purpose`, `X-Request-Id`, но в Node/Fastify они приходят в lower-case (`req.headers['x-purpose']`, `req.headers['x-request-id']`). Это норма.
+- **Валидация подписи:** `X-Relay-Signature` строго base64, при невалидном base64 — 401.
 - Relay проверяет: timestamp не старше 60 с, nonce не повторялся, подпись совпадает. **Хранение nonce**: для MVP — **in-memory** с TTL (например 120 с), при рестарте Relay дубли nonce допустимы. Redis — опциональное расширение для распределённой проверки.
+- **Единицы времени**: `X-Relay-Timestamp` — это **epoch milliseconds** (как `Date.now()`), а не секунды.
 - **Вариант Б.** mTLS — по желанию, для усиления безопасности.
 
 ---
@@ -207,15 +219,23 @@
 Relay:
 
 - Читает тело как JSON, валидирует (Zod) против схемы OpenAI Responses API.
-- При необходимости «чистит» запрос (убирает явные персональные поля, ограничивает размер input).
+- При необходимости «чистит» запрос (убирает явные персональные поля, ограничивает размер input), **но по умолчанию не удаляет** summary‑память и `entryContext` — это критично для качества.
 - Подставляет свой `OPENAI_API_KEY` и опционально org/project.
 - Отправляет запрос в `https://api.openai.com/v1/responses` с этим телом.
 - Ответ: при non-stream — как у OpenAI, плюс заголовок `X-Relay-Request-Id` для трассировки; при stream — см. ниже.
+- **Опционально (желательно для диагностики):** проксировать заголовки OpenAI с request id / rate limit (без чувствительных данных).
 
-**Стриминг (заголовок `X-Purpose: chat_stream` или параметр stream в теле):** выбран **вариант А — Relay транслирует в формат Mentala**. Relay читает SSE от OpenAI, извлекает текстовые дельты (и при необходимости `response.completed` и т.д.), и стримит клиенту **текущий формат Mentala**:
-- чанки `data: {"output_text_delta":"<delta>"}\n\n`;
-- в конце (после стрима) при необходимости `data: [DONE]\n\n`.
-Чипы генерируются на стороне Mentala после стрима, в поток Relay не входят. Nitro (`server/api/chat/stream.post.ts`) **почти не меняется**: вместо `openai.responses.stream()` получает стрим от Relay (те же строки/чанки в формате Mentala) и пишет их в `res.write(...)` как сейчас. Заголовки ответа при стриме: `Content-Type: text/event-stream`, `Cache-Control: no-cache`, `Connection: keep-alive`.
+**Стриминг (заголовок `X-Purpose: chat_stream` или параметр stream в теле):** текущий контракт внутри Mentala — **дельты текста**, а SSE строится на уровне API‑роута. Поэтому Relay/relayClient должны обеспечить выдачу **дельт**, а не готовых SSE‑чанков Mentala. **Выбран вариант 1**:
+
+- **Вариант 1 (принят)**: Relay проксирует **raw SSE OpenAI**, а `relayClient.chatStream` парсит события и возвращает `AsyncIterable<string>` дельт (только `response.output_text.delta`). Nitro (`server/api/chat/stream.post.ts`) продолжает формировать SSE (`data: {"output_text_delta":...}` и `[DONE]`).
+- **Вариант 2 (не используем сейчас)**: Relay сам извлекает дельты и отдаёт поток «чистого текста» (stream‑ответ без SSE), а `relayClient` просто читает и возвращает дельты.
+**Важно:** при проксировании стрима Relay передаёт **байты как есть** (Buffer → ответ), без преобразования в строку, чтобы не ломать SSE.
+
+**Важно:** прямой passthrough SSE‑чанков Mentala через `server/api/chat/stream.post.ts` не подходит, потому что роут уже оборачивает дельты в `data: ...`. Также `server/interface/api/chat.post.ts` использует `chatStreamViaProvider` при `messages.length === 0` (welcome‑старт) — это второй путь стриминга, который должен остаться совместимым с «дельтами».
+
+**Критично для памяти:** при стриме через Relay нужно сохранить механизм `previous_response_id`. Для этого Relay/relayClient должны передавать **response_id завершённого ответа** (например, отдельным событием после окончания стрима или заголовком), чтобы Mentala могла сохранить `response_id` так же, как сейчас в `openai.responses.stream()` при `response.completed`.
+
+Чипы генерируются на стороне Mentala после стрима и в поток Relay не входят. Заголовки ответа клиенту при стриме: `Content-Type: text/event-stream`, `Cache-Control: no-cache`, `Connection: keep-alive`.
 
 ### 6.2. GET /health и GET /ready
 
@@ -246,7 +266,8 @@ Relay:
 ## 8. Логи и приватность
 
 - **Логировать**: X-Request-Id, X-Purpose (purpose), model, latencyMs, statusCode, tokens (если доступно), X-Relay-Request-Id.
-- **Не логировать**: текст сообщений пользователя, системные промпты целиком (допустимо только хеш, например SHA-256). **Запрещено логировать** заголовки `Authorization` и любые bearer-токены (в т.ч. входящие от клиента и исходящие к OpenAI).
+- **Не логировать в проде (Relay и Mentala)**: текст сообщений пользователя и системные промпты целиком (допустим только хеш/длины). **Запрещено логировать** заголовки `Authorization` и любые bearer‑токены (в т.ч. входящие от клиента и исходящие к OpenAI).
+- **Локальная разработка**: допускается расширенное логирование промптов/preview **только** при `NODE_ENV=development` или отдельном флаге (например `AI_LOG_PROMPTS=true`). В проде — всегда выключено.
 - `LOG_LEVEL=info|warn|error`; в проде без debug.
 
 ---
@@ -266,8 +287,16 @@ Relay:
 - **Переключатель** — одна переменная окружения, по которой выбирается транспорт:
   - **Вариант А (рекомендуется)**: если задан и не пустой `AI_RELAY_URL` — используем Relay (внешний сервер); иначе — прямой вызов в OpenAI (внутреннее использование, как сейчас). Никакого удаления ключа из кода: при отсутствии `AI_RELAY_URL` по-прежнему читается `NUXT_OPENAI_API_KEY`.
   - **Вариант Б (опционально)**: явный флаг `AI_USE_RELAY=true|false`; при `false` или отсутствии — внутреннее использование, при `true` — Relay (при этом `AI_RELAY_URL` обязателен).
+- **Решение владельца проекта**: `OPENAI_REQUESTS_DISABLED` остаётся `true` как сейчас. Важно: при текущей реализации это блокирует **любой** вызов (и прямой, и через Relay), и это **сейчас ожидаемое поведение** до перехода на внешний сервер.
 - В коде: в начале каждой точки вызова (chat, chatStream, chips, finishSession, уведомления) — проверка «если включён Relay → relayClient.\*, иначе → текущая реализация». Текущая реализация остаётся одним из двух путей, без дублирования бизнес-логики.
 - Итог: **лёгкий способ переключиться** без правок кода — в проде на Яндексе выставляем `AI_RELAY_URL` (и не выставляем `NUXT_OPENAI_API_KEY`); локально/на стенде без Relay не выставляем `AI_RELAY_URL`, оставляем `NUXT_OPENAI_API_KEY` — всё работает как сейчас.
+
+### 10.0.1. Клиентский флаг стрима (фиксируем поведение)
+
+- На фронте используется константа `CHAT_STREAM_MODE` (`app/constants/chat.ts`):
+  - `true` → клиент вызывает `/api/chat/stream` и получает SSE‑чанки;
+  - `false` → клиент вызывает `/api/chat` и получает полный ответ.
+- При внедрении Relay это поведение должно сохраниться без изменений.
 
 ### 10.1. Единый клиент к AI и место логики подписи
 
@@ -278,7 +307,7 @@ Relay:
 
 - **В начале каждого метода** (chat, chatStream, chips, finishSession): проверка переключателя (например `if (process.env.AI_RELAY_URL) { return relayClient.*(...); }`), иначе — выполнение **текущей** логики без изменений.
 - **Non-stream** (chat, chips, finish session, уведомления): при включённом Relay — тело запроса **то же**, что и в OpenAI (без обёртки). Отправка: сформировать `rawBody = JSON.stringify(body)` один раз, от этих же байт посчитать SHA-256 для подписи; заголовки: подпись HMAC, `X-Request-Id`, `X-Purpose`, `Content-Type: application/json; charset=utf-8`; body: тот же объект (или rawBody, см. раздел 5). Вызов: `$fetch(AI_RELAY_URL + '/v1/responses', { method: 'POST', headers, body })`. При внутреннем использовании — оставляем как есть: `$fetch(OPENAI_URL, { method: 'POST', headers: { Authorization: Bearer ... }, body })`.
-- **Stream**: при включённом Relay — Relay возвращает стрим в **формате Mentala** (чанки `data: {"output_text_delta":...}\n\n`, затем `data: [DONE]\n\n`). Nitro читает этот стрим от Relay и пишет в `res.write(...)` как сейчас; контракт с `server/api/chat/stream.post.ts` не меняется (тот же формат чанков). При внутреннем использовании — оставляем как есть: `openai.responses.stream(streamOptions)`.
+- **Stream**: при включённом Relay — `relayClient.chatStream` должен вернуть **дельты текста** (AsyncIterable<string>), потому что SSE формируется в `server/api/chat/stream.post.ts`. Допускается, что Relay отдаёт raw SSE OpenAI, а `relayClient` парсит события и извлекает дельты. При внутреннем использовании — оставляем как есть: `openai.responses.stream(streamOptions)`.
 - Итог: **не переписывать слой** — добавить ветку «если Relay — relayClient, иначе — текущий код»; текущий прямой вызов остаётся вторым путём.
 
 ### 10.3. Переменные окружения
@@ -322,7 +351,52 @@ Relay:
 
 ---
 
-## 13. Расширения (вне первой версии)
+## 13. Инструкции для владельца проекта (до реализации)
+
+Ниже — чеклист того, что нужно подготовить **со стороны владельца проекта**, чтобы команда могла реализовать Relay без блокировок.
+
+1. **Домен и DNS**
+
+- Выбрать домен для Relay (например `ai-relay.mentala.app`).
+- Создать DNS‑запись `A` или `CNAME` на IP/балансировщик сервера Relay.
+
+2. **TLS/HTTPS**
+
+- Обеспечить сертификат (Let’s Encrypt или собственный), чтобы Relay принимал **только HTTPS**.
+- Убедиться, что балансировщик/прокси прокидывает `X-Forwarded-For` и `X-Request-Id` (если используется).
+
+3. **Секреты**
+
+- Сгенерировать `RELAY_AUTH_SECRET` (минимум 32–64 байта, случайный, Base64/hex).
+- Определить `AI_RELAY_CLIENT_ID` (например `mentala-yc-prod`).
+- Подготовить `OPENAI_API_KEY` (и при необходимости `OPENAI_ORG_ID`, `OPENAI_PROJECT_ID`) — **только на Relay**.
+
+4. **Окружение Mentala (Яндекс/прод)**
+
+- Задать `AI_RELAY_URL`, `AI_RELAY_AUTH_SECRET`, `AI_RELAY_CLIENT_ID`.
+- Удалить/не задавать `NUXT_OPENAI_API_KEY` и другие OpenAI‑ключи в этом окружении.
+
+5. **Сеть и доступы**
+
+- Открыть доступ к Relay по HTTPS (443) только с нужных источников (если есть allowlist).
+- Убедиться, что исходящий доступ Relay к OpenAI разрешён.
+
+6. **Мониторинг и метрики**
+
+- Подготовить сбор метрик Prometheus (или аналог) по Relay.
+- Настроить алерты на 5xx/429 и рост активных стримов.
+
+7. **Лимиты**
+
+- Зафиксировать допустимые лимиты (RPS и одновременные стримы), чтобы Relay не перегружался.
+
+8. **Контур отката**
+
+- Оставить возможность быстро выключить Relay: удалить `AI_RELAY_URL` (или `AI_USE_RELAY=false`).
+
+---
+
+## 14. Расширения (вне первой версии)
 
 - **TTS/STT**: проксирование `/v1/audio/speech` и `/v1/audio/transcriptions` через Relay, чтобы и аудио-трафик шёл из Нидерландов и ключ не хранился на Яндексе.
 - **Несколько ключей OpenAI**: ротация или разные ключи по окружениям на стороне Relay.
@@ -330,7 +404,7 @@ Relay:
 
 ---
 
-## 14. Ссылки на файлы кодовой базы
+## 15. Ссылки на файлы кодовой базы
 
 Пути проверены по репозиторию: маршрут Nitro для non-stream чата — `server/api/chat.post.ts`, он реэкспортирует handler из `server/interface/api/chat.post.ts` (именно такая структура в проекте).
 
@@ -339,7 +413,7 @@ Relay:
 | Провайдер OpenAI, Responses API, стрим                   | `server/infrastructure/llm/openai.ts`                                                                    |
 | Выбор провайдера, chatViaProvider, chatStreamViaProvider | `server/application/llm.service.ts`                                                                      |
 | API чата (стрим), формирование SSE                       | `server/api/chat/stream.post.ts`                                                                         |
-| API чата (non-stream): маршрут и handler                 | `server/api/chat.post.ts` → `server/interface/api/chat.post.ts`                                         |
+| API чата (non-stream): маршрут и handler                 | `server/api/chat.post.ts` → `server/interface/api/chat.post.ts`                                          |
 | Чипы                                                     | `server/application/suggested-chips.service.ts`                                                          |
 | Finish session                                           | `server/api/session/finish.post.ts`                                                                      |
 | Генерация уведомлений                                    | `server/application/notifications/ai-generation.service.ts`                                              |

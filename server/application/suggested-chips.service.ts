@@ -91,7 +91,13 @@ function normalizeActionParams(
   params: unknown
 ): { trackId?: string; collectionId?: string } | undefined {
   if (!params || typeof params !== 'object') return undefined;
-  const parsed = SuggestedChipActionParamsDto.safeParse(params);
+  const raw = params as Record<string, unknown>;
+  const normalized = {
+    trackId: typeof raw.trackId === 'string' ? raw.trackId : undefined,
+    collectionId:
+      typeof raw.collectionId === 'string' ? raw.collectionId : undefined,
+  };
+  const parsed = SuggestedChipActionParamsDto.safeParse(normalized);
   if (!parsed.success) return undefined;
 
   if (action === 'open_meditation_track' && !parsed.data.trackId) {
@@ -231,6 +237,48 @@ function parseJsonPayload(raw: string): unknown {
   }
 }
 
+function normalizeChipsPayload(payload: unknown): unknown {
+  if (!payload || typeof payload !== 'object') return payload;
+
+  const record = payload as Record<string, unknown>;
+  if (!Array.isArray(record.chips)) return payload;
+
+  const chips = record.chips.map((chip) => {
+    if (!chip || typeof chip !== 'object') return chip;
+    const chipRecord = { ...(chip as Record<string, unknown>) };
+
+    // Убираем null-поля, чтобы Zod не отбрасывал валидные чипы.
+    if (chipRecord.action === null) {
+      delete chipRecord.action;
+    }
+
+    const params = chipRecord.params;
+    if (params === null || typeof params !== 'object') {
+      delete chipRecord.params;
+    } else {
+      const paramsRecord = { ...(params as Record<string, unknown>) };
+      if (paramsRecord.trackId === null) {
+        delete paramsRecord.trackId;
+      }
+      if (paramsRecord.collectionId === null) {
+        delete paramsRecord.collectionId;
+      }
+      if (Object.keys(paramsRecord).length === 0) {
+        delete chipRecord.params;
+      } else {
+        chipRecord.params = paramsRecord;
+      }
+    }
+
+    return chipRecord;
+  });
+
+  return {
+    ...record,
+    chips,
+  };
+}
+
 async function requestChipsFromModel(params: {
   dialogContext: string;
   assistantAnswer: string;
@@ -273,7 +321,8 @@ async function requestChipsFromModel(params: {
         }
       : payload;
 
-  const parsed = SuggestedChipsPayloadDto.safeParse(normalizedPayload);
+  const cleanedPayload = normalizeChipsPayload(normalizedPayload);
+  const parsed = SuggestedChipsPayloadDto.safeParse(cleanedPayload);
   if (!parsed.success) return [];
 
   return parsed.data.chips;
