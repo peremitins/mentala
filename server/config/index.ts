@@ -38,7 +38,7 @@ export const config = {
         },
         chips: {
           temperature: 0.7, // Нужна вариативность формулировок
-          maxOutputTokens: 120,
+          maxOutputTokens: 200,
           enableReasoning: false,
         },
       },

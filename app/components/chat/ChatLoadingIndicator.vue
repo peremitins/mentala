@@ -1,12 +1,10 @@
 <template>
   <div
-    class="w-max px-3 py-2 items-center bubble max-w-[80%] glass-deep transition-all duration-300"
+    class="w-max px-3 py-2 items-center max-w-[80%] glass-deep transition-all duration-300"
   >
     <div class="flex items-center gap-2">
       <!-- Текст -->
-      <span
-        class="text-sm text-foreground transition-opacity duration-300"
-      >
+      <span class="text-sm text-foreground transition-opacity duration-300">
         {{ text }}
       </span>
       <!-- Анимированные точки -->
