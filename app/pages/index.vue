@@ -44,7 +44,7 @@
               <div
                 v-for="(m, index) in combinedMessages"
                 :key="`msg-${index}-${m.role}`"
-                class="w-max px-3 py-2 mb-2 items-center bubble max-w-[80%] glass-deep markdown-content"
+                class="w-max px-3 py-2 mb-2 items-center max-w-[80%] glass-deep markdown-content"
                 :class="{ 'ml-auto': (m as any).role === 'user' }"
                 v-html="
                   (m as any).role === 'assistant'
@@ -79,19 +79,33 @@
               @enter-pressed="handleKeydown"
               :placeholder="'Напишите сообщение…'"
             />
+            <div class="flex items-center">
+              <button
+                type="button"
+                @click="toggleMic"
+                class="chat-action-button relative flex items-center justify-center cursor-pointer flex-none"
+                :class="
+                  speechStore.isListening
+                    ? 'is-recording ring-2 ring-red-400/60 bg-red-500/15 shadow-[0_0_20px_rgba(239,68,68,0.35)]'
+                    : ''
+                "
+                :style="{ borderRadius: 'var(--radius-icon)' }"
+                :aria-pressed="speechStore.isListening"
+                aria-label="Запись голоса"
+              >
+                <IconMic
+                  :class="
+                    speechStore.isListening ? 'text-red-300' : 'text-foreground'
+                  "
+                  class="w-5 h-5"
+                />
+              </button>
+            </div>
             <button
-              @click="toggleMic"
-              class="icon-disc flex items-center justify-center cursor-pointer flex-none"
-              :style="{ borderRadius: 'var(--radius-icon)' }"
-            >
-              <IconMic
-                :class="speechStore.isListening ? 'text-primary-ui' : ''"
-                class="w-5 h-5"
-              />
-            </button>
-            <button
-              @click="onSend"
-              class="icon-disc flex items-center justify-center cursor-pointer flex-none"
+              type="button"
+              @pointerdown.prevent="onSendPointer"
+              @click="onSendClick"
+              class="chat-action-button flex items-center justify-center cursor-pointer flex-none"
               :style="{ borderRadius: 'var(--radius-icon)' }"
             >
               <IconSend class="w-5 h-5" />
@@ -131,7 +145,6 @@ import AvatarVoiceControls from '@/app/components/AvatarVoiceControls.vue';
 import SuggestedChips from '@/app/components/chat/SuggestedChips.vue';
 import ChatLoadingIndicator from '@/app/components/chat/ChatLoadingIndicator.vue';
 import type { SuggestedChip } from '@/shared/dto';
-import { useToast } from '@/app/composables/useToast';
 
 const emit = defineEmits<{ (e: 'send', text: string): void }>();
 
@@ -173,6 +186,7 @@ const { renderMarkdown } = useMarkdown();
 // Очищаем speechBase если пользователь полностью удалил текст
 const isProcessingVoiceInput = ref(false);
 const isSending = ref(false); // Флаг отправки сообщения - блокирует обновление textarea из голосового ввода
+const lastSendPointerTs = ref(0); // Защита от двойного клика после pointer-события
 
 onPartial((t) => {
   // Игнорируем partial, если микрофон не слушает (был остановлен) или идет отправка
@@ -220,10 +234,6 @@ onFinal((t) => {
 watch(
   () => chat.userText,
   (newText) => {
-    if (newText?.trim() && chat.suggestedChips.length) {
-      chat.clearSuggestedChips();
-    }
-
     // Пропускаем изменения из-за голосового ввода
     if (isProcessingVoiceInput.value) return;
 
@@ -306,6 +316,7 @@ async function toggleMic() {
 
 function emitSend() {
   if (!chat.userText?.trim()) return;
+  if (isSending.value) return;
   const finalText = chat.userText?.trim();
   emit('send', finalText);
 }
@@ -344,16 +355,21 @@ const sendText = async (rawText: string) => {
   const textToSend = rawText?.trim();
   if (!textToSend) return;
 
+  const currentText = textToSend;
+
   // Устанавливаем флаг отправки - блокируем обновление textarea из голосового ввода
   isSending.value = true;
 
   // Останавливаем микрофон, если он активен
   if (speechStore.isListening) {
-    await stop();
+    // Останавливаем микрофон, но не ждём финального колбэка - отправляем сразу.
+    void stop();
   }
 
   // Очищаем состояние голосового ввода
   speechBase.value = '';
+
+  // Очищаем ввод после захвата текста, чтобы отправка на мобильных срабатывала сразу.
   chat.userText = '';
 
   // Сбрасываем высоту textarea к исходному состоянию
@@ -363,7 +379,7 @@ const sendText = async (rawText: string) => {
 
   let res: any = null;
   try {
-    res = await chat.sendMessage(JSON.parse(JSON.stringify(textToSend)));
+    res = await chat.sendMessage(JSON.parse(JSON.stringify(currentText)));
   } catch (error) {
     console.error('[sendText] Failed to send message:', error);
     isSending.value = false; // Сбрасываем флаг при ошибке
@@ -393,9 +409,22 @@ const sendText = async (rawText: string) => {
 };
 
 const onSend = async () => {
+  if (isSending.value) return;
   if (!chat.userText?.trim()) return;
   await sendText(chat.userText);
 };
+
+function onSendPointer() {
+  // На мобильных отправляем сразу по pointerdown, чтобы не ждать закрытия клавиатуры.
+  lastSendPointerTs.value = Date.now();
+  void onSend();
+}
+
+function onSendClick() {
+  // Отсекаем "второй" клик после pointerdown на тач-устройствах.
+  if (Date.now() - lastSendPointerTs.value < 500) return;
+  void onSend();
+}
 
 const handleChipSelect = async (chip: SuggestedChip) => {
   // Чипы отправляются сразу, не заполняя textarea.
@@ -415,7 +444,6 @@ const handleActionChip = async (chip: SuggestedChip) => {
 
   if (chip.action === 'open_meditations') {
     await router.push('/meditations');
-    useToast('Открываю медитации');
     return;
   }
 
@@ -424,7 +452,6 @@ const handleActionChip = async (chip: SuggestedChip) => {
       path: '/meditations',
       query: { trackId: chip.params.trackId },
     });
-    useToast('Открываю медитацию');
     return;
   }
 
@@ -434,7 +461,6 @@ const handleActionChip = async (chip: SuggestedChip) => {
   ) {
     // collectionId трактуем как ключ темы медитаций
     await router.push(`/meditations?topic=${chip.params.collectionId}`);
-    useToast('Открываю подборку');
   }
 };
 
@@ -690,7 +716,6 @@ watch(
     }
   }
 );
-
 </script>
 
 <style scoped>

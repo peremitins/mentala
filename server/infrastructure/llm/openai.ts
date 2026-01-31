@@ -1,11 +1,16 @@
 // server/infrastructure/llm/openai.ts
 
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { $fetch } from 'ofetch';
 import { createError } from 'h3';
 import OpenAI from 'openai';
 import type { LlmProviderPort } from '../../ports';
 import { config } from '../../config';
+import {
+  isRelayEnabled,
+  relayResponsesRequest,
+  relayResponsesStream,
+} from './relayClient';
 import { summaryStore } from '../../utils/summaryStore';
 import { responseIdStore } from '../../utils/responseIdStore';
 import { readChatSettings } from '../../utils/storage';
@@ -23,11 +28,99 @@ const OPENAI_URL = 'https://api.openai.com/v1/responses';
 const MIN_SUMMARY_USER_MESSAGES = 1;
 const MIN_SUMMARY_USER_CHARS = 20;
 
+// Временно отключаем отправку запросов в OpenAI (чат и уведомления).
+const OPENAI_REQUESTS_DISABLED = false;
+
 // In-memory cache for current session encrypted reasoning
 const sessionCache = new Map<
   string,
   { encryptedReasoning?: string | null; lastUsedModel?: string }
 >();
+
+const ALLOW_PROMPT_LOGS =
+  process.env.NODE_ENV === 'development' ||
+  process.env.AI_LOG_PROMPTS === 'true';
+
+type RelayPurpose =
+  | 'chat'
+  | 'chat_stream'
+  | 'chips'
+  | 'finish_session'
+  | 'notification'
+  | 'other';
+
+function ensureOpenAiEnabled(context: string) {
+  if (!OPENAI_REQUESTS_DISABLED) return;
+  throw createError({
+    statusCode: 503,
+    message: `OpenAI временно отключен (${context})`,
+  });
+}
+
+// Создаем SDK-клиент с org/project, чтобы стрим учитывал настройки организации и проекта.
+function createOpenAiClient(apiKey: string) {
+  ensureOpenAiEnabled('sdk_client');
+  const organization =
+    process.env.NUXT_OPENAI_ORG_ID || process.env.OPENAI_ORG_ID;
+  const project =
+    process.env.NUXT_OPENAI_PROJECT_ID || process.env.OPENAI_PROJECT_ID;
+
+  return new OpenAI({ apiKey, organization, project });
+}
+
+function resolveRelayPurpose(
+  options?: { scenario?: 'chat' | 'notifications' | 'chips' },
+  isStream?: boolean
+): RelayPurpose {
+  if (isStream) return 'chat_stream';
+  if (options?.scenario === 'chips') return 'chips';
+  if (options?.scenario === 'notifications') return 'notification';
+  return 'chat';
+}
+
+async function sendResponsesRequest(params: {
+  body: any;
+  purpose: RelayPurpose;
+  timeoutMs?: number;
+  apiKey?: string;
+  org?: string | null;
+  project?: string | null;
+  idempotencyKey?: string;
+  requestId?: string;
+}) {
+  ensureOpenAiEnabled('responses_request');
+  if (isRelayEnabled()) {
+    return await relayResponsesRequest({
+      path: '/v1/responses',
+      body: params.body,
+      purpose: params.purpose,
+      timeoutMs: params.timeoutMs,
+      requestId: params.requestId,
+    });
+  }
+
+  if (!params.apiKey) {
+    throw createError({
+      statusCode: 500,
+      message: 'NUXT_OPENAI_API_KEY is not set',
+    });
+  }
+
+  return await $fetch(OPENAI_URL, {
+    method: 'POST',
+    timeout: params.timeoutMs,
+    headers: {
+      Authorization: `Bearer ${params.apiKey}`,
+      'Content-Type': 'application/json',
+      ...(params.org ? { 'OpenAI-Organization': params.org } : {}),
+      ...(params.project ? { 'OpenAI-Project': params.project } : {}),
+      ...(params.idempotencyKey
+        ? { 'Idempotency-Key': params.idempotencyKey }
+        : {}),
+    },
+    body: params.body,
+  });
+}
 
 function extractText(res: any): string {
   return res?.output_text || res?.output?.[0]?.content?.[0]?.text || '';
@@ -222,11 +315,21 @@ function formatPromptsForLogging(input: any[]): any[] {
       .join('')
       .trim();
 
+    const textHash = !ALLOW_PROMPT_LOGS
+      ? createHash('sha256').update(textContent).digest('hex')
+      : undefined;
+    const previewLimit = 500;
+    const textPreview = ALLOW_PROMPT_LOGS
+      ? textContent.slice(0, previewLimit)
+      : undefined;
+
+    // В проде не логируем содержимое; оставляем длину и хэш.
     return {
       index,
       role,
       textLength: textContent.length,
-      textPreview: textContent.length > 500 ? `${textContent}` : textContent,
+      ...(textPreview ? { textPreview } : {}),
+      ...(textHash ? { textHash } : {}),
     };
   });
 }
@@ -235,12 +338,9 @@ export const openaiProvider: LlmProviderPort = {
   id: 'openai',
 
   async chat({ messages, model, options }: any) {
-    const apiKey = process.env.NUXT_OPENAI_API_KEY;
-    if (!apiKey)
-      throw createError({
-        statusCode: 500,
-        message: 'NUXT_OPENAI_API_KEY is not set',
-      });
+    ensureOpenAiEnabled('chat');
+    const useRelay = isRelayEnabled();
+    const apiKey = useRelay ? undefined : process.env.NUXT_OPENAI_API_KEY;
 
     const usedModel = model || config.llm.openai.defaultModel;
     const maxTokens =
@@ -253,6 +353,7 @@ export const openaiProvider: LlmProviderPort = {
     const project =
       process.env.NUXT_OPENAI_PROJECT_ID || process.env.OPENAI_PROJECT_ID;
     const idempotencyKey = randomUUID();
+    const relayRequestId = randomUUID();
 
     const sessionId: string | undefined = options?.sessionId;
     const cached = sessionId ? sessionCache.get(sessionId) : undefined;
@@ -263,9 +364,21 @@ export const openaiProvider: LlmProviderPort = {
         process.env.OPENAI_ENABLE_ENCRYPTED_REASONING) ??
         'false') === 'true';
 
+    const purpose = resolveRelayPurpose(options, false);
+
     if (options?.scenario === 'chips') {
       // Для чипов используем сырой prompt без чат-прелюда и памяти.
       const input = mapToResponsesInput(messages || []);
+      const chipIntents = [
+        'clarify',
+        'example',
+        'apply_to_self',
+        'action_step',
+        'reflect',
+        'reframe',
+        'summarize',
+        'support',
+      ];
       const chipSchema = {
         type: 'object',
         additionalProperties: false,
@@ -275,42 +388,23 @@ export const openaiProvider: LlmProviderPort = {
             type: 'array',
             maxItems: 5,
             items: {
+              // OpenAI strict json_schema не поддерживает oneOf.
+              // Поэтому требуем все поля, а необязательные допускаем как null.
               type: 'object',
               additionalProperties: false,
-              required: ['text', 'intent'],
+              required: ['text', 'intent', 'kind', 'action', 'params'],
               properties: {
                 text: { type: 'string', minLength: 1, maxLength: 80 },
-                intent: {
-                  type: 'string',
-                  enum: [
-                    'clarify',
-                    'example',
-                    'apply_to_self',
-                    'action_step',
-                    'reflect',
-                    'reframe',
-                    'summarize',
-                    'support',
-                  ],
-                },
-                kind: {
-                  type: 'string',
-                  enum: ['text', 'action'],
-                },
-                action: {
-                  type: 'string',
-                  enum: [
-                    'open_meditations',
-                    'open_meditation_track',
-                    'open_meditations_collection',
-                  ],
-                },
+                intent: { type: 'string', enum: chipIntents },
+                kind: { type: 'string', enum: ['text', 'action'] },
+                action: { type: ['string', 'null'] },
                 params: {
-                  type: 'object',
+                  type: ['object', 'null'],
                   additionalProperties: false,
+                  required: ['trackId', 'collectionId'],
                   properties: {
-                    trackId: { type: 'string' },
-                    collectionId: { type: 'string' },
+                    trackId: { type: ['string', 'null'] },
+                    collectionId: { type: ['string', 'null'] },
                   },
                 },
               },
@@ -335,25 +429,25 @@ export const openaiProvider: LlmProviderPort = {
           },
         },
       };
+      const purpose = resolveRelayPurpose(options, false);
 
       try {
-        const res: any = await $fetch(OPENAI_URL, {
-          method: 'POST',
-          timeout: 30_000,
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-            ...(org ? { 'OpenAI-Organization': org } : {}),
-            ...(project ? { 'OpenAI-Project': project } : {}),
-            'Idempotency-Key': idempotencyKey,
-          },
+        const res: any = await sendResponsesRequest({
           body,
+          purpose,
+          timeoutMs: 30_000,
+          apiKey,
+          org,
+          project,
+          idempotencyKey,
+          requestId: randomUUID(),
         });
 
         const content = extractText(res);
         return { role: 'assistant', content, model: usedModel };
       } catch (err: any) {
-        const status = err?.response?.status || err?.status || 500;
+        const status =
+          err?.response?.status || err?.status || err?.statusCode || 500;
         const openaiMessage =
           err?.data?.error?.message ||
           err?.data?.message ||
@@ -383,17 +477,15 @@ export const openaiProvider: LlmProviderPort = {
               ...body,
               text: {}, // без structured output
             };
-            const fallbackRes: any = await $fetch(OPENAI_URL, {
-              method: 'POST',
-              timeout: 30_000,
-              headers: {
-                Authorization: `Bearer ${apiKey}`,
-                'Content-Type': 'application/json',
-                ...(org ? { 'OpenAI-Organization': org } : {}),
-                ...(project ? { 'OpenAI-Project': project } : {}),
-                'Idempotency-Key': idempotencyKey,
-              },
+            const fallbackRes: any = await sendResponsesRequest({
               body: fallbackBody,
+              purpose,
+              timeoutMs: 30_000,
+              apiKey,
+              org,
+              project,
+              idempotencyKey,
+              requestId: randomUUID(),
             });
             const content = extractText(fallbackRes);
             console.warn(
@@ -402,7 +494,10 @@ export const openaiProvider: LlmProviderPort = {
             return { role: 'assistant', content, model: usedModel };
           } catch (fallbackErr: any) {
             const fallbackStatus =
-              fallbackErr?.response?.status || fallbackErr?.status || status;
+              fallbackErr?.response?.status ||
+              fallbackErr?.status ||
+              fallbackErr?.statusCode ||
+              status;
             const fallbackMessage =
               fallbackErr?.data?.error?.message ||
               fallbackErr?.data?.message ||
@@ -607,17 +702,15 @@ export const openaiProvider: LlmProviderPort = {
           prompts: formatPromptsForLogging(input),
         });
 
-        const res: any = await $fetch(OPENAI_URL, {
-          method: 'POST',
-          timeout: 30_000,
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-            ...(org ? { 'OpenAI-Organization': org } : {}),
-            ...(project ? { 'OpenAI-Project': project } : {}),
-            'Idempotency-Key': idempotencyKey,
-          },
+        const res: any = await sendResponsesRequest({
           body,
+          purpose,
+          timeoutMs: 30_000,
+          apiKey,
+          org,
+          project,
+          idempotencyKey,
+          requestId: relayRequestId,
         });
 
         const content = extractText(res);
@@ -662,7 +755,7 @@ export const openaiProvider: LlmProviderPort = {
 
         return { role: 'assistant', content, model: usedModel };
       } catch (err: any) {
-        const status = err?.response?.status || err?.status;
+        const status = err?.response?.status || err?.status || err?.statusCode;
         const headers = err?.response?.headers;
         const messageText = err?.data?.error?.message || err?.message || '';
 
@@ -707,6 +800,7 @@ export const openaiProvider: LlmProviderPort = {
   },
 
   async finishSession({ sessionId, allMessages, userId, model }: any) {
+    ensureOpenAiEnabled('finish_session');
     if (!sessionId || !userId) {
       return;
     }
@@ -745,18 +839,15 @@ export const openaiProvider: LlmProviderPort = {
       return;
     }
 
-    const apiKey = process.env.NUXT_OPENAI_API_KEY;
-    if (!apiKey)
-      throw createError({
-        statusCode: 500,
-        message: 'NUXT_OPENAI_API_KEY is not set',
-      });
+    const useRelay = isRelayEnabled();
+    const apiKey = useRelay ? undefined : process.env.NUXT_OPENAI_API_KEY;
 
     const usedModel = model || config.llm.openai.defaultModel;
     const org = process.env.NUXT_OPENAI_ORG_ID || process.env.OPENAI_ORG_ID;
     const project =
       process.env.NUXT_OPENAI_PROJECT_ID || process.env.OPENAI_PROJECT_ID;
     const idempotencyKey = randomUUID();
+    const relayRequestId = randomUUID();
 
     const lastK = (allMessages || []).slice(-12);
 
@@ -801,17 +892,15 @@ export const openaiProvider: LlmProviderPort = {
     );
 
     try {
-      const res: any = await $fetch(OPENAI_URL, {
-        method: 'POST',
-        timeout: 30_000,
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-          ...(org ? { 'OpenAI-Organization': org } : {}),
-          ...(project ? { 'OpenAI-Project': project } : {}),
-          'Idempotency-Key': idempotencyKey,
-        },
+      const res: any = await sendResponsesRequest({
         body,
+        purpose: 'finish_session',
+        timeoutMs: 30_000,
+        apiKey,
+        org,
+        project,
+        idempotencyKey,
+        requestId: relayRequestId,
       });
 
       const raw = extractText(res);
@@ -832,12 +921,15 @@ export const openaiProvider: LlmProviderPort = {
   },
 
   async *chatStream({ messages, model, options }: any): AsyncIterable<string> {
-    const apiKey = process.env.NUXT_OPENAI_API_KEY;
-    if (!apiKey)
+    ensureOpenAiEnabled('chat_stream');
+    const useRelay = isRelayEnabled();
+    const apiKey = useRelay ? undefined : process.env.NUXT_OPENAI_API_KEY;
+    if (!useRelay && !apiKey) {
       throw createError({
         statusCode: 500,
         message: 'NUXT_OPENAI_API_KEY is not set',
       });
+    }
 
     // Получаем настройки пользователя для управления памятью
     const chatSettings = options?.userId
@@ -983,8 +1075,6 @@ export const openaiProvider: LlmProviderPort = {
         // НЕ добавляем messages - они пустые для welcome-старта!
       ];
 
-      const openai = new OpenAI({ apiKey });
-
       const streamOptions: any = {
         model: usedModel,
         input,
@@ -1025,52 +1115,80 @@ export const openaiProvider: LlmProviderPort = {
         }
       );
 
-      const stream = await openai.responses.stream(streamOptions);
-
       let responseId: string | undefined;
       let deltaCount = 0;
-      let hasError = false;
 
-      try {
-        for await (const ev of stream as any) {
-          if (ev?.type === 'response.output_text.delta' && ev?.delta) {
+      if (useRelay) {
+        const { stream, responseIdPromise } = await relayResponsesStream({
+          path: '/v1/responses',
+          body: { ...streamOptions, stream: true },
+          purpose: 'chat_stream',
+          requestId: randomUUID(),
+        });
+
+        try {
+          for await (const delta of stream) {
             deltaCount++;
-            yield String(ev.delta);
+            yield String(delta);
           }
-          if (ev?.type === 'response.completed') {
-            responseId =
-              ev?.response?.id ||
-              ev?.id ||
-              ev?.response_id ||
-              (ev?.response as any)?.id;
-            break;
-          }
-          if (ev?.type === 'response.error') {
-            hasError = true;
-            console.error(
-              '[OpenAI Stream] Stream error event:',
-              'userId:',
-              options?.userId,
-              'error:',
-              ev.error?.message || 'Unknown error'
-            );
-            throw createError({
-              statusCode: 500,
-              message: ev.error?.message || 'Stream error',
-            });
-          }
+        } catch (streamError: any) {
+          console.error(
+            '[Relay Stream] Error in welcome stream loop:',
+            'userId:',
+            options?.userId,
+            'deltaCount:',
+            deltaCount,
+            'error:',
+            streamError?.message || String(streamError)
+          );
+          throw streamError;
         }
-      } catch (streamError: any) {
-        console.error(
-          '[OpenAI Stream] Error in welcome stream loop:',
-          'userId:',
-          options?.userId,
-          'deltaCount:',
-          deltaCount,
-          'error:',
-          streamError?.message || String(streamError)
-        );
-        throw streamError;
+
+        responseId = await responseIdPromise;
+      } else {
+        const openai = createOpenAiClient(apiKey!);
+        const stream = await openai.responses.stream(streamOptions);
+
+        try {
+          for await (const ev of stream as any) {
+            if (ev?.type === 'response.output_text.delta' && ev?.delta) {
+              deltaCount++;
+              yield String(ev.delta);
+            }
+            if (ev?.type === 'response.completed') {
+              responseId =
+                ev?.response?.id ||
+                ev?.id ||
+                ev?.response_id ||
+                (ev?.response as any)?.id;
+              break;
+            }
+            if (ev?.type === 'response.error') {
+              console.error(
+                '[OpenAI Stream] Stream error event:',
+                'userId:',
+                options?.userId,
+                'error:',
+                ev.error?.message || 'Unknown error'
+              );
+              throw createError({
+                statusCode: 500,
+                message: ev.error?.message || 'Stream error',
+              });
+            }
+          }
+        } catch (streamError: any) {
+          console.error(
+            '[OpenAI Stream] Error in welcome stream loop:',
+            'userId:',
+            options?.userId,
+            'deltaCount:',
+            deltaCount,
+            'error:',
+            streamError?.message || String(streamError)
+          );
+          throw streamError;
+        }
       }
 
       // Сохраняем response_id для следующего запроса (если включено)
@@ -1176,8 +1294,6 @@ export const openaiProvider: LlmProviderPort = {
     // Но мы все равно должны передавать ВСЕ сообщения текущей сессии (не только новые).
     // Проблема: после перезагрузки страницы messages содержит только новые сообщения.
 
-    const openai = new OpenAI({ apiKey });
-
     const streamOptions: any = {
       model: usedModel,
       input,
@@ -1224,30 +1340,84 @@ export const openaiProvider: LlmProviderPort = {
         prompts: formatPromptsForLogging(input),
       }
     );
-
-    const stream = await openai.responses.stream(streamOptions);
-
     let responseId: string | undefined;
+    if (useRelay) {
+      const { stream, responseIdPromise } = await relayResponsesStream({
+        path: '/v1/responses',
+        body: { ...streamOptions, stream: true },
+        purpose: 'chat_stream',
+        requestId: randomUUID(),
+      });
 
-    for await (const ev of stream as any) {
-      if (ev?.type === 'response.output_text.delta' && ev?.delta) {
-        yield String(ev.delta);
+      let streamError: unknown;
+      let deltaCount = 0;
+      try {
+        for await (const delta of stream) {
+          deltaCount++;
+          yield String(delta);
+        }
+      } catch (err) {
+        streamError = err;
+        console.error(
+          '[Relay Stream] Error in chat stream loop:',
+          'userId:',
+          options?.userId,
+          'deltaCount:',
+          deltaCount,
+          'error:',
+          (err as Error)?.message || String(err)
+        );
+      } finally {
+        responseId = await responseIdPromise;
       }
-      if (ev?.type === 'response.completed') {
-        // Сохраняем response_id из завершенного ответа
-        // В Responses API stream response_id может быть в разных местах
-        responseId =
-          ev?.response?.id ||
-          ev?.id ||
-          ev?.response_id ||
-          (ev?.response as any)?.id;
-        break;
+
+      if (streamError) {
+        throw streamError;
       }
-      if (ev?.type === 'response.error') {
-        throw createError({
-          statusCode: 500,
-          message: ev.error?.message || 'Stream error',
-        });
+    } else {
+      const openai = createOpenAiClient(apiKey!);
+      const stream = await openai.responses.stream(streamOptions);
+
+      let streamError: unknown;
+      let deltaCount = 0;
+      try {
+        for await (const ev of stream as any) {
+          if (ev?.type === 'response.output_text.delta' && ev?.delta) {
+            deltaCount++;
+            yield String(ev.delta);
+          }
+          if (ev?.type === 'response.completed') {
+            // Сохраняем response_id из завершенного ответа
+            // В Responses API stream response_id может быть в разных местах
+            responseId =
+              ev?.response?.id ||
+              ev?.id ||
+              ev?.response_id ||
+              (ev?.response as any)?.id;
+            break;
+          }
+          if (ev?.type === 'response.error') {
+            throw createError({
+              statusCode: 500,
+              message: ev.error?.message || 'Stream error',
+            });
+          }
+        }
+      } catch (err) {
+        streamError = err;
+        console.error(
+          '[OpenAI Stream] Error in chat stream loop:',
+          'userId:',
+          options?.userId,
+          'deltaCount:',
+          deltaCount,
+          'error:',
+          (err as Error)?.message || String(err)
+        );
+      }
+
+      if (streamError) {
+        throw streamError;
       }
     }
 

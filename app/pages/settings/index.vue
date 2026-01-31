@@ -122,8 +122,9 @@
                 </p>
               </div>
               <Switch
-                v-model:checked="marketingConsent"
+                :checked="marketingConsent"
                 class="flex-shrink-0"
+                :loading="marketingConsentLoading"
                 @update:checked="handleMarketingConsentChange"
               />
             </div>
@@ -288,6 +289,7 @@ const loadingPreferences = ref(true);
 const showDeleteDialog = ref(false);
 const isDeleting = ref(false);
 const marketingConsent = ref(false);
+const marketingConsentLoading = ref(false);
 
 const isLoading = computed(() => loadingUser.value || loadingPreferences.value);
 const isAdmin = computed(() => auth.user?.role === 'admin');
@@ -367,6 +369,7 @@ onMounted(async () => {
 });
 
 async function handleMarketingConsentChange(value: boolean) {
+  marketingConsentLoading.value = true;
   try {
     await useAPI('/api/user/me', {
       method: 'PATCH',
@@ -389,6 +392,8 @@ async function handleMarketingConsentChange(value: boolean) {
     console.error('Не удалось обновить маркетинговое согласие:', error);
     marketingConsent.value = !value;
     useToast('Ошибка', 'Не удалось сохранить настройку', 'error');
+  } finally {
+    marketingConsentLoading.value = false;
   }
 }
 

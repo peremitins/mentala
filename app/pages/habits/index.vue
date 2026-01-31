@@ -46,6 +46,7 @@ import { BREATH_PRACTICES } from '@/app/lib/breathPracticesCatalog';
 import { HABITS_CATALOG, type HabitCatalogItem } from '@/app/lib/habitsCatalog';
 import { useUserHabitsStore } from '@/app/stores/userHabits';
 import { useLoadersStore } from '@/app/stores/loaders';
+import { useNotificationsStore } from '@/app/stores/notifications';
 import { useChatStore } from '@/app/stores/chat';
 import type { HabitDto, TherapyTopicDto } from '@/shared/dto/notifications';
 import CustomEntityModal from '@/app/components/modals/CustomEntityModal.vue';
@@ -70,12 +71,16 @@ const intentColors: Record<string, string> = {
 const userHabitsStore = useUserHabitsStore();
 const chat = useChatStore();
 const loadersStore = useLoadersStore();
+const notificationsStore = useNotificationsStore();
 const { habits: userHabits } = storeToRefs(userHabitsStore);
 
 // Загружаем данные после монтирования компонента (с кэшированием)
 // Защита от двойного вызова реализована в store через isSkeletonLoading флаг
 onMounted(async () => {
-  await userHabitsStore.fetchAll();
+  await Promise.all([
+    userHabitsStore.fetchAll(),
+    notificationsStore.fetchAll(),
+  ]);
 });
 
 function buildHabitQuickActions(habitKey: string, isCustom: boolean) {
@@ -95,23 +100,32 @@ function buildHabitQuickActions(habitKey: string, isCustom: boolean) {
 }
 
 const baseHabitItems = computed(() =>
-  HABITS_CATALOG.map((goal) => ({
-    id: goal.habitKey,
-    name: goal.name,
-    description: goal.description,
-    emoji: goal.emoji,
-    gradientClass:
-      intentColors[goal.intent] ||
-      intentColors.custom ||
-      'from-gray-500 to-slate-500',
-    payload: { ...goal, intent: goal.intent },
-    quickActions: buildHabitQuickActions(goal.habitKey, false),
-  }))
+  HABITS_CATALOG.map((goal) => {
+    const pref = notificationsStore.getPreference('habits', {
+      entityKey: goal.habitKey,
+    });
+    return {
+      id: goal.habitKey,
+      name: goal.name,
+      description: goal.description,
+      emoji: goal.emoji,
+      gradientClass:
+        intentColors[goal.intent] ||
+        intentColors.custom ||
+        'from-gray-500 to-slate-500',
+      payload: { ...goal, intent: goal.intent },
+      notificationsEnabled: pref?.enabled ?? false,
+      quickActions: buildHabitQuickActions(goal.habitKey, false),
+    };
+  })
 );
 
 const customHabitItems = computed(() =>
   userHabits.value.map((habit) => {
     const normalizedIntent = habit.intent === 'quit' ? 'quit' : 'build';
+    const pref = notificationsStore.getPreference('habits', {
+      entityKey: habit.id,
+    });
     return {
       id: habit.id, // Используем ID
       name: habit.name,
@@ -124,7 +138,7 @@ const customHabitItems = computed(() =>
         'from-gray-500 to-slate-500',
       payload: { ...habit, type: 'user', intent: normalizedIntent },
       canDelete: true,
-      // Кастомные привычки — только чат.
+      notificationsEnabled: pref?.enabled ?? false,
       quickActions: buildHabitQuickActions(habit.id, true),
     };
   })

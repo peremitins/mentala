@@ -98,7 +98,9 @@
       <NotificationsSummaryCard
         :preference="preference"
         :loading="prefLoading"
+        :toggle-loading="prefToggleLoading"
         @edit="goToNotifications"
+        @toggle="onToggleNotifications"
       />
 
       <StateBlock v-if="notificationError" state="error" class="mt-2">
@@ -135,7 +137,8 @@ const route = useRoute();
 const chat = useChatStore();
 const userHabitsStore = useUserHabitsStore();
 const loaders = useLoadersStore();
-const { fetchNotificationPreferences } = useNotificationsSettings();
+const { fetchNotificationPreferences, updateNotificationPreferences } =
+  useNotificationsSettings();
 
 const entityKey = computed(() => String(route.params.id || ''));
 
@@ -147,6 +150,7 @@ const { $api } = useNuxtApp();
 
 const preference = ref<NotificationPreferencesDto | null>(null);
 const prefLoading = ref(true);
+const prefToggleLoading = ref(false);
 const notificationError = ref<string | null>(null);
 
 const habitGradients: Record<string, string> = {
@@ -312,6 +316,26 @@ async function loadPreference() {
       error?.message || 'Не удалось загрузить настройки уведомлений';
   } finally {
     prefLoading.value = false;
+  }
+}
+
+/** Обновление включено/выключено уведомлений по переключателю на карточке */
+async function onToggleNotifications(enabled: boolean) {
+  if (!entityKey.value) return;
+  notificationError.value = null;
+  prefToggleLoading.value = true;
+  try {
+    const data = await updateNotificationPreferences('habits', {
+      enabled,
+      entityKey: entityKey.value,
+    });
+    if (data) preference.value = data;
+  } catch (error: any) {
+    console.error('[HabitDetail] Toggle notifications failed:', error);
+    notificationError.value =
+      error?.message || 'Не удалось обновить настройки уведомлений';
+  } finally {
+    prefToggleLoading.value = false;
   }
 }
 

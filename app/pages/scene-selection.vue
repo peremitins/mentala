@@ -93,7 +93,11 @@
               Плавное движение фона для эффекта присутствия.
             </p>
           </div>
-          <Switch v-model:checked="animateBackground" />
+          <Switch
+            :checked="sceneSettings.animateBackground"
+            :loading="animateBackgroundLoading"
+            @update:checked="onAnimateBackgroundChange"
+          />
         </div>
       </section>
 
@@ -200,13 +204,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { navigateTo } from '#app';
 import PageHeader from '@/app/components/PageHeader.vue';
 import TimePicker from '@/app/components/TimePicker.vue';
 import { Switch } from '@/app/components/ui/shadcn/switch';
 import { useSceneSettingsStore } from '@/app/stores/sceneSettings';
 import { useUiSettingsStore } from '@/app/stores/uiSettings';
+import { useAuthStore } from '@/app/stores/auth';
 import {
   DEFAULT_SCENE_ID,
   SCENE_TRACKS,
@@ -250,12 +255,36 @@ const backgroundPlayMinutes = computed({
   },
 });
 
-const animateBackground = computed({
-  get: () => sceneSettings.animateBackground,
-  set: (value: boolean) => {
-    sceneSettings.updateSettings({ animateBackground: value });
-  },
-});
+const animateBackgroundLoading = ref(false);
+
+async function onAnimateBackgroundChange(value: boolean) {
+  animateBackgroundLoading.value = true;
+  const auth = useAuthStore();
+  try {
+    const payload = {
+      sceneSettings: {
+        sceneId: sceneSettings.sceneId,
+        volume: sceneSettings.volume,
+        backgroundPlayMinutes: sceneSettings.backgroundPlayMinutes,
+        animateBackground: value,
+      },
+    };
+    const response: any = await useAPI('/api/user/me', {
+      method: 'PATCH',
+      body: payload,
+    });
+    sceneSettings.applySettings({ animateBackground: value });
+    if (response?.user) {
+      auth.user = response.user;
+    } else if (auth.user) {
+      (auth.user as any).sceneSettings = payload.sceneSettings;
+    }
+  } catch (error) {
+    console.error('[SceneSelection] Не удалось сохранить живой фон:', error);
+  } finally {
+    animateBackgroundLoading.value = false;
+  }
+}
 
 const currentSceneId = computed(
   () => sceneSettings.sceneId ?? DEFAULT_SCENE_ID
