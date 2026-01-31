@@ -18,6 +18,7 @@ import { welcomePromptStore } from '../../utils/welcomePromptStore';
 import {
   buildSummaryPrompt,
   buildChatPrelude,
+  buildDeveloperContext,
   buildSessionMemoryText,
   buildChatPreludeWithMemory,
   buildWelcomePrompt,
@@ -27,6 +28,11 @@ import {
 const OPENAI_URL = 'https://api.openai.com/v1/responses';
 const MIN_SUMMARY_USER_MESSAGES = 1;
 const MIN_SUMMARY_USER_CHARS = 20;
+// Summary-память полностью отключена в продукте:
+// - экономим токены (не передаём лишний контекст в OpenAI),
+// - оставляем только manual-память через previous_response_id.
+// Код summary сохраняем для возможного возвращения в будущем, но НЕ используем сейчас.
+const SUMMARY_ENABLED = false;
 
 // Временно отключаем отправку запросов в OpenAI (чат и уведомления).
 const OPENAI_REQUESTS_DISABLED = false;
@@ -37,9 +43,8 @@ const sessionCache = new Map<
   { encryptedReasoning?: string | null; lastUsedModel?: string }
 >();
 
-const ALLOW_PROMPT_LOGS =
-  process.env.NODE_ENV === 'development' ||
-  process.env.AI_LOG_PROMPTS === 'true';
+// В проде никогда не логируем промпты. В dev всегда показываем полный текст.
+const ALLOW_PROMPT_LOGS = process.env.NODE_ENV === 'development';
 
 type RelayPurpose =
   | 'chat'
@@ -318,10 +323,9 @@ function formatPromptsForLogging(input: any[]): any[] {
     const textHash = !ALLOW_PROMPT_LOGS
       ? createHash('sha256').update(textContent).digest('hex')
       : undefined;
-    const previewLimit = 500;
-    const textPreview = ALLOW_PROMPT_LOGS
-      ? textContent.slice(0, previewLimit)
-      : undefined;
+    // В dev логируем полный текст без обрезки, чтобы видеть реальный prompt.
+    // В проде содержимое скрывается через ALLOW_PROMPT_LOGS=false.
+    const textPreview = ALLOW_PROMPT_LOGS ? textContent : undefined;
 
     // В проде не логируем содержимое; оставляем длину и хэш.
     return {
@@ -526,7 +530,9 @@ export const openaiProvider: LlmProviderPort = {
           : null;
         const enablePreviousResponseId =
           chatSettings?.enablePreviousResponseId ?? true;
-        const enableSummary = chatSettings?.enableSummary ?? true;
+        // Summary отключена глобально (см. SUMMARY_ENABLED), настройки пользователя игнорируем.
+        const enableSummary =
+          SUMMARY_ENABLED && (chatSettings?.enableSummary ?? true);
         // Получаем последний валидный response_id (если включено)
         let previousResponseId: string | undefined;
         if (enablePreviousResponseId && options?.userId) {
@@ -553,7 +559,6 @@ export const openaiProvider: LlmProviderPort = {
         // Memory-aware prelude: при повторных — подмешиваем summary (если включено)
         // Важно: isFirst должен учитывать не только summary, но и previous_response_id
         // Если хотя бы один механизм памяти включен и есть данные - это не первая сессия
-        const hasSummary = enableSummary && options?.userId != null;
         const hasPreviousResponseId =
           enablePreviousResponseId && previousResponseId;
 
@@ -561,7 +566,9 @@ export const openaiProvider: LlmProviderPort = {
         let sessionMemoryText = '';
         let isFirst = Boolean(options?.isFirstSession);
 
-        if (hasSummary && options?.userId != null) {
+        // Summary-память сейчас отключена (SUMMARY_ENABLED = false).
+        // Логику оставляем в коде для возможного будущего возвращения.
+        if (enableSummary && options?.userId != null) {
           try {
             const all = await summaryStore.getSummaries(options.userId, 4); // Лимит последних 4 для оптимизации токенов
             if (all && all.length > 0) {
@@ -611,28 +618,30 @@ export const openaiProvider: LlmProviderPort = {
           }
         );
 
-        const developerStyle = '';
+        const developerContext = buildDeveloperContext(
+          {
+            user_name: options?.user_name,
+            user_gender: options?.user_gender,
+          },
+          { responseNumber }
+        );
 
         // Собираем корректный массив сообщений с валидными типами контента
+        const minimalMessages = lastUserMessage
+          ? [{ role: 'user', content: lastUserMessage }]
+          : [];
+
         const input = [
           {
             role: 'system',
             content: [{ type: 'input_text' as const, text: systemPrelude }],
           },
-          {
-            role: 'developer',
-            content: [{ type: 'input_text' as const, text: developerStyle }],
-          },
-          // ПАМЯТЬ ПРОШЛЫХ СЕССИЙ → developer-блок до истории сообщений
-          ...(!isFirst && sessionMemoryText
+          ...(developerContext
             ? [
                 {
                   role: 'developer' as const,
                   content: [
-                    {
-                      type: 'input_text' as const,
-                      text: `Справочный контекст прошлых сессий:\n${sessionMemoryText}`,
-                    },
+                    { type: 'input_text' as const, text: developerContext },
                   ],
                 },
               ]
@@ -650,9 +659,10 @@ export const openaiProvider: LlmProviderPort = {
                 },
               ]
             : []),
-          // Ограничиваем количество сообщений для оптимизации токенов
-          // Берем последние 30 сообщений (15 пар user-assistant)
-          ...mapToResponsesInput((messages || []).slice(-30)),
+          // В запрос отправляем только последнее сообщение пользователя.
+          // Контекст держим только через previous_response_id, чтобы не раздувать входные токены.
+          // История и summary намеренно не передаются (экономика + приватность).
+          ...mapToResponsesInput(minimalMessages),
         ];
         const body: any = {
           model: usedModel,
@@ -689,11 +699,9 @@ export const openaiProvider: LlmProviderPort = {
           sessionId: sessionId || 'none',
           isFirstSession: isFirst,
           hasPreviousResponseId: Boolean(previousResponseId),
-          hasSessionMemory: Boolean(sessionMemoryText),
           messagesCount: (messages || []).length,
-          messagesInContext: Math.min((messages || []).length, 30), // Ограничено до 30
+          messagesInContext: minimalMessages.length,
           userMessagesCount,
-          summariesCount: sessionMemoryText ? 4 : 0, // Теперь максимум 4
           temperature: body.temperature,
           maxOutputTokens: maxTokens,
           store: body.store,
@@ -802,6 +810,13 @@ export const openaiProvider: LlmProviderPort = {
   async finishSession({ sessionId, allMessages, userId, model }: any) {
     ensureOpenAiEnabled('finish_session');
     if (!sessionId || !userId) {
+      return;
+    }
+
+    // Summary отключена на уровне продукта: не генерируем и не сохраняем.
+    // Очищаем кэш сессии и выходим, чтобы не тратить токены.
+    if (!SUMMARY_ENABLED) {
+      sessionCache.delete(sessionId);
       return;
     }
 
@@ -937,7 +952,9 @@ export const openaiProvider: LlmProviderPort = {
       : null;
     const enablePreviousResponseId =
       chatSettings?.enablePreviousResponseId ?? true;
-    const enableSummary = chatSettings?.enableSummary ?? true;
+    // Summary отключена глобально (см. SUMMARY_ENABLED), настройки пользователя игнорируем.
+    const enableSummary =
+      SUMMARY_ENABLED && (chatSettings?.enableSummary ?? true);
     // ВАЖНО: Получаем последний валидный response_id ДО проверки welcome start
     // Это нужно для правильной работы памяти
     let previousResponseId: string | undefined;
@@ -972,14 +989,15 @@ export const openaiProvider: LlmProviderPort = {
 
     // Важно: isFirst должен учитывать не только summary, но и previous_response_id
     // Если хотя бы один механизм памяти включен и есть данные - это не первая сессия
-    const hasSummary = enableSummary && options?.userId != null;
     const hasPreviousResponseId =
       enablePreviousResponseId && previousResponseId;
 
     let sessionMemoryText = '';
     let isFirst = Boolean(options?.isFirstSession);
 
-    if (hasSummary && options?.userId != null) {
+    // Summary-память сейчас отключена (SUMMARY_ENABLED = false).
+    // Логику оставляем в коде для возможного будущего возвращения.
+    if (enableSummary && options?.userId != null) {
       try {
         const all = await summaryStore.getSummaries(options.userId, 10); // Лимит последних 10
         if (all && all.length > 0) {
@@ -1103,7 +1121,6 @@ export const openaiProvider: LlmProviderPort = {
           sessionId: options?.sessionId || 'none',
           isFirstSession: isFirst,
           hasPreviousResponseId: Boolean(previousResponseId),
-          hasSessionMemory: Boolean(sessionMemoryText),
           hasWelcomePrompt: Boolean(welcomePromptContent),
           temperature: streamOptions.temperature,
           maxOutputTokens: streamOptions.max_output_tokens,
@@ -1231,23 +1248,29 @@ export const openaiProvider: LlmProviderPort = {
       }
     );
 
-    const developerStyle = '';
+    const developerContext = buildDeveloperContext(
+      {
+        user_name: options?.user_name,
+        user_gender: options?.user_gender,
+      },
+      { responseNumber }
+    );
     const developerMessages: Array<{
       role: 'developer';
       content: Array<{ type: 'input_text'; text: string }>;
     }> = [];
 
+    if (developerContext) {
+      developerMessages.push({
+        role: 'developer',
+        content: [{ type: 'input_text' as const, text: developerContext }],
+      });
+    }
+
     if (contextNote) {
       developerMessages.push({
         role: 'developer',
         content: [{ type: 'input_text' as const, text: contextNote }],
-      });
-    }
-
-    if (developerStyle) {
-      developerMessages.push({
-        role: 'developer',
-        content: [{ type: 'input_text' as const, text: developerStyle }],
       });
     }
 
@@ -1257,20 +1280,6 @@ export const openaiProvider: LlmProviderPort = {
         content: [{ type: 'input_text' as const, text: systemPrelude }],
       },
       ...developerMessages,
-      // ПАМЯТЬ ПРОШЛЫХ СЕССИЙ → developer-блок до истории сообщений
-      ...(!isFirst && sessionMemoryText
-        ? [
-            {
-              role: 'developer' as const,
-              content: [
-                {
-                  type: 'input_text' as const,
-                  text: `Справочный контекст прошлых сессий:\n${sessionMemoryText}`,
-                },
-              ],
-            },
-          ]
-        : []),
       ...(options?.userPrompt
         ? [
             {
@@ -1284,15 +1293,16 @@ export const openaiProvider: LlmProviderPort = {
             },
           ]
         : []),
-      // Ограничиваем количество сообщений для оптимизации токенов
-      // Берем последние 30 сообщений (15 пар user-assistant)
-      // previous_response_id уже содержит контекст, поэтому можно безопасно обрезать
-      ...mapToResponsesInput((messages || []).slice(-30)),
+      // В запрос отправляем только последнее сообщение пользователя.
+      // Контекст держим только через previous_response_id, чтобы не раздувать входные токены.
+      // История и summary намеренно не передаются (экономика + приватность).
+      ...mapToResponsesInput(
+        lastUserMessage ? [{ role: 'user', content: lastUserMessage }] : []
+      ),
     ];
 
-    // ВАЖНО: Когда используется previous_response_id, OpenAI восстанавливает контекст из предыдущего ответа.
-    // Но мы все равно должны передавать ВСЕ сообщения текущей сессии (не только новые).
-    // Проблема: после перезагрузки страницы messages содержит только новые сообщения.
+    // ВАЖНО: История сообщений намеренно не отправляется.
+    // Контекст — только через previous_response_id (если включён пользователем).
 
     const streamOptions: any = {
       model: usedModel,
@@ -1323,11 +1333,9 @@ export const openaiProvider: LlmProviderPort = {
         sessionId: options?.sessionId || 'none',
         isFirstSession: isFirst,
         hasPreviousResponseId: Boolean(previousResponseId),
-        hasSessionMemory: Boolean(sessionMemoryText),
         messagesCount: (messages || []).length,
-        messagesInContext: Math.min((messages || []).length, 30), // Ограничено до 30
+        messagesInContext: lastUserMessage ? 1 : 0,
         userMessagesCount,
-        summariesCount: sessionMemoryText ? 4 : 0, // Теперь максимум 4
         responseNumber,
         hasEntryContext: Boolean(contextNote),
         hasUserPrompt: Boolean(options?.userPrompt),

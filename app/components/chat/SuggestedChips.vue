@@ -27,15 +27,16 @@ const handleSelect = (chip: SuggestedChip) => {
       variant="outline"
       size="sm"
       :disabled="props.disabled"
-      class="group rounded-full glass-deep border-white/10 bg-white/10 text-foreground/90 shadow-sm backdrop-blur-md transition-all duration-200 hover:-translate-y-0.5 hover:bg-white/20 hover:text-foreground active:translate-y-0 active:scale-[0.98]"
-      :class="chip.kind === 'action' ? 'border-primary-ui/40 text-primary-ui' : ''"
+      class="group rounded-full w-fit h-auto justify-start p-[5px_10px] glass-deep border-white/10 bg-white/10 text-foreground/90 shadow-sm backdrop-blur-md transition-all duration-200 hover:-translate-y-0.5 hover:bg-white/20 hover:text-foreground active:translate-y-0 active:scale-[0.98]"
+      :class="
+        chip.kind === 'action' ? 'border-primary-ui/40 text-primary-ui' : ''
+      "
       @click="handleSelect(chip)"
     >
-      <span class="flex items-center gap-1 text-[13px] leading-tight">
-        <IconArrowUpRight
-          v-if="chip.kind === 'action'"
-          class="h-3.5 w-3.5"
-        />
+      <span
+        class="flex items-start gap-1 text-[13px] leading-tight whitespace-normal text-start"
+      >
+        <IconArrowUpRight v-if="chip.kind === 'action'" class="h-3.5 w-3.5" />
         {{ chip.text }}
       </span>
     </Button>

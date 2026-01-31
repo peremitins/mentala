@@ -151,10 +151,13 @@ export default defineEventHandler(async (event) => {
         options: commonOptions,
       });
     }
-    // simple guard: roughly estimate tokens by characters (very rough ~4 chars per token)
-    const tokensIn = Math.ceil(
-      parsed.messages.reduce((s, m) => s + m.content.length, 0) / 4
-    );
+    // Оценка токенов: история в OpenAI не передается, считаем только последнее сообщение пользователя.
+    // Это снижает риск ложного отказа по бюджету при длинной локальной истории.
+    const lastUserMessage =
+      parsed.messages
+        .filter((m) => m.role === 'user')
+        .slice(-1)[0]?.content || '';
+    const tokensIn = Math.ceil(lastUserMessage.length / 4);
     const tokensOut = Math.ceil((result.content || '').length / 4);
     const estimated = estimateCostUSD({
       provider: 'openai',

@@ -1,7 +1,6 @@
 import { defineEventHandler, readBody, setHeader } from 'h3';
 import { chatStreamViaProvider } from '@@/server/application/llm.service';
 import { getSessionUserWithRole } from '@/server/utils/require-role';
-import { summaryStore } from '@@/server/utils/summaryStore';
 import { responseIdStore } from '@/server/utils/responseIdStore';
 import { readChatSettings } from '@/server/utils/storage';
 import { db } from '@/server/infrastructure/db/client';
@@ -134,7 +133,8 @@ export default defineEventHandler(async (event) => {
       return;
     }
 
-    // Определяем isFirstSession: это первая сессия только если НЕТ ни summary, ни previous_response_id
+    // Определяем isFirstSession только по previous_response_id.
+    // Summary отключена на уровне продукта — не используем её ни для контекста, ни для расчёта.
     let serverIsFirst = true;
 
     if (uid) {
@@ -142,16 +142,6 @@ export default defineEventHandler(async (event) => {
       const chatSettings = await readChatSettings(String(uid));
       const enablePreviousResponseId =
         chatSettings?.enablePreviousResponseId ?? true;
-      const enableSummary = chatSettings?.enableSummary ?? true;
-
-      // Проверяем summary
-      if (enableSummary) {
-        const count = await summaryStore.countByUser(uid);
-        if (count > 0) {
-          serverIsFirst = false;
-          // console.log('[Stream API] Found summary for user:', uid, 'count:', count);
-        }
-      }
 
       // Проверяем previous_response_id (важно для памяти OpenAI)
       if (enablePreviousResponseId && serverIsFirst) {

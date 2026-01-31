@@ -38,9 +38,8 @@ const MAX_OUTPUT_TOKENS_CAP =
     process.env.NUXT_AI_NOTIFICATIONS_MAX_OUTPUT_TOKENS ||
       process.env.AI_NOTIFICATIONS_MAX_OUTPUT_TOKENS
   ) || 12000;
-const ALLOW_AI_LOGS =
-  process.env.NODE_ENV === 'development' ||
-  process.env.AI_LOG_PROMPTS === 'true';
+// В проде никогда не логируем промпты. В dev всегда показываем полный текст.
+const ALLOW_AI_LOGS = process.env.NODE_ENV === 'development';
 const EMOJI_PREFIX = '✨ ';
 const MAX_NOTIFICATION_BODY_LENGTH = Math.max(
   0,
