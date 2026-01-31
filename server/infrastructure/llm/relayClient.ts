@@ -217,8 +217,12 @@ async function* iterateSseData(
 ): AsyncIterable<string> {
   // Простой SSE-парсер: собираем чанки и разбиваем по пустой строке.
   let buffer = '';
+  const decoder = new TextDecoder('utf-8');
   for await (const chunk of stream) {
-    buffer += typeof chunk === 'string' ? chunk : chunk.toString('utf-8');
+    // Используем TextDecoder, чтобы корректно обрабатывать UTF-8 на границах чанков.
+    const chunkText =
+      typeof chunk === 'string' ? chunk : decoder.decode(chunk, { stream: true });
+    buffer += chunkText;
     buffer = buffer.replace(/\r\n/g, '\n');
 
     while (true) {
@@ -239,6 +243,7 @@ async function* iterateSseData(
     }
   }
 
+  buffer += decoder.decode();
   const rest = buffer.trim();
   if (rest) {
     const lines = rest.split('\n');
