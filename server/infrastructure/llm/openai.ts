@@ -521,6 +521,156 @@ export const openaiProvider: LlmProviderPort = {
       }
     }
 
+    if (options?.scenario === 'notifications') {
+      // Для уведомлений используем переданный prompt как есть и требуем строгий JSON по схеме.
+      const input = mapToResponsesInput(messages || []);
+      // В Responses API json_schema должен иметь корневой type: "object".
+      // Поэтому оборачиваем массив в объект { items: [...] }.
+      const notificationSchema = {
+        type: 'object',
+        additionalProperties: false,
+        required: ['items'],
+        properties: {
+          items: {
+            type: 'array',
+            minItems: 1,
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              // В strict json_schema required должен включать все ключи из properties.
+              required: ['text', 'imageTag', 'subtype'],
+              properties: {
+                text: { type: 'string', minLength: 1 },
+                imageTag: {
+                  type: ['string', 'null'],
+                  enum: [
+                    'harm_organs',
+                    'harm_appearance',
+                    'harm_mental',
+                    'activity',
+                    'nature',
+                    'meditation',
+                    'daily_life',
+                    'neutral_abstract',
+                    null,
+                  ],
+                },
+                subtype: {
+                  type: ['string', 'null'],
+                  enum: ['reminder', 'informational', 'motivational', null],
+                },
+              },
+            },
+          },
+        },
+      };
+      const body: any = {
+        model: usedModel,
+        input,
+        max_output_tokens: maxTokens,
+        temperature: options?.temperature ?? 0.7,
+        store: false,
+        metadata: { app: 'mentai', feature: 'notifications' },
+        text: {
+          format: {
+            type: 'json_schema',
+            name: 'notification_items',
+            strict: true,
+            schema: notificationSchema,
+          },
+        },
+      };
+
+      console.log('[OpenAI notifications] Отправка запроса уведомлений:', {
+        model: usedModel,
+        userId: options?.userId || 'unknown',
+        messagesCount: (messages || []).length,
+        temperature: body.temperature,
+        maxOutputTokens: maxTokens,
+        prompts: formatPromptsForLogging(input),
+      });
+
+      try {
+        const res: any = await sendResponsesRequest({
+          body,
+          purpose,
+          timeoutMs: 60_000, // Уведомления могут быть длинными, даём больше времени
+          apiKey,
+          org,
+          project,
+          idempotencyKey,
+          requestId: relayRequestId,
+        });
+        const content = extractText(res);
+        return { role: 'assistant', content, model: usedModel };
+      } catch (err: any) {
+        const status =
+          err?.response?.status || err?.status || err?.statusCode || 500;
+        const openaiMessage =
+          err?.data?.error?.message ||
+          err?.data?.message ||
+          err?.message ||
+          'Unknown error';
+
+        console.error('[OpenAI notifications] Request failed:', {
+          status,
+          model: usedModel,
+          maxOutputTokens: maxTokens,
+          temperature: body.temperature,
+          inputItems: Array.isArray(input) ? input.length : 0,
+          hasJsonSchema: Boolean(body?.text?.format?.schema),
+          message: openaiMessage,
+          errorType: err?.data?.error?.type,
+          errorCode: err?.data?.error?.code,
+        });
+
+        // Если structured output не поддержан, пробуем повторить без schema.
+        if (status === 400 || status === 422) {
+          try {
+            const fallbackBody = {
+              ...body,
+              text: {}, // без structured output
+            };
+            const fallbackRes: any = await sendResponsesRequest({
+              body: fallbackBody,
+              purpose,
+              timeoutMs: 60_000, // Уведомления могут быть длинными, даём больше времени
+              apiKey,
+              org,
+              project,
+              idempotencyKey,
+              requestId: relayRequestId,
+            });
+            const content = extractText(fallbackRes);
+            console.warn(
+              '[OpenAI notifications] Fallback without json_schema succeeded'
+            );
+            return { role: 'assistant', content, model: usedModel };
+          } catch (fallbackErr: any) {
+            const fallbackStatus =
+              fallbackErr?.response?.status ||
+              fallbackErr?.status ||
+              fallbackErr?.statusCode ||
+              status;
+            const fallbackMessage =
+              fallbackErr?.data?.error?.message ||
+              fallbackErr?.data?.message ||
+              fallbackErr?.message ||
+              openaiMessage;
+            throw createError({
+              statusCode: fallbackStatus,
+              message: `OpenAI notifications error (fallback failed): ${fallbackStatus} ${fallbackMessage}`,
+            });
+          }
+        }
+
+        throw createError({
+          statusCode: status,
+          message: `OpenAI notifications error: ${status} ${openaiMessage}`,
+        });
+      }
+    }
+
     // eslint-disable-next-line no-constant-condition
     while (true) {
       try {
@@ -1438,6 +1588,43 @@ export const openaiProvider: LlmProviderPort = {
           console.error('[OpenAI Stream] ❌ Failed to save response_id:', err);
         }
       }
+    }
+
+    if (options?.scenario === 'notifications') {
+      // Для уведомлений используем переданный prompt как есть (без чат-прелюда).
+      const input = mapToResponsesInput(messages || []);
+      const body: any = {
+        model: usedModel,
+        input,
+        max_output_tokens: maxTokens,
+        temperature: options?.temperature ?? 0.7,
+        store: false,
+        metadata: { app: 'mentai', feature: 'notifications' },
+        text: {}, // при необходимости можно добавить text.format с json_schema
+      };
+
+      console.log('[OpenAI notifications] Отправка запроса уведомлений:', {
+        model: usedModel,
+        userId: options?.userId || 'unknown',
+        messagesCount: (messages || []).length,
+        temperature: body.temperature,
+        maxOutputTokens: maxTokens,
+        prompts: formatPromptsForLogging(input),
+      });
+
+      const res: any = await sendResponsesRequest({
+        body,
+        purpose,
+        timeoutMs: 30_000,
+        apiKey,
+        org,
+        project,
+        idempotencyKey,
+        requestId: relayRequestId,
+      });
+
+      const content = extractText(res);
+      return { role: 'assistant', content, model: usedModel };
     }
   },
 };

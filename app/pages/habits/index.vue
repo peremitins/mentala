@@ -2,7 +2,7 @@
   <div class="h-full flex flex-col z-0">
     <NotificationIndexPage
       title="📋&nbsp;&nbsp;Привычки"
-      description="Выберите тему, которая сейчас волнует. <br />
+      description="Выберите привычку, которую хотите приобрести или избавиться. <br />
 Мы поможем через разговор, практики и напоминания, которые можно настроить под себя."
       mentai-mode="habits"
       :items="habitItems"

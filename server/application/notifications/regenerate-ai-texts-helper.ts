@@ -113,18 +113,17 @@ export async function regenerateAiTextsForEntity(params: {
       const meta = (pref.meta as NotificationPreferenceMeta | null) || {};
       const textSource = meta.textSource;
 
-      // Перегенерируем только если используется AI или hybrid
-      if (textSource !== 'ai' && textSource !== 'hybrid') {
+      // Перегенерируем только если используется AI
+      if (textSource !== 'ai') {
         console.log(
-          `[RegenerateAI] Skipping preference ${pref.id}: textSource=${textSource} (not AI/hybrid)`
+          `[RegenerateAI] Skipping preference ${pref.id}: textSource=${textSource} (not AI)`
         );
         continue;
       }
 
-      // Определяем, кастомная ли это сущность (для subtype)
-      // Для кастомных привычек subtype всегда null
-      const isCustomEntity = kind === 'habits' || kind === 'therapy';
-      const subtypeForHash = isCustomEntity ? null : (pref.subtype as any);
+      // Для хеша используем фактический subtype из preference (для всех сущностей)
+      // ВАЖНО: subtype влияет на смысл текста, поэтому должен учитываться всегда
+      const subtypeForHash = (pref.subtype as any) ?? null;
 
       // Вычисляем новый хеш конфигурации
       // КРИТИЧНО: habitIntent должен быть включен в хеш, чтобы при изменении intent генерировался новый пул текстов
@@ -140,10 +139,11 @@ export async function regenerateAiTextsForEntity(params: {
           | 'motivational'
           | 'mixed'
           | null,
-        textSource: textSource as 'ai' | 'hybrid',
+        textSource: 'ai',
         kind,
         habitIntent: kind === 'habits' ? habitIntent : null, // Включаем intent только для habits
         userGender,
+        customPromptNotification: pref.customPromptNotification ?? null,
       });
 
       console.log(
@@ -163,9 +163,10 @@ export async function regenerateAiTextsForEntity(params: {
           | 'motivational'
           | 'mixed'
           | null,
-        textSource: textSource as 'ai' | 'hybrid',
+        textSource: 'ai',
         count: 50, // ВАЖНО: Всегда 50 текстов при перегенерации
         habitIntent: kind === 'habits' ? habitIntent : undefined, // Передаем intent для привычек
+        customPromptNotification: pref.customPromptNotification ?? null,
       })
         .then((result) => {
           console.log(
@@ -222,7 +223,7 @@ export async function regenerateAiTextsForEntity(params: {
       }
     } else {
       console.log(
-        `[RegenerateAI] No preferences with AI/hybrid textSource found, skipping regeneration`
+        `[RegenerateAI] No preferences with AI textSource found, skipping regeneration`
       );
     }
   } catch (error) {

@@ -122,6 +122,7 @@ export default defineEventHandler(
         (prefs.customSlotTimes as (number | null)[] | null) ?? null,
       timeRangeStart: prefs.timeRangeStart,
       timeRangeEnd: prefs.timeRangeEnd,
+      customPromptNotification: prefs.customPromptNotification ?? null,
       meta: (prefs.meta as NotificationPreferenceMeta | null) ?? null,
       createdAt: prefs.createdAt.toISOString(),
       updatedAt: prefs.updatedAt.toISOString(),

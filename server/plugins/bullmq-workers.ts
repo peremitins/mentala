@@ -32,6 +32,9 @@ export default defineNitroPlugin(async () => {
     const { startAiTextPoolWorker } = await import(
       '@/server/application/notifications/workers/aiTextPool.worker'
     );
+    const { startAiTextGenerationWorker } = await import(
+      '@/server/application/notifications/workers/aiTextGeneration.worker'
+    );
     const { startNotificationSlotsWorker } = await import(
       '@/server/application/notifications/workers/notificationSlots.worker'
     );
@@ -42,10 +45,13 @@ export default defineNitroPlugin(async () => {
     // 1. AI Text Pool Worker
     startAiTextPoolWorker();
 
-    // 2. Notification Slots Worker
+    // 2. AI Text Generation Worker
+    startAiTextGenerationWorker();
+
+    // 3. Notification Slots Worker
     startNotificationSlotsWorker();
 
-    // 3. Notification Delivery Worker
+    // 4. Notification Delivery Worker
     startNotificationDeliveryWorker();
 
     console.log('[BullMQ] ✅ All workers started successfully');

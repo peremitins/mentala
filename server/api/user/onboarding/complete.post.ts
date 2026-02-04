@@ -5,6 +5,7 @@ import { db } from '@/server/infrastructure/db/client';
 import { users, userPreferences } from '@/server/infrastructure/db/schema';
 import { getSessionUser } from '@/server/application/auth/session';
 import { OnboardingCompleteRequestDto } from '@/shared/dto/onboarding';
+import { enqueueAiRegenerationForUser } from '@/server/application/notifications/ai-text-regeneration.service';
 
 export default defineEventHandler(async (event) => {
   const sessionResult = await getSessionUser(event);
@@ -38,9 +39,12 @@ export default defineEventHandler(async (event) => {
   const tone = parsed.data.tone ?? 'unknown';
   const userId = Number(sessionResult.user.id);
 
+  let toneChanged = false;
+  let genderChanged = false;
+
   await db.transaction(async (tx) => {
     const [current] = await tx
-      .select({ onboarding: users.onboarding })
+      .select({ onboarding: users.onboarding, gender: users.gender })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);
@@ -51,6 +55,10 @@ export default defineEventHandler(async (event) => {
         : {};
 
     onboarding.welcome = true;
+
+    if (current?.gender !== gender) {
+      genderChanged = true;
+    }
 
     await tx
       .update(users)
@@ -70,6 +78,9 @@ export default defineEventHandler(async (event) => {
       .limit(1);
 
     if (prefs) {
+      if (prefs.tone !== tone) {
+        toneChanged = true;
+      }
       await tx
         .update(userPreferences)
         .set({
@@ -78,6 +89,8 @@ export default defineEventHandler(async (event) => {
         })
         .where(eq(userPreferences.userId, userId));
     } else {
+      // Если prefs не было, считаем тон изменившимся (чтобы при наличии AI настроек обновить пул)
+      toneChanged = true;
       await tx.insert(userPreferences).values({
         id: nanoid(),
         userId,
@@ -86,6 +99,20 @@ export default defineEventHandler(async (event) => {
       });
     }
   });
+
+  if (toneChanged || genderChanged) {
+    // Запускаем асинхронно, чтобы не блокировать ответ онбординга
+    void enqueueAiRegenerationForUser({
+      userId,
+      reason: 'onboarding_complete',
+      onlyEnabled: true,
+    }).catch((error) => {
+      console.error(
+        `[Onboarding] ❌ Не удалось поставить регенерацию AI-текстов:`,
+        error
+      );
+    });
+  }
 
   return {
     ok: true,

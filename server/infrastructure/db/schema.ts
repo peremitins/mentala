@@ -12,7 +12,7 @@ import {
   unique,
   index,
 } from 'drizzle-orm/pg-core';
-import { sql } from 'drizzle-orm';
+import { sql, type SQL } from 'drizzle-orm';
 
 // Roles table (must be defined before users references it)
 export const roles = pgTable('roles', {
@@ -383,7 +383,14 @@ export const notificationPreferences = pgTable('notification_preferences', {
   customSlotTimes: jsonb('custom_slot_times').$type<(number | null)[] | null>(),
   timeRangeStart: integer('time_range_start').notNull().default(540), // Начало временного окна в минутах от начала дня (09:00)
   timeRangeEnd: integer('time_range_end').notNull().default(1350), // Конец временного окна в минутах от начала дня (22:30)
-  meta: jsonb('meta'), // Дополнительные параметры (textSource: 'templates' | 'ai' | 'hybrid')
+  customPromptNotification: text('custom_prompt_notification'), // Персональные пожелания для шаблонных тем (только AI)
+  meta: jsonb('meta'), // Дополнительные параметры (textSource: 'templates' | 'ai')
+  // Нормализованное значение textSource (любой не-`ai` трактуется как `templates`)
+  textSourceNormalized: varchar('text_source_normalized', { length: 20 })
+    .generatedAlwaysAs(
+      (): SQL =>
+        sql`CASE WHEN ${notificationPreferences.meta} ->> 'textSource' = 'ai' THEN 'ai' ELSE 'templates' END`
+    ),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull(),
@@ -492,7 +499,7 @@ export const aiGeneratedNotificationTexts = pgTable(
     entityKey: varchar('entity_key', { length: 255 }).notNull(), // Единое поле для идентификации источника (ID для кастомных, ключ шаблона для шаблонных)
     entityDisplayName: varchar('entity_display_name', { length: 255 }), // Читаемое название сущности (для удобства разработчиков, не участвует в логике)
     preferenceId: text('preference_id').notNull(), // FK к notification_preferences.id
-    textSource: varchar('text_source', { length: 20 }).notNull(), // 'ai' | 'hybrid' (только для AI-текстов)
+    textSource: varchar('text_source', { length: 20 }).notNull(), // 'ai' (только для AI-текстов)
     texts: jsonb('texts').notNull(), // массив сгенерированных текстов (до 100)
     generationConfigHash: text('generation_config_hash').notNull(), // хеш настроек, влияющих на генерацию
     provider: varchar('provider', { length: 50 }).notNull(), // 'openai' | 'deepseek' | 'groq' | ...
@@ -531,6 +538,31 @@ export const aiNotificationTextUsage = pgTable('ai_notification_text_usage', {
   sentAt: timestamp('sent_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
+// Ротация изображений уведомлений (персистентно, без частых повторов)
+export const notificationImageRotation = pgTable(
+  'notification_image_rotation',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id').notNull(),
+    kind: varchar('kind', { length: 20 }).notNull(), // 'therapy' | 'habits'
+    // Для кастомных сущностей используем специальный ключ '__custom__'
+    entityKey: varchar('entity_key', { length: 255 }).notNull(),
+    imageTag: varchar('image_tag', { length: 50 }).notNull(),
+    lastIndex: integer('last_index').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    userKindEntityTagUnique: unique(
+      'notification_image_rotation_user_kind_entity_tag_unique'
+    ).on(table.userId, table.kind, table.entityKey, table.imageTag),
+  })
+);
+
 // Единая таблица для дефолтных и пользовательских текстов уведомлений
 export const notificationTexts = pgTable('notification_texts', {
   id: text('id').primaryKey(),
@@ -540,6 +572,7 @@ export const notificationTexts = pgTable('notification_texts', {
   source: text('source').notNull(), // 'default' | 'user'
   intent: text('intent'), // 'build' | 'quit' (только habits, если нужно)
   subtype: text('subtype'), // 'reminder' | 'informational' | 'motivational' | 'mixed' | NULL
+  imageTag: varchar('image_tag', { length: 50 }), // null = без картинки
   directness: text('directness').notNull(), // 'soft' | 'moderate' | 'hard' | 'universal'
   addressing: text('addressing').notNull(), // 'informal' | 'formal' | 'universal'
   locale: text('locale').notNull(), // 'ru' (пока одна, но заложимся)
@@ -561,6 +594,7 @@ export const notificationTextPresets = pgTable('notification_text_presets', {
   entityKey: text('entity_key').notNull(), // 'water', 'anxiety' и т.п.
   intent: text('intent'), // 'build' | 'quit' | NULL
   subtype: text('subtype'), // 'reminder' | 'informational' | 'motivational' | 'mixed' | NULL
+  imageTag: varchar('image_tag', { length: 50 }), // null = без картинки
   directness: text('directness').notNull(), // 'soft' | 'moderate' | 'hard' | 'universal'
   addressing: text('addressing').notNull(), // 'informal' | 'formal' | 'universal'
   locale: text('locale').notNull(), // 'ru'

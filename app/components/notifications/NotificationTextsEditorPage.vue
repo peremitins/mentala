@@ -1,216 +1,228 @@
 <template>
-  <div class="space-y-2 h-full overflow-y-auto rounded-lg pb-[80px]">
+  <div class="space-y-2 h-full overflow-y-auto rounded-lg">
     <PageHeader
       title="Тексты уведомлений"
       :show-back-button="true"
       @go-back="goBack"
     />
 
-    <section class="flex-1 overflow-y-auto space-y-2 pb-[100px]">
+    <section class="space-y-3 pb-[160px] animate-fade-in">
       <!-- Заголовок с информацией -->
-      <div>
-        <h2 class="text-lg font-semibold text-foreground">
+      <section class="glass-deep p-4 space-y-1">
+        <h2 class="text-base font-semibold text-foreground">
           {{ entityName }} — Тексты уведомлений
         </h2>
-        <p class="text-sm text-foreground">
+        <p class="text-sm text-foreground/80">
           {{ filteredTextsCount }} текстов • Источник: Шаблоны + ваши
         </p>
-      </div>
+      </section>
 
       <!-- Фильтры -->
-      <div class="space-y-3">
+      <section class="space-y-3">
         <!-- Фокус уведомлений -->
-        <div>
-          <label class="text-sm font-medium text-foreground mb-2 block">
+        <div class="glass-deep p-3 space-y-2">
+          <label class="text-sm font-semibold text-foreground">
             Фокус уведомлений
           </label>
-          <ToggleGroup
-            :model-value="selectedSubtype || ''"
-            type="single"
-            class="inline-flex w-full gap-2 overflow-auto"
-            @update:model-value="handleSubtypeChange"
-          >
-            <ToggleGroupItem
-              v-for="option in subtypeOptions"
-              :key="option.value"
-              :value="option.value"
-              class="flex-1 rounded-lg px-2 py-2 text-xs xs:text-sm whitespace-nowrap font-medium transition-all"
+          <div class="rounded-2xl border border-white/10 bg-background/20 p-2">
+            <ToggleGroup
+              :model-value="selectedSubtype || ''"
+              type="single"
+              class="inline-flex w-full gap-2 overflow-auto no-scrollbar"
+              @update:model-value="handleSubtypeChange"
             >
-              {{ option.icon }} {{ option.label }}
-            </ToggleGroupItem>
-          </ToggleGroup>
+              <ToggleGroupItem
+                v-for="option in subtypeOptions"
+                :key="option.value"
+                :value="option.value"
+                class="flex-1 rounded-lg px-2 py-2 text-xs xs:text-sm whitespace-nowrap font-medium transition-all"
+              >
+                {{ option.icon }} {{ option.label }}
+              </ToggleGroupItem>
+            </ToggleGroup>
+          </div>
         </div>
 
         <!-- Стиль уведомлений -->
-        <div>
-          <label class="text-sm font-medium text-foreground mb-2 block">
+        <div class="glass-deep p-3 space-y-2">
+          <label class="text-sm font-semibold text-foreground">
             Стиль уведомлений
           </label>
-          <ToggleGroup
-            :model-value="selectedDirectness"
-            type="single"
-            class="inline-flex w-full gap-2 overflow-auto"
-            @update:model-value="handleDirectnessChange"
-          >
-            <ToggleGroupItem
-              v-for="option in DIRECTNESS_OPTIONS"
-              :key="option.value"
-              :value="option.value"
-              class="flex-1 rounded-lg px-2 py-2 text-xs xs:text-sm whitespace-nowrap font-medium transition-all"
+          <div class="rounded-2xl border border-white/10 bg-background/20 p-2">
+            <ToggleGroup
+              :model-value="selectedDirectness"
+              type="single"
+              class="inline-flex w-full gap-2 overflow-auto no-scrollbar"
+              @update:model-value="handleDirectnessChange"
             >
-              {{ option.icon }} {{ option.label }}
-            </ToggleGroupItem>
-          </ToggleGroup>
+              <ToggleGroupItem
+                v-for="option in DIRECTNESS_OPTIONS"
+                :key="option.value"
+                :value="option.value"
+                class="flex-1 rounded-lg px-2 py-2 text-xs xs:text-sm whitespace-nowrap font-medium transition-all"
+              >
+                {{ option.icon }} {{ option.label }}
+              </ToggleGroupItem>
+            </ToggleGroup>
+          </div>
         </div>
-      </div>
+      </section>
 
       <!-- Скелетон при загрузке -->
       <Skeleton v-if="loading" type="notification-text" :count="5" />
 
-      <!-- Список текстов -->
-      <TransitionGroup v-else name="list" tag="div" class="space-y-3">
-        <div
-          v-for="(text, index) in localTexts"
-          :key="text.id || text.tempId"
-          :data-text-id="text.id || text.tempId"
-          class="rounded-lg border border-border bg-transparent p-3 transition-all shadow-sm relative overflow-hidden list-item hover:border-primary-ui"
-          :class="{
-            'border-primary-ui ring-2 ring-primary-ui/20':
-              editingId === (text.id || text.tempId),
-            'opacity-50': text.toDelete,
-          }"
-        >
-          <!-- Цветная полоска слева -->
+      <!-- Список текстов в общей glass-обёртке -->
+      <div v-else class="glass-deep p-3">
+        <TransitionGroup name="list" tag="div" class="space-y-3">
           <div
-            v-if="text.source === 'user'"
-            class="absolute left-0 top-0 bottom-0 w-1 bg-primary-ui"
-          />
-
-          <!-- Компактный режим -->
-          <div
-            v-if="editingId !== (text.id || text.tempId)"
-            class="flex items-center gap-3"
-            @click="startEdit(text)"
-          >
-            <div class="flex-1 truncate text-sm text-foreground cursor-pointer">
-              {{ text.text }}
-            </div>
-            <div class="flex items-center gap-1">
-              <button
-                class="inline-flex items-center justify-center rounded-md p-1.5 text-foreground hover:text-primary-ui hover:bg-primary-ui/10 transition-colors"
-                aria-label="Редактировать"
-              >
-                <svg
-                  class="h-4 w-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 013.536 3.536L6.5 20.5 3 21l.5-3.5L16.732 3.732z"
-                  />
-                </svg>
-              </button>
-              <button
-                class="delete-button inline-flex items-center justify-center rounded-md p-1.5 transition-colors"
-                :class="{
-                  'text-destructive bg-destructive/10': text.toDelete,
-                  'text-foreground': !text.toDelete,
-                }"
-                @click.stop="markForDelete(text)"
-                aria-label="Удалить"
-              >
-                <svg
-                  class="h-4 w-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                  />
-                </svg>
-              </button>
-            </div>
-          </div>
-
-          <!-- Режим редактирования -->
-          <div
-            v-else-if="editingId === (text.id || text.tempId)"
+            v-for="(text, index) in localTexts"
+            :key="text.id || text.tempId"
             :data-text-id="text.id || text.tempId"
-            class="space-y-3"
+            class="rounded-2xl border border-white/10 bg-background/20 p-3 transition-all shadow-sm relative overflow-hidden list-item hover:border-white/30 hover:-translate-y-0.5"
+            :class="{
+              'border-primary-ui ring-2 ring-primary-ui/20':
+                editingId === (text.id || text.tempId),
+              'opacity-50': text.toDelete,
+            }"
           >
-            <TextareaResize
-              ref="textareaRef"
-              v-model="editModel"
-              class="w-full min-h-[80px] rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-              :max-length="MAX_NOTIFICATION_TEXT_LENGTH"
+            <!-- Цветная полоска слева -->
+            <div
+              v-if="text.source === 'user'"
+              class="absolute left-0 top-0 bottom-0 w-1 bg-primary-ui"
             />
-            <div class="flex items-center justify-between text-xs">
-              <span class="text-foreground">
-                Можно использовать {name} для подстановки имени
-              </span>
-              <span
-                :class="{
-                  'text-destructive':
-                    editModel?.length > MAX_NOTIFICATION_TEXT_LENGTH,
-                  'text-foreground':
-                    editModel?.length <= MAX_NOTIFICATION_TEXT_LENGTH,
-                }"
+
+            <!-- Компактный режим -->
+            <div
+              v-if="editingId !== (text.id || text.tempId)"
+              class="flex items-center gap-3"
+              @click="startEdit(text)"
+            >
+              <div
+                class="flex-1 truncate text-sm text-foreground/90 leading-snug cursor-pointer"
               >
-                {{ editModel?.length }}/{{ MAX_NOTIFICATION_TEXT_LENGTH }}
-              </span>
+                {{ text.text }}
+              </div>
+              <div class="flex items-center gap-1">
+                <button
+                  class="inline-flex items-center justify-center rounded-md p-1.5 text-foreground hover:text-primary-ui hover:bg-primary-ui/10 transition-colors"
+                  aria-label="Редактировать"
+                >
+                  <svg
+                    class="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 013.536 3.536L6.5 20.5 3 21l.5-3.5L16.732 3.732z"
+                    />
+                  </svg>
+                </button>
+                <button
+                  class="delete-button inline-flex items-center justify-center rounded-md p-1.5 transition-colors"
+                  :class="{
+                    'text-destructive bg-destructive/10': text.toDelete,
+                    'text-foreground': !text.toDelete,
+                  }"
+                  @click.stop="markForDelete(text)"
+                  aria-label="Удалить"
+                >
+                  <svg
+                    class="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                    />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- Режим редактирования -->
+            <div
+              v-else-if="editingId === (text.id || text.tempId)"
+              :data-text-id="text.id || text.tempId"
+              class="space-y-3"
+            >
+              <TextareaResize
+                ref="textareaRef"
+                v-model="editModel"
+                class="w-full min-h-[80px] rounded-2xl border border-white/10 bg-background/40 px-3 py-2 text-sm text-foreground/90 resize-none focus:outline-none focus:ring-2 focus:ring-primary-ui/40 focus:ring-offset-2"
+                :max-length="MAX_NOTIFICATION_TEXT_LENGTH"
+              />
+              <div class="flex items-center justify-between text-xs">
+                <span class="text-foreground/70">
+                  Можно использовать {name} для подстановки вашего имени
+                </span>
+                <span
+                  :class="{
+                    'text-destructive':
+                      editModel?.length > MAX_NOTIFICATION_TEXT_LENGTH,
+                    'text-foreground':
+                      editModel?.length <= MAX_NOTIFICATION_TEXT_LENGTH,
+                  }"
+                >
+                  {{ editModel?.length }}/{{ MAX_NOTIFICATION_TEXT_LENGTH }}
+                </span>
+              </div>
             </div>
           </div>
-        </div>
-      </TransitionGroup>
+        </TransitionGroup>
+      </div>
 
       <!-- Кнопка добавления -->
-      <button
-        class="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-transparent px-4 py-2.5 text-sm font-medium text-foreground hover:border-primary-ui hover:text-primary-ui transition-colors w-full"
-        @click="addNewText"
-      >
-        <svg
-          class="h-4 w-4"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
+      <section class="glass-deep p-3">
+        <button
+          class="inline-flex items-center justify-center gap-2 rounded-lg border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-semibold text-foreground/90 transition-colors w-full hover:bg-white/10 hover:border-white/30"
+          @click="addNewText"
         >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M12 4v16m8-8H4"
-          />
-        </svg>
-        Добавить текст
-      </button>
+          <svg
+            class="h-4 w-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M12 4v16m8-8H4"
+            />
+          </svg>
+          Добавить текст
+        </button>
+      </section>
 
       <!-- Восстановление дефолтных -->
-      <div class="rounded-lg border border-border bg-transparent p-4 space-y-3">
+      <section class="glass-deep p-3 space-y-3">
         <h3 class="text-sm font-semibold text-foreground">
           Восстановить стандартные шаблоны
         </h3>
-        <div class="flex items-center gap-2">
-          <Checkbox id="keepUserTexts" v-model:checked="keepUserTexts" />
-          <label
-            for="keepUserTexts"
-            class="text-sm text-foreground cursor-pointer"
-          >
-            Сохранить мои тексты ({{ userTextsCount }})
-          </label>
+        <div class="rounded-2xl border border-white/10 bg-background/20 p-3">
+          <div class="flex items-center gap-2">
+            <Checkbox id="keepUserTexts" v-model:checked="keepUserTexts" />
+            <label
+              for="keepUserTexts"
+              class="text-sm text-foreground cursor-pointer"
+            >
+              Сохранить мои тексты ({{ userTextsCount }})
+            </label>
+          </div>
+          <p class="text-xs text-foreground/70 mt-2">
+            Ваши тексты останутся, дефолтные будут добавлены обратно
+          </p>
         </div>
-        <p class="text-xs text-foreground">
-          Ваши тексты останутся, дефолтные будут добавлены обратно
-        </p>
         <button
-          class="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-transparent px-4 py-2.5 text-sm font-medium text-foreground hover:border-primary-ui hover:text-primary-ui transition-colors w-full"
+          class="inline-flex items-center justify-center gap-2 rounded-lg border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-semibold text-foreground/90 transition-colors w-full hover:bg-white/10 hover:border-white/30"
           @click="handleReset"
         >
           <svg
@@ -228,47 +240,49 @@
           </svg>
           Восстановить дефолтные тексты
         </button>
-      </div>
+      </section>
     </section>
 
-    <!-- Фиксированная кнопка сохранения -->
-    <div class="sticky bottom-[20px]">
-      <button
-        class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors w-full disabled:opacity-70 disabled:cursor-not-allowed"
-        :disabled="!hasChanges || saving"
-        @click="handleSave"
-      >
-        <svg
-          v-if="saving"
-          class="h-4 w-4 animate-spin"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
+    <!-- Липкая панель сохранения -->
+    <div class="sticky bottom-[88px] z-40">
+      <div class="glass-deep p-2">
+        <button
+          class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors w-full hover:bg-primary/90 disabled:opacity-70 disabled:cursor-not-allowed"
+          :disabled="!hasChanges || saving"
+          @click="handleSave"
         >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-          />
-        </svg>
-        <svg
-          v-else
-          class="h-4 w-4"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M5 13l4 4L19 7"
-          />
-        </svg>
-        <span v-if="saving">Сохранение...</span>
-        <span v-else>Сохранить изменения ({{ changesCount }})</span>
-      </button>
+          <svg
+            v-if="saving"
+            class="h-4 w-4 animate-spin"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+            />
+          </svg>
+          <svg
+            v-else
+            class="h-4 w-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M5 13l4 4L19 7"
+            />
+          </svg>
+          <span v-if="saving">Сохранение...</span>
+          <span v-else>Сохранить изменения ({{ changesCount }})</span>
+        </button>
+      </div>
     </div>
 
     <!-- Модалка подтверждения сброса -->
@@ -711,6 +725,7 @@ async function addNewText() {
     source: 'user',
     intent: props.kind === 'habits' ? entityIntent.value : null,
     subtype: selectedSubtype.value,
+    imageTag: null,
     directness: selectedDirectness.value,
     addressing: 'universal', // Временное значение, на бэкенде будет заменено на значение из userPreferences
     locale: 'ru',
@@ -798,6 +813,7 @@ async function handleSave() {
       .map((t) => ({
         id: t.id!,
         text: t.text.trim(), // Обрезаем пробелы
+        imageTag: t.imageTag ?? null,
       })),
     created: localTexts.value
       .filter((t) => t.isNew && !t.toDelete && t.text.trim().length > 0)
@@ -808,6 +824,7 @@ async function handleSave() {
         text: t.text.trim(), // Обрезаем пробелы
         intent: t.intent,
         subtype: t.subtype,
+        imageTag: t.imageTag ?? null,
       })),
     deleted: localTexts.value
       .filter((t) => t.toDelete && !t.isNew && t.id)

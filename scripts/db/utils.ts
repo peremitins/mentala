@@ -62,6 +62,20 @@ export function parseEnvArg(
   return { env: envValue, restArgs } as EnvParseResult;
 }
 
+export function resolveDefaultEnv(): MigrationEnv {
+  const fromDbEnv = process.env.MENTALA_DB_ENV;
+  if (fromDbEnv === 'development' || fromDbEnv === 'production') {
+    return fromDbEnv;
+  }
+
+  const nodeEnv = process.env.NODE_ENV;
+  if (nodeEnv === 'production') {
+    return 'production';
+  }
+
+  return 'development';
+}
+
 export function resolveEnvFile(env: MigrationEnv): string {
   const explicitEnvFile =
     process.env.DRIZZLE_ENV_FILE || process.env.MIGRATE_ENV_FILE;

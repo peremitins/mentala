@@ -5,6 +5,8 @@
 
 import { hashNotificationText } from './ai-generation.service';
 import { formatNotificationTextWithName } from '@/shared/utils/notificationText';
+import type { NotificationSubtype } from '@/shared/dto/notifications';
+import type { AiNotificationText } from './ai-generation.service';
 
 /**
  * Состояние выбора текста для отслеживания использованных текстов
@@ -22,10 +24,10 @@ export interface TextSelectionState {
  */
 export interface PickTextParams {
   slotIndex: number;
-  textSource: 'templates' | 'ai' | 'hybrid';
+  textSource: 'templates' | 'ai';
   isCustomEntity: boolean;
-  templateTexts: { id: string; text: string }[];
-  aiTexts: string[] | null;
+  templateTexts: { text: string; imageTag?: string | null }[];
+  aiTexts: Array<string | AiNotificationText> | null;
   userName: string | null;
   userGender: 'male' | 'female' | null;
 }
@@ -38,6 +40,8 @@ export interface PickTextResult {
   templateIdForSlot: 'template_text' | 'ai_generated';
   selectedAiTextIndex: number | null;
   templateIndex: number | null;
+  imageTag: string | null;
+  subtype: NotificationSubtype | null;
 }
 
 const DEBUG_NOTIFICATIONS = process.env.DEBUG_NOTIFICATIONS === 'true';
@@ -47,11 +51,11 @@ const DEBUG_NOTIFICATIONS = process.env.DEBUG_NOTIFICATIONS === 'true';
  * Использует комбинированный подход для максимальной надежности
  */
 function selectUnusedAiText(
-  aiTexts: string[],
+  aiTexts: Array<string | AiNotificationText>,
   usedIndices: Set<number>,
   usedHashes: Set<string>,
   usedTexts: Set<string>
-): { text: string; index: number } | null {
+): { text: string; index: number; imageTag: string | null; subtype: NotificationSubtype | null } | null {
   // Получаем доступные индексы (не использованные по индексу)
   const availableIndices = aiTexts
     .map((_, index) => index)
@@ -67,7 +71,8 @@ function selectUnusedAiText(
   // Ищем первый доступный текст, который не был использован по хешу
   // Хеш вычисляется от исходного текста (rawText), чтобы имя пользователя не влияло на проверку дубликатов
   for (const index of shuffled) {
-    const rawText = aiTexts[index];
+    const entry = aiTexts[index];
+    const rawText = typeof entry === 'string' ? entry : entry.text;
 
     // Вычисляем хеш от исходного текста для проверки дубликатов
     // Это важно: имя пользователя - переменная часть, не должна влиять на проверку
@@ -79,6 +84,8 @@ function selectUnusedAiText(
       return {
         text: rawText,
         index: index,
+        imageTag: typeof entry === 'string' ? null : entry.imageTag ?? null,
+        subtype: typeof entry === 'string' ? null : entry.subtype ?? null,
       };
     }
   }
@@ -177,7 +184,7 @@ function selectTemplateText(
  * Обновляет все необходимые структуры данных и возвращает true при успехе
  */
 function tryUseAiText(
-  aiTexts: string[],
+  aiTexts: Array<string | AiNotificationText>,
   slotIndex: number,
   state: TextSelectionState,
   userName: string | null,
@@ -211,6 +218,8 @@ function tryUseAiText(
       templateIdForSlot: 'ai_generated',
       selectedAiTextIndex: selectedText.index,
       templateIndex: null,
+      imageTag: selectedText.imageTag,
+      subtype: selectedText.subtype ?? null,
     };
   } else {
     console.warn(
@@ -240,326 +249,66 @@ export function pickTextForSlot(
     userGender,
   } = params;
 
-  // Выбираем templateText (если доступен)
   const selectedTemplateText =
     templateTexts.length > 0
       ? selectTemplateText(templateTexts, state, userName, userGender)
       : null;
   const templateText = selectedTemplateText ? selectedTemplateText.text : null;
 
-  // Логика выбора текста с учетом режима генерации
-  // Для кастомных сущностей (привычки и терапия)
-  if (isCustomEntity) {
-    // Приоритет: AI > Hybrid > Templates
-    // Если textSource не определен, используем templates по умолчанию
-
-    if (textSource === 'ai') {
-      // Режим AI - используем только AI-тексты, игнорируем templateTexts
-      if (aiTexts && aiTexts.length > 0) {
-        const result = tryUseAiText(
-          aiTexts,
-          slotIndex,
-          state,
-          userName,
-          userGender,
-          'AI mode (custom entity)'
-        );
-        if (result) {
-          return result;
-        }
-        // Если не удалось выбрать AI-текст, возвращаем null
-        return null;
-      } else {
-        console.warn(
-          `[TextSelection] ❌ No AI texts found for custom entity in AI mode: slot ${slotIndex}`
-        );
-        return null;
-      }
-    } else if (textSource === 'hybrid') {
-      // Гибридный режим - чередуем templateTexts и AI детерминированно
-      // Проверяем наличие обоих источников
-      const hasTemplateTexts = templateText !== null;
-      const hasAiTexts = aiTexts && aiTexts.length > 0;
-
-      if (DEBUG_NOTIFICATIONS) {
-        console.log(
-          `[TextSelection] 🔍 HYBRID MODE - Slot ${slotIndex}: hasTemplateTexts=${hasTemplateTexts}, hasAiTexts=${hasAiTexts}, aiTexts=${aiTexts ? `[${aiTexts.length} texts]` : 'null'}, templateText=${templateText ? `"${templateText.substring(0, 30)}..."` : 'null'}`
-        );
-      }
-
-      if (!hasTemplateTexts && !hasAiTexts) {
-        // Если нет ни templateTexts, ни AI-текстов - пропускаем
-        console.warn(
-          `[TextSelection] ❌ No texts available in hybrid mode: slot ${slotIndex}`
-        );
-        return null;
-      }
-
-      // Детерминированное чередование: четные слоты - AI, нечетные - templateTexts
-      // Если одного из источников нет, используем только доступный
-      if (!hasTemplateTexts && aiTexts) {
-        // Только AI-тексты
-        return tryUseAiText(
-          aiTexts,
-          slotIndex,
-          state,
-          userName,
-          userGender,
-          'hybrid mode, no templateTexts'
-        );
-      } else if (!hasAiTexts) {
-        // Только templateTexts
-        if (selectedTemplateText) {
-          const rawText = templateTexts[selectedTemplateText.index].text;
-          if (state.usedTexts.has(rawText)) {
-            console.warn(
-              `[TextSelection] ⚠️ Template text already used, skipping slot: slot ${slotIndex}, text="${rawText.substring(0, 50)}..."`
-            );
-            return null;
-          }
-        }
-
-        if (templateText && selectedTemplateText) {
-          const rawText = templateTexts[selectedTemplateText.index].text;
-          state.usedTexts.add(rawText);
-          state.usedTemplateIndices.add(selectedTemplateText.index);
-          // УНИФИЦИРОВАННАЯ ЛОГИКА: добавляем хеш для анти-дублирования
-          const textHash = hashNotificationText(rawText);
-          state.usedTemplateHashes.add(textHash);
-        }
-        return {
-          text: templateText!,
-          templateIdForSlot: 'template_text',
-          selectedAiTextIndex: null,
-          templateIndex: selectedTemplateText?.index ?? null,
-        };
-      } else if (aiTexts) {
-        // Оба источника доступны - чередуем детерминированно
-        const isEvenSlot = slotIndex % 2 === 0;
-        if (DEBUG_NOTIFICATIONS) {
-          console.log(
-            `[TextSelection] 🔍 HYBRID MODE - Slot ${slotIndex}: isEvenSlot=${isEvenSlot}, will use ${isEvenSlot ? 'AI' : 'templateText'}`
-          );
-        }
-
-        if (isEvenSlot) {
-          // Четные слоты - AI
-          return tryUseAiText(
-            aiTexts,
-            slotIndex,
-            state,
-            userName,
-            userGender,
-            'hybrid mode, even slot'
-          );
-        } else {
-          // Нечетные слоты - templateTexts
-          if (selectedTemplateText) {
-            const rawText = templateTexts[selectedTemplateText.index].text;
-            if (state.usedTexts.has(rawText)) {
-              console.warn(
-                `[TextSelection] ⚠️ Template text already used, skipping slot: slot ${slotIndex}, text="${rawText.substring(0, 50)}..."`
-              );
-              return null;
-            }
-          }
-
-          if (templateText && selectedTemplateText) {
-            const rawText = templateTexts[selectedTemplateText.index].text;
-            state.usedTexts.add(rawText);
-            state.usedTemplateIndices.add(selectedTemplateText.index);
-            // УНИФИЦИРОВАННАЯ ЛОГИКА: добавляем хеш для анти-дублирования
-            const textHash = hashNotificationText(rawText);
-            state.usedTemplateHashes.add(textHash);
-          }
-          return {
-            text: templateText!,
-            templateIdForSlot: 'template_text',
-            selectedAiTextIndex: null,
-            templateIndex: selectedTemplateText?.index ?? null,
-          };
-        }
-      } else {
-        console.error(
-          `[TextSelection] ❌ ERROR: Both sources should be available but aiTexts is null! slot ${slotIndex}, hasTemplateTexts=${hasTemplateTexts}, hasAiTexts=${hasAiTexts}`
-        );
-        return null;
-      }
-    } else {
-      // Режим templates или undefined - используем только templateTexts
-      if (templateText && selectedTemplateText) {
-        // ВАЖНО: Проверяем использованные тексты (raw), чтобы избежать дублирования
-        const rawText = templateTexts[selectedTemplateText.index].text;
-        if (state.usedTexts.has(rawText)) {
-          console.warn(
-            `[TextSelection] ⚠️ Template text already used, skipping slot: slot ${slotIndex}, text="${rawText.substring(0, 50)}..."`
-          );
-          return null;
-        }
-
-        state.usedTexts.add(rawText);
-        state.usedTemplateIndices.add(selectedTemplateText.index);
-        // УНИФИЦИРОВАННАЯ ЛОГИКА: добавляем хеш для анти-дублирования
-        const textHash = hashNotificationText(rawText);
-        state.usedTemplateHashes.add(textHash);
-        return {
-          text: templateText,
-          templateIdForSlot: 'template_text',
-          selectedAiTextIndex: null,
-          templateIndex: selectedTemplateText.index,
-        };
-      } else {
-        console.warn(
-          `[TextSelection] ❌ No template text found for custom entity: slot ${slotIndex}, templateTexts count: ${templateTexts.length}`
-        );
-        return null;
-      }
+  if (textSource === 'ai') {
+    if (aiTexts && aiTexts.length > 0) {
+      return tryUseAiText(
+        aiTexts,
+        slotIndex,
+        state,
+        userName,
+        userGender,
+        isCustomEntity ? 'AI mode (custom entity)' : 'AI mode (template entity)'
+      );
     }
+
+    console.warn(
+      isCustomEntity
+        ? `[TextSelection] ❌ No AI texts found for custom entity in AI mode: slot ${slotIndex}`
+        : `[TextSelection] AI texts not ready yet, skipping slot (AI mode, template entity): slot ${slotIndex}`
+    );
+    return null;
   }
-  // Для готовых шаблонов (привычки и терапия)
-  else {
-    // ВАЖНО: Приоритет текстов из БД над шаблонами
-    // Сначала используем тексты из БД (templateTexts), только если их нет - используем шаблоны
 
-    // Если textSource не определен, используем шаблоны по умолчанию (обратная совместимость)
-    const useTemplates =
-      !textSource ||
-      textSource === 'templates' ||
-      textSource === 'hybrid';
-    const useAi = textSource === 'ai' || textSource === 'hybrid';
-
-    // Приоритет: если textSource === 'ai', используем только AI
-    // Если textSource === 'hybrid', чередуем тексты из БД/шаблоны и AI
-    // Если textSource === 'templates' или undefined, используем тексты из БД (если есть), иначе шаблоны
-
-    if (textSource === 'ai') {
-      // Режим AI - используем только AI-тексты
-      if (aiTexts && aiTexts.length > 0) {
-        return tryUseAiText(
-          aiTexts,
-          slotIndex,
-          state,
-          userName,
-          userGender,
-          'AI mode (template entity)'
-        );
-      } else {
-        console.warn(
-          `[TextSelection] AI texts not ready yet, skipping slot (AI mode, template entity): slot ${slotIndex}`
-        );
-        return null;
-      }
-    } else if (textSource === 'hybrid') {
-      // Гибридный режим - чередуем шаблоны и AI детерминированно
-      const hasAiTexts = aiTexts && aiTexts.length > 0;
-      const isEvenSlot = slotIndex % 2 === 0;
-
-      if (DEBUG_NOTIFICATIONS) {
-        console.log(
-          `[TextSelection] 🔍 HYBRID MODE (template) - Slot ${slotIndex}: hasAiTexts=${hasAiTexts}, aiTexts=${aiTexts ? `[${aiTexts.length} texts]` : 'null'}, isEvenSlot=${isEvenSlot}`
-        );
-      }
-
-      // Детерминированное чередование: четные слоты - AI, нечетные - шаблоны
-      // Если шаблонов нет, используем AI для всех слотов
-      if (isEvenSlot && hasAiTexts && aiTexts) {
-        // Четные слоты - AI
-        return tryUseAiText(
-          aiTexts,
-          slotIndex,
-          state,
-          userName,
-          userGender,
-          'hybrid mode, even slot'
-        );
-      } else {
-        // Нечетные слоты - сначала пробуем тексты из БД, потом шаблоны, если нет - используем AI
-        if (templateText && selectedTemplateText) {
-          // Проверяем использованные тексты (raw), чтобы избежать дублирования
-          const rawText = templateTexts[selectedTemplateText.index].text;
-          if (state.usedTexts.has(rawText)) {
-            console.warn(
-              `[TextSelection] ⚠️ Template text from DB already used, trying templates: slot ${slotIndex}, text="${rawText.substring(0, 50)}..."`
-            );
-          } else {
-            state.usedTexts.add(rawText);
-            state.usedTemplateIndices.add(selectedTemplateText.index);
-            // УНИФИЦИРОВАННАЯ ЛОГИКА: добавляем хеш для анти-дублирования
-            const textHash = hashNotificationText(rawText);
-            state.usedTemplateHashes.add(textHash);
-            return {
-              text: templateText,
-              templateIdForSlot: 'template_text',
-              selectedAiTextIndex: null,
-              templateIndex: selectedTemplateText.index,
-            };
-          }
-        }
-
-        // Если текста из БД нет И нет текстов в templateTexts - пропускаем слот
-        // Все тексты должны быть в БД, fallback на код удален
-        if (!templateText && templateTexts.length === 0) {
-          // Если есть AI-тексты в hybrid режиме, используем их
-          if (hasAiTexts && aiTexts) {
-            if (DEBUG_NOTIFICATIONS) {
-              console.log(
-                `[TextSelection] 🔍 No template texts found, using AI text instead (hybrid mode, slot ${slotIndex})`
-              );
-            }
-            return tryUseAiText(
-              aiTexts,
-              slotIndex,
-              state,
-              userName,
-              userGender,
-              'hybrid mode, no template texts'
-            );
-          } else {
-            // Если нет ни текстов из БД, ни AI-текстов - пропускаем слот
-            console.warn(
-              `[TextSelection] ⚠️ No texts found in DB and no AI texts, skipping slot: slot ${slotIndex}`
-            );
-            return null;
-          }
-        }
-
-        // Если текста нет, но templateTexts есть - это не должно произойти, но на всякий случай
-        return null;
-      }
-    } else {
-      // Режим templates или undefined - сначала пробуем тексты из БД, потом шаблоны
-      if (templateText && selectedTemplateText) {
-        // Проверяем использованные тексты (raw), чтобы избежать дублирования
-        const rawText = templateTexts[selectedTemplateText.index].text;
-        if (state.usedTexts.has(rawText)) {
-          console.warn(
-            `[TextSelection] ⚠️ Template text from DB already used, trying templates: slot ${slotIndex}, text="${rawText.substring(0, 50)}..."`
-          );
-          return null;
-        } else {
-          state.usedTexts.add(rawText);
-          state.usedTemplateIndices.add(selectedTemplateText.index);
-          const textHash = hashNotificationText(rawText);
-          state.usedTemplateHashes.add(textHash);
-          return {
-            text: templateText,
-            templateIdForSlot: 'template_text',
-            selectedAiTextIndex: null,
-            templateIndex: selectedTemplateText.index,
-          };
-        }
-      }
-
-      // Если текста из БД нет И нет текстов в templateTexts - пропускаем слот
-      // Все тексты должны быть в БД, fallback на код удален
-      if (!templateText && templateTexts.length === 0) {
-        console.warn(
-          `[TextSelection] ⚠️ No texts found in DB, skipping slot: slot ${slotIndex}`
-        );
-        return null;
-      }
-
+  // Режим templates: используем только шаблоны
+  if (templateText && selectedTemplateText) {
+    const rawText = templateTexts[selectedTemplateText.index].text;
+    if (state.usedTexts.has(rawText)) {
+      console.warn(
+        isCustomEntity
+          ? `[TextSelection] ⚠️ Template text already used, skipping slot: slot ${slotIndex}, text="${rawText.substring(0, 50)}..."`
+          : `[TextSelection] ⚠️ Template text from DB already used, trying templates: slot ${slotIndex}, text="${rawText.substring(0, 50)}..."`
+      );
       return null;
     }
+
+    state.usedTexts.add(rawText);
+    state.usedTemplateIndices.add(selectedTemplateText.index);
+    const textHash = hashNotificationText(rawText);
+    state.usedTemplateHashes.add(textHash);
+    return {
+      text: templateText,
+      templateIdForSlot: 'template_text',
+      selectedAiTextIndex: null,
+      templateIndex: selectedTemplateText.index,
+      imageTag: templateTexts[selectedTemplateText.index].imageTag ?? null,
+      subtype: null,
+    };
   }
+
+  if (!templateText && templateTexts.length === 0) {
+    console.warn(
+      isCustomEntity
+        ? `[TextSelection] ❌ No template text found for custom entity: slot ${slotIndex}, templateTexts count: ${templateTexts.length}`
+        : `[TextSelection] ⚠️ No texts found in DB, skipping slot: slot ${slotIndex}`
+    );
+    return null;
+  }
+
+  return null;
 }
