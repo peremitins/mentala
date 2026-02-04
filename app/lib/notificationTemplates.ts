@@ -12,6 +12,7 @@
 import type {
   NotificationKind,
   NotificationSubtype,
+  NotificationImageTag,
 } from '@/shared/dto/notifications';
 
 // Тип Directness с поддержкой 'universal' (используется только в шаблонах)
@@ -35,6 +36,7 @@ export interface NotificationTemplate {
   intent?: HabitIntent; // build | quit
   // Для всех видов (habits и therapy)
   subtype?: NotificationSubtype; // reminder | informational | motivational | mixed
+  imageTag?: NotificationImageTag | null; // опциональный тег изображения (по умолчанию null)
   ru: {
     // Universal text (для informational) - один текст для всех directness
     universal?: string;
@@ -55,10 +57,34 @@ export interface NotificationTemplate {
   };
 }
 
+// По умолчанию у шаблонов нет картинки, но можно указать imageTag явно
+function applyImageTags(
+  templates: NotificationTemplate[]
+): NotificationTemplate[] {
+  return templates.map((template) => {
+    if (template.imageTag !== undefined) {
+      return template;
+    }
+
+    // Для воды всегда используем neutral_abstract
+    if (template.kind === 'habits' && template.entityKey === 'water') {
+      return {
+        ...template,
+        imageTag: 'neutral_abstract',
+      };
+    }
+
+    return {
+      ...template,
+      imageTag: null,
+    };
+  });
+}
+
 /**
  * Каталог шаблонов для типа "therapy" (Терапия)
  */
-export const therapyTemplates: NotificationTemplate[] = [
+const rawTherapyTemplates: NotificationTemplate[] = [
   // =========================
   // ANXIETY (Тревога и паника) - 45 templates
   // 15 reminder + 15 informational + 15 motivational
@@ -9599,10 +9625,13 @@ export const therapyTemplates: NotificationTemplate[] = [
   },
 ];
 
+export const therapyTemplates: NotificationTemplate[] =
+  applyImageTags(rawTherapyTemplates);
+
 /**
  * Каталог шаблонов для типа "habits" (Привычки)
  */
-export const habitsTemplates: NotificationTemplate[] = [
+const rawHabitsTemplates: NotificationTemplate[] = [
   // ==========================================
   // WATER (build) - 20 REMINDER + 20 INFORMATIONAL + 20 MOTIVATIONAL = 60 шаблонов
   // ==========================================
@@ -12486,6 +12515,9 @@ export const habitsTemplates: NotificationTemplate[] = [
     },
   },
 ];
+
+export const habitsTemplates: NotificationTemplate[] =
+  applyImageTags(rawHabitsTemplates);
 
 /**
  * Полный каталог шаблонов

@@ -270,7 +270,3 @@ cd android
 ./gradlew clean
 ./gradlew installDebug
 ```
-
-## 📚 Подробная документация
-
-См. полную инструкцию в `ANDROID_SETUP.md`

@@ -1440,7 +1440,7 @@ setRole(email, role)
 
 ## 🔗 Связанные документы
 
-- `.docs/auth_security_improvements_tz.md` — улучшения безопасности авторизации
+- `.docs/auth_tz.md` — авторизация, регистрация и безопасность (объединённый ТЗ)
 - `.docs/security_requirements.md` — общие требования безопасности
 - `server/application/auth/session.ts` — текущая реализация сессий
 

@@ -69,7 +69,7 @@ export function startAiTextPoolWorker() {
         // Проверяем, используется ли AI-генерация
         const meta = (pref.meta || {}) as any;
         const textSource = meta.textSource;
-        if (textSource !== 'ai' && textSource !== 'hybrid') {
+        if (textSource !== 'ai') {
           console.log(
             `[AI Text Pool Worker] ⏭️ Skipping preference ${preferenceId} (textSource: ${textSource})`
           );
@@ -155,10 +155,11 @@ export function startAiTextPoolWorker() {
           addressing,
           directness,
           subtype,
-          textSource,
+          textSource: 'ai',
           kind: pref.kind as 'habits' | 'therapy',
           habitIntent: pref.kind === 'habits' ? habitIntent : null, // Включаем intent только для habits
           userGender,
+          customPromptNotification: pref.customPromptNotification ?? null,
         });
 
         // Вызываем функцию догенерации
@@ -170,8 +171,9 @@ export function startAiTextPoolWorker() {
           configHash,
           directness,
           subtype,
-          textSource,
-          habitIntent // Передаем intent для формирования правильных инструкций
+          'ai',
+          habitIntent, // Передаем intent для формирования правильных инструкций
+          pref.customPromptNotification ?? null
         );
 
         if (result) {

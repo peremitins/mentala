@@ -7,6 +7,7 @@ import type {
   UpdateUserPreferencesDto,
 } from '@/shared/dto/notifications';
 import { getSessionUser } from '@/server/application/auth/session';
+import { enqueueAiRegenerationForUser } from '@/server/application/notifications/ai-text-regeneration.service';
 
 /**
  * PUT /api/settings/preferences
@@ -74,16 +75,36 @@ export default defineEventHandler(
           ? body.meditationTimerMinutes
           : existing.meditationTimerMinutes ?? null;
       // Обновляем существующие
+      const nextAddressing = body.addressing ?? existing.addressing;
+      const nextTone = body.tone ?? existing.tone;
+      const addressingChanged =
+        body.addressing !== undefined && body.addressing !== existing.addressing;
+      const toneChanged = body.tone !== undefined && body.tone !== existing.tone;
+
       const [updated] = await db
         .update(userPreferences)
         .set({
-          addressing: body.addressing ?? existing.addressing,
-          tone: body.tone ?? existing.tone,
+          addressing: nextAddressing,
+          tone: nextTone,
           meditationTimerMinutes: nextMeditationTimer,
           updatedAt: new Date(),
         })
         .where(eq(userPreferences.userId, userId))
         .returning();
+
+      if (addressingChanged || toneChanged) {
+        // Запускаем асинхронно, чтобы не блокировать ответ
+        void enqueueAiRegenerationForUser({
+          userId,
+          reason: 'settings_preferences_update',
+          onlyEnabled: true,
+        }).catch((error) => {
+          console.error(
+            `[SettingsPreferences] ❌ Не удалось поставить регенерацию AI-текстов:`,
+            error
+          );
+        });
+      }
 
       return {
         addressing: updated.addressing as 'informal' | 'formal',
@@ -98,16 +119,35 @@ export default defineEventHandler(
       };
     } else {
       // Создаём новые
+      const createdAddressing = body.addressing ?? 'informal';
+      const createdTone = body.tone ?? 'neutral';
+      const shouldRegenerateAiOnCreate =
+        body.addressing !== undefined || body.tone !== undefined;
+
       const [created] = await db
         .insert(userPreferences)
         .values({
           id: nanoid(),
           userId,
-          addressing: body.addressing ?? 'informal',
-          tone: body.tone ?? 'neutral',
+          addressing: createdAddressing,
+          tone: createdTone,
           meditationTimerMinutes: body.meditationTimerMinutes ?? null,
         })
         .returning();
+
+      if (shouldRegenerateAiOnCreate) {
+        // Запускаем асинхронно, чтобы не блокировать ответ
+        void enqueueAiRegenerationForUser({
+          userId,
+          reason: 'settings_preferences_create',
+          onlyEnabled: true,
+        }).catch((error) => {
+          console.error(
+            `[SettingsPreferences] ❌ Не удалось поставить регенерацию AI-текстов при создании настроек:`,
+            error
+          );
+        });
+      }
 
       return {
         addressing: created.addressing as 'informal' | 'formal',

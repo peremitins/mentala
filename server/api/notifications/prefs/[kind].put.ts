@@ -15,9 +15,12 @@ import type {
 } from '@/shared/dto/notifications';
 import { getSessionUser } from '@/server/application/auth/session';
 import { generateAllSlotsForUser } from '@/server/application/notifications/scheduler.service';
-import { generateNotificationTexts } from '@/server/application/notifications/ai-generation.service';
+import {
+  loadAiGeneratedTexts,
+} from '@/server/application/notifications/ai-generation.service';
 import { computeGenerationConfigHash } from '@/server/utils/notification-ai-config-hash';
 import { userPreferences } from '@/server/infrastructure/db/schema';
+import { enqueueAiTextGenerationJob } from '@/server/application/notifications/queues/aiTextGeneration.queue';
 
 function normalizeCustomSlotTimes(
   input: (number | null)[] | null | undefined,
@@ -39,6 +42,13 @@ function normalizeCustomSlotTimes(
   }
 
   return normalized.length ? normalized : null;
+}
+
+function normalizeCustomPromptNotification(
+  value?: string | null
+): string | null {
+  const normalized = value ? value.trim() : '';
+  return normalized.length > 0 ? normalized : null;
 }
 
 /**
@@ -232,6 +242,34 @@ export default defineEventHandler(
       }
     }
 
+    let normalizedCustomPromptNotification: string | null | undefined =
+      undefined;
+    if (body.customPromptNotification !== undefined) {
+      if (
+        body.customPromptNotification !== null &&
+        typeof body.customPromptNotification !== 'string'
+      ) {
+        throw createError({
+          statusCode: 400,
+          message: 'customPromptNotification must be a string or null',
+        });
+      }
+
+      normalizedCustomPromptNotification = normalizeCustomPromptNotification(
+        body.customPromptNotification
+      );
+
+      if (
+        normalizedCustomPromptNotification &&
+        normalizedCustomPromptNotification.length > 400
+      ) {
+        throw createError({
+          statusCode: 400,
+          message: 'customPromptNotification must be 400 characters or меньше',
+        });
+      }
+    }
+
     const entityKey = body.entityKey;
 
     // Пытаемся найти существующие настройки с учётом entityKey
@@ -296,7 +334,7 @@ export default defineEventHandler(
       .where(and(...conditions))
       .limit(1);
 
-    // ВАЖНО: Если AI-тексты генерируются и textSource === 'ai' или 'hybrid', НЕ регенерируем слоты сейчас
+    // ВАЖНО: Если AI-тексты генерируются и textSource === 'ai', НЕ регенерируем слоты сейчас
     // Слоты будут регенерированы после завершения AI-генерации
     // Объявляем переменную ДО блока if (existing), чтобы она была доступна ниже
     let shouldRegenerateSlotsAfterAi = false;
@@ -323,7 +361,9 @@ export default defineEventHandler(
       const finalMeta: NotificationPreferenceMeta = {
         ...(existingMeta || {}),
         ...(body.meta?.textSource !== undefined
-          ? { textSource: body.meta.textSource }
+          ? {
+              textSource: body.meta.textSource === 'ai' ? 'ai' : 'templates',
+            }
           : {}),
       };
 
@@ -333,6 +373,7 @@ export default defineEventHandler(
       const metaToSave = hasMetaFields ? finalMeta : null;
 
       let normalizedEntityKey = entityKey;
+      let isCustomEntityForPrompt = false;
 
       // ВАЖНО: Обновляем название и описание ДО обновления настроек уведомлений
       // Это нужно для правильного вычисления хеша и пересоздания AI-текстов
@@ -362,6 +403,7 @@ export default defineEventHandler(
 
         // Сохраняем старые значения ДО обновления
         if (habit) {
+          isCustomEntityForPrompt = true;
           oldEntityNameBeforeUpdate = habit.name;
           oldEntityDescriptionBeforeUpdate = habit.description;
         }
@@ -464,6 +506,7 @@ export default defineEventHandler(
 
         // Сохраняем старые значения ДО обновления
         if (topic) {
+          isCustomEntityForPrompt = true;
           oldEntityNameBeforeUpdate = topic.name;
           oldEntityDescriptionBeforeUpdate = topic.description;
         }
@@ -549,6 +592,16 @@ export default defineEventHandler(
         }
       }
 
+      const allowCustomPrompt = Boolean(entityKey) && !isCustomEntityForPrompt;
+      const nextCustomPromptNotification = allowCustomPrompt
+        ? normalizedCustomPromptNotification !== undefined
+          ? normalizedCustomPromptNotification
+          : existing.customPromptNotification ?? null
+        : null;
+      const oldCustomPromptNotification = allowCustomPrompt
+        ? existing.customPromptNotification ?? null
+        : null;
+
       // Обновляем существующие
       const [updated] = await db
         .update(notificationPreferences)
@@ -565,6 +618,7 @@ export default defineEventHandler(
           timeRangeEnd: body.timeRangeEnd ?? existing.timeRangeEnd,
           customSlotTimes: nextCustomSlotTimes,
           meta: metaToSave,
+          customPromptNotification: nextCustomPromptNotification,
           updatedAt: new Date(),
         })
         .where(eq(notificationPreferences.id, existing.id))
@@ -578,8 +632,7 @@ export default defineEventHandler(
         (kind === 'habits' || kind === 'therapy') &&
         entityKey && // Только для конкретных сущностей
         metaForCheck &&
-        (metaForCheck.textSource === 'ai' ||
-          metaForCheck.textSource === 'hybrid');
+        metaForCheck.textSource === 'ai';
 
       console.log(
         `[NotificationPrefs] Checking AI regeneration: shouldRegenerateAi=${shouldRegenerateAi}, kind=${kind}, entityKey=${entityKey || 'none'}, textSource=${metaForCheck?.textSource}, metaToSave=${JSON.stringify(metaToSave)}`
@@ -717,21 +770,15 @@ export default defineEventHandler(
         // ВАЖНО: Если название или описание изменились, нужно принудительно пересоздать AI-тексты
         // entityName/entityDescription входят в хеш, поэтому хеш изменится автоматически
 
-        const textSource: 'ai' | 'hybrid' =
-          metaForCheck?.textSource === 'ai'
-            ? 'ai'
-            : metaForCheck?.textSource === 'hybrid'
-              ? 'hybrid'
-              : 'ai';
+        const textSource: 'ai' = 'ai';
 
         console.log(
           `[NotificationPrefs] 🔍 Determined textSource: ${textSource}, isCustomEntity: ${isCustomEntity}, metaForCheck: ${JSON.stringify(metaForCheck)}`
         );
 
-        // Для вычисления хеша используем subtype
-        // Для кастомных привычек subtype всегда null
-        // Для готовых шаблонов может быть 'mixed', 'reminder', 'informational', 'motivational'
-        const nextSubtypeForHash = isCustomEntity ? null : nextSubtype;
+        // Для вычисления хеша используем фактический subtype из настроек
+        // ВАЖНО: subtype влияет на смысл текста (фокус), поэтому должен менять хеш
+        const nextSubtypeForHash = nextSubtype;
 
         // Вычисляем новый хеш конфигурации
         // КРИТИЧНО: habitIntent должен быть включен в хеш, чтобы при изменении intent генерировался новый пул текстов
@@ -751,6 +798,7 @@ export default defineEventHandler(
           kind: kind as 'habits' | 'therapy',
           habitIntent: kind === 'habits' ? habitIntent : null, // Включаем intent только для habits
           userGender,
+          customPromptNotification: nextCustomPromptNotification,
         });
 
         console.log(
@@ -762,18 +810,14 @@ export default defineEventHandler(
           (existing.meta as NotificationPreferenceMeta | null) || {};
         const oldDirectness = existing.directness;
         const oldSubtype = existing.subtype;
-        const oldTextSource: 'ai' | 'hybrid' | undefined =
-          oldMeta.textSource === 'ai'
-            ? 'ai'
-            : oldMeta.textSource === 'hybrid'
-              ? 'hybrid'
-              : undefined;
+        const oldTextSource: 'ai' | undefined =
+          oldMeta.textSource === 'ai' ? 'ai' : undefined;
 
         // Если старый режим не был AI, то хеш не нужен (тексты не генерировались)
         let oldConfigHash: string | null = null;
-        if (oldTextSource === 'ai' || oldTextSource === 'hybrid') {
-          // Для кастомных привычек subtype всегда null в хеше
-          const oldSubtypeForHash = isCustomEntity ? null : oldSubtype;
+        if (oldTextSource === 'ai') {
+          // Используем фактический subtype из существующих настроек
+          const oldSubtypeForHash = oldSubtype;
           // ВАЖНО: Используем старые значения entityName/entityDescription для старого хеша
           // Это нужно для правильного сравнения, если название/описание изменились
           // КРИТИЧНО: habitIntent должен быть включен в хеш, чтобы при изменении intent генерировался новый пул текстов
@@ -798,20 +842,49 @@ export default defineEventHandler(
             kind: kind as 'habits' | 'therapy',
             habitIntent: kind === 'habits' ? habitIntent : null, // Используем текущий intent (если он изменился, хеш изменится)
             userGender,
+            customPromptNotification: oldCustomPromptNotification,
           });
         }
 
         // Генерируем только если хеш изменился или текстов еще нет
         // ВАЖНО: Если изменилось название или описание, обязательно пересоздаем AI-тексты
         const hashChanged = oldConfigHash !== newConfigHash;
-        const needsAiGeneration =
-          hashChanged || !oldConfigHash || nameChanged || descriptionChanged;
+        // Если хеш совпал, но AI-пул пустой/отсутствует, принудительно регенерируем.
+        let missingAiTexts = false;
 
-        // ВАЖНО: Если AI-тексты генерируются и textSource === 'ai' или 'hybrid', НЕ регенерируем слоты сейчас
+        if (!hashChanged && textSource === 'ai') {
+          try {
+            const existingAiTexts = await loadAiGeneratedTexts(
+              userId,
+              existing.id,
+              newConfigHash
+            );
+            missingAiTexts = !existingAiTexts || existingAiTexts.length === 0;
+            if (missingAiTexts) {
+              console.warn(
+                `[NotificationPrefs] ⚠️ AI texts missing for unchanged hash, forcing generation: user ${userId}, kind: ${kind}, entityKey: ${finalEntityKey}, hash: ${newConfigHash.substring(0, 8)}...`
+              );
+            }
+          } catch (error) {
+            console.warn(
+              `[NotificationPrefs] ⚠️ Failed to check existing AI texts, forcing generation:`,
+              error
+            );
+            missingAiTexts = true;
+          }
+        }
+
+        const needsAiGeneration =
+          hashChanged ||
+          !oldConfigHash ||
+          nameChanged ||
+          descriptionChanged ||
+          missingAiTexts;
+
+        // ВАЖНО: Если AI-тексты генерируются и textSource === 'ai', НЕ регенерируем слоты сейчас
         // Слоты будут регенерированы после завершения AI-генерации
         // Присваиваем значение переменной, объявленной выше
-        shouldRegenerateSlotsAfterAi =
-          needsAiGeneration && (textSource === 'ai' || textSource === 'hybrid');
+        shouldRegenerateSlotsAfterAi = needsAiGeneration && textSource === 'ai';
 
         if (needsAiGeneration) {
           console.log(
@@ -822,66 +895,14 @@ export default defineEventHandler(
           console.log(
             `[NotificationPrefs] Calling generateNotificationTexts with entityKey: ${finalEntityKey}`
           );
-          generateNotificationTexts({
+          // Ставим задачу генерации в очередь (без синхронного ожидания).
+          // Это защищает от гонок при быстрых изменениях настроек.
+          void enqueueAiTextGenerationJob({
             userId,
             preferenceId: existing.id,
-            kind: kind as 'habits' | 'therapy',
-            entityKey: finalEntityKey, // ID для кастомных, ключ шаблона для шаблонных
-            directness: nextDirectness as 'soft' | 'moderate' | 'hard',
-            subtype: nextSubtypeForHash as
-              | 'reminder'
-              | 'informational'
-              | 'motivational'
-              | 'mixed'
-              | null,
-            textSource,
-            count: 50, // ВАЖНО: Всегда 50 текстов при перегенерации
-            habitIntent: kind === 'habits' ? habitIntent : undefined, // Передаем intent для привычек
-          })
-            .then(async (result) => {
-              console.log(
-                `[NotificationPrefs] ✅ AI texts generated: ${result.texts.length} texts, provider: ${result.provider}, model: ${result.model}`
-              );
-              // Небольшая задержка, чтобы убедиться, что тексты сохранились в БД
-              await new Promise((resolve) => setTimeout(resolve, 1000));
-              // После генерации AI-текстов регенерируем слоты
-              // Используем нормализованные (читаемые) значения для поиска настроек
-              // ВАЖНО: Используем глобальную оркестрацию для правильного чередования тем
-              return generateAllSlotsForUser(userId, {
-                forceTodaySlots: true,
-              });
-            })
-            .then(() => {
-              console.log(
-                `[NotificationPrefs] ✅ Slots regenerated after AI generation: user ${userId}, kind: ${kind}, entityKey: ${entityKey || 'none'}`
-              );
-            })
-            .catch(async (error) => {
-              console.error(
-                `[NotificationPrefs] ❌ Failed to generate AI texts:`,
-                error
-              );
-              // ВАЖНО: Даже если генерация AI-текстов завершилась с ошибкой,
-              // нужно перегенерировать слоты, чтобы использовать доступные тексты (шаблоны для hybrid)
-              console.log(
-                `[NotificationPrefs] Regenerating slots anyway (may use templates only): user ${userId}, kind: ${kind}, entityKey: ${entityKey || 'none'}`
-              );
-              try {
-                await new Promise((resolve) => setTimeout(resolve, 1000));
-                // ВАЖНО: Используем глобальную оркестрацию для правильного чередования тем
-                await generateAllSlotsForUser(userId, {
-                  forceTodaySlots: true,
-                });
-                console.log(
-                  `[NotificationPrefs] ✅ Slots regenerated after AI generation error: user ${userId}, kind: ${kind}`
-                );
-              } catch (slotError) {
-                console.error(
-                  `[NotificationPrefs] ❌ Failed to regenerate slots after AI error:`,
-                  slotError
-                );
-              }
-            });
+            reason: 'prefs_update',
+            configHash: newConfigHash,
+          });
         } else {
           console.log(
             `[NotificationPrefs] Config hash unchanged, skipping AI generation: user ${userId}, kind: ${kind}, entityKey: ${finalEntityKey}, hash: ${newConfigHash.substring(0, 8)}...`
@@ -945,6 +966,7 @@ export default defineEventHandler(
           (updated.customSlotTimes as (number | null)[] | null) ?? null,
         timeRangeStart: updated.timeRangeStart,
         timeRangeEnd: updated.timeRangeEnd,
+        customPromptNotification: updated.customPromptNotification ?? null,
         meta: (updated.meta as NotificationPreferenceMeta | null) ?? null,
         createdAt: updated.createdAt.toISOString(),
         updatedAt: updated.updatedAt.toISOString(),
@@ -978,6 +1000,7 @@ export default defineEventHandler(
         initialTimesPerDay
       );
       let normalizedEntityKey = entityKey;
+      let isCustomEntityForPrompt = false;
 
       if (kind === 'habits' && entityKey) {
         // Для кастомных сущностей entityKey должен быть ID
@@ -988,6 +1011,7 @@ export default defineEventHandler(
           .limit(1);
         // Для кастомных привычек используем ID
         if (habit) {
+          isCustomEntityForPrompt = true;
           normalizedEntityKey = habit.id; // ВСЕГДА ID для кастомных сущностей
           console.log(
             `[NotificationPrefs] Creating preference for habit: entityKey param=${entityKey}, found id=${habit.id}, using normalizedEntityKey=${normalizedEntityKey}`
@@ -1011,6 +1035,7 @@ export default defineEventHandler(
           )
           .limit(1);
         if (topic) {
+          isCustomEntityForPrompt = true;
           // Для кастомных тем используем ID
           normalizedEntityKey = topic.id; // ВСЕГДА ID для кастомных сущностей
           console.log(
@@ -1033,13 +1058,18 @@ export default defineEventHandler(
 
               // Сохраняем textSource из body.meta
               if (body.meta?.textSource !== undefined) {
-                meta.textSource = body.meta.textSource;
+                meta.textSource =
+                  body.meta.textSource === 'ai' ? 'ai' : 'templates';
               }
 
               // Возвращаем meta только если есть хотя бы одно поле
               return meta.textSource !== undefined ? meta : null;
             })()
           : null;
+      const allowCustomPrompt = Boolean(entityKey) && !isCustomEntityForPrompt;
+      const initialCustomPromptNotification = allowCustomPrompt
+        ? normalizedCustomPromptNotification ?? null
+        : null;
       const [created] = await db
         .insert(notificationPreferences)
         .values({
@@ -1058,6 +1088,7 @@ export default defineEventHandler(
           timeRangeEnd: body.timeRangeEnd ?? 1350, // 22:30
           customSlotTimes: initialCustomSlotTimes,
           meta: initialMeta,
+          customPromptNotification: initialCustomPromptNotification,
         })
         .returning();
 
@@ -1066,8 +1097,7 @@ export default defineEventHandler(
         (kind === 'habits' || kind === 'therapy') &&
         entityKey && // Только для конкретных сущностей
         initialMeta &&
-        (initialMeta.textSource === 'ai' ||
-          initialMeta.textSource === 'hybrid');
+        initialMeta.textSource === 'ai';
 
       if (shouldGenerateAi) {
         // ВАЖНО: Для кастомных сущностей entityKey = ID, для шаблонных = ключ шаблона
@@ -1075,16 +1105,12 @@ export default defineEventHandler(
         const finalEntityKey = normalizedEntityKey || entityKey || '';
 
         // Определяем textSource
-        const textSource: 'ai' | 'hybrid' =
-          initialMeta.textSource === 'ai'
-            ? 'ai'
-            : initialMeta.textSource === 'hybrid'
-              ? 'hybrid'
-              : 'ai';
+        const textSource: 'ai' = 'ai';
 
-        // Определяем isCustomEntity для вычисления subtype и habitIntent
-        let isCustomEntity = false;
+        // Определяем сущность и intent для вычисления хеша и генерации
         let habitIntent: 'quit' | 'build' | null = null;
+        let entityName = '';
+        let entityDescription: string | null = null;
         if (kind === 'habits' && entityKey) {
           // Для кастомных сущностей entityKey = ID
           const [habit] = await db
@@ -1092,14 +1118,17 @@ export default defineEventHandler(
             .from(habits)
             .where(and(eq(habits.id, entityKey), eq(habits.userId, userId)))
             .limit(1);
-          isCustomEntity = !!habit;
           if (habit) {
             habitIntent = habit.intent as 'quit' | 'build' | null;
+            entityName = habit.name;
+            entityDescription = habit.description;
           } else {
             // Готовый шаблон - берем intent из каталога
             const { findHabitByKey } = await import('@/app/lib/habitsCatalog');
             const catalogHabit = findHabitByKey(entityKey);
             habitIntent = catalogHabit ? catalogHabit.intent : null;
+            entityName = catalogHabit?.name ?? entityKey;
+            entityDescription = catalogHabit?.description || null;
           }
         } else if (kind === 'therapy' && entityKey) {
           // Для кастомных сущностей entityKey = ID
@@ -1113,14 +1142,47 @@ export default defineEventHandler(
               )
             )
             .limit(1);
-          isCustomEntity = !!topic;
+          if (topic) {
+            entityName = topic.name;
+            entityDescription = topic.description;
+          } else {
+            entityName = entityKey;
+            entityDescription = null;
+          }
         }
 
-        // Для вычисления хеша используем subtype
-        // Для кастомных привычек subtype всегда null
-        const initialSubtypeForHash = isCustomEntity ? null : initialSubtype;
+        // Для вычисления хеша используем фактический subtype
+        const initialSubtypeForHash = initialSubtype;
 
         const initialDirectness = body.directness ?? 'moderate';
+
+        const [userPrefs] = await db
+          .select()
+          .from(userPreferences)
+          .where(eq(userPreferences.userId, userId))
+          .limit(1);
+
+        const tone = resolveTone(userPrefs?.tone as string | null | undefined);
+        const addressing = (userPrefs?.addressing as any) || 'informal';
+
+        const newConfigHash = computeGenerationConfigHash({
+          entityName: entityName || finalEntityKey,
+          entityDescription,
+          tone,
+          addressing,
+          directness: initialDirectness as 'soft' | 'moderate' | 'hard',
+          subtype: initialSubtypeForHash as
+            | 'reminder'
+            | 'informational'
+            | 'motivational'
+            | 'mixed'
+            | null,
+          textSource,
+          kind: kind as 'habits' | 'therapy',
+          habitIntent: kind === 'habits' ? habitIntent : null,
+          userGender,
+          customPromptNotification: initialCustomPromptNotification,
+        });
 
         console.log(
           `[NotificationPrefs] Preparing AI generation for NEW preference: kind=${kind}, original entityKey=${entityKey || 'none'}, normalizedEntityKey=${normalizedEntityKey || 'none'}, finalEntityKey=${finalEntityKey} (ID for custom, key for template)`
@@ -1131,67 +1193,16 @@ export default defineEventHandler(
         console.log(
           `[NotificationPrefs] Starting AI text generation for NEW preference: user ${userId}, kind: ${kind}, entityKey: ${finalEntityKey} (ID for custom, key for template), textSource: ${textSource}`
         );
-        generateNotificationTexts({
+        // Ставим задачу генерации в очередь (без синхронного ожидания).
+        // Это защищает от гонок при быстрых изменениях настроек.
+        void enqueueAiTextGenerationJob({
           userId,
           preferenceId: created.id,
-          kind: kind as 'habits' | 'therapy',
-          entityKey: finalEntityKey, // ID для кастомных, ключ шаблона для шаблонных
-          directness: initialDirectness as 'soft' | 'moderate' | 'hard',
-          subtype: initialSubtypeForHash as
-            | 'reminder'
-            | 'informational'
-            | 'motivational'
-            | 'mixed'
-            | null,
-          textSource,
-          count: 50, // ВАЖНО: Всегда 50 текстов при создании нового preference
-          habitIntent: kind === 'habits' ? habitIntent : undefined, // Передаем intent для привычек
-        })
-          .then(async (result) => {
-            console.log(
-              `[NotificationPrefs] ✅ AI texts generated for new preference: ${result.texts.length} texts, provider: ${result.provider}, model: ${result.model}`
-            );
-            // Небольшая задержка, чтобы убедиться, что тексты сохранились в БД
-            await new Promise((resolve) => setTimeout(resolve, 1000));
-            // После генерации AI-текстов регенерируем слоты
-            // ВАЖНО: Используем глобальную оркестрацию для правильного чередования тем
-            return generateAllSlotsForUser(userId, {
-              forceTodaySlots: true,
-            });
-          })
-          .then(() => {
-            console.log(
-              `[NotificationPrefs] ✅ Slots regenerated after AI generation for new preference: user ${userId}, kind: ${kind}, entityKey: ${entityKey || 'none'}`
-            );
-          })
-          .catch(async (error) => {
-            console.error(
-              `[NotificationPrefs] ❌ Failed to generate AI texts for new preference:`,
-              error
-            );
-            // ВАЖНО: Даже если генерация AI-текстов завершилась с ошибкой,
-            // нужно перегенерировать слоты, чтобы использовать доступные тексты (шаблоны для hybrid)
-            console.log(
-              `[NotificationPrefs] Regenerating slots anyway (may use templates only): user ${userId}, kind: ${kind}, entityKey: ${entityKey || 'none'}`
-            );
-            try {
-              await new Promise((resolve) => setTimeout(resolve, 1000));
-              // ВАЖНО: Используем глобальную оркестрацию для правильного чередования тем
-              await generateAllSlotsForUser(userId, {
-                forceTodaySlots: true,
-              });
-              console.log(
-                `[NotificationPrefs] ✅ Slots regenerated after AI generation error: user ${userId}, kind: ${kind}`
-              );
-            } catch (slotError) {
-              console.error(
-                `[NotificationPrefs] ❌ Failed to regenerate slots after AI error:`,
-                slotError
-              );
-            }
-          });
+          reason: 'prefs_create',
+          configHash: newConfigHash,
+        });
       } else {
-        // Если AI-тексты не нужны (textSource !== 'ai' && textSource !== 'hybrid'),
+        // Если AI-тексты не нужны (textSource !== 'ai'),
         // генерируем слоты сразу
         try {
           // ВАЖНО: Используем глобальную оркестрацию для правильного чередования тем
@@ -1222,6 +1233,7 @@ export default defineEventHandler(
           (created.customSlotTimes as (number | null)[] | null) ?? null,
         timeRangeStart: created.timeRangeStart,
         timeRangeEnd: created.timeRangeEnd,
+        customPromptNotification: created.customPromptNotification ?? null,
         meta: (created.meta as NotificationPreferenceMeta | null) ?? null,
         createdAt: created.createdAt.toISOString(),
         updatedAt: created.updatedAt.toISOString(),

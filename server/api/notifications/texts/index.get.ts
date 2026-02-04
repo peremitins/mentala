@@ -140,6 +140,7 @@ export default defineEventHandler(async (event) => {
     source: text.source as 'default' | 'user',
     intent: text.intent as NotificationTextIntent | null,
     subtype: text.subtype as NotificationSubtype | null,
+    imageTag: text.imageTag ?? null,
     directness: text.directness as 'soft' | 'moderate' | 'hard' | 'universal',
     addressing: text.addressing as 'informal' | 'formal' | 'universal',
     locale: text.locale,

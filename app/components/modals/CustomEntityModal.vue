@@ -90,14 +90,22 @@
         </div>
 
         <div class="flex flex-col gap-2">
-          <label class="text-xs sm:text-sm font-medium text-foreground">
-            Описание
-          </label>
+          <div class="flex items-center justify-between">
+            <label class="text-xs sm:text-sm font-medium text-foreground">
+              Описание
+            </label>
+            <span class="text-xs text-muted-foreground">
+              {{ descriptionLength }}/{{
+                MAX_CUSTOM_PROMPT_NOTIFICATION_LENGTH
+              }}
+            </span>
+          </div>
           <TextareaResize
             v-model="description"
             variant="form"
             :min-height="'80px'"
             :max-height="'200px'"
+            :maxlength="MAX_CUSTOM_PROMPT_NOTIFICATION_LENGTH"
             :placeholder="descriptionPlaceholder"
           />
         </div>
@@ -144,6 +152,7 @@ import type {
   HabitIntent,
   TherapyTopicDto,
 } from '@/shared/dto/notifications';
+import { MAX_CUSTOM_PROMPT_NOTIFICATION_LENGTH } from '@/shared/dto/notifications';
 import { useUserHabitsStore } from '@/app/stores/userHabits';
 import { useTherapyTopicsStore } from '@/app/stores/therapyTopics';
 import { useForm, useField } from 'vee-validate';
@@ -188,7 +197,10 @@ const formSchema = computed(() =>
           'Слишком длинное название'
         ),
       emoji: z.string().max(4).optional(),
-      description: z.string().max(400).optional(),
+      description: z
+        .string()
+        .max(MAX_CUSTOM_PROMPT_NOTIFICATION_LENGTH)
+        .optional(),
     })
   )
 );
@@ -221,6 +233,7 @@ const {
 } = useField('name', undefined, { validateOnValueUpdate: true });
 const { value: emoji } = useField<string | undefined>('emoji');
 const { value: description } = useField<string | undefined>('description');
+const descriptionLength = computed(() => (description.value ?? '').length);
 
 const showIntentSelector = computed(() => props.mentaiMode === 'habits');
 
@@ -237,11 +250,7 @@ const headerSubtitle = computed(
       : 'Создайте тему под свои запросы: название, описание и эмодзи')
 );
 
-const submitLabel = computed(
-  () =>
-    props.submitLabel ??
-    (props.mentaiMode === 'habits' ? 'Создать и настроить' : 'Создать тему')
-);
+const submitLabel = computed(() => props.submitLabel ?? 'Создать');
 
 const namePlaceholder = computed(
   () =>
@@ -269,7 +278,11 @@ const intentOptions = [
 ];
 
 const isSubmitDisabled = computed(
-  () => loading.value || !nameMeta.valid || !nameMeta.touched
+  () =>
+    loading.value ||
+    !nameMeta.valid ||
+    !nameMeta.touched ||
+    descriptionLength.value > MAX_CUSTOM_PROMPT_NOTIFICATION_LENGTH
 );
 
 function close() {

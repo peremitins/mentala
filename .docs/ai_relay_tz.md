@@ -1,10 +1,48 @@
-# AI Relay (Нидерланды) — ТЗ и ответы на уточняющие вопросы
+# AI Gateway и AI Relay — ТЗ для Mentala
 
-Документ описывает relay-сервис для запросов к OpenAI вне России, ответы на уточняющие вопросы по кодовой базе Mentala и итоговое ТЗ для реализации.
+Документ объединяет: (I) общие цели и архитектуру AI Gateway и политику по провайдерам/регионам; (II) конкретное ТЗ реализации **AI Relay** — прокси к OpenAI вне РФ и интеграция с кодовой базой Mentala. Объединён с бывшими дополнениями (содержание перенесено в этот документ).
+
+**Согласование (Relay):** каноническая схема подписи — как в разделе 5; один эндпоинт `/v1/responses`; Relay проксирует raw SSE OpenAI, парсинг делает relayClient; TTL подписи 60 с; `OPENAI_REQUESTS_DISABLED` остаётся как сейчас.
 
 ---
 
-## Ответы на уточняющие вопросы
+## Часть I. AI Gateway: цели и архитектура (контекст)
+
+### Цель
+
+Обеспечить работу ИИ-чата при условиях: инфраструктура (аккаунты, БД, платежи) в РФ; внешний AI-провайдер может быть недоступен из РФ или запрещать сервис в неподдерживаемых странах. Нужны: отказоустойчивость, безопасность, контроль расходов, возможность быстро переключать провайдера без релиза клиента.
+
+### Принципы
+
+1. **Provider Abstraction** — приложение не завязано на одного провайдера.
+2. **AI Gateway** — отдельный сервис: держит секреты провайдеров, нормализует запросы/ответы, rate-limit, retries, circuit breaker, аудит, метрики.
+3. **Policy-aware routing** — учёт страны/региона пользователя и правил провайдера.
+4. **Data minimization** — в провайдера уходит минимум текста; PII по возможности не передавать.
+5. **No raw chat logs** — в логах не хранить тела сообщений.
+
+### Компоненты и трафик
+
+- **RU Backend** — авторизация, подписки, лимиты, хранение summary/контекста; endpoint для клиента `/api/chat`.
+- **AI Gateway** (в неподдерживающей РФ стране при необходимости) — единственная точка выхода к внешним AI API; доступ только от RU backend (подпись / mTLS).
+- **Схема:** Client (RU) → RU Backend → AI Gateway (non-RU) → Provider. **Fallback:** при недоступности/запрете провайдера A — провайдер B или «ограниченный режим» (сообщение «Сервис временно недоступен»).
+
+### Политика по OpenAI и РФ
+
+OpenAI публикует список поддерживаемых стран; доступ из неподдерживаемых стран может привести к блокировке. Для РФ необходимо одно из: (1) не использовать OpenAI для пользователей из РФ; (2) геофенсинг — OpenAI только для поддерживаемых регионов; (3) контракт/разрешение при наличии. В реализации: правило роутинга `if region == RU → provider = B` или restricted mode; OpenAI включать только для пользователей из поддерживаемого региона.
+
+### Безопасность и метрики (общие)
+
+- Не логировать: тела сообщений, сырые промпты, полные ответы модели. Логировать: requestId, latency, provider, statusCode, token usage, длину входа/выхода.
+- Ключи провайдеров только в Gateway; RU backend без ключей провайдера A.
+- Метрики: запросы по provider/region/status, latency p95, ошибки провайдера, fallback_triggered, token_usage.
+
+**Текущая реализация в Mentala** — **AI Relay** (ниже): один провайдер (OpenAI), прокси к Responses API. Расширение до мульти-провайдера и policy-aware routing по региону — в дорожной карте.
+
+---
+
+## Часть II. AI Relay — ТЗ и реализация
+
+### Ответы на уточняющие вопросы
 
 ### 1. OpenAI: Chat Completions или Responses API, есть ли стриминг?
 
@@ -203,6 +241,35 @@
 - **Единицы времени**: `X-Relay-Timestamp` — это **epoch milliseconds** (как `Date.now()`), а не секунды.
 - **Вариант Б.** mTLS — по желанию, для усиления безопасности.
 
+#### 5.1.1. Реализация raw body в Fastify (обязательно)
+
+Relay обязан получать тело запроса в байтах **до парсинга** и класть в `req.rawBody`. Пример для Fastify:
+
+```ts
+app.addContentTypeParser(
+  /^application\/json(?:;|$)/,
+  { parseAs: 'buffer' },
+  (req, body, done) => {
+    const buffer = body as Buffer;
+    (req as any).rawBody = buffer;
+    if (buffer.length === 0) {
+      done(null, {});
+      return;
+    }
+    try {
+      const json = JSON.parse(buffer.toString('utf-8'));
+      done(null, json);
+    } catch (err) {
+      done(err as Error, undefined as any);
+    }
+  }
+);
+```
+
+В handler использовать `req.rawBody` как `Buffer` для подсчёта SHA-256 подписи.
+
+**Масштабирование:** in-memory nonce-cache работает только на одной инстанции. При 2+ инстанциях под балансировщиком нужен общий storage (например Redis) для защиты от повторов.
+
 ---
 
 ## 6. API Relay
@@ -229,7 +296,7 @@ Relay:
 
 - **Вариант 1 (принят)**: Relay проксирует **raw SSE OpenAI**, а `relayClient.chatStream` парсит события и возвращает `AsyncIterable<string>` дельт (только `response.output_text.delta`). Nitro (`server/api/chat/stream.post.ts`) продолжает формировать SSE (`data: {"output_text_delta":...}` и `[DONE]`).
 - **Вариант 2 (не используем сейчас)**: Relay сам извлекает дельты и отдаёт поток «чистого текста» (stream‑ответ без SSE), а `relayClient` просто читает и возвращает дельты.
-**Важно:** при проксировании стрима Relay передаёт **байты как есть** (Buffer → ответ), без преобразования в строку, чтобы не ломать SSE.
+**Важно:** при проксировании стрима Relay передаёт **байты как есть** (Buffer → ответ), без преобразования в строку (`toString()`), без склейки чанков в строку — писать каждый chunk как Buffer, чтобы не ломать SSE.
 
 **Важно:** прямой passthrough SSE‑чанков Mentala через `server/api/chat/stream.post.ts` не подходит, потому что роут уже оборачивает дельты в `data: ...`. Также `server/interface/api/chat.post.ts` использует `chatStreamViaProvider` при `messages.length === 0` (welcome‑старт) — это второй путь стриминга, который должен остаться совместимым с «дельтами».
 
@@ -423,3 +490,297 @@ Relay:
 | Промпты (user_name, user_gender)                         | `server/application/prompts/index.ts`                                                                    |
 | Порт LLM                                                 | `server/ports/index.ts`                                                                                  |
 | TTS/STT (опционально в Relay)                            | `server/api/tts/openai.post.ts`, `server/api/tts/openai.stream.get.ts`, `server/api/stt/whisper.post.ts` |
+
+---
+
+## 16. Размещение Relay в монорепе
+
+Приложение Relay может располагаться в том же репозитории в каталоге `apps/ai-relay` (рядом с `server/`, `shared/` и т.д.). В коде основного backend уже может быть `relayClient` с методами `relayResponsesRequest` и `relayResponsesStream`; Relay должен соответствовать этому контракту.
+
+---
+
+## 17. Запуск Relay локально
+
+В каталоге `apps/ai-relay` (или где развёрнут Relay):
+
+```bash
+cp .env.example .env
+# вставь OPENAI_API_KEY и RELAY_SHARED_SECRET (или AI_RELAY_AUTH_SECRET)
+npm install
+npm run dev
+```
+
+Проверка: `GET http://localhost:8080/health` должен вернуть `{ "ok": true }`.
+
+---
+
+## Приложение A. Пример реализации Relay (Node.js + Fastify)
+
+Ниже — минимально достаточный MVP: проверка HMAC, проксирование `POST /v1/responses`, проксирование raw SSE без преобразования, эндпоинт `/health`.
+
+### A.1. Структура файлов
+
+```
+apps/ai-relay/
+  package.json
+  tsconfig.json
+  Dockerfile
+  .env.example
+  src/
+    fastify.d.ts
+    index.ts
+    server.ts
+    config.ts
+    auth.ts
+    openai.ts
+    sse.ts
+    types.ts
+    utils.ts
+```
+
+### A.2. package.json
+
+```json
+{
+  "name": "ai-relay",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "node --env-file=.env --loader ts-node/esm src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node --env-file=.env dist/index.js"
+  },
+  "dependencies": {
+    "fastify": "4.29.1",
+    "pino": "9.4.0",
+    "undici": "6.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.13.1",
+    "ts-node": "10.9.2",
+    "typescript": "5.7.3"
+  }
+}
+```
+
+### A.3. .env.example
+
+```bash
+NODE_ENV=production
+PORT=8080
+
+OPENAI_API_KEY=replace_me
+OPENAI_BASE_URL=https://api.openai.com
+
+RELAY_SHARED_SECRET=replace_me
+
+RELAY_MAX_BODY_BYTES=1048576
+RELAY_SIGNATURE_TTL_MS=60000
+
+OPENAI_TIMEOUT_MS=30000
+OPENAI_STREAM_TIMEOUT_MS=120000
+```
+
+### A.4. Dockerfile
+
+```dockerfile
+FROM node:22-alpine
+
+WORKDIR /app
+
+COPY package.json ./
+COPY tsconfig.json ./
+RUN npm install
+
+COPY src ./src
+RUN npm run build
+
+ENV NODE_ENV=production
+EXPOSE 8080
+
+CMD ["node", "dist/index.js"]
+```
+
+### A.5. src/config.ts
+
+```ts
+export function mustGetEnv(name: string): string {
+  const v = process.env[name];
+  if (!v || String(v).trim().length === 0) {
+    throw new Error(`Missing env: ${name}`);
+  }
+  return String(v);
+}
+
+export const config = {
+  nodeEnv: process.env.NODE_ENV || 'development',
+  port: Number(process.env.PORT || 8080),
+
+  openai: {
+    apiKey: mustGetEnv('OPENAI_API_KEY'),
+    baseUrl: (process.env.OPENAI_BASE_URL || 'https://api.openai.com').replace(/\/+$/, ''),
+    timeoutMs: Number(process.env.OPENAI_TIMEOUT_MS || 30000),
+    streamTimeoutMs: Number(process.env.OPENAI_STREAM_TIMEOUT_MS || 120000),
+  },
+
+  relay: {
+    sharedSecret: mustGetEnv('RELAY_SHARED_SECRET'),
+    maxBodyBytes: Number(process.env.RELAY_MAX_BODY_BYTES || 1048576),
+    signatureTtlMs: Number(process.env.RELAY_SIGNATURE_TTL_MS || 60000),
+  },
+};
+```
+
+### A.6. src/fastify.d.ts
+
+```ts
+import 'fastify';
+
+declare module 'fastify' {
+  interface FastifyRequest {
+    rawBody?: Buffer;
+  }
+}
+```
+
+### A.7. src/types.ts
+
+```ts
+export type RelayPurpose =
+  | 'chat'
+  | 'chat_stream'
+  | 'chips'
+  | 'finish_session'
+  | 'notification'
+  | 'other';
+
+export type StreamEvent = {
+  type: 'raw';
+  data: Buffer;
+};
+```
+
+### A.8. src/auth.ts (каноническая строка с `\n`)
+
+В канонической строке поля соединяются символом перевода строки `\n`:
+
+```ts
+const canonical = [
+  params.method.toUpperCase(),
+  params.path,
+  String(ts),
+  nonce,
+  bodyHash,
+  clientId,
+].join('\n');
+```
+
+Полная реализация проверки заголовков, timestamp (TTL), nonce (in-memory с TTL), SHA-256 тела и HMAC — как в разделе 5; при невалидном base64 в `X-Relay-Signature` возвращать 401.
+
+### A.9. src/openai.ts
+
+```ts
+import { request } from 'undici';
+import { config } from './config';
+
+export async function openaiResponsesRequest(body: unknown) {
+  const url = `${config.openai.baseUrl}/v1/responses`;
+  const res = await request(url, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${config.openai.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+    headersTimeout: config.openai.timeoutMs,
+    bodyTimeout: config.openai.timeoutMs,
+  });
+  return res;
+}
+
+export async function openaiResponsesStream(body: unknown) {
+  const url = `${config.openai.baseUrl}/v1/responses`;
+  const res = await request(url, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${config.openai.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+    headersTimeout: config.openai.streamTimeoutMs,
+    bodyTimeout: config.openai.streamTimeoutMs,
+  });
+  return res;
+}
+```
+
+### A.10. src/sse.ts
+
+```ts
+import type { FastifyReply } from 'fastify';
+import type { StreamEvent } from './types';
+
+export function proxySse(reply: FastifyReply, ev: StreamEvent): void {
+  reply.raw.write(ev.data);
+}
+```
+
+### A.11. src/utils.ts
+
+```ts
+const DIAGNOSTIC_HEADERS = [
+  'x-request-id',
+  'openai-request-id',
+  'x-ratelimit-limit-requests',
+  'x-ratelimit-remaining-requests',
+  'x-ratelimit-reset-requests',
+  'x-ratelimit-limit-tokens',
+  'x-ratelimit-remaining-tokens',
+  'x-ratelimit-reset-tokens',
+];
+
+export async function readBodyBuffer(
+  body: AsyncIterable<Uint8Array> | null
+): Promise<Buffer> {
+  if (!body) return Buffer.alloc(0);
+  const chunks: Buffer[] = [];
+  for await (const chunk of body as AsyncIterable<Uint8Array>) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}
+
+export function extractDiagnosticHeaders(
+  headers: Record<string, string | string[] | undefined>
+): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const key of DIAGNOSTIC_HEADERS) {
+    const value = headers[key];
+    if (typeof value === 'string') result[key] = value;
+  }
+  return result;
+}
+```
+
+### A.12. src/server.ts (основная логика)
+
+- Регистрация content-type parser для `application/json` с `parseAs: 'buffer'`, сохранение `req.rawBody = buffer`, парсинг JSON из того же Buffer.
+- `GET /health` → `{ ok: true }`.
+- `POST /v1/responses`: проверить `req.rawBody`, вызвать `verifyRelaySignature({ req, rawBody, method: 'POST', path: '/v1/responses' })`, прочитать body как JSON, определить `isStream = parsedBody?.stream`, вызвать `openaiResponsesStream` или `openaiResponsesRequest`. Для non-stream: прочитать ответ в Buffer, вернуть с теми же status/headers. Для stream: установить заголовки `content-type`, `cache-control`, `connection`, пройтись `for await (const chunk of res.body)` и вызывать `reply.raw.write(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))`, затем `reply.raw.end()`.
+
+### A.13. src/index.ts
+
+```ts
+import { config } from './config';
+import { buildServer } from './server';
+
+const app = buildServer();
+
+app.listen({ port: config.port, host: '0.0.0.0' }).then((address) => {
+  app.log.info({ address }, 'ai-relay started');
+});
+```
+
+Имена переменных окружения в основном ТЗ: `AI_RELAY_AUTH_SECRET` / `AI_RELAY_CLIENT_ID` на стороне Mentala; на стороне Relay в примере использованы `RELAY_SHARED_SECRET` — при развёртывании согласовать единые имена (например `RELAY_AUTH_SECRET` = `AI_RELAY_AUTH_SECRET`).

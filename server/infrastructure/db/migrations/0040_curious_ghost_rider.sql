@@ -1,0 +1,3 @@
+ALTER TABLE "notification_preferences" ADD COLUMN "text_source_normalized" varchar(20) GENERATED ALWAYS AS (CASE WHEN "notification_preferences"."meta" ->> 'textSource' = 'ai' THEN 'ai' ELSE 'templates' END) STORED;--> statement-breakpoint
+ALTER TABLE "notification_text_presets" ADD COLUMN "image_tag" varchar(50);--> statement-breakpoint
+ALTER TABLE "notification_texts" ADD COLUMN "image_tag" varchar(50);

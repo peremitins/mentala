@@ -141,6 +141,7 @@ export default defineEventHandler(
               source: 'default' as const,
               intent: preset.intent,
               subtype: preset.subtype,
+              imageTag: preset.imageTag ?? null,
               directness: preset.directness,
               addressing: preset.addressing,
               locale: preset.locale,

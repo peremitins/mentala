@@ -18,12 +18,15 @@ import {
 } from '@@/server/infrastructure/db/schema';
 import { computeGenerationConfigHash } from '@@/server/utils/notification-ai-config-hash';
 import { eq, and, or, sql, lte } from 'drizzle-orm';
+import { enqueueAiTextPoolRefillJob } from '@@/server/application/notifications/queues/aiTextPool.queue';
 import { createHash } from 'node:crypto';
+import type { LlmProviderPort } from '@@/server/ports';
 import type {
   Tone,
   Addressing,
   Directness,
   HabitSubtype,
+  NotificationSubtype,
 } from '@/shared/dto/notifications';
 import { MAX_NOTIFICATION_TEXT_LENGTH } from '@/shared/dto/notifications';
 
@@ -45,6 +48,86 @@ const MAX_NOTIFICATION_BODY_LENGTH = Math.max(
   0,
   MAX_NOTIFICATION_TEXT_LENGTH - EMOJI_PREFIX.length
 );
+const IMAGE_TAGS = new Set([
+  'harm_organs',
+  'harm_appearance',
+  'harm_mental',
+  'activity',
+  'nature',
+  'meditation',
+  'daily_life',
+  'neutral_abstract',
+]);
+const SAFE_IMAGE_TAGS: ImageTag[] = [
+  'activity',
+  'nature',
+  'meditation',
+  'daily_life',
+  'neutral_abstract',
+];
+const HARM_MARKERS = [
+  /вред/iu,
+  /риск/iu,
+  /опас/iu,
+  /болез/iu,
+  /инфаркт/iu,
+  /инсульт/iu,
+  /рак/iu,
+  /онколог/iu,
+  /смерт/iu,
+  /тяжел/iu,
+  /токс/iu,
+  /поврежд/iu,
+  /разруш/iu,
+  /ухудш/iu,
+  /зависим/iu,
+  /печен/iu,
+  /сердц/iu,
+  /сосуд/iu,
+  /легк/iu,
+];
+const MIXED_SUBTYPES = new Set(['reminder', 'informational', 'motivational']);
+const SUPPORT_MARKERS = [
+  /держись/iu,
+  /ты справишься/iu,
+  /я с тобой/iu,
+  /мы рядом/iu,
+  /ты не один/iu,
+  /поддерж/iu,
+];
+const FACT_MARKERS = [
+  /\d/,
+  /риск/iu,
+  /повышает/iu,
+  /снижает/iu,
+  /увеличивает/iu,
+  /уменьшает/iu,
+  /статистик/iu,
+  /процент/iu,
+];
+type ImageTag =
+  | 'harm_organs'
+  | 'harm_appearance'
+  | 'harm_mental'
+  | 'activity'
+  | 'nature'
+  | 'meditation'
+  | 'daily_life'
+  | 'neutral_abstract';
+type MixedElementSubtype = 'reminder' | 'informational' | 'motivational';
+type NormalizedAiItem = {
+  text: string;
+  imageTag: ImageTag | null;
+  subtype: NotificationSubtype | null;
+  subtypeRestored: boolean;
+};
+
+type ImageTagPolicy = {
+  allowedTags: ImageTag[];
+  fallbackTag: ImageTag;
+  disallowHarmForPositive: boolean;
+  meditationOnly: boolean;
+};
 
 interface GenerateNotificationTextsParams {
   userId: number;
@@ -53,14 +136,21 @@ interface GenerateNotificationTextsParams {
   entityKey: string; // ID для кастомных сущностей, ключ шаблона для шаблонных
   directness: Directness;
   subtype?: HabitSubtype | null;
-  textSource: 'ai' | 'hybrid'; // Только для AI-генерации (не может быть 'templates')
+  textSource: 'ai'; // Только для AI-генерации (не может быть 'templates')
   count?: number; // количество текстов для генерации (по умолчанию 50)
   provider?: 'openai' | 'deepseek' | 'yandex';
   habitIntent?: 'quit' | 'build' | null; // Intent привычки: отказ (quit) или приобретение (build). Передается явно, не угадывается.
+  customPromptNotification?: string | null; // Персональные пожелания (только для шаблонных тем и AI)
+}
+
+export interface AiNotificationText {
+  text: string;
+  imageTag: string | null;
+  subtype: NotificationSubtype | null;
 }
 
 interface GenerationResult {
-  texts: string[];
+  texts: AiNotificationText[];
   provider: string;
   model: string;
   tokensUsed: number;
@@ -78,6 +168,13 @@ function resolveTone(value?: string | null): Tone {
     return value;
   }
   return 'neutral';
+}
+
+function normalizeCustomPromptNotification(
+  value?: string | null
+): string | null {
+  const normalized = value ? value.trim() : '';
+  return normalized.length > 0 ? normalized : null;
 }
 
 /**
@@ -114,7 +211,7 @@ export async function loadAiGeneratedTexts(
   userId: number,
   preferenceId: string,
   configHash: string
-): Promise<string[] | null> {
+): Promise<AiNotificationText[] | null> {
   const [existing] = await db
     .select()
     .from(aiGeneratedNotificationTexts)
@@ -128,7 +225,7 @@ export async function loadAiGeneratedTexts(
     .limit(1);
 
   if (existing && existing.texts) {
-    return existing.texts as string[];
+    return existing.texts as AiNotificationText[];
   }
 
   return null;
@@ -142,7 +239,7 @@ export async function loadAiGeneratedTextsWithId(
   userId: number,
   preferenceId: string,
   configHash: string
-): Promise<{ id: number; texts: string[] } | null> {
+): Promise<{ id: number; texts: AiNotificationText[] } | null> {
   const [existing] = await db
     .select()
     .from(aiGeneratedNotificationTexts)
@@ -158,7 +255,7 @@ export async function loadAiGeneratedTextsWithId(
   if (existing && existing.texts) {
     return {
       id: existing.id,
-      texts: existing.texts as string[],
+      texts: existing.texts as AiNotificationText[],
     };
   }
 
@@ -258,27 +355,283 @@ export function hashNotificationText(text: string): string {
   return createHash('sha256').update(normalized).digest('hex');
 }
 
-function normalizeNotificationTexts(
-  rawTexts: string[],
-  expectedCount: number
-): string[] {
-  const normalized = rawTexts
-    .filter((text): text is string => typeof text === 'string')
-    .map((text) => String(text).replace(/\s+/g, ' ').trim())
-    .filter((text) => text.length > 0)
-    .map((text) => {
-      if (text.startsWith(EMOJI_PREFIX)) {
-        return text;
-      }
-      if (text.length > MAX_NOTIFICATION_BODY_LENGTH) {
-        return '';
-      }
-      return `${EMOJI_PREFIX}${text}`;
-    })
-    .filter((text) => text.length > 0)
-    .filter((text) => text.length <= MAX_NOTIFICATION_TEXT_LENGTH);
+function stripEmojiPrefix(text: string): string {
+  if (text.startsWith(EMOJI_PREFIX)) {
+    return text.slice(EMOJI_PREFIX.length).trim();
+  }
+  return text.trim();
+}
 
-  return normalized.slice(0, expectedCount);
+function isHarmContext(text: string): boolean {
+  const raw = stripEmojiPrefix(text);
+  return HARM_MARKERS.some((pattern) => pattern.test(raw));
+}
+
+function resolveFallbackImageTag(allowed?: Set<ImageTag> | null): ImageTag {
+  if (allowed && allowed.has('meditation')) return 'meditation';
+  if (allowed && allowed.has('nature')) return 'nature';
+  if (allowed && allowed.size > 0) {
+    return Array.from(allowed)[0] as ImageTag;
+  }
+  return 'nature';
+}
+
+function isMeditationTopic(params: {
+  entityKey: string;
+  entityName: string;
+}): boolean {
+  const key = params.entityKey.trim().toLowerCase();
+  if (key === 'meditation') return true;
+  const name = params.entityName.trim().toLowerCase();
+  return name.includes('медитац') || name.includes('meditation');
+}
+
+function buildImageTagPolicy(params: {
+  entityKey: string;
+  entityName: string;
+}): ImageTagPolicy {
+  const meditationOnly = isMeditationTopic(params);
+  const allowedTags = meditationOnly
+    ? (['meditation'] as ImageTag[])
+    : (Array.from(IMAGE_TAGS) as ImageTag[]);
+  const fallbackTag = meditationOnly ? 'meditation' : 'nature';
+
+  return {
+    allowedTags,
+    fallbackTag,
+    disallowHarmForPositive: true,
+    meditationOnly,
+  };
+}
+
+// Нормализуем тег, чтобы AI мог отдавать варианты с пробелами/дефисами.
+function normalizeImageTag(value: unknown): ImageTag | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_')
+    .replace(/-+/g, '_');
+  if (!normalized) return null;
+  const resolved = normalized === 'neutral' ? 'neutral_abstract' : normalized;
+  return IMAGE_TAGS.has(resolved) ? (resolved as ImageTag) : null;
+}
+
+// Валидируем subtype для mixed-элементов с учетом legacy-имен.
+function normalizeMixedSubtype(value: unknown): MixedElementSubtype | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized === 'support') return 'motivational';
+  if (normalized === 'facts') return 'informational';
+  if (normalized === 'reminders') return 'reminder';
+  return MIXED_SUBTYPES.has(normalized)
+    ? (normalized as MixedElementSubtype)
+    : null;
+}
+
+function inferSubtypeFromText(text: string): MixedElementSubtype {
+  const raw = stripEmojiPrefix(text);
+  if (SUPPORT_MARKERS.some((pattern) => pattern.test(raw))) {
+    return 'motivational';
+  }
+  if (FACT_MARKERS.some((pattern) => pattern.test(raw))) {
+    return 'informational';
+  }
+  return 'reminder';
+}
+
+function computeSubtypeTargets(
+  total: number
+): Record<MixedElementSubtype, number> {
+  const base = Math.floor(total / 3);
+  const remainder = total % 3;
+  const order: MixedElementSubtype[] = [
+    'motivational',
+    'informational',
+    'reminder',
+  ];
+  const targets: Record<MixedElementSubtype, number> = {
+    motivational: base,
+    informational: base,
+    reminder: base,
+  };
+  for (let i = 0; i < remainder; i += 1) {
+    targets[order[i]] += 1;
+  }
+  return targets;
+}
+
+// Мягко выравниваем распределение mixed-сабтайпов, не трогая явные AI-выборы.
+function rebalanceMixedSubtypes(items: NormalizedAiItem[]): void {
+  const total = items.length;
+  if (total === 0) return;
+
+  const targets = computeSubtypeTargets(total);
+  const counts: Record<MixedElementSubtype, number> = {
+    motivational: 0,
+    informational: 0,
+    reminder: 0,
+  };
+
+  for (const item of items) {
+    if (item.subtype && item.subtype !== 'mixed') {
+      counts[item.subtype as MixedElementSubtype] += 1;
+    }
+  }
+
+  const deficits: Record<MixedElementSubtype, number> = {
+    motivational: targets.motivational - counts.motivational,
+    informational: targets.informational - counts.informational,
+    reminder: targets.reminder - counts.reminder,
+  };
+
+  const hasDeficits = Object.values(deficits).some((value) => value > 0);
+  if (!hasDeficits) return;
+
+  const candidates = items.filter(
+    (item) =>
+      item.subtypeRestored &&
+      item.subtype &&
+      item.subtype !== 'mixed' &&
+      !(item.imageTag && item.imageTag.startsWith('harm_'))
+  );
+
+  for (const item of candidates) {
+    if (!Object.values(deficits).some((value) => value > 0)) {
+      break;
+    }
+
+    const preferred = inferSubtypeFromText(item.text);
+    let chosen: MixedElementSubtype | null = null;
+
+    if (deficits[preferred] > 0) {
+      chosen = preferred;
+    } else {
+      const fallback = (
+        Object.entries(deficits) as Array<[MixedElementSubtype, number]>
+      )
+        .filter(([, value]) => value > 0)
+        .sort((left, right) => right[1] - left[1])[0];
+      chosen = fallback ? fallback[0] : null;
+    }
+
+    if (chosen && item.subtype !== chosen) {
+      counts[item.subtype as MixedElementSubtype] -= 1;
+      deficits[item.subtype as MixedElementSubtype] += 1;
+      item.subtype = chosen;
+      counts[chosen] += 1;
+      deficits[chosen] -= 1;
+    }
+  }
+}
+
+// Нормализуем вход (строки/объекты) в единый массив AiNotificationText.
+export function normalizeNotificationItems(
+  rawItems: Array<string | AiNotificationText | Record<string, unknown>>,
+  expectedCount: number,
+  options: {
+    isMixed: boolean;
+    allowedImageTags?: Set<ImageTag> | null;
+    fallbackImageTag?: ImageTag | null;
+    disallowHarmForPositive?: boolean;
+    addEmojiPrefix?: boolean;
+  }
+): AiNotificationText[] {
+  const normalized: NormalizedAiItem[] = [];
+
+  for (const item of rawItems) {
+    let rawText: string | null = null;
+    let rawImageTag: unknown = null;
+    let rawSubtype: unknown = null;
+
+    if (typeof item === 'string') {
+      rawText = item;
+    } else if (item && typeof item === 'object') {
+      rawText =
+        typeof (item as { text?: unknown }).text === 'string'
+          ? String((item as { text?: unknown }).text)
+          : null;
+      rawImageTag = (item as { imageTag?: unknown }).imageTag;
+      rawSubtype = (item as { subtype?: unknown }).subtype;
+    }
+
+    if (!rawText) continue;
+
+    const cleaned = String(rawText).replace(/\s+/g, ' ').trim();
+    if (!cleaned) continue;
+
+    if (cleaned.length > MAX_NOTIFICATION_BODY_LENGTH) {
+      continue;
+    }
+
+    const shouldPrefix = options.addEmojiPrefix !== false;
+    const text = shouldPrefix
+      ? cleaned.startsWith(EMOJI_PREFIX)
+        ? cleaned
+        : `${EMOJI_PREFIX}${cleaned}`
+      : cleaned;
+
+    if (text.length > MAX_NOTIFICATION_TEXT_LENGTH) {
+      continue;
+    }
+
+    let imageTag = normalizeImageTag(rawImageTag);
+    const subtype = options.isMixed ? normalizeMixedSubtype(rawSubtype) : null;
+
+    const allowedTags = options.allowedImageTags ?? null;
+    const hasFallbackOverride = Object.prototype.hasOwnProperty.call(
+      options,
+      'fallbackImageTag'
+    );
+    const fallbackTag = hasFallbackOverride
+      ? (options.fallbackImageTag ?? null)
+      : resolveFallbackImageTag(allowedTags);
+
+    if (imageTag && allowedTags && !allowedTags.has(imageTag)) {
+      imageTag = fallbackTag ?? null;
+    }
+
+    if (
+      imageTag &&
+      imageTag.startsWith('harm_') &&
+      options.disallowHarmForPositive
+    ) {
+      if (!isHarmContext(text)) {
+        imageTag = fallbackTag ?? null;
+      }
+    }
+
+    normalized.push({
+      text,
+      imageTag,
+      subtype: subtype ?? null,
+      subtypeRestored: false,
+    });
+  }
+
+  if (options.isMixed) {
+    for (const item of normalized) {
+      if (item.subtype) continue;
+      // Если subtype отсутствует, восстанавливаем по безопасным правилам.
+      if (item.imageTag && item.imageTag.startsWith('harm_')) {
+        item.subtype = 'informational';
+      } else {
+        item.subtype = 'motivational';
+      }
+      item.subtypeRestored = true;
+    }
+
+    rebalanceMixedSubtypes(normalized);
+  }
+
+  return normalized
+    .slice(0, expectedCount)
+    .map(({ subtypeRestored, ...item }) => item);
+}
+
+function extractTextValue(item: string | AiNotificationText): string {
+  return typeof item === 'string' ? item : item.text;
 }
 
 function extractJsonArrayCandidate(raw: string): string | null {
@@ -371,6 +724,13 @@ const DEFAULT_RETRY_CONFIG: RetryConfig = {
     'server_error',
     'internal_error',
     'service_unavailable',
+    // HTTP статусы и распространённые gateway-ошибки
+    'bad_gateway',
+    'gateway_timeout',
+    '502',
+    '503',
+    '504',
+    'upstream',
   ],
 };
 
@@ -392,7 +752,7 @@ function isRetryableError(error: any, retryableCodes: string[]): boolean {
   }
 
   // Проверяем HTTP статусы
-  const status = error?.status || error?.response?.status;
+  const status = error?.status || error?.response?.status || error?.statusCode;
   if (status === 429) return true; // Rate limit
   if (status >= 500 && status < 600) return true; // Server errors
 
@@ -478,6 +838,175 @@ async function generateWithRetry<T>(
   }
 
   throw lastError || new Error('Failed to generate texts');
+}
+
+/**
+ * Вычисляет maxOutputTokens для количества текстов
+ */
+function computeMaxOutputTokensForCount(count: number): number {
+  // Формула: 120 токенов на текст + 800 запас под формат JSON
+  const dynamicMaxOutputTokens = count * 120 + 800;
+  return Math.min(dynamicMaxOutputTokens, MAX_OUTPUT_TOKENS_CAP);
+}
+
+/**
+ * Генерирует партию уведомлений через LLM (один запрос)
+ */
+async function generateNotificationBatch(params: {
+  provider: LlmProviderPort['id'];
+  model: string;
+  systemPrompt: string;
+  count: number;
+  scenarioSettings: typeof config.llm.openai.settings.notifications;
+  isMixed: boolean;
+  imageTagPolicy: ImageTagPolicy;
+}): Promise<{
+  items: AiNotificationText[];
+  model: string;
+  rawContent: string;
+}> {
+  const maxOutputTokens = computeMaxOutputTokensForCount(params.count);
+
+  // Генерируем с retry механизмом
+  const result = await generateWithRetry(async () => {
+    return await chatViaProvider({
+      provider: params.provider,
+      model: params.model,
+      messages: [
+        {
+          role: 'system',
+          content: params.systemPrompt,
+        },
+        {
+          role: 'user',
+          content: `Сгенерируй ДО ${params.count} вариантов уведомлений в формате JSON объекта с полем items (массив объектов). Верни НЕ пустой массив items. Если все варианты не помещаются, верни сколько поместится.`,
+        },
+      ],
+      options: {
+        scenario: 'notifications', // Использует настройки из конфига
+        temperature: params.scenarioSettings.temperature,
+        maxOutputTokens,
+      },
+    });
+  });
+
+  // ВАЖНО: Логируем ответ только в dev, в проде — без содержимого.
+  if (ALLOW_AI_LOGS) {
+    const responsePreview = result.content.substring(0, 500);
+    console.log(
+      `[AI Generation] 📝 Raw LLM response length: ${result.content.length} characters, preview: ${responsePreview}...`
+    );
+  } else {
+    const responseHash = createHash('sha256')
+      .update(result.content)
+      .digest('hex');
+    console.log(
+      `[AI Generation] 📝 Raw LLM response length: ${result.content.length} characters, hash: ${responseHash}`
+    );
+  }
+
+  const items = parseAndValidateTexts(result.content, params.count, {
+    isMixed: params.isMixed,
+    allowedImageTags: new Set(params.imageTagPolicy.allowedTags),
+    fallbackImageTag: params.imageTagPolicy.fallbackTag,
+    disallowHarmForPositive: params.imageTagPolicy.disallowHarmForPositive,
+  });
+
+  console.log(
+    `[AI Generation] 📊 Parsed texts count: ${items.length} (expected: ${params.count}, difference: ${params.count - items.length})`
+  );
+
+  if (items.length === 0) {
+    throw new Error('Failed to generate valid notification texts');
+  }
+
+  return {
+    items,
+    model: result.model || params.model,
+    rawContent: result.content,
+  };
+}
+
+/**
+ * Генерирует уведомления батчами, чтобы уменьшить риск таймаутов/502
+ */
+async function generateNotificationItemsBatched(params: {
+  provider: LlmProviderPort['id'];
+  model: string;
+  systemPrompt: string;
+  totalCount: number;
+  scenarioSettings: typeof config.llm.openai.settings.notifications;
+  isMixed: boolean;
+  imageTagPolicy: ImageTagPolicy;
+}): Promise<{
+  items: AiNotificationText[];
+  model: string;
+  isPartial: boolean;
+}> {
+  const items: AiNotificationText[] = [];
+  let remaining = params.totalCount;
+  // Стартовый размер батча: 25 для 50, иначе весь объём
+  let batchSize = params.totalCount >= 50 ? 25 : params.totalCount;
+  const minBatchSize = 10;
+  let lastModel = params.model;
+  let isPartial = false;
+
+  while (remaining > 0) {
+    const currentBatch = Math.min(remaining, batchSize);
+
+    try {
+      const batch = await generateNotificationBatch({
+        provider: params.provider,
+        model: params.model,
+        systemPrompt: params.systemPrompt,
+        count: currentBatch,
+        scenarioSettings: params.scenarioSettings,
+        isMixed: params.isMixed,
+        imageTagPolicy: params.imageTagPolicy,
+      });
+
+      lastModel = batch.model || lastModel;
+      items.push(...batch.items);
+      remaining -= batch.items.length;
+
+      // Если модель вернула меньше, чем просили — пробуем добрать следующей итерацией
+      if (batch.items.length < currentBatch) {
+        console.warn(
+          `[AI Generation] ⚠️ Batch produced ${batch.items.length}/${currentBatch} texts, remaining=${remaining}`
+        );
+      }
+    } catch (error) {
+      const canRetry = isRetryableError(
+        error,
+        DEFAULT_RETRY_CONFIG.retryableErrorCodes
+      );
+
+      // Если уже есть часть текстов — возвращаем частичный результат
+      if (items.length > 0) {
+        console.warn(
+          `[AI Generation] ⚠️ Batch failed, returning partial result (${items.length}/${params.totalCount})`
+        );
+        isPartial = true;
+        break;
+      }
+
+      if (!canRetry || batchSize <= minBatchSize) {
+        throw error;
+      }
+
+      const nextBatchSize = Math.max(minBatchSize, Math.floor(batchSize / 2));
+      if (nextBatchSize === batchSize) {
+        throw error;
+      }
+
+      console.warn(
+        `[AI Generation] ⚠️ Batch failed, reducing batch size: ${batchSize} → ${nextBatchSize}`
+      );
+      batchSize = nextBatchSize;
+    }
+  }
+
+  return { items, model: lastModel, isPartial };
 }
 
 /**
@@ -584,6 +1113,11 @@ export async function generateNotificationTexts(
     }
   }
 
+  const isCustomEntity = params.kind === 'habits' ? isCustomHabit : isCustomTherapy;
+  const customPromptNotification = isCustomEntity
+    ? null
+    : normalizeCustomPromptNotification(params.customPromptNotification);
+
   // 2. Загружаем глобальные настройки пользователя (tone, addressing)
   const [userPrefs] = await db
     .select()
@@ -625,6 +1159,7 @@ export async function generateNotificationTexts(
     kind: params.kind,
     habitIntent: params.kind === 'habits' ? habitIntent : null, // Включаем intent только для habits
     userGender,
+    customPromptNotification,
   });
 
   console.log(
@@ -642,6 +1177,11 @@ export async function generateNotificationTexts(
     configHash
   );
 
+  const imageTagPolicy = buildImageTagPolicy({
+    entityKey: params.entityKey,
+    entityName,
+  });
+
   if (existingTexts && existingTexts.length > 0) {
     // Используем существующие тексты
     const [existing] = await db
@@ -656,9 +1196,15 @@ export async function generateNotificationTexts(
       )
       .limit(1);
 
-    const textsWithEmoji = normalizeNotificationTexts(
+    const textsWithEmoji = normalizeNotificationItems(
       existingTexts,
-      existingTexts.length
+      existingTexts.length,
+      {
+        isMixed: params.subtype === 'mixed',
+        allowedImageTags: new Set(imageTagPolicy.allowedTags),
+        fallbackImageTag: imageTagPolicy.fallbackTag,
+        disallowHarmForPositive: imageTagPolicy.disallowHarmForPositive,
+      }
     );
 
     console.log(
@@ -686,6 +1232,7 @@ export async function generateNotificationTexts(
 
   // 5. Строим промпт
   const systemPrompt = buildNotificationSystemPrompt({
+    entityKey: params.entityKey,
     entityName,
     description: entityDescription,
     tone,
@@ -696,6 +1243,9 @@ export async function generateNotificationTexts(
     subtype: params.subtype,
     kind: params.kind,
     habitIntent, // Передаем intent для формирования правильных инструкций
+    imageTagPolicy,
+    customPromptNotification,
+    isCustomEntity,
   });
 
   const count = params.count || DEFAULT_TEXT_COUNT;
@@ -727,83 +1277,24 @@ export async function generateNotificationTexts(
     `[AI Generation] 💰 Estimated cost for ${count} texts: $${estimatedCost.toFixed(6)} (model: ${model})`
   );
 
-  // 6. Вызываем LLM через существующую систему с retry механизмом
+  // 6. Генерируем тексты батчами (уменьшаем риск 502/таймаутов)
   const scenarioSettings = config.llm.openai.settings.notifications;
-
-  // Вычисляем динамический maxOutputTokens на основе количества текстов
-  // Формула: каждый текст ~140-150 символов (русский текст) = ~90-120 токенов (кириллица кодируется менее эффективно)
-  // Плюс JSON форматирование ~30-40 токенов на текст (кавычки, запятые, скобки, переносы строк, эмодзи ✨, пробелы)
-  // Итого: ~130-160 токенов на текст, используем консервативный расчет
-  // Формула: 180 токенов на текст + 1200 запас под формат JSON.
-  // Это достаточно для 140-150 символов текста с эмодзи ✨ и служебными кавычками.
-  // Для 50 текстов: 50 * 180 + 1200 = 10200 токенов
-  const dynamicMaxOutputTokens = count * 180 + 1200;
-  // Ограничиваем сверху, чтобы не выходить за лимиты модели и не раздувать стоимость.
-  const maxOutputTokens = Math.min(
-    dynamicMaxOutputTokens,
-    MAX_OUTPUT_TOKENS_CAP
-  );
-
-  console.log(
-    `[AI Generation] 📊 Dynamic maxOutputTokens: ${dynamicMaxOutputTokens} (cap: ${MAX_OUTPUT_TOKENS_CAP}, final: ${maxOutputTokens} for ${count} texts)`
-  );
-
-  // Генерируем с retry механизмом
-  const result = await generateWithRetry(async () => {
-    return await chatViaProvider({
-      provider,
-      model,
-      messages: [
-        {
-          role: 'system',
-          content: systemPrompt,
-        },
-        {
-          role: 'user',
-          content: `Сгенерируй ДО ${count} вариантов текстов уведомлений в формате JSON массива строк. Верни НЕ пустой массив строк. Если все варианты не помещаются, верни сколько поместится.`,
-        },
-      ],
-      options: {
-        scenario: 'notifications', // Использует настройки из конфига
-        temperature: scenarioSettings.temperature,
-        maxOutputTokens, // Используем динамически вычисленное значение
-      },
-    });
+  const batchResult = await generateNotificationItemsBatched({
+    provider,
+    model,
+    systemPrompt,
+    totalCount: count,
+    scenarioSettings,
+    isMixed: params.subtype === 'mixed',
+    imageTagPolicy,
   });
 
-  // 7. Парсим и валидируем тексты
-  // Эмодзи ✨ добавляется автоматически в функции parseAndValidateTexts
-
-  // ВАЖНО: Логируем ответ только в dev, в проде — без содержимого.
-  if (ALLOW_AI_LOGS) {
-    const responsePreview = result.content.substring(0, 500);
-    console.log(
-      `[AI Generation] 📝 Raw LLM response length: ${result.content.length} characters, preview: ${responsePreview}...`
-    );
-  } else {
-    const responseHash = createHash('sha256')
-      .update(result.content)
-      .digest('hex');
-    console.log(
-      `[AI Generation] 📝 Raw LLM response length: ${result.content.length} characters, hash: ${responseHash}`
-    );
-  }
-
-  const texts = parseAndValidateTexts(result.content, count);
-
-  // ВАЖНО: Логируем количество полученных текстов
-  console.log(
-    `[AI Generation] 📊 Parsed texts count: ${texts.length} (expected: ${count}, difference: ${count - texts.length})`
-  );
-
-  if (texts.length === 0) {
-    throw new Error('Failed to generate valid notification texts');
-  }
+  const texts = batchResult.items;
 
   // ВАЖНО: Недобор допускается, просто логируем для наблюдения.
   if (texts.length < count) {
     console.warn(
-      `[AI Generation] ⚠️ Generated ${texts.length}/${count} texts (maxOutputTokens dynamic=${dynamicMaxOutputTokens}, cap=${MAX_OUTPUT_TOKENS_CAP}, final=${maxOutputTokens}). Accepting partial result.`
+      `[AI Generation] ⚠️ Generated ${texts.length}/${count} texts. Accepting partial result.`
     );
   }
 
@@ -811,21 +1302,21 @@ export async function generateNotificationTexts(
   // Примерная оценка токенов: ~4 символа на токен
   const promptText =
     systemPrompt +
-    `\nСгенерируй ДО ${count} вариантов текстов уведомлений в формате JSON массива строк. Каждый текст должен быть примерно 140-${MAX_NOTIFICATION_BODY_LENGTH} символов (сервер добавит префикс "${EMOJI_PREFIX}").`;
+    `\nСгенерируй ДО ${count} вариантов уведомлений в формате JSON объекта с полем items (массив объектов). Каждый текст должен быть примерно 140-${MAX_NOTIFICATION_BODY_LENGTH} символов (сервер добавит префикс "${EMOJI_PREFIX}").`;
   const tokensIn = Math.ceil(promptText.length / 4);
   const tokensOut = Math.ceil(
-    texts.reduce((sum, text) => sum + text.length, 0) / 4
+    texts.reduce((sum, text) => sum + text.text.length, 0) / 4
   );
   const actualTokensUsed = tokensIn + tokensOut;
   const actualCostUsd = estimateCostUSD({
     provider: 'openai',
-    model: result.model || model,
+    model: batchResult.model || model,
     tokensIn,
     tokensOut,
   });
 
   console.log(
-    `[AI Generation] 💰 Actual cost: $${actualCostUsd.toFixed(6)} (tokens: ${actualTokensUsed}, in: ${tokensIn}, out: ${tokensOut}, model: ${result.model || model})`
+    `[AI Generation] 💰 Actual cost: $${actualCostUsd.toFixed(6)} (tokens: ${actualTokensUsed}, in: ${tokensIn}, out: ${tokensOut}, model: ${batchResult.model || model})`
   );
 
   // ВАЖНО: Проверяем, что kind валидный
@@ -888,7 +1379,7 @@ export async function generateNotificationTexts(
       texts,
       generationConfigHash: configHash,
       provider,
-      model: result.model || model,
+      model: batchResult.model || model,
       tokensUsed: actualTokensUsed,
       costUsd: actualCostUsd.toString(),
     })
@@ -902,7 +1393,7 @@ export async function generateNotificationTexts(
         texts,
         entityDisplayName: entityName || null, // Обновляем display name при обновлении записи
         provider,
-        model: result.model || model,
+        model: batchResult.model || model,
         tokensUsed: actualTokensUsed,
         costUsd: actualCostUsd.toString(),
         updatedAt: sql`NOW()`,
@@ -913,10 +1404,21 @@ export async function generateNotificationTexts(
     `[AI Generation] ✅ AI texts saved to DB: userId: ${params.userId}, preferenceId: ${params.preferenceId}, configHash: ${configHash.substring(0, 8)}...`
   );
 
+  // Если получили только часть текстов — ставим задачу на догенерацию
+  if (batchResult.isPartial || texts.length < count) {
+    void enqueueAiTextPoolRefillJob({
+      preferenceId: params.preferenceId,
+      userId: params.userId,
+      configHash,
+      delayMs: 60_000,
+      reason: 'partial_generation',
+    });
+  }
+
   return {
     texts,
     provider,
-    model: result.model || model,
+    model: batchResult.model || model,
     tokensUsed: actualTokensUsed,
     costUsd: actualCostUsd,
   };
@@ -926,6 +1428,7 @@ export async function generateNotificationTexts(
  * Строит системный промпт для генерации уведомлений
  */
 function buildNotificationSystemPrompt(params: {
+  entityKey: string;
   entityName: string;
   description?: string | null;
   tone: Tone;
@@ -936,6 +1439,9 @@ function buildNotificationSystemPrompt(params: {
   subtype?: HabitSubtype | null;
   kind: 'habits' | 'therapy';
   habitIntent?: 'quit' | 'build' | null; // Intent привычки: отказ (quit) или приобретение (build)
+  imageTagPolicy: ImageTagPolicy;
+  customPromptNotification?: string | null; // Персональные пожелания пользователя (только для AI)
+  isCustomEntity?: boolean;
 }): string {
   const genderLabel =
     params.userGender === 'male'
@@ -966,10 +1472,48 @@ function buildNotificationSystemPrompt(params: {
     mixed: 'Смешанные уведомления',
   };
 
+  const imageTagList = params.imageTagPolicy.allowedTags.join(', ');
+  const safeTagList = SAFE_IMAGE_TAGS.join(', ');
+  const isWaterTopic = params.entityKey.trim().toLowerCase() === 'water';
+
+  const imageTagRules = [
+    '- imageTag должен соответствовать смыслу текста.',
+    '- harm_* используй ТОЛЬКО если текст явно описывает вред/негативные последствия.',
+    `- Если текст позитивный или нейтральный, выбирай только: ${safeTagList}.`,
+    params.customPromptNotification || params.description
+      ? '- Если в описании/пожеланиях есть запрет на "страшные" темы/картинки, НЕ используй harm_* и избегай тяжелых последствий.'
+      : null,
+    '- Ставь imageTag только если связь с текстом очевидна и однозначна.',
+    '- Если смысл расплывчатый, общий или без конкретной визуальной сцены — ставь imageTag = null.',
+    '- Не угадывай тег и не подбирай "на всякий случай". Лучше null, чем неверный визуал.',
+    isWaterTopic
+      ? '- Для темы "Вода" ВСЕГДА ставь imageTag = neutral_abstract. Другие теги запрещены.'
+      : null,
+    params.imageTagPolicy.meditationOnly
+      ? null
+      : '- Если нет подходящего тега, ставь imageTag = null (картинка не прикрепляется).',
+    params.imageTagPolicy.meditationOnly
+      ? '- Для темы "Медитация" ВСЕГДА ставь imageTag = meditation. Другие теги запрещены.'
+      : null,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
   // Формируем промпт с использованием описания как основной основы
+  const descriptionPriorityNotice =
+    params.isCustomEntity && params.description
+      ? '\n\nВАЖНО: Если описание противоречит subtype/directness/tone, приоритет за описанием пользователя.'
+      : '';
   const descriptionContext = params.description
-    ? `\n\nОписание и контекст (это ОСНОВА для генерации текстов, используй именно это):\n${params.description}\n\nКРИТИЧЕСКИ ВАЖНО: Все инструкции из описания (обращение, стиль, особые указания) должны применяться к КАЖДОМУ из всех текстов, а не только к первому.`
+    ? `\n\nОписание и контекст (это ОСНОВА для генерации текстов, используй именно это):\n${params.description}\n\nКРИТИЧЕСКИ ВАЖНО: Все инструкции из описания (обращение, стиль, особые указания) должны применяться к КАЖДОМУ из всех текстов, а не только к первому.${descriptionPriorityNotice}`
     : '';
+  const customPromptContext = params.customPromptNotification
+    ? `\n\nДополнительные пожелания пользователя (обязательные к учету):\n${params.customPromptNotification}\n\nВАЖНО: Если пожелания противоречат subtype/directness/tone, приоритет за пожеланиями пользователя.`
+    : '';
+  const userPriorityContext =
+    params.customPromptNotification || params.description
+      ? `\n\nПРИОРИТЕТ ПОЛЬЗОВАТЕЛЬСКОГО КОНТЕКСТА:\n- Пожелания пользователя и описание имеют приоритет над tone/directness/subtype и другими стилевыми правилами.\n- Если есть конфликт, следуй пользовательскому контексту, даже если это снижает "жесткость" или меняет фокус.\n- Если пользователь просит избегать "страшных" текстов/болезней/картинок — НЕ используй harm_* и не упоминай тяжелые последствия.`
+      : '';
   // Формируем инструкции для разных типов уведомлений
   let subtypeInstructions = '';
 
@@ -1080,7 +1624,7 @@ ${params.description ? '- Используй описание как основ�
 
 Контекст:
 - Тип: ${params.kind === 'habits' ? 'привычка' : 'тема поддержки'}
-- Название (используй только как внутренний контекст): ${params.entityName}${descriptionContext}
+- Название (используй только как внутренний контекст): ${params.entityName}${descriptionContext}${customPromptContext}${userPriorityContext}
 - Имя пользователя: ${params.userName || 'не указано'}
 - Пол пользователя: ${genderLabel || 'не указан'}
 
@@ -1119,7 +1663,35 @@ ${subtypeInstructions}
 - НЕ упоминай название привычки или темы напрямую в текстах, если это не является естественным (например, если название - это общее понятие типа "пить воду", можно использовать, но если название - это специфическое слово типа "Здарова", НЕ используй его)
 
 
-Формат ответа: JSON массив строк, например: ["текст 1", "текст 2", ..., "текст N"], где N - это запрошенное количество.`;
+Формат ответа: JSON объект с полем items (массив объектов).
+Каждый объект items содержит поля:
+- text (строка)
+- imageTag (строка из списка: ${imageTagList} или null)
+${imageTagRules}
+${
+  params.subtype === 'mixed'
+    ? '- subtype (строка: reminder, informational, motivational) ОБЯЗАТЕЛЬНО для каждого элемента'
+    : '- subtype (null) ОБЯЗАТЕЛЬНО для каждого элемента'
+}
+- Корневой JSON ДОЛЖЕН быть объектом с ключом items (НЕ массивом).
+- НЕ добавляй лишние поля
+- Верни только JSON, без пояснений и markdown-блоков
+
+Пример:
+{
+  "items": [
+    {"text": "Текст 1", "imageTag": "nature"${
+      params.subtype === 'mixed'
+        ? ', "subtype": "motivational"'
+        : ', "subtype": null'
+    }},
+    {"text": "Текст 2", "imageTag": "activity"${
+      params.subtype === 'mixed'
+        ? ', "subtype": "reminder"'
+        : ', "subtype": null'
+    }}
+  ]
+}`;
 }
 
 /**
@@ -1127,32 +1699,70 @@ ${subtypeInstructions}
  */
 function parseAndValidateTexts(
   content: string,
-  expectedCount: number
-): string[] {
+  expectedCount: number,
+  options: {
+    isMixed: boolean;
+    allowedImageTags?: Set<ImageTag> | null;
+    fallbackImageTag?: ImageTag;
+    disallowHarmForPositive?: boolean;
+  }
+): AiNotificationText[] {
   // Парсим JSON массив
-  let texts: string[] = [];
+  let items: Array<string | AiNotificationText | Record<string, unknown>> = [];
   try {
     // Убираем markdown code fences если есть
     const cleaned = content
       .replace(/```json\n?/g, '')
       .replace(/```\n?/g, '')
       .trim();
-    texts = JSON.parse(cleaned);
-    console.log(
-      `[AI Generation] ✅ Successfully parsed JSON: ${texts.length} texts found (expected: ${expectedCount})`
-    );
+    const parsed = JSON.parse(cleaned);
+    if (Array.isArray(parsed)) {
+      items = parsed as Array<
+        string | AiNotificationText | Record<string, unknown>
+      >;
+      console.log(
+        `[AI Generation] ✅ Successfully parsed JSON array: ${items.length} items found (expected: ${expectedCount})`
+      );
+    } else if (
+      parsed &&
+      typeof parsed === 'object' &&
+      Array.isArray((parsed as { items?: unknown }).items)
+    ) {
+      items = (parsed as { items: unknown[] }).items as Array<
+        string | AiNotificationText | Record<string, unknown>
+      >;
+      console.log(
+        `[AI Generation] ✅ Successfully parsed JSON object: ${items.length} items found (expected: ${expectedCount})`
+      );
+    }
   } catch (error: any) {
     console.warn(
       `[AI Generation] ⚠️ JSON parse failed, trying regex fallback: ${error.message}`
     );
-    // Попытка извлечь массив строк, если ответ содержит лишний текст.
+    // Попытка извлечь массив, если ответ содержит лишний текст.
     const arrayCandidate = extractJsonArrayCandidate(content);
     if (arrayCandidate) {
       try {
-        texts = JSON.parse(arrayCandidate);
-        console.log(
-          `[AI Generation] ✅ Extracted JSON array: ${texts.length} texts found (expected: ${expectedCount})`
-        );
+        const parsedCandidate = JSON.parse(arrayCandidate);
+        if (Array.isArray(parsedCandidate)) {
+          items = parsedCandidate as Array<
+            string | AiNotificationText | Record<string, unknown>
+          >;
+          console.log(
+            `[AI Generation] ✅ Extracted JSON array: ${items.length} items found (expected: ${expectedCount})`
+          );
+        } else if (
+          parsedCandidate &&
+          typeof parsedCandidate === 'object' &&
+          Array.isArray((parsedCandidate as { items?: unknown }).items)
+        ) {
+          items = (parsedCandidate as { items: unknown[] }).items as Array<
+            string | AiNotificationText | Record<string, unknown>
+          >;
+          console.log(
+            `[AI Generation] ✅ Extracted JSON object: ${items.length} items found (expected: ${expectedCount})`
+          );
+        }
       } catch (candidateError: any) {
         console.warn(
           `[AI Generation] ⚠️ JSON array candidate parse failed: ${candidateError.message}`
@@ -1160,23 +1770,25 @@ function parseAndValidateTexts(
       }
     }
     // Fallback: пытаемся извлечь тексты через regex
-    const matches = content.match(
-      new RegExp(`"([^"]{1,${MAX_NOTIFICATION_TEXT_LENGTH}})"`, 'g')
-    );
-    if (matches) {
-      texts = matches.map((m) => m.slice(1, -1));
-      console.log(
-        `[AI Generation] ✅ Regex fallback found ${texts.length} texts (expected: ${expectedCount})`
+    if (items.length === 0) {
+      const matches = content.match(
+        new RegExp(`"([^"]{1,${MAX_NOTIFICATION_TEXT_LENGTH}})"`, 'g')
       );
-    } else {
-      console.error(
-        `[AI Generation] ❌ Failed to extract texts from LLM response`
-      );
+      if (matches) {
+        items = matches.map((m) => m.slice(1, -1));
+        console.log(
+          `[AI Generation] ✅ Regex fallback found ${items.length} texts (expected: ${expectedCount})`
+        );
+      } else {
+        console.error(
+          `[AI Generation] ❌ Failed to extract texts from LLM response`
+        );
+      }
     }
   }
 
-  // Валидация и добавление эмодзи (без обрезания текста)
-  return normalizeNotificationTexts(texts, expectedCount);
+  // Валидация, нормализация и добавление эмодзи.
+  return normalizeNotificationItems(items, expectedCount, options);
 }
 
 /**
@@ -1241,8 +1853,9 @@ export async function refillTextPool(
   configHash: string,
   directness: Directness,
   subtype: HabitSubtype | null,
-  textSource: 'ai' | 'hybrid',
-  habitIntent?: 'quit' | 'build' | null // Intent привычки, переданный явно
+  textSource: 'ai',
+  habitIntent?: 'quit' | 'build' | null, // Intent привычки, переданный явно
+  customPromptNotification?: string | null
 ): Promise<GenerationResult | null> {
   let lockKey: bigint | null = null;
   let lockAcquired = false;
@@ -1285,7 +1898,9 @@ export async function refillTextPool(
 
     // 2. Проверяем использованные тексты
     const usedIndicesNow = await getUsedTextIndices(currentRecord.id);
-    const currentTexts = currentRecord.texts as string[];
+    const currentTexts = currentRecord.texts as Array<
+      string | AiNotificationText
+    >;
     const availableTexts = currentTexts.length - usedIndicesNow.size;
 
     // 3. Определяем, сколько нужно догенерировать
@@ -1311,6 +1926,7 @@ export async function refillTextPool(
     // 4.1. Загружаем данные о сущности для промпта
     let entityName = '';
     let entityDescription: string | null = null;
+    let isCustomEntity = false;
     // Используем переданный intent, если он есть, иначе определяем из БД/каталога
     let currentHabitIntent: 'quit' | 'build' | null = habitIntent ?? null;
 
@@ -1328,6 +1944,7 @@ export async function refillTextPool(
         .limit(1);
 
       if (habit) {
+        isCustomEntity = true;
         entityName = habit.name;
         entityDescription = habit.description;
         // Используем переданный intent, если он есть, иначе берем из БД
@@ -1361,12 +1978,17 @@ export async function refillTextPool(
         .limit(1);
 
       if (topic) {
+        isCustomEntity = true;
         entityName = topic.name;
         entityDescription = topic.description;
       } else {
         entityName = entityKey;
       }
     }
+
+    const effectiveCustomPromptNotification = isCustomEntity
+      ? null
+      : normalizeCustomPromptNotification(customPromptNotification);
 
     // 4.2. Загружаем настройки пользователя
     const [userPrefs] = await db
@@ -1391,8 +2013,14 @@ export async function refillTextPool(
         ? userProfile.gender
         : null;
 
+    const imageTagPolicy = buildImageTagPolicy({
+      entityKey,
+      entityName,
+    });
+
     // 4.3. Строим промпт и генерируем только новые тексты через LLM
     const systemPrompt = buildNotificationSystemPrompt({
+      entityKey,
       entityName,
       description: entityDescription,
       tone,
@@ -1403,11 +2031,13 @@ export async function refillTextPool(
       subtype,
       kind,
       habitIntent: currentHabitIntent, // Передаем intent для формирования правильных инструкций
+      imageTagPolicy,
+      customPromptNotification: effectiveCustomPromptNotification,
+      isCustomEntity,
     });
 
     const provider = config.llm.defaultProvider;
     const model = config.llm.openai.models.notifications;
-    const scenarioSettings = config.llm.openai.settings.notifications;
     const estimatedCost = estimateGenerationCost(toGenerate, model);
 
     if (estimatedCost > config.llm.limits.maxRequestUSD) {
@@ -1421,43 +2051,19 @@ export async function refillTextPool(
       `[AI Generation] 💰 Refill estimated cost: $${estimatedCost.toFixed(6)} for ${toGenerate} texts`
     );
 
-    // Вычисляем динамический maxOutputTokens на основе количества текстов
-    // Формула такая же, как в основной генерации: count * 180 + 1200
-    const dynamicMaxOutputTokens = toGenerate * 180 + 1200;
-    const maxOutputTokens = Math.min(
-      dynamicMaxOutputTokens,
-      MAX_OUTPUT_TOKENS_CAP
-    );
-
-    console.log(
-      `[AI Generation] 📊 Refill dynamic maxOutputTokens: ${dynamicMaxOutputTokens} (cap: ${MAX_OUTPUT_TOKENS_CAP}, final: ${maxOutputTokens} for ${toGenerate} texts)`
-    );
-
-    // Генерируем с retry механизмом
-    const llmResult = await generateWithRetry(async () => {
-      return await chatViaProvider({
-        provider,
-        model,
-        messages: [
-          {
-            role: 'system',
-            content: systemPrompt,
-          },
-          {
-            role: 'user',
-            content: `Сгенерируй ДО ${toGenerate} вариантов текстов уведомлений в формате JSON массива строк. Верни НЕ пустой массив строк. Если все варианты не помещаются, верни сколько поместится.`,
-          },
-        ],
-        options: {
-          scenario: 'notifications',
-          temperature: scenarioSettings.temperature,
-          maxOutputTokens, // Используем динамически вычисленное значение
-        },
-      });
+    // Генерируем батчами, чтобы снизить риск таймаутов/502
+    const scenarioSettings = config.llm.openai.settings.notifications;
+    const batchResult = await generateNotificationItemsBatched({
+      provider,
+      model,
+      systemPrompt,
+      totalCount: toGenerate,
+      scenarioSettings,
+      isMixed: subtype === 'mixed',
+      imageTagPolicy,
     });
 
-    // 4.4. Парсим и валидируем тексты
-    const newTexts = parseAndValidateTexts(llmResult.content, toGenerate);
+    const newTexts = batchResult.items;
 
     if (newTexts.length === 0) {
       console.warn(
@@ -1473,10 +2079,10 @@ export async function refillTextPool(
 
     // Фильтруем дубликаты по содержанию, чтобы не раздувать пул одинаковыми текстами.
     const existingHashes = new Set(
-      currentTexts.map((text) => hashNotificationText(text))
+      currentTexts.map((text) => hashNotificationText(extractTextValue(text)))
     );
     const uniqueTexts = newTexts.filter((text) => {
-      const textHash = hashNotificationText(text);
+      const textHash = hashNotificationText(text.text);
       if (existingHashes.has(textHash)) {
         return false;
       }
@@ -1499,15 +2105,15 @@ export async function refillTextPool(
     // 4.5. Вычисляем стоимость
     const promptText =
       systemPrompt +
-      `\nСгенерируй ДО ${toGenerate} вариантов текстов уведомлений в формате JSON массива строк. Каждый текст должен быть примерно 140-${MAX_NOTIFICATION_BODY_LENGTH} символов (сервер добавит префикс "${EMOJI_PREFIX}").`;
+      `\nСгенерируй ДО ${toGenerate} вариантов уведомлений в формате JSON объекта с полем items (массив объектов). Каждый текст должен быть примерно 140-${MAX_NOTIFICATION_BODY_LENGTH} символов (сервер добавит префикс "${EMOJI_PREFIX}").`;
     const tokensIn = Math.ceil(promptText.length / 4);
     const tokensOut = Math.ceil(
-      newTexts.reduce((sum, text) => sum + text.length, 0) / 4
+      newTexts.reduce((sum, text) => sum + text.text.length, 0) / 4
     );
     const actualTokensUsed = tokensIn + tokensOut;
     const actualCostUsd = estimateCostUSD({
       provider: 'openai',
-      model: llmResult.model || model,
+      model: batchResult.model || model,
       tokensIn,
       tokensOut,
     });
@@ -1515,7 +2121,7 @@ export async function refillTextPool(
     const result: GenerationResult = {
       texts: uniqueTexts,
       provider,
-      model: llmResult.model || model,
+      model: batchResult.model || model,
       tokensUsed: actualTokensUsed,
       costUsd: actualCostUsd,
     };
@@ -1548,7 +2154,7 @@ export async function refillTextPool(
     }
 
     console.log(
-      `[AI Generation] ✅ Pool refilled successfully: generated ${result.texts.length} texts, total now: ${(updated[0].texts as string[]).length}`
+      `[AI Generation] ✅ Pool refilled successfully: generated ${result.texts.length} texts, total now: ${(updated[0].texts as Array<string | AiNotificationText>).length}`
     );
 
     return result;

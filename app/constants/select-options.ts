@@ -75,11 +75,6 @@ export const TEXT_SOURCE_OPTIONS = [
     description:
       'Генерировать новые тексты с помощью искусственного интеллекта',
   },
-  {
-    label: 'Гибридный',
-    value: 'hybrid',
-    description: 'Комбинация готовых шаблонов и AI-генерации',
-  },
 ];
 
 // Опции для стиля уведомлений (directness)

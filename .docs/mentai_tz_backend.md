@@ -41,7 +41,7 @@ mentai/frontend/server/
 - Auth:
   - **Web:** httpOnly cookie `mentala.sid` + CSRF токен в cookie `mentala.csrf` (Double Submit Cookie паттерн)
   - **Mobile (Capacitor):** заголовок `X-Session-Token` (CSRF не требуется)
-  - См. подробнее: [auth_security_improvements_tz.md](./auth_security_improvements_tz.md)
+  - См. подробнее: [auth_tz.md](./auth_tz.md)
 - Ошибки: `{ "error": { "code": "E_xxx", "message": "..." } }`.
 - Пагинация: `?page=1&limit=20` → `{ items, page, limit, total }`.
 - Идемпотентность: `Idempotency-Key` на чувствительных POST.

@@ -82,6 +82,7 @@ export async function ensureUserTextsInitialized(
             source: 'default' as const, // Помечаем как дефолтные тексты
             intent: preset.intent,
             subtype: preset.subtype,
+            imageTag: preset.imageTag ?? null,
             directness: preset.directness,
             addressing: preset.addressing,
             locale: preset.locale,

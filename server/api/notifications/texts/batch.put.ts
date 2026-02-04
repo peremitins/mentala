@@ -17,6 +17,30 @@ import { nanoid } from 'nanoid';
 import { generateAllSlotsForUser } from '@/server/application/notifications/scheduler.service';
 import { ensureUserTextsInitialized } from '@/server/application/notifications/initialize-texts.service';
 
+const IMAGE_TAGS = new Set([
+  'harm_organs',
+  'harm_appearance',
+  'harm_mental',
+  'activity',
+  'nature',
+  'meditation',
+  'daily_life',
+  'neutral_abstract',
+]);
+
+function normalizeImageTag(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== 'string') return null;
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_')
+    .replace(/-+/g, '_');
+  if (!normalized) return null;
+  const resolved = normalized === 'neutral' ? 'neutral_abstract' : normalized;
+  return IMAGE_TAGS.has(resolved) ? resolved : null;
+}
+
 /**
  * PUT /api/notifications/texts/batch
  * Batch-сохранение изменений (основной эндпоинт)
@@ -161,11 +185,17 @@ export default defineEventHandler(async (event) => {
           }
         }
 
+        const nextImageTag =
+          update.imageTag !== undefined
+            ? normalizeImageTag(update.imageTag)
+            : text.imageTag ?? null;
+
         // Обновляем
         await tx
           .update(notificationTexts)
           .set({
             text: update.text !== undefined ? update.text : text.text,
+            imageTag: nextImageTag,
             updatedAt: new Date(),
           })
           .where(eq(notificationTexts.id, update.id));
@@ -237,6 +267,7 @@ export default defineEventHandler(async (event) => {
           source: 'user',
           intent: create.intent || null,
           subtype: create.subtype || null,
+          imageTag: normalizeImageTag(create.imageTag),
           directness: create.directness,
           addressing: addressing, // Берем из глобальных настроек пользователя
           locale: create.locale,
@@ -312,6 +343,7 @@ export default defineEventHandler(async (event) => {
       source: text.source as 'default' | 'user',
       intent: text.intent as NotificationTextIntent | null,
       subtype: text.subtype as NotificationSubtype | null,
+      imageTag: text.imageTag ?? null,
       directness: text.directness as 'soft' | 'moderate' | 'hard' | 'universal',
       addressing: text.addressing as 'informal' | 'formal' | 'universal',
       locale: text.locale,

@@ -299,7 +299,7 @@ pnpm dev
 pnpm cap:sync
 ```
 
-2. Убедись, что эмулятор с Google Play Services (см. setup_google.md у плагина).
+2. Убедись, что эмулятор с Google Play Services.
 3. Открой Android Studio:
 
 ```bash
@@ -317,7 +317,7 @@ pnpm cap:open:android
 pnpm cap:sync
 ```
 
-2. В `Info.plist` добавь `CFBundleURLTypes` с reversed client id (см. доки плагина).
+2. В `Info.plist` добавь `CFBundleURLTypes` с reversed client id.
 3. Открой Xcode и собери приложение.
 
 ---
