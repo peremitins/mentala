@@ -29,7 +29,7 @@
 
 ## Улучшения безопасности авторизации
 
-См. подробное ТЗ: [auth_security_improvements_tz.md](./auth_security_improvements_tz.md)
+См. подробное ТЗ: [auth_tz.md](./auth_tz.md) (Часть II. Безопасность авторизации)
 
 **Реализованные улучшения:**
 

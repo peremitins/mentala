@@ -2,7 +2,7 @@
 -- Убираем дублирование полей, оставляем только textSource
 
 -- 1. Обновить notification_preferences.meta: generationMode -> textSource
--- manual -> templates, ai -> ai, hybrid -> hybrid
+-- manual -> templates, ai -> ai
 UPDATE notification_preferences
 SET meta = jsonb_set(
   COALESCE(meta, '{}'::jsonb) - 'generationMode',
@@ -10,7 +10,6 @@ SET meta = jsonb_set(
   CASE 
     WHEN meta->>'generationMode' = 'manual' THEN '"templates"'
     WHEN meta->>'generationMode' = 'ai' THEN '"ai"'
-    WHEN meta->>'generationMode' = 'hybrid' THEN '"hybrid"'
     ELSE COALESCE(meta->>'textSource', '"templates"')
   END::jsonb
 )
@@ -24,4 +23,3 @@ RENAME COLUMN generation_mode TO text_source;
 -- Раскомментируйте, если нужно удалить все данные:
 -- TRUNCATE TABLE notification_slots CASCADE;
 -- TRUNCATE TABLE ai_generated_notification_texts CASCADE;
-

@@ -1,192 +1,220 @@
-ТЗ: Подключение Object Storage + CDN (Yandex Cloud) для медиа Mentala
+# ТЗ: Подключение Object Storage + CDN (Yandex Cloud) для медиа Mentala
 
-Цели 1. Хранить медиафайлы (аудио + картинки медитаций + картинки уведомлений) в Yandex Object Storage. 2. Раздавать медиа пользователям через Yandex Cloud CDN (быстро, кэшируемо, дешевле нагрузки на VPS). 3. В кодовой базе перейти от путей вида /meditations/... к URL, формируемым от CDN base URL.
+Документ объединяет: настройку Object Storage и CDN в Yandex Cloud и перевод медиа приложения на внешний base URL (без использования `public/meditations/` в продакшене).
 
-Термины (коротко)
-• S3-совместимый = сервис понимает AWS S3 API. То есть Object Storage Яндекса можно использовать через инструменты/SDK, рассчитанные на S3 (AWS CLI, AWS SDK), просто меняется endpoint. Официально: “Static access keys compatible with the AWS API”
-https://yandex.cloud/en/docs/iam/concepts/authorization/access-key ￼
-Quickstart по S3 API: https://yandex.cloud/en/docs/storage/s3/s3-api-quickstart ￼
+## Цели
 
-⸻
+1. Хранить медиафайлы (аудио + картинки медитаций + картинки уведомлений) в Yandex Object Storage.
+2. Раздавать медиа пользователям через Yandex Cloud CDN (быстро, кэшируемо, дешевле нагрузки на VPS).
+3. В кодовой базе перейти от путей вида `/meditations/...` к URL, формируемым от CDN base URL.
+4. Локальная папка `public/meditations/**` не используется как источник для продакшена.
 
-Глава 1. Настройка в Yandex Cloud (консоль): что создать и где нажимать
+---
 
-1. Подготовка: облако, каталог (folder), биллинг
-   • Войти в консоль: https://console.yandex.cloud/
-   • Создать Cloud и Folder (если ещё нет). Все ресурсы дальше будут внутри folder.
+## Термины (коротко)
 
-2. Создать бакеты Object Storage
+- **S3-совместимый** — сервис понимает AWS S3 API. Object Storage Яндекса можно использовать через инструменты/SDK для S3 (AWS CLI, AWS SDK), меняется только endpoint.
+  - [Static access keys (Yandex)](https://yandex.cloud/en/docs/iam/concepts/authorization/access-key)
+  - [S3 API Quickstart (Yandex)](https://yandex.cloud/en/docs/storage/s3/s3-api-quickstart)
 
-Официальная инструкция “Creating a bucket”:
-https://yandex.cloud/en/docs/storage/operations/buckets/create ￼
+---
 
-Рекомендуемая структура: 1–2 бакета (в зависимости от подхода к доступу)
-• Вариант A (проще): 1 публичный бакет + CDN
-mentala-media-prod
-Префиксы внутри:
-• meditations/audio/...
-• meditations/covers/...
-• meditations/backgrounds/...
-• notifications/...
-• Вариант B (правильнее по безопасности): бакет приватный, доступ только через CDN
-(к нему можно применить policy “только сети CDN” — это уже следующий шаг)
+## Глава 1. Настройка в Yandex Cloud (консоль)
+
+### 1. Подготовка: облако, каталог (folder), биллинг
+
+- Войти в консоль: https://console.yandex.cloud/
+- Создать Cloud и Folder (если ещё нет). Все ресурсы дальше будут внутри folder.
+
+### 2. Создать бакеты Object Storage
+
+- [Creating a bucket](https://yandex.cloud/en/docs/storage/operations/buckets/create)
+
+Рекомендуемая структура: 1–2 бакета (в зависимости от подхода к доступу).
+
+- **Вариант A (проще):** 1 публичный бакет + CDN, например `mentala-media-prod`. Префиксы внутри:
+  - `meditations/audio/...`
+  - `meditations/covers/...`
+  - `meditations/backgrounds/...`
+  - `notifications/...`
+- **Вариант B (безопаснее):** бакет приватный, доступ только через CDN (policy «только сети CDN»).
 
 Именование: коротко, уникально, без пробелов, латиница/цифры/дефисы.
 
-3. Создать сервисный аккаунт и ключи доступа (чтобы заливать файлы)
+### 3. Сервисный аккаунт и ключи доступа (для загрузки файлов)
 
-Тебе нужен Service Account + Static access key (Key ID + Secret).
-• “Managing static access keys”:
-https://yandex.cloud/en/docs/iam/operations/authentication/manage-access-keys ￼
-• Что такое static access key:
-https://yandex.cloud/en/docs/iam/concepts/authorization/access-key ￼
+Нужен Service Account + Static access key (Key ID + Secret).
 
-Шаги (через консоль): 1. IAM → Service accounts → Create service account (например mentala-storage-sa) 2. Выдать роль на folder: минимум для работы с бакетами — см. требования в доке про bucket create (там указан минимум роли для создания)
-https://yandex.cloud/en/docs/storage/operations/buckets/create ￼ 3. В сервисном аккаунте: Create new key → Create static access key 4. Сохранить Key ID и Secret key (секрет показывается один раз).
+- [Managing static access keys](https://yandex.cloud/en/docs/iam/operations/authentication/manage-access-keys)
+- [Static access key](https://yandex.cloud/en/docs/iam/concepts/authorization/access-key)
 
-Если хочешь хранить ключи безопаснее: Yandex Lockbox (опционально)
-https://yandex.cloud/en/docs/tutorials/security/static-key-in-lockbox/console ￼
+Шаги: IAM → Service accounts → Create (например `mentala-storage-sa`) → выдать роль на folder (минимум для бакетов по доке) → Create new key → Create static access key → сохранить Key ID и Secret (секрет показывается один раз).
 
-4. Загрузить медиафайлы в бакет
+Опционально: [Yandex Lockbox](https://yandex.cloud/en/docs/tutorials/security/static-key-in-lockbox/console) для хранения ключей.
 
-Официально: “Uploading an object”:
-https://yandex.cloud/en/docs/storage/operations/objects/upload ￼
+### 4. Загрузить медиафайлы в бакет
 
-Можно делать:
-• руками через консоль (на старте ок),
-• или AWS CLI / SDK (удобнее для пачек, CI).
+- [Uploading an object](https://yandex.cloud/en/docs/storage/operations/objects/upload)
+- Вручную через консоль или через AWS CLI / SDK (удобнее для пачек и CI).
 
-5. Настроить CORS (если медиа будут запрашиваться из webview/браузера)
+### 5. Настроить CORS (если медиа запрашиваются из webview/браузера)
 
-Официальная инструкция (обновлена 13 Jan 2026):
-https://yandex.cloud/en/docs/storage/operations/buckets/cors ￼
+- [CORS для бакетов](https://yandex.cloud/en/docs/storage/operations/buckets/cors)
 
-Минимально для медиа обычно хватает:
-• Allowed origins: _ (или строго твой домен/приложение)
-• Allowed methods: GET, HEAD
-• Allowed headers: _
+Минимально: Allowed origins `*` или твой домен, methods GET/HEAD, headers по необходимости.
 
-6. Подключить Cloud CDN к бакету
+### 6. Подключить Cloud CDN к бакету
 
-CDN умеет брать origin из бакета. Официально:
-• Quickstart CDN: https://yandex.cloud/en/docs/cdn/quickstart ￼
-• Создание CDN resource (origin может быть Bucket):
-https://yandex.cloud/en/docs/cdn/operations/resources/create-resource ￼
-• Концепция CDN (origin = bucket):
-https://yandex.cloud/en/docs/cdn/concepts/ ￼
+- [CDN Quickstart](https://yandex.cloud/en/docs/cdn/quickstart)
+- [Создание CDN resource (origin = Bucket)](https://yandex.cloud/en/docs/cdn/operations/resources/create-resource)
+- [Концепция CDN](https://yandex.cloud/en/docs/cdn/concepts/)
 
-Шаги (в консоли): 1. Cloud CDN → Create resource 2. Origin: Bucket → выбрать твой бакет 3. Указать домен для раздачи, например:
-• media.mentala.me (или cdn.mentala.me) 4. Включить нужные настройки кэша (по умолчанию ок для старта).
+В консоли: Cloud CDN → Create resource → Origin: Bucket → выбрать бакет → указать домен раздачи (например `media.mentala.app`) → настроить кэш.
 
-7. HTTPS: сертификат и домен (чтобы было красиво и безопасно)
-   • Certificate Manager quickstart:
-   https://yandex.cloud/en/docs/certificate-manager/quickstart/ ￼
-   • Пример end-to-end туториала (Object Storage + CDN + DNS + сертификат):
-   https://yandex.cloud/en/docs/tutorials/applied/cdn-hosting/console ￼
+### 7. HTTPS: сертификат и домен
 
-Шаги: 1. Certificate Manager → выпустить Let’s Encrypt сертификат для media.mentala.me 2. DNS (у регистратора/в Yandex Cloud DNS) → создать CNAME на адрес CDN ресурса (он будет показан в настройках CDN). 3. Привязать сертификат к CDN ресурсу (если требуется в UI).
+- [Certificate Manager quickstart](https://yandex.cloud/en/docs/certificate-manager/quickstart/)
+- [Туториал: Object Storage + CDN + DNS + сертификат](https://yandex.cloud/en/docs/tutorials/applied/cdn-hosting/console)
 
-8. (Опционально) Закрыть прямой доступ к бакету и оставить только CDN
+Шаги: Certificate Manager → Let's Encrypt для `media.mentala.app` → DNS CNAME на CDN → привязать сертификат к CDN при необходимости.
 
-Если хочешь, чтобы медиа нельзя было “тащить” напрямую из storage URL, а только через CDN — можно ограничить бакет policy по подсетям CDN.
-Официальная статья:
-https://yandex.cloud/en/docs/troubleshooting/storage/how-to/permit-bucket-access-only-to-cdn-networks ￼
-Bucket policy reference:
-https://yandex.cloud/en/docs/storage/concepts/policy ￼
+### 8. (Опционально) Доступ только через CDN
 
-⸻
+Чтобы медиа нельзя было забирать напрямую из storage URL:
 
-Глава 2. Изменения в кодовой базе Mentala (Nuxt/Vue + seed + хранение путей)
+- [Ограничение доступа к бакету только сетями CDN](https://yandex.cloud/en/docs/troubleshooting/storage/how-to/permit-bucket-access-only-to-cdn-networks)
+- [Bucket policy](https://yandex.cloud/en/docs/storage/concepts/policy)
 
-2.1. Что меняем концептуально
+---
 
-Сейчас у тебя в БД/seed лежат пути вида:
-• /meditations/rain-night.m4a
-• /meditations/covers/...webp
+## Глава 2. Изменения в кодовой базе Mentala
 
-В продакшне это лучше заменить на один из вариантов:
+### 2.1. Текущее состояние
 
-Вариант 1 (рекомендую): хранить в БД “ключ объекта” (object key), а URL собирать в коде
-• В БД: audioKey = "meditations/audio/rain-night.m4a"
-• В коде: url = MEDIA_BASE_URL + "/" + audioKey
+- В БД (и в сидере) поля `audioPath` / `coverPath` / `backgroundPath` хранят путь от корня, например:
+  - `/meditations/audio/nature/rain-night.m4a`
+  - `/meditations/covers/rain-night.webp`
+  - `/meditations/backgrounds/rain-night.webp`
+- В коде: `topicKey` обязателен, `topicKeys?: string[]` опционален (трек может отображаться в нескольких темах).
 
-Плюсы: можно сменить CDN/домен без миграции БД.
-Минус: надо один раз привести данные к ключам.
+### 2.2. Концепция хранения путей
 
-Вариант 2: хранить полный URL в БД
-• https://media.mentala.me/meditations/audio/rain-night.m4a
-Проще, но хуже для переездов/версий.
+Варианты:
 
-2.2. Конфиг: добавить base URL для медиа
+- **Вариант 1 (рекомендуется для новых систем):** в БД хранить «ключ объекта» без ведущего слэша, URL собирать в коде. Плюс: смена CDN/домена без миграции БД.
+- **Вариант 2 (минимальные изменения):** не менять схему БД — остаются относительные пути вида `/meditations/...`. Меняется только то, как приложение превращает путь в URL: `mediaBaseUrl + path`.
 
-В .env / секретах:
-• NUXT_PUBLIC_MEDIA_BASE_URL=https://media.mentala.me (CDN домен)
+В обоих случаях итоговый URL: `https://media.mentala.app/meditations/audio/...`.
 
-В nuxt.config:
-• пробросить в runtimeConfig.public.
+### 2.3. Конфигурация окружения
 
-Дальше в клиенте:
-• const mediaBase = useRuntimeConfig().public.mediaBaseUrl
+В `.env` / секретах (обязательная в проде):
 
-2.3. Обновить модели/типы трека
+```bash
+NUXT_PUBLIC_MEDIA_BASE_URL=https://media.mentala.app
+```
 
-Сейчас:
+- `.env.development` — для локальной разработки (можно тестовый CDN).
+- `.env` / `.env.production` — для продакшена. Пустое значение в проде не допускается.
 
-audioPath: '/meditations/rain-night.m4a'
+В `nuxt.config`: пробросить в `runtimeConfig.public.mediaBaseUrl` (должен быть доступен на клиенте). Пример:
 
-Станет (пример для варианта 1):
+```ts
+runtimeConfig.public.mediaBaseUrl = process.env.NUXT_PUBLIC_MEDIA_BASE_URL ?? ''
+```
 
-audioKey: 'meditations/audio/rain-night.m4a'
-coverKey: 'meditations/covers/rain-night.webp'
-backgroundKey: 'meditations/backgrounds/rain-night.webp'
+### 2.4. Единая функция построения URL
 
-И helper:
+Утилита (например `shared/lib/mediaUrl.ts` или `shared/utils/media.ts`):
 
-export function mediaUrl(key: string) {
-const { public: cfg } = useRuntimeConfig();
-return `${cfg.mediaBaseUrl}/${key}`;
+- Вход: `path: string | null | undefined`.
+- Если `path` уже абсолютный (`http://` или `https://`) → вернуть как есть.
+- Если `path` начинается с `/` → вернуть `${mediaBaseUrl}${path}` (избегать двойных слэшей).
+- Если `path` пустой → пустая строка.
+- Если `mediaBaseUrl` пустой → залогировать ошибку и вернуть пустую строку (локальные пути в проде не использовать).
+
+Пример (для варианта с ключами без ведущего слэша):
+
+```ts
+export function mediaUrl(keyOrPath: string | null | undefined): string {
+  const { public: cfg } = useRuntimeConfig()
+  if (!keyOrPath) return ''
+  if (keyOrPath.startsWith('http://') || keyOrPath.startsWith('https://')) return keyOrPath
+  const base = (cfg.mediaBaseUrl ?? '').replace(/\/$/, '')
+  const path = keyOrPath.startsWith('/') ? keyOrPath : `/${keyOrPath}`
+  return base ? `${base}${path}` : ''
 }
+```
 
-2.4. Обновить seed-meditations.ts
+### 2.5. Модели и типы (если меняем на ключи)
 
-Тебе нужно заменить поля audioPath/coverPath/backgroundPath на ключи (или на полные URL — если выберешь вариант 2).
+При переходе на вариант с ключами в БД:
 
-Плюс: можно оставить обратную совместимость:
-• если начинается с http → считать это уже URL
-• иначе → считать ключом и доклеивать base.
+- Было: `audioPath: '/meditations/rain-night.m4a'`
+- Стало: `audioKey: 'meditations/audio/rain-night.m4a'`, `coverKey`, `backgroundKey` — и везде использовать `mediaUrl(track.audioKey)` и т.д.
 
-2.5. Обновить места использования в UI
-• Плеер должен брать src из mediaUrl(track.audioKey)
-• Картинки: img :src="mediaUrl(track.coverKey)", и т.п.
+Если оставляем текущую схему — поля остаются `audioPath`/`coverPath`/`backgroundPath`, в UI везде используется `mediaUrl(track.audioPath)`.
 
-2.6. Кеширование и версии файлов
+### 2.6. Seed (meditations)
 
-Чтобы CDN эффективно кэшировал:
-• Для неизменяемых файлов делай versioned filenames:
-• rain-night.v1.m4a или rain-night-<hash>.m4a
-• Тогда можно ставить долгий cache-control на CDN/объекте.
+В сидере пути должны соответствовать структуре в бакете (либо относительные пути `/meditations/...`, либо ключи без слэша). Можно добавить обратную совместимость: если значение начинается с `http` — считать полным URL, иначе — ключ/путь и собирать URL через `mediaBaseUrl`.
 
-2.7. Уведомления: картинки
-• Аналогично: хранить notificationImageKey и в payload пуша прокидывать CDN URL.
-• Важно: некоторые пуш-системы кешируют/переиспользуют URL — стабильный CDN домен здесь плюс.
+### 2.7. Применить утилиту во всех местах UI
 
-2.8. Что НЕ делаем на первом этапе (чтобы было недорого и просто)
-• Не делаем загрузку пользователями (upload из приложения) → значит, не нужны pre-signed URL.
-• Не делаем сложные правила доступа по пользователям.
-• Не делаем медиапайплайн в фоне.
+Обязательные точки:
 
-⸻
+- карточки треков (cover, background);
+- экран плеера (cover, background);
+- сам аудио-источник (`<audio src="...">` или плеер).
 
-Acceptance Criteria (критерии готовности) 1. В Object Storage лежат все медиа по ключам (структура префиксов). 2. Медиа открываются по CDN-домену (пример: https://media.mentala.me/meditations/audio/rain-night.m4a). 3. Приложение больше не зависит от файлов в public для продакшна. 4. В dev можно оставить локальные файлы, а в prod — CDN (через NUXT_PUBLIC_MEDIA_BASE_URL). 5. CORS настроен и медиа корректно загружается в web.
+В UI и плеере не должно остаться прямых ссылок на `/meditations/...` без префикса `mediaBaseUrl`. API может продолжать отдавать относительные пути — клиент собирает финальный URL через `mediaUrl()`.
 
-⸻
+### 2.8. Разделы и фильтрация по темам (topicKey + topicKeys)
 
-Мини-ответ на твой вопрос “нужен ли отдельный сервер у Яндекса?”
+Трек принадлежит теме X, если:
 
-Нет. Object Storage и CDN — это управляемые сервисы. У тебя остаётся твой VPS (API/БД/рендер), а медиа уходит в storage и раздаётся CDN. “S3-совместимость” — это про API-доступ/инструменты, а не про то, что ты поднимаешь свой S3-сервер. ￼
+- `track.topicKey === X` или
+- `track.topicKeys?.includes(X) === true`
 
-⸻
+При этом `topicKeys` может отсутствовать; `topicKey` обязателен.
 
-Если хочешь, я следующим шагом могу:
-• предложить конкретную структуру ключей под твои текущие папки (meditations/_, notifications/_),
-• и дать готовый код-хелпер + пример миграции (скрипт, который превращает старые /meditations/... в meditations/audio/...).
+### 2.9. Убрать зависимость от public/meditations
+
+- Удалить `public/meditations/**` из проекта или не включать в билд продакшена.
+- Локально для разработки тоже использовать CDN (задать `NUXT_PUBLIC_MEDIA_BASE_URL` на тестовый CDN).
+
+### 2.10. Кеширование и версии файлов
+
+Для эффективного кэша CDN у неизменяемых файлов использовать versioned filenames: например `rain-night.v1.m4a` или `rain-night-<hash>.m4a`, и выставлять долгий Cache-Control на объекте/CDN.
+
+### 2.11. Уведомления: картинки
+
+Хранить ключ/путь изображения уведомления и в payload пуша отдавать полный CDN URL. Стабильный CDN-домен удобен для кэширования со стороны пуш-систем.
+
+### 2.12. Что не делаем на первом этапе
+
+- Загрузка файлов пользователями (upload из приложения) — pre-signed URL не нужны.
+- Сложные правила доступа по пользователям.
+- Медиапайплайн в фоне.
+
+---
+
+## Критерии приёмки
+
+1. В Object Storage лежат все медиа по выбранной структуре (префиксы meditations/..., notifications/...).
+2. Медиа открываются по CDN-домену (например `https://media.mentala.app/meditations/audio/rain-night.m4a`).
+3. Приложение не зависит от файлов в `public/meditations` для продакшена; в dev можно оставить локальные файлы или тот же CDN через `NUXT_PUBLIC_MEDIA_BASE_URL`.
+4. CORS настроен, медиа корректно загружаются в web.
+5. В прод окружении `NUXT_PUBLIC_MEDIA_BASE_URL` не пустой; любой трек воспроизводится, cover/background загружаются по `https://media.mentala.app/...`.
+6. Треки с `topicKeys` отображаются в соответствующих темах; без `topicKeys` — только по `topicKey`.
+7. В Network (DevTools) нет запросов к медиа через локальный домен приложения или localhost — только к CDN-домену.
+
+---
+
+## Отдельный сервер у Яндекса не нужен
+
+Object Storage и CDN — управляемые сервисы. VPS (API, БД, рендер) остаётся твоим; медиа хранятся в Storage и раздаются через CDN. S3-совместимость относится к API и инструментам, а не к развёртыванию своего S3-сервера.
+
+---
+
+При необходимости следующий шаг: конкретная структура ключей под текущие папки (`meditations/`, `notifications/`) и готовый код-хелпер + пример миграции (скрипт перевода старых `/meditations/...` в нужный формат ключей).

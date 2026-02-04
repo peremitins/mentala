@@ -8,6 +8,7 @@
 // ==========================================
 
 export const MAX_NOTIFICATION_TEXT_LENGTH = 150;
+export const MAX_CUSTOM_PROMPT_NOTIFICATION_LENGTH = 400;
 
 export type NotificationKind = 'therapy' | 'habits';
 export type NotificationTextSource = 'default' | 'user';
@@ -32,6 +33,15 @@ export type SnoozeDuration = '15m' | '1h' | '4h' | 'tomorrow';
 export type HabitIntent = 'build' | 'quit' | 'custom';
 // Intent для текстов уведомлений (только 'build' | 'quit', без 'custom')
 export type NotificationTextIntent = 'build' | 'quit';
+export type NotificationImageTag =
+  | 'harm_organs'
+  | 'harm_appearance'
+  | 'harm_mental'
+  | 'activity'
+  | 'nature'
+  | 'meditation'
+  | 'daily_life'
+  | 'neutral_abstract';
 // Универсальный тип subtype для всех видов уведомлений
 export type NotificationSubtype =
   | 'reminder'
@@ -76,6 +86,7 @@ export interface NotificationPreferencesDto {
   customSlotTimes?: (number | null)[] | null; // Индивидуальные времена слотов (0-1439 минут) для каждого уведомления
   timeRangeStart: number; // Начало временного окна в минутах от начала дня (0-1439)
   timeRangeEnd: number; // Конец временного окна в минутах от начала дня (0-1439)
+  customPromptNotification?: string | null; // Персональные пожелания (только для шаблонных тем и AI)
   meta?: NotificationPreferenceMeta | null; // Дополнительные параметры (textSource и т.д.)
   createdAt: string;
   updatedAt: string;
@@ -92,6 +103,7 @@ export interface UpdateNotificationPreferencesDto {
   customSlotTimes?: (number | null)[] | null; // Пользовательские времена слотов (0-1439 минут)
   timeRangeStart?: number; // Начало временного окна в минутах от начала дня (0-1439)
   timeRangeEnd?: number; // Конец временного окна в минутах от начала дня (0-1439)
+  customPromptNotification?: string | null; // Персональные пожелания (только для шаблонных тем и AI)
   meta?: NotificationPreferenceMeta | null;
   // Поля для обновления названия и описания кастомных привычек/терапии
   name?: string; // Новое название (только для кастомных привычек/терапии)
@@ -131,7 +143,14 @@ export interface UpdateHabitDto {
 
 export interface NotificationPreferenceMeta {
   // Единое поле для всех типов сущностей (кастомные и шаблоны)
-  textSource?: 'templates' | 'ai' | 'hybrid';
+  textSource?: 'templates' | 'ai';
+}
+
+// Единый формат элемента уведомления (AI и шаблоны)
+export interface NotificationItem {
+  text: string;
+  imageTag: NotificationImageTag | null;
+  subtype: NotificationSubtype | null;
 }
 
 // ==========================================
@@ -146,6 +165,7 @@ export interface NotificationText {
   source: NotificationTextSource;
   intent: NotificationTextIntent | null;
   subtype: NotificationSubtype | null;
+  imageTag: NotificationImageTag | null;
   directness: 'soft' | 'moderate' | 'hard' | 'universal';
   addressing: 'informal' | 'formal' | 'universal';
   locale: string; // 'ru'
@@ -160,12 +180,14 @@ export interface BatchTextChanges {
   updated?: Array<{
     id: string;
     text?: string;
+    imageTag?: NotificationImageTag | null;
     sortOrder?: number;
   }>;
   created?: Array<{
     tempId?: string;
     intent?: 'build' | 'quit' | null;
     subtype?: 'reminder' | 'informational' | 'motivational' | 'mixed' | null;
+    imageTag?: NotificationImageTag | null;
     directness: 'soft' | 'moderate' | 'hard' | 'universal';
     // addressing больше не передается с фронта, берется из userPreferences на бэкенде
     locale: string;

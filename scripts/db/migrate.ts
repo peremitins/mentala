@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import {
   getMigrationLockKey,
   prepareMigrationEnv,
+  resolveDefaultEnv,
 } from './utils';
 
 async function runDrizzle(
@@ -39,7 +40,8 @@ async function runDrizzle(
 
 async function main() {
   const { env, envFile, dbUrl, restArgs } = prepareMigrationEnv(
-    process.argv.slice(2)
+    process.argv.slice(2),
+    { defaultEnv: resolveDefaultEnv() }
   );
 
   console.log(

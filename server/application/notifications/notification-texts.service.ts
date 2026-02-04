@@ -13,6 +13,7 @@ import type {
   NotificationSubtype,
 } from '@/shared/dto/notifications';
 import { ensureUserTextsInitialized } from './initialize-texts.service';
+import { normalizeNotificationItems } from './ai-generation.service';
 
 export interface LoadTextsParams {
   userId: number;
@@ -25,9 +26,8 @@ export interface LoadTextsParams {
 }
 
 export interface LoadedText {
-  id: string;
   text: string;
-  source: 'user' | 'default';
+  imageTag: string | null;
 }
 
 export interface LoadedTexts {
@@ -102,6 +102,7 @@ export async function loadTextsForPreference(
     .select({
       id: notificationTexts.id,
       text: notificationTexts.text,
+      imageTag: notificationTexts.imageTag,
       source: notificationTexts.source,
     })
     .from(notificationTexts)
@@ -123,18 +124,29 @@ export async function loadTextsForPreference(
 
   // Объединяем дефолтные и кастомные тексты
   // Дефолтные идут первыми, затем кастомные
-  const allTexts: LoadedText[] = [
-    ...defaultTexts.map((t) => ({
-      id: t.id,
-      text: t.text,
-      source: 'default' as const,
-    })),
-    ...userTexts.map((t) => ({
-      id: t.id,
-      text: t.text,
-      source: 'user' as const,
-    })),
-  ];
+  // Единая нормализация шаблонов через общий пайплайн NotificationItem
+  const normalizeLoadedText = (raw: { text: string; imageTag: string | null }) =>
+    normalizeNotificationItems([raw], 1, {
+      isMixed: false,
+      allowedImageTags: null,
+      fallbackImageTag: null,
+      disallowHarmForPositive: false,
+      // Для шаблонов эмодзи не добавляем, только для AI-генерации
+      addEmojiPrefix: false,
+    })[0] ?? null;
+
+  const allTexts: LoadedText[] = [];
+  for (const raw of [...defaultTexts, ...userTexts]) {
+    const normalized = normalizeLoadedText({
+      text: raw.text,
+      imageTag: raw.imageTag ?? null,
+    });
+    if (!normalized) continue;
+    allTexts.push({
+      text: normalized.text,
+      imageTag: normalized.imageTag ?? null,
+    });
+  }
 
   return {
     texts: allTexts,

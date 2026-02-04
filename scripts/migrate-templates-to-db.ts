@@ -143,6 +143,25 @@ function validateTemplate(template: NotificationTemplate): void {
       `Invalid template.ru: missing or not an object (template id: ${template.id})`
     );
   }
+
+  // Валидация правила harm_*: только quit + informational + hard
+  if (template.imageTag && template.imageTag.startsWith('harm_')) {
+    if (template.intent !== 'quit') {
+      throw new Error(
+        `Invalid imageTag for template ${template.id}: harm_* разрешён только для quit`
+      );
+    }
+    if (template.subtype !== 'informational') {
+      throw new Error(
+        `Invalid imageTag for template ${template.id}: harm_* разрешён только для subtype=informational`
+      );
+    }
+    if (template.directness.some((value) => value !== 'hard')) {
+      throw new Error(
+        `Invalid imageTag for template ${template.id}: harm_* разрешён только для directness=hard`
+      );
+    }
+  }
 }
 
 /**
@@ -164,8 +183,9 @@ async function createPresetAndText(
     id: presetId,
     kind: template.kind,
     entityKey: template.entityKey,
-    intent: template.intent || null,
-    subtype: template.subtype || null,
+    intent: template.intent ?? null,
+    subtype: template.subtype ?? null,
+    imageTag: template.imageTag ?? null,
     directness,
     addressing,
     locale: 'ru',
@@ -179,10 +199,10 @@ async function createPresetAndText(
     kind: template.kind,
     entityKey: template.entityKey,
     userId: null, // системный дефолт
-    preferenceId: null,
     source: 'default',
-    intent: template.intent || null,
-    subtype: template.subtype || null,
+    intent: template.intent ?? null,
+    subtype: template.subtype ?? null,
+    imageTag: template.imageTag ?? null,
     directness,
     addressing,
     locale: 'ru',
@@ -226,6 +246,7 @@ async function migrateTemplates(): Promise<void> {
     entityKey: string;
     intent: string | null;
     subtype: string | null;
+    imageTag: string | null;
     directness: string;
     addressing: string;
     locale: string;
@@ -242,6 +263,7 @@ async function migrateTemplates(): Promise<void> {
     source: string;
     intent: string | null;
     subtype: string | null;
+    imageTag: string | null;
     directness: string;
     addressing: string;
     locale: string;
@@ -274,6 +296,7 @@ async function migrateTemplates(): Promise<void> {
         entityKey: template.entityKey,
         intent: template.intent || null,
         subtype: template.subtype || null,
+        imageTag: template.imageTag ?? null,
         directness,
         addressing,
         locale: 'ru',
@@ -290,6 +313,7 @@ async function migrateTemplates(): Promise<void> {
         source: 'default',
         intent: template.intent || null,
         subtype: template.subtype || null,
+        imageTag: template.imageTag ?? null,
         directness,
         addressing,
         locale: 'ru',

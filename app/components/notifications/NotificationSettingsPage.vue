@@ -58,12 +58,12 @@
         <div
           ref="subtitleInputContainerRef"
           v-if="isEditingSubtitle"
-          class="space-y-2 rounded-2xl border border-white/10 bg-background/20 p-2"
+          class="space-y-2 rounded-2xl border border-white/10 bg-background/20"
         >
           <TextareaResize
             ref="subtitleInputRef"
+            class="!rounded-2xl leading-[inherit]"
             v-model="subtitleDraft"
-            variant="form"
             :placeholder="descriptionPlaceholder"
             @esc-pressed="finishSubtitleEdit"
           />
@@ -71,16 +71,16 @@
         <div
           v-else
           class="flex items-start gap-3 rounded-2xl border border-white/10 bg-background/20 px-3 py-2"
+          @click="startEditSubtitle"
         >
           <p
-            class="text-sm text-foreground/90 flex-1 border-2 border-transparent leading-relaxed"
+            class="text-sm text-foreground/90 flex-1 border-2 border-transparent"
             v-html="descriptionText"
           />
           <button
             v-if="canEditCustomEntity"
             type="button"
             class="text-foreground hover:text-foreground transition mt-1"
-            @click="startEditSubtitle"
             aria-label="Редактировать описание"
           >
             <svg
@@ -100,6 +100,27 @@
         </div>
       </section>
 
+      <!-- Карточка персональных пожеланий -->
+      <section
+        v-if="showCustomPromptNotification"
+        class="glass-deep p-3 space-y-2"
+      >
+        <div class="flex items-center justify-between">
+          <p class="text-sm font-semibold">Мои пожелания</p>
+          <p class="text-xs text-foreground/70">
+            {{ customPromptNotificationLength }}/{{
+              MAX_CUSTOM_PROMPT_NOTIFICATION_LENGTH
+            }}
+          </p>
+        </div>
+
+        <TextareaResize
+          v-model="customPromptNotification"
+          :maxlength="MAX_CUSTOM_PROMPT_NOTIFICATION_LENGTH"
+          :placeholder="descriptionPlaceholder"
+        />
+      </section>
+
       <!-- Карточка расписания уведомлений -->
       <section class="glass-deep p-3 space-y-4">
         <div class="flex items-center justify-between">
@@ -112,10 +133,7 @@
             </h3>
             <p class="text-xs text-foreground">Дни, время и частота отправки</p>
           </div>
-          <Switch
-            v-model:checked="enabled"
-            :loading="loading"
-          />
+          <Switch v-model:checked="enabled" :loading="loading" />
         </div>
 
         <div class="space-y-4">
@@ -377,12 +395,6 @@
               >
                 ✨ ИИ
               </ToggleGroupItem>
-              <ToggleGroupItem
-                value="hybrid"
-                class="flex-1 rounded-lg px-3 py-2 text-xs xs:text-sm whitespace-nowrap font-medium transition-all"
-              >
-                🔀 Гибридный
-              </ToggleGroupItem>
             </ToggleGroup>
           </div>
 
@@ -424,28 +436,9 @@
             </div>
           </div>
 
-          <!-- Информационный блок для Гибридного режима -->
-          <div
-            v-if="textSource === 'hybrid'"
-            class="rounded-2xl border bg-muted/60 border-border/60 px-3 py-2"
-          >
-            <div class="flex items-baseline gap-2">
-              <span class="">🔀</span>
-              <div class="flex-1">
-                <p class="text-sm font-semibold text-foreground">
-                  Гибридный режим
-                </p>
-                <p class="text-xs text-foreground mt-1">
-                  Тексты уведомлений будут чередоваться: часть будет взята из
-                  готовых шаблонов, часть создаст ИИ с учётом всех параметров
-                  настроек.
-                </p>
-              </div>
-            </div>
-          </div>
-
           <!-- Блок управления текстами -->
           <div
+            v-if="textSource === 'templates'"
             class="rounded-2xl border border-white/10 bg-background/20 p-3 mt-2"
           >
             <button
@@ -515,7 +508,10 @@ import type {
   UpdateNotificationPreferencesDto,
   UserPreferencesDto,
 } from '@/shared/dto/notifications';
-import { MAX_NOTIFICATION_TEXT_LENGTH } from '@/shared/dto/notifications';
+import {
+  MAX_NOTIFICATION_TEXT_LENGTH,
+  MAX_CUSTOM_PROMPT_NOTIFICATION_LENGTH,
+} from '@/shared/dto/notifications';
 
 const props = defineProps<{
   mentaiMode: 'habits' | 'therapy';
@@ -678,16 +674,23 @@ const customSlotTimes = ref<(number | null)[]>([]);
 const loading = ref(false);
 const addressing = ref<Addressing>('informal');
 const tone = ref<Tone>('neutral');
-const textSource = ref<'templates' | 'ai' | 'hybrid'>('templates');
+const textSource = ref<'templates' | 'ai'>('templates');
+const customPromptNotification = ref('');
+const customPromptNotificationLength = computed(
+  () => (customPromptNotification.value ?? '').length
+);
 
 // Условное отображение информационного блока про AI
 const showAiInfo = computed(() => {
   const source = textSource.value;
-  return source === 'ai' || source === 'hybrid';
+  return source === 'ai';
 });
 
 const isCustomEntity = computed(() =>
   isHabits.value ? isCustomHabit.value : isCustomTherapy.value
+);
+const showCustomPromptNotification = computed(
+  () => !isCustomEntity.value && textSource.value === 'ai'
 );
 const canEditCustomEntity = computed(() => {
   if (isHabits.value) {
@@ -816,6 +819,12 @@ function computeStateSignature() {
     (value) => value !== null
   );
 
+  // На всякий случай приводим к строке, чтобы избежать ошибок при null
+  const normalizedCustomPrompt =
+    customPromptNotification.value == null
+      ? ''
+      : String(customPromptNotification.value).trim();
+
   // Получаем текущие значения названия и описания
   // Если идет редактирование, используем draft значения, иначе - сохраненные
   const currentName = isEditingTitle.value
@@ -835,6 +844,9 @@ function computeStateSignature() {
       : customTherapy.value?.description ||
         catalogTherapy.value?.description ||
         null;
+  const currentCustomPrompt = showCustomPromptNotification.value
+    ? normalizedCustomPrompt
+    : null;
 
   return JSON.stringify({
     enabled: enabled.value,
@@ -855,6 +867,7 @@ function computeStateSignature() {
     // Сравниваем с исходными значениями
     entityName: currentName,
     entityDescription: currentDescription || null,
+    customPromptNotification: currentCustomPrompt || null,
   });
 }
 
@@ -1116,9 +1129,11 @@ onMounted(async () => {
         end: pref.timeRangeEnd,
       };
       customSlotTimes.value = pref.customSlotTimes ?? [];
-      textSource.value = pref.meta?.textSource ?? 'templates';
+      textSource.value = pref.meta?.textSource === 'ai' ? 'ai' : 'templates';
+      customPromptNotification.value = pref.customPromptNotification ?? '';
     } else {
       textSource.value = 'templates';
+      customPromptNotification.value = '';
     }
     initialStateSignature.value = computeStateSignature();
   } catch (error) {
@@ -1226,6 +1241,11 @@ async function saveSettings() {
     const hasManualSlots = customSlotTimes.value.some(
       (value) => value !== null
     );
+    const normalizedCustomPrompt = showCustomPromptNotification.value
+      ? customPromptNotification.value == null
+        ? ''
+        : String(customPromptNotification.value).trim()
+      : '';
 
     const baseData = {
       enabled: enabled.value,
@@ -1256,6 +1276,9 @@ async function saveSettings() {
         ? { description: newDescription }
         : {}),
     };
+    if (showCustomPromptNotification.value) {
+      updateData.customPromptNotification = normalizedCustomPrompt || null;
+    }
 
     const prefsUrl = isHabits.value
       ? '/api/notifications/prefs/habits'
@@ -1338,7 +1361,7 @@ function goBack() {
 
 const descriptionPlaceholder = computed(
   () =>
-    'Добавьте детали, чтобы ИИ мог создавать более персональные и точные уведомления.'
+    'Добавьте детали, чтобы ИИ мог создавать более персональные и точные уведомления'
 );
 
 const descriptionText = computed(() => {

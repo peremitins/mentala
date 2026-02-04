@@ -12,6 +12,8 @@ UPLOAD_ENV_FILE="${UPLOAD_ENV_FILE:-}"
 LOADED_ENV_FILE=""
 
 echo "📦 Подготовка хешированных картинок уведомлений..."
+echo "🧼 Нормализуем структуру (без male/female)..."
+node scripts/normalize-notification-images.mjs
 node scripts/hash-notification-images.mjs
 
 echo ""

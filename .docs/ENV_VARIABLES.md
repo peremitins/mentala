@@ -373,4 +373,4 @@ ADMIN_EMAILS=admin@mentala.com,superadmin@mentala.com
 
 ## 📚 Дополнительная информация
 
-Подробнее о реализации см. в `.docs/auth_security_improvements_tz.md`.
+Подробнее о реализации см. в `.docs/auth_tz.md` (Часть II. Безопасность авторизации).
