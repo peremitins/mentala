@@ -329,7 +329,6 @@ server/
 • `.docs/mentai_tz_product.md` - Общие требования к продукту
 • `.docs/mentai_tz_frontend.md` - Требования к фронтенду
 • `.docs/mentai_tz_backend.md` - Требования к бэкенду
-• `.docs/meditation_page_redesign_tz.md` - ТЗ на редизайн страницы медитаций
 • `.docs/security_requirements.md` - Требования к безопасности
 
 ⸻
