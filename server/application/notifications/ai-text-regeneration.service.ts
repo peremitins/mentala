@@ -64,6 +64,7 @@ export async function enqueueAiRegenerationForUser(params: {
       directness: notificationPreferences.directness,
       subtype: notificationPreferences.subtype,
       enabled: notificationPreferences.enabled,
+      customPromptNotification: notificationPreferences.customPromptNotification,
     })
     .from(notificationPreferences)
     .where(
@@ -154,6 +155,7 @@ export async function enqueueAiRegenerationForUser(params: {
       kind: pref.kind as 'habits' | 'therapy',
       habitIntent: pref.kind === 'habits' ? habitIntent : null,
       userGender,
+      customPromptNotification: pref.customPromptNotification ?? null,
     });
 
     await enqueueAiTextGenerationJob({

@@ -148,6 +148,7 @@ async function computeCurrentConfigHash(params: {
     kind: preference.kind as 'habits' | 'therapy',
     habitIntent: preference.kind === 'habits' ? habitIntent : null,
     userGender: normalizedGender,
+    customPromptNotification: preference.customPromptNotification ?? null,
   });
 }
 
@@ -271,6 +272,7 @@ export function startAiTextGenerationWorker() {
           subtype: (pref.subtype as HabitSubtype | null) ?? null,
           textSource: normalizedTextSource,
           count: generationCount,
+          customPromptNotification: pref.customPromptNotification ?? null,
         });
 
         console.log(

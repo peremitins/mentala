@@ -260,6 +260,13 @@
       "when": 1770141761788,
       "tag": "0040_curious_ghost_rider",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1770204087173,
+      "tag": "0041_needy_black_tarantula",
+      "breakpoints": true
     }
   ]
 }

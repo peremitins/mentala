@@ -44,6 +44,13 @@ function normalizeCustomSlotTimes(
   return normalized.length ? normalized : null;
 }
 
+function normalizeCustomPromptNotification(
+  value?: string | null
+): string | null {
+  const normalized = value ? value.trim() : '';
+  return normalized.length > 0 ? normalized : null;
+}
+
 /**
  * PUT /api/notifications/prefs/:kind
  * Обновить локальные настройки конкретного типа (therapy | habits)
@@ -235,6 +242,34 @@ export default defineEventHandler(
       }
     }
 
+    let normalizedCustomPromptNotification: string | null | undefined =
+      undefined;
+    if (body.customPromptNotification !== undefined) {
+      if (
+        body.customPromptNotification !== null &&
+        typeof body.customPromptNotification !== 'string'
+      ) {
+        throw createError({
+          statusCode: 400,
+          message: 'customPromptNotification must be a string or null',
+        });
+      }
+
+      normalizedCustomPromptNotification = normalizeCustomPromptNotification(
+        body.customPromptNotification
+      );
+
+      if (
+        normalizedCustomPromptNotification &&
+        normalizedCustomPromptNotification.length > 400
+      ) {
+        throw createError({
+          statusCode: 400,
+          message: 'customPromptNotification must be 400 characters or меньше',
+        });
+      }
+    }
+
     const entityKey = body.entityKey;
 
     // Пытаемся найти существующие настройки с учётом entityKey
@@ -338,6 +373,7 @@ export default defineEventHandler(
       const metaToSave = hasMetaFields ? finalMeta : null;
 
       let normalizedEntityKey = entityKey;
+      let isCustomEntityForPrompt = false;
 
       // ВАЖНО: Обновляем название и описание ДО обновления настроек уведомлений
       // Это нужно для правильного вычисления хеша и пересоздания AI-текстов
@@ -367,6 +403,7 @@ export default defineEventHandler(
 
         // Сохраняем старые значения ДО обновления
         if (habit) {
+          isCustomEntityForPrompt = true;
           oldEntityNameBeforeUpdate = habit.name;
           oldEntityDescriptionBeforeUpdate = habit.description;
         }
@@ -469,6 +506,7 @@ export default defineEventHandler(
 
         // Сохраняем старые значения ДО обновления
         if (topic) {
+          isCustomEntityForPrompt = true;
           oldEntityNameBeforeUpdate = topic.name;
           oldEntityDescriptionBeforeUpdate = topic.description;
         }
@@ -554,6 +592,16 @@ export default defineEventHandler(
         }
       }
 
+      const allowCustomPrompt = Boolean(entityKey) && !isCustomEntityForPrompt;
+      const nextCustomPromptNotification = allowCustomPrompt
+        ? normalizedCustomPromptNotification !== undefined
+          ? normalizedCustomPromptNotification
+          : existing.customPromptNotification ?? null
+        : null;
+      const oldCustomPromptNotification = allowCustomPrompt
+        ? existing.customPromptNotification ?? null
+        : null;
+
       // Обновляем существующие
       const [updated] = await db
         .update(notificationPreferences)
@@ -570,6 +618,7 @@ export default defineEventHandler(
           timeRangeEnd: body.timeRangeEnd ?? existing.timeRangeEnd,
           customSlotTimes: nextCustomSlotTimes,
           meta: metaToSave,
+          customPromptNotification: nextCustomPromptNotification,
           updatedAt: new Date(),
         })
         .where(eq(notificationPreferences.id, existing.id))
@@ -749,6 +798,7 @@ export default defineEventHandler(
           kind: kind as 'habits' | 'therapy',
           habitIntent: kind === 'habits' ? habitIntent : null, // Включаем intent только для habits
           userGender,
+          customPromptNotification: nextCustomPromptNotification,
         });
 
         console.log(
@@ -792,6 +842,7 @@ export default defineEventHandler(
             kind: kind as 'habits' | 'therapy',
             habitIntent: kind === 'habits' ? habitIntent : null, // Используем текущий intent (если он изменился, хеш изменится)
             userGender,
+            customPromptNotification: oldCustomPromptNotification,
           });
         }
 
@@ -915,6 +966,7 @@ export default defineEventHandler(
           (updated.customSlotTimes as (number | null)[] | null) ?? null,
         timeRangeStart: updated.timeRangeStart,
         timeRangeEnd: updated.timeRangeEnd,
+        customPromptNotification: updated.customPromptNotification ?? null,
         meta: (updated.meta as NotificationPreferenceMeta | null) ?? null,
         createdAt: updated.createdAt.toISOString(),
         updatedAt: updated.updatedAt.toISOString(),
@@ -948,6 +1000,7 @@ export default defineEventHandler(
         initialTimesPerDay
       );
       let normalizedEntityKey = entityKey;
+      let isCustomEntityForPrompt = false;
 
       if (kind === 'habits' && entityKey) {
         // Для кастомных сущностей entityKey должен быть ID
@@ -958,6 +1011,7 @@ export default defineEventHandler(
           .limit(1);
         // Для кастомных привычек используем ID
         if (habit) {
+          isCustomEntityForPrompt = true;
           normalizedEntityKey = habit.id; // ВСЕГДА ID для кастомных сущностей
           console.log(
             `[NotificationPrefs] Creating preference for habit: entityKey param=${entityKey}, found id=${habit.id}, using normalizedEntityKey=${normalizedEntityKey}`
@@ -981,6 +1035,7 @@ export default defineEventHandler(
           )
           .limit(1);
         if (topic) {
+          isCustomEntityForPrompt = true;
           // Для кастомных тем используем ID
           normalizedEntityKey = topic.id; // ВСЕГДА ID для кастомных сущностей
           console.log(
@@ -1011,6 +1066,10 @@ export default defineEventHandler(
               return meta.textSource !== undefined ? meta : null;
             })()
           : null;
+      const allowCustomPrompt = Boolean(entityKey) && !isCustomEntityForPrompt;
+      const initialCustomPromptNotification = allowCustomPrompt
+        ? normalizedCustomPromptNotification ?? null
+        : null;
       const [created] = await db
         .insert(notificationPreferences)
         .values({
@@ -1029,6 +1088,7 @@ export default defineEventHandler(
           timeRangeEnd: body.timeRangeEnd ?? 1350, // 22:30
           customSlotTimes: initialCustomSlotTimes,
           meta: initialMeta,
+          customPromptNotification: initialCustomPromptNotification,
         })
         .returning();
 
@@ -1121,6 +1181,7 @@ export default defineEventHandler(
           kind: kind as 'habits' | 'therapy',
           habitIntent: kind === 'habits' ? habitIntent : null,
           userGender,
+          customPromptNotification: initialCustomPromptNotification,
         });
 
         console.log(
@@ -1172,6 +1233,7 @@ export default defineEventHandler(
           (created.customSlotTimes as (number | null)[] | null) ?? null,
         timeRangeStart: created.timeRangeStart,
         timeRangeEnd: created.timeRangeEnd,
+        customPromptNotification: created.customPromptNotification ?? null,
         meta: (created.meta as NotificationPreferenceMeta | null) ?? null,
         createdAt: created.createdAt.toISOString(),
         updatedAt: created.updatedAt.toISOString(),

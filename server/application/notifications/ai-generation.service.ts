@@ -140,6 +140,7 @@ interface GenerateNotificationTextsParams {
   count?: number; // количество текстов для генерации (по умолчанию 50)
   provider?: 'openai' | 'deepseek' | 'yandex';
   habitIntent?: 'quit' | 'build' | null; // Intent привычки: отказ (quit) или приобретение (build). Передается явно, не угадывается.
+  customPromptNotification?: string | null; // Персональные пожелания (только для шаблонных тем и AI)
 }
 
 export interface AiNotificationText {
@@ -167,6 +168,13 @@ function resolveTone(value?: string | null): Tone {
     return value;
   }
   return 'neutral';
+}
+
+function normalizeCustomPromptNotification(
+  value?: string | null
+): string | null {
+  const normalized = value ? value.trim() : '';
+  return normalized.length > 0 ? normalized : null;
 }
 
 /**
@@ -1105,6 +1113,11 @@ export async function generateNotificationTexts(
     }
   }
 
+  const isCustomEntity = params.kind === 'habits' ? isCustomHabit : isCustomTherapy;
+  const customPromptNotification = isCustomEntity
+    ? null
+    : normalizeCustomPromptNotification(params.customPromptNotification);
+
   // 2. Загружаем глобальные настройки пользователя (tone, addressing)
   const [userPrefs] = await db
     .select()
@@ -1146,6 +1159,7 @@ export async function generateNotificationTexts(
     kind: params.kind,
     habitIntent: params.kind === 'habits' ? habitIntent : null, // Включаем intent только для habits
     userGender,
+    customPromptNotification,
   });
 
   console.log(
@@ -1230,6 +1244,8 @@ export async function generateNotificationTexts(
     kind: params.kind,
     habitIntent, // Передаем intent для формирования правильных инструкций
     imageTagPolicy,
+    customPromptNotification,
+    isCustomEntity,
   });
 
   const count = params.count || DEFAULT_TEXT_COUNT;
@@ -1424,6 +1440,8 @@ function buildNotificationSystemPrompt(params: {
   kind: 'habits' | 'therapy';
   habitIntent?: 'quit' | 'build' | null; // Intent привычки: отказ (quit) или приобретение (build)
   imageTagPolicy: ImageTagPolicy;
+  customPromptNotification?: string | null; // Персональные пожелания пользователя (только для AI)
+  isCustomEntity?: boolean;
 }): string {
   const genderLabel =
     params.userGender === 'male'
@@ -1462,6 +1480,9 @@ function buildNotificationSystemPrompt(params: {
     '- imageTag должен соответствовать смыслу текста.',
     '- harm_* используй ТОЛЬКО если текст явно описывает вред/негативные последствия.',
     `- Если текст позитивный или нейтральный, выбирай только: ${safeTagList}.`,
+    params.customPromptNotification || params.description
+      ? '- Если в описании/пожеланиях есть запрет на "страшные" темы/картинки, НЕ используй harm_* и избегай тяжелых последствий.'
+      : null,
     '- Ставь imageTag только если связь с текстом очевидна и однозначна.',
     '- Если смысл расплывчатый, общий или без конкретной визуальной сцены — ставь imageTag = null.',
     '- Не угадывай тег и не подбирай "на всякий случай". Лучше null, чем неверный визуал.',
@@ -1479,9 +1500,20 @@ function buildNotificationSystemPrompt(params: {
     .join('\n');
 
   // Формируем промпт с использованием описания как основной основы
+  const descriptionPriorityNotice =
+    params.isCustomEntity && params.description
+      ? '\n\nВАЖНО: Если описание противоречит subtype/directness/tone, приоритет за описанием пользователя.'
+      : '';
   const descriptionContext = params.description
-    ? `\n\nОписание и контекст (это ОСНОВА для генерации текстов, используй именно это):\n${params.description}\n\nКРИТИЧЕСКИ ВАЖНО: Все инструкции из описания (обращение, стиль, особые указания) должны применяться к КАЖДОМУ из всех текстов, а не только к первому.`
+    ? `\n\nОписание и контекст (это ОСНОВА для генерации текстов, используй именно это):\n${params.description}\n\nКРИТИЧЕСКИ ВАЖНО: Все инструкции из описания (обращение, стиль, особые указания) должны применяться к КАЖДОМУ из всех текстов, а не только к первому.${descriptionPriorityNotice}`
     : '';
+  const customPromptContext = params.customPromptNotification
+    ? `\n\nДополнительные пожелания пользователя (обязательные к учету):\n${params.customPromptNotification}\n\nВАЖНО: Если пожелания противоречат subtype/directness/tone, приоритет за пожеланиями пользователя.`
+    : '';
+  const userPriorityContext =
+    params.customPromptNotification || params.description
+      ? `\n\nПРИОРИТЕТ ПОЛЬЗОВАТЕЛЬСКОГО КОНТЕКСТА:\n- Пожелания пользователя и описание имеют приоритет над tone/directness/subtype и другими стилевыми правилами.\n- Если есть конфликт, следуй пользовательскому контексту, даже если это снижает "жесткость" или меняет фокус.\n- Если пользователь просит избегать "страшных" текстов/болезней/картинок — НЕ используй harm_* и не упоминай тяжелые последствия.`
+      : '';
   // Формируем инструкции для разных типов уведомлений
   let subtypeInstructions = '';
 
@@ -1592,7 +1624,7 @@ ${params.description ? '- Используй описание как основ�
 
 Контекст:
 - Тип: ${params.kind === 'habits' ? 'привычка' : 'тема поддержки'}
-- Название (используй только как внутренний контекст): ${params.entityName}${descriptionContext}
+- Название (используй только как внутренний контекст): ${params.entityName}${descriptionContext}${customPromptContext}${userPriorityContext}
 - Имя пользователя: ${params.userName || 'не указано'}
 - Пол пользователя: ${genderLabel || 'не указан'}
 
@@ -1822,7 +1854,8 @@ export async function refillTextPool(
   directness: Directness,
   subtype: HabitSubtype | null,
   textSource: 'ai',
-  habitIntent?: 'quit' | 'build' | null // Intent привычки, переданный явно
+  habitIntent?: 'quit' | 'build' | null, // Intent привычки, переданный явно
+  customPromptNotification?: string | null
 ): Promise<GenerationResult | null> {
   let lockKey: bigint | null = null;
   let lockAcquired = false;
@@ -1893,6 +1926,7 @@ export async function refillTextPool(
     // 4.1. Загружаем данные о сущности для промпта
     let entityName = '';
     let entityDescription: string | null = null;
+    let isCustomEntity = false;
     // Используем переданный intent, если он есть, иначе определяем из БД/каталога
     let currentHabitIntent: 'quit' | 'build' | null = habitIntent ?? null;
 
@@ -1910,6 +1944,7 @@ export async function refillTextPool(
         .limit(1);
 
       if (habit) {
+        isCustomEntity = true;
         entityName = habit.name;
         entityDescription = habit.description;
         // Используем переданный intent, если он есть, иначе берем из БД
@@ -1943,12 +1978,17 @@ export async function refillTextPool(
         .limit(1);
 
       if (topic) {
+        isCustomEntity = true;
         entityName = topic.name;
         entityDescription = topic.description;
       } else {
         entityName = entityKey;
       }
     }
+
+    const effectiveCustomPromptNotification = isCustomEntity
+      ? null
+      : normalizeCustomPromptNotification(customPromptNotification);
 
     // 4.2. Загружаем настройки пользователя
     const [userPrefs] = await db
@@ -1980,7 +2020,7 @@ export async function refillTextPool(
 
     // 4.3. Строим промпт и генерируем только новые тексты через LLM
     const systemPrompt = buildNotificationSystemPrompt({
-      entityKey: params.entityKey,
+      entityKey,
       entityName,
       description: entityDescription,
       tone,
@@ -1992,6 +2032,8 @@ export async function refillTextPool(
       kind,
       habitIntent: currentHabitIntent, // Передаем intent для формирования правильных инструкций
       imageTagPolicy,
+      customPromptNotification: effectiveCustomPromptNotification,
+      isCustomEntity,
     });
 
     const provider = config.llm.defaultProvider;

@@ -143,6 +143,7 @@ export async function regenerateAiTextsForEntity(params: {
         kind,
         habitIntent: kind === 'habits' ? habitIntent : null, // Включаем intent только для habits
         userGender,
+        customPromptNotification: pref.customPromptNotification ?? null,
       });
 
       console.log(
@@ -165,6 +166,7 @@ export async function regenerateAiTextsForEntity(params: {
         textSource: 'ai',
         count: 50, // ВАЖНО: Всегда 50 текстов при перегенерации
         habitIntent: kind === 'habits' ? habitIntent : undefined, // Передаем intent для привычек
+        customPromptNotification: pref.customPromptNotification ?? null,
       })
         .then((result) => {
           console.log(

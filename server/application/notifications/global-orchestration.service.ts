@@ -1492,6 +1492,8 @@ export async function orchestrateAllSlotsForUser(
           kind: source.kind,
           habitIntent: source.kind === 'habits' ? intent : null,
           userGender,
+          customPromptNotification:
+            source.preference.customPromptNotification ?? null,
         });
 
         const aiTextRecord = await loadAiGeneratedTextsWithId(

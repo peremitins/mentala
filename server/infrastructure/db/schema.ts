@@ -383,6 +383,7 @@ export const notificationPreferences = pgTable('notification_preferences', {
   customSlotTimes: jsonb('custom_slot_times').$type<(number | null)[] | null>(),
   timeRangeStart: integer('time_range_start').notNull().default(540), // Начало временного окна в минутах от начала дня (09:00)
   timeRangeEnd: integer('time_range_end').notNull().default(1350), // Конец временного окна в минутах от начала дня (22:30)
+  customPromptNotification: text('custom_prompt_notification'), // Персональные пожелания для шаблонных тем (только AI)
   meta: jsonb('meta'), // Дополнительные параметры (textSource: 'templates' | 'ai')
   // Нормализованное значение textSource (любой не-`ai` трактуется как `templates`)
   textSourceNormalized: varchar('text_source_normalized', { length: 20 })

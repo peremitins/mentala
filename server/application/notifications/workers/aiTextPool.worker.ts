@@ -159,6 +159,7 @@ export function startAiTextPoolWorker() {
           kind: pref.kind as 'habits' | 'therapy',
           habitIntent: pref.kind === 'habits' ? habitIntent : null, // Включаем intent только для habits
           userGender,
+          customPromptNotification: pref.customPromptNotification ?? null,
         });
 
         // Вызываем функцию догенерации
@@ -171,7 +172,8 @@ export function startAiTextPoolWorker() {
           directness,
           subtype,
           'ai',
-          habitIntent // Передаем intent для формирования правильных инструкций
+          habitIntent, // Передаем intent для формирования правильных инструкций
+          pref.customPromptNotification ?? null
         );
 
         if (result) {

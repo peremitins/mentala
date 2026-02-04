@@ -47,6 +47,7 @@ export default defineEventHandler(
       customSlotTimes: (p.customSlotTimes as (number | null)[] | null) ?? null,
       timeRangeStart: p.timeRangeStart,
       timeRangeEnd: p.timeRangeEnd,
+      customPromptNotification: p.customPromptNotification ?? null,
       meta: (p.meta as NotificationPreferenceMeta | null) ?? null,
       createdAt: p.createdAt.toISOString(),
       updatedAt: p.updatedAt.toISOString(),

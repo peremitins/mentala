@@ -8,6 +8,7 @@
 // ==========================================
 
 export const MAX_NOTIFICATION_TEXT_LENGTH = 150;
+export const MAX_CUSTOM_PROMPT_NOTIFICATION_LENGTH = 400;
 
 export type NotificationKind = 'therapy' | 'habits';
 export type NotificationTextSource = 'default' | 'user';
@@ -85,6 +86,7 @@ export interface NotificationPreferencesDto {
   customSlotTimes?: (number | null)[] | null; // Индивидуальные времена слотов (0-1439 минут) для каждого уведомления
   timeRangeStart: number; // Начало временного окна в минутах от начала дня (0-1439)
   timeRangeEnd: number; // Конец временного окна в минутах от начала дня (0-1439)
+  customPromptNotification?: string | null; // Персональные пожелания (только для шаблонных тем и AI)
   meta?: NotificationPreferenceMeta | null; // Дополнительные параметры (textSource и т.д.)
   createdAt: string;
   updatedAt: string;
@@ -101,6 +103,7 @@ export interface UpdateNotificationPreferencesDto {
   customSlotTimes?: (number | null)[] | null; // Пользовательские времена слотов (0-1439 минут)
   timeRangeStart?: number; // Начало временного окна в минутах от начала дня (0-1439)
   timeRangeEnd?: number; // Конец временного окна в минутах от начала дня (0-1439)
+  customPromptNotification?: string | null; // Персональные пожелания (только для шаблонных тем и AI)
   meta?: NotificationPreferenceMeta | null;
   // Поля для обновления названия и описания кастомных привычек/терапии
   name?: string; // Новое название (только для кастомных привычек/терапии)

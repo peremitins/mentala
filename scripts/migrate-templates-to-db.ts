@@ -199,7 +199,6 @@ async function createPresetAndText(
     kind: template.kind,
     entityKey: template.entityKey,
     userId: null, // системный дефолт
-    preferenceId: null,
     source: 'default',
     intent: template.intent ?? null,
     subtype: template.subtype ?? null,
