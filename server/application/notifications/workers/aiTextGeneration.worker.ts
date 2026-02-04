@@ -63,6 +63,12 @@ function isRetryableQueueError(error: any): boolean {
   );
 }
 
+function resolveGenerationCount(attemptsMade: number): number {
+  if (attemptsMade >= 2) return 12;
+  if (attemptsMade >= 1) return 25;
+  return 50;
+}
+
 async function computeCurrentConfigHash(params: {
   userId: number;
   preference: typeof notificationPreferences.$inferSelect;
@@ -153,6 +159,7 @@ export function startAiTextGenerationWorker() {
     AI_TEXT_GENERATION_QUEUE,
     async (job: Job<AiTextGenerationJobData>) => {
       const { userId, preferenceId } = job.data;
+      const attemptsMade = job.attemptsMade ?? 0;
 
       console.log(
         `[AI Generation Worker] ▶️ Processing job ${job.id} for preference ${preferenceId}`
@@ -246,6 +253,14 @@ export function startAiTextGenerationWorker() {
           return { skipped: true, reason: 'missing_entity_key' };
         }
 
+        // При повторных ошибках уменьшаем объём генерации, чтобы повысить устойчивость
+        const generationCount = resolveGenerationCount(attemptsMade);
+        if (generationCount !== 50) {
+          console.warn(
+            `[AI Generation Worker] ⚠️ Reduce AI count to ${generationCount} (attemptsMade=${attemptsMade}) for preference ${preferenceId}`
+          );
+        }
+
         // Генерируем AI-тексты по текущим настройкам preference
         const result = await generateNotificationTexts({
           userId,
@@ -255,7 +270,7 @@ export function startAiTextGenerationWorker() {
           directness: pref.directness as 'soft' | 'moderate' | 'hard',
           subtype: (pref.subtype as HabitSubtype | null) ?? null,
           textSource: normalizedTextSource,
-          count: 50,
+          count: generationCount,
         });
 
         console.log(
@@ -283,7 +298,6 @@ export function startAiTextGenerationWorker() {
 
         // Если это повторяемая ошибка провайдера и попытки исчерпаны — ставим новую задачу с задержкой
         const attemptsLimit = job.opts?.attempts ?? 1;
-        const attemptsMade = job.attemptsMade ?? 0;
         const isLastAttempt = attemptsMade + 1 >= attemptsLimit;
 
         if (isRetryableQueueError(error) && isLastAttempt) {

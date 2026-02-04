@@ -1218,6 +1218,7 @@ export async function generateNotificationTexts(
 
   // 5. Строим промпт
   const systemPrompt = buildNotificationSystemPrompt({
+    entityKey: params.entityKey,
     entityName,
     description: entityDescription,
     tone,
@@ -1411,6 +1412,7 @@ export async function generateNotificationTexts(
  * Строит системный промпт для генерации уведомлений
  */
 function buildNotificationSystemPrompt(params: {
+  entityKey: string;
   entityName: string;
   description?: string | null;
   tone: Tone;
@@ -1454,6 +1456,8 @@ function buildNotificationSystemPrompt(params: {
 
   const imageTagList = params.imageTagPolicy.allowedTags.join(', ');
   const safeTagList = SAFE_IMAGE_TAGS.join(', ');
+  const isWaterTopic = params.entityKey.trim().toLowerCase() === 'water';
+
   const imageTagRules = [
     '- imageTag должен соответствовать смыслу текста.',
     '- harm_* используй ТОЛЬКО если текст явно описывает вред/негативные последствия.',
@@ -1461,6 +1465,9 @@ function buildNotificationSystemPrompt(params: {
     '- Ставь imageTag только если связь с текстом очевидна и однозначна.',
     '- Если смысл расплывчатый, общий или без конкретной визуальной сцены — ставь imageTag = null.',
     '- Не угадывай тег и не подбирай "на всякий случай". Лучше null, чем неверный визуал.',
+    isWaterTopic
+      ? '- Для темы "Вода" ВСЕГДА ставь imageTag = neutral_abstract. Другие теги запрещены.'
+      : null,
     params.imageTagPolicy.meditationOnly
       ? null
       : '- Если нет подходящего тега, ставь imageTag = null (картинка не прикрепляется).',
@@ -1973,6 +1980,7 @@ export async function refillTextPool(
 
     // 4.3. Строим промпт и генерируем только новые тексты через LLM
     const systemPrompt = buildNotificationSystemPrompt({
+      entityKey: params.entityKey,
       entityName,
       description: entityDescription,
       tone,
