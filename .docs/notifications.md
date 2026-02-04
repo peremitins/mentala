@@ -27,7 +27,7 @@
 - 🔔 **Snooze** — отложить на 15 мин / 1 час / 4 часа / до завтра
 - 📊 **Трекинг** — автоматический сбор метрик взаимодействия
 - 🌍 **Timezone-aware** — автоопределение часового пояса
-- 🤖 **AI-генерация** — режимы templates/ai/hybrid для создания текстов
+- 🤖 **AI-генерация** — режимы templates/ai для создания текстов
 - ⏱️ **Кастомные слоты** — ручное задание времени уведомлений
 
 ---
@@ -106,14 +106,14 @@ notification_preferences {
   directness: 'soft' | 'moderate' | 'hard'
   timezone: string (IANA)
   subtype: 'reminder' | 'informational' | 'motivational' | 'mixed' | null  // Для habits
-  textSource: 'templates' | 'ai' | 'hybrid'  // Способ создания текстов
+  textSource: 'templates' | 'ai'  // Способ создания текстов
 
   // Дополнительные параметры
   activeDays: integer[]  // Дни недели (0-6)
   timeRangeStart: integer  // Начало окна (в минутах, 0-1439)
   timeRangeEnd: integer  // Конец окна (в минутах, 0-1439)
   customSlotTimes: integer[] | null  // Кастомные времена (максимум 5, в минутах)
-  meta: jsonb | null  // { textSource: 'templates' | 'ai' | 'hybrid' }
+  meta: jsonb | null  // { textSource: 'templates' | 'ai' }
 
   createdAt: timestamp
   updatedAt: timestamp
@@ -336,7 +336,7 @@ psql -d mentai -f server/infrastructure/db/migrations/0027_add_ai_notification_t
    - Приоритет кастомным временам (`customSlotTimes`)
    - Остальные распределяются равномерно внутри окна (`timeRangeStart` - `timeRangeEnd`)
 5. Для каждого слота:
-   - Определяем `textSource` (templates/ai/hybrid)
+   - Определяем `textSource` (templates/ai)
    - Выбираем текст (кастомные тексты → AI-тексты → шаблоны)
    - Создаём слот в БД
 
@@ -357,14 +357,11 @@ psql -d mentai -f server/infrastructure/db/migrations/0027_add_ai_notification_t
    - Используется OpenAI GPT (модель `gpt-4o-mini` для экономии)
    - Тексты сохраняются в `ai_generated_notification_texts`
    - Кэширование по `generationConfigHash`
-3. **`hybrid`** — комбинация пользовательских/шаблонных текстов и AI-генерации
-   - 70% пользовательских/шаблонных, 30% AI-текстов
-
 ### Логика выбора текста
 
 ```typescript
 // Загрузка текстов из БД (для всех типов сущностей)
-if (textSource === 'templates' || textSource === 'hybrid') {
+if (textSource === 'templates') {
   // Инициализируем тексты, если их еще нет (lazy init)
   await ensureUserTextsInitialized(userId, kind, entityKey);
 
@@ -386,13 +383,9 @@ if (textSource === 'templates' || textSource === 'hybrid') {
   // Выбираем текст из загруженных (с учётом уже использованных)
   text = selectTextFromPool(templateTexts, usedTexts);
 
-  if (textSource === 'hybrid' && Math.random() < 0.3) {
-    // 30% AI в hybrid режиме
-    text = await generateAiNotification({ ... });
-  }
 }
 
-if (!text && (textSource === 'ai' || textSource === 'hybrid')) {
+if (!text && textSource === 'ai') {
   // Генерируем через AI
   text = await generateAiNotification({ ... });
 }
@@ -404,7 +397,7 @@ if (!text && (textSource === 'ai' || textSource === 'hybrid')) {
 
 - Хранение сгенерированных текстов для переиспользования
 - Кэширование по `generationConfigHash` (хеш настроек, влияющих на генерацию)
-- Регенерация только при изменении релевантных параметров (название, описание, tone, directness)
+- Регенерация только при изменении релевантных параметров (название, описание, tone, addressing, directness, subtype, habitIntent, userGender, textSource)
 
 **Таблица:** `ai_notification_text_usage` (отслеживание отправленных текстов)
 
@@ -421,7 +414,7 @@ if (!text && (textSource === 'ai' || textSource === 'hybrid')) {
 - Защита от дублирования: отслеживание уже отправленных текстов через таблицу `ai_notification_text_usage`
 - Retry механизм с exponential backoff для надежности генерации
 - Динамический расчет токенов: `count * 200 + 5000` для гарантии получения всех текстов
-- При изменении настроек (tone, directness, subtype, название, описание) происходит полная перегенерация всех 50 текстов с очисткой старых данных
+- При изменении настроек (tone, addressing, directness, subtype, название, описание, habitIntent, userGender, textSource) происходит полная перегенерация всех 50 текстов с очисткой старых данных
 
 **Конфигурация моделей:**
 
@@ -769,7 +762,7 @@ psql -d mentai -f server/infrastructure/db/migrations/0022_refactor_habitId_topi
 - ✅ Capacitor интеграция (регистрация токенов, обработка уведомлений, snooze)
 - ✅ Пользовательские привычки и тексты
 - ✅ Пользовательские темы терапии
-- ✅ Режимы генерации текстов (templates/ai/hybrid)
+- ✅ Режимы генерации текстов (templates/ai)
 
 ### 🔜 Следующие шаги
 

@@ -39,7 +39,7 @@ export async function enqueueAiTextPoolRefillForAllActivePreferences(): Promise<
         // Проверяем, используется ли AI-генерация
         const meta = (pref.meta || {}) as any;
         const textSource = meta.textSource;
-        if (textSource !== 'ai' && textSource !== 'hybrid') {
+        if (textSource !== 'ai') {
           skippedCount++;
           continue;
         }

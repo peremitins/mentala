@@ -8,6 +8,7 @@ import {
   revokeAllUserSessions,
 } from '@/server/application/auth/session';
 import { getSessionUserWithRole, requireCanEditUser } from '@/server/utils/require-role';
+import { enqueueAiRegenerationForUser } from '@/server/application/notifications/ai-text-regeneration.service';
 
 export default defineEventHandler(async (event) => {
   const user = await getSessionUserWithRole(event);
@@ -79,6 +80,12 @@ export default defineEventHandler(async (event) => {
     await requireCanEditUser(event, id);
   }
 
+  const [currentUser] = await db
+    .select({ gender: users.gender })
+    .from(users)
+    .where(eq(users.id, id))
+    .limit(1);
+
   const patch: any = {};
 
   // Обычный пользователь может изменять только свои базовые данные
@@ -136,6 +143,23 @@ export default defineEventHandler(async (event) => {
 
   // Убираем passwordHash из ответа
   const { passwordHash, ...safeUser } = updated[0];
+
+  const genderChanged =
+    body?.gender !== undefined && body.gender !== currentUser?.gender;
+
+  if (genderChanged) {
+    // Асинхронно, чтобы не блокировать ответ
+    void enqueueAiRegenerationForUser({
+      userId: id,
+      reason: 'user_gender_update',
+      onlyEnabled: true,
+    }).catch((error) => {
+      console.error(
+        `[Users PATCH] ❌ Не удалось поставить регенерацию AI-текстов после смены gender:`,
+        error
+      );
+    });
+  }
 
   // Ротация session ID при смене пароля (критичная операция)
   const isPasswordChange = body?.password && body.password.length >= 6;

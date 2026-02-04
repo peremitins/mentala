@@ -19,7 +19,7 @@ export interface GenerationConfig {
   addressing: Addressing;
   directness: Directness;
   subtype?: HabitSubtype | null;
-  textSource: 'ai' | 'hybrid'; // Только для AI-генерации (не может быть 'templates')
+  textSource: 'ai'; // Только для AI-генерации (не может быть 'templates')
   kind: 'habits' | 'therapy';
   habitIntent?: 'quit' | 'build' | null; // Intent привычки: отказ (quit) или приобретение (build). Только для habits.
   userGender?: 'male' | 'female' | null;

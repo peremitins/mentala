@@ -63,4 +63,4 @@ $$;
 
 COMMENT ON COLUMN notification_preferences.topic_key IS 'Support topic key (anxiety, stress, mood, etc.) для therapy notifications';
 COMMENT ON COLUMN notification_slots.topic_key IS 'Support topic key для привязки слота к конкретной теме';
-COMMENT ON COLUMN notification_preferences.meta IS 'Дополнительные параметры (textSource: templates | ai | hybrid) в формате JSONB';
+COMMENT ON COLUMN notification_preferences.meta IS 'Дополнительные параметры (textSource: templates | ai) в формате JSONB';

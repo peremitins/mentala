@@ -377,12 +377,6 @@
               >
                 ✨ ИИ
               </ToggleGroupItem>
-              <ToggleGroupItem
-                value="hybrid"
-                class="flex-1 rounded-lg px-3 py-2 text-xs xs:text-sm whitespace-nowrap font-medium transition-all"
-              >
-                🔀 Гибридный
-              </ToggleGroupItem>
             </ToggleGroup>
           </div>
 
@@ -424,28 +418,9 @@
             </div>
           </div>
 
-          <!-- Информационный блок для Гибридного режима -->
-          <div
-            v-if="textSource === 'hybrid'"
-            class="rounded-2xl border bg-muted/60 border-border/60 px-3 py-2"
-          >
-            <div class="flex items-baseline gap-2">
-              <span class="">🔀</span>
-              <div class="flex-1">
-                <p class="text-sm font-semibold text-foreground">
-                  Гибридный режим
-                </p>
-                <p class="text-xs text-foreground mt-1">
-                  Тексты уведомлений будут чередоваться: часть будет взята из
-                  готовых шаблонов, часть создаст ИИ с учётом всех параметров
-                  настроек.
-                </p>
-              </div>
-            </div>
-          </div>
-
           <!-- Блок управления текстами -->
           <div
+            v-if="textSource === 'templates'"
             class="rounded-2xl border border-white/10 bg-background/20 p-3 mt-2"
           >
             <button
@@ -678,12 +653,12 @@ const customSlotTimes = ref<(number | null)[]>([]);
 const loading = ref(false);
 const addressing = ref<Addressing>('informal');
 const tone = ref<Tone>('neutral');
-const textSource = ref<'templates' | 'ai' | 'hybrid'>('templates');
+const textSource = ref<'templates' | 'ai'>('templates');
 
 // Условное отображение информационного блока про AI
 const showAiInfo = computed(() => {
   const source = textSource.value;
-  return source === 'ai' || source === 'hybrid';
+  return source === 'ai';
 });
 
 const isCustomEntity = computed(() =>
@@ -1116,7 +1091,7 @@ onMounted(async () => {
         end: pref.timeRangeEnd,
       };
       customSlotTimes.value = pref.customSlotTimes ?? [];
-      textSource.value = pref.meta?.textSource ?? 'templates';
+      textSource.value = pref.meta?.textSource === 'ai' ? 'ai' : 'templates';
     } else {
       textSource.value = 'templates';
     }

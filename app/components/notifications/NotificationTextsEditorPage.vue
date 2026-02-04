@@ -711,6 +711,7 @@ async function addNewText() {
     source: 'user',
     intent: props.kind === 'habits' ? entityIntent.value : null,
     subtype: selectedSubtype.value,
+    imageTag: null,
     directness: selectedDirectness.value,
     addressing: 'universal', // Временное значение, на бэкенде будет заменено на значение из userPreferences
     locale: 'ru',
@@ -798,6 +799,7 @@ async function handleSave() {
       .map((t) => ({
         id: t.id!,
         text: t.text.trim(), // Обрезаем пробелы
+        imageTag: t.imageTag ?? null,
       })),
     created: localTexts.value
       .filter((t) => t.isNew && !t.toDelete && t.text.trim().length > 0)
@@ -808,6 +810,7 @@ async function handleSave() {
         text: t.text.trim(), // Обрезаем пробелы
         intent: t.intent,
         subtype: t.subtype,
+        imageTag: t.imageTag ?? null,
       })),
     deleted: localTexts.value
       .filter((t) => t.toDelete && !t.isNew && t.id)

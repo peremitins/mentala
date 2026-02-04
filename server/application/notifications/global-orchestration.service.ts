@@ -48,7 +48,9 @@ import {
   loadAiGeneratedTextsWithId,
   getUsedTextIndices,
   getUsedTextHashes,
+  type AiNotificationText,
 } from './ai-generation.service';
+import { enqueueAiTextGenerationJob } from './queues/aiTextGeneration.queue';
 import { computeGenerationConfigHash } from '@/server/utils/notification-ai-config-hash';
 import { computeDayOfYear } from './notification-date.utils';
 import { and, eq } from 'drizzle-orm';
@@ -1056,16 +1058,23 @@ export async function orchestrateAllSlotsForUser(
 
     // Этап 0: Проверка активных настроек ПЕРЕД удалением слотов
     const allPrefs = await findEnabledPreferencesByUser(userId);
+    const timezone = getTimezoneFromPrefs(allPrefs);
+
+    // ВАЖНО: Если активных настроек нет, нужно очистить расписание
+    // Иначе при выключении последнего уведомления останутся старые слоты
     if (allPrefs.length === 0) {
+      const deletedCount = await deleteAllPlannedSlotsForUserInternal(
+        userId,
+        timezone
+      );
       console.log(
-        `[GlobalOrchestration] No active preferences for user ${userId}, skipping orchestration`
+        `[GlobalOrchestration] No active preferences for user ${userId}, deleted ${deletedCount} planned/queued slots within planning horizon (today + tomorrow)`
       );
       return;
     }
 
     // ВАЖНО: Удаляем planned/queued слоты только после проверки наличия активных настроек
     // Это предотвращает потерю слотов, если настройки были отключены
-    const timezone = getTimezoneFromPrefs(allPrefs);
     const deletedCount = await deleteAllPlannedSlotsForUserInternal(
       userId,
       timezone
@@ -1431,17 +1440,16 @@ export async function orchestrateAllSlotsForUser(
       }
 
       // Загружаем AI-тексты если нужно
-      let aiTexts: string[] | null = null;
+      let aiTexts: Array<string | AiNotificationText> | null = null;
       let configHash: string | null = null;
       // Инициализируем used-сеты для AI (загружаются из БД если есть AI-тексты)
       let usedAiTextIndicesFromDb = new Set<number>();
       let usedAiTextHashesFromDb = new Set<string>();
-      const textSource =
-        (source.preference.meta as any)?.textSource || 'templates';
+      const rawTextSource = (source.preference.meta as any)?.textSource;
+      const textSource: 'templates' | 'ai' =
+        rawTextSource === 'ai' ? 'ai' : 'templates';
       let aiTextsAvailable = false;
-      if ((textSource === 'ai' || textSource === 'hybrid') && entityName) {
-        const effectiveTextSource: 'ai' | 'hybrid' =
-          textSource === 'ai' ? 'ai' : 'hybrid';
+      if (textSource === 'ai' && entityName) {
         // ВАЖНО: Используем tone из userPreferences, а не из preference.meta
         const tone = resolveTone(
           globalPrefs?.tone as string | null | undefined
@@ -1461,14 +1469,13 @@ export async function orchestrateAllSlotsForUser(
         // ВАЖНО: Для хеша используем исходный subtype из preference (если 'mixed' - оставляем 'mixed')
         // actualSubtype используется только для выбора шаблонных текстов, но не для хеша
         // Это обеспечивает стабильность пула AI-текстов и совпадение хеша с генерацией
-        const subtypeForHash = source.isCustomEntity
-          ? null
-          : (source.preference.subtype as
-              | 'reminder'
-              | 'informational'
-              | 'motivational'
-              | 'mixed'
-              | null);
+        // ВАЖНО: subtype влияет на смысл текста, поэтому учитываем его для всех сущностей
+        const subtypeForHash = (source.preference.subtype as
+          | 'reminder'
+          | 'informational'
+          | 'motivational'
+          | 'mixed'
+          | null) ?? null;
 
         // Вычисляем configHash с исходным subtype (не actualSubtype)
         configHash = computeGenerationConfigHash({
@@ -1481,7 +1488,7 @@ export async function orchestrateAllSlotsForUser(
             | 'moderate'
             | 'hard',
           subtype: subtypeForHash,
-          textSource: effectiveTextSource,
+          textSource: 'ai',
           kind: source.kind,
           habitIntent: source.kind === 'habits' ? intent : null,
           userGender,
@@ -1513,13 +1520,23 @@ export async function orchestrateAllSlotsForUser(
           console.warn(
             `[GlobalOrchestration] ⚠️ AI texts not found or empty for source ${source.kind}:${source.entityKey || 'null'}, configHash: ${configHash?.substring(0, 8)}...`
           );
-          if (textSource === 'ai') {
-            // В режиме AI без текстов - используем fallback на шаблоны
-            console.warn(
-              `[GlobalOrchestration] ⚠️ Falling back to templates for AI mode (no AI texts available)`
-            );
-          }
         }
+      }
+
+      // ВАЖНО: Если textSource = ai и AI-тексты отсутствуют — НЕ создаём слоты и ставим ретрай
+      if (textSource === 'ai' && !aiTextsAvailable) {
+        console.warn(
+          `[GlobalOrchestration] ⏭️ Skipping slots for AI source ${source.kind}:${source.entityKey || 'null'} (no AI texts yet)`
+        );
+        // Ставим задачу на генерацию с задержкой, чтобы не спамить провайдера
+        void enqueueAiTextGenerationJob({
+          userId,
+          preferenceId: source.preference.id,
+          delayMs: 60_000,
+          reason: 'missing_ai_texts',
+          configHash: configHash ?? undefined,
+        });
+        continue;
       }
 
       // Создаём состояние выбора текста для источника с данными из БД
@@ -1532,7 +1549,6 @@ export async function orchestrateAllSlotsForUser(
       };
 
       // Создаём слоты для этого источника
-      // Используем локальный индекс внутри sourceSlots для правильного hybrid-чередования
       for (let slotIndex = 0; slotIndex < sourceSlots.length; slotIndex++) {
         const slot = sourceSlots[slotIndex];
         const slotDate = slot.scheduledAt;
@@ -1548,26 +1564,18 @@ export async function orchestrateAllSlotsForUser(
               ) / dayMs
             )
           : 0;
-        const imageSequenceIndex =
-          source.timesPerDay > 0
-            ? dayNumber * source.timesPerDay + daySlotIndex
-            : daySlotIndex;
         if (!slot.scheduledAt) continue;
 
-        // ВАЖНО: Если textSource === 'ai' но AI-тексты недоступны, используем fallback на шаблоны
-        // Это предотвращает потерю слотов, когда AI-тексты ещё не сгенерированы
-        const effectiveTextSource: 'templates' | 'ai' | 'hybrid' =
-          textSource === 'ai' && !aiTextsAvailable
-            ? 'templates' // Fallback на шаблоны если AI-тексты недоступны
-            : (textSource as 'templates' | 'ai' | 'hybrid');
+        const effectiveTextSource: 'templates' | 'ai' =
+          textSource as 'templates' | 'ai';
 
         const pickParams: PickTextParams = {
           slotIndex: slotIndex, // Локальный индекс внутри sourceSlots, а не глобальный
           textSource: effectiveTextSource,
           isCustomEntity: source.isCustomEntity,
           templateTexts: loadedTexts.texts.map((t) => ({
-            id: t.id,
             text: t.text,
+            imageTag: t.imageTag ?? null,
           })),
           aiTexts: aiTextsAvailable ? aiTexts : null, // Передаём null если AI-тексты недоступны
           userName,
@@ -1583,14 +1591,25 @@ export async function orchestrateAllSlotsForUser(
           continue;
         }
 
-        const { text, templateIdForSlot } = pickResult;
+        const { text, templateIdForSlot, imageTag, subtype } = pickResult;
 
         const slotId = nanoid();
-        const imageUrl = pickNotificationImage({
+        const effectiveSubtypeForImage =
+          source.preference.subtype === 'mixed'
+            ? (subtype ?? actualSubtype)
+            : actualSubtype;
+        const imageUrl = await pickNotificationImage({
+          userId,
           kind: source.kind,
           entityKey: source.normalizedEntityKey,
-          gender: userGender,
-          sequenceIndex: imageSequenceIndex,
+          imageTag,
+          directness: source.preference.directness as
+            | 'soft'
+            | 'moderate'
+            | 'hard',
+          subtype: effectiveSubtypeForImage,
+          isMixedMode: source.preference.subtype === 'mixed',
+          habitIntent: source.kind === 'habits' ? intent : null,
         });
 
         // Создаём payload

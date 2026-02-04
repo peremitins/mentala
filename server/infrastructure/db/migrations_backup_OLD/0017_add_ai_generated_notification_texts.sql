@@ -5,7 +5,7 @@ CREATE TABLE ai_generated_notification_texts (
   kind VARCHAR(20) NOT NULL, -- 'habits' | 'therapy'
   entity_id VARCHAR(255) NOT NULL, -- habitId или topicKey
   preference_id TEXT NOT NULL, -- FK к notification_preferences.id
-  generation_mode VARCHAR(20) NOT NULL, -- 'ai' | 'hybrid'
+  generation_mode VARCHAR(20) NOT NULL, -- 'ai'
   texts JSONB NOT NULL, -- массив сгенерированных текстов (до 100)
   generation_config_hash TEXT NOT NULL, -- хеш настроек, влияющих на генерацию
   provider VARCHAR(50) NOT NULL, -- 'openai' | 'deepseek' | 'groq' | ...
@@ -23,4 +23,3 @@ CREATE TABLE ai_generated_notification_texts (
 CREATE INDEX idx_ai_texts_user_pref ON ai_generated_notification_texts(user_id, preference_id);
 CREATE INDEX idx_ai_texts_config_hash ON ai_generated_notification_texts(generation_config_hash);
 CREATE INDEX idx_ai_texts_entity ON ai_generated_notification_texts(user_id, kind, entity_id);
-

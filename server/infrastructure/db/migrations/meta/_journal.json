@@ -246,6 +246,20 @@
       "when": 1769629708334,
       "tag": "0038_dapper_harrier",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1770124488626,
+      "tag": "0039_awesome_sentinels",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1770141761788,
+      "tag": "0040_curious_ghost_rider",
+      "breakpoints": true
     }
   ]
 }
