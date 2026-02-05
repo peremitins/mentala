@@ -43,11 +43,19 @@ const MAX_OUTPUT_TOKENS_CAP =
   ) || 12000;
 // В проде никогда не логируем промпты. В dev всегда показываем полный текст.
 const ALLOW_AI_LOGS = process.env.NODE_ENV === 'development';
-const EMOJI_PREFIX = '✨ ';
-const MAX_NOTIFICATION_BODY_LENGTH = Math.max(
-  0,
-  MAX_NOTIFICATION_TEXT_LENGTH - EMOJI_PREFIX.length
-);
+const AI_DEFAULT_EMOJI_PREFIX = '✨ ';
+const AI_CUSTOM_EMOJI_PREFIX = '✏️ ';
+const AI_EMOJI_PREFIXES = [AI_DEFAULT_EMOJI_PREFIX, AI_CUSTOM_EMOJI_PREFIX];
+
+// Выбираем префикс для AI-текстов в зависимости от типа сущности.
+function resolveAiEmojiPrefix(isCustomEntity: boolean): string {
+  return isCustomEntity ? AI_CUSTOM_EMOJI_PREFIX : AI_DEFAULT_EMOJI_PREFIX;
+}
+
+// Максимальная длина тела текста с учетом префикса.
+function resolveMaxNotificationBodyLength(emojiPrefix: string): number {
+  return Math.max(0, MAX_NOTIFICATION_TEXT_LENGTH - emojiPrefix.length);
+}
 const IMAGE_TAGS = new Set([
   'harm_organs',
   'harm_appearance',
@@ -64,6 +72,29 @@ const SAFE_IMAGE_TAGS: ImageTag[] = [
   'meditation',
   'daily_life',
   'neutral_abstract',
+];
+// Особые правила для конкретных тем (легко расширять при изменении контента).
+type ImageTagOverride = {
+  key?: string;
+  keys?: string[];
+  kind?: 'habits' | 'therapy';
+  allowedTags: ImageTag[];
+  fallbackTag?: ImageTag;
+  disallowHarmForPositive?: boolean;
+};
+const IMAGE_TAG_POLICY_OVERRIDES: ImageTagOverride[] = [
+  {
+    // Можно один ключ в key или несколько в keys
+    keys: ['junk_food'],
+    // Ограничить только привычки (можно убрать — применится к habits+therapy)
+    kind: 'habits',
+    // Список разрешённых тегов
+    allowedTags: ['neutral_abstract', 'harm_appearance', 'harm_organs'],
+    // Тег‑фолбэк, когда пришёл запрещённый/неуместный
+    fallbackTag: 'neutral_abstract',
+    // Запрещать harm_* для «позитивных» текстов
+    disallowHarmForPositive: true,
+  },
 ];
 const HARM_MARKERS = [
   /вред/iu,
@@ -356,10 +387,13 @@ export function hashNotificationText(text: string): string {
 }
 
 function stripEmojiPrefix(text: string): string {
-  if (text.startsWith(EMOJI_PREFIX)) {
-    return text.slice(EMOJI_PREFIX.length).trim();
+  const trimmed = text.trim();
+  for (const prefix of AI_EMOJI_PREFIXES) {
+    if (trimmed.startsWith(prefix)) {
+      return trimmed.slice(prefix.length).trim();
+    }
   }
-  return text.trim();
+  return trimmed;
 }
 
 function isHarmContext(text: string): boolean {
@@ -386,10 +420,46 @@ function isMeditationTopic(params: {
   return name.includes('медитац') || name.includes('meditation');
 }
 
+function resolveImageTagPolicyOverride(params: {
+  kind: 'habits' | 'therapy';
+  entityKey: string;
+}): ImageTagPolicy | null {
+  const normalizedKey = params.entityKey.trim().toLowerCase();
+  const match = IMAGE_TAG_POLICY_OVERRIDES.find((item) => {
+    const keys = item.keys ?? (item.key ? [item.key] : []);
+    const normalizedKeys = keys.map((key) => key.trim().toLowerCase());
+    const matchesKey = normalizedKeys.includes(normalizedKey);
+    return matchesKey && (item.kind ? item.kind === params.kind : true);
+  });
+
+  if (!match) return null;
+
+  const allowedTags = match.allowedTags;
+  const fallbackTag =
+    match.fallbackTag ?? resolveFallbackImageTag(new Set(allowedTags));
+  const meditationOnly =
+    allowedTags.length === 1 && allowedTags[0] === 'meditation';
+
+  return {
+    allowedTags,
+    fallbackTag,
+    disallowHarmForPositive: match.disallowHarmForPositive ?? true,
+    meditationOnly,
+  };
+}
+
 function buildImageTagPolicy(params: {
   entityKey: string;
   entityName: string;
+  kind: 'habits' | 'therapy';
 }): ImageTagPolicy {
+  // Сначала проверяем, нет ли специальных правил для темы.
+  const override = resolveImageTagPolicyOverride({
+    kind: params.kind,
+    entityKey: params.entityKey,
+  });
+  if (override) return override;
+
   const meditationOnly = isMeditationTopic(params);
   const allowedTags = meditationOnly
     ? (['meditation'] as ImageTag[])
@@ -536,9 +606,15 @@ export function normalizeNotificationItems(
     fallbackImageTag?: ImageTag | null;
     disallowHarmForPositive?: boolean;
     addEmojiPrefix?: boolean;
+    emojiPrefix?: string;
   }
 ): AiNotificationText[] {
   const normalized: NormalizedAiItem[] = [];
+  const emojiPrefix = options.emojiPrefix ?? AI_DEFAULT_EMOJI_PREFIX;
+  const shouldPrefix = options.addEmojiPrefix !== false;
+  const maxBodyLength = shouldPrefix
+    ? resolveMaxNotificationBodyLength(emojiPrefix)
+    : MAX_NOTIFICATION_TEXT_LENGTH;
 
   for (const item of rawItems) {
     let rawText: string | null = null;
@@ -561,16 +637,14 @@ export function normalizeNotificationItems(
     const cleaned = String(rawText).replace(/\s+/g, ' ').trim();
     if (!cleaned) continue;
 
-    if (cleaned.length > MAX_NOTIFICATION_BODY_LENGTH) {
+    const baseText = shouldPrefix ? stripEmojiPrefix(cleaned) : cleaned;
+    if (!baseText) continue;
+
+    if (baseText.length > maxBodyLength) {
       continue;
     }
 
-    const shouldPrefix = options.addEmojiPrefix !== false;
-    const text = shouldPrefix
-      ? cleaned.startsWith(EMOJI_PREFIX)
-        ? cleaned
-        : `${EMOJI_PREFIX}${cleaned}`
-      : cleaned;
+    const text = shouldPrefix ? `${emojiPrefix}${baseText}` : baseText;
 
     if (text.length > MAX_NOTIFICATION_TEXT_LENGTH) {
       continue;
@@ -860,6 +934,7 @@ async function generateNotificationBatch(params: {
   scenarioSettings: typeof config.llm.openai.settings.notifications;
   isMixed: boolean;
   imageTagPolicy: ImageTagPolicy;
+  emojiPrefix: string;
 }): Promise<{
   items: AiNotificationText[];
   model: string;
@@ -910,6 +985,7 @@ async function generateNotificationBatch(params: {
     allowedImageTags: new Set(params.imageTagPolicy.allowedTags),
     fallbackImageTag: params.imageTagPolicy.fallbackTag,
     disallowHarmForPositive: params.imageTagPolicy.disallowHarmForPositive,
+    emojiPrefix: params.emojiPrefix,
   });
 
   console.log(
@@ -938,6 +1014,7 @@ async function generateNotificationItemsBatched(params: {
   scenarioSettings: typeof config.llm.openai.settings.notifications;
   isMixed: boolean;
   imageTagPolicy: ImageTagPolicy;
+  emojiPrefix: string;
 }): Promise<{
   items: AiNotificationText[];
   model: string;
@@ -963,6 +1040,7 @@ async function generateNotificationItemsBatched(params: {
         scenarioSettings: params.scenarioSettings,
         isMixed: params.isMixed,
         imageTagPolicy: params.imageTagPolicy,
+        emojiPrefix: params.emojiPrefix,
       });
 
       lastModel = batch.model || lastModel;
@@ -1113,7 +1191,10 @@ export async function generateNotificationTexts(
     }
   }
 
-  const isCustomEntity = params.kind === 'habits' ? isCustomHabit : isCustomTherapy;
+  const isCustomEntity =
+    params.kind === 'habits' ? isCustomHabit : isCustomTherapy;
+  const emojiPrefix = resolveAiEmojiPrefix(isCustomEntity);
+  const maxBodyLength = resolveMaxNotificationBodyLength(emojiPrefix);
   const customPromptNotification = isCustomEntity
     ? null
     : normalizeCustomPromptNotification(params.customPromptNotification);
@@ -1180,6 +1261,7 @@ export async function generateNotificationTexts(
   const imageTagPolicy = buildImageTagPolicy({
     entityKey: params.entityKey,
     entityName,
+    kind: params.kind,
   });
 
   if (existingTexts && existingTexts.length > 0) {
@@ -1204,8 +1286,25 @@ export async function generateNotificationTexts(
         allowedImageTags: new Set(imageTagPolicy.allowedTags),
         fallbackImageTag: imageTagPolicy.fallbackTag,
         disallowHarmForPositive: imageTagPolicy.disallowHarmForPositive,
+        emojiPrefix,
       }
     );
+
+    if (
+      existing?.id &&
+      textsWithEmoji.some(
+        (text) => !extractTextValue(text).startsWith(emojiPrefix)
+      )
+    ) {
+      // Обновляем префиксы в пуле, чтобы кастомные AI-тексты были помечены корректно.
+      await db
+        .update(aiGeneratedNotificationTexts)
+        .set({
+          texts: textsWithEmoji,
+          updatedAt: sql`NOW()`,
+        })
+        .where(eq(aiGeneratedNotificationTexts.id, existing.id));
+    }
 
     console.log(
       `[AI Generation] ✅ Using existing AI texts: userId: ${params.userId}, preferenceId: ${params.preferenceId}, configHash: ${configHash.substring(0, 8)}..., textsCount: ${textsWithEmoji.length}`
@@ -1245,6 +1344,8 @@ export async function generateNotificationTexts(
     habitIntent, // Передаем intent для формирования правильных инструкций
     imageTagPolicy,
     customPromptNotification,
+    emojiPrefix,
+    maxBodyLength,
     isCustomEntity,
   });
 
@@ -1287,6 +1388,7 @@ export async function generateNotificationTexts(
     scenarioSettings,
     isMixed: params.subtype === 'mixed',
     imageTagPolicy,
+    emojiPrefix,
   });
 
   const texts = batchResult.items;
@@ -1302,7 +1404,7 @@ export async function generateNotificationTexts(
   // Примерная оценка токенов: ~4 символа на токен
   const promptText =
     systemPrompt +
-    `\nСгенерируй ДО ${count} вариантов уведомлений в формате JSON объекта с полем items (массив объектов). Каждый текст должен быть примерно 140-${MAX_NOTIFICATION_BODY_LENGTH} символов (сервер добавит префикс "${EMOJI_PREFIX}").`;
+    `\nСгенерируй ДО ${count} вариантов уведомлений в формате JSON объекта с полем items (массив объектов). Каждый текст должен быть примерно 140-${maxBodyLength} символов (сервер добавит префикс "${emojiPrefix}").`;
   const tokensIn = Math.ceil(promptText.length / 4);
   const tokensOut = Math.ceil(
     texts.reduce((sum, text) => sum + text.text.length, 0) / 4
@@ -1441,6 +1543,8 @@ function buildNotificationSystemPrompt(params: {
   habitIntent?: 'quit' | 'build' | null; // Intent привычки: отказ (quit) или приобретение (build)
   imageTagPolicy: ImageTagPolicy;
   customPromptNotification?: string | null; // Персональные пожелания пользователя (только для AI)
+  emojiPrefix: string;
+  maxBodyLength: number;
   isCustomEntity?: boolean;
 }): string {
   const genderLabel =
@@ -1639,7 +1743,7 @@ ${params.subtype ? `- Фокус уведомления: ${subtypeMap[params.sub
 - Каждый из всех текстов должен соответствовать всем указанным параметрам и инструкциям из описания
 
 Требования:
-- Каждый текст должен быть примерно 140-${MAX_NOTIFICATION_BODY_LENGTH} символов (сервер добавит префикс "${EMOJI_PREFIX}" к каждому тексту)
+- Каждый текст должен быть примерно 140-${params.maxBodyLength} символов (сервер добавит префикс "${params.emojiPrefix}" к каждому тексту)
 - Можно использовать плейсхолдер {name} для имени пользователя
 - Если имя не указано, не используй плейсхолдер {name}
 - Если пол не указан, используй нейтральные конструкции без рода
@@ -1660,6 +1764,7 @@ ${subtypeInstructions}
 - НЕ создавай тексты с вопросами к пользователю (например: "Что ты хочешь обсудить?", "Как я могу помочь?", "О чем ты хочешь спросить?")
 - НЕ предлагай обсудить что-либо - уведомления должны быть информативными, напоминающими или мотивирующими, но не призывающими к диалогу
 - Уведомления - это одностороннее сообщение, а не начало разговора
+- НЕ утверждай, что пользователь уже достиг результата или сделал прогресс (например: "ты уже месяц держишься", "ты справился"). Формулируй нейтрально или условно, без фиксации достижений.
 - НЕ упоминай название привычки или темы напрямую в текстах, если это не является естественным (например, если название - это общее понятие типа "пить воду", можно использовать, но если название - это специфическое слово типа "Здарова", НЕ используй его)
 
 
@@ -1705,6 +1810,7 @@ function parseAndValidateTexts(
     allowedImageTags?: Set<ImageTag> | null;
     fallbackImageTag?: ImageTag;
     disallowHarmForPositive?: boolean;
+    emojiPrefix?: string;
   }
 ): AiNotificationText[] {
   // Парсим JSON массив
@@ -2016,9 +2122,12 @@ export async function refillTextPool(
     const imageTagPolicy = buildImageTagPolicy({
       entityKey,
       entityName,
+      kind,
     });
 
     // 4.3. Строим промпт и генерируем только новые тексты через LLM
+    const emojiPrefix = resolveAiEmojiPrefix(isCustomEntity);
+    const maxBodyLength = resolveMaxNotificationBodyLength(emojiPrefix);
     const systemPrompt = buildNotificationSystemPrompt({
       entityKey,
       entityName,
@@ -2033,6 +2142,8 @@ export async function refillTextPool(
       habitIntent: currentHabitIntent, // Передаем intent для формирования правильных инструкций
       imageTagPolicy,
       customPromptNotification: effectiveCustomPromptNotification,
+      emojiPrefix,
+      maxBodyLength,
       isCustomEntity,
     });
 
@@ -2061,6 +2172,7 @@ export async function refillTextPool(
       scenarioSettings,
       isMixed: subtype === 'mixed',
       imageTagPolicy,
+      emojiPrefix,
     });
 
     const newTexts = batchResult.items;
@@ -2105,7 +2217,7 @@ export async function refillTextPool(
     // 4.5. Вычисляем стоимость
     const promptText =
       systemPrompt +
-      `\nСгенерируй ДО ${toGenerate} вариантов уведомлений в формате JSON объекта с полем items (массив объектов). Каждый текст должен быть примерно 140-${MAX_NOTIFICATION_BODY_LENGTH} символов (сервер добавит префикс "${EMOJI_PREFIX}").`;
+      `\nСгенерируй ДО ${toGenerate} вариантов уведомлений в формате JSON объекта с полем items (массив объектов). Каждый текст должен быть примерно 140-${maxBodyLength} символов (сервер добавит префикс "${emojiPrefix}").`;
     const tokensIn = Math.ceil(promptText.length / 4);
     const tokensOut = Math.ceil(
       newTexts.reduce((sum, text) => sum + text.text.length, 0) / 4

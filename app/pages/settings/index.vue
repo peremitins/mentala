@@ -36,7 +36,7 @@
         >
           <div class="flex items-center gap-3 min-w-0">
             <div
-              class="h-12 w-12 rounded-full bg-primary/15 text-primary-foreground flex items-center justify-center text-sm font-semibold"
+              class="h-12 w-12 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-semibold"
             >
               {{ userInitials }}
             </div>
@@ -146,9 +146,6 @@
             >
               <div class="">
                 <p class="text-sm font-medium">Условия использования</p>
-                <p class="text-xs text-muted-foreground">
-                  {{ legalDocsVersionLabel }}
-                </p>
               </div>
               <IconChevronRight class="h-4 w-4 text-muted-foreground" />
             </a>
@@ -162,9 +159,6 @@
             >
               <div class="">
                 <p class="text-sm font-medium">Политика конфиденциальности</p>
-                <p class="text-xs text-muted-foreground">
-                  {{ legalDocsVersionLabel }}
-                </p>
               </div>
               <IconChevronRight class="h-4 w-4 text-muted-foreground" />
             </a>
@@ -275,7 +269,6 @@ import type {
   Tone,
   UserPreferencesDto,
 } from '@/shared/dto/notifications';
-import { LEGAL_DOCS_DATE_LABEL } from '@/shared/constants/legal';
 import IconChevronRight from '~icons/lucide/chevron-right';
 
 const auth = useAuthStore();
@@ -327,9 +320,6 @@ const toneLabel = computed(() => {
   const value = preferences.value.tone;
   return toneLabels[value] || 'Нейтральный';
 });
-
-// Версия юридических документов для отображения в настройках
-const legalDocsVersionLabel = `Версия от ${LEGAL_DOCS_DATE_LABEL}`;
 
 const localeLabel = computed(() => {
   const value = (auth.user?.locale || locale.value || 'ru').toString();

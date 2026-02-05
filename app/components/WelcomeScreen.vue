@@ -12,7 +12,8 @@
     <div class="w-full max-w-md space-y-4">
       <Button
         @click="handleSelect"
-        class="w-full rounded-xl p-4 flex items-center gap-4 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group animate-slide-up"
+        variant="outline"
+        class="w-full rounded-xl p-4 flex items-center gap-4 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group animate-slide-up bg-transparent"
         style="animation-delay: 0.2s; animation-fill-mode: both"
       >
         Начать

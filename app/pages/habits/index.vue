@@ -130,7 +130,7 @@ const customHabitItems = computed(() =>
       id: habit.id, // Используем ID
       name: habit.name,
       description: habit.description || 'Персональная привычка',
-      emoji: habit.emoji || '✨',
+      emoji: habit.emoji || '✏️',
       gradientClass:
         intentColors[habit.intent] ||
         intentColors[normalizedIntent] ||
@@ -148,7 +148,7 @@ const createCard: NotificationIndexItem = {
   id: '__create_habit',
   name: 'Создать свою привычку',
   description: 'Настройте свои напоминания под себя: название, текст и частоту',
-  emoji: '🛠️',
+  emoji: '✏️',
   gradientClass: 'from-gray-500 to-gray-700',
   payload: {
     action: 'create-habit',

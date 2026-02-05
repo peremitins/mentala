@@ -14,7 +14,10 @@
     <AvatarVoiceControls />
 
     <!-- Основной контент -->
-    <div class="flex-1 flex flex-col overflow-hidden relative">
+    <div
+      class="flex-1 flex flex-col overflow-hidden absolute w-full h-[calc(100%-100px)] top-0 left-0 bottom-[100px] rounded-lg z-0"
+      :class="{ 'pt-[100px]': showWelcomeScreen }"
+    >
       <!-- Приветственный экран -->
 
       <WelcomeScreen
@@ -287,6 +290,15 @@ function updateURL(screen: 'welcome' | 'chat') {
 
 // Обработчик выбора на приветственном экране
 async function handleWelcomeSelect() {
+  console.log('chat.messages?.length111', chat.messages?.length);
+  if (chat.messages?.length) {
+    console.log('chat.messages?.length', chat.messages?.length);
+    updateURL('chat');
+    await nextTick();
+    await scrollToBottom('auto');
+    return;
+  }
+
   updateURL('chat');
 
   // Начинаем диалог от ассистента (без user-сообщения "Привет")

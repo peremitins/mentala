@@ -230,7 +230,7 @@ psql -d mentai -f server/infrastructure/db/migrations/0027_add_ai_notification_t
 - `GET /api/notifications/texts?kind=habits|therapy&entityKey=:key&includeDeleted=false` — получить тексты для сущности
 - `POST /api/notifications/texts` — получить тексты с фильтрами (subtype, directness, includeDeleted)
 - `PUT /api/notifications/texts/batch` — batch-сохранение изменений (создание, обновление, удаление)
-- `POST /api/notifications/texts/reset` — восстановить дефолтные тексты из presets
+- `POST /api/notifications/texts/reset` — Вернуть тексты по умолчанию из presets
 
 **Важно:** Все эндпоинты работают только с текстами текущего пользователя (`userId = текущий_пользователь`). Тексты с `userId IS NULL` больше не используются.
 
@@ -357,6 +357,7 @@ psql -d mentai -f server/infrastructure/db/migrations/0027_add_ai_notification_t
    - Используется OpenAI GPT (модель `gpt-4o-mini` для экономии)
    - Тексты сохраняются в `ai_generated_notification_texts`
    - Кэширование по `generationConfigHash`
+
 ### Логика выбора текста
 
 ```typescript

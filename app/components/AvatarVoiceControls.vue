@@ -1,5 +1,5 @@
 <template>
-  <div class="flex gap-2 py-2">
+  <div class="flex gap-2 py-2 z-100">
     <!-- Кнопка аватара -->
     <button
       v-if="false"

@@ -35,7 +35,7 @@
         />
       </div>
     </div>
-    <div class="relative z-10 flex min-h-0 flex-1 flex-col">
+    <div class="relative z-10 flex min-h-0 flex-1 flex-col rounded-lg">
       <slot />
 
       <ClientOnly>
