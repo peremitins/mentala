@@ -145,7 +145,7 @@ const createCard: NotificationIndexItem = {
   id: '__create_topic',
   name: 'Создать свою терапию',
   description: 'Сформулируйте собственный запрос и настройте тексты под себя',
-  emoji: '✨',
+  emoji: '✏️',
   gradientClass: 'from-gray-500 to-gray-700',
   payload: { action: 'create-topic' },
   quickActions: {},

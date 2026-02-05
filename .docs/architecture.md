@@ -18,7 +18,7 @@
 • blank (fullscreen),
 • auth (центрирование форм; при входе на auth экран фоновые звуки и медитации принудительно выключаются).
 • Глобальная защита аудио: `app/plugins/audio-playback-guard.client.ts` отслеживает auth/роуты и через `setPlaybackAllowed` в `useSceneAudio` и `useMeditationPlayer` блокирует любой звук на публичных страницах и при разлогине.
-• UI‑настройки: `useUiSettingsStore` хранит локальные параметры интерфейса (яркость фона) в `persistentStorage` (web: localStorage, mobile: Capacitor Preferences). Яркость применяется к aurora‑слою и к затемнению фоновых изображений сцен (overlay).
+• UI‑настройки: `useUiSettingsStore` хранит локальные параметры интерфейса (яркость фона) в `persistentStorage` (web: localStorage, mobile: Capacitor Preferences). Яркость применяется к aurora‑слою и к затемнению фоновых изображений сцен (overlay). Дефолтная яркость — 85%.
 • Тема интерфейса: приложение использует только тёмную тему (dark theme) по умолчанию. Переключение между светлой и тёмной темой не поддерживается. Все CSS-переменные настроены на тёмную палитру в `:root`, класс `.dark` не используется. PWA manifest (`site.webmanifest`) и favicon настроены на тёмные цвета.
 • Страницы:
 index, onboarding, chat (layout blank), therapy, habits, practices, breath-practices, profile/\*, settings, privacy, subscription, billing.
@@ -150,6 +150,7 @@ server/
 • Страница `/scene-selection` позволяет выбрать фон и фоновый трек для всего приложения (кроме детальной медитации).
 • Список сцен фиксирован в `app/lib/sceneSelectionCatalog.ts` (на основе seed медитаций).
 • Дефолтная сцена — «Горный ручей» (обои включены сразу).
+• Дефолтная громкость фонового трека — 50%.
 • Настройки возвращаются в `/api/user/me` как `sceneSettings` и сохраняются через `/api/user/me` (PATCH).
 • Дополнительный флаг `sceneSettings.animateBackground` управляет анимацией обоев.
 • Pinia-store `useSceneSettingsStore` отвечает за локальное состояние и дебаунс‑сохранение.
@@ -196,6 +197,8 @@ server/
 • Logout отключает уведомления **только на текущем устройстве**: токен удаляется через `/api/notifications/unregister-token` (таблица `user_devices`).
 • При логине токен устройства повторно регистрируется (если есть) и в фоне проверяется наличие активных слотов: если нужно регенерировать или активные настройки есть, но слотов нет — запускается `generateAllSlotsForUser`.
 • AI‑генерация текстов уведомлений выполняется через очередь BullMQ `ai-text-generation` с debounce‑dedup (`id = ai-gen-{preferenceId}`, TTL≈20с) и лимитом на пользователя (не больше 3 активных задач одновременно). При ошибках AI слоты **не** создаются, задача ретраится с backoff; после успешной генерации выполняется глобальная регенерация слотов. При повторных сбоях объём генерации снижается (50 → 25 → 12), чтобы не срывать процесс.
+• Префикс AI‑текстов: для шаблонных тем используется `✨`, для кастомных — `✏️` (префикс учитывается в лимите длины).
+• AI‑промпты запрещают ложные утверждения о достижениях пользователя: формулировки только нейтральные/поддерживающие без фиксации «успеха».
 • При изменении глобальных настроек (`tone`, `addressing`) через `/api/settings/preferences` ставится регенерация AI‑пулов для всех `ai` preferences пользователя (через ту же очередь).
 • Шаблонные тексты из `notificationTemplates` по умолчанию без изображений (`imageTag = null`), но могут иметь явный `imageTag`.
 • В native (Capacitor) регистрация push‑токена всегда идёт через `$api` и `NUXT_PUBLIC_API_SERVER_URL`, чтобы запросы не уходили на `capacitor://localhost` и `user_devices` корректно заполнялась.
@@ -205,6 +208,12 @@ server/
 • NotificationTextsEditorPage использует общий `glass-deep` контейнер для списка текстов с внутренними карточками-подложками; кнопка сохранения закреплена липкой панелью над BottomNav.
 • NotificationSettingsPage показывает блок «Мои пожелания» для **шаблонных** тем (не для кастомных). Пожелания сохраняются в `custom_prompt_notification` и влияют на AI-генерацию.
 • Изображения уведомлений: подбираются по `kind/entityKey` из `public/notifications/*` **без гендерных подкаталогов** (только нейтральные наборы). Порядок: сущностные (`/notifications/habits/{entityKey}/{imageTag}/`), затем общие (`/notifications/common/{imageTag}/`). Для therapy допускаются сущностные папки (`/notifications/therapy/{entityKey}/{imageTag}/` и вложенные `/notifications/therapy/{entityKey}/**/{imageTag}/`); если есть верхний уровень и вложенные — они миксуются между собой и с common. Для кастомных сущностей (`entityKey = null`) разрешены только нейтральные теги (`activity/nature/meditation/daily_life/neutral_abstract`), `harm_*` запрещены. Legacy‑пулы (старый формат без `imageTag/subtype`) используют только safe‑only fallback `nature` → `neutral_abstract`, `harm_*` запрещены. `harm_*` допускаются в common только как универсальные медицинские визуалы без предметных контекстов, сущностные `harm_*` остаются в habits. Ротация изображений должна быть устойчивой и бесконечной: минимизировать повторы и сохранять позицию между перегенерациями текстов и изменениями настроек. URL строится от `NUXT_PUBLIC_MEDIA_BASE_URL` (fallback: `PUBLIC_APP_ORIGIN`/`NUXT_PUBLIC_APP_URL`). Нормализация файлов выполняется скриптом, который переносит `male/female` в нейтральные каталоги и затем синхронизирует Yandex Object Storage с `--delete`.
+• Для отдельных тем можно задавать специальные ограничения `imageTag` через `IMAGE_TAG_POLICY_OVERRIDES` (например `junk_food` → только `neutral_abstract`, `harm_appearance`, `harm_organs`).
+• Где находится: `server/application/notifications/ai-generation.service.ts`.
+• Как матчится: `entityKey` нормализуется через `trim().toLowerCase()` и сравнивается с `key/keys`; опционально учитывается `kind` (`habits`/`therapy`).
+• Поля override: `keys` (массив ключей), `kind` (опционально), `allowedTags` (строго разрешённые теги), `fallbackTag` (чем заменить запрещённый/неуместный тег), `disallowHarmForPositive` (если `true`, harm_* запрещён для нейтральных/позитивных текстов).
+• Порядок применения: сначала override, затем дефолтная политика (meditation-only, safe‑теги).
+• Важно: override применяется только к AI‑генерации; чтобы вступило в силу, нужен ре‑ген AI‑пула (смена `subtype/directness` или переключение `textSource`).
 • Для **шаблонов** картинки выключены по умолчанию (`imageTag = null`), но их можно включить точечно, задав `imageTag` в шаблоне.
 • Если для выбранного `imageTag` нет файлов ни в сущности, ни в common (AI‑источник), используется safe‑fallback в порядке `nature → daily_life → activity → meditation → neutral_abstract`. Для привычки `meditation` допускается только `meditation`. Для привычки `water` в промпте задано требование `imageTag = neutral_abstract`.
 • Android push: канал `mentai_high` создаётся нативно в `MainApplication` и задан как `default_notification_channel_id` в манифесте; fallback канал `fcm_fallback_notification_channel` удаляется, чтобы все уведомления были в одном разделе. Для FCM используется `tag = slotId`, чтобы Android не перезаписывал уведомления внутри группы.

@@ -105,7 +105,7 @@ export function useNotificationTexts(
   }
 
   /**
-   * Восстановить дефолтные тексты
+   * Вернуть тексты по умолчанию
    */
   async function resetDefaults(keepUserTexts = true) {
     saving.value = true;
@@ -131,7 +131,7 @@ export function useNotificationTexts(
       console.error('Failed to reset defaults:', error);
       useToast(
         'Ошибка восстановления',
-        error?.data?.message || 'Не удалось восстановить дефолтные тексты',
+        error?.data?.message || 'Не удалось Вернуть тексты по умолчанию',
         'error'
       );
       return false;

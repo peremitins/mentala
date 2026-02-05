@@ -61,7 +61,7 @@ ALLOWED_ORIGINS=https://mentala.com
 
 ---
 
-## 🛠️ Development (опционально)
+## ✏️ Development (опционально)
 
 ### `DEV_ALLOWED_ORIGINS`
 
