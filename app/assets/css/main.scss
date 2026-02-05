@@ -19,6 +19,13 @@ a {
   cursor: pointer;
 }
 
+/* Placeholder в input/textarea делаем менее ярким и единым по приложению */
+input::placeholder,
+textarea::placeholder {
+  color: hsl(var(--foreground));
+  opacity: 0.6;
+}
+
 .glass {
   border-radius: var(--radius-lg);
   @apply border border-border/15 bg-background/10 shadow-lg backdrop-blur-md;

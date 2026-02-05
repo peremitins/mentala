@@ -56,7 +56,8 @@ const globalState = {
   currentScene: ref<SceneTrack | null>(null),
   isPlaying: ref(false),
   isBuffering: ref(false),
-  volume: ref(0.7),
+  // Стартовая громкость фонового трека — 50%.
+  volume: ref(0.5),
   fadeInterval: null as ReturnType<typeof setInterval> | null,
   pendingPlay: null as PendingPlay | null,
   gestureUnlockCleanup: null as (() => void) | null,

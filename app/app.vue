@@ -24,14 +24,14 @@
     />
 
     <!-- Глобальный PageLoader -->
-    <Transition name="fade">
+    <!-- <Transition name="fade">
       <div
         v-if="loaders.isPageLoading"
         class="fixed inset-0 z-[9999] flex items-center justify-center pointer-events-none"
       >
         <PageLoader :size="8" />
       </div>
-    </Transition>
+    </Transition> -->
   </div>
 </template>
 

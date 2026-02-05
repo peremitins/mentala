@@ -205,7 +205,7 @@ const formSchema = computed(() =>
   )
 );
 
-const defaultEmojiValue = computed(() => props.defaultEmoji ?? '✨');
+const defaultEmojiValue = computed(() => props.defaultEmoji ?? '✏️');
 
 const defaultIntentValue = computed<HabitIntent>(
   () => props.defaultIntent ?? 'build'

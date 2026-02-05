@@ -36,7 +36,7 @@
         >
           <div class="flex items-center gap-3 min-w-0">
             <div
-              class="h-12 w-12 rounded-full bg-primary/15 text-primary-foreground flex items-center justify-center text-sm font-semibold"
+              class="h-12 w-12 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-semibold"
             >
               {{ userInitials }}
             </div>
