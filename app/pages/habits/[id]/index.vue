@@ -177,7 +177,7 @@ const entityName = computed(() => {
   }
   return entityData.value?.name || 'Привычка';
 });
-const entityEmoji = computed(() => entityData.value?.emoji || '✨');
+const entityEmoji = computed(() => entityData.value?.emoji || '✏️');
 const entityIntent = computed<HabitIntent>(() => {
   if (!entityData.value) return 'build';
   return (entityData.value.intent || 'build') as HabitIntent;

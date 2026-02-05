@@ -8,14 +8,14 @@
 
     <section class="space-y-3 pb-[160px] animate-fade-in">
       <!-- Заголовок с информацией -->
-      <section class="glass-deep p-4 space-y-1">
+      <!-- <section class="glass-deep p-4 space-y-1">
         <h2 class="text-base font-semibold text-foreground">
           {{ entityName }} — Тексты уведомлений
         </h2>
         <p class="text-sm text-foreground/80">
           {{ filteredTextsCount }} текстов • Источник: Шаблоны + ваши
         </p>
-      </section>
+      </section> -->
 
       <!-- Фильтры -->
       <section class="space-y-3">
@@ -204,9 +204,6 @@
 
       <!-- Восстановление дефолтных -->
       <section class="glass-deep p-3 space-y-3">
-        <h3 class="text-sm font-semibold text-foreground">
-          Восстановить стандартные шаблоны
-        </h3>
         <div class="rounded-2xl border border-white/10 bg-background/20 p-3">
           <div class="flex items-center gap-2">
             <Checkbox id="keepUserTexts" v-model:checked="keepUserTexts" />
@@ -218,7 +215,8 @@
             </label>
           </div>
           <p class="text-xs text-foreground/70 mt-2">
-            Ваши тексты останутся, дефолтные будут добавлены обратно
+            Ваши тексты сохранятся, а тексты по умолчанию будут добавлены
+            обратно
           </p>
         </div>
         <button
@@ -238,7 +236,7 @@
               d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
             />
           </svg>
-          Восстановить дефолтные тексты
+          Вернуть тексты по умолчанию
         </button>
       </section>
     </section>
@@ -288,9 +286,10 @@
     <!-- Модалка подтверждения сброса -->
     <ConfirmModal
       ref="resetModalRef"
-      :title="`Сбросить тексты для ${entityName}?`"
-      :subtitle="`Будут восстановлены стандартные тексты.\n⚠️ ВНИМАНИЕ: Все ваши изменения стандартных текстов будут потеряны.\n\nВаши ${userTextsCount} пользовательских текстов будут сохранены, если включена галочка.`"
-      confirm-label="Сбросить"
+      :title="`Вернуть тексты по умолчанию для «${entityName}»?`"
+      :subtitle="`Тексты по умолчанию будут добавлены заново.
+Пользовательские тексты (${userTextsCount}) сохранятся, если вы включите галочку.`"
+      confirm-label="Вернуть"
       cancel-label="Отмена"
       @confirm="handleResetConfirm"
     />

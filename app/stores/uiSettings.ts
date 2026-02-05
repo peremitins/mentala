@@ -24,7 +24,8 @@ function clampOpacity(value: number) {
 
 export const useUiSettingsStore = defineStore('uiSettings', {
   state: (): UiSettingsState => ({
-    auroraOpacity: 1,
+    // По умолчанию яркость фона 85%.
+    auroraOpacity: 0.85,
     loaded: false,
     saving: false,
   }),
@@ -36,7 +37,8 @@ export const useUiSettingsStore = defineStore('uiSettings', {
     },
     async loadFromStorage() {
       const raw = await getPersistentItem(AURORA_OPACITY_KEY);
-      const parsed = raw !== null ? Number(raw) : 1;
+      // Если ничего не сохранено — используем 85%.
+      const parsed = raw !== null ? Number(raw) : 0.85;
       this.applySettings({ auroraOpacity: parsed });
       this.loaded = true;
     },

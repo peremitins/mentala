@@ -35,7 +35,8 @@ function normalizeSceneId(value?: string | null) {
 export const useSceneSettingsStore = defineStore('sceneSettings', {
   state: (): SceneSettingsState => ({
     sceneId: DEFAULT_SCENE_ID,
-    volume: 70,
+    // По умолчанию держим фон на 50%.
+    volume: 50,
     backgroundPlayMinutes: 0,
     // По умолчанию анимация обоев выключена.
     animateBackground: false,
@@ -69,7 +70,8 @@ export const useSceneSettingsStore = defineStore('sceneSettings', {
       } else {
         this.applySettings({
           sceneId: DEFAULT_SCENE_ID,
-          volume: 70,
+          // По умолчанию держим фон на 50%.
+          volume: 50,
           backgroundPlayMinutes: 0,
           // По умолчанию анимация обоев выключена.
           animateBackground: false,
