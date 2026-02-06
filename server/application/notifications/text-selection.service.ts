@@ -4,7 +4,7 @@
  */
 
 import { hashNotificationText } from './ai-generation.service';
-import { formatNotificationTextWithName } from '@/shared/utils/notificationText';
+import { formatNotificationText } from '@/shared/utils/notificationText';
 import type { NotificationSubtype } from '@/shared/dto/notifications';
 import type { AiNotificationText } from './ai-generation.service';
 
@@ -28,7 +28,6 @@ export interface PickTextParams {
   isCustomEntity: boolean;
   templateTexts: { text: string; imageTag?: string | null }[];
   aiTexts: Array<string | AiNotificationText> | null;
-  userName: string | null;
   userGender: 'male' | 'female' | null;
 }
 
@@ -69,13 +68,13 @@ function selectUnusedAiText(
   const shuffled = [...availableIndices].sort(() => Math.random() - 0.5);
 
   // Ищем первый доступный текст, который не был использован по хешу
-  // Хеш вычисляется от исходного текста (rawText), чтобы имя пользователя не влияло на проверку дубликатов
+  // Хеш вычисляется от исходного текста (rawText), чтобы форматирование не влияло на проверку дубликатов
   for (const index of shuffled) {
     const entry = aiTexts[index];
     const rawText = typeof entry === 'string' ? entry : entry.text;
 
     // Вычисляем хеш от исходного текста для проверки дубликатов
-    // Это важно: имя пользователя - переменная часть, не должна влиять на проверку
+    // Это важно: форматирование не должно влиять на проверку
     const textHash = hashNotificationText(rawText);
 
     // Проверяем по хешу (основная защита - устойчив к форматированию)
@@ -106,7 +105,6 @@ function selectUnusedAiText(
 function selectTemplateText(
   templateTexts: { id: string; text: string }[],
   state: TextSelectionState,
-  userName: string | null,
   userGender: 'male' | 'female' | null
 ): { text: string; index: number } | null {
   if (templateTexts.length === 0) {
@@ -142,7 +140,7 @@ function selectTemplateText(
     const rawText = selectedText.text;
 
     return {
-      text: formatNotificationTextWithName(rawText, userName, userGender),
+      text: formatNotificationText(rawText, userGender),
       index: randomIndex,
     };
   }
@@ -151,7 +149,7 @@ function selectTemplateText(
   const shuffled = [...availableIndices].sort(() => Math.random() - 0.5);
 
   // Ищем первый доступный текст, который не был использован по хешу
-  // Хеш вычисляется от исходного текста (rawText), чтобы имя пользователя не влияло на проверку дубликатов
+  // Хеш вычисляется от исходного текста (rawText), чтобы форматирование не влияло на проверку дубликатов
   for (const index of shuffled) {
     const rawText = templateTexts[index].text;
 
@@ -165,7 +163,7 @@ function selectTemplateText(
       !state.usedTexts.has(rawText)
     ) {
       return {
-        text: formatNotificationTextWithName(rawText, userName, userGender),
+        text: formatNotificationText(rawText, userGender),
         index: index,
       };
     }
@@ -187,7 +185,6 @@ function tryUseAiText(
   aiTexts: Array<string | AiNotificationText>,
   slotIndex: number,
   state: TextSelectionState,
-  userName: string | null,
   userGender: 'male' | 'female' | null,
   reason: string
 ): PickTextResult | null {
@@ -199,11 +196,7 @@ function tryUseAiText(
   );
 
   if (selectedText) {
-    const text = formatNotificationTextWithName(
-      selectedText.text,
-      userName,
-      userGender
-    );
+    const text = formatNotificationText(selectedText.text, userGender);
     state.usedAiIndices.add(selectedText.index);
     const textHash = hashNotificationText(selectedText.text);
     state.usedAiHashes.add(textHash);
@@ -245,13 +238,12 @@ export function pickTextForSlot(
     isCustomEntity,
     templateTexts,
     aiTexts,
-    userName,
     userGender,
   } = params;
 
   const selectedTemplateText =
     templateTexts.length > 0
-      ? selectTemplateText(templateTexts, state, userName, userGender)
+      ? selectTemplateText(templateTexts, state, userGender)
       : null;
   const templateText = selectedTemplateText ? selectedTemplateText.text : null;
 
@@ -261,7 +253,6 @@ export function pickTextForSlot(
         aiTexts,
         slotIndex,
         state,
-        userName,
         userGender,
         isCustomEntity ? 'AI mode (custom entity)' : 'AI mode (template entity)'
       );

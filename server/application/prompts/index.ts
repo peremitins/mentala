@@ -580,6 +580,10 @@ export function buildWelcomePrompt(options: {
   user_locale?: string;
   user_name?: string;
   user_gender?: string;
+  greetingName?: string | null;
+  includeNameValidationPrompt?: boolean;
+  openingMode?: 'greeting' | 'alternative';
+  openingLine?: string;
   welcomePromptContent?: string;
   entryContext?: ChatEntryContext;
 }): string {
@@ -590,12 +594,22 @@ export function buildWelcomePrompt(options: {
     ? buildEntryContextDescription(options.entryContext)
     : '';
 
+  const nameInstruction =
+    options.includeNameValidationPrompt && options.greetingName
+      ? `\n\nВАЖНО: В первом предложении приветствия используй обращение по имени «${options.greetingName}». Используй только это имя, без фамилии и без выдумок.`
+      : '';
+  const openingInstruction =
+    options.openingMode === 'alternative' && options.openingLine
+      ? `\n\nВАЖНО: Сегодня приветствие не нужно. Начни сообщение с фразы: «${options.openingLine}». Не используй слова приветствия (привет, здравствуй, доброе утро/день/вечер).`
+      : '';
+
   if (options.welcomePromptContent) {
     let prompt = options.welcomePromptContent;
 
     prompt = prompt.replace(/{{user_name}}/g, options.user_name || '');
     prompt = prompt.replace(/{{user_gender}}/g, options.user_gender || '');
     prompt = prompt.replace(/{{user_locale}}/g, options.user_locale || '');
+    prompt = prompt.replace(/{{greeting_name}}/g, options.greetingName || '');
     prompt = prompt.replace(/{{lang}}/g, lang);
 
     if (!isFirst && sessionMemoryText) {
@@ -606,7 +620,8 @@ export function buildWelcomePrompt(options: {
       prompt +
       '\n\nВАЖНО: Не утверждай, что вы уже обсуждали конкретно эту тему; если контекст неочевиден - формулируй нейтрально. Твое сообщение будет ПЕРВЫМ в диалоге. Сгенерируй: приветствие (2-3 предложения) + 1 конкретная опора (выбор/инсайт/рамка) + 1 открытый вопрос.';
 
-    return contextNote ? `${contextNote}\n\n${prompt}` : prompt;
+    const fullPrompt = `${prompt}${nameInstruction}${openingInstruction}`;
+    return contextNote ? `${contextNote}\n\n${fullPrompt}` : fullPrompt;
   }
 
   const templates = {
@@ -634,9 +649,21 @@ export function buildWelcomePrompt(options: {
   const template = isFirst ? templates.first : templates.repeat;
   let prompt = template;
 
+  if (options.openingMode === 'alternative') {
+    prompt = prompt.replace(
+      'Сгенерируй приветствие (2-3 предложения):',
+      'Сгенерируй стартовое сообщение без приветствия (2-3 предложения):'
+    );
+    prompt = prompt.replace(
+      'Сгенерируй приветствие (2-3 предложения), которое:',
+      'Сгенерируй стартовое сообщение без приветствия (2-3 предложения), которое:'
+    );
+  }
+
   prompt = prompt.replace(/{{user_name}}/g, options.user_name || '');
   prompt = prompt.replace(/{{user_gender}}/g, options.user_gender || '');
   prompt = prompt.replace(/{{user_locale}}/g, options.user_locale || '');
+  prompt = prompt.replace(/{{greeting_name}}/g, options.greetingName || '');
   prompt = prompt.replace(/{{lang}}/g, lang);
 
   if (!isFirst && sessionMemoryText) {
@@ -648,7 +675,8 @@ export function buildWelcomePrompt(options: {
     );
   }
 
-  return contextNote ? `${contextNote}\n\n${prompt}` : prompt;
+  const fullPrompt = `${prompt}${nameInstruction}${openingInstruction}`;
+  return contextNote ? `${contextNote}\n\n${fullPrompt}` : fullPrompt;
 }
 
 export function buildSuggestedChipsUserPrompt(params: {

@@ -1211,12 +1211,11 @@ export async function generateNotificationTexts(
     (userPrefs?.addressing as Addressing) || 'informal';
 
   const [userProfile] = await db
-    .select({ name: users.name, gender: users.gender })
+    .select({ gender: users.gender })
     .from(users)
     .where(eq(users.id, params.userId))
     .limit(1);
 
-  const userName = userProfile?.name ? String(userProfile.name).trim() : null;
   const userGender =
     userProfile?.gender === 'male' || userProfile?.gender === 'female'
       ? userProfile.gender
@@ -1336,7 +1335,6 @@ export async function generateNotificationTexts(
     description: entityDescription,
     tone,
     addressing,
-    userName,
     userGender,
     directness: params.directness,
     subtype: params.subtype,
@@ -1535,7 +1533,6 @@ function buildNotificationSystemPrompt(params: {
   description?: string | null;
   tone: Tone;
   addressing: Addressing;
-  userName?: string | null;
   userGender?: 'male' | 'female' | null;
   directness: Directness;
   subtype?: HabitSubtype | null;
@@ -1729,7 +1726,6 @@ ${params.description ? '- Используй описание как основ�
 Контекст:
 - Тип: ${params.kind === 'habits' ? 'привычка' : 'тема поддержки'}
 - Название (используй только как внутренний контекст): ${params.entityName}${descriptionContext}${customPromptContext}${userPriorityContext}
-- Имя пользователя: ${params.userName || 'не указано'}
 - Пол пользователя: ${genderLabel || 'не указан'}
 
 Стиль:
@@ -1744,8 +1740,6 @@ ${params.subtype ? `- Фокус уведомления: ${subtypeMap[params.sub
 
 Требования:
 - Каждый текст должен быть примерно 140-${params.maxBodyLength} символов (сервер добавит префикс "${params.emojiPrefix}" к каждому тексту)
-- Можно использовать плейсхолдер {name} для имени пользователя
-- Если имя не указано, не используй плейсхолдер {name}
 - Если пол не указан, используй нейтральные конструкции без рода
 - Запрещены формы с альтернативами в скобках (например, "сделал / сделала")
 - Тексты должны быть разнообразными и достаточно подробными
@@ -1760,6 +1754,7 @@ ${
 ${subtypeInstructions}
 
 ВАЖНО - запрещено использовать:
+- НЕ используй имя пользователя или обращения по имени
 - НЕ используй приветствия с упоминанием времени дня (например: "Доброе утро", "Добрый день", "Добрый вечер", "Спокойной ночи"), ЕСЛИ в описании нет явных инструкций об обращении
 - НЕ создавай тексты с вопросами к пользователю (например: "Что ты хочешь обсудить?", "Как я могу помочь?", "О чем ты хочешь спросить?")
 - НЕ предлагай обсудить что-либо - уведомления должны быть информативными, напоминающими или мотивирующими, но не призывающими к диалогу
@@ -2108,12 +2103,11 @@ export async function refillTextPool(
       (userPrefs?.addressing as Addressing) || 'informal';
 
     const [userProfile] = await db
-      .select({ name: users.name, gender: users.gender })
+      .select({ gender: users.gender })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);
 
-    const userName = userProfile?.name ? String(userProfile.name).trim() : null;
     const userGender =
       userProfile?.gender === 'male' || userProfile?.gender === 'female'
         ? userProfile.gender
@@ -2134,7 +2128,6 @@ export async function refillTextPool(
       description: entityDescription,
       tone,
       addressing,
-      userName,
       userGender,
       directness,
       subtype,

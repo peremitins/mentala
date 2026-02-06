@@ -267,6 +267,13 @@
       "when": 1770204087173,
       "tag": "0041_needy_black_tarantula",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1770372914613,
+      "tag": "0042_loving_madrox",
+      "breakpoints": true
     }
   ]
 }

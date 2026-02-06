@@ -1279,11 +1279,10 @@ export async function orchestrateAllSlotsForUser(
 
     const addressing = globalPrefs?.addressing || 'informal';
     const [userRecord] = await db
-      .select({ name: users.name, gender: users.gender })
+      .select({ gender: users.gender })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);
-    const userName = userRecord?.name ?? null;
     const userGender =
       userRecord?.gender === 'male' || userRecord?.gender === 'female'
         ? userRecord.gender
@@ -1580,7 +1579,6 @@ export async function orchestrateAllSlotsForUser(
             imageTag: t.imageTag ?? null,
           })),
           aiTexts: aiTextsAvailable ? aiTexts : null, // Передаём null если AI-тексты недоступны
-          userName,
           userGender,
         };
 

@@ -22,6 +22,7 @@ export interface LlmProviderPort {
       user_locale?: string;
       user_name?: string;
       user_gender?: string;
+      user_timezone?: string;
       userId?: number | string;
       isFirstSession?: boolean;
       userPrompt?: string;
@@ -44,6 +45,7 @@ export interface LlmProviderPort {
       user_locale?: string;
       user_name?: string;
       user_gender?: string;
+      user_timezone?: string;
       userId?: number | string;
       isFirstSession?: boolean;
       userPrompt?: string;

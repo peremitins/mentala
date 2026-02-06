@@ -357,6 +357,12 @@ export const chatSettings = pgTable('chat_settings', {
     .notNull()
     .default(true),
   enableSummary: boolean('enable_summary').notNull().default(true),
+  lastGreetingAt: timestamp('last_greeting_at', {
+    withTimezone: true,
+  }),
+  lastNameGreetingAt: timestamp('last_name_greeting_at', {
+    withTimezone: true,
+  }),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull(),
