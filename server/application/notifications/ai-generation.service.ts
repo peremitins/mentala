@@ -85,7 +85,7 @@ type ImageTagOverride = {
 const IMAGE_TAG_POLICY_OVERRIDES: ImageTagOverride[] = [
   {
     // Можно один ключ в key или несколько в keys
-    keys: ['junk_food'],
+    keys: ['nutrition'],
     // Ограничить только привычки (можно убрать — применится к habits+therapy)
     kind: 'habits',
     // Список разрешённых тегов
@@ -1576,6 +1576,7 @@ function buildNotificationSystemPrompt(params: {
   const imageTagList = params.imageTagPolicy.allowedTags.join(', ');
   const safeTagList = SAFE_IMAGE_TAGS.join(', ');
   const isWaterTopic = params.entityKey.trim().toLowerCase() === 'water';
+  const isNutritionTopic = params.entityKey.trim().toLowerCase() === 'nutrition';
 
   const imageTagRules = [
     '- imageTag должен соответствовать смыслу текста.',
@@ -1620,7 +1621,10 @@ function buildNotificationSystemPrompt(params: {
 
   if (params.kind === 'habits' && params.subtype) {
     // Базовые инструкции
-    const habitContext = `Все тексты должны быть релевантны этой привычке. Используй смысл названия только как подсказку для понимания поведения, но НЕ копируй название дословно в тексты, особенно если оно звучит как кодовое слово или шутка.`;
+    const nutritionBalanceNote = isNutritionTopic
+      ? '\n- Чередуй пользу здорового питания и вред от вредной пищи.\n- Избегай стыда и обвинений, держи нейтральную поддержку.'
+      : '';
+    const habitContext = `Все тексты должны быть релевантны этой привычке. Используй смысл названия только как подсказку для понимания поведения, но НЕ копируй название дословно в тексты, особенно если оно звучит как кодовое слово или шутка.${nutritionBalanceNote}`;
 
     switch (params.subtype) {
       case 'reminder':
