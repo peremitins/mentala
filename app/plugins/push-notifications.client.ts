@@ -1,11 +1,170 @@
 import { Capacitor } from '@capacitor/core';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { LocalNotifications } from '@capacitor/local-notifications';
+import type {
+  InteractionAction,
+  NotificationNavigation,
+} from '@/shared/dto/notifications';
 
 export default defineNuxtPlugin((nuxtApp) => {
   // Работаем только на мобильных платформах
   const platform = Capacitor.getPlatform();
   if (platform === 'web') return;
+
+  const NON_NAV_ACTIONS = new Set(['yes', 'no', 'later']);
+
+  function isTapAction(actionId?: string | null): boolean {
+    // Считаем тапом все, что не является action-кнопкой snooze/yes/no/later.
+    if (!actionId) return true;
+    if (NON_NAV_ACTIONS.has(actionId)) return false;
+    if (actionId.startsWith('snooze:')) return false;
+    return true;
+  }
+
+  function normalizeNavigation(raw: unknown): NotificationNavigation | null {
+    if (!raw || typeof raw !== 'object') return null;
+    const type =
+      typeof (raw as { type?: unknown }).type === 'string'
+        ? String((raw as { type?: unknown }).type).trim()
+        : '';
+    if (!type) return null;
+
+    if (type === 'home') {
+      return { type: 'home' };
+    }
+
+    if (type === 'meditation_track') {
+      const trackId =
+        typeof (raw as { trackId?: unknown }).trackId === 'string'
+          ? String((raw as { trackId?: unknown }).trackId).trim()
+          : '';
+      return trackId ? { type: 'meditation_track', trackId } : null;
+    }
+
+    if (type === 'breath_practices') {
+      return { type: 'breath_practices' };
+    }
+
+    if (type === 'breath_practice') {
+      const slug =
+        typeof (raw as { slug?: unknown }).slug === 'string'
+          ? String((raw as { slug?: unknown }).slug).trim()
+          : '';
+      return slug ? { type: 'breath_practice', slug } : null;
+    }
+
+    return null;
+  }
+
+  function resolveNavigation(
+    data?: Record<string, any>
+  ): NotificationNavigation | null {
+    if (!data) return null;
+
+    if (typeof data.navigation === 'string' && data.navigation.trim()) {
+      try {
+        const parsed = JSON.parse(data.navigation) as unknown;
+        const normalized = normalizeNavigation(parsed);
+        if (normalized) return normalized;
+      } catch {
+        // Ошибки парсинга не блокируют fallback.
+      }
+    }
+
+    if (data.navigation && typeof data.navigation === 'object') {
+      const normalized = normalizeNavigation(data.navigation);
+      if (normalized) return normalized;
+    }
+
+    const navType =
+      typeof data.navType === 'string' ? data.navType.trim() : '';
+    const navId = typeof data.navId === 'string' ? data.navId.trim() : '';
+    if (!navType) return null;
+
+    if (navType === 'home') {
+      return { type: 'home' };
+    }
+
+    if (navType === 'meditation_track' && navId) {
+      return { type: 'meditation_track', trackId: navId };
+    }
+
+    if (navType === 'breath_practices') {
+      return { type: 'breath_practices' };
+    }
+
+    if (navType === 'breath_practice' && navId) {
+      return { type: 'breath_practice', slug: navId };
+    }
+
+    return null;
+  }
+
+  function buildPathFromNavigation(
+    navigation: NotificationNavigation
+  ): string {
+    // Приводим navigation к пути внутри приложения.
+    switch (navigation.type) {
+      case 'meditation_track':
+        return `/meditations?trackId=${encodeURIComponent(
+          navigation.trackId
+        )}`;
+      case 'breath_practice':
+        return `/breath-practices/${encodeURIComponent(
+          navigation.slug
+        )}${navigation.slug === '4-7-8' ? '?group=popular' : ''}`;
+      case 'breath_practices':
+        return '/breath-practices';
+      default:
+        return '/';
+    }
+  }
+
+  function normalizeTargetPath(value: string): string {
+    const trimmed = value.trim();
+    if (!trimmed) return '/';
+
+    let path = trimmed;
+    if (/^https?:\/\//i.test(trimmed)) {
+      try {
+        const parsed = new URL(trimmed);
+        path = `${parsed.pathname}${parsed.search}`;
+      } catch {
+        path = trimmed;
+      }
+    }
+
+    // Убираем лишний "/" перед "?" (например: /meditations/?trackId=...).
+    path = path.replace('/?', '?');
+
+    if (!path.startsWith('/')) {
+      path = `/${path}`;
+    }
+
+    return path || '/';
+  }
+
+  async function navigateToTarget(targetPath: string) {
+    try {
+      const normalized = normalizeTargetPath(targetPath);
+      await nuxtApp.$router.isReady();
+      if (nuxtApp.$router.currentRoute.value.fullPath === normalized) {
+        return;
+      }
+      await nuxtApp.$router.push(normalized);
+    } catch (error) {
+      console.error('[PushPlugin] Failed to navigate:', error);
+    }
+  }
+
+  function resolveNavigationId(
+    navigation: NotificationNavigation | null
+  ): string | null {
+    if (!navigation) return null;
+    if ('trackId' in navigation) return navigation.trackId;
+    if ('slug' in navigation) return navigation.slug;
+    return null;
+  }
 
   // TODO: Раскомментировать когда Firebase будет настроен
   // TEMPORARY: Полностью отключаем push уведомления до настройки Firebase
@@ -115,25 +274,36 @@ export default defineNuxtPlugin((nuxtApp) => {
         );
 
         const { notification } = action;
-        const data = notification.data;
+        const data = notification.data as Record<string, any> | undefined;
+        // На разных платформах данные могут оказаться в root, а не в data.
+        // Собираем единый payload с приоритетом data.
+        const payload = {
+          ...(notification as Record<string, any>),
+          ...(data ?? {}),
+        } as Record<string, any>;
+        const actionId = action.actionId || '';
+        const isTap = isTapAction(actionId);
+        const navigation = resolveNavigation(payload);
 
         // Трекинг взаимодействия
-        if (data?.slotId) {
-          let actionType: 'yes' | 'no' | 'later' | 'dismissed' = 'dismissed';
+        if (payload?.slotId) {
+          let actionType: InteractionAction = 'dismissed';
 
           // Определяем тип действия
-          if (action.actionId === 'yes') {
+          if (isTap) {
+            actionType = 'open';
+          } else if (actionId === 'yes') {
             actionType = 'yes';
-          } else if (action.actionId === 'no') {
+          } else if (actionId === 'no') {
             actionType = 'no';
           } else if (
-            action.actionId === 'later' ||
-            action.actionId.startsWith('snooze:')
+            actionId === 'later' ||
+            actionId.startsWith('snooze:')
           ) {
             actionType = 'later';
 
             // Если это snooze — отправляем запрос на отложение
-            const duration = action.actionId.replace('snooze:', '') as
+            const duration = actionId.replace('snooze:', '') as
               | '15m'
               | '1h'
               | '4h'
@@ -143,9 +313,9 @@ export default defineNuxtPlugin((nuxtApp) => {
               await nuxtApp.$api('/api/notifications/snooze', {
                 method: 'POST',
                 body: {
-                  kind: data.kind || 'therapy',
+                  kind: payload.kind || 'therapy',
                   duration,
-                  entityKey: data.entityKey || null,
+                  entityKey: payload.entityKey || null,
                 },
               });
               console.log('[PushPlugin] Notification snoozed:', duration);
@@ -160,12 +330,14 @@ export default defineNuxtPlugin((nuxtApp) => {
             await nuxtApp.$api('/api/notifications/interaction', {
               method: 'POST',
               body: {
-                slotId: data.slotId,
+                slotId: payload.slotId,
                 action: actionType,
                 at: new Date().toISOString(),
                 meta: {
                   platform,
-                  actionId: action.actionId,
+                  actionId,
+                  navigationType: navigation?.type ?? null,
+                  navigationId: resolveNavigationId(navigation),
                 },
               },
             });
@@ -175,13 +347,17 @@ export default defineNuxtPlugin((nuxtApp) => {
           }
         }
 
-        // Deep link навигация
-        if (data?.deepLink) {
-          try {
-            await navigateTo(data.deepLink);
-          } catch (error) {
-            console.error('[PushPlugin] Failed to navigate:', error);
-          }
+        // Навигация выполняется только при системном тапе.
+        if (isTap) {
+          const deepLink =
+            typeof payload?.deepLink === 'string' && payload.deepLink.trim()
+              ? payload.deepLink.trim()
+              : null;
+          const targetPath = navigation
+            ? buildPathFromNavigation(navigation)
+            : deepLink || '/';
+
+          await navigateToTarget(targetPath);
         }
       }
     );

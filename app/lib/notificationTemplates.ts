@@ -13,6 +13,7 @@ import type {
   NotificationKind,
   NotificationSubtype,
   NotificationImageTag,
+  NotificationActionHint,
 } from '@/shared/dto/notifications';
 
 // Тип Directness с поддержкой 'universal' (используется только в шаблонах)
@@ -32,6 +33,7 @@ export interface NotificationTemplate {
   kind: NotificationKind;
   entityKey: EntityKey; // Универсальный идентификатор (заменяет type, habitKey, topic)
   directness: Directness[];
+  actionHint?: NotificationActionHint; // Подсказка навигации (по умолчанию none)
   // Для привычек
   intent?: HabitIntent; // build | quit
   // Для всех видов (habits и therapy)

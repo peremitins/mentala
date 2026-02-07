@@ -721,6 +721,7 @@ async function addNewText() {
     intent: props.kind === 'habits' ? entityIntent.value : null,
     subtype: selectedSubtype.value,
     imageTag: null,
+    actionHint: 'none',
     directness: selectedDirectness.value,
     addressing: 'universal', // Временное значение, на бэкенде будет заменено на значение из userPreferences
     locale: 'ru',

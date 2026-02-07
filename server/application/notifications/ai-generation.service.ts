@@ -27,6 +27,7 @@ import type {
   Directness,
   HabitSubtype,
   NotificationSubtype,
+  NotificationActionHint,
 } from '@/shared/dto/notifications';
 import { MAX_NOTIFICATION_TEXT_LENGTH } from '@/shared/dto/notifications';
 
@@ -136,6 +137,26 @@ const FACT_MARKERS = [
   /статистик/iu,
   /процент/iu,
 ];
+// Маркеры для эвристического определения actionHint по тексту.
+const MEDITATION_HINT_MARKERS = [
+  /медитац/iu,
+  /медит/iu,
+  /осознанн/iu,
+  /mindful/iu,
+  /meditat/iu,
+];
+const BREATHING_HINT_MARKERS = [
+  /дыхател/iu,
+  /дыхани/iu,
+  /4\s*[-–—‑]?\s*7\s*[-–—‑]?\s*8/iu,
+  /4\s*[-–—‑]?\s*4\s*[-–—‑]?\s*4\s*[-–—‑]?\s*4/iu,
+  /коробочн/iu,
+  /квадратн.*дых/iu,
+  /box\s*breath/iu,
+  /square\s*breath/iu,
+  /пранаям/iu,
+  /pranayama/iu,
+];
 type ImageTag =
   | 'harm_organs'
   | 'harm_appearance'
@@ -150,6 +171,7 @@ type NormalizedAiItem = {
   text: string;
   imageTag: ImageTag | null;
   subtype: NotificationSubtype | null;
+  actionHint: NotificationActionHint;
   subtypeRestored: boolean;
 };
 
@@ -178,6 +200,7 @@ export interface AiNotificationText {
   text: string;
   imageTag: string | null;
   subtype: NotificationSubtype | null;
+  actionHint: NotificationActionHint;
 }
 
 interface GenerationResult {
@@ -500,6 +523,58 @@ function normalizeMixedSubtype(value: unknown): MixedElementSubtype | null {
     : null;
 }
 
+// Нормализуем actionHint, чтобы выдерживать разные форматы от моделей.
+function normalizeActionHint(value: unknown): NotificationActionHint {
+  if (typeof value !== 'string') return 'none';
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_')
+    .replace(/-+/g, '_');
+  if (!normalized) return 'none';
+  if (
+    normalized === 'breathing' ||
+    normalized === 'breath' ||
+    normalized === 'breath_practice' ||
+    normalized === 'breath_practices'
+  ) {
+    return 'breathing';
+  }
+  if (
+    normalized === 'meditation' ||
+    normalized === 'meditate' ||
+    normalized === 'meditations'
+  ) {
+    return 'meditation';
+  }
+  return 'none';
+}
+
+function inferActionHintFromText(
+  text: string,
+  imageTag: ImageTag | null
+): NotificationActionHint {
+  // Бэкап-эвристика: если actionHint не пришёл от модели, определяем по смысловым маркерам.
+  const raw = stripEmojiPrefix(text).toLowerCase();
+  const hasMeditation = MEDITATION_HINT_MARKERS.some((pattern) =>
+    pattern.test(raw)
+  );
+  const hasBreathing = BREATHING_HINT_MARKERS.some((pattern) =>
+    pattern.test(raw)
+  );
+
+  // Если есть явные дыхательные маркеры без медитации — ведём в дыхательные.
+  if (hasBreathing && !hasMeditation) {
+    return 'breathing';
+  }
+
+  if (hasMeditation || imageTag === 'meditation') {
+    return 'meditation';
+  }
+
+  return 'none';
+}
+
 function inferSubtypeFromText(text: string): MixedElementSubtype {
   const raw = stripEmojiPrefix(text);
   if (SUPPORT_MARKERS.some((pattern) => pattern.test(raw))) {
@@ -620,6 +695,7 @@ export function normalizeNotificationItems(
     let rawText: string | null = null;
     let rawImageTag: unknown = null;
     let rawSubtype: unknown = null;
+    let rawActionHint: unknown = null;
 
     if (typeof item === 'string') {
       rawText = item;
@@ -630,6 +706,9 @@ export function normalizeNotificationItems(
           : null;
       rawImageTag = (item as { imageTag?: unknown }).imageTag;
       rawSubtype = (item as { subtype?: unknown }).subtype;
+      rawActionHint =
+        (item as { actionHint?: unknown }).actionHint ??
+        (item as { action_hint?: unknown }).action_hint;
     }
 
     if (!rawText) continue;
@@ -652,6 +731,7 @@ export function normalizeNotificationItems(
 
     let imageTag = normalizeImageTag(rawImageTag);
     const subtype = options.isMixed ? normalizeMixedSubtype(rawSubtype) : null;
+    let actionHint = normalizeActionHint(rawActionHint);
 
     const allowedTags = options.allowedImageTags ?? null;
     const hasFallbackOverride = Object.prototype.hasOwnProperty.call(
@@ -676,10 +756,15 @@ export function normalizeNotificationItems(
       }
     }
 
+    if (actionHint === 'none') {
+      actionHint = inferActionHintFromText(baseText, imageTag);
+    }
+
     normalized.push({
       text,
       imageTag,
       subtype: subtype ?? null,
+      actionHint,
       subtypeRestored: false,
     });
   }
@@ -1771,6 +1856,11 @@ ${subtypeInstructions}
 Каждый объект items содержит поля:
 - text (строка)
 - imageTag (строка из списка: ${imageTagList} или null)
+- actionHint (строка: none | meditation | breathing)
+- actionHint = meditation, если текст упоминает медитацию/медитативную практику (даже без прямого призыва)
+- actionHint = breathing, если текст упоминает дыхательные практики или дыхательные техники (например: дыхание, 4-7-8, 4-4-4-4, квадратное/коробочное дыхание)
+- Если imageTag = meditation, actionHint ОБЯЗАТЕЛЬНО = meditation
+- actionHint = none во всех остальных случаях (не используй none, если есть упоминание медитации или дыхания)
 ${imageTagRules}
 ${
   params.subtype === 'mixed'
@@ -1784,16 +1874,16 @@ ${
 Пример:
 {
   "items": [
-    {"text": "Текст 1", "imageTag": "nature"${
+    {"text": "Короткая медитация поможет перезагрузиться.", "imageTag": "meditation"${
       params.subtype === 'mixed'
         ? ', "subtype": "motivational"'
         : ', "subtype": null'
-    }},
-    {"text": "Текст 2", "imageTag": "activity"${
+    }, "actionHint": "meditation"},
+    {"text": "Сделай 3 цикла дыхания 4-7-8, чтобы быстро успокоиться.", "imageTag": "activity"${
       params.subtype === 'mixed'
         ? ', "subtype": "reminder"'
         : ', "subtype": null'
-    }}
+    }, "actionHint": "breathing"}
   ]
 }`;
 }

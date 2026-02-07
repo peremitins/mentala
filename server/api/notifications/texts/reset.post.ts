@@ -142,6 +142,7 @@ export default defineEventHandler(
               intent: preset.intent,
               subtype: preset.subtype,
               imageTag: preset.imageTag ?? null,
+              actionHint: preset.actionHint ?? null,
               directness: preset.directness,
               addressing: preset.addressing,
               locale: preset.locale,

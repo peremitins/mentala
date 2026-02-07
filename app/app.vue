@@ -80,10 +80,17 @@ const showAurora = computed(() => {
 const auroraOpacity = computed(() => uiSettings.auroraOpacity);
 
 onMounted(async () => {
-  await Promise.all([sceneSettings.ensureLoaded(), uiSettings.ensureLoaded()]);
+  await Promise.all([
+    sceneSettings.ensureLoaded(),
+    uiSettings.ensureLoaded(auth.user?.id ?? null),
+  ]);
 });
 
-watch([() => auth.user?.id, () => auth.user?.sceneSettings], async () => {
+watch(() => auth.user?.id, async (userId) => {
+  await uiSettings.loadFromStorage(userId ?? null);
+});
+
+watch(() => auth.user?.sceneSettings, async () => {
   if (!auth.user) return;
   // Следим за сменой пользователя и настройками сцены после авторизации.
   await sceneSettings.loadFromUser();

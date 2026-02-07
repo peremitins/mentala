@@ -38,7 +38,14 @@ export default defineEventHandler(
 
     if (
       !body.action ||
-      !['yes', 'no', 'later', 'dismissed', 'unanswered'].includes(body.action)
+      ![
+        'yes',
+        'no',
+        'later',
+        'open',
+        'dismissed',
+        'unanswered',
+      ].includes(body.action)
     ) {
       throw createError({
         statusCode: 400,
@@ -93,6 +100,7 @@ export default defineEventHandler(
         | 'yes'
         | 'no'
         | 'later'
+        | 'open'
         | 'dismissed'
         | 'unanswered',
       actionAt: created.actionAt?.toISOString() ?? new Date().toISOString(),

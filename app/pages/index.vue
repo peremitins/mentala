@@ -11,7 +11,7 @@
       </template>
     </PageHeader>
 
-    <AvatarVoiceControls />
+    <AvatarVoiceControls v-if="!showWelcomeScreen" />
 
     <!-- Основной контент -->
     <div

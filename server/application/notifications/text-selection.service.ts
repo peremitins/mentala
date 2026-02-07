@@ -5,7 +5,10 @@
 
 import { hashNotificationText } from './ai-generation.service';
 import { formatNotificationText } from '@/shared/utils/notificationText';
-import type { NotificationSubtype } from '@/shared/dto/notifications';
+import type {
+  NotificationSubtype,
+  NotificationActionHint,
+} from '@/shared/dto/notifications';
 import type { AiNotificationText } from './ai-generation.service';
 
 /**
@@ -26,7 +29,11 @@ export interface PickTextParams {
   slotIndex: number;
   textSource: 'templates' | 'ai';
   isCustomEntity: boolean;
-  templateTexts: { text: string; imageTag?: string | null }[];
+  templateTexts: {
+    text: string;
+    imageTag?: string | null;
+    actionHint?: NotificationActionHint | null;
+  }[];
   aiTexts: Array<string | AiNotificationText> | null;
   userGender: 'male' | 'female' | null;
 }
@@ -41,6 +48,7 @@ export interface PickTextResult {
   templateIndex: number | null;
   imageTag: string | null;
   subtype: NotificationSubtype | null;
+  actionHint: NotificationActionHint;
 }
 
 const DEBUG_NOTIFICATIONS = process.env.DEBUG_NOTIFICATIONS === 'true';
@@ -54,7 +62,13 @@ function selectUnusedAiText(
   usedIndices: Set<number>,
   usedHashes: Set<string>,
   usedTexts: Set<string>
-): { text: string; index: number; imageTag: string | null; subtype: NotificationSubtype | null } | null {
+): {
+  text: string;
+  index: number;
+  imageTag: string | null;
+  subtype: NotificationSubtype | null;
+  actionHint: NotificationActionHint;
+} | null {
   // Получаем доступные индексы (не использованные по индексу)
   const availableIndices = aiTexts
     .map((_, index) => index)
@@ -85,6 +99,8 @@ function selectUnusedAiText(
         index: index,
         imageTag: typeof entry === 'string' ? null : entry.imageTag ?? null,
         subtype: typeof entry === 'string' ? null : entry.subtype ?? null,
+        actionHint:
+          typeof entry === 'string' ? 'none' : entry.actionHint ?? 'none',
       };
     }
   }
@@ -103,7 +119,7 @@ function selectUnusedAiText(
  * При сбросе очищаются только шаблонные тексты из usedTexts, AI-тексты остаются
  */
 function selectTemplateText(
-  templateTexts: { id: string; text: string }[],
+  templateTexts: { text: string }[],
   state: TextSelectionState,
   userGender: 'male' | 'female' | null
 ): { text: string; index: number } | null {
@@ -213,6 +229,7 @@ function tryUseAiText(
       templateIndex: null,
       imageTag: selectedText.imageTag,
       subtype: selectedText.subtype ?? null,
+      actionHint: selectedText.actionHint ?? 'none',
     };
   } else {
     console.warn(
@@ -289,6 +306,8 @@ export function pickTextForSlot(
       templateIndex: selectedTemplateText.index,
       imageTag: templateTexts[selectedTemplateText.index].imageTag ?? null,
       subtype: null,
+      actionHint:
+        templateTexts[selectedTemplateText.index].actionHint ?? 'none',
     };
   }
 

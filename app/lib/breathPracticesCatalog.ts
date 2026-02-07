@@ -66,9 +66,7 @@ function buildSteps(phases: BreathPhase[]): string[] {
 }
 
 function buildPattern(phases: BreathPhase[]): string {
-  return phases
-    .map((phase) => `${phase.label} ${phase.seconds}`)
-    .join(' → ');
+  return phases.map((phase) => `${phase.label} ${phase.seconds}`).join(' → ');
 }
 
 function buildPractice(
@@ -135,8 +133,7 @@ export const BREATH_PRACTICES: readonly BreathPractice[] = [
     slug: 'long-exhale-4-6',
     title: '4-6',
     goal: 'Снятие тревоги / успокоение',
-    description:
-      'Простой анти-стресс, легко делать на ходу, без задержек.',
+    description: 'Простой анти-стресс, легко делать на ходу, без задержек.',
     phases: [createPhase('inhale', 4), createPhase('exhale', 6)],
     emoji: '💨',
     tags: ['popular', 'anxiety', 'sleep'],
@@ -156,8 +153,7 @@ export const BREATH_PRACTICES: readonly BreathPractice[] = [
     slug: 'diaphragmatic',
     title: '4-4',
     goal: 'База / успокоение',
-    description:
-      'Мягкое дыхание животом для стабилизации и расслабления.',
+    description: 'Мягкое дыхание животом для стабилизации и расслабления.',
     phases: [createPhase('inhale', 4), createPhase('exhale', 4)],
     pattern: 'Вдох 4 → выдох 4',
     emoji: '🫁',
@@ -180,7 +176,7 @@ export const BREATH_PRACTICES: readonly BreathPractice[] = [
   }),
   buildPractice({
     slug: 'physiological-sigh',
-    title: 'Физиологический вздох',
+    title: 'Успокоиться',
     goal: 'Быстрое снижение стресса',
     description:
       'Два коротких вдоха подряд и длинный выдох. Часто используют как быстрый способ переключиться и успокоиться.',

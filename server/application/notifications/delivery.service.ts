@@ -193,6 +193,17 @@ export async function sendFCMNotification(
       deepLink: payload.deepLink || '',
     };
 
+    if (payload.navigation) {
+      // Навигация хранится как JSON-строка + дублируется в плоские поля для диагностики.
+      dataPayload.navigation = JSON.stringify(payload.navigation);
+      dataPayload.navType = payload.navigation.type;
+      if ('trackId' in payload.navigation) {
+        dataPayload.navId = payload.navigation.trackId;
+      } else if ('slug' in payload.navigation) {
+        dataPayload.navId = payload.navigation.slug;
+      }
+    }
+
     // Добавляем дополнительные данные из payload.data
     // Фильтруем undefined значения, чтобы не отправлять ключи с "undefined"
     if (payload.data) {
@@ -219,10 +230,20 @@ export async function sendFCMNotification(
     }
 
     // Подготовка Android notification
+    const androidClickAction =
+      process.env.FCM_ANDROID_CLICK_ACTION?.trim() ||
+      'MENTALA_NOTIFICATION_CLICK';
+    const enableAndroidClickAction =
+      (process.env.NODE_ENV === 'production' ||
+        process.env.FCM_ANDROID_CLICK_ACTION_ENABLED === 'true') &&
+      androidClickAction.length > 0;
+
     const androidNotification: admin.messaging.AndroidNotification = {
       sound: 'default',
       channelId: 'mentai_high',
-      clickAction: 'FLUTTER_NOTIFICATION_CLICK',
+      // clickAction включаем только если явно задано в env,
+      // иначе оставляем дефолтное поведение Android (открытие приложения).
+      ...(enableAndroidClickAction ? { clickAction: androidClickAction } : {}),
       // Уникальный tag предотвращает замену уведомлений внутри группы Android
       ...(payload.data?.slotId
         ? { tag: `slot-${String(payload.data.slotId)}` }

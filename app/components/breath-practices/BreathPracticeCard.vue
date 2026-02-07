@@ -1,6 +1,6 @@
 <template>
   <div
-    class="group relative flex w-[78vw] min-w-[240px] max-w-[240px] sm:w-72 flex-col overflow-hidden rounded-xl"
+    class="group relative flex w-[78vw] min-w-[210px] max-w-[240px] sm:w-52 flex-col overflow-hidden rounded-xl text-left transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-primary-ui/60"
   >
     <button
       type="button"
@@ -12,7 +12,7 @@
         class="absolute inset-0 bg-gradient-to-t from-black/60 via-black/35 to-black/5"
       />
 
-      <div class="relative z-10 flex h-full flex-col gap-2 p-3">
+      <div class="relative z-10 flex h-full flex-col gap-2 p-3 min-h-[120px]">
         <div class="flex items-start justify-between gap-2">
           <div class="space-y-1">
             <div class="flex items-center gap-2">
@@ -24,15 +24,15 @@
               </div>
             </div>
 
-            <p class="line-clamp-2 text-sm text-foreground/80">
+            <p class="line-clamp-3 text-sm text-foreground/80">
               {{ practice.description }}
             </p>
           </div>
         </div>
 
-        <div class="mt-auto flex flex-wrap gap-2 text-[9px]">
+        <!-- <div class="mt-auto flex flex-wrap gap-2 text-[9px]">
           {{ practice.pattern }}
-        </div>
+        </div> -->
       </div>
     </button>
 
