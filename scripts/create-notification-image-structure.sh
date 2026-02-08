@@ -25,7 +25,7 @@ HABITS_KEYS=(
   "meditation"
   "smoking"
   "sugar"
-  "junk_food"
+  "nutrition"
 )
 
 # Теги, допустимые внутри сущностных habits

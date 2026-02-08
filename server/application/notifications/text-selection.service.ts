@@ -4,8 +4,11 @@
  */
 
 import { hashNotificationText } from './ai-generation.service';
-import { formatNotificationTextWithName } from '@/shared/utils/notificationText';
-import type { NotificationSubtype } from '@/shared/dto/notifications';
+import { formatNotificationText } from '@/shared/utils/notificationText';
+import type {
+  NotificationSubtype,
+  NotificationActionHint,
+} from '@/shared/dto/notifications';
 import type { AiNotificationText } from './ai-generation.service';
 
 /**
@@ -26,9 +29,12 @@ export interface PickTextParams {
   slotIndex: number;
   textSource: 'templates' | 'ai';
   isCustomEntity: boolean;
-  templateTexts: { text: string; imageTag?: string | null }[];
+  templateTexts: {
+    text: string;
+    imageTag?: string | null;
+    actionHint?: NotificationActionHint | null;
+  }[];
   aiTexts: Array<string | AiNotificationText> | null;
-  userName: string | null;
   userGender: 'male' | 'female' | null;
 }
 
@@ -42,6 +48,7 @@ export interface PickTextResult {
   templateIndex: number | null;
   imageTag: string | null;
   subtype: NotificationSubtype | null;
+  actionHint: NotificationActionHint;
 }
 
 const DEBUG_NOTIFICATIONS = process.env.DEBUG_NOTIFICATIONS === 'true';
@@ -55,7 +62,13 @@ function selectUnusedAiText(
   usedIndices: Set<number>,
   usedHashes: Set<string>,
   usedTexts: Set<string>
-): { text: string; index: number; imageTag: string | null; subtype: NotificationSubtype | null } | null {
+): {
+  text: string;
+  index: number;
+  imageTag: string | null;
+  subtype: NotificationSubtype | null;
+  actionHint: NotificationActionHint;
+} | null {
   // Получаем доступные индексы (не использованные по индексу)
   const availableIndices = aiTexts
     .map((_, index) => index)
@@ -69,13 +82,13 @@ function selectUnusedAiText(
   const shuffled = [...availableIndices].sort(() => Math.random() - 0.5);
 
   // Ищем первый доступный текст, который не был использован по хешу
-  // Хеш вычисляется от исходного текста (rawText), чтобы имя пользователя не влияло на проверку дубликатов
+  // Хеш вычисляется от исходного текста (rawText), чтобы форматирование не влияло на проверку дубликатов
   for (const index of shuffled) {
     const entry = aiTexts[index];
     const rawText = typeof entry === 'string' ? entry : entry.text;
 
     // Вычисляем хеш от исходного текста для проверки дубликатов
-    // Это важно: имя пользователя - переменная часть, не должна влиять на проверку
+    // Это важно: форматирование не должно влиять на проверку
     const textHash = hashNotificationText(rawText);
 
     // Проверяем по хешу (основная защита - устойчив к форматированию)
@@ -86,6 +99,8 @@ function selectUnusedAiText(
         index: index,
         imageTag: typeof entry === 'string' ? null : entry.imageTag ?? null,
         subtype: typeof entry === 'string' ? null : entry.subtype ?? null,
+        actionHint:
+          typeof entry === 'string' ? 'none' : entry.actionHint ?? 'none',
       };
     }
   }
@@ -104,9 +119,8 @@ function selectUnusedAiText(
  * При сбросе очищаются только шаблонные тексты из usedTexts, AI-тексты остаются
  */
 function selectTemplateText(
-  templateTexts: { id: string; text: string }[],
+  templateTexts: { text: string }[],
   state: TextSelectionState,
-  userName: string | null,
   userGender: 'male' | 'female' | null
 ): { text: string; index: number } | null {
   if (templateTexts.length === 0) {
@@ -142,7 +156,7 @@ function selectTemplateText(
     const rawText = selectedText.text;
 
     return {
-      text: formatNotificationTextWithName(rawText, userName, userGender),
+      text: formatNotificationText(rawText, userGender),
       index: randomIndex,
     };
   }
@@ -151,7 +165,7 @@ function selectTemplateText(
   const shuffled = [...availableIndices].sort(() => Math.random() - 0.5);
 
   // Ищем первый доступный текст, который не был использован по хешу
-  // Хеш вычисляется от исходного текста (rawText), чтобы имя пользователя не влияло на проверку дубликатов
+  // Хеш вычисляется от исходного текста (rawText), чтобы форматирование не влияло на проверку дубликатов
   for (const index of shuffled) {
     const rawText = templateTexts[index].text;
 
@@ -165,7 +179,7 @@ function selectTemplateText(
       !state.usedTexts.has(rawText)
     ) {
       return {
-        text: formatNotificationTextWithName(rawText, userName, userGender),
+        text: formatNotificationText(rawText, userGender),
         index: index,
       };
     }
@@ -187,7 +201,6 @@ function tryUseAiText(
   aiTexts: Array<string | AiNotificationText>,
   slotIndex: number,
   state: TextSelectionState,
-  userName: string | null,
   userGender: 'male' | 'female' | null,
   reason: string
 ): PickTextResult | null {
@@ -199,11 +212,7 @@ function tryUseAiText(
   );
 
   if (selectedText) {
-    const text = formatNotificationTextWithName(
-      selectedText.text,
-      userName,
-      userGender
-    );
+    const text = formatNotificationText(selectedText.text, userGender);
     state.usedAiIndices.add(selectedText.index);
     const textHash = hashNotificationText(selectedText.text);
     state.usedAiHashes.add(textHash);
@@ -220,6 +229,7 @@ function tryUseAiText(
       templateIndex: null,
       imageTag: selectedText.imageTag,
       subtype: selectedText.subtype ?? null,
+      actionHint: selectedText.actionHint ?? 'none',
     };
   } else {
     console.warn(
@@ -245,13 +255,12 @@ export function pickTextForSlot(
     isCustomEntity,
     templateTexts,
     aiTexts,
-    userName,
     userGender,
   } = params;
 
   const selectedTemplateText =
     templateTexts.length > 0
-      ? selectTemplateText(templateTexts, state, userName, userGender)
+      ? selectTemplateText(templateTexts, state, userGender)
       : null;
   const templateText = selectedTemplateText ? selectedTemplateText.text : null;
 
@@ -261,7 +270,6 @@ export function pickTextForSlot(
         aiTexts,
         slotIndex,
         state,
-        userName,
         userGender,
         isCustomEntity ? 'AI mode (custom entity)' : 'AI mode (template entity)'
       );
@@ -298,6 +306,8 @@ export function pickTextForSlot(
       templateIndex: selectedTemplateText.index,
       imageTag: templateTexts[selectedTemplateText.index].imageTag ?? null,
       subtype: null,
+      actionHint:
+        templateTexts[selectedTemplateText.index].actionHint ?? 'none',
     };
   }
 

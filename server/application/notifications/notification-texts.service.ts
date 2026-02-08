@@ -11,6 +11,7 @@ import type {
   Directness,
   Addressing,
   NotificationSubtype,
+  NotificationActionHint,
 } from '@/shared/dto/notifications';
 import { ensureUserTextsInitialized } from './initialize-texts.service';
 import { normalizeNotificationItems } from './ai-generation.service';
@@ -28,6 +29,7 @@ export interface LoadTextsParams {
 export interface LoadedText {
   text: string;
   imageTag: string | null;
+  actionHint: NotificationActionHint;
 }
 
 export interface LoadedTexts {
@@ -103,6 +105,7 @@ export async function loadTextsForPreference(
       id: notificationTexts.id,
       text: notificationTexts.text,
       imageTag: notificationTexts.imageTag,
+      actionHint: notificationTexts.actionHint,
       source: notificationTexts.source,
     })
     .from(notificationTexts)
@@ -125,7 +128,11 @@ export async function loadTextsForPreference(
   // Объединяем дефолтные и кастомные тексты
   // Дефолтные идут первыми, затем кастомные
   // Единая нормализация шаблонов через общий пайплайн NotificationItem
-  const normalizeLoadedText = (raw: { text: string; imageTag: string | null }) =>
+  const normalizeLoadedText = (raw: {
+    text: string;
+    imageTag: string | null;
+    actionHint: NotificationActionHint | null;
+  }) =>
     normalizeNotificationItems([raw], 1, {
       isMixed: false,
       allowedImageTags: null,
@@ -140,11 +147,13 @@ export async function loadTextsForPreference(
     const normalized = normalizeLoadedText({
       text: raw.text,
       imageTag: raw.imageTag ?? null,
+      actionHint: (raw.actionHint as NotificationActionHint | null) ?? null,
     });
     if (!normalized) continue;
     allTexts.push({
       text: normalized.text,
       imageTag: normalized.imageTag ?? null,
+      actionHint: normalized.actionHint ?? 'none',
     });
   }
 

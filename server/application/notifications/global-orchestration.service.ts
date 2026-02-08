@@ -58,6 +58,8 @@ import { pickNotificationImage } from './notification-images.service';
 import type {
   NotificationPayload,
   NotificationSubtype,
+  NotificationActionHint,
+  NotificationNavigation,
 } from '@/shared/dto/notifications';
 
 /**
@@ -93,6 +95,46 @@ const SCHEDULE_CONFIG = {
   jitterMinutes: 15,
   minGapMinutes: 10,
 };
+
+const DEFAULT_MEDITATION_TRACK_ID =
+  process.env.DEFAULT_MEDITATION_TRACK_ID?.trim() || 'ultimate-relaxation';
+const DEFAULT_BREATH_PRACTICE_SLUG =
+  process.env.DEFAULT_BREATH_PRACTICE_SLUG?.trim() || '4-7-8';
+
+function resolveNavigationFromActionHint(
+  actionHint?: NotificationActionHint | null
+): NotificationNavigation {
+  // Источник истины — actionHint из текста, навигация вычисляется на сервере.
+  if (actionHint === 'meditation') {
+    return {
+      type: 'meditation_track',
+      trackId: DEFAULT_MEDITATION_TRACK_ID,
+    };
+  }
+  if (actionHint === 'breathing') {
+    return {
+      type: 'breath_practice',
+      slug: DEFAULT_BREATH_PRACTICE_SLUG,
+    };
+  }
+  return { type: 'home' };
+}
+
+function buildDeepLinkFromNavigation(navigation: NotificationNavigation): string {
+  // Строим путь внутри приложения, чтобы клиент мог сделать fallback.
+  switch (navigation.type) {
+    case 'meditation_track':
+      return `/meditations?trackId=${encodeURIComponent(navigation.trackId)}`;
+    case 'breath_practice':
+      return `/breath-practices/${encodeURIComponent(navigation.slug)}${
+        navigation.slug === DEFAULT_BREATH_PRACTICE_SLUG ? '?group=popular' : ''
+      }`;
+    case 'breath_practices':
+      return '/breath-practices';
+    default:
+      return '/';
+  }
+}
 
 /**
  * Интерфейс для источника уведомлений
@@ -1279,11 +1321,10 @@ export async function orchestrateAllSlotsForUser(
 
     const addressing = globalPrefs?.addressing || 'informal';
     const [userRecord] = await db
-      .select({ name: users.name, gender: users.gender })
+      .select({ gender: users.gender })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);
-    const userName = userRecord?.name ?? null;
     const userGender =
       userRecord?.gender === 'male' || userRecord?.gender === 'female'
         ? userRecord.gender
@@ -1578,9 +1619,9 @@ export async function orchestrateAllSlotsForUser(
           templateTexts: loadedTexts.texts.map((t) => ({
             text: t.text,
             imageTag: t.imageTag ?? null,
+            actionHint: t.actionHint ?? 'none',
           })),
           aiTexts: aiTextsAvailable ? aiTexts : null, // Передаём null если AI-тексты недоступны
-          userName,
           userGender,
         };
 
@@ -1593,7 +1634,8 @@ export async function orchestrateAllSlotsForUser(
           continue;
         }
 
-        const { text, templateIdForSlot, imageTag, subtype } = pickResult;
+        const { text, templateIdForSlot, imageTag, subtype, actionHint } =
+          pickResult;
 
         const slotId = nanoid();
         const effectiveSubtypeForImage =
@@ -1614,13 +1656,17 @@ export async function orchestrateAllSlotsForUser(
           habitIntent: source.kind === 'habits' ? intent : null,
         });
 
+        const navigation = resolveNavigationFromActionHint(actionHint);
+        const deepLink = buildDeepLinkFromNavigation(navigation);
+
         // Создаём payload
         const payload: NotificationPayload = {
           title: entityName || '',
           body: text,
           templateId: templateIdForSlot,
           action: 'open',
-          deepLink: source.kind === 'therapy' ? '/support' : '/habits',
+          deepLink,
+          navigation,
           image: imageUrl || undefined,
           data: {
             kind: source.kind,

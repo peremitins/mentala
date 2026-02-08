@@ -27,6 +27,7 @@ export type InteractionAction =
   | 'yes'
   | 'no'
   | 'later'
+  | 'open'
   | 'dismissed'
   | 'unanswered';
 export type SnoozeDuration = '15m' | '1h' | '4h' | 'tomorrow';
@@ -48,6 +49,14 @@ export type NotificationSubtype =
   | 'informational'
   | 'motivational'
   | 'mixed';
+
+export type NotificationActionHint = 'none' | 'meditation' | 'breathing';
+
+export type NotificationNavigation =
+  | { type: 'home' }
+  | { type: 'meditation_track'; trackId: string }
+  | { type: 'breath_practices' }
+  | { type: 'breath_practice'; slug: string };
 
 // Обратная совместимость
 export type HabitSubtype = NotificationSubtype;
@@ -151,6 +160,7 @@ export interface NotificationItem {
   text: string;
   imageTag: NotificationImageTag | null;
   subtype: NotificationSubtype | null;
+  actionHint: NotificationActionHint | null;
 }
 
 // ==========================================
@@ -166,6 +176,7 @@ export interface NotificationText {
   intent: NotificationTextIntent | null;
   subtype: NotificationSubtype | null;
   imageTag: NotificationImageTag | null;
+  actionHint: NotificationActionHint | null;
   directness: 'soft' | 'moderate' | 'hard' | 'universal';
   addressing: 'informal' | 'formal' | 'universal';
   locale: string; // 'ru'
@@ -287,6 +298,7 @@ export interface NotificationPayload {
   templateId?: string;
   action: string; // 'open' | 'snooze:15m' | 'snooze:1h' | ...
   deepLink?: string;
+  navigation?: NotificationNavigation;
   data?: Record<string, any>;
 }
 

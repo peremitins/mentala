@@ -31,7 +31,7 @@
     "cap:sync:emulator": "./scripts/setup-capacitor-dev.sh emulator",
     "cap:sync:device": "./scripts/setup-capacitor-dev.sh device",
     "cap:open:android": "npx cap open android",
-    "build:mobile": "nuxt generate && npx cap sync",
+    "build:mobile": "pnpm run generate && npx cap sync",
     "upload:media": "bash scripts/upload-media-safe.sh",
     "hash:notification-images": "node scripts/hash-notification-images.mjs",
     "upload:notification-images": "bash scripts/upload-notification-images.sh",

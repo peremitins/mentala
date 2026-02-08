@@ -27,31 +27,34 @@ function applyGenderedVariants(text: string, gender?: Gender | null): string {
 }
 
 /**
- * Подставляет имя пользователя в текст уведомления.
- * Если имя отсутствует, плейсхолдеры удаляются, чтобы не оставлять запятые/пробелы.
+ * Очищает плейсхолдеры имени в уведомлениях и нормализует пунктуацию.
+ * Важно для пользовательских текстов, где могли остаться {name}.
  */
-export function formatNotificationTextWithName(
+export function formatNotificationText(
   text: string,
-  userName?: string | null,
   userGender?: Gender | null
 ): string {
   if (!text) {
     return '';
   }
 
-  if (userName && userName.trim()) {
-    return applyGenderedVariants(
-      text.replace(/{name}/gi, userName.trim()),
-      userGender
-    );
-  }
+  const hadNamePlaceholder = /{name}/i.test(text);
 
-  const cleaned = text
+  let cleaned = text
     .replace(/{name}/gi, '')
     .replace(/,\s*\./g, '.')
     .replace(/,\s*,/g, ',')
     .replace(/\s+/g, ' ')
     .trim();
+
+  if (hadNamePlaceholder) {
+    cleaned = cleaned.replace(/^[,–—-]\s*/g, '').trim();
+    cleaned = cleaned.replace(
+      /^([^A-Za-zА-Яа-яЁё]*)([A-Za-zА-Яа-яЁё])/,
+      (_match, prefix: string, firstLetter: string) =>
+        `${prefix}${firstLetter.toUpperCase()}`
+    );
+  }
 
   return applyGenderedVariants(cleaned, userGender);
 }

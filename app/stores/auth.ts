@@ -11,6 +11,7 @@ import { usePromptsStore } from '@/app/stores/prompts';
 import { useNotificationsStore } from '@/app/stores/notifications';
 import { useUserStore } from '@/app/stores/user';
 import { useSceneSettingsStore } from '@/app/stores/sceneSettings';
+import { useUiSettingsStore } from '@/app/stores/uiSettings';
 import { useTTS } from '@/app/composables/useTTS';
 import { useSpeechEngine } from '@/app/composables/useSpeechEngine';
 import { useMeditationPlayer } from '@/app/composables/useMeditationPlayer';
@@ -543,6 +544,7 @@ export const useAuthStore = defineStore('auth', {
         useNotificationsStore().$reset();
         useUserStore().$reset();
         useSceneSettingsStore().$reset();
+        useUiSettingsStore().$reset();
       } catch (err) {
         console.error('[Auth Store] Ошибка сброса стора:', err);
         // Продолжаем выполнение даже если какой-то store не удалось сбросить

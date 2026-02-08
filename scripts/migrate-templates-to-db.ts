@@ -186,6 +186,7 @@ async function createPresetAndText(
     intent: template.intent ?? null,
     subtype: template.subtype ?? null,
     imageTag: template.imageTag ?? null,
+    actionHint: template.actionHint ?? null,
     directness,
     addressing,
     locale: 'ru',
@@ -203,6 +204,7 @@ async function createPresetAndText(
     intent: template.intent ?? null,
     subtype: template.subtype ?? null,
     imageTag: template.imageTag ?? null,
+    actionHint: template.actionHint ?? null,
     directness,
     addressing,
     locale: 'ru',
@@ -247,6 +249,7 @@ async function migrateTemplates(): Promise<void> {
     intent: string | null;
     subtype: string | null;
     imageTag: string | null;
+    actionHint: string | null;
     directness: string;
     addressing: string;
     locale: string;
@@ -264,6 +267,7 @@ async function migrateTemplates(): Promise<void> {
     intent: string | null;
     subtype: string | null;
     imageTag: string | null;
+    actionHint: string | null;
     directness: string;
     addressing: string;
     locale: string;
@@ -297,6 +301,7 @@ async function migrateTemplates(): Promise<void> {
         intent: template.intent || null,
         subtype: template.subtype || null,
         imageTag: template.imageTag ?? null,
+        actionHint: template.actionHint ?? null,
         directness,
         addressing,
         locale: 'ru',
@@ -314,6 +319,7 @@ async function migrateTemplates(): Promise<void> {
         intent: template.intent || null,
         subtype: template.subtype || null,
         imageTag: template.imageTag ?? null,
+        actionHint: template.actionHint ?? null,
         directness,
         addressing,
         locale: 'ru',

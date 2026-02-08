@@ -357,6 +357,12 @@ export const chatSettings = pgTable('chat_settings', {
     .notNull()
     .default(true),
   enableSummary: boolean('enable_summary').notNull().default(true),
+  lastGreetingAt: timestamp('last_greeting_at', {
+    withTimezone: true,
+  }),
+  lastNameGreetingAt: timestamp('last_name_greeting_at', {
+    withTimezone: true,
+  }),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull(),
@@ -573,6 +579,7 @@ export const notificationTexts = pgTable('notification_texts', {
   intent: text('intent'), // 'build' | 'quit' (только habits, если нужно)
   subtype: text('subtype'), // 'reminder' | 'informational' | 'motivational' | 'mixed' | NULL
   imageTag: varchar('image_tag', { length: 50 }), // null = без картинки
+  actionHint: text('action_hint'), // 'none' | 'meditation' | 'breathing'
   directness: text('directness').notNull(), // 'soft' | 'moderate' | 'hard' | 'universal'
   addressing: text('addressing').notNull(), // 'informal' | 'formal' | 'universal'
   locale: text('locale').notNull(), // 'ru' (пока одна, но заложимся)
@@ -595,6 +602,7 @@ export const notificationTextPresets = pgTable('notification_text_presets', {
   intent: text('intent'), // 'build' | 'quit' | NULL
   subtype: text('subtype'), // 'reminder' | 'informational' | 'motivational' | 'mixed' | NULL
   imageTag: varchar('image_tag', { length: 50 }), // null = без картинки
+  actionHint: text('action_hint'), // 'none' | 'meditation' | 'breathing'
   directness: text('directness').notNull(), // 'soft' | 'moderate' | 'hard' | 'universal'
   addressing: text('addressing').notNull(), // 'informal' | 'formal' | 'universal'
   locale: text('locale').notNull(), // 'ru'

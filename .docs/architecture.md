@@ -18,7 +18,7 @@
 • blank (fullscreen),
 • auth (центрирование форм; при входе на auth экран фоновые звуки и медитации принудительно выключаются).
 • Глобальная защита аудио: `app/plugins/audio-playback-guard.client.ts` отслеживает auth/роуты и через `setPlaybackAllowed` в `useSceneAudio` и `useMeditationPlayer` блокирует любой звук на публичных страницах и при разлогине.
-• UI‑настройки: `useUiSettingsStore` хранит локальные параметры интерфейса (яркость фона) в `persistentStorage` (web: localStorage, mobile: Capacitor Preferences). Яркость применяется к aurora‑слою и к затемнению фоновых изображений сцен (overlay). Дефолтная яркость — 85%.
+• UI‑настройки: `useUiSettingsStore` хранит локальные параметры интерфейса (яркость фона) в `persistentStorage` (web: localStorage, mobile: Capacitor Preferences) с ключом, привязанным к `userId` (чтобы разные аккаунты не наследовали яркость). Яркость применяется к aurora‑слою и к затемнению фоновых изображений сцен (overlay). Дефолтная яркость — 85%.
 • Тема интерфейса: приложение использует только тёмную тему (dark theme) по умолчанию. Переключение между светлой и тёмной темой не поддерживается. Все CSS-переменные настроены на тёмную палитру в `:root`, класс `.dark` не используется. PWA manifest (`site.webmanifest`) и favicon настроены на тёмные цвета.
 • Страницы:
 index, onboarding, chat (layout blank), therapy, habits, practices, breath-practices, profile/\*, settings, privacy, subscription, billing.
@@ -33,6 +33,7 @@ index, onboarding, chat (layout blank), therapy, habits, practices, breath-pract
 • В настройках: переключатель «Маркетинговые сообщения» пишет согласие через `PATCH /api/user/me`.
 • ID пользователя показывается внизу `/settings` с копированием (useClipboard/Capacitor Clipboard с fallback).
 • Чат: welcome‑ответ стартует при пустом `messages`, параметр `mode` удалён; `entryContext` приходит из разделов `/habits` и `/therapy` и учитывается в prompt.
+• Чат: приветствие используется только в welcome‑старте и не чаще 1 раза в день (локальная дата пользователя). Приветствие по имени — отдельный лимит; имя очищается до «только имя» без фамилии/никнеймов. Отметки хранятся в `chat_settings.last_greeting_at` и `chat_settings.last_name_greeting_at`. Инструкция про имя и выбор стартовой фразы добавляются только в первое сообщение дня, чтобы не раздувать токены.
 • Чат: suggested‑chips не сбрасываются при наборе текста, очищаются только при отправке/выборе.
 • Чат: микрофон в инпуте имеет индикацию записи через ::before/::after (пульсирующая точка), отправка на мобильных срабатывает на первый тап через pointerdown‑хэндлер даже во время записи.
 • Голосовой ввод: Whisper‑fallback временно отключён, используются только native/webspeech движки.
@@ -121,7 +122,8 @@ server/
 • Политика удаления аккаунта: по умолчанию удаление происходит сразу (hard delete), но можно включить grace‑период через `AUTH_DELETE_GRACE_DAYS` (тогда используется 2‑фазное удаление и очередь).
 • Нативный Google Sign-In (Capacitor): клиент получает `idToken` и отправляет в `/api/auth/google/native`, сервер валидирует через `google-auth-library` и создаёт сессию.
 • Диагностика Google Sign-In на мобильных: клиент валидирует Web Client ID и показывает понятные ошибки по типовым кодам Google (DEVELOPER_ERROR, отмена входа, сеть).
-• Capacitor dev CORS: при запуске через `server.url` в dev клиент использует `window.location.origin` как API baseURL, чтобы избегать CORS между ngrok/локальным доменом.
+• Capacitor API baseURL: в native сначала берём `Capacitor.getServerUrl()` (если задан и не localhost), затем `window.location.origin` (если не localhost). Если origin = `http://localhost` (статическая сборка), используем `NUXT_PUBLIC_API_SERVER_URL` (apiBase), иначе авторизация ломается.
+• Сборка для mobile: используем `pnpm generate` (script `build:mobile`) с `.env.development`, чтобы `NUXT_PUBLIC_API_SERVER_URL` попал в runtimeConfig.
 • Медитации v1:
 • Таблицы: `meditation_tracks` (каталог), `meditation_favorites` (избранное).
 • Настройки пользователя: `user_preferences.meditation_timer_minutes`.
@@ -208,7 +210,7 @@ server/
 • NotificationTextsEditorPage использует общий `glass-deep` контейнер для списка текстов с внутренними карточками-подложками; кнопка сохранения закреплена липкой панелью над BottomNav.
 • NotificationSettingsPage показывает блок «Мои пожелания» для **шаблонных** тем (не для кастомных). Пожелания сохраняются в `custom_prompt_notification` и влияют на AI-генерацию.
 • Изображения уведомлений: подбираются по `kind/entityKey` из `public/notifications/*` **без гендерных подкаталогов** (только нейтральные наборы). Порядок: сущностные (`/notifications/habits/{entityKey}/{imageTag}/`), затем общие (`/notifications/common/{imageTag}/`). Для therapy допускаются сущностные папки (`/notifications/therapy/{entityKey}/{imageTag}/` и вложенные `/notifications/therapy/{entityKey}/**/{imageTag}/`); если есть верхний уровень и вложенные — они миксуются между собой и с common. Для кастомных сущностей (`entityKey = null`) разрешены только нейтральные теги (`activity/nature/meditation/daily_life/neutral_abstract`), `harm_*` запрещены. Legacy‑пулы (старый формат без `imageTag/subtype`) используют только safe‑only fallback `nature` → `neutral_abstract`, `harm_*` запрещены. `harm_*` допускаются в common только как универсальные медицинские визуалы без предметных контекстов, сущностные `harm_*` остаются в habits. Ротация изображений должна быть устойчивой и бесконечной: минимизировать повторы и сохранять позицию между перегенерациями текстов и изменениями настроек. URL строится от `NUXT_PUBLIC_MEDIA_BASE_URL` (fallback: `PUBLIC_APP_ORIGIN`/`NUXT_PUBLIC_APP_URL`). Нормализация файлов выполняется скриптом, который переносит `male/female` в нейтральные каталоги и затем синхронизирует Yandex Object Storage с `--delete`.
-• Для отдельных тем можно задавать специальные ограничения `imageTag` через `IMAGE_TAG_POLICY_OVERRIDES` (например `junk_food` → только `neutral_abstract`, `harm_appearance`, `harm_organs`).
+• Для отдельных тем можно задавать специальные ограничения `imageTag` через `IMAGE_TAG_POLICY_OVERRIDES` (например `nutrition` → только `neutral_abstract`, `harm_appearance`, `harm_organs`).
 • Где находится: `server/application/notifications/ai-generation.service.ts`.
 • Как матчится: `entityKey` нормализуется через `trim().toLowerCase()` и сравнивается с `key/keys`; опционально учитывается `kind` (`habits`/`therapy`).
 • Поля override: `keys` (массив ключей), `kind` (опционально), `allowedTags` (строго разрешённые теги), `fallbackTag` (чем заменить запрещённый/неуместный тег), `disallowHarmForPositive` (если `true`, harm_* запрещён для нейтральных/позитивных текстов).
@@ -217,6 +219,14 @@ server/
 • Для **шаблонов** картинки выключены по умолчанию (`imageTag = null`), но их можно включить точечно, задав `imageTag` в шаблоне.
 • Если для выбранного `imageTag` нет файлов ни в сущности, ни в common (AI‑источник), используется safe‑fallback в порядке `nature → daily_life → activity → meditation → neutral_abstract`. Для привычки `meditation` допускается только `meditation`. Для привычки `water` в промпте задано требование `imageTag = neutral_abstract`.
 • Android push: канал `mentai_high` создаётся нативно в `MainApplication` и задан как `default_notification_channel_id` в манифесте; fallback канал `fcm_fallback_notification_channel` удаляется, чтобы все уведомления были в одном разделе. Для FCM используется `tag = slotId`, чтобы Android не перезаписывал уведомления внутри группы.
+• Android push (важно): для Android отправляются **data-only** сообщения. Нативный сервис `MentalaMessagingService` сам строит уведомление (title/body/image из `data`) и привязывает `contentIntent`, чтобы тап работал и в раскрытом виде. В фореграунде системное уведомление не показываем (только JS-обработка). В интент обязательно кладём `google.message_id`, чтобы `PushNotificationsPlugin` эмитил `pushNotificationActionPerformed` на холодном старте.
+• Push‑навигация: payload слота содержит `navigation` (type + params) и `deepLink` (внутренний path). Клиент выполняет переход только при системном тапе; snooze/yes/no не должны запускать навигацию. При отсутствии данных fallback на `/`.
+• Приоритет навигации: `navigation` — источник истины, `deepLink` используется только как fallback.
+• Надёжность push‑переходов (client): целевая навигация кладётся в очередь (Preferences/localStorage) с TTL, дедуплицируется по `messageId` и «специфичности» пути (например `/meditations?trackId=...` сильнее `/meditations`). Переход выполняется после `router.isReady()` и попытки `auth.me()`; если маршрут свернулся до базового пути, выполняется одноразовый retry через `router.replace`.
+• `actionHint` хранится в `notification_texts` и `notification_text_presets` (а для AI — в `ai_generated_notification_texts.texts[]`) и используется на сервере для вычисления `navigation`.
+• Если `actionHint` отсутствует или равен `none`, сервер применяет эвристику по тексту и `imageTag` (медитация/дыхание) как fallback, чтобы не терять навигацию.
+• Android clickAction: сейчас **не задаётся** (используем дефолтное поведение Android — открытие приложения по тапу). Если когда‑нибудь понадобится кастомный `clickAction`, он должен строго совпадать с `intent-filter` `MainActivity`, иначе тап по уведомлению не откроет приложение.
+• Дефолтные цели перехода (медитация/дыхание) задаются на сервере конфигом и могут меняться без релиза клиента.
 
 • Режимы генерации текстов (`textSource`):
 • `templates` — использование готовых шаблонов или пользовательских текстов (для кастомных привычек/терапии)

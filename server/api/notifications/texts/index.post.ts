@@ -11,6 +11,7 @@ import { ensureUserTextsInitialized } from '@/server/application/notifications/i
 import type {
   NotificationTextIntent,
   NotificationSubtype,
+  NotificationActionHint,
 } from '@/shared/dto/notifications';
 
 /**
@@ -208,6 +209,7 @@ export default defineEventHandler(async (event) => {
     intent: text.intent as NotificationTextIntent | null,
     subtype: text.subtype as NotificationSubtype | null,
     imageTag: text.imageTag ?? null,
+    actionHint: (text.actionHint as NotificationActionHint | null) ?? null,
     directness: text.directness as 'soft' | 'moderate' | 'hard' | 'universal',
     addressing: text.addressing as 'informal' | 'formal' | 'universal',
     locale: text.locale,
