@@ -160,7 +160,8 @@ function generateCollapseKey(payload: NotificationPayload): string {
  */
 export async function sendFCMNotification(
   token: string,
-  payload: NotificationPayload
+  payload: NotificationPayload,
+  platform?: string | null
 ): Promise<boolean> {
   // Если Firebase не инициализирован
   if (!firebaseApp) {
@@ -187,11 +188,24 @@ export async function sendFCMNotification(
   }
 
   try {
+    const normalizedPlatform = String(platform || '').toLowerCase();
+    const isAndroid = normalizedPlatform === 'android';
+
     // Подготовка data - все значения должны быть строками
     const dataPayload: Record<string, string> = {
       action: payload.action || '',
       deepLink: payload.deepLink || '',
     };
+
+    // Для Android используем data-only и строим уведомление нативно.
+    // Поэтому прокидываем текст и изображение в data.
+    if (isAndroid) {
+      dataPayload.title = payload.title || '';
+      dataPayload.body = payload.body || '';
+      if (payload.image) {
+        dataPayload.image = payload.image;
+      }
+    }
 
     if (payload.navigation) {
       // Навигация хранится как JSON-строка + дублируется в плоские поля для диагностики.
@@ -230,20 +244,11 @@ export async function sendFCMNotification(
     }
 
     // Подготовка Android notification
-    const androidClickAction =
-      process.env.FCM_ANDROID_CLICK_ACTION?.trim() ||
-      'MENTALA_NOTIFICATION_CLICK';
-    const enableAndroidClickAction =
-      (process.env.NODE_ENV === 'production' ||
-        process.env.FCM_ANDROID_CLICK_ACTION_ENABLED === 'true') &&
-      androidClickAction.length > 0;
-
     const androidNotification: admin.messaging.AndroidNotification = {
       sound: 'default',
       channelId: 'mentai_high',
-      // clickAction включаем только если явно задано в env,
-      // иначе оставляем дефолтное поведение Android (открытие приложения).
-      ...(enableAndroidClickAction ? { clickAction: androidClickAction } : {}),
+      // Не задаём clickAction, чтобы Android использовал дефолтное поведение
+      // и открывал приложение по тапу на уведомление.
       // Уникальный tag предотвращает замену уведомлений внутри группы Android
       ...(payload.data?.slotId
         ? { tag: `slot-${String(payload.data.slotId)}` }
@@ -257,37 +262,41 @@ export async function sendFCMNotification(
 
     const message: admin.messaging.Message = {
       token,
-      notification: notificationPayload,
       data: dataPayload,
       android: {
         priority: 'high',
         ttl: 60 * 60 * 1000, // 1 час (3600 секунд)
         collapseKey,
-        notification: androidNotification,
+        ...(isAndroid ? {} : { notification: androidNotification }),
       },
-      apns: {
-        headers: {
-          'apns-priority': '10',
-          'apns-expiration': String(Math.floor(Date.now() / 1000) + 3600), // 1 час
-          'apns-collapse-id': collapseKey,
-        },
-        payload: {
-          aps: {
-            alert: {
-              title: payload.title,
-              body: payload.body,
-            },
-            sound: 'default',
-            category: 'MENTAI_CATEGORY',
-          },
-          // Добавляем изображение для iOS (через fcm_options)
-          ...(payload.image && {
-            fcm_options: {
-              image: payload.image,
+      ...(isAndroid ? {} : { notification: notificationPayload }),
+      ...(isAndroid
+        ? {}
+        : {
+            apns: {
+              headers: {
+                'apns-priority': '10',
+                'apns-expiration': String(Math.floor(Date.now() / 1000) + 3600), // 1 час
+                'apns-collapse-id': collapseKey,
+              },
+              payload: {
+                aps: {
+                  alert: {
+                    title: payload.title,
+                    body: payload.body,
+                  },
+                  sound: 'default',
+                  category: 'MENTAI_CATEGORY',
+                },
+                // Добавляем изображение для iOS (через fcm_options)
+                ...(payload.image && {
+                  fcm_options: {
+                    image: payload.image,
+                  },
+                }),
+              },
             },
           }),
-        },
-      },
     };
 
     const response = await admin.messaging().send(message);
@@ -338,7 +347,11 @@ export async function sendToUser(
     console.log(
       `[FCM] Sending to device: ${device.platform} (token: ${device.token.substring(0, 20)}...)`
     );
-    const success = await sendFCMNotification(device.token, payload);
+    const success = await sendFCMNotification(
+      device.token,
+      payload,
+      device.platform
+    );
     if (success) {
       successCount++;
     }

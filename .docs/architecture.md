@@ -122,7 +122,8 @@ server/
 • Политика удаления аккаунта: по умолчанию удаление происходит сразу (hard delete), но можно включить grace‑период через `AUTH_DELETE_GRACE_DAYS` (тогда используется 2‑фазное удаление и очередь).
 • Нативный Google Sign-In (Capacitor): клиент получает `idToken` и отправляет в `/api/auth/google/native`, сервер валидирует через `google-auth-library` и создаёт сессию.
 • Диагностика Google Sign-In на мобильных: клиент валидирует Web Client ID и показывает понятные ошибки по типовым кодам Google (DEVELOPER_ERROR, отмена входа, сеть).
-• Capacitor dev CORS: при запуске через `server.url` в dev клиент использует `window.location.origin` как API baseURL, чтобы избегать CORS между ngrok/локальным доменом.
+• Capacitor API baseURL: в native сначала берём `Capacitor.getServerUrl()` (если задан и не localhost), затем `window.location.origin` (если не localhost). Если origin = `http://localhost` (статическая сборка), используем `NUXT_PUBLIC_API_SERVER_URL` (apiBase), иначе авторизация ломается.
+• Сборка для mobile: используем `pnpm generate` (script `build:mobile`) с `.env.development`, чтобы `NUXT_PUBLIC_API_SERVER_URL` попал в runtimeConfig.
 • Медитации v1:
 • Таблицы: `meditation_tracks` (каталог), `meditation_favorites` (избранное).
 • Настройки пользователя: `user_preferences.meditation_timer_minutes`.
@@ -218,11 +219,13 @@ server/
 • Для **шаблонов** картинки выключены по умолчанию (`imageTag = null`), но их можно включить точечно, задав `imageTag` в шаблоне.
 • Если для выбранного `imageTag` нет файлов ни в сущности, ни в common (AI‑источник), используется safe‑fallback в порядке `nature → daily_life → activity → meditation → neutral_abstract`. Для привычки `meditation` допускается только `meditation`. Для привычки `water` в промпте задано требование `imageTag = neutral_abstract`.
 • Android push: канал `mentai_high` создаётся нативно в `MainApplication` и задан как `default_notification_channel_id` в манифесте; fallback канал `fcm_fallback_notification_channel` удаляется, чтобы все уведомления были в одном разделе. Для FCM используется `tag = slotId`, чтобы Android не перезаписывал уведомления внутри группы.
+• Android push (важно): для Android отправляются **data-only** сообщения. Нативный сервис `MentalaMessagingService` сам строит уведомление (title/body/image из `data`) и привязывает `contentIntent`, чтобы тап работал и в раскрытом виде. В фореграунде системное уведомление не показываем (только JS-обработка). В интент обязательно кладём `google.message_id`, чтобы `PushNotificationsPlugin` эмитил `pushNotificationActionPerformed` на холодном старте.
 • Push‑навигация: payload слота содержит `navigation` (type + params) и `deepLink` (внутренний path). Клиент выполняет переход только при системном тапе; snooze/yes/no не должны запускать навигацию. При отсутствии данных fallback на `/`.
 • Приоритет навигации: `navigation` — источник истины, `deepLink` используется только как fallback.
+• Надёжность push‑переходов (client): целевая навигация кладётся в очередь (Preferences/localStorage) с TTL, дедуплицируется по `messageId` и «специфичности» пути (например `/meditations?trackId=...` сильнее `/meditations`). Переход выполняется после `router.isReady()` и попытки `auth.me()`; если маршрут свернулся до базового пути, выполняется одноразовый retry через `router.replace`.
 • `actionHint` хранится в `notification_texts` и `notification_text_presets` (а для AI — в `ai_generated_notification_texts.texts[]`) и используется на сервере для вычисления `navigation`.
 • Если `actionHint` отсутствует или равен `none`, сервер применяет эвристику по тексту и `imageTag` (медитация/дыхание) как fallback, чтобы не терять навигацию.
-• Android clickAction: либо не задаётся, либо совпадает с `intent-filter` `MainActivity`; несоответствие блокирует открытие приложения по тапу.
+• Android clickAction: сейчас **не задаётся** (используем дефолтное поведение Android — открытие приложения по тапу). Если когда‑нибудь понадобится кастомный `clickAction`, он должен строго совпадать с `intent-filter` `MainActivity`, иначе тап по уведомлению не откроет приложение.
 • Дефолтные цели перехода (медитация/дыхание) задаются на сервере конфигом и могут меняться без релиза клиента.
 
 • Режимы генерации текстов (`textSource`):

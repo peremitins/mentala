@@ -1,17 +1,47 @@
 import { Capacitor } from '@capacitor/core';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { LocalNotifications } from '@capacitor/local-notifications';
+import { Preferences } from '@capacitor/preferences';
+import { nextTick } from 'vue';
 import type {
   InteractionAction,
   NotificationNavigation,
 } from '@/shared/dto/notifications';
+import { useAuthStore } from '@/app/stores/auth';
 
-export default defineNuxtPlugin((nuxtApp) => {
-  // Работаем только на мобильных платформах
-  const platform = Capacitor.getPlatform();
-  if (platform === 'web') return;
+export default defineNuxtPlugin({
+  name: 'push-notifications',
+  dependsOn: ['pinia'],
+  setup(nuxtApp) {
+    // Работаем только на мобильных платформах
+    const platform = Capacitor.getPlatform();
+    if (platform === 'web') return;
 
   const NON_NAV_ACTIONS = new Set(['yes', 'no', 'later']);
+  const PENDING_NAV_STORAGE_KEY = 'mentai.push.pendingNavigation';
+  const PENDING_NAV_TTL_MS = 5 * 60 * 1000;
+  const NAV_DEDUP_WINDOW_MS = 12 * 1000;
+  const NAV_RETRY_DELAY_MS = 900;
+
+  const canUsePreferences = Capacitor.isPluginAvailable('Preferences');
+  const auth = useAuthStore();
+
+  // Сохраняем отложенную навигацию, чтобы не потерять тап на холодном старте.
+  type PendingNavigation = {
+    targetPath: string;
+    messageId?: string | null;
+    createdAt: number;
+  };
+
+  let pendingNavigation: PendingNavigation | null = null;
+  let isFlushingNavigation = false;
+  let lastNavigation:
+    | {
+        path: string;
+        messageId?: string | null;
+        at: number;
+      }
+    | null = null;
 
   function isTapAction(actionId?: string | null): boolean {
     // Считаем тапом все, что не является action-кнопкой snooze/yes/no/later.
@@ -144,14 +174,209 @@ export default defineNuxtPlugin((nuxtApp) => {
     return path || '/';
   }
 
-  async function navigateToTarget(targetPath: string) {
+  // Чем выше score, тем "сильнее" и конкретнее маршрут.
+  function scoreTargetPath(targetPath: string): number {
+    const normalized = normalizeTargetPath(targetPath);
+    if (normalized.includes('trackId=')) return 4;
+    if (/^\/breath-practices\/[^/?#]+/i.test(normalized)) return 4;
+    if (normalized.startsWith('/meditations')) return 3;
+    if (normalized.startsWith('/breath-practices')) return 3;
+    if (normalized === '/' || normalized === '') return 1;
+    return 2;
+  }
+
+  async function readStoredValue(key: string): Promise<string | null> {
+    try {
+      if (canUsePreferences) {
+        const result = await Preferences.get({ key });
+        return result?.value ?? null;
+      }
+      if (typeof window !== 'undefined') {
+        return window.localStorage.getItem(key);
+      }
+      return null;
+    } catch (error) {
+      console.warn('[PushPlugin] Failed to read storage:', error);
+      return null;
+    }
+  }
+
+  async function writeStoredValue(
+    key: string,
+    value: string | null
+  ): Promise<void> {
+    try {
+      if (canUsePreferences) {
+        if (value === null) {
+          await Preferences.remove({ key });
+          return;
+        }
+        await Preferences.set({ key, value });
+        return;
+      }
+      if (typeof window !== 'undefined') {
+        if (value === null) {
+          window.localStorage.removeItem(key);
+          return;
+        }
+        window.localStorage.setItem(key, value);
+      }
+    } catch (error) {
+      console.warn('[PushPlugin] Failed to write storage:', error);
+    }
+  }
+
+  async function loadPendingNavigation(): Promise<PendingNavigation | null> {
+    if (pendingNavigation) return pendingNavigation;
+    const raw = await readStoredValue(PENDING_NAV_STORAGE_KEY);
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw) as PendingNavigation;
+      if (!parsed?.targetPath) {
+        await writeStoredValue(PENDING_NAV_STORAGE_KEY, null);
+        return null;
+      }
+      if (Date.now() - parsed.createdAt > PENDING_NAV_TTL_MS) {
+        await writeStoredValue(PENDING_NAV_STORAGE_KEY, null);
+        return null;
+      }
+      pendingNavigation = parsed;
+      return parsed;
+    } catch {
+      await writeStoredValue(PENDING_NAV_STORAGE_KEY, null);
+      return null;
+    }
+  }
+
+  async function savePendingNavigation(
+    value: PendingNavigation | null
+  ): Promise<void> {
+    pendingNavigation = value;
+    if (!value) {
+      await writeStoredValue(PENDING_NAV_STORAGE_KEY, null);
+      return;
+    }
+    await writeStoredValue(PENDING_NAV_STORAGE_KEY, JSON.stringify(value));
+  }
+
+  function resolveMessageId(
+    payload: Record<string, any>,
+    action: { notification?: { id?: string | number } }
+  ): string | null {
+    const raw =
+      payload?.['google.message_id'] ??
+      payload?.messageId ??
+      payload?.id ??
+      action?.notification?.id;
+    if (raw === null || raw === undefined) return null;
+    const value = String(raw).trim();
+    return value ? value : null;
+  }
+
+  // Дедуплицируем быстрые повторы, чтобы не перетирать более точный маршрут.
+  function choosePendingNavigation(
+    current: PendingNavigation | null,
+    nextValue: PendingNavigation
+  ): PendingNavigation {
+    if (!current) return nextValue;
+    if (
+      current.messageId &&
+      nextValue.messageId &&
+      current.messageId === nextValue.messageId
+    ) {
+      const currentScore = scoreTargetPath(current.targetPath);
+      const nextScore = scoreTargetPath(nextValue.targetPath);
+      return nextScore >= currentScore ? nextValue : current;
+    }
+
+    const currentScore = scoreTargetPath(current.targetPath);
+    const nextScore = scoreTargetPath(nextValue.targetPath);
+    if (
+      Date.now() - current.createdAt < NAV_DEDUP_WINDOW_MS &&
+      currentScore > nextScore
+    ) {
+      return current;
+    }
+
+    return nextValue;
+  }
+
+  async function ensureAuthReady(): Promise<void> {
+    if (auth.user || auth.isLoggedIn) return;
+    try {
+      await auth.me();
+    } catch {
+      // Если авторизация недоступна, не блокируем навигацию.
+    }
+  }
+
+  // Если уже навигировались недавно, не затираем менее точным переходом.
+  function shouldSkipNavigation(
+    targetPath: string,
+    messageId?: string | null
+  ): boolean {
+    if (!lastNavigation) return false;
+    if (
+      messageId &&
+      lastNavigation.messageId &&
+      messageId === lastNavigation.messageId
+    ) {
+      return true;
+    }
+    const age = Date.now() - lastNavigation.at;
+    if (age > NAV_DEDUP_WINDOW_MS) return false;
+    const currentScore = scoreTargetPath(lastNavigation.path);
+    const nextScore = scoreTargetPath(targetPath);
+    return currentScore >= nextScore;
+  }
+
+  async function enqueueNavigation(
+    targetPath: string,
+    messageId?: string | null
+  ): Promise<void> {
+    const nextValue: PendingNavigation = {
+      targetPath,
+      messageId,
+      createdAt: Date.now(),
+    };
+    const existing = await loadPendingNavigation();
+    const selected = choosePendingNavigation(existing, nextValue);
+    await savePendingNavigation(selected);
+  }
+
+  async function navigateToTarget(
+    targetPath: string,
+    messageId?: string | null
+  ) {
     try {
       const normalized = normalizeTargetPath(targetPath);
+      if (shouldSkipNavigation(normalized, messageId)) {
+        return;
+      }
+      await ensureAuthReady();
       await nuxtApp.$router.isReady();
       if (nuxtApp.$router.currentRoute.value.fullPath === normalized) {
         return;
       }
       await nuxtApp.$router.push(normalized);
+      await nextTick();
+
+      const expected = nuxtApp.$router.resolve(normalized);
+      setTimeout(() => {
+        const current = nuxtApp.$router.currentRoute.value;
+        if (current.path === expected.path) {
+          if (current.fullPath !== expected.fullPath) {
+            void nuxtApp.$router.replace(expected.fullPath);
+          }
+          return;
+        }
+      }, NAV_RETRY_DELAY_MS);
+
+      lastNavigation = {
+        path: normalized,
+        messageId,
+        at: Date.now(),
+      };
     } catch (error) {
       console.error('[PushPlugin] Failed to navigate:', error);
     }
@@ -164,6 +389,19 @@ export default defineNuxtPlugin((nuxtApp) => {
     if ('trackId' in navigation) return navigation.trackId;
     if ('slug' in navigation) return navigation.slug;
     return null;
+  }
+
+  async function flushPendingNavigation(): Promise<void> {
+    if (isFlushingNavigation) return;
+    isFlushingNavigation = true;
+    try {
+      const pending = await loadPendingNavigation();
+      if (!pending) return;
+      await navigateToTarget(pending.targetPath, pending.messageId);
+      await savePendingNavigation(null);
+    } finally {
+      isFlushingNavigation = false;
+    }
   }
 
   // TODO: Раскомментировать когда Firebase будет настроен
@@ -284,6 +522,7 @@ export default defineNuxtPlugin((nuxtApp) => {
         const actionId = action.actionId || '';
         const isTap = isTapAction(actionId);
         const navigation = resolveNavigation(payload);
+        const messageId = resolveMessageId(payload, action);
 
         // Трекинг взаимодействия
         if (payload?.slotId) {
@@ -357,7 +596,8 @@ export default defineNuxtPlugin((nuxtApp) => {
             ? buildPathFromNavigation(navigation)
             : deepLink || '/';
 
-          await navigateToTarget(targetPath);
+          await enqueueNavigation(targetPath, messageId);
+          await flushPendingNavigation();
         }
       }
     );
@@ -403,14 +643,20 @@ export default defineNuxtPlugin((nuxtApp) => {
   };
 
   // Используем Nuxt хук для отложенной инициализации после полной загрузки
-  nuxtApp.hook('app:mounted', () => {
-    console.log('[PushPlugin] App mounted, scheduling notification init in 3s');
-    setTimeout(initNotifications, 3000);
+    nuxtApp.hook('app:mounted', () => {
+      console.log(
+        '[PushPlugin] App mounted, scheduling notification init in 3s'
+      );
+      setTimeout(initNotifications, 3000);
 
-    // Fallback polling отключен - используем только реальные FCM push-уведомления
+      // Восстанавливаем отложенную навигацию, если тап пришёл до инициализации.
+      void flushPendingNavigation();
 
-    console.log(
-      '[PushPlugin] Using FCM push notifications (fallback polling disabled)'
-    );
-  });
+      // Fallback polling отключен - используем только реальные FCM push-уведомления
+
+      console.log(
+        '[PushPlugin] Using FCM push notifications (fallback polling disabled)'
+      );
+    });
+  },
 });

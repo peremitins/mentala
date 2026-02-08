@@ -1,4 +1,5 @@
 import { eq } from 'drizzle-orm';
+import { setResponseStatus } from 'h3';
 import { nanoid } from 'nanoid';
 import {
   notificationInteractions,
@@ -38,14 +39,9 @@ export default defineEventHandler(
 
     if (
       !body.action ||
-      ![
-        'yes',
-        'no',
-        'later',
-        'open',
-        'dismissed',
-        'unanswered',
-      ].includes(body.action)
+      !['yes', 'no', 'later', 'open', 'dismissed', 'unanswered'].includes(
+        body.action
+      )
     ) {
       throw createError({
         statusCode: 400,
@@ -61,10 +57,15 @@ export default defineEventHandler(
       .limit(1);
 
     if (!slot) {
-      throw createError({
-        statusCode: 404,
-        message: 'Notification slot not found',
+      // Не падаем, если слот не найден: пуш мог прийти из другого окружения
+      // или слот уже удалён. В этом случае просто игнорируем взаимодействие.
+      console.warn('[Notifications] Slot not found for interaction', {
+        slotId: body.slotId,
+        userId,
+        action: body.action,
       });
+      setResponseStatus(event, 204);
+      return null as unknown as NotificationInteractionDto;
     }
 
     if (slot.userId !== userId) {

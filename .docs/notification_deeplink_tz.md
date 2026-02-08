@@ -167,10 +167,10 @@ export type NotificationActionHint = 'none' | 'meditation' | 'breathing';
 ## 9. Изменения на сервере
 
 - `global-orchestration.service.ts`: при сборке `NotificationPayload` добавлять `navigation` и `deepLink` по правилам из раздела 6.
-- `delivery.service.ts`: передавать `navigation` в FCM `data` как строку. Проверить `clickAction` для Android.
+- `delivery.service.ts`: передавать `navigation` в FCM `data` как строку. Для Android пуши отправляются **data-only** (без `notification`), а `title/body/image` кладутся в `data` для нативного рендера.
 - `action` в payload используется только для кнопок/трекинга (yes/no/later/snooze). Для навигации `action` не используется.
 
-Важно: сейчас в `delivery.service.ts` задан `clickAction: 'FLUTTER_NOTIFICATION_CLICK'`, а в `AndroidManifest.xml` нет intent‑filter под этот action. Это может блокировать открытие приложения по тапу. Нужно либо удалить `clickAction`, либо добавить корректный intent‑filter под выбранный action.
+Важно: если в будущем понадобится кастомный `clickAction`, он должен быть синхронизирован с `intent-filter` в `AndroidManifest.xml`, иначе тап по уведомлению не откроет приложение.
 
 ## 10. Изменения на клиенте
 
