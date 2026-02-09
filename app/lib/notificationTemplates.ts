@@ -950,27 +950,6 @@ const rawTherapyTemplates: NotificationTemplate[] = [
     },
   },
   {
-    id: 'psystressreminder04_new',
-    kind: 'therapy',
-    entityKey: 'stress',
-    subtype: 'reminder',
-    directness: ['soft', 'moderate', 'hard'],
-    ru: {
-      informal: {
-        soft: 'Сделай "3 вещи": назови 3 предмета вокруг и 3 ощущения в теле.',
-        moderate:
-          'Быстрое заземление: 3 предмета вокруг + 3 ощущения в теле. Это возвращает в реальность.',
-        hard: '3 и 3. Три предмета и три ощущения. Сейчас.',
-      },
-      formal: {
-        soft: 'Сделайте "3 вещи": назовите 3 предмета вокруг и 3 ощущения в теле.',
-        moderate:
-          'Быстрое заземление: 3 предмета вокруг + 3 ощущения в теле. Это возвращает в реальность.',
-        hard: '3 и 3. Три предмета и три ощущения. Сейчас.',
-      },
-    },
-  },
-  {
     id: 'psystressreminder05_new',
     kind: 'therapy',
     entityKey: 'stress',
