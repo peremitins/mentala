@@ -15,7 +15,8 @@
 
     <!-- Основной контент -->
     <div
-      class="flex-1 flex flex-col overflow-hidden absolute w-full h-[calc(100%-100px)] top-0 left-0 bottom-[100px] rounded-lg z-0"
+      class="flex-1 flex flex-col overflow-hidden absolute w-full top-0 left-0 rounded-lg z-0"
+      :style="chatViewportStyle"
       :class="{ 'pt-[100px]': showWelcomeScreen }"
     >
       <!-- Приветственный экран -->
@@ -172,6 +173,14 @@ const emit = defineEmits<{ (e: 'send', text: string): void }>();
 
 const route = useRoute();
 const router = useRouter();
+const chatViewportStyle = computed(() => {
+  const bottomOffset = '100px';
+
+  return {
+    bottom: bottomOffset,
+    height: `calc(100% - ${bottomOffset})`,
+  };
+});
 
 // Определяем экран на основе query параметра и состояния чата
 const showWelcomeScreen = computed(() => {

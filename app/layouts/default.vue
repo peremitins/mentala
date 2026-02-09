@@ -1,5 +1,10 @@
 <template>
-  <div class="h-dvh w-full flex flex-col min-h-dvh p-2 overflow-hidden">
+  <div
+    :class="[
+      'h-dvh w-full flex flex-col min-h-dvh px-1 pt-1 pb-0 overflow-hidden',
+      { 'ios-safe-layout': isIos },
+    ]"
+  >
     <Transition name="scene-bg-fade" mode="out-in">
       <div
         v-if="showSceneBackground && sceneBackground"
@@ -69,6 +74,7 @@ import { useSceneAudio } from '@/app/composables/useSceneAudio';
 import { findSceneTrack } from '@/app/lib/sceneSelectionCatalog';
 import { resolveMediaUrl } from '@/app/utils/media';
 import { useAuthStore } from '@/app/stores/auth';
+import { usePlatform } from '@/app/composables/usePlatform';
 
 const {
   currentTrack,
@@ -91,6 +97,8 @@ const isPortraitMode = computed(() => {
 
 const route = useRoute();
 const auth = useAuthStore();
+const { platform } = usePlatform();
+const isIos = computed(() => platform.value === 'ios');
 const sceneSettings = useSceneSettingsStore();
 const uiSettings = useUiSettingsStore();
 const sceneAudio = useSceneAudio();
