@@ -1661,7 +1661,8 @@ function buildNotificationSystemPrompt(params: {
   const imageTagList = params.imageTagPolicy.allowedTags.join(', ');
   const safeTagList = SAFE_IMAGE_TAGS.join(', ');
   const isWaterTopic = params.entityKey.trim().toLowerCase() === 'water';
-  const isNutritionTopic = params.entityKey.trim().toLowerCase() === 'nutrition';
+  const isNutritionTopic =
+    params.entityKey.trim().toLowerCase() === 'nutrition';
 
   const imageTagRules = [
     '- imageTag должен соответствовать смыслу текста.',
@@ -1819,7 +1820,7 @@ ${params.description ? '- Используй описание как основ�
 
 Стиль:
 - Тон: ${toneMap[params.tone]}
-- Обращение: ${params.addressing === 'formal' ? 'на Вы' : 'на ты'}
+- Обращение: ${params.addressing === 'formal' ? 'на вы' : 'на ты'}
 - Прямота: ${directnessMap[params.directness]}
 ${params.subtype ? `- Фокус уведомления: ${subtypeMap[params.subtype]}` : ''}
 
