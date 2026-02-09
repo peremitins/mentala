@@ -15,10 +15,24 @@ export default defineEventHandler(async (event) => {
     cfg.OAUTH_GOOGLE_CLIENT_ID ||
     process.env.NUXT_OAUTH_GOOGLE_CLIENT_ID;
 
-  if (!webClientId) {
+  const iosClientId =
+    cfg.public.googleIosClientId ||
+    process.env.NUXT_PUBLIC_GOOGLE_IOS_CLIENT_ID;
+
+  const audiences = [
+    ...new Set(
+      [webClientId, iosClientId]
+        .filter((value): value is string => {
+          return typeof value === 'string' && value.trim().length > 0;
+        })
+        .map((value) => value.trim())
+    ),
+  ];
+
+  if (!audiences.length) {
     throw createError({
       statusCode: 500,
-      statusMessage: 'Google client id не настроен',
+      statusMessage: 'Google client id не настроен (web/iOS)',
     });
   }
 
@@ -34,9 +48,13 @@ export default defineEventHandler(async (event) => {
     | undefined;
 
   try {
+    const audience: string | string[] =
+      audiences.length === 1 ? audiences[0] : audiences;
+
     const ticket = await oauthClient.verifyIdToken({
       idToken: body.idToken,
-      audience: webClientId,
+      // Для native токен может прийти с web/iOS audience в зависимости от платформы OAuth.
+      audience,
     });
     payload = ticket.getPayload();
   } catch (error: any) {

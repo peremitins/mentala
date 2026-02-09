@@ -444,6 +444,7 @@ export const userDevices = pgTable('user_devices', {
   userId: integer('user_id').notNull(),
   token: text('token').notNull().unique(), // FCM token
   platform: varchar('platform', { length: 20 }).notNull(), // 'ios' | 'android' | 'web'
+  appEnv: varchar('app_env', { length: 10 }).notNull().default('dev'), // 'dev' | 'prod'
   lastSeen: timestamp('last_seen', { withTimezone: true }).defaultNow(),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()

@@ -5,6 +5,14 @@ import {
 } from '@/server/infrastructure/db/client';
 
 export default defineNitroPlugin(() => {
+  const isStaticBuild =
+    process.env.NITRO_PRESET === 'static' ||
+    process.env.npm_lifecycle_event === 'generate';
+  if (isStaticBuild) {
+    console.log('[TrialUsageCleanup] Skipped in static generate');
+    return;
+  }
+
   const enabled = process.env.TRIAL_USAGE_CLEANUP_ENABLED !== 'false';
   if (!enabled) return;
 
@@ -21,8 +29,8 @@ export default defineNitroPlugin(() => {
     } catch (error) {
       // Если БД недоступна — пересоздаём пул, чтобы восстановить работу фоновой задачи.
       if (isDbConnectionError(error)) {
-        const rootError = (error as { cause?: unknown; code?: string })
-          ?.cause ?? error;
+        const rootError =
+          (error as { cause?: unknown; code?: string })?.cause ?? error;
         const errorMessage =
           (rootError as { message?: string })?.message ||
           (error as { message?: string })?.message ||

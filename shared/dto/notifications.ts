@@ -51,6 +51,7 @@ export type NotificationSubtype =
   | 'mixed';
 
 export type NotificationActionHint = 'none' | 'meditation' | 'breathing';
+export type AppEnv = 'dev' | 'prod';
 
 export type NotificationNavigation =
   | { type: 'home' }
@@ -260,6 +261,7 @@ export interface UserDeviceDto {
   userId: number;
   token: string;
   platform: Platform;
+  appEnv: AppEnv;
   lastSeen: string | null;
   createdAt: string;
   updatedAt: string;
@@ -268,6 +270,7 @@ export interface UserDeviceDto {
 export interface RegisterTokenDto {
   token: string;
   platform: Platform;
+  appEnv?: AppEnv;
 }
 
 export interface UnregisterTokenDto {

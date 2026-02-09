@@ -136,6 +136,27 @@ function buildDeepLinkFromNavigation(navigation: NotificationNavigation): string
   }
 }
 
+function buildActionFromNavigation(
+  navigation: NotificationNavigation
+): { action: string; params?: Record<string, string> } {
+  switch (navigation.type) {
+    case 'meditation_track':
+      return {
+        action: 'open_meditation_track',
+        params: { trackId: navigation.trackId },
+      };
+    case 'breath_practices':
+      return { action: 'open_breath_practices' };
+    case 'breath_practice':
+      return {
+        action: 'open_breath_practice',
+        params: { practiceId: navigation.slug },
+      };
+    default:
+      return { action: 'open_home' };
+  }
+}
+
 /**
  * Интерфейс для источника уведомлений
  */
@@ -1658,6 +1679,7 @@ export async function orchestrateAllSlotsForUser(
 
         const navigation = resolveNavigationFromActionHint(actionHint);
         const deepLink = buildDeepLinkFromNavigation(navigation);
+        const actionMeta = buildActionFromNavigation(navigation);
 
         // Создаём payload
         const payload: NotificationPayload = {
@@ -1678,6 +1700,9 @@ export async function orchestrateAllSlotsForUser(
               slot.isFixed && slot.fixedTime !== null
                 ? slot.fixedTime
                 : undefined, // Флаг для защиты от сдвига
+            // Fallback-навигация для push: action + параметры (для iOS/Android).
+            action: actionMeta.action,
+            ...(actionMeta.params ?? {}),
           },
         };
 

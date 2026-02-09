@@ -8,6 +8,21 @@ import type {
 } from '@/shared/dto/notifications';
 import { getSessionUser } from '@/server/application/auth/session';
 
+function normalizeAppEnv(raw?: string | null): 'dev' | 'prod' | null {
+  if (!raw) return null;
+  const value = raw.trim().toLowerCase();
+  if (value === 'prod' || value === 'production') return 'prod';
+  if (value === 'dev' || value === 'development') return 'dev';
+  return null;
+}
+
+function resolveServerAppEnv(): 'dev' | 'prod' {
+  const fromEnv = normalizeAppEnv(
+    process.env.MENTALA_DB_ENV || process.env.NODE_ENV
+  );
+  return fromEnv || 'dev';
+}
+
 /**
  * POST /api/notifications/register-token
  * Регистрация/обновление FCM токена устройства
@@ -39,6 +54,12 @@ export default defineEventHandler(async (event): Promise<UserDeviceDto> => {
     });
   }
 
+  const headerAppEnv = normalizeAppEnv(
+    String(event.node.req.headers['x-app-env'] || '')
+  );
+  const bodyAppEnv = normalizeAppEnv(body.appEnv);
+  const appEnv = headerAppEnv || bodyAppEnv || resolveServerAppEnv();
+
   // Проверяем, существует ли этот токен
   const [existing] = await db
     .select()
@@ -53,6 +74,7 @@ export default defineEventHandler(async (event): Promise<UserDeviceDto> => {
       .set({
         userId,
         platform: body.platform,
+        appEnv,
         lastSeen: new Date(),
         updatedAt: new Date(),
       })
@@ -64,6 +86,7 @@ export default defineEventHandler(async (event): Promise<UserDeviceDto> => {
       userId: updated.userId,
       token: updated.token,
       platform: updated.platform as 'ios' | 'android' | 'web',
+      appEnv: updated.appEnv as 'dev' | 'prod',
       lastSeen: updated.lastSeen?.toISOString() ?? null,
       createdAt: updated.createdAt.toISOString(),
       updatedAt: updated.updatedAt.toISOString(),
@@ -77,6 +100,7 @@ export default defineEventHandler(async (event): Promise<UserDeviceDto> => {
         userId,
         token: body.token,
         platform: body.platform,
+        appEnv,
       })
       .returning();
 
@@ -85,6 +109,7 @@ export default defineEventHandler(async (event): Promise<UserDeviceDto> => {
       userId: created.userId,
       token: created.token,
       platform: created.platform as 'ios' | 'android' | 'web',
+      appEnv: created.appEnv as 'dev' | 'prod',
       lastSeen: created.lastSeen?.toISOString() ?? null,
       createdAt: created.createdAt.toISOString(),
       updatedAt: created.updatedAt.toISOString(),

@@ -4,10 +4,27 @@ import { PushNotifications } from '@capacitor/push-notifications';
 
 export function useNotifications() {
   let channelPrepared = false;
+  const platform = Capacitor.getPlatform();
+  const isIos = platform === 'ios';
   const isAvailable = computed(() => {
-    const platform = Capacitor.getPlatform();
     return platform === 'ios' || platform === 'android';
   });
+
+  // Для iOS нужен FCM token (APNs token не подходит под текущий серверный контракт).
+  async function resolveFcmToken(): Promise<string | null> {
+    if (!isIos) return null;
+    if (!Capacitor.isPluginAvailable('FCM')) return null;
+    try {
+      const { FCM } = await import('@capacitor-community/fcm');
+      const result = await FCM.getToken();
+      const value =
+        typeof result?.token === 'string' ? result.token.trim() : '';
+      return value || null;
+    } catch (error) {
+      console.error('Failed to get FCM token:', error);
+      return null;
+    }
+  }
 
   /**
    * Планирует локальное уведомление
@@ -106,7 +123,15 @@ export function useNotifications() {
 
       // Если токена нет, регистрируемся заново
       await PushNotifications.register();
-      // Токен придет через событие 'registration'
+      // На iOS сразу пытаемся получить FCM token, на Android ждём событие регистрации
+      if (isIos) {
+        const fcmToken = await resolveFcmToken();
+        if (fcmToken && typeof window !== 'undefined') {
+          window.localStorage.setItem('pushToken', fcmToken);
+        }
+        return fcmToken;
+      }
+      // Токен для Android придёт через событие 'registration'
       return null;
     } catch (error) {
       console.error('Failed to get push token:', error);
