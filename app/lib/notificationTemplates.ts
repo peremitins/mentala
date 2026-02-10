@@ -241,27 +241,6 @@ const rawTherapyTemplates: NotificationTemplate[] = [
     },
   },
   {
-    id: 'psyanxietyreminder10',
-    kind: 'therapy',
-    entityKey: 'anxiety',
-    subtype: 'reminder',
-    directness: ['soft', 'moderate', 'hard'],
-    ru: {
-      informal: {
-        soft: 'Сделай микро-действие: убери одну мелочь, открой окно, встань. Действие заземляет.',
-        moderate:
-          'Выбери одно простое действие на 1 минуту. Тревога падает, когда появляется контроль.',
-        hard: 'Хватит прокручивать. Сделай одно действие на 60 секунд. Сейчас.',
-      },
-      formal: {
-        soft: 'Сделайте микро-действие: уберите одну мелочь, откройте окно, встаньте. Действие заземляет.',
-        moderate:
-          'Выберите одно простое действие на 1 минуту. Тревога снижается, когда появляется контроль.',
-        hard: 'Хватит прокручивать. Сделайте одно действие на 60 секунд. Сейчас.',
-      },
-    },
-  },
-  {
     id: 'psyanxietyreminder11',
     kind: 'therapy',
     entityKey: 'anxiety',
@@ -929,129 +908,6 @@ const rawTherapyTemplates: NotificationTemplate[] = [
     },
   },
   {
-    id: 'psystressreminder03_new',
-    kind: 'therapy',
-    entityKey: 'stress',
-    subtype: 'reminder',
-    directness: ['soft', 'moderate', 'hard'],
-    ru: {
-      informal: {
-        soft: 'Проверь плечи: опусти их и сделай круги плечами 10 раз.',
-        moderate:
-          'Разгрузи верх: 10 кругов плечами назад, 10 - вперед. Дыши спокойно.',
-        hard: 'Плечи вниз. 10 кругов. Сейчас.',
-      },
-      formal: {
-        soft: 'Проверьте плечи: опустите их и сделайте круги плечами 10 раз.',
-        moderate:
-          'Разгрузите верх: 10 кругов плечами назад, 10 - вперед. Дышите спокойно.',
-        hard: 'Плечи вниз. 10 кругов. Сейчас.',
-      },
-    },
-  },
-  {
-    id: 'psystressreminder05_new',
-    kind: 'therapy',
-    entityKey: 'stress',
-    subtype: 'reminder',
-    directness: ['soft', 'moderate', 'hard'],
-    ru: {
-      informal: {
-        soft: 'Если чувствуешь усталость — выбери одну задачу и сократи её до первого шага.',
-        moderate:
-          'Анти-выгорание: один следующий шаг, не весь проект. Что самое маленькое действие?',
-        hard: 'Перестань тащить все сразу. Один шаг. Сейчас.',
-      },
-      formal: {
-        soft: 'Если устали - выберите одну задачу и сократите ее до первого шага.',
-        moderate:
-          'Анти-выгорание: один следующий шаг, не весь проект. Какое самое маленькое действие?',
-        hard: 'Перестаньте тащить все сразу. Один шаг. Сейчас.',
-      },
-    },
-  },
-  {
-    id: 'psystressreminder06_new',
-    kind: 'therapy',
-    entityKey: 'stress',
-    subtype: 'reminder',
-    directness: ['soft', 'moderate', 'hard'],
-    ru: {
-      informal: {
-        soft: 'Сделай разгрузку глаз: 20 секунд смотри вдаль.',
-        moderate: 'Экран утомляет. 20 секунд взгляд вдаль + 3 длинных выдоха.',
-        hard: 'Глаза от экрана. 20 секунд вдаль. Делай.',
-      },
-      formal: {
-        soft: 'Сделайте разгрузку глаз: 20 секунд смотрите вдаль.',
-        moderate: 'Экран утомляет. 20 секунд взгляд вдаль + 3 длинных выдоха.',
-        hard: 'Глаза от экрана. 20 секунд вдаль. Делайте.',
-      },
-    },
-  },
-  {
-    id: 'psystressreminder07_new',
-    kind: 'therapy',
-    entityKey: 'stress',
-    subtype: 'reminder',
-    directness: ['soft', 'moderate', 'hard'],
-    ru: {
-      informal: {
-        soft: 'Попей воды. Усталость часто усиливается от обезвоживания.',
-        moderate:
-          'Пауза на воду: 10 маленьких глотков. Потом вернешься к делу.',
-        hard: 'Вода. Сейчас. Потом продолжишь.',
-      },
-      formal: {
-        soft: 'Попейте воды. Усталость часто усиливается от обезвоживания.',
-        moderate:
-          'Пауза на воду: 10 маленьких глотков. Потом вернетесь к делам.',
-        hard: 'Вода. Сейчас. Потом продолжите.',
-      },
-    },
-  },
-  {
-    id: 'psystressreminder08_new',
-    kind: 'therapy',
-    entityKey: 'stress',
-    subtype: 'reminder',
-    directness: ['soft', 'moderate', 'hard'],
-    ru: {
-      informal: {
-        soft: '1 минута ходьбы по комнате - и нервная система успокаивается.',
-        moderate: 'Встань и пройдись 1-2 минуты. Движение сбрасывает стресс.',
-        hard: 'Вставай и иди 2 минуты. Сейчас.',
-      },
-      formal: {
-        soft: '1 минута ходьбы по комнате - и нервная система успокаивается.',
-        moderate:
-          'Встаньте и пройдитесь 1-2 минуты. Движение сбрасывает стресс.',
-        hard: 'Вставайте и идите 2 минуты. Сейчас.',
-      },
-    },
-  },
-  {
-    id: 'psystressreminder10_new',
-    kind: 'therapy',
-    entityKey: 'stress',
-    subtype: 'reminder',
-    directness: ['soft', 'moderate', 'hard'],
-    ru: {
-      informal: {
-        soft: 'Выдохни и спроси: что важно сегодня, а что можно отложить?',
-        moderate:
-          'Перегруз? выбери 1 главное на сегодня. Остальное - в список, не в голову.',
-        hard: 'Сейчас выбор: 1 главное, остальное - позже. Решай.',
-      },
-      formal: {
-        soft: 'Выдохните и спросите: что важно сегодня, а что можно отложить?',
-        moderate:
-          'Перегруз? выберите 1 главное на сегодня. Остальное - в список, не в голову.',
-        hard: 'Сейчас выбор: 1 главное, остальное - позже. Решайте.',
-      },
-    },
-  },
-  {
     id: 'psystressreminder11_new',
     kind: 'therapy',
     entityKey: 'stress',
@@ -1111,27 +967,6 @@ const rawTherapyTemplates: NotificationTemplate[] = [
         moderate:
           'Шея напряжена? 10 медленных наклонов вправо-влево + длинный выдох.',
         hard: 'Шея: 10 наклонов. Медленно. Сейчас.',
-      },
-    },
-  },
-  {
-    id: 'psystressreminder14_new',
-    kind: 'therapy',
-    entityKey: 'stress',
-    subtype: 'reminder',
-    directness: ['soft', 'moderate', 'hard'],
-    ru: {
-      informal: {
-        soft: 'Поставь таймер на 5 минут и сделай паузу без экрана.',
-        moderate:
-          '5 минут без экрана. Это реально помогает мозгу восстановиться.',
-        hard: 'Телефон в сторону. 5 минут паузы. Делай.',
-      },
-      formal: {
-        soft: 'Поставьте таймер на 5 минут и сделайте паузу без экрана.',
-        moderate:
-          '5 минут без экрана. Это реально помогает мозгу восстановиться.',
-        hard: 'Телефон в сторону. 5 минут паузы. Делайте.',
       },
     },
   },
@@ -1777,27 +1612,6 @@ const rawTherapyTemplates: NotificationTemplate[] = [
     },
   },
   {
-    id: 'psymoodreminder05_new',
-    kind: 'therapy',
-    entityKey: 'mood',
-    subtype: 'reminder',
-    directness: ['soft', 'moderate', 'hard'],
-    ru: {
-      informal: {
-        soft: 'Тело “держит” эмоции. Разомни плечи и шею 60 секунд, пока выдыхаешь длинно. Это реально снижает напряжение.',
-        moderate:
-          '60 секунд: плечи вниз, круги плечами, мягкая шея. Дыши ровно. Настроение часто улучшается через тело.',
-        hard: '60 секунд разминки. Плечи, шея, длинный выдох. Сейчас.',
-      },
-      formal: {
-        soft: 'Тело “держит” эмоции. Разомните плечи и шею 60 секунд с длинным выдохом. Это снижает напряжение.',
-        moderate:
-          '60 секунд: плечи вниз, круги плечами, мягкая шея. Дышите ровно. Настроение улучшается через тело.',
-        hard: '60 секунд разминки. Плечи, шея, длинный выдох. Сейчас.',
-      },
-    },
-  },
-  {
     id: 'psymoodreminder08_new',
     kind: 'therapy',
     entityKey: 'mood',
@@ -1920,27 +1734,6 @@ const rawTherapyTemplates: NotificationTemplate[] = [
         moderate:
           'Одно сообщение близкому — маленькая опора. Не нужно объяснять всё, достаточно контакта и теплого слова.',
         hard: 'Напишите кому-то. Одно сообщение. Сейчас.',
-      },
-    },
-  },
-  {
-    id: 'psymoodreminder14_new',
-    kind: 'therapy',
-    entityKey: 'mood',
-    subtype: 'reminder',
-    directness: ['soft', 'moderate', 'hard'],
-    ru: {
-      informal: {
-        soft: 'Сделай 10 секунд “взгляд вдаль” и длинный выдох. Это простая разгрузка, когда мозг устал и всё кажется тяжелее.',
-        moderate:
-          '20 секунд смотри вдаль + 3 длинных выдоха. Мелочь, но она реально снимает внутренний разгон.',
-        hard: 'Взгляд вдаль. 3 длинных выдоха. Поехали.',
-      },
-      formal: {
-        soft: 'Сделайте 10 секунд “взгляд вдаль” и длинный выдох. Это разгрузка, когда мозг устал и всё кажется тяжелее.',
-        moderate:
-          '20 секунд смотрите вдаль + 3 длинных выдоха. Это снимает внутренний разгон.',
-        hard: 'Взгляд вдаль. 3 длинных выдоха. Начните.',
       },
     },
   },
@@ -3477,27 +3270,6 @@ const rawTherapyTemplates: NotificationTemplate[] = [
 
   // --- REMINDER (15) ---
   {
-    id: 'psyangerreminder01_new',
-    kind: 'therapy',
-    entityKey: 'anger',
-    subtype: 'reminder',
-    directness: ['soft', 'moderate', 'hard'],
-    ru: {
-      informal: {
-        soft: 'Пауза на 10 секунд. Разожми челюсть, опусти плечи и сделай длинный выдох. Злость любит скорость, а пауза возвращает контроль.',
-        moderate:
-          'Стоп на 10 секунд: челюсть мягкая, плечи вниз, выдох длиннее вдоха. Это “охлаждение”, чтобы не сказать лишнего.',
-        hard: 'Стоп. Челюсть разжать. Длинный выдох. Не реагируй сразу.',
-      },
-      formal: {
-        soft: 'Пауза на 10 секунд. Расслабьте челюсть, опустите плечи и сделайте длинный выдох. Пауза возвращает контроль.',
-        moderate:
-          'Стоп на 10 секунд: челюсть мягкая, плечи вниз, выдох длиннее вдоха. Это “охлаждение”, чтобы не сказать лишнего.',
-        hard: 'Стоп. Расслабьте челюсть. Длинный выдох. Не реагируйте сразу.',
-      },
-    },
-  },
-  {
     id: 'psyangerreminder02_new',
     kind: 'therapy',
     entityKey: 'anger',
@@ -3536,27 +3308,6 @@ const rawTherapyTemplates: NotificationTemplate[] = [
         moderate:
           'Два длинных выдоха перед ответом. Это управление импульсом. Потом решите, что говорить.',
         hard: 'Два выдоха — потом слова. Точка.',
-      },
-    },
-  },
-  {
-    id: 'psyangerreminder04_new',
-    kind: 'therapy',
-    entityKey: 'anger',
-    subtype: 'reminder',
-    directness: ['soft', 'moderate', 'hard'],
-    ru: {
-      informal: {
-        soft: 'Если накрывает — смени позицию: встань, сделай 10 шагов, посмотри в окно. Смена контекста сбивает пик злости.',
-        moderate:
-          '10 шагов и взгляд вдаль на 20 секунд. Злость любит туннель, а ты расширяешь поле и возвращаешь управление.',
-        hard: 'Встань. 10 шагов. Взгляд вдаль. Остываем.',
-      },
-      formal: {
-        soft: 'Если накрывает — смените позицию: встаньте, сделайте 10 шагов, посмотрите в окно. Смена контекста сбивает пик злости.',
-        moderate:
-          '10 шагов и взгляд вдаль на 20 секунд. Вы расширяете поле внимания и возвращаете управление.',
-        hard: 'Встаньте. 10 шагов. Взгляд вдаль. Остываем.',
       },
     },
   },
@@ -4475,27 +4226,6 @@ const rawTherapyTemplates: NotificationTemplate[] = [
     },
   },
   {
-    id: 'psyselfesteemreminder11_new',
-    kind: 'therapy',
-    entityKey: 'selfesteem',
-    subtype: 'reminder',
-    directness: ['soft', 'moderate', 'hard'],
-    ru: {
-      informal: {
-        soft: 'Если стыдно — сделай паузу и назови чувство. Стыд любит молчание, а ясность делает его меньше.',
-        moderate:
-          'Назови: “мне стыдно/мне больно”. И добавь: “я справлюсь”. Это не отменяет ответственности, но снимает самонаказание.',
-        hard: 'Назови чувство. Стыд. И перестань добивать себя.',
-      },
-      formal: {
-        soft: 'Если стыдно — сделайте паузу и назовите чувство. Стыд любит молчание, а ясность делает его меньше.',
-        moderate:
-          'Назовите: “мне стыдно/мне больно”. И добавьте: “я справлюсь”. Это снижает самонаказание.',
-        hard: 'Назовите чувство. Стыд. И перестаньте добивать себя.',
-      },
-    },
-  },
-  {
     id: 'psyselfesteemreminder13_new',
     kind: 'therapy',
     entityKey: 'selfesteem',
@@ -4505,14 +4235,14 @@ const rawTherapyTemplates: NotificationTemplate[] = [
       informal: {
         soft: 'Выбери одну ценность: забота, честность, рост. И спроси: “какой маленький шаг сейчас будет в её сторону?”. Это опора сильнее критики.',
         moderate:
-          'Самооценка растёт, когда ты живёшь по ценностям. Один маленький шаг сегодня важнее, чем тысяча обвинений.',
-        hard: 'Шаг по ценности. Сейчас. И меньше самокритики.',
+          'Выбери одну ценность: забота, честность, рост. И спроси: “какой маленький шаг сейчас будет в её сторону?”. Это опора сильнее критики.',
+        hard: 'Выбери одну ценность: забота, честность, рост. И спроси: “какой маленький шаг сейчас будет в её сторону?”. Это опора сильнее критики.',
       },
       formal: {
         soft: 'Выберите одну ценность: забота, честность, рост. Спросите: “какой маленький шаг сейчас будет в её сторону?”.',
         moderate:
-          'Самооценка растёт, когда вы живёте по ценностям. Один шаг сегодня важнее обвинений.',
-        hard: 'Шаг по ценности. Сейчас. И меньше самокритики.',
+          'Выберите одну ценность: забота, честность, рост. Спросите: “какой маленький шаг сейчас будет в её сторону?',
+        hard: 'Выберите одну ценность: забота, честность, рост. Спросите: “какой маленький шаг сейчас будет в её сторону?',
       },
     },
   },
@@ -4972,13 +4702,13 @@ const rawTherapyTemplates: NotificationTemplate[] = [
         soft: 'Сделай сегодня маленький шаг по ценности, а не по страху. Это может быть честность, забота, творчество — то, что важно именно тебе.',
         moderate:
           'Когда ты выбираешь ценности, а не только избегание, внутри появляется ощущение: “я живу свою жизнь, а не только от чего-то бегу”.',
-        hard: 'Один шаг по ценности сегодня. Это укрепит тебя больше, чем сто самоупрёков.',
+        hard: 'Когда ты выбираешь ценности, а не только избегание, внутри появляется ощущение: “я живу свою жизнь, а не только от чего-то бегу”.',
       },
       formal: {
         soft: 'Сделайте сегодня маленький шаг по ценности, а не по страху. Это может быть честность, забота или творчество.',
         moderate:
           'Выбор в пользу ценностей даёт ощущение “я живу свою жизнь”, а не только избегаю ошибок.',
-        hard: 'Один шаг по ценности укрепит вас больше, чем сто самоупрёков.',
+        hard: 'Выбор в пользу ценностей даёт ощущение “я живу свою жизнь”, а не только избегаю ошибок.',
       },
     },
   },
@@ -6149,27 +5879,6 @@ const rawTherapyTemplates: NotificationTemplate[] = [
         moderate:
           'Сейчас достаточно базовых шагов: дышать, есть, спать по мере сил. Остальное необязательно.',
         hard: 'Не требуйте от себя подвигов. Задача — выдерживать этот период, а не быть идеальными.',
-      },
-    },
-  },
-  {
-    id: 'psygriefreminder06_new',
-    kind: 'therapy',
-    entityKey: 'grief',
-    subtype: 'reminder',
-    directness: ['soft', 'moderate', 'hard'],
-    ru: {
-      informal: {
-        soft: 'Если мысли крутятся по кругу, можно мягко сказать себе: “стоп, сейчас я просто сделаю один маленький шаг по уходу за собой”.',
-        moderate:
-          'Выбери один шаг: выпить воды, умыться, переодеться. Это не отменяет боли, но поддерживает тебя в ней.',
-        hard: 'Сделай один маленький шаг о себе: вода, умыться или сменить одежду.',
-      },
-      formal: {
-        soft: 'Если мысли застревают, мягко скажите себе: “сейчас я сделаю один маленький шаг заботы о себе”.',
-        moderate:
-          'Выберите одно действие: выпить воды, умыться, переодеться. Это небольшой, но важный жест поддержки.',
-        hard: 'Сделайте один шаг ухода за собой: вода, умывание или переодевание.',
       },
     },
   },
@@ -9155,6 +8864,124 @@ const rawHabitsTemplates: NotificationTemplate[] = [
       },
     },
   },
+  // Informational (10 шаблонов)
+  {
+    id: 'habit_steps_info_01',
+    kind: 'habits',
+    entityKey: 'steps',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Ежедневная ходьба 30 минут снижает риск сердечно-сосудистых заболеваний на 30%.',
+    },
+  },
+  {
+    id: 'habit_steps_info_02',
+    kind: 'habits',
+    entityKey: 'steps',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Во время ходьбы организм выделяет эндорфины — гормоны счастья, которые снимают напряжение.',
+    },
+  },
+  {
+    id: 'habit_steps_info_03',
+    kind: 'habits',
+    entityKey: 'steps',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal: 'При 9000 шагов в день риск развития рака снижается на 16%.',
+    },
+  },
+  {
+    id: 'habit_steps_info_04',
+    kind: 'habits',
+    entityKey: 'steps',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Регулярная ходьба укрепляет кости и снижает риск остеопороза.',
+    },
+  },
+  {
+    id: 'habit_steps_info_05',
+    kind: 'habits',
+    entityKey: 'steps',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal: 'Ходьба улучшает мышление и мозговую активность.',
+    },
+  },
+  {
+    id: 'habit_steps_info_06',
+    kind: 'habits',
+    entityKey: 'steps',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal: 'Даже 2,5 часа ходьбы в день может добавить до 11 лет жизни.',
+    },
+  },
+  {
+    id: 'habit_steps_info_07',
+    kind: 'habits',
+    entityKey: 'steps',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Ходьба в медленном темпе 30-50 минут 4-5 раз в неделю значительно повышает функциональные возможности организма.',
+    },
+  },
+  {
+    id: 'habit_steps_info_08',
+    kind: 'habits',
+    entityKey: 'steps',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Врачи рекомендуют ежедневно проходить 4-6 километров или 10000 шагов.',
+    },
+  },
+  {
+    id: 'habit_steps_info_09',
+    kind: 'habits',
+    entityKey: 'steps',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'До 5 миллионов случаев смерти в год можно предотвратить при большей физической активности.',
+    },
+  },
+  {
+    id: 'habit_steps_info_10',
+    kind: 'habits',
+    entityKey: 'steps',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Ходьба улучшает работу легких, способствует контролю веса и укрепляет мышцы и суставы.',
+    },
+  },
   // ==========================================
   // TRAINING (build) - 20 REMINDER + 20 INFORMATIONAL + 20 MOTIVATIONAL = 60 шаблонов
   // ==========================================
@@ -9916,7 +9743,7 @@ const rawHabitsTemplates: NotificationTemplate[] = [
     directness: ['universal'],
     ru: {
       universal:
-        'Курение пачки сигарет в день обходится примерно в 150 000₽ в год.',
+        'Курение пачки сигарет в день обходится примерно в 100 000₽ в год.',
     },
   },
   {
@@ -10446,6 +10273,2737 @@ const rawHabitsTemplates: NotificationTemplate[] = [
         soft: 'Каждый трезвый час — это вы выбираете себя и свою жизнь.',
         moderate: 'Вы выбрали жизнь без алкоголя. Это Ваша победа.',
         hard: 'Выбирайте жизнь. Каждый час — Ваше решение.',
+      },
+    },
+  },
+  // ==========================================
+  // MEDITATION (build) - 10 REMINDER + 10 INFORMATIONAL + 10 MOTIVATIONAL = 30 шаблонов
+  // ==========================================
+
+  // Reminder (10 шаблонов)
+  {
+    id: 'habit_meditation_reminder_01',
+    kind: 'habits',
+    entityKey: 'meditation',
+    intent: 'build',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Время для медитации. Даже 5 минут помогут перезагрузиться.',
+        moderate: 'Пора медитировать. 5-10 минут — сейчас.',
+        hard: 'Медитация. 5 минут. Начинай.',
+      },
+      formal: {
+        soft: 'Время для медитации. Даже 5 минут помогут перезагрузиться.',
+        moderate: 'Пора медитировать. 5-10 минут — сейчас.',
+        hard: 'Медитация. 5 минут. Начинайте.',
+      },
+    },
+  },
+  {
+    id: 'habit_meditation_reminder_02',
+    kind: 'habits',
+    entityKey: 'meditation',
+    intent: 'build',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Сделай паузу для медитации. Твой ум нуждается в отдыхе.',
+        moderate: 'Ум нуждается в отдыхе. Медитация — сейчас.',
+        hard: 'Ум устал. Медитируй. Сейчас.',
+      },
+      formal: {
+        soft: 'Сделайте паузу для медитации. Ваш ум нуждается в отдыхе.',
+        moderate: 'Ум нуждается в отдыхе. Медитация — сейчас.',
+        hard: 'Ум устал. Медитируйте. Сейчас.',
+      },
+    },
+  },
+  {
+    id: 'habit_meditation_reminder_03',
+    kind: 'habits',
+    entityKey: 'meditation',
+    intent: 'build',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Медитация ждёт. Найди несколько минут для себя.',
+        moderate: 'Медитация ждёт. Найди время — прямо сейчас.',
+        hard: 'Медитация. Время есть. Делай.',
+      },
+      formal: {
+        soft: 'Медитация ждёт. Найдите несколько минут для себя.',
+        moderate: 'Медитация ждёт. Найдите время — прямо сейчас.',
+        hard: 'Медитация. Время есть. Делайте.',
+      },
+    },
+  },
+  {
+    id: 'habit_meditation_reminder_04',
+    kind: 'habits',
+    entityKey: 'meditation',
+    intent: 'build',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Когда последний раз ты медитировал? Пора вернуться к практике.',
+        moderate: 'Последний раз медитировал? Возвращайся к практике.',
+        hard: 'Медитация давно? Возвращайся.',
+      },
+      formal: {
+        soft: 'Когда последний раз вы медитировали? Пора вернуться к практике.',
+        moderate: 'Последний раз медитировали? Возвращайтесь к практике.',
+        hard: 'Медитация давно? Возвращайтесь.',
+      },
+    },
+  },
+  {
+    id: 'habit_meditation_reminder_05',
+    kind: 'habits',
+    entityKey: 'meditation',
+    intent: 'build',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Уделил ли ты сегодня время медитации? Если нет — начни прямо сейчас.',
+        moderate: 'Медитировал сегодня? Если нет — начинай сейчас.',
+        hard: 'Медитировал? Нет? Начинай.',
+      },
+      formal: {
+        soft: 'Уделили ли вы сегодня время медитации? Если нет — начните прямо сейчас.',
+        moderate: 'Медитировали сегодня? Если нет — начинайте сейчас.',
+        hard: 'Медитировали? Нет? Начинайте.',
+      },
+    },
+  },
+  {
+    id: 'habit_meditation_reminder_06',
+    kind: 'habits',
+    entityKey: 'meditation',
+    intent: 'build',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Твой день станет легче после короткой медитации. Попробуй.',
+        moderate: 'День станет легче после медитации. Начинай.',
+        hard: 'День станет легче. Медитируй.',
+      },
+      formal: {
+        soft: 'Ваш день станет легче после короткой медитации. Попробуйте.',
+        moderate: 'День станет легче после медитации. Начинайте.',
+        hard: 'День станет легче. Медитируйте.',
+      },
+    },
+  },
+  {
+    id: 'habit_meditation_reminder_07',
+    kind: 'habits',
+    entityKey: 'meditation',
+    intent: 'build',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Остановись на минуту. Медитация поможет вернуть ясность.',
+        moderate: 'Остановись. Медитация вернёт ясность — сейчас.',
+        hard: 'Остановись. Медитация. Ясность.',
+      },
+      formal: {
+        soft: 'Остановитесь на минуту. Медитация поможет вернуть ясность.',
+        moderate: 'Остановитесь. Медитация вернёт ясность — сейчас.',
+        hard: 'Остановитесь. Медитация. Ясность.',
+      },
+    },
+  },
+  {
+    id: 'habit_meditation_reminder_08',
+    kind: 'habits',
+    entityKey: 'meditation',
+    intent: 'build',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Стресс копится? Медитация — простой способ снизить напряжение.',
+        moderate: 'Стресс копится? Медитация снизит напряжение. Начинай.',
+        hard: 'Стресс? Медитируй. Снизь напряжение.',
+      },
+      formal: {
+        soft: 'Стресс копится? Медитация — простой способ снизить напряжение.',
+        moderate: 'Стресс копится? Медитация снизит напряжение. Начинайте.',
+        hard: 'Стресс? Медитируйте. Снизьте напряжение.',
+      },
+    },
+  },
+  {
+    id: 'habit_meditation_reminder_09',
+    kind: 'habits',
+    entityKey: 'meditation',
+    intent: 'build',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Подари себе 10 минут тишины. Медитация перезагрузит мысли.',
+        moderate: '10 минут тишины. Медитация перезагрузит мысли — начинай.',
+        hard: '10 минут. Медитация. Перезагрузка.',
+      },
+      formal: {
+        soft: 'Подарите себе 10 минут тишины. Медитация перезагрузит мысли.',
+        moderate: '10 минут тишины. Медитация перезагрузит мысли — начинайте.',
+        hard: '10 минут. Медитация. Перезагрузка.',
+      },
+    },
+  },
+  {
+    id: 'habit_meditation_reminder_10',
+    kind: 'habits',
+    entityKey: 'meditation',
+    intent: 'build',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Забываешь о медитации? Напоминаю: время практиковать.',
+        moderate: 'Забываешь медитировать? Практикуй сейчас.',
+        hard: 'Забыл? Медитируй. Сейчас.',
+      },
+      formal: {
+        soft: 'Забываете о медитации? Напоминаю: время практиковать.',
+        moderate: 'Забываете медитировать? Практикуйте сейчас.',
+        hard: 'Забыли? Медитируйте. Сейчас.',
+      },
+    },
+  },
+  // Informational (10 шаблонов)
+  {
+    id: 'habit_meditation_info_01',
+    kind: 'habits',
+    entityKey: 'meditation',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Медитация уменьшает стресс, тревогу и депрессию — это подтверждено научными исследованиями.',
+    },
+  },
+  {
+    id: 'habit_meditation_info_02',
+    kind: 'habits',
+    entityKey: 'meditation',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Медитация изменяет геометрию коры головного мозга, ускоряя обработку информации.',
+    },
+  },
+  {
+    id: 'habit_meditation_info_03',
+    kind: 'habits',
+    entityKey: 'meditation',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Регулярная медитация улучшает навыки внимания на долгие годы после начала практики.',
+    },
+  },
+  {
+    id: 'habit_meditation_info_04',
+    kind: 'habits',
+    entityKey: 'meditation',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Трансцендентальная медитация может уменьшать артериальное давление.',
+    },
+  },
+  {
+    id: 'habit_meditation_info_05',
+    kind: 'habits',
+    entityKey: 'meditation',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Медитация стимулирует выработку дофамина и серотонина — нейромедиаторов счастья.',
+    },
+  },
+  {
+    id: 'habit_meditation_info_06',
+    kind: 'habits',
+    entityKey: 'meditation',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Исследования показали повышение активности теломеразы после медитации — фермента, связанного с уровнем счастья.',
+    },
+  },
+  {
+    id: 'habit_meditation_info_07',
+    kind: 'habits',
+    entityKey: 'meditation',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Медитация способствует отключению центра страхов в мозге, уменьшая беспокойство и тревогу.',
+    },
+  },
+  {
+    id: 'habit_meditation_info_08',
+    kind: 'habits',
+    entityKey: 'meditation',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Научные исследования медитации проводятся с 1960-х годов и публикуются в авторитетных изданиях.',
+    },
+  },
+  {
+    id: 'habit_meditation_info_09',
+    kind: 'habits',
+    entityKey: 'meditation',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Медитация на основе осознанности помогает снизить кровяное давление.',
+    },
+  },
+  {
+    id: 'habit_meditation_info_10',
+    kind: 'habits',
+    entityKey: 'meditation',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Медитация улучшает перцептивную чувствительность и способность к концентрации.',
+    },
+  },
+  // Motivational (10 шаблонов)
+  {
+    id: 'habit_meditation_motiv_01',
+    kind: 'habits',
+    entityKey: 'meditation',
+    intent: 'build',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Каждая минута медитации — это вклад в твоё спокойствие.',
+        moderate: 'Каждая минута медитации — вклад в спокойствие. Практикуй.',
+        hard: 'Медитируй. Спокойствие — твоё.',
+      },
+      formal: {
+        soft: 'Каждая минута медитации — это вклад в Ваше спокойствие.',
+        moderate: 'Каждая минута медитации — вклад в спокойствие. Практикуйте.',
+        hard: 'Медитируйте. Спокойствие — Ваше.',
+      },
+    },
+  },
+  {
+    id: 'habit_meditation_motiv_02',
+    kind: 'habits',
+    entityKey: 'meditation',
+    intent: 'build',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Медитация делает тебя сильнее изнутри. Продолжай практику.',
+        moderate: 'Медитация делает сильнее. Продолжай практиковать.',
+        hard: 'Медитируй. Становись сильнее.',
+      },
+      formal: {
+        soft: 'Медитация делает Вас сильнее изнутри. Продолжайте практику.',
+        moderate: 'Медитация делает сильнее. Продолжайте практиковать.',
+        hard: 'Медитируйте. Становитесь сильнее.',
+      },
+    },
+  },
+  {
+    id: 'habit_meditation_motiv_03',
+    kind: 'habits',
+    entityKey: 'meditation',
+    intent: 'build',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Ты заслуживаешь внутренний покой. Медитация — твой путь к нему.',
+        moderate: 'Ты заслуживаешь покой. Медитация — путь к нему.',
+        hard: 'Заслуживаешь покой. Медитируй.',
+      },
+      formal: {
+        soft: 'Вы заслуживаете внутренний покой. Медитация — Ваш путь к нему.',
+        moderate: 'Вы заслуживаете покой. Медитация — путь к нему.',
+        hard: 'Заслуживаете покой. Медитируйте.',
+      },
+    },
+  },
+  {
+    id: 'habit_meditation_motiv_04',
+    kind: 'habits',
+    entityKey: 'meditation',
+    intent: 'build',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Практика медитации — это забота о себе. Ты это делаешь для себя.',
+        moderate: 'Медитация — забота о себе. Делай для себя.',
+        hard: 'Медитируй. Для себя.',
+      },
+      formal: {
+        soft: 'Практика медитации — это забота о себе. Вы это делаете для себя.',
+        moderate: 'Медитация — забота о себе. Делайте для себя.',
+        hard: 'Медитируйте. Для себя.',
+      },
+    },
+  },
+  {
+    id: 'habit_meditation_motiv_05',
+    kind: 'habits',
+    entityKey: 'meditation',
+    intent: 'build',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Твой ум благодарит тебя за каждую минуту медитации.',
+        moderate: 'Ум благодарит за медитацию. Продолжай.',
+        hard: 'Ум благодарит. Медитируй.',
+      },
+      formal: {
+        soft: 'Ваш ум благодарит Вас за каждую минуту медитации.',
+        moderate: 'Ум благодарит за медитацию. Продолжайте.',
+        hard: 'Ум благодарит. Медитируйте.',
+      },
+    },
+  },
+  {
+    id: 'habit_meditation_motiv_06',
+    kind: 'habits',
+    entityKey: 'meditation',
+    intent: 'build',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Регулярность важнее длительности. Медитируй хотя бы 5 минут.',
+        moderate: 'Регулярность важнее длительности. 5 минут — начинай.',
+        hard: 'Регулярность важнее. 5 минут. Делай.',
+      },
+      formal: {
+        soft: 'Регулярность важнее длительности. Медитируйте хотя бы 5 минут.',
+        moderate: 'Регулярность важнее длительности. 5 минут — начинайте.',
+        hard: 'Регулярность важнее. 5 минут. Делайте.',
+      },
+    },
+  },
+  {
+    id: 'habit_meditation_motiv_07',
+    kind: 'habits',
+    entityKey: 'meditation',
+    intent: 'build',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Медитация меняет твой мозг к лучшему. Продолжай практику.',
+        moderate: 'Медитация меняет мозг к лучшему. Практикуй дальше.',
+        hard: 'Меняй мозг. Медитируй.',
+      },
+      formal: {
+        soft: 'Медитация меняет Ваш мозг к лучшему. Продолжайте практику.',
+        moderate: 'Медитация меняет мозг к лучшему. Практикуйте дальше.',
+        hard: 'Меняйте мозг. Медитируйте.',
+      },
+    },
+  },
+  {
+    id: 'habit_meditation_motiv_08',
+    kind: 'habits',
+    entityKey: 'meditation',
+    intent: 'build',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Ты строишь новую привычку. Каждая медитация приближает к цели.',
+        moderate: 'Строишь привычку. Каждая медитация приближает к цели.',
+        hard: 'Строишь привычку. Медитируй.',
+      },
+      formal: {
+        soft: 'Вы строите новую привычку. Каждая медитация приближает к цели.',
+        moderate: 'Строите привычку. Каждая медитация приближает к цели.',
+        hard: 'Строите привычку. Медитируйте.',
+      },
+    },
+  },
+  {
+    id: 'habit_meditation_motiv_09',
+    kind: 'habits',
+    entityKey: 'meditation',
+    intent: 'build',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Твоя практика медитации — это инвестиция в ментальное здоровье.',
+        moderate: 'Медитация — инвестиция в ментальное здоровье. Инвестируй.',
+        hard: 'Инвестируй в здоровье. Медитируй.',
+      },
+      formal: {
+        soft: 'Ваша практика медитации — это инвестиция в ментальное здоровье.',
+        moderate: 'Медитация — инвестиция в ментальное здоровье. Инвестируйте.',
+        hard: 'Инвестируйте в здоровье. Медитируйте.',
+      },
+    },
+  },
+  {
+    id: 'habit_meditation_motiv_10',
+    kind: 'habits',
+    entityKey: 'meditation',
+    intent: 'build',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Простые практики меняют жизнь. Медитируй и ощути разницу.',
+        moderate: 'Простые практики меняют жизнь. Медитируй — ощути.',
+        hard: 'Меняй жизнь. Медитируй.',
+      },
+      formal: {
+        soft: 'Простые практики меняют жизнь. Медитируйте и ощутите разницу.',
+        moderate: 'Простые практики меняют жизнь. Медитируйте — ощутите.',
+        hard: 'Меняйте жизнь. Медитируйте.',
+      },
+    },
+  },
+  // ==========================================
+  // NUTRITION (build) - 10 REMINDER + 10 INFORMATIONAL + 10 MOTIVATIONAL = 30 шаблонов
+  // ==========================================
+
+  // Reminder (10 шаблонов)
+  {
+    id: 'habit_nutrition_reminder_01',
+    kind: 'habits',
+    entityKey: 'nutrition',
+    intent: 'build',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Следишь ли ты за питанием сегодня? Начни с простого — овощи и белок.',
+        moderate: 'Следишь за питанием? Овощи и белок — сейчас.',
+        hard: 'Питание. Овощи. Белок. Сейчас.',
+      },
+      formal: {
+        soft: 'Следите ли вы за питанием сегодня? Начните с простого — овощи и белок.',
+        moderate: 'Следите за питанием? Овощи и белок — сейчас.',
+        hard: 'Питание. Овощи. Белок. Сейчас.',
+      },
+    },
+  },
+  {
+    id: 'habit_nutrition_reminder_02',
+    kind: 'habits',
+    entityKey: 'nutrition',
+    intent: 'build',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Пора подумать о питании. Здоровая еда — это забота о себе.',
+        moderate: 'Думай о питании. Здоровая еда — забота о себе.',
+        hard: 'Питание. Здоровая еда. Сейчас.',
+      },
+      formal: {
+        soft: 'Пора подумать о питании. Здоровая еда — это забота о себе.',
+        moderate: 'Думайте о питании. Здоровая еда — забота о себе.',
+        hard: 'Питание. Здоровая еда. Сейчас.',
+      },
+    },
+  },
+  {
+    id: 'habit_nutrition_reminder_03',
+    kind: 'habits',
+    entityKey: 'nutrition',
+    intent: 'build',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Что ты ел сегодня? Проверь, хватает ли овощей и фруктов.',
+        moderate: 'Что ел? Проверь овощи и фрукты — хватает ли?',
+        hard: 'Овощи? Фрукты? Проверь. Добавь.',
+      },
+      formal: {
+        soft: 'Что вы ели сегодня? Проверьте, хватает ли овощей и фруктов.',
+        moderate: 'Что ели? Проверьте овощи и фрукты — хватает ли?',
+        hard: 'Овощи? Фрукты? Проверьте. Добавьте.',
+      },
+    },
+  },
+  {
+    id: 'habit_nutrition_reminder_04',
+    kind: 'habits',
+    entityKey: 'nutrition',
+    intent: 'build',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Планируешь следующий приём пищи? Сделай его здоровым.',
+        moderate: 'Планируешь еду? Сделай здоровой — сейчас.',
+        hard: 'Еда? Планируй. Здоровую.',
+      },
+      formal: {
+        soft: 'Планируете следующий приём пищи? Сделайте его здоровым.',
+        moderate: 'Планируете еду? Сделайте здоровой — сейчас.',
+        hard: 'Еда? Планируйте. Здоровую.',
+      },
+    },
+  },
+  {
+    id: 'habit_nutrition_reminder_05',
+    kind: 'habits',
+    entityKey: 'nutrition',
+    intent: 'build',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Проверь свою тарелку: есть ли овощи, белок и цельные злаки?',
+        moderate: 'Проверь тарелку: овощи, белок, злаки?',
+        hard: 'Тарелка. Проверь. Добавь.',
+      },
+      formal: {
+        soft: 'Проверьте свою тарелку: есть ли овощи, белок и цельные злаки?',
+        moderate: 'Проверьте тарелку: овощи, белок, злаки?',
+        hard: 'Тарелка. Проверьте. Добавьте.',
+      },
+    },
+  },
+  {
+    id: 'habit_nutrition_reminder_06',
+    kind: 'habits',
+    entityKey: 'nutrition',
+    intent: 'build',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Забываешь о правильном питании? Начни с одного здорового приёма пищи.',
+        moderate: 'Забываешь о питании? Один здоровый приём — сейчас.',
+        hard: 'Забыл? Питание. Здоровый приём.',
+      },
+      formal: {
+        soft: 'Забываете о правильном питании? Начните с одного здорового приёма пищи.',
+        moderate: 'Забываете о питании? Один здоровый приём — сейчас.',
+        hard: 'Забыли? Питание. Здоровый приём.',
+      },
+    },
+  },
+  {
+    id: 'habit_nutrition_reminder_08',
+    kind: 'habits',
+    entityKey: 'nutrition',
+    intent: 'build',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Когда последний раз ты ел овощи? Добавь их в следующий приём пищи.',
+        moderate: 'Когда ел овощи? Добавь в следующий приём.',
+        hard: 'Овощи? Когда? Добавь.',
+      },
+      formal: {
+        soft: 'Когда последний раз вы ели овощи? Добавьте их в следующий приём пищи.',
+        moderate: 'Когда ели овощи? Добавьте в следующий приём.',
+        hard: 'Овощи? Когда? Добавьте.',
+      },
+    },
+  },
+  {
+    id: 'habit_nutrition_reminder_09',
+    kind: 'habits',
+    entityKey: 'nutrition',
+    intent: 'build',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Правильное питание даёт энергию. Выбери здоровый вариант сейчас.',
+        moderate: 'Питание даёт энергию. Выбирай здоровый вариант — сейчас.',
+        hard: 'Энергия. Питание. Здоровый выбор.',
+      },
+      formal: {
+        soft: 'Правильное питание даёт энергию. Выберите здоровый вариант сейчас.',
+        moderate: 'Питание даёт энергию. Выбирайте здоровый вариант — сейчас.',
+        hard: 'Энергия. Питание. Здоровый выбор.',
+      },
+    },
+  },
+  {
+    id: 'habit_nutrition_reminder_10',
+    kind: 'habits',
+    entityKey: 'nutrition',
+    intent: 'build',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Сегодня ты уже думал о здоровом питании? Время начать.',
+        moderate: 'Думал о здоровом питании? Время начинать.',
+        hard: 'Думал? Нет? Начинай.',
+      },
+      formal: {
+        soft: 'Сегодня вы уже думали о здоровом питании? Время начать.',
+        moderate: 'Думали о здоровом питании? Время начинать.',
+        hard: 'Думали? Нет? Начинайте.',
+      },
+    },
+  },
+  // Informational (10 шаблонов)
+  {
+    id: 'habit_nutrition_info_01',
+    kind: 'habits',
+    entityKey: 'nutrition',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Правильное питание защищает от диабета, болезней сердца, инсульта и рака.',
+    },
+  },
+  {
+    id: 'habit_nutrition_info_02',
+    kind: 'habits',
+    entityKey: 'nutrition',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Потребление не менее 400 г овощей и фруктов в день снижает риск сердечно-сосудистых заболеваний и некоторых видов рака.',
+    },
+  },
+  {
+    id: 'habit_nutrition_info_03',
+    kind: 'habits',
+    entityKey: 'nutrition',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Жиры должны составлять менее 30% от суточной калорийности, при этом насыщенные жиры — менее 10%.',
+    },
+  },
+  {
+    id: 'habit_nutrition_info_04',
+    kind: 'habits',
+    entityKey: 'nutrition',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Потребление соли рекомендуется менее 5 г в день для профилактики гипертонии.',
+    },
+  },
+  {
+    id: 'habit_nutrition_info_05',
+    kind: 'habits',
+    entityKey: 'nutrition',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Зерновые продукты должны обеспечивать не менее половины суточной калорийности, предпочтительно цельнозерновые.',
+    },
+  },
+  {
+    id: 'habit_nutrition_info_06',
+    kind: 'habits',
+    entityKey: 'nutrition',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Здоровое питание укрепляет иммунную систему и повышает физическую выносливость.',
+    },
+  },
+  {
+    id: 'habit_nutrition_info_07',
+    kind: 'habits',
+    entityKey: 'nutrition',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Сбалансированное питание улучшает когнитивные функции и память.',
+    },
+  },
+  {
+    id: 'habit_nutrition_info_08',
+    kind: 'habits',
+    entityKey: 'nutrition',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Правильно питающиеся люди ведут более производительную жизнь и имеют лучшие шансы на долголетие.',
+    },
+  },
+  {
+    id: 'habit_nutrition_info_09',
+    kind: 'habits',
+    entityKey: 'nutrition',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Здоровое питание способствует нормальному развитию детей и улучшению когнитивных функций.',
+    },
+  },
+  {
+    id: 'habit_nutrition_info_10',
+    kind: 'habits',
+    entityKey: 'nutrition',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Правильное питание поддерживает здоровую микрофлору кишечника и улучшает пищеварение.',
+    },
+  },
+  // Motivational (10 шаблонов)
+  {
+    id: 'habit_nutrition_motiv_01',
+    kind: 'habits',
+    entityKey: 'nutrition',
+    intent: 'build',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Каждый здоровый приём пищи — это забота о своём теле.',
+        moderate: 'Каждый здоровый приём — забота о теле. Заботься.',
+        hard: 'Здоровый приём. Заботься о теле.',
+      },
+      formal: {
+        soft: 'Каждый здоровый приём пищи — это забота о своём теле.',
+        moderate: 'Каждый здоровый приём — забота о теле. Заботьтесь.',
+        hard: 'Здоровый приём. Заботьтесь о теле.',
+      },
+    },
+  },
+  {
+    id: 'habit_nutrition_motiv_02',
+    kind: 'habits',
+    entityKey: 'nutrition',
+    intent: 'build',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Ты строишь здоровые привычки. Продолжай выбирать правильную еду.',
+        moderate: 'Строишь здоровые привычки. Выбирай правильно.',
+        hard: 'Строишь привычки. Выбирай правильно.',
+      },
+      formal: {
+        soft: 'Вы строите здоровые привычки. Продолжайте выбирать правильную еду.',
+        moderate: 'Строите здоровые привычки. Выбирайте правильно.',
+        hard: 'Строите привычки. Выбирайте правильно.',
+      },
+    },
+  },
+  {
+    id: 'habit_nutrition_motiv_03',
+    kind: 'habits',
+    entityKey: 'nutrition',
+    intent: 'build',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Твоё тело благодарит тебя за каждый правильный выбор.',
+        moderate: 'Тело благодарит за правильный выбор. Продолжай.',
+        hard: 'Тело благодарит. Продолжай.',
+      },
+      formal: {
+        soft: 'Ваше тело благодарит Вас за каждый правильный выбор.',
+        moderate: 'Тело благодарит за правильный выбор. Продолжайте.',
+        hard: 'Тело благодарит. Продолжайте.',
+      },
+    },
+  },
+  {
+    id: 'habit_nutrition_motiv_04',
+    kind: 'habits',
+    entityKey: 'nutrition',
+    intent: 'build',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Правильное питание — это инвестиция в своё здоровье и долголетие.',
+        moderate: 'Питание — инвестиция в здоровье. Инвестируй.',
+        hard: 'Инвестируй в здоровье. Питайся правильно.',
+      },
+      formal: {
+        soft: 'Правильное питание — это инвестиция в своё здоровье и долголетие.',
+        moderate: 'Питание — инвестиция в здоровье. Инвестируйте.',
+        hard: 'Инвестируйте в здоровье. Питайтесь правильно.',
+      },
+    },
+  },
+  {
+    id: 'habit_nutrition_motiv_05',
+    kind: 'habits',
+    entityKey: 'nutrition',
+    intent: 'build',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Каждый день — это возможность выбрать здоровье. Используй её.',
+        moderate: 'Каждый день — выбор здоровья. Используй возможность.',
+        hard: 'Выбирай здоровье. Сегодня.',
+      },
+      formal: {
+        soft: 'Каждый день — это возможность выбрать здоровье. Используйте её.',
+        moderate: 'Каждый день — выбор здоровья. Используйте возможность.',
+        hard: 'Выбирайте здоровье. Сегодня.',
+      },
+    },
+  },
+  {
+    id: 'habit_nutrition_motiv_06',
+    kind: 'habits',
+    entityKey: 'nutrition',
+    intent: 'build',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Ты делаешь отличную работу. Правильное питание — это твой путь к здоровью.',
+        moderate: 'Отличная работа. Питание — путь к здоровью.',
+        hard: 'Отличная работа. Продолжай.',
+      },
+      formal: {
+        soft: 'Вы делаете отличную работу. Правильное питание — это Ваш путь к здоровью.',
+        moderate: 'Отличная работа. Питание — путь к здоровью.',
+        hard: 'Отличная работа. Продолжайте.',
+      },
+    },
+  },
+  {
+    id: 'habit_nutrition_motiv_07',
+    kind: 'habits',
+    entityKey: 'nutrition',
+    intent: 'build',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Здоровое питание даёт тебе энергию для всего, что важно.',
+        moderate: 'Питание даёт энергию для важного. Питайся правильно.',
+        hard: 'Энергия для важного. Питайся.',
+      },
+      formal: {
+        soft: 'Здоровое питание даёт Вам энергию для всего, что важно.',
+        moderate: 'Питание даёт энергию для важного. Питайтесь правильно.',
+        hard: 'Энергия для важного. Питайтесь.',
+      },
+    },
+  },
+  {
+    id: 'habit_nutrition_motiv_08',
+    kind: 'habits',
+    entityKey: 'nutrition',
+    intent: 'build',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Ты заслуживаешь чувствовать себя хорошо. Питание — это основа.',
+        moderate: 'Заслуживаешь чувствовать себя хорошо. Питание — основа.',
+        hard: 'Заслуживаешь. Питание — основа.',
+      },
+      formal: {
+        soft: 'Вы заслуживаете чувствовать себя хорошо. Питание — это основа.',
+        moderate: 'Заслуживаете чувствовать себя хорошо. Питание — основа.',
+        hard: 'Заслуживаете. Питание — основа.',
+      },
+    },
+  },
+  {
+    id: 'habit_nutrition_motiv_09',
+    kind: 'habits',
+    entityKey: 'nutrition',
+    intent: 'build',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Простые изменения в питании меняют всё. Продолжай двигаться вперёд.',
+        moderate: 'Простые изменения меняют всё. Двигайся вперёд.',
+        hard: 'Меняй. Двигайся. Вперёд.',
+      },
+      formal: {
+        soft: 'Простые изменения в питании меняют всё. Продолжайте двигаться вперёд.',
+        moderate: 'Простые изменения меняют всё. Двигайтесь вперёд.',
+        hard: 'Меняйте. Двигайтесь. Вперёд.',
+      },
+    },
+  },
+  {
+    id: 'habit_nutrition_motiv_10',
+    kind: 'habits',
+    entityKey: 'nutrition',
+    intent: 'build',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Каждый правильный выбор приближает тебя к цели. Ты на верном пути.',
+        moderate: 'Каждый выбор приближает к цели. Верный путь.',
+        hard: 'Выбирай правильно. Двигайся к цели.',
+      },
+      formal: {
+        soft: 'Каждый правильный выбор приближает Вас к цели. Вы на верном пути.',
+        moderate: 'Каждый выбор приближает к цели. Верный путь.',
+        hard: 'Выбирайте правильно. Двигайтесь к цели.',
+      },
+    },
+  },
+  // ==========================================
+  // GRATITUDE (build) - 10 REMINDER + 10 INFORMATIONAL + 10 MOTIVATIONAL = 30 шаблонов
+  // ==========================================
+
+  // Reminder (10 шаблонов)
+  {
+    id: 'habit_gratitude_reminder_01',
+    kind: 'habits',
+    entityKey: 'gratitude',
+    intent: 'build',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Время для практики благодарности. Запиши 3 вещи, за которые благодарен сегодня.',
+        moderate: 'Практика благодарности. 3 вещи — запиши сейчас.',
+        hard: 'Благодарность. 3 вещи. Записывай.',
+      },
+      formal: {
+        soft: 'Время для практики благодарности. Запишите 3 вещи, за которые благодарны сегодня.',
+        moderate: 'Практика благодарности. 3 вещи — запишите сейчас.',
+        hard: 'Благодарность. 3 вещи. Записывайте.',
+      },
+    },
+  },
+  {
+    id: 'habit_gratitude_reminder_02',
+    kind: 'habits',
+    entityKey: 'gratitude',
+    intent: 'build',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Что хорошего произошло сегодня? Запиши это в дневник благодарности.',
+        moderate: 'Что хорошего сегодня? Запиши в дневник.',
+        hard: 'Хорошее сегодня? Записывай.',
+      },
+      formal: {
+        soft: 'Что хорошего произошло сегодня? Запишите это в дневник благодарности.',
+        moderate: 'Что хорошего сегодня? Запишите в дневник.',
+        hard: 'Хорошее сегодня? Записывайте.',
+      },
+    },
+  },
+  {
+    id: 'habit_gratitude_reminder_03',
+    kind: 'habits',
+    entityKey: 'gratitude',
+    intent: 'build',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Пауза на благодарность. За что ты благодарен прямо сейчас?',
+        moderate: 'Пауза. За что благодарен? Осознай сейчас.',
+        hard: 'Благодарен? За что? Осознай.',
+      },
+      formal: {
+        soft: 'Пауза на благодарность. За что вы благодарны прямо сейчас?',
+        moderate: 'Пауза. За что благодарны? Осознайте сейчас.',
+        hard: 'Благодарны? За что? Осознайте.',
+      },
+    },
+  },
+  {
+    id: 'habit_gratitude_reminder_04',
+    kind: 'habits',
+    entityKey: 'gratitude',
+    intent: 'build',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Забываешь о благодарности? Напоминаю: запиши хотя бы одну вещь.',
+        moderate: 'Забываешь? Одна вещь — запиши сейчас.',
+        hard: 'Забыл? Одна вещь. Записывай.',
+      },
+      formal: {
+        soft: 'Забываете о благодарности? Напоминаю: запишите хотя бы одну вещь.',
+        moderate: 'Забываете? Одна вещь — запишите сейчас.',
+        hard: 'Забыли? Одна вещь. Записывайте.',
+      },
+    },
+  },
+  {
+    id: 'habit_gratitude_reminder_05',
+    kind: 'habits',
+    entityKey: 'gratitude',
+    intent: 'build',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Практиковал ли ты благодарность сегодня? Если нет — самое время.',
+        moderate: 'Практиковал благодарность? Если нет — делай сейчас.',
+        hard: 'Практиковал? Нет? Делай.',
+      },
+      formal: {
+        soft: 'Практиковали ли вы благодарность сегодня? Если нет — самое время.',
+        moderate: 'Практиковали благодарность? Если нет — делайте сейчас.',
+        hard: 'Практиковали? Нет? Делайте.',
+      },
+    },
+  },
+  {
+    id: 'habit_gratitude_reminder_06',
+    kind: 'habits',
+    entityKey: 'gratitude',
+    intent: 'build',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Найди минуту для благодарности. Это быстро меняет настроение.',
+        moderate: 'Минута для благодарности. Меняет настроение — делай.',
+        hard: 'Благодарность. Минута. Меняй настроение.',
+      },
+      formal: {
+        soft: 'Найдите минуту для благодарности. Это быстро меняет настроение.',
+        moderate: 'Минута для благодарности. Меняет настроение — делайте.',
+        hard: 'Благодарность. Минута. Меняйте настроение.',
+      },
+    },
+  },
+  {
+    id: 'habit_gratitude_reminder_07',
+    kind: 'habits',
+    entityKey: 'gratitude',
+    intent: 'build',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Дневник благодарности ждёт. Запиши что-то хорошее из сегодняшнего дня.',
+        moderate: 'Дневник ждёт. Запиши хорошее из дня — сейчас.',
+        hard: 'Дневник. Хорошее. Записывай.',
+      },
+      formal: {
+        soft: 'Дневник благодарности ждёт. Запишите что-то хорошее из сегодняшнего дня.',
+        moderate: 'Дневник ждёт. Запишите хорошее из дня — сейчас.',
+        hard: 'Дневник. Хорошее. Записывайте.',
+      },
+    },
+  },
+  {
+    id: 'habit_gratitude_reminder_08',
+    kind: 'habits',
+    entityKey: 'gratitude',
+    intent: 'build',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Вспомни три позитивных момента дня. Это практика благодарности.',
+        moderate: 'Три позитивных момента. Вспомни — сейчас.',
+        hard: 'Три момента. Позитивных. Вспоминай.',
+      },
+      formal: {
+        soft: 'Вспомните три позитивных момента дня. Это практика благодарности.',
+        moderate: 'Три позитивных момента. Вспомните — сейчас.',
+        hard: 'Три момента. Позитивных. Вспоминайте.',
+      },
+    },
+  },
+  {
+    id: 'habit_gratitude_reminder_09',
+    kind: 'habits',
+    entityKey: 'gratitude',
+    intent: 'build',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Когда последний раз ты практиковал благодарность? Вернись к практике.',
+        moderate: 'Когда практиковал благодарность? Возвращайся к практике.',
+        hard: 'Практика давно? Возвращайся.',
+      },
+      formal: {
+        soft: 'Когда последний раз вы практиковали благодарность? Вернитесь к практике.',
+        moderate: 'Когда практиковали благодарность? Возвращайтесь к практике.',
+        hard: 'Практика давно? Возвращайтесь.',
+      },
+    },
+  },
+  {
+    id: 'habit_gratitude_reminder_10',
+    kind: 'habits',
+    entityKey: 'gratitude',
+    intent: 'build',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Остановись и подумай: за что ты благодарен в этот момент?',
+        moderate: 'Остановись. За что благодарен сейчас? Подумай.',
+        hard: 'Остановись. Благодарен? Подумай.',
+      },
+      formal: {
+        soft: 'Остановитесь и подумайте: за что вы благодарны в этот момент?',
+        moderate: 'Остановитесь. За что благодарны сейчас? Подумайте.',
+        hard: 'Остановитесь. Благодарны? Подумайте.',
+      },
+    },
+  },
+  // Informational (10 шаблонов)
+  {
+    id: 'habit_gratitude_info_01',
+    kind: 'habits',
+    entityKey: 'gratitude',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Практика благодарности активирует медиальную префронтальную кору мозга, отвечающую за эмпатию и принятие решений.',
+    },
+  },
+  {
+    id: 'habit_gratitude_info_02',
+    kind: 'habits',
+    entityKey: 'gratitude',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Благодарность стимулирует выработку дофамина и серотонина — нейромедиаторов счастья.',
+    },
+  },
+  {
+    id: 'habit_gratitude_info_03',
+    kind: 'habits',
+    entityKey: 'gratitude',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Регулярная практика благодарности через нейропластичность создаёт «скоростные магистрали» для позитивных эмоций в мозге.',
+    },
+  },
+  {
+    id: 'habit_gratitude_info_04',
+    kind: 'habits',
+    entityKey: 'gratitude',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Практика благодарности повышает общее счастье и удовлетворённость жизнью.',
+    },
+  },
+  {
+    id: 'habit_gratitude_info_05',
+    kind: 'habits',
+    entityKey: 'gratitude',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Благодарность снижает проявления депрессии и укрепляет эмоциональную устойчивость к стрессу.',
+    },
+  },
+  {
+    id: 'habit_gratitude_info_06',
+    kind: 'habits',
+    entityKey: 'gratitude',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Практика благодарности способствует здоровому сну и снижает клеточное воспаление.',
+    },
+  },
+  {
+    id: 'habit_gratitude_info_07',
+    kind: 'habits',
+    entityKey: 'gratitude',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Невозможно одновременно чувствовать зависть и благодарность — практика отключает токсичные эмоции.',
+    },
+  },
+  {
+    id: 'habit_gratitude_info_08',
+    kind: 'habits',
+    entityKey: 'gratitude',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Дневник благодарности — это систематическая фиксация людей, событий или вещей, за которые испытываешь признательность.',
+    },
+  },
+  {
+    id: 'habit_gratitude_info_09',
+    kind: 'habits',
+    entityKey: 'gratitude',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Письменное выражение благодарности эффективнее мысленного, так как процесс письма помогает объективно оценить происходящее.',
+    },
+  },
+  {
+    id: 'habit_gratitude_info_10',
+    kind: 'habits',
+    entityKey: 'gratitude',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Регулярность — ключевой фактор практики благодарности: позитивный эффект накапливается со временем.',
+    },
+  },
+  // Motivational (10 шаблонов)
+  {
+    id: 'habit_gratitude_motiv_01',
+    kind: 'habits',
+    entityKey: 'gratitude',
+    intent: 'build',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Каждая запись благодарности меняет твой мозг к лучшему.',
+        moderate: 'Каждая запись меняет мозг к лучшему. Записывай.',
+        hard: 'Меняй мозг. Записывай благодарность.',
+      },
+      formal: {
+        soft: 'Каждая запись благодарности меняет Ваш мозг к лучшему.',
+        moderate: 'Каждая запись меняет мозг к лучшему. Записывайте.',
+        hard: 'Меняйте мозг. Записывайте благодарность.',
+      },
+    },
+  },
+  {
+    id: 'habit_gratitude_motiv_02',
+    kind: 'habits',
+    entityKey: 'gratitude',
+    intent: 'build',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Ты строишь привычку благодарности. Это твой путь к счастью.',
+        moderate: 'Строишь привычку. Путь к счастью — продолжай.',
+        hard: 'Строишь привычку. К счастью. Продолжай.',
+      },
+      formal: {
+        soft: 'Вы строите привычку благодарности. Это Ваш путь к счастью.',
+        moderate: 'Строите привычку. Путь к счастью — продолжайте.',
+        hard: 'Строите привычку. К счастью. Продолжайте.',
+      },
+    },
+  },
+  {
+    id: 'habit_gratitude_motiv_03',
+    kind: 'habits',
+    entityKey: 'gratitude',
+    intent: 'build',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Благодарность — это не про отрицание проблем, а про умение замечать хорошее.',
+        moderate: 'Благодарность — умение замечать хорошее. Замечай.',
+        hard: 'Замечай хорошее. Практикуй благодарность.',
+      },
+      formal: {
+        soft: 'Благодарность — это не про отрицание проблем, а про умение замечать хорошее.',
+        moderate: 'Благодарность — умение замечать хорошее. Замечайте.',
+        hard: 'Замечайте хорошее. Практикуйте благодарность.',
+      },
+    },
+  },
+  {
+    id: 'habit_gratitude_motiv_04',
+    kind: 'habits',
+    entityKey: 'gratitude',
+    intent: 'build',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Ты делаешь отличную работу. Продолжай практиковать благодарность.',
+        moderate: 'Отличная работа. Продолжай благодарность.',
+        hard: 'Отличная работа. Продолжай.',
+      },
+      formal: {
+        soft: 'Вы делаете отличную работу. Продолжайте практиковать благодарность.',
+        moderate: 'Отличная работа. Продолжайте благодарность.',
+        hard: 'Отличная работа. Продолжайте.',
+      },
+    },
+  },
+  {
+    id: 'habit_gratitude_motiv_05',
+    kind: 'habits',
+    entityKey: 'gratitude',
+    intent: 'build',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Практика благодарности — это забота о своём ментальном здоровье.',
+        moderate: 'Благодарность — забота о ментальном здоровье. Заботься.',
+        hard: 'Забота о здоровье. Благодарность. Практикуй.',
+      },
+      formal: {
+        soft: 'Практика благодарности — это забота о своём ментальном здоровье.',
+        moderate: 'Благодарность — забота о ментальном здоровье. Заботьтесь.',
+        hard: 'Забота о здоровье. Благодарность. Практикуйте.',
+      },
+    },
+  },
+  {
+    id: 'habit_gratitude_motiv_06',
+    kind: 'habits',
+    entityKey: 'gratitude',
+    intent: 'build',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Каждая минута благодарности прокладывает путь к позитивным эмоциям.',
+        moderate: 'Каждая минута прокладывает путь к позитиву. Продолжай.',
+        hard: 'Прокладывай путь. К позитиву. Благодари.',
+      },
+      formal: {
+        soft: 'Каждая минута благодарности прокладывает путь к позитивным эмоциям.',
+        moderate: 'Каждая минута прокладывает путь к позитиву. Продолжайте.',
+        hard: 'Прокладывайте путь. К позитиву. Благодарите.',
+      },
+    },
+  },
+  {
+    id: 'habit_gratitude_motiv_07',
+    kind: 'habits',
+    entityKey: 'gratitude',
+    intent: 'build',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Ты заслуживаешь счастья. Благодарность — простой инструмент для этого.',
+        moderate:
+          'Заслуживаешь счастья. Благодарность — инструмент. Используй.',
+        hard: 'Заслуживаешь счастье. Благодари.',
+      },
+      formal: {
+        soft: 'Вы заслуживаете счастья. Благодарность — простой инструмент для этого.',
+        moderate:
+          'Заслуживаете счастья. Благодарность — инструмент. Используйте.',
+        hard: 'Заслуживаете счастье. Благодарите.',
+      },
+    },
+  },
+  {
+    id: 'habit_gratitude_motiv_08',
+    kind: 'habits',
+    entityKey: 'gratitude',
+    intent: 'build',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Простые практики меняют жизнь. Благодарность — одна из них.',
+        moderate: 'Простые практики меняют жизнь. Благодари — меняй.',
+        hard: 'Меняй жизнь. Благодари.',
+      },
+      formal: {
+        soft: 'Простые практики меняют жизнь. Благодарность — одна из них.',
+        moderate: 'Простые практики меняют жизнь. Благодарите — меняйте.',
+        hard: 'Меняйте жизнь. Благодарите.',
+      },
+    },
+  },
+  {
+    id: 'habit_gratitude_motiv_09',
+    kind: 'habits',
+    entityKey: 'gratitude',
+    intent: 'build',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Регулярность важнее идеальности. Записывай хотя бы одну вещь в день.',
+        moderate: 'Регулярность важнее. Одна вещь в день — делай.',
+        hard: 'Регулярность важнее. Делай.',
+      },
+      formal: {
+        soft: 'Регулярность важнее идеальности. Записывайте хотя бы одну вещь в день.',
+        moderate: 'Регулярность важнее. Одна вещь в день — делайте.',
+        hard: 'Регулярность важнее. Делайте.',
+      },
+    },
+  },
+  {
+    id: 'habit_gratitude_motiv_10',
+    kind: 'habits',
+    entityKey: 'gratitude',
+    intent: 'build',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Ты создаёшь новую привычку благодарности. Каждый день приближает к цели.',
+        moderate: 'Создаёшь привычку. Каждый день — к цели.',
+        hard: 'Создаёшь привычку. К цели. Действуй.',
+      },
+      formal: {
+        soft: 'Вы создаёте новую привычку благодарности. Каждый день приближает к цели.',
+        moderate: 'Создаёте привычку. Каждый день — к цели.',
+        hard: 'Создаёте привычку. К цели. Действуйте.',
+      },
+    },
+  },
+  // ==========================================
+  // CAFFEINE (build) - 10 REMINDER + 10 INFORMATIONAL + 10 MOTIVATIONAL = 30 шаблонов
+  // ВАЖНО: Кофе полезен! Проблема только в чрезмерном потреблении и времени приёма
+  // ==========================================
+
+  // Reminder (10 шаблонов)
+  {
+    id: 'habit_caffeine_reminder_01',
+    kind: 'habits',
+    entityKey: 'caffeine',
+    intent: 'build',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Следишь ли ты за балансом кофеина? Последняя чашка лучше до 14:00.',
+        moderate: 'Баланс кофеина. Последняя чашка до 14:00 — проверь время.',
+        hard: 'Кофе после 14:00? Убирай.',
+      },
+      formal: {
+        soft: 'Следите ли вы за балансом кофеина? Последняя чашка лучше до 14:00.',
+        moderate: 'Баланс кофеина. Последняя чашка до 14:00 — проверьте время.',
+        hard: 'Кофе после 14:00? Убирайте.',
+      },
+    },
+  },
+  {
+    id: 'habit_caffeine_reminder_02',
+    kind: 'habits',
+    entityKey: 'caffeine',
+    intent: 'build',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Сколько кофе ты выпил сегодня? Безопасная норма — до 400 мг (3-4 чашки).',
+        moderate: 'Сколько кофе сегодня? Норма — до 400 мг. Проверь.',
+        hard: 'Кофе за день? Считай. Норма — 400 мг.',
+      },
+      formal: {
+        soft: 'Сколько кофе вы выпили сегодня? Безопасная норма — до 400 мг (3-4 чашки).',
+        moderate: 'Сколько кофе сегодня? Норма — до 400 мг. Проверьте.',
+        hard: 'Кофе за день? Считайте. Норма — 400 мг.',
+      },
+    },
+  },
+  {
+    id: 'habit_caffeine_reminder_03',
+    kind: 'habits',
+    entityKey: 'caffeine',
+    intent: 'build',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Время для последней чашки кофе. После обеда переходи на воду или чай без кофеина.',
+        moderate: 'Последняя чашка кофе. После 14:00 — без кофеина.',
+        hard: 'Последний кофе. После 14:00 — стоп.',
+      },
+      formal: {
+        soft: 'Время для последней чашки кофе. После обеда переходите на воду или чай без кофеина.',
+        moderate: 'Последняя чашка кофе. После 14:00 — без кофеина.',
+        hard: 'Последний кофе. После 14:00 — стоп.',
+      },
+    },
+  },
+  {
+    id: 'habit_caffeine_reminder_04',
+    kind: 'habits',
+    entityKey: 'caffeine',
+    intent: 'build',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Сколько чашек кофе ты уже выпил? Следи за количеством и временем.',
+        moderate: 'Считай чашки кофе за день. Последняя — до обеда.',
+        hard: 'Сколько чашек? Считай. Последняя до обеда.',
+      },
+      formal: {
+        soft: 'Сколько чашек кофе вы уже выпили? Следите за количеством и временем.',
+        moderate: 'Считайте чашки кофе за день. Последняя — до обеда.',
+        hard: 'Сколько чашек? Считайте. Последняя до обеда.',
+      },
+    },
+  },
+  {
+    id: 'habit_caffeine_reminder_05',
+    kind: 'habits',
+    entityKey: 'caffeine',
+    intent: 'build',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Хочешь ещё кофе? Посмотри на часы — после 14:00 лучше переключиться на воду.',
+        moderate: 'Ещё кофе? Сейчас который час? После 14:00 не стоит.',
+        hard: 'Ещё кофе? Смотри на часы. После 14:00 стоп.',
+      },
+      formal: {
+        soft: 'Хотите ещё кофе? Посмотрите на часы — после 14:00 лучше переключиться на воду.',
+        moderate: 'Ещё кофе? Сейчас который час? После 14:00 не стоит.',
+        hard: 'Ещё кофе? Смотрите на часы. После 14:00 стоп.',
+      },
+    },
+  },
+  {
+    id: 'habit_caffeine_reminder_06',
+    kind: 'habits',
+    entityKey: 'caffeine',
+    intent: 'build',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Хочешь хорошо спать? Пей кофе только в первой половине дня.',
+        moderate: 'Для хорошего сна — кофе только до обеда.',
+        hard: 'Хороший сон? Кофе до обеда. Точка.',
+      },
+      formal: {
+        soft: 'Хотите хорошо спать? Пейте кофе только в первой половине дня.',
+        moderate: 'Для хорошего сна — кофе только до обеда.',
+        hard: 'Хороший сон? Кофе до обеда. Точка.',
+      },
+    },
+  },
+  {
+    id: 'habit_caffeine_reminder_07',
+    kind: 'habits',
+    entityKey: 'caffeine',
+    intent: 'build',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Кофе во второй половине дня может испортить твой сон. Лучше переключись на воду или чай.',
+        moderate: 'Кофе после обеда портит сон. Переходи на воду.',
+        hard: 'После обеда кофе мешает спать. Переходи на воду.',
+      },
+      formal: {
+        soft: 'Кофе во второй половине дня может испортить ваш сон. Лучше переключитесь на воду или чай.',
+        moderate: 'Кофе после обеда портит сон. Переходите на воду.',
+        hard: 'После обеда кофе мешает спать. Переходите на воду.',
+      },
+    },
+  },
+  {
+    id: 'habit_caffeine_reminder_08',
+    kind: 'habits',
+    entityKey: 'caffeine',
+    intent: 'build',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Чувствуешь тревогу или нервозность? Возможно, сегодня было слишком много кофе.',
+        moderate: 'Тревожность? Может, слишком много кофе за день.',
+        hard: 'Тревожность? Много кофе. Сбавь темп.',
+      },
+      formal: {
+        soft: 'Чувствуете тревогу или нервозность? Возможно, сегодня было слишком много кофе.',
+        moderate: 'Тревожность? Может, слишком много кофе за день.',
+        hard: 'Тревожность? Много кофе. Сбавьте темп.',
+      },
+    },
+  },
+  {
+    id: 'habit_caffeine_reminder_09',
+    kind: 'habits',
+    entityKey: 'caffeine',
+    intent: 'build',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Пьёшь энергетики? Помни, что кофеин в них и в кофе складывается — не переборщи.',
+        moderate: 'Энергетики содержат кофеин. Учитывай их как кофе.',
+        hard: 'Энергетики = кофеин. Учитывай в дневной норме.',
+      },
+      formal: {
+        soft: 'Пьёте энергетики? Помните, что кофеин в них и в кофе складывается — не переборщите.',
+        moderate: 'Энергетики содержат кофеин. Учитывайте их как кофе.',
+        hard: 'Энергетики = кофеин. Учитывайте в дневной норме.',
+      },
+    },
+  },
+  {
+    id: 'habit_caffeine_reminder_10',
+    kind: 'habits',
+    entityKey: 'caffeine',
+    intent: 'build',
+    subtype: 'reminder',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Уже вечер? Откажись от кофе сейчас — он помешает тебе уснуть.',
+        moderate: 'Вечер? Кофе сейчас помешает уснуть.',
+        hard: 'Вечер. Кофе нельзя — не уснёшь.',
+      },
+      formal: {
+        soft: 'Уже вечер? Откажитесь от кофе сейчас — он помешает вам уснуть.',
+        moderate: 'Вечер? Кофе сейчас помешает уснуть.',
+        hard: 'Вечер. Кофе нельзя — не уснёте.',
+      },
+    },
+  },
+  // Informational (10 шаблонов)
+  {
+    id: 'habit_caffeine_info_01',
+    kind: 'habits',
+    entityKey: 'caffeine',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Умеренное потребление кофе (до 400 мг кофеина в день) снижает риск болезней Паркинсона и Альцгеймера.',
+    },
+  },
+  {
+    id: 'habit_caffeine_info_02',
+    kind: 'habits',
+    entityKey: 'caffeine',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Кофе полезен: он повышает умственную и физическую работоспособность, улучшает память и внимание.',
+    },
+  },
+  {
+    id: 'habit_caffeine_info_03',
+    kind: 'habits',
+    entityKey: 'caffeine',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Безопасная доза кофеина для здоровых взрослых — до 400 мг в день, это примерно 3-4 чашки кофе.',
+    },
+  },
+  {
+    id: 'habit_caffeine_info_04',
+    kind: 'habits',
+    entityKey: 'caffeine',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Кофе снижает риск диабета 2 типа и связан с уменьшением риска депрессии.',
+    },
+  },
+  {
+    id: 'habit_caffeine_info_05',
+    kind: 'habits',
+    entityKey: 'caffeine',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Чрезмерное потребление кофеина (более 450 мг в день) может нарушать сон и повышать уровень тревожности.',
+    },
+  },
+  {
+    id: 'habit_caffeine_info_06',
+    kind: 'habits',
+    entityKey: 'caffeine',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Кофеин после 14:00 может ухудшить качество сна, даже если засыпание происходит нормально.',
+    },
+  },
+  {
+    id: 'habit_caffeine_info_07',
+    kind: 'habits',
+    entityKey: 'caffeine',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Кофе снижает риск некоторых видов рака и улучшает функции печени при умеренном потреблении.',
+    },
+  },
+  {
+    id: 'habit_caffeine_info_08',
+    kind: 'habits',
+    entityKey: 'caffeine',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Баланс кофеина — это не отказ, а контроль количества и времени приёма для сохранения пользы.',
+    },
+  },
+  {
+    id: 'habit_caffeine_info_09',
+    kind: 'habits',
+    entityKey: 'caffeine',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Высокие дозы кофеина могут временно повысить тревожность и учащённое сердцебиение у чувствительных людей.',
+    },
+  },
+  {
+    id: 'habit_caffeine_info_10',
+    kind: 'habits',
+    entityKey: 'caffeine',
+    intent: 'build',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Кофе изучается учёными с 1960-х годов — умеренное потребление признано безопасным и даже полезным.',
+    },
+  },
+  // Motivational (10 шаблонов)
+  {
+    id: 'habit_caffeine_motiv_01',
+    kind: 'habits',
+    entityKey: 'caffeine',
+    intent: 'build',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Следить за временем кофе — это забота о качестве твоего сна.',
+        moderate: 'Контролируешь время кофе — заботишься о сне.',
+        hard: 'Контролируешь кофе — спишь лучше. Продолжай.',
+      },
+      formal: {
+        soft: 'Следить за временем кофе — это забота о качестве вашего сна.',
+        moderate: 'Контролируете время кофе — заботитесь о сне.',
+        hard: 'Контролируете кофе — спите лучше. Продолжайте.',
+      },
+    },
+  },
+  {
+    id: 'habit_caffeine_motiv_02',
+    kind: 'habits',
+    entityKey: 'caffeine',
+    intent: 'build',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Ты контролируешь свои привычки, а не они тебя. Продолжай.',
+        moderate: 'Контролируешь привычки, не они тебя. Продолжай.',
+        hard: 'Контроль за тобой. Не за кофеином.',
+      },
+      formal: {
+        soft: 'Вы контролируете свои привычки, а не они Вас. Продолжайте.',
+        moderate: 'Контролируете привычки, не они Вас. Продолжайте.',
+        hard: 'Контроль за Вами. Не за кофеином.',
+      },
+    },
+  },
+  {
+    id: 'habit_caffeine_motiv_03',
+    kind: 'habits',
+    entityKey: 'caffeine',
+    intent: 'build',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Пить кофе умеренно — получать энергию без вреда для сна. Ты молодец.',
+        moderate: 'Умеренный кофе — энергия без вреда. Молодец.',
+        hard: 'Умеренный кофе = энергия без вреда. Держи курс.',
+      },
+      formal: {
+        soft: 'Пить кофе умеренно — получать энергию без вреда для сна. Вы молодец.',
+        moderate: 'Умеренный кофе — энергия без вреда. Молодец.',
+        hard: 'Умеренный кофе = энергия без вреда. Держите курс.',
+      },
+    },
+  },
+  {
+    id: 'habit_caffeine_motiv_04',
+    kind: 'habits',
+    entityKey: 'caffeine',
+    intent: 'build',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Ты находишь баланс с кофе — пьёшь в меру и вовремя. Умный подход.',
+        moderate: 'Находишь баланс с кофе. Умный подход.',
+        hard: 'Баланс с кофе найден. Держи его.',
+      },
+      formal: {
+        soft: 'Вы находите баланс с кофе — пьёте в меру и вовремя. Умный подход.',
+        moderate: 'Находите баланс с кофе. Умный подход.',
+        hard: 'Баланс с кофе найден. Держите его.',
+      },
+    },
+  },
+  {
+    id: 'habit_caffeine_motiv_05',
+    kind: 'habits',
+    entityKey: 'caffeine',
+    intent: 'build',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Контролируешь время кофе — спишь лучше и меньше нервничаешь. Продолжай.',
+        moderate: 'Контролируешь кофе — спишь лучше. Так держать.',
+        hard: 'Контроль кофе = лучший сон. Продолжай.',
+      },
+      formal: {
+        soft: 'Контролируете время кофе — спите лучше и меньше нервничаете. Продолжайте.',
+        moderate: 'Контролируете кофе — спите лучше. Так держать.',
+        hard: 'Контроль кофе = лучший сон. Продолжайте.',
+      },
+    },
+  },
+  {
+    id: 'habit_caffeine_motiv_06',
+    kind: 'habits',
+    entityKey: 'caffeine',
+    intent: 'build',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Ты пьёшь кофе с умом — получаешь пользу без вреда. Отлично.',
+        moderate: 'Пьёшь кофе с умом. Получаешь пользу. Отлично.',
+        hard: 'Кофе с умом = польза без вреда. Так держать.',
+      },
+      formal: {
+        soft: 'Вы пьёте кофе с умом — получаете пользу без вреда. Отлично.',
+        moderate: 'Пьёте кофе с умом. Получаете пользу. Отлично.',
+        hard: 'Кофе с умом = польза без вреда. Так держать.',
+      },
+    },
+  },
+  {
+    id: 'habit_caffeine_motiv_07',
+    kind: 'habits',
+    entityKey: 'caffeine',
+    intent: 'build',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Пить кофе утром и днём — наслаждаться энергией без проблем со сном. Умно.',
+        moderate: 'Кофе утром и днём — энергия без проблем со сном.',
+        hard: 'Кофе до обеда = энергия + сон. Умно.',
+      },
+      formal: {
+        soft: 'Пить кофе утром и днём — наслаждаться энергией без проблем со сном. Умно.',
+        moderate: 'Кофе утром и днём — энергия без проблем со сном.',
+        hard: 'Кофе до обеда = энергия + сон. Умно.',
+      },
+    },
+  },
+  {
+    id: 'habit_caffeine_motiv_08',
+    kind: 'habits',
+    entityKey: 'caffeine',
+    intent: 'build',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Следить за временем и количеством кофе — это зрелый подход к здоровью.',
+        moderate: 'Следишь за кофе — зрелый подход к здоровью.',
+        hard: 'Контроль кофе = зрелость. Продолжай.',
+      },
+      formal: {
+        soft: 'Следить за временем и количеством кофе — это зрелый подход к здоровью.',
+        moderate: 'Следите за кофе — зрелый подход к здоровью.',
+        hard: 'Контроль кофе = зрелость. Продолжайте.',
+      },
+    },
+  },
+  {
+    id: 'habit_caffeine_motiv_09',
+    kind: 'habits',
+    entityKey: 'caffeine',
+    intent: 'build',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Правильное время кофе даёт тебе энергию днём и хороший сон ночью. Продолжай.',
+        moderate: 'Кофе вовремя = энергия днём + сон ночью.',
+        hard: 'Кофе вовремя = энергия + сон. Держи.',
+      },
+      formal: {
+        soft: 'Правильное время кофе даёт вам энергию днём и хороший сон ночью. Продолжайте.',
+        moderate: 'Кофе вовремя = энергия днём + сон ночью.',
+        hard: 'Кофе вовремя = энергия + сон. Держите.',
+      },
+    },
+  },
+  {
+    id: 'habit_caffeine_motiv_10',
+    kind: 'habits',
+    entityKey: 'caffeine',
+    intent: 'build',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Ты заботишься о своём сне, контролируя время кофе. Это правильный путь.',
+        moderate: 'Контролируешь кофе — заботишься о сне. Правильно.',
+        hard: 'Контроль кофе = забота о сне. Держи курс.',
+      },
+      formal: {
+        soft: 'Вы заботитесь о своём сне, контролируя время кофе. Это правильный путь.',
+        moderate: 'Контролируете кофе — заботитесь о сне. Правильно.',
+        hard: 'Контроль кофе = забота о сне. Держите курс.',
+      },
+    },
+  },
+  // ==========================================
+  // SUGAR (quit) - БЕЗ reminder! Только 10 INFORMATIONAL + 10 MOTIVATIONAL = 20 шаблонов
+  // ==========================================
+
+  // Informational (10 шаблонов)
+  {
+    id: 'habit_sugar_info_01',
+    kind: 'habits',
+    entityKey: 'sugar',
+    intent: 'quit',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Частое употребление сахара связано с повышением риска диабета второго типа и сердечно-сосудистых заболеваний.',
+    },
+  },
+  {
+    id: 'habit_sugar_info_02',
+    kind: 'habits',
+    entityKey: 'sugar',
+    intent: 'quit',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Чрезмерное потребление сахара приводит к ожирению и повышает риск развития рака.',
+    },
+  },
+  {
+    id: 'habit_sugar_info_03',
+    kind: 'habits',
+    entityKey: 'sugar',
+    intent: 'quit',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'ВОЗ рекомендует сокращать потребление сахара, заменяя его продуктами с естественными сахарами, такими как фрукты.',
+    },
+  },
+  {
+    id: 'habit_sugar_info_04',
+    kind: 'habits',
+    entityKey: 'sugar',
+    intent: 'quit',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'У людей, часто употребляющих подсластители, риск диабета второго типа повышается на 23-34%.',
+    },
+  },
+  {
+    id: 'habit_sugar_info_05',
+    kind: 'habits',
+    entityKey: 'sugar',
+    intent: 'quit',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Частое потребление сахарозаменителей связано с повышением риска смерти от сердечно-сосудистых заболеваний на 19%.',
+    },
+  },
+  {
+    id: 'habit_sugar_info_06',
+    kind: 'habits',
+    entityKey: 'sugar',
+    intent: 'quit',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Сахар негативно влияет на обмен веществ и способствует накоплению жира.',
+    },
+  },
+  {
+    id: 'habit_sugar_info_07',
+    kind: 'habits',
+    entityKey: 'sugar',
+    intent: 'quit',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Отказ от избыточного сахара улучшает состояние кожи и снижает воспаление в организме.',
+    },
+  },
+  {
+    id: 'habit_sugar_info_08',
+    kind: 'habits',
+    entityKey: 'sugar',
+    intent: 'quit',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Снижение потребления сахара помогает контролировать вес и улучшает метаболизм.',
+    },
+  },
+  {
+    id: 'habit_sugar_info_09',
+    kind: 'habits',
+    entityKey: 'sugar',
+    intent: 'quit',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Чрезмерное потребление сахара ухудшает когнитивные функции и повышает риск депрессии.',
+    },
+  },
+  {
+    id: 'habit_sugar_info_10',
+    kind: 'habits',
+    entityKey: 'sugar',
+    intent: 'quit',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Искусственные подсластители не обеспечивают долгосрочную потерю веса и могут быть вредны для здоровья.',
+    },
+  },
+  // Motivational (10 шаблонов)
+  {
+    id: 'habit_sugar_motiv_01',
+    kind: 'habits',
+    entityKey: 'sugar',
+    intent: 'quit',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Каждый день без лишнего сахара — это забота о своём здоровье.',
+        moderate: 'Каждый день без сахара — забота о здоровье. Продолжай.',
+        hard: 'Без сахара. Забота о здоровье. Держись.',
+      },
+      formal: {
+        soft: 'Каждый день без лишнего сахара — это забота о своём здоровье.',
+        moderate: 'Каждый день без сахара — забота о здоровье. Продолжайте.',
+        hard: 'Без сахара. Забота о здоровье. Держитесь.',
+      },
+    },
+  },
+  {
+    id: 'habit_sugar_motiv_02',
+    kind: 'habits',
+    entityKey: 'sugar',
+    intent: 'quit',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Ты контролируешь тягу к сладкому, а не она тебя. Продолжай.',
+        moderate: 'Контролируешь тягу, не она тебя. Продолжай.',
+        hard: 'Контроль за тобой. Не за сахаром.',
+      },
+      formal: {
+        soft: 'Вы контролируете тягу к сладкому, а не она Вас. Продолжайте.',
+        moderate: 'Контролируете тягу, не она Вас. Продолжайте.',
+        hard: 'Контроль за Вами. Не за сахаром.',
+      },
+    },
+  },
+  {
+    id: 'habit_sugar_motiv_03',
+    kind: 'habits',
+    entityKey: 'sugar',
+    intent: 'quit',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Твоё тело благодарит за отказ от избыточного сахара.',
+        moderate: 'Тело благодарит за отказ. Продолжай.',
+        hard: 'Тело благодарит. Держись.',
+      },
+      formal: {
+        soft: 'Ваше тело благодарит за отказ от избыточного сахара.',
+        moderate: 'Тело благодарит за отказ. Продолжайте.',
+        hard: 'Тело благодарит. Держитесь.',
+      },
+    },
+  },
+  {
+    id: 'habit_sugar_motiv_04',
+    kind: 'habits',
+    entityKey: 'sugar',
+    intent: 'quit',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Ты строишь здоровые отношения с едой. Это твоя сила.',
+        moderate: 'Строишь здоровые отношения с едой. Сила — в тебе.',
+        hard: 'Строишь здоровое. Сила — твоя.',
+      },
+      formal: {
+        soft: 'Вы строите здоровые отношения с едой. Это Ваша сила.',
+        moderate: 'Строите здоровые отношения с едой. Сила — в Вас.',
+        hard: 'Строите здоровое. Сила — Ваша.',
+      },
+    },
+  },
+  {
+    id: 'habit_sugar_motiv_05',
+    kind: 'habits',
+    entityKey: 'sugar',
+    intent: 'quit',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Снижение сахара улучшает твой метаболизм и энергию. Продолжай.',
+        moderate: 'Снижение сахара улучшает метаболизм. Продолжай путь.',
+        hard: 'Улучшай метаболизм. Снижай сахар.',
+      },
+      formal: {
+        soft: 'Снижение сахара улучшает Ваш метаболизм и энергию. Продолжайте.',
+        moderate: 'Снижение сахара улучшает метаболизм. Продолжайте путь.',
+        hard: 'Улучшайте метаболизм. Снижайте сахар.',
+      },
+    },
+  },
+  {
+    id: 'habit_sugar_motiv_06',
+    kind: 'habits',
+    entityKey: 'sugar',
+    intent: 'quit',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Ты освобождаешься от сладкой зависимости. Каждый день делает тебя свободнее.',
+        moderate: 'Освобождаешься от зависимости. Каждый день — свободнее.',
+        hard: 'Освобождайся. Становись свободнее.',
+      },
+      formal: {
+        soft: 'Вы освобождаетесь от сладкой зависимости. Каждый день делает Вас свободнее.',
+        moderate: 'Освобождаетесь от зависимости. Каждый день — свободнее.',
+        hard: 'Освобождайтесь. Становитесь свободнее.',
+      },
+    },
+  },
+  {
+    id: 'habit_sugar_motiv_07',
+    kind: 'habits',
+    entityKey: 'sugar',
+    intent: 'quit',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Ты выбираешь естественную сладость фруктов. Это мудрый выбор.',
+        moderate: 'Выбираешь естественную сладость. Мудрый выбор.',
+        hard: 'Естественная сладость. Выбирай.',
+      },
+      formal: {
+        soft: 'Вы выбираете естественную сладость фруктов. Это мудрый выбор.',
+        moderate: 'Выбираете естественную сладость. Мудрый выбор.',
+        hard: 'Естественная сладость. Выбирайте.',
+      },
+    },
+  },
+  {
+    id: 'habit_sugar_motiv_08',
+    kind: 'habits',
+    entityKey: 'sugar',
+    intent: 'quit',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Ты делаешь сложное. Но ты справляешься. Продолжай.',
+        moderate: 'Делаешь сложное. Справляешься. Продолжай.',
+        hard: 'Сложно? Справляешься. Держись.',
+      },
+      formal: {
+        soft: 'Вы делаете сложное. Но Вы справляетесь. Продолжайте.',
+        moderate: 'Делаете сложное. Справляетесь. Продолжайте.',
+        hard: 'Сложно? Справляетесь. Держитесь.',
+      },
+    },
+  },
+  {
+    id: 'habit_sugar_motiv_09',
+    kind: 'habits',
+    entityKey: 'sugar',
+    intent: 'quit',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Твоё тело восстанавливает здоровый обмен веществ. Дай ему время.',
+        moderate: 'Тело восстанавливает обмен. Дай время.',
+        hard: 'Восстановление обмена. Дай время.',
+      },
+      formal: {
+        soft: 'Ваше тело восстанавливает здоровый обмен веществ. Дайте ему время.',
+        moderate: 'Тело восстанавливает обмен. Дайте время.',
+        hard: 'Восстановление обмена. Дайте время.',
+      },
+    },
+  },
+  {
+    id: 'habit_sugar_motiv_10',
+    kind: 'habits',
+    entityKey: 'sugar',
+    intent: 'quit',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Каждый день без лишнего сахара — это твоя победа над зависимостью.',
+        moderate: 'Каждый день — твоя победа. Продолжай побеждать.',
+        hard: 'Твоя победа. Каждый день.',
+      },
+      formal: {
+        soft: 'Каждый день без лишнего сахара — это Ваша победа над зависимостью.',
+        moderate: 'Каждый день — Ваша победа. Продолжайте побеждать.',
+        hard: 'Ваша победа. Каждый день.',
+      },
+    },
+  },
+  // ==========================================
+  // PROCRASTINATION (quit) - БЕЗ reminder! Только 10 INFORMATIONAL + 10 MOTIVATIONAL = 20 шаблонов
+  // ==========================================
+
+  // Informational (10 шаблонов)
+  {
+    id: 'habit_procrastination_info_01',
+    kind: 'habits',
+    entityKey: 'procrastination',
+    intent: 'quit',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Прокрастинация — это не лень, а склонность к постоянному откладыванию важных дел, приводящая к психологическим проблемам.',
+    },
+  },
+  {
+    id: 'habit_procrastination_info_02',
+    kind: 'habits',
+    entityKey: 'procrastination',
+    intent: 'quit',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Прокрастинация вызвана работой когнитивных схем, а не отсутствием воли.',
+    },
+  },
+  {
+    id: 'habit_procrastination_info_03',
+    kind: 'habits',
+    entityKey: 'procrastination',
+    intent: 'quit',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Нейрокогнитивные исследования выявили сниженную активность в префронтальной коре мозга у людей с прокрастинацией.',
+    },
+  },
+  {
+    id: 'habit_procrastination_info_04',
+    kind: 'habits',
+    entityKey: 'procrastination',
+    intent: 'quit',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Прокрастинация — это «краткосрочный ремонт настроения»: человек откладывает дело, чтобы избежать дискомфорта сейчас.',
+    },
+  },
+  {
+    id: 'habit_procrastination_info_05',
+    kind: 'habits',
+    entityKey: 'procrastination',
+    intent: 'quit',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Откладывание дел приводит к стрессу, чувству вины, потере производительности и эмоциональному истощению.',
+    },
+  },
+  {
+    id: 'habit_procrastination_info_06',
+    kind: 'habits',
+    entityKey: 'procrastination',
+    intent: 'quit',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'По данным исследований, 80-95% студентов вузов периодически прокрастинируют.',
+    },
+  },
+  {
+    id: 'habit_procrastination_info_07',
+    kind: 'habits',
+    entityKey: 'procrastination',
+    intent: 'quit',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Разделение задач на меньшие части снижает эмоциональный дискомфорт и помогает начать действовать.',
+    },
+  },
+  {
+    id: 'habit_procrastination_info_08',
+    kind: 'habits',
+    entityKey: 'procrastination',
+    intent: 'quit',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Ключ к борьбе с прокрастинацией — воздействовать на эмоциональный дискомфорт, а не полагаться на мотивацию.',
+    },
+  },
+  {
+    id: 'habit_procrastination_info_10',
+    kind: 'habits',
+    entityKey: 'procrastination',
+    intent: 'quit',
+    subtype: 'informational',
+    directness: ['universal'],
+    ru: {
+      universal:
+        'Прокрастинация — это проблема саморегуляции, требующая работы с эмоциями и планированием.',
+    },
+  },
+  // Motivational (10 шаблонов)
+  {
+    id: 'habit_procrastination_motiv_01',
+    kind: 'habits',
+    entityKey: 'procrastination',
+    intent: 'quit',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Каждое завершённое дело — это твоя победа над прокрастинацией.',
+        moderate: 'Каждое дело — победа. Продолжай побеждать.',
+        hard: 'Твоя победа. Завершай дела.',
+      },
+      formal: {
+        soft: 'Каждое завершённое дело — это Ваша победа над прокрастинацией.',
+        moderate: 'Каждое дело — победа. Продолжайте побеждать.',
+        hard: 'Ваша победа. Завершайте дела.',
+      },
+    },
+  },
+  {
+    id: 'habit_procrastination_motiv_02',
+    kind: 'habits',
+    entityKey: 'procrastination',
+    intent: 'quit',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Ты учишься действовать, несмотря на дискомфорт. Это настоящая сила.',
+        moderate: 'Учишься действовать вопреки дискомфорту. Настоящая сила.',
+        hard: 'Действуй вопреки. Это сила.',
+      },
+      formal: {
+        soft: 'Вы учитесь действовать, несмотря на дискомфорт. Это настоящая сила.',
+        moderate: 'Учитесь действовать вопреки дискомфорту. Настоящая сила.',
+        hard: 'Действуйте вопреки. Это сила.',
+      },
+    },
+  },
+  {
+    id: 'habit_procrastination_motiv_03',
+    kind: 'habits',
+    entityKey: 'procrastination',
+    intent: 'quit',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Ты меняешь свои когнитивные схемы. Это требует времени, но ты справляешься.',
+        moderate: 'Меняешь схемы. Требует времени. Справляешься.',
+        hard: 'Меняешь схемы. Справляешься.',
+      },
+      formal: {
+        soft: 'Вы меняете свои когнитивные схемы. Это требует времени, но Вы справляетесь.',
+        moderate: 'Меняете схемы. Требует времени. Справляетесь.',
+        hard: 'Меняете схемы. Справляетесь.',
+      },
+    },
+  },
+  {
+    id: 'habit_procrastination_motiv_04',
+    kind: 'habits',
+    entityKey: 'procrastination',
+    intent: 'quit',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Разбивай большие задачи на маленькие шаги. Ты можешь сделать один шаг прямо сейчас.',
+        moderate: 'Разбивай на шаги. Один шаг — сейчас.',
+        hard: 'Один шаг. Сейчас. Делай.',
+      },
+      formal: {
+        soft: 'Разбивайте большие задачи на маленькие шаги. Вы можете сделать один шаг прямо сейчас.',
+        moderate: 'Разбивайте на шаги. Один шаг — сейчас.',
+        hard: 'Один шаг. Сейчас. Делайте.',
+      },
+    },
+  },
+  {
+    id: 'habit_procrastination_motiv_05',
+    kind: 'habits',
+    entityKey: 'procrastination',
+    intent: 'quit',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Ты не ждёшь идеального настроения. Ты действуешь. И это делает тебя сильнее.',
+        moderate: 'Не ждёшь настроения. Действуешь. Сильнее.',
+        hard: 'Не жди. Действуй. Сильнее.',
+      },
+      formal: {
+        soft: 'Вы не ждёте идеального настроения. Вы действуете. И это делает Вас сильнее.',
+        moderate: 'Не ждёте настроения. Действуете. Сильнее.',
+        hard: 'Не ждите. Действуйте. Сильнее.',
+      },
+    },
+  },
+  {
+    id: 'habit_procrastination_motiv_06',
+    kind: 'habits',
+    entityKey: 'procrastination',
+    intent: 'quit',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Каждый завершённый день без откладывания — это прогресс. Продолжай.',
+        moderate: 'Каждый день без откладывания — прогресс. Продолжай.',
+        hard: 'Без откладывания. Прогресс. Продолжай.',
+      },
+      formal: {
+        soft: 'Каждый завершённый день без откладывания — это прогресс. Продолжайте.',
+        moderate: 'Каждый день без откладывания — прогресс. Продолжайте.',
+        hard: 'Без откладывания. Прогресс. Продолжайте.',
+      },
+    },
+  },
+  {
+    id: 'habit_procrastination_motiv_07',
+    kind: 'habits',
+    entityKey: 'procrastination',
+    intent: 'quit',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Ты работаешь над саморегуляцией. Это фундамент всех достижений.',
+        moderate: 'Работаешь над саморегуляцией. Фундамент достижений.',
+        hard: 'Саморегуляция. Фундамент. Строй.',
+      },
+      formal: {
+        soft: 'Вы работаете над саморегуляцией. Это фундамент всех достижений.',
+        moderate: 'Работаете над саморегуляцией. Фундамент достижений.',
+        hard: 'Саморегуляция. Фундамент. Стройте.',
+      },
+    },
+  },
+  {
+    id: 'habit_procrastination_motiv_08',
+    kind: 'habits',
+    entityKey: 'procrastination',
+    intent: 'quit',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Ты освобождаешься от цикла вины и тревоги. Каждый шаг делает тебя свободнее.',
+        moderate: 'Освобождаешься от цикла. Каждый шаг — свободнее.',
+        hard: 'Освобождайся. Шаг за шагом.',
+      },
+      formal: {
+        soft: 'Вы освобождаетесь от цикла вины и тревоги. Каждый шаг делает Вас свободнее.',
+        moderate: 'Освобождаетесь от цикла. Каждый шаг — свободнее.',
+        hard: 'Освобождайтесь. Шаг за шагом.',
+      },
+    },
+  },
+  {
+    id: 'habit_procrastination_motiv_09',
+    kind: 'habits',
+    entityKey: 'procrastination',
+    intent: 'quit',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Прокрастинация — это привычка, а привычки можно менять. Ты на верном пути.',
+        moderate: 'Прокрастинация — привычка. Меняй её. Верный путь.',
+        hard: 'Привычка. Меняй. Верный путь.',
+      },
+      formal: {
+        soft: 'Прокрастинация — это привычка, а привычки можно менять. Вы на верном пути.',
+        moderate: 'Прокрастинация — привычка. Меняйте её. Верный путь.',
+        hard: 'Привычка. Меняйте. Верный путь.',
+      },
+    },
+  },
+  {
+    id: 'habit_procrastination_motiv_10',
+    kind: 'habits',
+    entityKey: 'procrastination',
+    intent: 'quit',
+    subtype: 'motivational',
+    directness: ['soft', 'moderate', 'hard'],
+    ru: {
+      informal: {
+        soft: 'Ты выбираешь продуктивность вместо избегания. Это твоя победа над собой.',
+        moderate: 'Выбираешь продуктивность вместо избегания. Твоя победа.',
+        hard: 'Продуктивность. Не избегание. Побеждай.',
+      },
+      formal: {
+        soft: 'Вы выбираете продуктивность вместо избегания. Это Ваша победа над собой.',
+        moderate: 'Выбираете продуктивность вместо избегания. Ваша победа.',
+        hard: 'Продуктивность. Не избегание. Побеждайте.',
       },
     },
   },

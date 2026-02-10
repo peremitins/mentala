@@ -559,6 +559,17 @@ export function buildEntryContextDescription(
     const description = context.habit_description
       ? ` ${context.habit_description}`
       : '';
+    
+    // СПЕЦИАЛЬНОЕ ПРАВИЛО ДЛЯ КОФЕИНА/КОФЕ
+    const habitIdLower = String(context.habit_id || '').toLowerCase();
+    const nameLower = name.toLowerCase();
+    if (habitIdLower === 'caffeine' || 
+        nameLower.includes('кофеин') || 
+        nameLower.includes('кофе')) {
+      return `Контекст: пользователь хочет обсудить привычку «${name}» (баланс кофеина)${description}.
+ВАЖНО: Кофе полезен! НЕ говори о вреде кофе. Проблема в избытке и времени (после 14:00 мешает сну). Фокус на балансе.`;
+    }
+    
     return `Контекст: пользователь хочет обсудить привычку «${name}» (${intent})${description}.`;
   }
 
