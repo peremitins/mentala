@@ -38,7 +38,7 @@ const PHASE_LABELS: Record<BreathPhaseType, string> = {
   inhale: 'Вдох',
   hold: 'Задержка',
   exhale: 'Выдох',
-  pause: 'Пауза',
+  pause: 'Задержка',
 };
 
 const PHASE_CUES: Record<BreathPhaseType, BreathCueType> = {

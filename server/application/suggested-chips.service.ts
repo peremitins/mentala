@@ -89,13 +89,15 @@ function normalizeAction(value: string | undefined): SuggestedChipAction | null 
 function normalizeActionParams(
   action: SuggestedChipAction,
   params: unknown
-): { trackId?: string; collectionId?: string } | undefined {
+): { trackId?: string; collectionId?: string; sosEntry?: 'panic' | 'tension' | 'technique_picker'; source?: 'chat' } | undefined {
   if (!params || typeof params !== 'object') return undefined;
   const raw = params as Record<string, unknown>;
   const normalized = {
     trackId: typeof raw.trackId === 'string' ? raw.trackId : undefined,
     collectionId:
       typeof raw.collectionId === 'string' ? raw.collectionId : undefined,
+    sosEntry: typeof raw.sosEntry === 'string' ? raw.sosEntry : undefined,
+    source: typeof raw.source === 'string' ? raw.source : undefined,
   };
   const parsed = SuggestedChipActionParamsDto.safeParse(normalized);
   if (!parsed.success) return undefined;
@@ -107,6 +109,9 @@ function normalizeActionParams(
     action === 'open_meditations_collection' &&
     !parsed.data.collectionId
   ) {
+    return undefined;
+  }
+  if (action === 'open_sos' && !parsed.data.sosEntry) {
     return undefined;
   }
   return parsed.data;
@@ -137,6 +142,9 @@ function normalizeChip(raw: {
     if (action === 'open_meditations_collection' && !params?.collectionId) {
       return null;
     }
+    if (action === 'open_sos' && !params?.sosEntry) {
+      return null;
+    }
     return SuggestedChipDto.safeParse({
       text,
       intent,
@@ -163,7 +171,7 @@ function filterBySimilarity(chips: SuggestedChip[], recentChips: string[]) {
 
   for (const chip of chips) {
     if (chip.kind === 'action') {
-      const actionKey = `${chip.action || 'action'}:${chip.params?.trackId || ''}:${chip.params?.collectionId || ''}`;
+      const actionKey = `${chip.action || 'action'}:${chip.params?.trackId || ''}:${chip.params?.collectionId || ''}:${chip.params?.sosEntry || ''}:${chip.params?.source || ''}`;
       if (actionKeys.has(actionKey)) continue;
       actionKeys.add(actionKey);
       unique.push(chip);
@@ -228,7 +236,7 @@ function buildRecentChipsList(chips: string[]): string {
 function parseJsonPayload(raw: string): unknown {
   const text = String(raw || '').trim();
   const fenced = text.match(/```json\s*([\s\S]*?)```/i);
-  const body = (fenced ? fenced[1] : text).trim();
+  const body = (fenced?.[1] ?? text).trim();
 
   try {
     return JSON.parse(body);
@@ -352,6 +360,15 @@ function resolvePrimaryTopic(entryContext?: ChatEntryContext | null): string {
     return entryContext.topic_name || entryContext.topic_description || 'тема';
   }
 
+  if (entryContext.type === 'sos') {
+    const labelMap: Record<typeof entryContext.sos_entry, string> = {
+      panic: 'тревога',
+      tension: 'напряжение',
+      vent: 'выговориться',
+    };
+    return labelMap[entryContext.sos_entry] || 'sos';
+  }
+
   return '';
 }
 
@@ -380,6 +397,37 @@ export async function generateSuggestedChips(params: {
   therapySessionId?: number | null;
   entryContext?: ChatEntryContext | null;
 }) {
+  if (
+    params.entryContext?.type === 'sos' &&
+    params.entryContext.sos_entry === 'vent' &&
+    params.messages.length === 0
+  ) {
+    const sosChips: SuggestedChip[] = [
+      {
+        text: 'Мне тревожно',
+        intent: 'support',
+        kind: 'action',
+        action: 'open_sos',
+        params: { sosEntry: 'panic', source: 'chat' },
+      },
+      {
+        text: 'Снять напряжение',
+        intent: 'action_step',
+        kind: 'action',
+        action: 'open_sos',
+        params: { sosEntry: 'tension', source: 'chat' },
+      },
+      {
+        text: 'Дай короткую технику',
+        intent: 'action_step',
+        kind: 'action',
+        action: 'open_sos',
+        params: { sosEntry: 'technique_picker', source: 'chat' },
+      },
+    ];
+    return sosChips;
+  }
+
   const answer = String(params.assistantAnswer || '').trim();
   if (!answer) return [];
 

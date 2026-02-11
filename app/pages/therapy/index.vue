@@ -124,7 +124,7 @@ const customTopicItems = computed<NotificationIndexItem[]>(() =>
 );
 
 const baseTopicItems = computed<NotificationIndexItem[]>(() =>
-  THERAPY_TOPICS.map((topic) => {
+  THERAPY_TOPICS.filter((topic) => topic.key !== 'sos').map((topic) => {
     const pref = notificationsStore.getPreference('therapy', {
       entityKey: topic.key,
     });

@@ -68,9 +68,9 @@ export function useBreathPracticePlayer(options?: BreathPracticePlayerOptions) {
 
   function setSessionDuration(seconds: number) {
     sessionDurationSeconds.value = seconds;
-    if (!isRunning.value) {
-      sessionRemainingSeconds.value = seconds;
-    }
+    // Всегда синхронизируем оставшееся время с новой длительностью,
+    // иначе UI показывает несоответствие (особенно при увеличении таймера).
+    sessionRemainingSeconds.value = seconds;
   }
 
   function emitPhaseStart() {

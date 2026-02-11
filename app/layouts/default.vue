@@ -56,6 +56,7 @@
         />
       </ClientOnly>
       <BottomNav />
+      <SosModalRoot />
     </div>
   </div>
 </template>
@@ -66,11 +67,13 @@ import { useRoute } from 'vue-router';
 import { useMediaQuery, useWindowSize } from '@vueuse/core';
 import BottomNav from '@/app/components/BottomNav.vue';
 import MiniMeditationPlayer from '@/app/components/meditations/MiniMeditationPlayer.vue';
+import SosModalRoot from '@/app/components/sos/SosModalRoot.vue';
 import { useMeditationPlayer } from '@/app/composables/useMeditationPlayer';
 import { useMeditationsStore } from '@/app/stores/meditations';
 import { useSceneSettingsStore } from '@/app/stores/sceneSettings';
 import { useUiSettingsStore } from '@/app/stores/uiSettings';
 import { useSceneAudio } from '@/app/composables/useSceneAudio';
+import { useSos } from '@/app/composables/useSos';
 import { findSceneTrack } from '@/app/lib/sceneSelectionCatalog';
 import { resolveMediaUrl } from '@/app/utils/media';
 import { useAuthStore } from '@/app/stores/auth';
@@ -102,6 +105,18 @@ const isIos = computed(() => platform.value === 'ios');
 const sceneSettings = useSceneSettingsStore();
 const uiSettings = useUiSettingsStore();
 const sceneAudio = useSceneAudio();
+const sos = useSos();
+const SOS_TECHNIQUE_STEPS = [
+  'panic-grounding',
+  'panic-breathing',
+  'tension-practice',
+  'finish',
+] as const;
+const isSosTechniqueActive = computed(
+  () =>
+    sos.isOpen.value &&
+    SOS_TECHNIQUE_STEPS.includes(sos.step.value as (typeof SOS_TECHNIQUE_STEPS)[number])
+);
 const canPlaySceneAudio = computed(() => {
   // Во время logout фон не должен стартовать заново.
   return auth.isLoggedIn && !auth.isLoggingOut;
@@ -204,11 +219,12 @@ const isBreathPracticePage = computed(() => {
 });
 
 const shouldMuteSceneAudio = computed(() => {
-  // Пока открыт трек медитации, активен мини‑плеер или открыты дыхательные практики — фон сцены молчит.
+  // Пока открыт трек медитации, активен мини‑плеер, дыхательные практики или техники SOS — фон сцены молчит.
   return (
     isMeditationDetail.value ||
     isMeditationAudioActive.value ||
-    isBreathPracticePage.value
+    isBreathPracticePage.value ||
+    isSosTechniqueActive.value
   );
 });
 

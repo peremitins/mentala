@@ -168,11 +168,13 @@ import AvatarVoiceControls from '@/app/components/AvatarVoiceControls.vue';
 import SuggestedChips from '@/app/components/chat/SuggestedChips.vue';
 import ChatLoadingIndicator from '@/app/components/chat/ChatLoadingIndicator.vue';
 import type { SuggestedChip } from '@/shared/dto';
+import { useSos } from '@/app/composables/useSos';
 
 const emit = defineEmits<{ (e: 'send', text: string): void }>();
 
 const route = useRoute();
 const router = useRouter();
+const sos = useSos();
 const chatViewportStyle = computed(() => {
   const bottomOffset = '100px';
 
@@ -511,6 +513,20 @@ const handleActionChip = async (chip: SuggestedChip) => {
   ) {
     // collectionId трактуем как ключ темы медитаций
     await router.push(`/meditations?topic=${chip.params.collectionId}`);
+    return;
+  }
+
+  if (chip.action === 'open_sos') {
+    const entry = chip.params?.sosEntry;
+    if (
+      entry === 'panic' ||
+      entry === 'tension' ||
+      entry === 'technique_picker'
+    ) {
+      sos.open(entry);
+      return;
+    }
+    sos.open();
   }
 };
 
