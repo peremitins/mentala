@@ -287,6 +287,8 @@ server/
 • Данные и таблицы:
 • `subscription_plans` — конфигурация тарифов (`basic/pro/premium`), лимиты минут, фичи.
 • `user_subscriptions` — периоды подписок пользователя + статус оплаты (`active/pending/expired/canceled`) + `billing_period`.
+• To-be: для операционных аномалий используется отдельное поле `checkoutStatus` (`in_progress`/`manual_review`/`closed`), а `paymentStatus` остается доменным статусом доступа.
+• To-be: default для нового pending-checkout — `checkoutStatus=in_progress` (без `NULL`).
 • `subscription_events` — аудит/аналитика (trial_started, checkout_started, purchase_success/failed, subscription_canceled и т.д.).
 • `payments` — идемпотентность webhook по `payment.id` YooKassa (PK = text).
 • `idempotency_keys` — идемпотентность команд (ключ = userId+route+Idempotency-Key), хранит `response_json` для повторов.
@@ -303,20 +305,61 @@ server/
 • Ретеншн PII для `trial_usage_tracking`: 1 год после последнего использования Trial или удаления аккаунта (см. `.docs/trial_abuse_prevention_tz.md`).
 • Очистка ретеншна: ежедневная фоновая очистка `trial_usage_tracking` (можно отключить `TRIAL_USAGE_CLEANUP_ENABLED=false`).
 
-• Checkout (MVP, без реального YooKassa checkout):
+• Checkout (as-is):
 • `POST /api/subscriptions/start-checkout` требует заголовок `Idempotency-Key`.
+• `idempotency_keys` работает с TTL (по умолчанию 24ч): повтор с тем же ключом возвращает тот же `response_json`, пока ключ не истёк.
+• To-be: повтор с тем же `Idempotency-Key`, но другим payload (`planId`/`billingPeriod`) должен возвращать `409`.
 • Создаёт `pending` подписку и сохраняет «ожидаемые» checkout-поля прямо в `user_subscriptions`:
 `checkout_amount`, `checkout_currency`, `billing_credit_applied`, `billing_credit_granted`, `yookassa_payment_id`.
 • Кредит `billingCredit` **резервируется** на старте checkout (уменьшаем `users.billing_credit`) и:
 • при `payment.succeeded` не списывается повторно,
 • при `payment.canceled` возвращается.
 • Если `toPay === 0` — финализация происходит сразу в `start-checkout` (без webhook).
+• Zero-pay путь: резерв кредита, активация и audit event выполняются в одной транзакции.
+• Если `toPay > 0`, сейчас возвращается mock `paymentUrl` (реальный create payment в YooKassa — в roadmap).
+• `paymentUrl` в текущем состоянии не является подтверждением оплаты и не используется как источник истины в бизнес-логике.
 
 • YooKassa webhook:
 • В `POST /api/payments/yookassa/webhook` подлинность уведомления подтверждается через API YooKassa:
 `GET https://api.yookassa.ru/v3/payments/{payment_id}` (Basic Auth `shopId:secretKey`).
+• IP allowlist используется как мягкая проверка (не блокирующая), источник истины — ответ API YooKassa.
 • Сумма/валюта сверяются с `user_subscriptions.checkout_*` перед активацией.
+• To-be: при real checkout в metadata платежа обязательно передаётся `subscriptionId/orderId`; финализация запрещена при неконсистентной привязке.
+• To-be: если в pending-подписке уже установлен `yookassa_payment_id`, webhook с другим `payment.id` не может её финализировать.
+• To-be: в рамках одного pending checkout `yookassa_payment_id` неизменяем; второй платеж для того же pending не создается.
+• To-be: при повторном `start-checkout` и уже существующем pending + `yookassa_payment_id` возвращается тот же `confirmation_url` (или требуется явная отмена pending перед новым процессом).
 • Все мутации — в транзакции; конкурентные повторы защищены `ON CONFLICT DO NOTHING` по `payments.id`.
+• Инварианты:
+• переход `pending -> active` только после валидного `payment.succeeded`;
+• дубль webhook не приводит к повторной активации;
+• один `payment.id` не может быть применен дважды (один платеж -> одна финализация);
+• повторный webhook не должен повторно начислять `billingCreditGranted`;
+• после активации старая активная подписка пользователя переводится в `expired`.
+• Текущее усиление от гонок: PK `payments.id` + `ON CONFLICT DO NOTHING` + conditional update `pending -> active`; дополнительная row-level блокировка в webhook — часть hardening roadmap.
+• Обязательный hardening: "не более одной active подписки на пользователя" (частичный unique index или row-level lock в критических транзакциях).
+• Обязательный hardening: reconciliation pending-подписок при потерянном/задержанном webhook через verify API YooKassa (порог конфигурируемый 15-30 минут, по умолчанию 15 минут) и только при наличии `yookassa_payment_id`.
+• Обязательный hardening: кейсы mismatch/несовпадений переводятся в `checkoutStatus=manual_review` (видимый в API/админке), а не остаются только в логах.
+• Для `manual_review` вводятся идемпотентные админ-операции approve/reject с обязательным audit event и переводом кейса в терминальный статус.
+• Операционные переходы `checkoutStatus`: `succeeded`/zero-pay/canceled финализируют checkout и переводят кейс в `closed`.
+• Для `pending` без `yookassa_payment_id` verify/reconciliation не запускается; такие "висяки" закрываются TTL-политикой.
+• Вводится `pending_ttl_hours` (default 24 часа): cron переводит просроченные `pending` в `canceled`, возвращает зарезервированный кредит и пишет audit event.
+
+• To-be roadmap (без ломки текущих контрактов):
+• Phase 1: реальный `POST /v3/payments` в `start-checkout`, запись `yookassa_payment_id`, возврат `confirmation.confirmation_url`, запрет бизнес-решений по `paymentUrl`.
+• Phase 1 UX: после возврата с оплаты клиент проверяет `/api/subscriptions/current`; до webhook UI показывает "Оплата обрабатывается".
+• Phase 1 reliability: внедряется reconciliation (job и/или защищенный endpoint "Я оплатил") для server-side проверки pending платежей через `GET /v3/payments/{id}`.
+• `checkoutStatus` не входит в scope базового Phase 1 и вводится на этапе hardening (Phase 1.5).
+• Phase 1.5 migration: `user_subscriptions.checkout_status` вводится через миграцию БД (`NOT NULL DEFAULT 'in_progress'`) с backfill существующих записей.
+• Phase 2: интеграция отмены автопродления у провайдера в `POST /api/subscriptions/cancel` + ретраи/мониторинг recurring.
+• Phase 3: server-side paywall config (регион/канал), затем Stripe (global web) и IAP verify (iOS/Android).
+• Phase 4: унифицированный entitlement-слой и rollout через feature flags.
+• До Phase 2 endpoint `POST /api/subscriptions/cancel` трактуется как soft cancel (`autoRenew=false` в нашей модели), без гарантии провайдерной отмены.
+• Для UI to-be: в ответе `/api/subscriptions/current` добавить явный флаг `cancelAtPeriodEnd`.
+
+• Вне текущего scope (не считать реализованным):
+• runtime-маршрутизация `apple_iap / google_play / ios_external`;
+• iOS External Link entitlement как рабочий production flow;
+• server-side merge entitlement между несколькими провайдерами (`max(expire_at)` по источникам).
 
 • Доступ к AI и лимиты:
 • Сервер жёстко проверяет доступ к AI и недельный лимит минут (с overdraft `WEEKLY_OVERDRAFT_MINUTES`).
