@@ -1661,7 +1661,8 @@ function buildNotificationSystemPrompt(params: {
   const imageTagList = params.imageTagPolicy.allowedTags.join(', ');
   const safeTagList = SAFE_IMAGE_TAGS.join(', ');
   const isWaterTopic = params.entityKey.trim().toLowerCase() === 'water';
-  const isNutritionTopic = params.entityKey.trim().toLowerCase() === 'nutrition';
+  const isNutritionTopic =
+    params.entityKey.trim().toLowerCase() === 'nutrition';
 
   const imageTagRules = [
     '- imageTag должен соответствовать смыслу текста.',
@@ -1782,6 +1783,19 @@ ${params.description ? '- Используй описание как основ�
 - Прямолинейная, конкретная польза с прямыми формулировками
 - Фокус на конкретных выгодах и снижении рисков`;
           }
+          
+          // СПЕЦИАЛЬНОЕ ПРАВИЛО ДЛЯ КОФЕИНА/КОФЕ
+          const entityKeyLower = params.entityKey.trim().toLowerCase();
+          const entityNameLower = params.entityName.trim().toLowerCase();
+          if (entityKeyLower === 'caffeine' || 
+              entityKeyLower.includes('кофеин') ||
+              entityKeyLower.includes('кофе') ||
+              entityNameLower.includes('кофеин') ||
+              entityNameLower.includes('кофе')) {
+            subtypeInstructions = `${habitContext}
+- ВАЖНО: Кофе полезен! НЕ говори о вреде кофе. Проблема в чрезмерных дозах и времени приёма (после 14:00 мешает сну).
+- Фокус: баланс и время. Используй разнообразные формулировки.`;
+          }
         } else {
           subtypeInstructions = `${habitContext}
 - Факты и полезная информация, связанные с этой привычкой
@@ -1819,7 +1833,7 @@ ${params.description ? '- Используй описание как основ�
 
 Стиль:
 - Тон: ${toneMap[params.tone]}
-- Обращение: ${params.addressing === 'formal' ? 'на Вы' : 'на ты'}
+- Обращение: ${params.addressing === 'formal' ? 'на вы' : 'на ты'}
 - Прямота: ${directnessMap[params.directness]}
 ${params.subtype ? `- Фокус уведомления: ${subtypeMap[params.subtype]}` : ''}
 

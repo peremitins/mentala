@@ -4,6 +4,17 @@
 • Фронтенд: Nuxt 4 + TypeScript + Pinia + TailwindCSS + shadcn-vue + vue-query.
 • Бэкенд: Nitro (Node.js runtime) + Postgres + Drizzle ORM.
 • Мобильность: Capacitor + Ionic (iOS/Android).
+• Safe-area на mobile: для iOS в layout (`default/auth/blank`) применяется только верхний safe-area (`safe-area-inset-top`) через класс `ios-safe-layout`; нижняя часть интерфейса (BottomNav/контент) не получает дополнительных iOS-отступов, чтобы сохранять прежнюю высоту и визуальный ритм.
+• iOS‑гайд и паритет с Android: см. `.docs/IOS_SETUP.md` (dev/prod, push, Apple Developer Program, FCM/APNs особенности).
+• iOS bundle id: `com.mentala.app` (prod) и `com.mentala.app.dev` (dev), отдельные схемы в Xcode.
+• Визуальный стеклянный слой (`.glass-deep`, `.glass-deep-bottom`) использует progressive enhancement: базовый плотный fallback (без `color-mix`) для старых iOS/WebView, затем `-webkit-backdrop-filter`/`backdrop-filter`, и только при поддержке `color-mix(in oklab, ...)` применяются целевые стили.
+• API-клиент в `app/plugins/api.ts` использует единую кроссплатформенную стратегию `baseURL`: на web берётся `NUXT_PUBLIC_API_SERVER_URL`; на native в dev сохраняется поведение с `window.location.origin`, но для iOS есть защита от custom scheme (`capacitor://...`) и fallback на `NUXT_PUBLIC_API_SERVER_URL` (иначе запросы уходят не на backend).
+• Резолв медиа (`app/utils/media.ts`): в `dev` приоритет у `window.location.origin` (если это `http/https` и отличается от `apiBase`) — это выравнивает поведение с native `server.url` в Capacitor на iOS/Android; далее fallback на `apiBase` и `mediaBaseUrl`. В `production` приоритет остаётся у `NUXT_PUBLIC_MEDIA_BASE_URL`.
+• Ошибки API на native логируются в `app/plugins/api.ts` с контекстом (`url`, `status`, `statusText`, `message`, `responseData`) для диагностики проблем сети/доступности backend.
+• Глобальный auth middleware (`app/middleware/auth.global.ts`) держит fail-fast стратегию в компактном виде: helper для public routes, gate по native session token (`mentai.session.token`) и единый `auth.me()` с timeout (`AUTH_ME_TIMEOUT_MS`) для избежания зависаний на мобильных сетевых сбоях.
+• Google OAuth на native: `@capgo/capacitor-social-login` использует `google.webClientId` (env `NUXT_OAUTH_GOOGLE_CLIENT_ID`) на Android/Web и `google.iOSClientId` (env `NUXT_PUBLIC_GOOGLE_IOS_CLIENT_ID`) на iOS. Без iOS client id initialize на iOS возвращает `No provider was initialized`. В `AppDelegate` обязательно обрабатываем callback через `GIDSignIn.sharedInstance.handle(url)`. Backend `/api/auth/google/native` валидирует `idToken` по аудиториям `web + iOS`.
+• Для `nuxt generate` фоновые notification/BullMQ воркеры не запускаются (guards в `server/plugins/notifications-worker.ts` и `server/plugins/bullmq-workers.ts`), чтобы static-сборка не зависала на Redis и `cap sync` всегда получал свежие web assets.
+• Дополнительно для static-сборки отключены фоновые cleanup-плагины (`server/plugins/auth-cleanup.ts`, `server/plugins/trial-usage-cleanup.ts`), а Redis-клиент BullMQ работает в `lazyConnect` режиме, чтобы `generate` не блокировался фоновыми коннектами.
 • Валидация и схемы: Zod (в связке с @vee-validate/zod).
 • Логи и мониторинг: Pino + Sentry.
 • Миграции БД: Drizzle Kit (SQL файлы хранятся для совместимости с будущими системами).
@@ -40,7 +51,13 @@ index, onboarding, chat (layout blank), therapy, habits, practices, breath-pract
 • Чат: кнопки действий (микрофон/отправка) оформлены как отдельные «приподнятые» элементы с градиентом и мягкой тенью для лучшей читаемости.
 • Практики:
 • Хаб `/practices` объединяет дыхательные практики и медитации.
-• Дыхательные практики: страницы `/breath-practices` и `/breath-practices/:slug`, каталог в `app/lib/breathPracticesCatalog.ts`.
+• Дыхательные практики: страницы `/breath-practices` и `/breath-practices/:slug`, каталог в `app/lib/breathPracticesCatalog.ts`. Плеер вынесен в переиспользуемые компоненты: `BreathPracticePlayer.vue` (полный плеер с управлением, настройками, overlays) и `BreathOrb.vue` (визуализация сферы дыхания). Компоненты можно использовать в модалке SOS и других местах.
+• В `BreathPracticePlayer` добавлена отдельная настройка `Голос` (независимо от `Звуковые сигналы`): голосовые подсказки фаз (`inhale/hold/exhale/pause`) загружаются из `public/breath/voice/{informal|formal}/*.mp3`, с preloading и fallback при ошибках.
+• SOS: глобальная полноэкранная модалка `app/components/sos/SosModalRoot.vue`, монтируется в `default` layout и открывается из `PageHeader` через состояние `useSos()`. Сценарии: выбор состояния, короткие практики (5-4-3-2-1, квадратное дыхание через `BreathPracticePlayer` в SOS-режиме, PMR), финиш с переходом в чат. При входе в любой тренажёр (panic-grounding, panic-breathing, tension-practice) фоновые звуки сцены приглушаются; при выходе — возобновляются (как в дыхательных практиках и медитации).
+• SOS PMR Voice: для шага `tension-practice` добавлена локальная озвучка фаз (`clench`/`release`/`finish`) через файлы из `public/sos/tension/*`, с предзагрузкой, graceful fallback при ошибке аудио и отдельной локальной настройкой `voiceEnabled` (`app/utils/sosVoiceSettings.ts`).
+• SOS PMR UI стандартизирован под `BreathPracticePlayer`: такой же prep-overlay `3..2..1`, фиксированная нижняя панель (settings/stop/play-pause + прогресс). В хедере SOS при техниках отображается кнопка «Назад» (аналогично PageHeader). Модалка настроек в том же стиле + отдельные пункты `Голос` (voice prompts) и `Звуковые сигналы` (cue inhale/exhale), локальные настройки в `app/utils/sosTensionPracticeSettings.ts`.
+• Переход из SOS в чат: модалка закрывается, затем выполняется переход на `/` с `screen=chat`, контекст передается через `chat.entryContext` типа `sos` (`sos_entry`, `after_practice`).
+• Suggested chips: добавлен action `open_sos` (params: `sosEntry`, `source`) для переоткрытия SOS-модалки из чата на нужном шаге.
 • Контекст группы дыхательных практик передаётся через query `group` на `/breath-practices/:slug`; в плеере доступны кнопки «Назад/Вперёд» для перелистывания практик внутри выбранной группы (built-in: anxiety/sleep/focus/popular, custom: custom).
 • Кастомные практики и настройки хранятся в `app/stores/breathPractices.ts` через `app/utils/persistentStorage.ts` (web: localStorage, mobile: Capacitor Preferences).
 • Тренажёр использует `app/composables/useBreathPracticePlayer.ts` (тайминг фаз, отсчёт; при уходе в фон не ставим паузу).
@@ -122,7 +139,7 @@ server/
 • Политика удаления аккаунта: по умолчанию удаление происходит сразу (hard delete), но можно включить grace‑период через `AUTH_DELETE_GRACE_DAYS` (тогда используется 2‑фазное удаление и очередь).
 • Нативный Google Sign-In (Capacitor): клиент получает `idToken` и отправляет в `/api/auth/google/native`, сервер валидирует через `google-auth-library` и создаёт сессию.
 • Диагностика Google Sign-In на мобильных: клиент валидирует Web Client ID и показывает понятные ошибки по типовым кодам Google (DEVELOPER_ERROR, отмена входа, сеть).
-• Capacitor API baseURL: в native сначала берём `Capacitor.getServerUrl()` (если задан и не localhost), затем `window.location.origin` (если не localhost). Если origin = `http://localhost` (статическая сборка), используем `NUXT_PUBLIC_API_SERVER_URL` (apiBase), иначе авторизация ломается.
+• Capacitor API baseURL: в native используется правило из `app/plugins/api.ts` — в dev приоритет у `window.location.origin` (для сохранения рабочего Android-потока), но на iOS non-http(s) origin (`capacitor://localhost`) запрещён и заменяется на `NUXT_PUBLIC_API_SERVER_URL` (apiBase).
 • Сборка для mobile: используем `pnpm generate` (script `build:mobile`) с `.env.development`, чтобы `NUXT_PUBLIC_API_SERVER_URL` попал в runtimeConfig.
 • Медитации v1:
 • Таблицы: `meditation_tracks` (каталог), `meditation_favorites` (избранное).
@@ -203,7 +220,8 @@ server/
 • AI‑промпты запрещают ложные утверждения о достижениях пользователя: формулировки только нейтральные/поддерживающие без фиксации «успеха».
 • При изменении глобальных настроек (`tone`, `addressing`) через `/api/settings/preferences` ставится регенерация AI‑пулов для всех `ai` preferences пользователя (через ту же очередь).
 • Шаблонные тексты из `notificationTemplates` по умолчанию без изображений (`imageTag = null`), но могут иметь явный `imageTag`.
-• В native (Capacitor) регистрация push‑токена всегда идёт через `$api` и `NUXT_PUBLIC_API_SERVER_URL`, чтобы запросы не уходили на `capacitor://localhost` и `user_devices` корректно заполнялась.
+• Контент каталога `notificationTemplates` поддерживается через регулярную чистку: спорные/неестественные шаблоны удаляются целыми блоками, а в оставшихся текстах нормализуется типографика (например `5 Минут` → `5 минут`). После правок выполняется синхронизация в БД через `scripts/migrate-templates-to-db.ts`.
+• В native (Capacitor) регистрация push‑токена всегда идёт через `$api` и использует ту же стратегию выбора `baseURL`, что и остальные API-запросы (`app/plugins/api.ts`), чтобы не было расхождений между auth и push.
 • Доставка слотов: если planned-слот опоздал больше чем на 10 минут, он не отправляется, помечается как `skipped` и считается выполненным для дневной квоты.
 • UI (habits и therapy) отражает вручную заданные слоты: под слайдером частоты отображается интерактивный список слотов с тайм-пикерами; компонент TimePicker использует Radix ScrollArea без `overflow-hidden`, поэтому свайпы/прокрутка работают нативно, а кнопки синхронно центрируют выбранное значение.
 • NotificationSettingsPage визуально сгруппирован в `glass-deep` карточки с внутренними подложками, чтобы текст читался на фоне обоев и сохранялась иерархия блоков.
@@ -220,8 +238,11 @@ server/
 • Если для выбранного `imageTag` нет файлов ни в сущности, ни в common (AI‑источник), используется safe‑fallback в порядке `nature → daily_life → activity → meditation → neutral_abstract`. Для привычки `meditation` допускается только `meditation`. Для привычки `water` в промпте задано требование `imageTag = neutral_abstract`.
 • Android push: канал `mentai_high` создаётся нативно в `MainApplication` и задан как `default_notification_channel_id` в манифесте; fallback канал `fcm_fallback_notification_channel` удаляется, чтобы все уведомления были в одном разделе. Для FCM используется `tag = slotId`, чтобы Android не перезаписывал уведомления внутри группы.
 • Android push (важно): для Android отправляются **data-only** сообщения. Нативный сервис `MentalaMessagingService` сам строит уведомление (title/body/image из `data`) и привязывает `contentIntent`, чтобы тап работал и в раскрытом виде. В фореграунде системное уведомление не показываем (только JS-обработка). В интент обязательно кладём `google.message_id`, чтобы `PushNotificationsPlugin` эмитил `pushNotificationActionPerformed` на холодном старте.
-• Push‑навигация: payload слота содержит `navigation` (type + params) и `deepLink` (внутренний path). Клиент выполняет переход только при системном тапе; snooze/yes/no не должны запускать навигацию. При отсутствии данных fallback на `/`.
-• Приоритет навигации: `navigation` — источник истины, `deepLink` используется только как fallback.
+• iOS push: сервер принимает **FCM registration token**. На iOS токен берём через `@capacitor-community/fcm`; APNs token хранится только для диагностики и не используется для отправки.
+• iOS rich‑image: сервер ставит `aps.mutableContent = true`, прокидывает картинку в `apns.fcmOptions.imageUrl` и дублирует URL в `data.image` для Notification Service Extension.
+• Разделение окружений push: клиент шлёт `X-App-Env` и `appEnv`, в `user_devices` хранится `app_env`; отправка фильтруется по текущему окружению (dev/prod).
+• Push‑навигация: payload слота содержит `deepLink`, `navigation`, а также `data.action` + параметры (`trackId`/`practiceId`) для fallback‑маршрута. Клиент выполняет переход только при системном тапе; snooze/yes/no не должны запускать навигацию. При отсутствии данных fallback на `/`.
+• Приоритет навигации: `deepLink` → `data.action` → `navigation/navType` → `/`.
 • Надёжность push‑переходов (client): целевая навигация кладётся в очередь (Preferences/localStorage) с TTL, дедуплицируется по `messageId` и «специфичности» пути (например `/meditations?trackId=...` сильнее `/meditations`). Переход выполняется после `router.isReady()` и попытки `auth.me()`; если маршрут свернулся до базового пути, выполняется одноразовый retry через `router.replace`.
 • `actionHint` хранится в `notification_texts` и `notification_text_presets` (а для AI — в `ai_generated_notification_texts.texts[]`) и используется на сервере для вычисления `navigation`.
 • Если `actionHint` отсутствует или равен `none`, сервер применяет эвристику по тексту и `imageTag` (медитация/дыхание) как fallback, чтобы не терять навигацию.

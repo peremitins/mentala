@@ -67,7 +67,7 @@ const initialPreferences = ref<{
 
 const addressingOptions = [
   { value: 'informal' as Addressing, label: 'ты' },
-  { value: 'formal' as Addressing, label: 'Вы' },
+  { value: 'formal' as Addressing, label: 'вы' },
 ];
 
 const toneOptions = [

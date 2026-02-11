@@ -317,8 +317,6 @@
 import { ref, computed, onMounted, nextTick } from 'vue';
 import { useCountdown } from '@vueuse/core';
 import { useAuthStore } from '@/app/stores/auth';
-import TelegramIcon from '~icons/mdi/telegram';
-import VkIcon from '~icons/simple-icons/vk';
 import GoogleIcon from '~icons/logos/google-icon';
 import NeuralBg from '@/app/components/ui/bg-neural/NeuralBg.vue';
 import BrandLogo from '@/app/assets/images/logo.svg';
@@ -326,6 +324,7 @@ import { Input } from '@/app/components/ui/shadcn/input';
 import { Checkbox } from '@/app/components/ui/shadcn/checkbox';
 import { Tabs, TabsList, TabsTrigger } from '@/app/components/ui/shadcn/tabs';
 import { useToast } from '@/app/composables/useToast';
+import { getErrorDiagnosticsLog } from '@/app/utils/errorDiagnostics';
 
 definePageMeta({
   layout: 'auth',
@@ -501,9 +500,11 @@ async function submit() {
       const retryAfter = getRetryAfterFromError(e);
       const isLimited = statusCode === 429 || !!retryAfter;
       startVerificationFlow({ retryAfter, rateLimited: isLimited });
+      console.error('[Auth] Register error:', getErrorDiagnosticsLog(e));
+      return;
     }
 
-    console.error('[Auth] Register error:', e);
+    console.error('[Auth] Signin error:', getErrorDiagnosticsLog(e));
   } finally {
     loading.value = false;
   }
@@ -525,7 +526,7 @@ async function confirmCode() {
   } catch (e: any) {
     const payload = e?.data || e?.response?._data || {};
     attemptsLeft.value = payload?.data?.attemptsLeft ?? attemptsLeft.value;
-    console.error('[Auth] Verify code error:', e);
+    console.error('[Auth] Verify code error:', getErrorDiagnosticsLog(e));
   } finally {
     loading.value = false;
   }
@@ -559,39 +560,7 @@ async function resendCode() {
       );
     }
   } catch (e: any) {
-    console.error('[Auth] Resend code error:', e);
-  }
-}
-
-async function requestVerification() {
-  if (!email.value) {
-    useToast('Ошибка', 'Введите email', 'error');
-    return;
-  }
-  try {
-    const response: any = await auth.requestEmailVerification({
-      email: email.value,
-    });
-    const retryAfter = response?.retryAfter
-      ? Number(response.retryAfter)
-      : null;
-    if (retryAfter) {
-      const minutes = Math.floor(retryAfter / 60);
-      const seconds = retryAfter % 60;
-      useToast(
-        'Слишком часто',
-        `Повторите через ${minutes}:${seconds.toString().padStart(2, '0')}`,
-        'warning'
-      );
-    } else {
-      useToast(
-        'Проверьте почту',
-        'Мы отправили письмо с кодом подтверждения.\nЕсли вы уже использовали Mentala ранее, вы сможете войти или восстановить доступ',
-        'info'
-      );
-    }
-  } catch (e: any) {
-    console.error('[Auth] Request verification error:', e);
+    console.error('[Auth] Resend code error:', getErrorDiagnosticsLog(e));
   }
 }
 
@@ -599,12 +568,13 @@ async function loginWithGoogle() {
   try {
     await auth.loginWithGoogle(locale.value);
   } catch (e: any) {
-    console.error('[Auth] Google login error:', e);
+    const message =
+      e instanceof Error && e.message
+        ? e.message
+        : 'Не удалось войти через Google';
+    useToast('Ошибка входа через Google', message, 'error');
+    console.error('[Auth] Google login error:', getErrorDiagnosticsLog(e));
   }
-}
-
-function oauth(provider: string) {
-  auth.oauth(provider, locale.value);
 }
 
 const handleSvg = () => {

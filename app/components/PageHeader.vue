@@ -26,25 +26,38 @@
           {{ props.title }}
         </h1>
       </div>
-      <button
-        type="button"
-        class="flex h-9 w-9 mr-2 items-center justify-center rounded-full border border-white/10 text-foreground/80 transition hover:border-white/20 hover:text-foreground"
-        aria-label="Настройки атмосферы"
-        @click="openSceneSelection"
-      >
-        <IconSlidersHorizontal class="h-4 w-4" />
-      </button>
+      <div class="mr-2 flex items-center gap-2">
+        <button
+          type="button"
+          class="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-foreground/80 transition hover:border-white/20 hover:text-foreground"
+          aria-label="SOS"
+          @click="openSos"
+        >
+          <IconHeartPulse class="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          class="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-foreground/80 transition hover:border-white/20 hover:text-foreground"
+          aria-label="Настройки атмосферы"
+          @click="openSceneSelection"
+        >
+          <IconSlidersHorizontal class="h-4 w-4" />
+        </button>
+      </div>
     </div>
   </div>
 </template>
 
 <script lang="ts" setup>
 import IconChevronLeft from '~icons/lucide/chevron-left';
+import IconHeartPulse from '~icons/lucide/heart-pulse';
 import IconSlidersHorizontal from '~icons/lucide/sliders-horizontal';
 import { useRoute, useRouter } from 'vue-router';
+import { useSos } from '@/app/composables/useSos';
 
 const route = useRoute();
 const router = useRouter();
+const sos = useSos();
 
 interface Props {
   title: string;
@@ -67,6 +80,10 @@ const openSceneSelection = async () => {
   // Открываем страницу настроек атмосферы напрямую.
   await router.push('/scene-selection');
 };
+
+function openSos() {
+  sos.open();
+}
 
 const detailTrackId = computed(() => {
   const raw = route.query.trackId;

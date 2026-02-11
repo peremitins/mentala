@@ -5,6 +5,23 @@
  */
 
 export default defineNitroPlugin(async () => {
+  // В static generate воркеры не должны стартовать:
+  // они не нужны для prerender и требуют Redis.
+  const isStaticBuild =
+    process.env.NITRO_PRESET === 'static' ||
+    process.env.npm_lifecycle_event === 'generate';
+  const isWorkerEnabled = process.env.ENABLE_NOTIFICATIONS_WORKER !== 'false';
+
+  if (!isWorkerEnabled || isStaticBuild) {
+    console.log('[BullMQ Plugin] Skipped worker startup', {
+      isWorkerEnabled,
+      isStaticBuild,
+      NITRO_PRESET: process.env.NITRO_PRESET,
+      npmLifecycle: process.env.npm_lifecycle_event,
+    });
+    return;
+  }
+
   console.log('[BullMQ Plugin] Plugin loaded');
 
   // Проверяем, нужно ли запускать воркеры

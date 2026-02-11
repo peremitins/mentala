@@ -1,7 +1,12 @@
 <template>
   <DialogPortal>
     <DialogOverlay
-      class="fixed inset-0 z-50 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
+      :class="
+        cn(
+          'fixed inset-0 z-50 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
+          props.overlayClass
+        )
+      "
     />
     <DialogContent
       v-bind="forwarded"
@@ -39,7 +44,10 @@ import {
 import { cn } from '@/app/lib/utils';
 
 const props = defineProps<
-  DialogContentProps & { class?: HTMLAttributes['class'] }
+  DialogContentProps & {
+    class?: HTMLAttributes['class'];
+    overlayClass?: HTMLAttributes['class'];
+  }
 >();
 const emits = defineEmits<DialogContentEmits>();
 

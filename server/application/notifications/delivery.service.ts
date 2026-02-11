@@ -31,6 +31,13 @@ import { resolve, isAbsolute } from 'node:path';
 
 let firebaseApp: admin.app.App | null = null;
 
+function resolveServerAppEnv(): 'dev' | 'prod' {
+  const raw = process.env.MENTALA_DB_ENV || process.env.NODE_ENV || '';
+  const normalized = raw.trim().toLowerCase();
+  if (normalized === 'prod' || normalized === 'production') return 'prod';
+  return 'dev';
+}
+
 /**
  * Инициализация Firebase Admin SDK
  *
@@ -198,13 +205,15 @@ export async function sendFCMNotification(
     };
 
     // Для Android используем data-only и строим уведомление нативно.
-    // Поэтому прокидываем текст и изображение в data.
+    // Поэтому прокидываем текст в data только для Android.
     if (isAndroid) {
       dataPayload.title = payload.title || '';
       dataPayload.body = payload.body || '';
-      if (payload.image) {
-        dataPayload.image = payload.image;
-      }
+    }
+
+    // URL изображения нужен и для iOS Extension — кладём всегда.
+    if (payload.image) {
+      dataPayload.image = payload.image;
     }
 
     if (payload.navigation) {
@@ -287,14 +296,16 @@ export async function sendFCMNotification(
                   },
                   sound: 'default',
                   category: 'MENTAI_CATEGORY',
+                  ...(payload.image ? { mutableContent: true } : {}),
                 },
-                // Добавляем изображение для iOS (через fcm_options)
-                ...(payload.image && {
-                  fcm_options: {
-                    image: payload.image,
-                  },
-                }),
               },
+              ...(payload.image
+                ? {
+                    fcmOptions: {
+                      imageUrl: payload.image,
+                    },
+                  }
+                : {}),
             },
           }),
     };
@@ -329,13 +340,18 @@ export async function sendToUser(
   userId: number,
   payload: NotificationPayload
 ): Promise<number> {
-  console.log(`[FCM] Looking for devices for user ${userId}`);
+  const appEnv = resolveServerAppEnv();
+  console.log(
+    `[FCM] Looking for devices for user ${userId} (env=${appEnv})`
+  );
   const devices = await db
     .select()
     .from(userDevices)
-    .where(eq(userDevices.userId, userId));
+    .where(and(eq(userDevices.userId, userId), eq(userDevices.appEnv, appEnv)));
 
-  console.log(`[FCM] Found ${devices.length} device(s) for user ${userId}`);
+  console.log(
+    `[FCM] Found ${devices.length} device(s) for user ${userId} (env=${appEnv})`
+  );
 
   if (devices.length === 0) {
     console.warn(`[FCM] No devices found for user ${userId}`);

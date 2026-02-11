@@ -30,7 +30,7 @@ function getCSRFToken(): string | null {
       if (name === cookieName && value) {
         try {
           return decodeURIComponent(value);
-        } catch (e) {
+        } catch {
           // Если decodeURIComponent не работает, возвращаем как есть
           return value;
         }
@@ -72,6 +72,8 @@ export default defineNuxtPlugin(() => {
   const router = useRouter();
 
   const isCapacitor = Capacitor.isNativePlatform();
+  const platform = Capacitor.getPlatform();
+  const isHttpOrigin = (origin: string) => /^https?:\/\//i.test(origin);
 
   // apiBase: пустой для Web и Capacitor dev, полный URL для Capacitor prod
   const apiBase = (config.public as any).apiBase || '';
@@ -79,10 +81,15 @@ export default defineNuxtPlugin(() => {
     (config.public as any).isDev === true ||
     (!import.meta.env?.PROD && import.meta.env?.MODE !== 'production');
   const appOrigin = typeof window !== 'undefined' ? window.location.origin : '';
-  const baseURL =
+
+  // В dev на native используем appOrigin (как раньше), но на iOS не допускаем custom-схемы
+  // вроде capacitor://localhost для API-запросов.
+  const shouldUseOriginAsApiBase =
     isCapacitor && isDev && appOrigin && apiBase && apiBase !== appOrigin
-      ? appOrigin
-      : apiBase || '';
+      ? !(platform === 'ios' && !isHttpOrigin(appOrigin))
+      : false;
+
+  const baseURL = shouldUseOriginAsApiBase ? appOrigin : apiBase || '';
 
   const SESSION_TOKEN_KEY = 'mentai.session.token';
 
@@ -136,7 +143,6 @@ export default defineNuxtPlugin(() => {
           | undefined;
 
         // Определяем платформу для передачи на сервер
-        const platform = Capacitor.getPlatform();
         const platformHeader =
           platform === 'ios'
             ? 'ios'
@@ -265,7 +271,7 @@ export default defineNuxtPlugin(() => {
       return d;
     },
 
-    onRequestError({ error, request }) {
+    onRequestError({ error }) {
       // Обрабатываем canceled запросы (AbortError)
       if (
         error?.name === 'AbortError' ||

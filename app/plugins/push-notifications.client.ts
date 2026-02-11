@@ -25,6 +25,28 @@ export default defineNuxtPlugin({
 
   const canUsePreferences = Capacitor.isPluginAvailable('Preferences');
   const auth = useAuthStore();
+  const isIos = platform === 'ios';
+  const PUSH_TOKEN_STORAGE_KEY = 'pushToken';
+  const APNS_TOKEN_STORAGE_KEY = 'pushToken.apns';
+
+  // Для iOS обязателен FCM token. APNs token сохраняем только для диагностики.
+  async function resolveFcmToken(): Promise<string | null> {
+    if (!isIos) return null;
+    if (!Capacitor.isPluginAvailable('FCM')) {
+      console.warn('[PushPlugin] FCM plugin is not available on iOS');
+      return null;
+    }
+    try {
+      const { FCM } = await import('@capacitor-community/fcm');
+      const result = await FCM.getToken();
+      const value =
+        typeof result?.token === 'string' ? result.token.trim() : '';
+      return value || null;
+    } catch (error) {
+      console.error('[PushPlugin] Failed to get FCM token:', error);
+      return null;
+    }
+  }
 
   // Сохраняем отложенную навигацию, чтобы не потерять тап на холодном старте.
   type PendingNavigation = {
@@ -128,6 +150,88 @@ export default defineNuxtPlugin({
     }
 
     return null;
+  }
+
+  // Fallback по action-коду, если deepLink или navigation отсутствуют.
+  function resolveActionTargetPath(
+    payload?: Record<string, any>
+  ): string | null {
+    if (!payload) return null;
+    const rawAction =
+      typeof payload.action === 'string' ? payload.action.trim() : '';
+    if (!rawAction) return null;
+    const action = rawAction.toLowerCase();
+
+    const readString = (value: unknown): string | null => {
+      if (typeof value !== 'string') return null;
+      const trimmed = value.trim();
+      return trimmed ? trimmed : null;
+    };
+
+    if (
+      action === 'open_meditations' ||
+      action === 'open_meditations_collection'
+    ) {
+      return '/meditations';
+    }
+
+    if (action === 'open_meditation_track') {
+      const trackId =
+        readString(payload.trackId) ||
+        readString(payload.navId) ||
+        readString(payload.actionParams?.trackId);
+      return trackId
+        ? `/meditations?trackId=${encodeURIComponent(trackId)}`
+        : '/meditations';
+    }
+
+    if (action === 'open_breath_practices') {
+      return '/breath-practices';
+    }
+
+    if (action === 'open_breath_practice') {
+      const practiceId =
+        readString(payload.practiceId) ||
+        readString(payload.slug) ||
+        readString(payload.navId) ||
+        readString(payload.actionParams?.practiceId);
+      return practiceId
+        ? `/breath-practices/${encodeURIComponent(practiceId)}`
+        : '/breath-practices';
+    }
+
+    if (action === 'open_home') {
+      return '/';
+    }
+
+    return null;
+  }
+
+  async function logMissingNavigation(
+    payload: Record<string, any>
+  ): Promise<void> {
+    const safePayload = {
+      slotId: payload?.slotId ?? null,
+      messageId:
+        payload?.['google.message_id'] ??
+        payload?.messageId ??
+        payload?.id ??
+        null,
+      deepLink: payload?.deepLink ?? null,
+      action: payload?.action ?? null,
+      navType: payload?.navType ?? null,
+      navId: payload?.navId ?? null,
+    };
+
+    try {
+      const Sentry = await import('@sentry/vue');
+      Sentry.captureMessage('Нет данных для навигации по push', {
+        level: 'warning',
+        extra: safePayload,
+      });
+    } catch {
+      console.warn('[PushPlugin] Missing navigation data:', safePayload);
+    }
   }
 
   function buildPathFromNavigation(
@@ -432,11 +536,37 @@ export default defineNuxtPlugin({
   try {
     // Успешная регистрация токена
     PushNotifications.addListener('registration', async (token) => {
-      console.log('[PushPlugin] Registration success, token:', token.value);
+      const apnsToken = token.value;
+      console.log('[PushPlugin] Registration success, token:', apnsToken);
+
+      let effectiveToken = apnsToken;
+      if (isIos) {
+        const fcmToken = await resolveFcmToken();
+        if (!fcmToken) {
+          // На iOS без FCM токена пуши работать не будут.
+          if (typeof window !== 'undefined' && apnsToken) {
+            window.localStorage.setItem(APNS_TOKEN_STORAGE_KEY, apnsToken);
+          }
+          console.warn(
+            '[PushPlugin] FCM token is required on iOS, skipping registration'
+          );
+          return;
+        }
+        effectiveToken = fcmToken;
+        console.log('[PushPlugin] FCM token resolved for iOS');
+      }
+
+      if (!effectiveToken) {
+        console.warn('[PushPlugin] Empty push token, skipping registration');
+        return;
+      }
 
       // Сохраняем локально
       if (typeof window !== 'undefined') {
-        window.localStorage.setItem('pushToken', token.value);
+        window.localStorage.setItem(PUSH_TOKEN_STORAGE_KEY, effectiveToken);
+        if (isIos && apnsToken) {
+          window.localStorage.setItem(APNS_TOKEN_STORAGE_KEY, apnsToken);
+        }
       }
 
       // Регистрируем на сервере (только если есть сессия)
@@ -457,6 +587,8 @@ export default defineNuxtPlugin({
           typeof window !== 'undefined' && window.location?.origin
             ? window.location.origin
             : (config.public as any).apiBase || '';
+        const appEnv =
+          (config.public as any).isDev === true ? 'dev' : 'prod';
         const timezone =
           typeof Intl !== 'undefined' &&
           Intl.DateTimeFormat &&
@@ -465,17 +597,21 @@ export default defineNuxtPlugin({
               'Europe/Moscow'
             : 'Europe/Moscow';
 
+        const platformHeader = isIos ? 'ios' : 'android';
+
         await $fetch(`${baseURL}/api/notifications/register-token`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'X-Session-Token': sessionToken,
-            'X-Platform': platform === 'ios' ? 'ios' : 'android',
+            'X-Platform': platformHeader,
             'X-Timezone': timezone,
+            'X-App-Env': appEnv,
           },
           body: {
-            token: token.value,
-            platform: platform === 'ios' ? 'ios' : 'android',
+            token: effectiveToken,
+            platform: platformHeader,
+            appEnv,
           },
         });
         console.log('[PushPlugin] Token registered on server');
@@ -592,9 +728,15 @@ export default defineNuxtPlugin({
             typeof payload?.deepLink === 'string' && payload.deepLink.trim()
               ? payload.deepLink.trim()
               : null;
-          const targetPath = navigation
-            ? buildPathFromNavigation(navigation)
-            : deepLink || '/';
+          const actionPath = resolveActionTargetPath(payload);
+          const targetPath =
+            deepLink ||
+            actionPath ||
+            (navigation ? buildPathFromNavigation(navigation) : '/');
+
+          if (!deepLink && !actionPath && !navigation) {
+            void logMissingNavigation(payload);
+          }
 
           await enqueueNavigation(targetPath, messageId);
           await flushPendingNavigation();

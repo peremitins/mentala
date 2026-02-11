@@ -11,6 +11,23 @@
 import { startDeliveryWorker } from '@/server/application/notifications/delivery.service';
 
 export default defineNitroPlugin(() => {
+  // В static generate фоновые планировщики не нужны:
+  // они тянут Redis/таймеры и могут подвешивать сборку.
+  const isStaticBuild =
+    process.env.NITRO_PRESET === 'static' ||
+    process.env.npm_lifecycle_event === 'generate';
+  const isWorkerEnabled = process.env.ENABLE_NOTIFICATIONS_WORKER !== 'false';
+
+  if (!isWorkerEnabled || isStaticBuild) {
+    console.log('[NotificationsWorkerPlugin] Skipped scheduler startup', {
+      isWorkerEnabled,
+      isStaticBuild,
+      NITRO_PRESET: process.env.NITRO_PRESET,
+      npmLifecycle: process.env.npm_lifecycle_event,
+    });
+    return;
+  }
+
   console.log(
     '[NotificationsWorkerPlugin] Initializing notifications scheduler'
   );
