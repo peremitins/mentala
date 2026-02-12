@@ -32,9 +32,16 @@ export const TherapyTopicEntryContextDto = z.object({
   topic_description: z.string().optional(),
 });
 
+export const SosEntryContextDto = z.object({
+  type: z.literal('sos'),
+  sos_entry: z.enum(['panic', 'tension', 'vent']),
+  after_practice: z.boolean().optional(),
+});
+
 export const ChatEntryContextDto = z.discriminatedUnion('type', [
   HabitEntryContextDto,
   TherapyTopicEntryContextDto,
+  SosEntryContextDto,
 ]);
 
 export const ChatRequestDto = z.object({
@@ -79,11 +86,14 @@ export const SuggestedChipActionEnum = z.enum([
   'open_meditations',
   'open_meditation_track',
   'open_meditations_collection',
+  'open_sos',
 ]);
 
 export const SuggestedChipActionParamsDto = z.object({
   trackId: z.string().optional(),
   collectionId: z.string().optional(),
+  sosEntry: z.enum(['panic', 'tension', 'technique_picker']).optional(),
+  source: z.enum(['chat']).optional(),
 });
 
 export const SuggestedChipDto = z

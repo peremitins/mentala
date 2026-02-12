@@ -11,6 +11,7 @@ import {
   numeric,
   unique,
   index,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { sql, type SQL } from 'drizzle-orm';
 
@@ -357,6 +358,12 @@ export const chatSettings = pgTable('chat_settings', {
     .notNull()
     .default(true),
   enableSummary: boolean('enable_summary').notNull().default(true),
+  lastGreetingAt: timestamp('last_greeting_at', {
+    withTimezone: true,
+  }),
+  lastNameGreetingAt: timestamp('last_name_greeting_at', {
+    withTimezone: true,
+  }),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull(),
@@ -366,38 +373,50 @@ export const chatSettings = pgTable('chat_settings', {
 });
 
 // Локальные настройки уведомлений (по типу: therapy / habits)
-export const notificationPreferences = pgTable('notification_preferences', {
-  id: text('id').primaryKey(),
-  userId: integer('user_id').notNull(),
-  kind: varchar('kind', { length: 20 }).notNull(), // 'therapy' | 'habits'
-  entityKey: varchar('entity_key', { length: 255 }), // Единое поле для идентификации источника (ID для кастомных, ключ шаблона для шаблонных)
-  enabled: boolean('enabled').default(true).notNull(),
-  timesPerDay: integer('times_per_day').notNull(),
-  directness: varchar('directness', { length: 20 }).notNull(), // 'soft' | 'moderate' | 'hard'
-  timezone: varchar('timezone', { length: 100 }).notNull(), // IANA timezone
-  subtype: varchar('subtype', { length: 20 }).default('mixed'), // 'reminder' | 'informational' | 'motivational' | 'mixed' (для habits, по умолчанию 'mixed')
-  activeDays: jsonb('active_days')
-    .$type<number[]>()
-    .notNull()
-    .default([0, 1, 2, 3, 4, 5, 6]), // Дни недели (0 = Воскресенье, 1 = Понедельник, ..., 6 = Суббота)
-  customSlotTimes: jsonb('custom_slot_times').$type<(number | null)[] | null>(),
-  timeRangeStart: integer('time_range_start').notNull().default(540), // Начало временного окна в минутах от начала дня (09:00)
-  timeRangeEnd: integer('time_range_end').notNull().default(1350), // Конец временного окна в минутах от начала дня (22:30)
-  customPromptNotification: text('custom_prompt_notification'), // Персональные пожелания для шаблонных тем (только AI)
-  meta: jsonb('meta'), // Дополнительные параметры (textSource: 'templates' | 'ai')
-  // Нормализованное значение textSource (любой не-`ai` трактуется как `templates`)
-  textSourceNormalized: varchar('text_source_normalized', { length: 20 })
-    .generatedAlwaysAs(
+export const notificationPreferences = pgTable(
+  'notification_preferences',
+  {
+    id: text('id').primaryKey(),
+    userId: integer('user_id').notNull(),
+    kind: varchar('kind', { length: 20 }).notNull(), // 'therapy' | 'habits'
+    entityKey: varchar('entity_key', { length: 255 }), // Единое поле для идентификации источника (ID для кастомных, ключ шаблона для шаблонных)
+    enabled: boolean('enabled').default(true).notNull(),
+    timesPerDay: integer('times_per_day').notNull(),
+    directness: varchar('directness', { length: 20 }).notNull(), // 'soft' | 'moderate' | 'hard'
+    timezone: varchar('timezone', { length: 100 }).notNull(), // IANA timezone
+    subtype: varchar('subtype', { length: 20 }).default('mixed'), // 'reminder' | 'informational' | 'motivational' | 'mixed' (для habits, по умолчанию 'mixed')
+    activeDays: jsonb('active_days')
+      .$type<number[]>()
+      .notNull()
+      .default([0, 1, 2, 3, 4, 5, 6]), // Дни недели (0 = Воскресенье, 1 = Понедельник, ..., 6 = Суббота)
+    customSlotTimes: jsonb('custom_slot_times').$type<
+      (number | null)[] | null
+    >(),
+    timeRangeStart: integer('time_range_start').notNull().default(540), // Начало временного окна в минутах от начала дня (09:00)
+    timeRangeEnd: integer('time_range_end').notNull().default(1350), // Конец временного окна в минутах от начала дня (22:30)
+    customPromptNotification: text('custom_prompt_notification'), // Персональные пожелания для шаблонных тем (только AI)
+    meta: jsonb('meta'), // Дополнительные параметры (textSource: 'templates' | 'ai')
+    // Нормализованное значение textSource (любой не-`ai` трактуется как `templates`)
+    textSourceNormalized: varchar('text_source_normalized', {
+      length: 20,
+    }).generatedAlwaysAs(
       (): SQL =>
         sql`CASE WHEN ${notificationPreferences.meta} ->> 'textSource' = 'ai' THEN 'ai' ELSE 'templates' END`
     ),
-  createdAt: timestamp('created_at', { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-});
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    // Критичный partial index для инкрементального обхода scheduler по enabled prefs.
+    enabledUserIdx: index('idx_notification_preferences_enabled_user')
+      .on(table.userId)
+      .where(sql`${table.enabled} = true`),
+  })
+);
 
 // Запланированные слоты уведомлений
 export const notificationSlots = pgTable(
@@ -429,8 +448,44 @@ export const notificationSlots = pgTable(
       table.userId,
       table.status
     ),
+    // Идемпотентность активных слотов (planned + queued) без поля status.
+    activeSlotUniqueIdx: uniqueIndex('uk_notification_slots_active')
+      .on(table.userId, table.kind, table.entityKey, table.scheduledAt)
+      .where(sql`${table.status} IN ('planned', 'queued')`),
   })
 );
+
+// Курсор обхода scheduler по каждому shard.
+export const slotsSchedulerCursor = pgTable(
+  'slots_scheduler_cursor',
+  {
+    shard: integer('shard').primaryKey(),
+    lastUserId: integer('last_user_id').notNull().default(0),
+    cycleId: integer('cycle_id').notNull().default(1),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    updatedAtIdx: index('idx_slots_scheduler_cursor_updated_at').on(
+      table.updatedAt
+    ),
+  })
+);
+
+// Глобальное состояние scheduler: текущий cycle и указатель round-robin по shard.
+export const slotsSchedulerState = pgTable('slots_scheduler_state', {
+  id: text('id').primaryKey().default('global'),
+  globalCycleId: integer('global_cycle_id').notNull().default(1),
+  nextShard: integer('next_shard').notNull().default(0),
+  completedShards: jsonb('completed_shards')
+    .$type<number[]>()
+    .notNull()
+    .default([]),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
 
 // Регистрация FCM токенов устройств
 export const userDevices = pgTable('user_devices', {
@@ -438,6 +493,7 @@ export const userDevices = pgTable('user_devices', {
   userId: integer('user_id').notNull(),
   token: text('token').notNull().unique(), // FCM token
   platform: varchar('platform', { length: 20 }).notNull(), // 'ios' | 'android' | 'web'
+  appEnv: varchar('app_env', { length: 10 }).notNull().default('dev'), // 'dev' | 'prod'
   lastSeen: timestamp('last_seen', { withTimezone: true }).defaultNow(),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
@@ -573,6 +629,7 @@ export const notificationTexts = pgTable('notification_texts', {
   intent: text('intent'), // 'build' | 'quit' (только habits, если нужно)
   subtype: text('subtype'), // 'reminder' | 'informational' | 'motivational' | 'mixed' | NULL
   imageTag: varchar('image_tag', { length: 50 }), // null = без картинки
+  actionHint: text('action_hint'), // 'none' | 'meditation' | 'breathing'
   directness: text('directness').notNull(), // 'soft' | 'moderate' | 'hard' | 'universal'
   addressing: text('addressing').notNull(), // 'informal' | 'formal' | 'universal'
   locale: text('locale').notNull(), // 'ru' (пока одна, но заложимся)
@@ -595,6 +652,7 @@ export const notificationTextPresets = pgTable('notification_text_presets', {
   intent: text('intent'), // 'build' | 'quit' | NULL
   subtype: text('subtype'), // 'reminder' | 'informational' | 'motivational' | 'mixed' | NULL
   imageTag: varchar('image_tag', { length: 50 }), // null = без картинки
+  actionHint: text('action_hint'), // 'none' | 'meditation' | 'breathing'
   directness: text('directness').notNull(), // 'soft' | 'moderate' | 'hard' | 'universal'
   addressing: text('addressing').notNull(), // 'informal' | 'formal' | 'universal'
   locale: text('locale').notNull(), // 'ru'

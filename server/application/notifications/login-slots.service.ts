@@ -24,18 +24,26 @@ export function scheduleNotificationSlotsAfterLogin(userId: number): void {
  * - если слоты уже нужно регенерировать по правилам -> пересоздаём
  * - если активные настройки есть, но слотов нет -> пересоздаём
  */
-async function ensureNotificationSlotsAfterLogin(userId: number): Promise<void> {
+async function ensureNotificationSlotsAfterLogin(
+  userId: number
+): Promise<void> {
   const activePrefs = await findEnabledPreferencesByUser(userId);
   if (activePrefs.length === 0) return;
 
-  const needsRegen = await needsSlotRegenerationInternal(userId);
-  if (needsRegen) {
-    await generateAllSlotsForUser(userId, { forceTodaySlots: true });
+  const decision = await needsSlotRegenerationInternal(userId);
+  if (decision.shouldRegenerate) {
+    await generateAllSlotsForUser(userId, {
+      forceTodaySlots: true,
+      reason: 'login',
+    });
     return;
   }
 
   const activeSlotsCount = await countActiveSlotsFromDate(userId, new Date());
   if (activeSlotsCount === 0) {
-    await generateAllSlotsForUser(userId, { forceTodaySlots: true });
+    await generateAllSlotsForUser(userId, {
+      forceTodaySlots: true,
+      reason: 'login',
+    });
   }
 }

@@ -761,7 +761,12 @@ async function play(scene: SceneTrack) {
         return;
       }
     } catch (error) {
-      console.error('[SceneAudio] Ошибка WebAudio:', error);
+      console.error('[SceneAudio] Ошибка WebAudio:', {
+        sceneId: scene.id,
+        audioPath: scene.audioPath,
+        message: error instanceof Error ? error.message : String(error),
+        name: error instanceof Error ? error.name : null,
+      });
       // Если WebAudio не удалось и это не loop-трек, пробуем HTML
       if (!scene.isLoop) {
         mode = 'html';
@@ -780,7 +785,15 @@ async function play(scene: SceneTrack) {
       !globalState.audio
     ) {
       const audioUrl = resolveMediaUrl(scene.audioPath);
-      if (!audioUrl) return;
+      if (!audioUrl) {
+        globalState.isBuffering.value = false;
+        globalState.isPlaying.value = false;
+        console.error('[SceneAudio] Missing audio URL:', {
+          sceneId: scene.id,
+          audioPath: scene.audioPath,
+        });
+        return;
+      }
       const audio = new Audio(audioUrl);
       audio.loop = SCENE_LOOP_ENABLED;
       audio.preload = 'auto';

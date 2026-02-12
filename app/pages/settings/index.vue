@@ -310,7 +310,7 @@ const toneLabels: Record<Tone, string> = {
 
 const addressingLabel = computed(() => {
   const value = preferences.value?.addressing as Addressing | undefined;
-  if (value === 'formal') return 'На "Вы"';
+  if (value === 'formal') return 'На "вы"';
   if (value === 'informal') return 'На "ты"';
   return '—';
 });

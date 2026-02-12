@@ -195,10 +195,11 @@ export const systemCore = `Ты заботливый помощник по са�
  1 фраза валидации + 1 конкретная микрополезность (рамка/гипотеза/пояснение/конкретная фраза).
  Максимум 1 вопрос; если уже дал гипотезу/рамку, не задавай уточняющих.
 
-Запрещено:
- 2 и более вопросов в одном сообщении.
- Просить сделать упражнение прямо сейчас или давать физические задания.
- Абстрактные советы без привязки к деталям.
+
+Запрещено 2 и более вопросов в одном сообщении.
+Запрещено просить сделать упражнение прямо сейчас или давать физические задания.
+Запрещены абстрактные советы без привязки к деталям.
+Запрещено заканчивать ответ фразой вроде «когда вернёшься, расскажи» — всегда дай возможность продолжить диалог сейчас (вопрос или приглашение ответить).
 
 Требования:
  Используй детали из сообщения пользователя.
@@ -321,8 +322,8 @@ export const suggestedChipsDeveloperPrompt = `Сгенерируй 1..maxChips �
  Тон: дружелюбный, взрослый.
 Action chip (максимум 1):
  kind: "action"
- action: "open_meditations" | "open_meditation_track" | "open_meditations_collection"
- params: { trackId?: string, collectionId?: string }
+ action: "open_meditations" | "open_meditation_track" | "open_meditations_collection" | "open_sos"
+ params: { trackId?: string, collectionId?: string, sosEntry?: "panic" | "tension" | "technique_picker", source?: "chat" }
 Остальные чипы: kind: "text".
 Ответ строго JSON:
 {
@@ -364,9 +365,10 @@ export function selectDiversePhrase(
   phraseArray: string[],
   recentlyUsed: string[] = []
 ): string {
+  if (!phraseArray.length) return '';
   const available = phraseArray.filter((p) => !recentlyUsed.includes(p));
-  if (available.length === 0) return phraseArray[0];
-  return available[Math.floor(Math.random() * available.length)];
+  if (available.length === 0) return phraseArray[0] ?? '';
+  return available[Math.floor(Math.random() * available.length)] ?? '';
 }
 
 function resolveGenderLabel(value?: string | null): string | null {
@@ -559,6 +561,19 @@ export function buildEntryContextDescription(
     const description = context.habit_description
       ? ` ${context.habit_description}`
       : '';
+
+    // СПЕЦИАЛЬНОЕ ПРАВИЛО ДЛЯ КОФЕИНА/КОФЕ
+    const habitIdLower = String(context.habit_id || '').toLowerCase();
+    const nameLower = name.toLowerCase();
+    if (
+      habitIdLower === 'caffeine' ||
+      nameLower.includes('кофеин') ||
+      nameLower.includes('кофе')
+    ) {
+      return `Контекст: пользователь хочет обсудить привычку «${name}» (баланс кофеина)${description}.
+ВАЖНО: Кофе полезен! НЕ говори о вреде кофе. Проблема в избытке и времени (после 14:00 мешает сну). Фокус на балансе.`;
+    }
+
     return `Контекст: пользователь хочет обсудить привычку «${name}» (${intent})${description}.`;
   }
 
@@ -568,6 +583,19 @@ export function buildEntryContextDescription(
       ? ` ${context.topic_description}`
       : '';
     return `Контекст: пользователь хочет поговорить о теме «${name}»${description}.`;
+  }
+
+  if (context.type === 'sos') {
+    const entryMap: Record<typeof context.sos_entry, string> = {
+      panic: 'тревога и паника',
+      tension: 'сильное напряжение',
+      vent: 'хочу выговориться',
+    };
+    const label = entryMap[context.sos_entry] || 'sos';
+    const afterPractice = context.after_practice
+      ? ' Пользователь уже завершил SOS-практику.'
+      : '';
+    return `Контекст: пользователь пришёл из SOS («${label}»).${afterPractice}`;
   }
 
   return '';
@@ -580,6 +608,10 @@ export function buildWelcomePrompt(options: {
   user_locale?: string;
   user_name?: string;
   user_gender?: string;
+  greetingName?: string | null;
+  includeNameValidationPrompt?: boolean;
+  openingMode?: 'greeting' | 'alternative';
+  openingLine?: string;
   welcomePromptContent?: string;
   entryContext?: ChatEntryContext;
 }): string {
@@ -590,12 +622,22 @@ export function buildWelcomePrompt(options: {
     ? buildEntryContextDescription(options.entryContext)
     : '';
 
+  const nameInstruction =
+    options.includeNameValidationPrompt && options.greetingName
+      ? `\n\nВАЖНО: В первом предложении приветствия используй обращение по имени «${options.greetingName}». Используй только это имя, без фамилии и без выдумок.`
+      : '';
+  const openingInstruction =
+    options.openingMode === 'alternative' && options.openingLine
+      ? `\n\nВАЖНО: Сегодня приветствие не нужно. Начни сообщение с фразы: «${options.openingLine}». Не используй слова приветствия (привет, здравствуй, доброе утро/день/вечер).`
+      : '';
+
   if (options.welcomePromptContent) {
     let prompt = options.welcomePromptContent;
 
     prompt = prompt.replace(/{{user_name}}/g, options.user_name || '');
     prompt = prompt.replace(/{{user_gender}}/g, options.user_gender || '');
     prompt = prompt.replace(/{{user_locale}}/g, options.user_locale || '');
+    prompt = prompt.replace(/{{greeting_name}}/g, options.greetingName || '');
     prompt = prompt.replace(/{{lang}}/g, lang);
 
     if (!isFirst && sessionMemoryText) {
@@ -606,7 +648,8 @@ export function buildWelcomePrompt(options: {
       prompt +
       '\n\nВАЖНО: Не утверждай, что вы уже обсуждали конкретно эту тему; если контекст неочевиден - формулируй нейтрально. Твое сообщение будет ПЕРВЫМ в диалоге. Сгенерируй: приветствие (2-3 предложения) + 1 конкретная опора (выбор/инсайт/рамка) + 1 открытый вопрос.';
 
-    return contextNote ? `${contextNote}\n\n${prompt}` : prompt;
+    const fullPrompt = `${prompt}${nameInstruction}${openingInstruction}`;
+    return contextNote ? `${contextNote}\n\n${fullPrompt}` : fullPrompt;
   }
 
   const templates = {
@@ -634,9 +677,21 @@ export function buildWelcomePrompt(options: {
   const template = isFirst ? templates.first : templates.repeat;
   let prompt = template;
 
+  if (options.openingMode === 'alternative') {
+    prompt = prompt.replace(
+      'Сгенерируй приветствие (2-3 предложения):',
+      'Сгенерируй стартовое сообщение без приветствия (2-3 предложения):'
+    );
+    prompt = prompt.replace(
+      'Сгенерируй приветствие (2-3 предложения), которое:',
+      'Сгенерируй стартовое сообщение без приветствия (2-3 предложения), которое:'
+    );
+  }
+
   prompt = prompt.replace(/{{user_name}}/g, options.user_name || '');
   prompt = prompt.replace(/{{user_gender}}/g, options.user_gender || '');
   prompt = prompt.replace(/{{user_locale}}/g, options.user_locale || '');
+  prompt = prompt.replace(/{{greeting_name}}/g, options.greetingName || '');
   prompt = prompt.replace(/{{lang}}/g, lang);
 
   if (!isFirst && sessionMemoryText) {
@@ -648,7 +703,8 @@ export function buildWelcomePrompt(options: {
     );
   }
 
-  return contextNote ? `${contextNote}\n\n${prompt}` : prompt;
+  const fullPrompt = `${prompt}${nameInstruction}${openingInstruction}`;
+  return contextNote ? `${contextNote}\n\n${fullPrompt}` : fullPrompt;
 }
 
 export function buildSuggestedChipsUserPrompt(params: {

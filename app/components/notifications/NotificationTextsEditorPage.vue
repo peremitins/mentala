@@ -151,29 +151,25 @@
             <div
               v-else-if="editingId === (text.id || text.tempId)"
               :data-text-id="text.id || text.tempId"
-              class="space-y-3"
+              class="relative"
             >
+              <span
+                class="absolute text-[10px] right-[5px] top-[-12px]"
+                :class="{
+                  'text-destructive':
+                    editModel?.length > MAX_NOTIFICATION_TEXT_LENGTH,
+                  'text-foreground/70':
+                    editModel?.length <= MAX_NOTIFICATION_TEXT_LENGTH,
+                }"
+              >
+                {{ editModel?.length }}/{{ MAX_NOTIFICATION_TEXT_LENGTH }}
+              </span>
               <TextareaResize
                 ref="textareaRef"
                 v-model="editModel"
                 class="w-full min-h-[80px] rounded-2xl border border-white/10 bg-background/40 px-3 py-2 text-sm text-foreground/90 resize-none focus:outline-none focus:ring-2 focus:ring-primary-ui/40 focus:ring-offset-2"
                 :max-length="MAX_NOTIFICATION_TEXT_LENGTH"
               />
-              <div class="flex items-center justify-between text-xs">
-                <span class="text-foreground/70">
-                  Можно использовать {name} для подстановки вашего имени
-                </span>
-                <span
-                  :class="{
-                    'text-destructive':
-                      editModel?.length > MAX_NOTIFICATION_TEXT_LENGTH,
-                    'text-foreground':
-                      editModel?.length <= MAX_NOTIFICATION_TEXT_LENGTH,
-                  }"
-                >
-                  {{ editModel?.length }}/{{ MAX_NOTIFICATION_TEXT_LENGTH }}
-                </span>
-              </div>
             </div>
           </div>
         </TransitionGroup>
@@ -725,6 +721,7 @@ async function addNewText() {
     intent: props.kind === 'habits' ? entityIntent.value : null,
     subtype: selectedSubtype.value,
     imageTag: null,
+    actionHint: 'none',
     directness: selectedDirectness.value,
     addressing: 'universal', // Временное значение, на бэкенде будет заменено на значение из userPreferences
     locale: 'ru',

@@ -1,0 +1,1 @@
+ALTER TABLE "user_devices" ADD COLUMN "app_env" varchar(10) DEFAULT 'dev' NOT NULL;

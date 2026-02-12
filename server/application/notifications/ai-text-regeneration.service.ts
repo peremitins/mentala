@@ -64,7 +64,8 @@ export async function enqueueAiRegenerationForUser(params: {
       directness: notificationPreferences.directness,
       subtype: notificationPreferences.subtype,
       enabled: notificationPreferences.enabled,
-      customPromptNotification: notificationPreferences.customPromptNotification,
+      customPromptNotification:
+        notificationPreferences.customPromptNotification,
     })
     .from(notificationPreferences)
     .where(
@@ -104,7 +105,10 @@ export async function enqueueAiRegenerationForUser(params: {
         .select()
         .from(habits)
         .where(
-          and(eq(habits.id, pref.entityKey as string), eq(habits.userId, userId))
+          and(
+            eq(habits.id, pref.entityKey as string),
+            eq(habits.userId, userId)
+          )
         )
         .limit(1);
 
@@ -137,7 +141,7 @@ export async function enqueueAiRegenerationForUser(params: {
       }
     }
 
-    const textSource: 'ai' = 'ai';
+    const textSource = 'ai' as const;
 
     const configHash = computeGenerationConfigHash({
       entityName,
@@ -145,12 +149,13 @@ export async function enqueueAiRegenerationForUser(params: {
       tone,
       addressing,
       directness: pref.directness as 'soft' | 'moderate' | 'hard',
-      subtype: (pref.subtype as
-        | 'reminder'
-        | 'informational'
-        | 'motivational'
-        | 'mixed'
-        | null) ?? null,
+      subtype:
+        (pref.subtype as
+          | 'reminder'
+          | 'informational'
+          | 'motivational'
+          | 'mixed'
+          | null) ?? null,
       textSource,
       kind: pref.kind as 'habits' | 'therapy',
       habitIntent: pref.kind === 'habits' ? habitIntent : null,

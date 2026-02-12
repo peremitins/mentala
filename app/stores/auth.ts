@@ -11,24 +11,93 @@ import { usePromptsStore } from '@/app/stores/prompts';
 import { useNotificationsStore } from '@/app/stores/notifications';
 import { useUserStore } from '@/app/stores/user';
 import { useSceneSettingsStore } from '@/app/stores/sceneSettings';
+import { useUiSettingsStore } from '@/app/stores/uiSettings';
 import { useTTS } from '@/app/composables/useTTS';
 import { useSpeechEngine } from '@/app/composables/useSpeechEngine';
 import { useMeditationPlayer } from '@/app/composables/useMeditationPlayer';
 import { useSceneAudio } from '@/app/composables/useSceneAudio';
+import { getErrorDiagnosticsLog } from '@/app/utils/errorDiagnostics';
 import { AuthRegisterResponseDto } from '@/shared/dto/auth';
 
 const SESSION_TOKEN_KEY = 'mentai.session.token';
 const GOOGLE_WEB_CLIENT_ID_REGEX = /\.apps\.googleusercontent\.com$/i;
+const GOOGLE_IOS_CLIENT_ID_REGEX = /\.apps\.googleusercontent\.com$/i;
+
+function normalizeErrorPart(value: unknown): string {
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value).trim();
+  }
+  return '';
+}
+
+function extractGoogleLoginErrorMessage(error: any): string {
+  const candidates = [
+    error?.message,
+    error?.errorMessage,
+    error?.statusMessage,
+    error?.data?.message,
+    error?.data?.errorMessage,
+    error?.data?.statusMessage,
+    error?.response?._data?.message,
+    error?.response?._data?.errorMessage,
+    error?.response?._data?.statusMessage,
+    error?.cause?.message,
+  ];
+
+  for (const candidate of candidates) {
+    const text = normalizeErrorPart(candidate);
+    if (text) return text;
+  }
+
+  return '';
+}
 
 function mapGoogleLoginError(error: any): string {
-  const rawMessage = String(error?.message || error || '').trim();
-  const code = String(error?.code || '').trim();
+  const rawMessage = extractGoogleLoginErrorMessage(error);
+  const rawCode =
+    error?.code ??
+    error?.data?.code ??
+    error?.response?._data?.code ??
+    error?.cause?.code ??
+    '';
+  const code = normalizeErrorPart(rawCode);
   const text = `${code} ${rawMessage}`.toLowerCase();
+  const isDeveloperError =
+    text.includes('developer_error') ||
+    /\bstatus(?:\s*code)?\s*[:=]?\s*10\b/.test(text) ||
+    code === '10';
 
-  if (text.includes('sign_in_cancelled') || text.includes('12501')) {
+  if (
+    text.includes('sign_in_cancelled') ||
+    text.includes('user canceled') ||
+    text.includes('user cancelled') ||
+    text.includes('12501')
+  ) {
     return 'Вход отменён пользователем';
   }
-  if (text.includes('developer_error') || text.includes('10')) {
+  if (
+    text.includes('cannot find provider') ||
+    text.includes('provider was not initialized') ||
+    text.includes('no provider was initialized')
+  ) {
+    return 'Google провайдер не инициализирован. Проверь `NUXT_OAUTH_GOOGLE_CLIENT_ID` и пересобери Android (`pnpm run generate && npx cap sync android`).';
+  }
+  if (
+    text.includes('google.clientid is null or empty') ||
+    text.includes('web client id')
+  ) {
+    return 'Не задан или некорректен Google Web Client ID. Проверь `NUXT_OAUTH_GOOGLE_CLIENT_ID`.';
+  }
+  if (
+    text.includes('неверный google токен') ||
+    text.includes('invalid google token') ||
+    text.includes('id token verification failed') ||
+    (text.includes('/api/auth/google/native') && text.includes('401'))
+  ) {
+    return 'Google токен отклонён сервером. Проверь, что `NUXT_OAUTH_GOOGLE_CLIENT_ID` одинаков на клиенте и сервере.';
+  }
+  if (isDeveloperError) {
     return 'Google отклонил вход (DEVELOPER_ERROR). Проверь SHA-1 (debug/release) и package name в Android OAuth client, а также что используется Web Client ID.';
   }
   if (text.includes('network') || text.includes('12500')) {
@@ -80,7 +149,10 @@ export const useAuthStore = defineStore('auth', {
       } catch (error) {
         this.user = null;
         this.isLoggedIn = false;
-        console.warn('Не удалось получить пользователя:', error);
+        console.warn(
+          'Не удалось получить пользователя:',
+          getErrorDiagnosticsLog(error)
+        );
         throw error;
       }
     },
@@ -130,7 +202,7 @@ export const useAuthStore = defineStore('auth', {
         // Переходим на главную
         await navigateTo('/');
       } catch (error) {
-        console.error('Ошибка входа:', error);
+        console.error('Ошибка входа:', getErrorDiagnosticsLog(error));
         throw error;
       } finally {
         this.loading = false;
@@ -141,6 +213,7 @@ export const useAuthStore = defineStore('auth', {
 
       const { Capacitor } = await import('@capacitor/core');
       const isCapacitor = Capacitor.isNativePlatform();
+      const platform = Capacitor.getPlatform();
 
       if (!isCapacitor) {
         this.oauth('google', locale);
@@ -159,8 +232,9 @@ export const useAuthStore = defineStore('auth', {
         ).trim();
 
         if (!Capacitor.isPluginAvailable('SocialLogin')) {
+          const syncPlatform = platform === 'android' ? 'android' : 'ios';
           throw new Error(
-            'Нативный плагин SocialLogin не найден. Выполни `pnpm cap sync android`, затем Clean/Rebuild и переустанови приложение.'
+            `Нативный плагин SocialLogin не найден. Выполни \`npx cap sync ${syncPlatform}\`, затем Clean/Rebuild и переустанови приложение.`
           );
         }
 
@@ -170,13 +244,29 @@ export const useAuthStore = defineStore('auth', {
           );
         }
 
+        // Логируем только признаки наличия client id, без утечки самих значений.
+        console.info(
+          '[Auth][Google] Native init:',
+          JSON.stringify({
+            platform,
+            hasWebClientId: !!webClientId,
+            hasIosClientId: !!iosClientId,
+          })
+        );
+
         const googleConfig: Record<string, any> = {
           webClientId,
           mode: 'online',
         };
 
-        if (Capacitor.getPlatform() === 'ios' && iosClientId) {
+        if (platform === 'ios') {
+          if (!iosClientId || !GOOGLE_IOS_CLIENT_ID_REGEX.test(iosClientId)) {
+            throw new Error(
+              'Для iOS не настроен Google Client ID. Добавь `NUXT_PUBLIC_GOOGLE_IOS_CLIENT_ID` (iOS OAuth client) и пересобери iOS приложение.'
+            );
+          }
           googleConfig.iOSClientId = iosClientId;
+          // На iOS серверный client id нужен для корректного server authorization.
           googleConfig.iOSServerClientId = webClientId;
         }
 
@@ -232,8 +322,16 @@ export const useAuthStore = defineStore('auth', {
         await navigateTo('/');
         return response;
       } catch (error) {
-        console.error('Ошибка нативного входа Google:', error);
-        throw new Error(mapGoogleLoginError(error));
+        console.error(
+          'Ошибка нативного входа Google:',
+          getErrorDiagnosticsLog(error)
+        );
+        const mappedMessage = mapGoogleLoginError(error);
+        console.error('[Auth] Google login mapped error:', mappedMessage);
+
+        const mappedError = new Error(mappedMessage);
+        (mappedError as any).cause = error;
+        throw mappedError;
       } finally {
         this.loading = false;
       }
@@ -257,7 +355,7 @@ export const useAuthStore = defineStore('auth', {
         });
         return AuthRegisterResponseDto.parse(response);
       } catch (error) {
-        console.error('Ошибка регистрации:', error);
+        console.error('Ошибка регистрации:', getErrorDiagnosticsLog(error));
         throw error;
       } finally {
         this.loading = false;
@@ -309,7 +407,7 @@ export const useAuthStore = defineStore('auth', {
         }
         return response as any;
       } catch (error) {
-        console.error('Ошибка проверки email:', error);
+        console.error('Ошибка проверки email:', getErrorDiagnosticsLog(error));
         throw error;
       } finally {
         this.loading = false;
@@ -359,7 +457,10 @@ export const useAuthStore = defineStore('auth', {
 
         return response as any;
       } catch (error) {
-        console.error('Ошибка привязки OAuth по паролю:', error);
+        console.error(
+          'Ошибка привязки OAuth по паролю:',
+          getErrorDiagnosticsLog(error)
+        );
         throw error;
       } finally {
         this.loading = false;
@@ -413,7 +514,10 @@ export const useAuthStore = defineStore('auth', {
 
         return response as any;
       } catch (error) {
-        console.error('Ошибка восстановления пароля:', error);
+        console.error(
+          'Ошибка восстановления пароля:',
+          getErrorDiagnosticsLog(error)
+        );
         throw error;
       } finally {
         this.loading = false;
@@ -454,7 +558,10 @@ export const useAuthStore = defineStore('auth', {
 
         return response;
       } catch (error) {
-        console.error('Ошибка привязки OAuth по коду:', error);
+        console.error(
+          'Ошибка привязки OAuth по коду:',
+          getErrorDiagnosticsLog(error)
+        );
         throw error;
       } finally {
         this.loading = false;
@@ -543,6 +650,7 @@ export const useAuthStore = defineStore('auth', {
         useNotificationsStore().$reset();
         useUserStore().$reset();
         useSceneSettingsStore().$reset();
+        useUiSettingsStore().$reset();
       } catch (err) {
         console.error('[Auth Store] Ошибка сброса стора:', err);
         // Продолжаем выполнение даже если какой-то store не удалось сбросить
@@ -587,7 +695,7 @@ export const useAuthStore = defineStore('auth', {
       } catch (error) {
         console.error(
           '[Auth Store] Не удалось зарегистрировать push-токен:',
-          error
+          getErrorDiagnosticsLog(error)
         );
       }
     },
@@ -618,7 +726,10 @@ export const useAuthStore = defineStore('auth', {
           },
         });
       } catch (error) {
-        console.error('[Auth Store] Не удалось отключить push-токен:', error);
+        console.error(
+          '[Auth Store] Не удалось отключить push-токен:',
+          getErrorDiagnosticsLog(error)
+        );
       }
     },
 
@@ -651,7 +762,10 @@ export const useAuthStore = defineStore('auth', {
               method: 'POST',
             });
           } catch (error) {
-            console.error('[Auth Store] Ошибка logout:', error);
+            console.error(
+              '[Auth Store] Ошибка logout:',
+              getErrorDiagnosticsLog(error)
+            );
           }
         })();
 
@@ -667,7 +781,10 @@ export const useAuthStore = defineStore('auth', {
         // 7. Переходим на страницу авторизации
         await navigateTo('/auth');
       } catch (error) {
-        console.error('[Auth Store] Logout завершился с ошибкой:', error);
+        console.error(
+          '[Auth Store] Logout завершился с ошибкой:',
+          getErrorDiagnosticsLog(error)
+        );
         try {
           await navigateTo('/auth');
         } catch {

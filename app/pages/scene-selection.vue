@@ -227,6 +227,7 @@ import IconSunDim from '~icons/lucide/sun-dim';
 
 const sceneSettings = useSceneSettingsStore();
 const uiSettings = useUiSettingsStore();
+const auth = useAuthStore();
 
 const router = useRouter();
 
@@ -259,7 +260,6 @@ const animateBackgroundLoading = ref(false);
 
 async function onAnimateBackgroundChange(value: boolean) {
   animateBackgroundLoading.value = true;
-  const auth = useAuthStore();
   try {
     const payload = {
       sceneSettings: {
@@ -334,6 +334,9 @@ function goBack() {
 }
 
 onMounted(async () => {
-  await Promise.all([sceneSettings.ensureLoaded(), uiSettings.ensureLoaded()]);
+  await Promise.all([
+    sceneSettings.ensureLoaded(),
+    uiSettings.ensureLoaded(auth.user?.id ?? null),
+  ]);
 });
 </script>

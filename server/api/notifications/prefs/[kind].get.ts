@@ -1,4 +1,4 @@
-import { eq, and, isNull, or } from 'drizzle-orm';
+import { eq, and, isNull } from 'drizzle-orm';
 import {
   notificationPreferences,
   habits,

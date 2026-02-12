@@ -1,7 +1,7 @@
 <template>
   <button
     type="button"
-    class="group relative flex w-[78vw] min-w-[240px] max-w-[240px] sm:w-72 flex-col overflow-hidden rounded-xl text-left transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-primary-ui/60"
+    class="group relative flex w-[78vw] min-w-[210px] max-w-[240px] sm:w-52 flex-col overflow-hidden rounded-xl text-left transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-primary-ui/60"
     @click="emit('open', track.id)"
   >
     <img

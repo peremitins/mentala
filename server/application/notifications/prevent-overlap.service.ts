@@ -147,7 +147,6 @@ export async function preventSimultaneousNotifications(
 
   // Получаем timezone пользователя (все preferences должны иметь одинаковый timezone)
   const userTimezone = getTimezoneFromPrefs(allPrefs);
-  const nowLocal = toLocalTime(nowUTC, userTimezone);
 
   // Создаем карту диапазонов для быстрого доступа
   // Ключ: kind:entityKey, значение: {start, end, crossesMidnight}
@@ -227,10 +226,6 @@ export async function preventSimultaneousNotifications(
       // Это предотвращает "прилипание" всех слотов к концу диапазона
       if (!freeTime) {
         // Ищем ближайшее свободное место, сдвигая слот на minGapMinutes от предыдущего
-        const currentTimeLocal = toLocalTime(
-          currentSlot.scheduledAt,
-          userTimezone
-        );
         const prevTimeLocal = toLocalTime(prevSlot.scheduledAt, userTimezone);
 
         // Вычисляем новое время: предыдущий слот + minGapMinutes
@@ -361,10 +356,6 @@ export async function preventSimultaneousNotifications(
         // КРИТИЧНО: Если все равно не нашли свободное время, НЕ оставляем слот на месте
         // Вместо этого сдвигаем его на minGapMinutes от предыдущего, даже если это выходит за границы
         // Это предотвращает "прилипание" всех слотов к концу диапазона
-        const currentTimeLocal = toLocalTime(
-          currentSlot.scheduledAt,
-          userTimezone
-        );
         const prevTimeLocal = toLocalTime(prevSlot.scheduledAt, userTimezone);
         const newTimeLocal = new Date(
           prevTimeLocal.getTime() + minGapMinutes * 60 * 1000

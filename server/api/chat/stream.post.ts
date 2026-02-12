@@ -63,6 +63,10 @@ export default defineEventHandler(async (event) => {
       (sessionResult as any)?.name ||
       (typeof body?.user_name === 'string' ? body.user_name : undefined);
     const userGender = (sessionResult as any)?.gender || undefined;
+    const userTimezone =
+      typeof (sessionResult as any)?.timezone === 'string'
+        ? String((sessionResult as any).timezone)
+        : undefined;
 
     // Требуем валидный therapySessionId, чтобы нельзя было обойти биллинг прямыми вызовами /api/chat/stream
     const therapySessionId =
@@ -181,6 +185,7 @@ export default defineEventHandler(async (event) => {
           user_locale: body?.user_locale,
           user_name: userName,
           user_gender: userGender,
+          user_timezone: userTimezone,
           userId: uid,
           isFirstSession: serverIsFirst,
           userPrompt: body?.userPrompt,

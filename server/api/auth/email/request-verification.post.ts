@@ -30,8 +30,8 @@ export default defineEventHandler(async (event) => {
     ),
   ]);
   const blocked = rateLimits.find((limit) => !limit.allowed);
-  if (blocked?.retryAfter) {
-    setResponseHeader(event, 'Retry-After', String(blocked.retryAfter));
+  if (typeof blocked?.retryAfter === 'number') {
+    setResponseHeader(event, 'Retry-After', blocked.retryAfter);
   }
 
   if (blocked && !blocked.allowed) {
