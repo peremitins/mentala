@@ -187,7 +187,7 @@ export default defineEventHandler(
     (async () => {
       try {
         // ВАЖНО: Используем глобальную оркестрацию для правильного чередования тем
-        await generateAllSlotsForUser(userId);
+        await generateAllSlotsForUser(userId, { reason: 'manual' });
         console.log(
           `[NotificationTexts] ✅ Slots regenerated after reset: user ${userId}, kind: ${body.kind}, entityKey: ${normalizedEntityKey}`
         );

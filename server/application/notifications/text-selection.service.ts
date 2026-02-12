@@ -97,10 +97,10 @@ function selectUnusedAiText(
       return {
         text: rawText,
         index: index,
-        imageTag: typeof entry === 'string' ? null : entry.imageTag ?? null,
-        subtype: typeof entry === 'string' ? null : entry.subtype ?? null,
+        imageTag: typeof entry === 'string' ? null : (entry.imageTag ?? null),
+        subtype: typeof entry === 'string' ? null : (entry.subtype ?? null),
         actionHint:
-          typeof entry === 'string' ? 'none' : entry.actionHint ?? 'none',
+          typeof entry === 'string' ? 'none' : (entry.actionHint ?? 'none'),
       };
     }
   }

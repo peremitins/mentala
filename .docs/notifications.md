@@ -12,6 +12,11 @@
 - Добавлен retry механизм с exponential backoff для надежности генерации
 - Динамический расчет токенов: `count * 200 + 5000` для гарантии получения всех текстов
 
+**Важно по актуальности документации:**
+
+- Источник истины по масштабированию генерации слотов, backpressure, lock-стратегии и инвариантам горизонта: `.docs/notification_slots_scaling_tz.md`.
+- Этот документ описывает функциональную и продуктовую сторону уведомлений; при конфликте правил приоритет у scaling-ТЗ.
+
 ## 📋 Обзор
 
 Система персонализированных push-уведомлений для Mentala с поддержкой:
@@ -112,7 +117,7 @@ notification_preferences {
   activeDays: integer[]  // Дни недели (0-6)
   timeRangeStart: integer  // Начало окна (в минутах, 0-1439)
   timeRangeEnd: integer  // Конец окна (в минутах, 0-1439)
-  customSlotTimes: integer[] | null  // Кастомные времена (максимум 5, в минутах)
+  customSlotTimes: integer[] | null  // Кастомные времена (максимум 5, в минутах, non-null значения должны быть уникальны)
   meta: jsonb | null  // { textSource: 'templates' | 'ai' }
 
   createdAt: timestamp
@@ -331,7 +336,7 @@ psql -d mentai -f server/infrastructure/db/migrations/0027_add_ai_notification_t
 
 1. Получаем настройки с учётом `entityKey`
 2. Получаем глобальные настройки (`addressing` из `user_preferences`)
-3. Удаляем старые запланированные слоты
+3. Пересоздаём `planned` слоты в диапазоне регенерации (без удаления `queued`, см. `.docs/notification_slots_scaling_tz.md`)
 4. Генерируем времена слотов:
    - Приоритет кастомным временам (`customSlotTimes`)
    - Остальные распределяются равномерно внутри окна (`timeRangeStart` - `timeRangeEnd`)
@@ -466,7 +471,10 @@ if (!text && textSource === 'ai') {
    - Воркер: `server/application/notifications/workers/notificationSlots.worker.ts`
    - Планировщик: `server/application/notifications/schedulers/notificationSlots.scheduler.ts`
    - Concurrency: 2 задачи параллельно
-   - Задачи ставятся планировщиком для всех пользователей с активными настройками
+   - Для production используется масштабируемая модель из `.docs/notification_slots_scaling_tz.md` (sharding + cursor/cycle state, fairness, backpressure).
+   - Для production обязателен process split: `scheduler (enqueue)` / `slots worker` / `delivery worker`.
+   - Регенерация оценивается по фактическому горизонту `planned+queued` и `min_horizon_hours`; `queued` слоты при регенерации не удаляются.
+   - Backpressure ориентируется на lag именно очереди `notification-slots-generation` (`queue_lag_p95` SLO, soft/hard пороги).
 
 2. **`notification-delivery`** — отправка уведомлений через FCM
 
@@ -659,7 +667,7 @@ pnpm preview
 ```sql
 SELECT * FROM notification_slots
 WHERE user_id = YOUR_USER_ID
-  AND status = 'planned'
+  AND status IN ('planned', 'queued')
 ORDER BY scheduled_at;
 ```
 
@@ -693,7 +701,7 @@ WHERE user_id = YOUR_USER_ID;
 2. Проверить что слоты генерируются:
 
    ```sql
-   SELECT * FROM notification_slots WHERE user_id = YOUR_USER_ID AND status = 'planned';
+   SELECT * FROM notification_slots WHERE user_id = YOUR_USER_ID AND status IN ('planned', 'queued');
    ```
 
 3. Проверить логи воркеров:

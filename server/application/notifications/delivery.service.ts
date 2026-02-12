@@ -19,6 +19,7 @@ import {
 } from '@/server/infrastructure/db/schema';
 import type { NotificationPayload } from '@/shared/dto/notifications';
 import { enqueueAiTextPoolRefillForAllActivePreferences } from '@/server/application/notifications/schedulers/aiTextPool.scheduler';
+import { startNotificationSlotsSchedulerLoop } from '@/server/application/notifications/schedulers/notificationSlots.scheduler';
 import { notificationDeliveryQueue } from '@/server/application/notifications/queues/notificationDelivery.queue';
 import { getUserTimezone, toLocalTime } from './timezone.utils';
 import admin from 'firebase-admin';
@@ -341,9 +342,7 @@ export async function sendToUser(
   payload: NotificationPayload
 ): Promise<number> {
   const appEnv = resolveServerAppEnv();
-  console.log(
-    `[FCM] Looking for devices for user ${userId} (env=${appEnv})`
-  );
+  console.log(`[FCM] Looking for devices for user ${userId} (env=${appEnv})`);
   const devices = await db
     .select()
     .from(userDevices)
@@ -474,10 +473,9 @@ export async function processDueSlots(): Promise<void> {
           continue;
         }
 
-        // КРИТИЧНО: Атомарно обновляем статус перед постановкой в очередь
-        // Это предотвращает race condition - если слот уже обрабатывается, обновление не пройдет
-        // Используем результат update напрямую для проверки количества обновленных строк
-        const updateResult = await db
+        // КРИТИЧНО: Конкурентно-безопасный переход planned -> queued.
+        // Side-effect (enqueue) выполняем только если UPDATE вернул строку.
+        const transitionedRows = await db
           .update(notificationSlots)
           .set({ status: 'queued' })
           .where(
@@ -485,12 +483,10 @@ export async function processDueSlots(): Promise<void> {
               eq(notificationSlots.id, slot.id),
               eq(notificationSlots.status, 'planned') // Только если еще planned
             )
-          );
+          )
+          .returning({ id: notificationSlots.id });
 
-        // Проверяем количество обновленных строк через rowCount
-        // Если 0 - значит слот уже обрабатывается другим процессом или был удален
-        const rowsAffected = updateResult.rowCount || 0;
-        if (rowsAffected === 0) {
+        if (transitionedRows.length === 0) {
           skippedCount++;
           console.log(
             `[DeliveryWorker] ⏭️ Slot ${slot.id} already processed, skipping`
@@ -534,16 +530,21 @@ export async function processDueSlots(): Promise<void> {
             `[DeliveryWorker] ⏭️ Job for slot ${slot.id} already exists in queue, keeping status 'queued'`
           );
         } else {
-          // Реальная ошибка при постановке в очередь - делаем rollback в planned
-          // чтобы слот мог быть обработан при следующем вызове
+          // ВАЖНО: queued -> planned запрещён в state machine.
+          // При реальной ошибке постановки в очередь фиксируем queued -> failed.
           try {
             await db
               .update(notificationSlots)
-              .set({ status: 'planned' })
-              .where(eq(notificationSlots.id, slot.id));
+              .set({ status: 'failed' })
+              .where(
+                and(
+                  eq(notificationSlots.id, slot.id),
+                  eq(notificationSlots.status, 'queued')
+                )
+              );
           } catch (rollbackError) {
             console.error(
-              `[DeliveryWorker] ❌ Failed to rollback status for slot ${slot.id}:`,
+              `[DeliveryWorker] ❌ Failed to mark slot ${slot.id} as failed after enqueue error:`,
               rollbackError
             );
           }
@@ -603,17 +604,18 @@ export async function processDueSlots(): Promise<void> {
  * Периодически проверяет состояние системы и ставит задачи в соответствующие очереди:
  * - processDueSlots() - ставит задачи отправки уведомлений в очередь notification-delivery
  * - enqueueAiTextPoolRefillForAllActivePreferences() - ставит задачи догенерации AI-текстов в очередь ai-text-pool-refill
+ * - startNotificationSlotsSchedulerLoop() - запускает адаптивный sharded scheduler слотов
  *
  * Воркеры BullMQ обрабатывают задачи из этих очередей (см. server/plugins/bullmq-workers.ts)
  *
  * ВАЖНО: Эта функция должна вызываться только один раз при старте сервера.
  * Многократный вызов приведет к дублированию планировщиков и таймеров.
  *
- * ПРИМЕЧАНИЕ: Регенерация слотов происходит event-driven образом:
- * - При изменении настроек уведомлений
- * - При изменении timezone
- * - При первом включении уведомлений
- * Периодическая регенерация для всех пользователей отключена как избыточная.
+ * Регенерация слотов:
+ * - Event-driven: при логине, смене настроек, timezone
+ * - Периодическая: каждые 2 часа ставим задачи для всех пользователей с активными настройками.
+ *   Воркер вызывает needsSlotRegeneration и генерирует только если planned < 80% ожидаемого.
+ *   Без периода слоты не пополняются после того, как все отправлены (горизонт 2 дня).
  */
 let workerStarted = false;
 
@@ -680,10 +682,14 @@ export function startDeliveryWorker(): void {
     }, TEXT_POOL_REFILL_INTERVAL_MS);
   }, TEXT_POOL_REFILL_INITIAL_DELAY_MS);
 
+  // Запускаем отдельный адаптивный loop шардированного scheduler слотов.
+  startNotificationSlotsSchedulerLoop();
+
   console.log(
     `[DeliveryWorker] Worker scheduled (first check in ${INITIAL_DELAY_MS / 1000}s, then every ${INTERVAL_MS / 1000}s)`
   );
   console.log(
     `[DeliveryWorker] Text pool refill scheduled (first check in ${TEXT_POOL_REFILL_INITIAL_DELAY_MS / 1000 / 60} minutes, then every ${TEXT_POOL_REFILL_INTERVAL_MS / 1000 / 60} minutes)`
   );
+  console.log('[DeliveryWorker] Slot generation scheduler loop started');
 }

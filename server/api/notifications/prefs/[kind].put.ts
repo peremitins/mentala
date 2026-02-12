@@ -1,4 +1,5 @@
 import { eq, and, isNull } from 'drizzle-orm';
+import type { H3Event } from 'h3';
 import { nanoid } from 'nanoid';
 import {
   notificationPreferences,
@@ -15,9 +16,7 @@ import type {
 } from '@/shared/dto/notifications';
 import { getSessionUser } from '@/server/application/auth/session';
 import { generateAllSlotsForUser } from '@/server/application/notifications/scheduler.service';
-import {
-  loadAiGeneratedTexts,
-} from '@/server/application/notifications/ai-generation.service';
+import { loadAiGeneratedTexts } from '@/server/application/notifications/ai-generation.service';
 import { computeGenerationConfigHash } from '@/server/utils/notification-ai-config-hash';
 import { userPreferences } from '@/server/infrastructure/db/schema';
 import { enqueueAiTextGenerationJob } from '@/server/application/notifications/queues/aiTextGeneration.queue';
@@ -42,6 +41,71 @@ function normalizeCustomSlotTimes(
   }
 
   return normalized.length ? normalized : null;
+}
+
+function hasDuplicateCustomSlotTimes(
+  input: (number | null)[] | null | undefined
+): boolean {
+  if (!input || input.length === 0) return false;
+
+  const seen = new Set<number>();
+  for (const value of input) {
+    if (value === null || value === undefined) continue;
+
+    // Используем округлённые минуты, т.к. именно так значения сохраняются в БД.
+    const minute = Math.round(value);
+    if (seen.has(minute)) {
+      return true;
+    }
+    seen.add(minute);
+  }
+
+  return false;
+}
+
+function runSlotsRegenerationInBackground(params: {
+  event: H3Event;
+  userId: number;
+  kind: string;
+  entityKey?: string | null;
+  reason: 'prefs_changed';
+  forceTodaySlots?: boolean;
+}): void {
+  const runTask = async () => {
+    try {
+      await generateAllSlotsForUser(params.userId, {
+        forceTodaySlots: params.forceTodaySlots ?? true,
+        reason: params.reason,
+      });
+      console.log(
+        `[NotificationPrefs] ✅ Background slot regeneration completed: user=${params.userId}, kind=${params.kind}${params.entityKey ? `, entityKey=${params.entityKey}` : ''}`
+      );
+    } catch (error) {
+      console.error(
+        `[NotificationPrefs] ❌ Background slot regeneration failed: user=${params.userId}, kind=${params.kind}${params.entityKey ? `, entityKey=${params.entityKey}` : ''}`,
+        error
+      );
+    }
+  };
+
+  // В Nitro/Nuxt предпочтительно регистрировать фоновую задачу через waitUntil.
+  // Это не блокирует HTTP-ответ и даёт рантайму корректно дождаться async-задачи.
+  if (typeof params.event.waitUntil === 'function') {
+    params.event.waitUntil(runTask());
+    return;
+  }
+
+  // Fallback для окружений без waitUntil.
+  if (typeof setImmediate === 'function') {
+    setImmediate(() => {
+      void runTask();
+    });
+    return;
+  }
+
+  setTimeout(() => {
+    void runTask();
+  }, 0);
 }
 
 function normalizeCustomPromptNotification(
@@ -239,6 +303,17 @@ export default defineEventHandler(
               'customSlotTimes values must be null or numbers between 0 and 1439',
           });
         }
+
+        // Дубли фиксированных минут запрещаем явно:
+        // active-slot уникальность в БД не позволит сохранить два planned/queued слота
+        // с одинаковым (user, kind, entity, scheduled_at), что приводило к "тихим" пропускам.
+        if (hasDuplicateCustomSlotTimes(body.customSlotTimes)) {
+          throw createError({
+            statusCode: 400,
+            message:
+              'customSlotTimes must not contain duplicate non-null times',
+          });
+        }
       }
     }
 
@@ -379,7 +454,6 @@ export default defineEventHandler(
       // Это нужно для правильного вычисления хеша и пересоздания AI-текстов
       let nameChanged = false;
       let descriptionChanged = false;
-      let updatedEntityId: string | null = null; // ID обновленной сущности (для обновления normalizedEntityKey)
       // Сохраняем старые значения ДО обновления для вычисления старого хеша
       let oldEntityNameBeforeUpdate = '';
       let oldEntityDescriptionBeforeUpdate: string | null = null;
@@ -462,7 +536,6 @@ export default defineEventHandler(
               .returning();
 
             if (updatedHabit) {
-              updatedEntityId = updatedHabit.id;
               // Для кастомных сущностей entityKey = ID
               normalizedEntityKey = updatedHabit.id;
               console.log(
@@ -565,7 +638,6 @@ export default defineEventHandler(
               .returning();
 
             if (updatedTopic) {
-              updatedEntityId = updatedTopic.id;
               // Для кастомных сущностей entityKey = ID
               normalizedEntityKey = updatedTopic.id;
               console.log(
@@ -596,10 +668,10 @@ export default defineEventHandler(
       const nextCustomPromptNotification = allowCustomPrompt
         ? normalizedCustomPromptNotification !== undefined
           ? normalizedCustomPromptNotification
-          : existing.customPromptNotification ?? null
+          : (existing.customPromptNotification ?? null)
         : null;
       const oldCustomPromptNotification = allowCustomPrompt
-        ? existing.customPromptNotification ?? null
+        ? (existing.customPromptNotification ?? null)
         : null;
 
       // Обновляем существующие
@@ -641,7 +713,7 @@ export default defineEventHandler(
       if (shouldRegenerateAi) {
         // Проверяем, изменились ли параметры, влияющие на генерацию
         // Используем нормализованное значение для entityKey
-        let finalEntityKey = normalizedEntityKey || '';
+        const finalEntityKey = normalizedEntityKey || '';
 
         console.log(
           `[NotificationPrefs] Preparing AI generation: kind=${kind}, original entityKey=${entityKey || 'none'}, normalizedEntityKey=${normalizedEntityKey || 'none'}, finalEntityKey=${finalEntityKey}`
@@ -770,7 +842,7 @@ export default defineEventHandler(
         // ВАЖНО: Если название или описание изменились, нужно принудительно пересоздать AI-тексты
         // entityName/entityDescription входят в хеш, поэтому хеш изменится автоматически
 
-        const textSource: 'ai' = 'ai';
+        const textSource = 'ai' as const;
 
         console.log(
           `[NotificationPrefs] 🔍 Determined textSource: ${textSource}, isCustomEntity: ${isCustomEntity}, metaForCheck: ${JSON.stringify(metaForCheck)}`
@@ -925,21 +997,17 @@ export default defineEventHandler(
         body.meta?.textSource !== undefined;
 
       if (settingsChanged && !shouldRegenerateSlotsAfterAi) {
-        try {
-          // ВАЖНО: Используем глобальную оркестрацию для правильного чередования тем
-          await generateAllSlotsForUser(userId, {
-            forceTodaySlots: true,
-          });
-          console.log(
-            `[NotificationPrefs] Slots regenerated for source: user ${userId}, kind: ${kind}`,
-            entityKey ? `, entityKey: ${entityKey}` : ''
-          );
-        } catch (error) {
-          console.error(
-            `[NotificationPrefs] Failed to regenerate slots:`,
-            error
-          );
-        }
+        runSlotsRegenerationInBackground({
+          event,
+          userId,
+          kind,
+          entityKey,
+          forceTodaySlots: true,
+          reason: 'prefs_changed',
+        });
+        console.log(
+          `[NotificationPrefs] 🕒 Slot regeneration scheduled in background: user ${userId}, kind: ${kind}${entityKey ? `, entityKey: ${entityKey}` : ''}`
+        );
       } else if (settingsChanged && shouldRegenerateSlotsAfterAi) {
         console.log(
           `[NotificationPrefs] Skipping immediate slot regeneration (will regenerate after AI generation): user ${userId}, kind: ${kind}`
@@ -1068,7 +1136,7 @@ export default defineEventHandler(
           : null;
       const allowCustomPrompt = Boolean(entityKey) && !isCustomEntityForPrompt;
       const initialCustomPromptNotification = allowCustomPrompt
-        ? normalizedCustomPromptNotification ?? null
+        ? (normalizedCustomPromptNotification ?? null)
         : null;
       const [created] = await db
         .insert(notificationPreferences)
@@ -1105,7 +1173,7 @@ export default defineEventHandler(
         const finalEntityKey = normalizedEntityKey || entityKey || '';
 
         // Определяем textSource
-        const textSource: 'ai' = 'ai';
+        const textSource = 'ai' as const;
 
         // Определяем сущность и intent для вычисления хеша и генерации
         let habitIntent: 'quit' | 'build' | null = null;
@@ -1203,19 +1271,18 @@ export default defineEventHandler(
         });
       } else {
         // Если AI-тексты не нужны (textSource !== 'ai'),
-        // генерируем слоты сразу
-        try {
-          // ВАЖНО: Используем глобальную оркестрацию для правильного чередования тем
-          await generateAllSlotsForUser(userId, {
-            forceTodaySlots: true,
-          });
-          console.log(
-            `[NotificationPrefs] Slots generated for new source (no AI): user ${userId}, kind: ${kind}`,
-            entityKey ? `, entityKey: ${entityKey}` : ''
-          );
-        } catch (error) {
-          console.error(`[NotificationPrefs] Failed to generate slots:`, error);
-        }
+        // генерируем слоты в фоне, чтобы не держать ответ API
+        runSlotsRegenerationInBackground({
+          event,
+          userId,
+          kind,
+          entityKey,
+          forceTodaySlots: true,
+          reason: 'prefs_changed',
+        });
+        console.log(
+          `[NotificationPrefs] 🕒 Slot generation scheduled in background for new source (no AI): user ${userId}, kind: ${kind}${entityKey ? `, entityKey: ${entityKey}` : ''}`
+        );
       }
 
       const response = {

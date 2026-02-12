@@ -174,7 +174,7 @@ export function createQueue<T = any>(
  */
 export function createWorker<TData = any, TResult = any>(
   name: string,
-  processor: (job: Job<TData, TResult>) => Promise<TResult>,
+  processor: (job: Job<TData, TResult>, token?: string) => Promise<TResult>,
   options: Omit<WorkerOptions, 'connection'> = {}
 ): Worker<TData, TResult> {
   if (isBullMqDisabled || !redisConnectionInstance) {

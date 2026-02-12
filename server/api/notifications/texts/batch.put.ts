@@ -189,7 +189,7 @@ export default defineEventHandler(async (event) => {
         const nextImageTag =
           update.imageTag !== undefined
             ? normalizeImageTag(update.imageTag)
-            : text.imageTag ?? null;
+            : (text.imageTag ?? null);
 
         // Обновляем
         await tx
@@ -372,7 +372,7 @@ export default defineEventHandler(async (event) => {
     (async () => {
       try {
         // ВАЖНО: Используем глобальную оркестрацию для правильного чередования тем
-        await generateAllSlotsForUser(userId);
+        await generateAllSlotsForUser(userId, { reason: 'manual' });
         console.log(
           `[NotificationTexts] ✅ Slots regenerated after text changes: user ${userId}, kind: ${body.kind}, entityKey: ${normalizedEntityKey}`
         );

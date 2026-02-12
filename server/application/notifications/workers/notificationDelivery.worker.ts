@@ -32,7 +32,10 @@ export function startNotificationDeliveryWorker() {
 
       try {
         const [slot] = await db
-          .select({ id: notificationSlots.id, status: notificationSlots.status })
+          .select({
+            id: notificationSlots.id,
+            status: notificationSlots.status,
+          })
           .from(notificationSlots)
           .where(eq(notificationSlots.id, slotId))
           .limit(1);

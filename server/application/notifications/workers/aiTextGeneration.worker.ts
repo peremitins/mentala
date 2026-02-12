@@ -169,7 +169,11 @@ export function startAiTextGenerationWorker() {
       try {
         // КРИТИЧНО: Проверяем пользователя
         const [user] = await db
-          .select({ id: users.id, isBlocked: users.isBlocked, gender: users.gender })
+          .select({
+            id: users.id,
+            isBlocked: users.isBlocked,
+            gender: users.gender,
+          })
           .from(users)
           .where(eq(users.id, userId))
           .limit(1);
@@ -225,7 +229,7 @@ export function startAiTextGenerationWorker() {
           );
           return { skipped: true, reason: 'not_ai' };
         }
-        const normalizedTextSource: 'ai' = 'ai';
+        const normalizedTextSource = 'ai' as const;
 
         const expectedConfigHash = job.data.configHash;
         if (expectedConfigHash) {
@@ -285,6 +289,7 @@ export function startAiTextGenerationWorker() {
         // Перегенерируем слоты только после успешной генерации AI-текстов
         await generateAllSlotsForUser(userId, {
           forceTodaySlots: true,
+          reason: 'manual',
         });
 
         console.log(
@@ -293,10 +298,7 @@ export function startAiTextGenerationWorker() {
 
         return { success: true, textsGenerated: result.texts.length };
       } catch (error) {
-        console.error(
-          `[AI Generation Worker] ❌ Job ${job.id} failed:`,
-          error
-        );
+        console.error(`[AI Generation Worker] ❌ Job ${job.id} failed:`, error);
 
         // Если это повторяемая ошибка провайдера и попытки исчерпаны — ставим новую задачу с задержкой
         const attemptsLimit = job.opts?.attempts ?? 1;
