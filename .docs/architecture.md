@@ -392,7 +392,7 @@ server/
 • Брокер: Redis (локально через Docker, в production через Upstash).
 • Node.js: BullMQ 5.x для обработки фоновых задач.
 • Структура очередей:
-• `notification-slots-generation` — генерация слотов уведомлений для пользователей
+• `notification-slots-generation` — генерация слотов уведомлений. Планировщик `notificationSlots.scheduler` каждые 2 часа ставит задачи для пользователей с активными настройками; воркер генерирует только при нехватке planned (< 80%), иначе слоты не пополняются после отправки (горизонт 2 дня).
 • `notification-delivery` — отправка уведомлений через FCM
 • `ai-text-pool-refill` — пополнение пула AI-генерированных текстов
 • Воркеры запускаются автоматически через плагин `server/plugins/bullmq-workers.ts`.

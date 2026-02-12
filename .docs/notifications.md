@@ -466,7 +466,8 @@ if (!text && textSource === 'ai') {
    - Воркер: `server/application/notifications/workers/notificationSlots.worker.ts`
    - Планировщик: `server/application/notifications/schedulers/notificationSlots.scheduler.ts`
    - Concurrency: 2 задачи параллельно
-   - Задачи ставятся планировщиком для всех пользователей с активными настройками
+   - Задачи ставятся планировщиком каждые 2 часа (prod) / 5 мин (dev) для всех пользователей с активными настройками
+   - Воркер выполняет генерацию только если `needsSlotRegeneration` (planned < 80% ожидаемого). Без периода слоты не пополняются после того, как все отправлены (горизонт 2 дня).
 
 2. **`notification-delivery`** — отправка уведомлений через FCM
 

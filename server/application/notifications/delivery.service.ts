@@ -19,6 +19,7 @@ import {
 } from '@/server/infrastructure/db/schema';
 import type { NotificationPayload } from '@/shared/dto/notifications';
 import { enqueueAiTextPoolRefillForAllActivePreferences } from '@/server/application/notifications/schedulers/aiTextPool.scheduler';
+import { enqueueSlotGenerationForAllActiveUsers } from '@/server/application/notifications/schedulers/notificationSlots.scheduler';
 import { notificationDeliveryQueue } from '@/server/application/notifications/queues/notificationDelivery.queue';
 import { getUserTimezone, toLocalTime } from './timezone.utils';
 import admin from 'firebase-admin';
@@ -603,17 +604,18 @@ export async function processDueSlots(): Promise<void> {
  * Периодически проверяет состояние системы и ставит задачи в соответствующие очереди:
  * - processDueSlots() - ставит задачи отправки уведомлений в очередь notification-delivery
  * - enqueueAiTextPoolRefillForAllActivePreferences() - ставит задачи догенерации AI-текстов в очередь ai-text-pool-refill
+ * - enqueueSlotGenerationForAllActiveUsers() - ставит задачи генерации слотов в очередь notification-slots-generation
  *
  * Воркеры BullMQ обрабатывают задачи из этих очередей (см. server/plugins/bullmq-workers.ts)
  *
  * ВАЖНО: Эта функция должна вызываться только один раз при старте сервера.
  * Многократный вызов приведет к дублированию планировщиков и таймеров.
  *
- * ПРИМЕЧАНИЕ: Регенерация слотов происходит event-driven образом:
- * - При изменении настроек уведомлений
- * - При изменении timezone
- * - При первом включении уведомлений
- * Периодическая регенерация для всех пользователей отключена как избыточная.
+ * Регенерация слотов:
+ * - Event-driven: при логине, смене настроек, timezone
+ * - Периодическая: каждые 2 часа ставим задачи для всех пользователей с активными настройками.
+ *   Воркер вызывает needsSlotRegeneration и генерирует только если planned < 80% ожидаемого.
+ *   Без периода слоты не пополняются после того, как все отправлены (горизонт 2 дня).
  */
 let workerStarted = false;
 
@@ -640,6 +642,14 @@ export function startDeliveryWorker(): void {
   // Интервал для проверки и догенерации текстов (раз в час, с небольшим смещением)
   const TEXT_POOL_REFILL_INTERVAL_MS = 60 * 60 * 1000; // 1 час
   const TEXT_POOL_REFILL_INITIAL_DELAY_MS = 10 * 60 * 1000; // 10 минут после старта
+
+  // Интервал для постановки задач генерации слотов (горизонт 2 дня — нужно пополнять)
+  const SLOTS_GENERATION_INTERVAL_MS = isDevelopment
+    ? 5 * 60 * 1000
+    : 2 * 60 * 60 * 1000; // 5 мин в dev, 2 часа в prod
+  const SLOTS_GENERATION_INITIAL_DELAY_MS = isDevelopment
+    ? 2 * 60 * 1000
+    : 15 * 60 * 1000; // 2 мин в dev, 15 мин в prod
 
   console.log(
     `[DeliveryWorker] Mode: ${isDevelopment ? 'development' : 'production'}`
@@ -680,10 +690,32 @@ export function startDeliveryWorker(): void {
     }, TEXT_POOL_REFILL_INTERVAL_MS);
   }, TEXT_POOL_REFILL_INITIAL_DELAY_MS);
 
+  // Периодическая постановка задач генерации слотов
+  setTimeout(() => {
+    enqueueSlotGenerationForAllActiveUsers().catch((error) => {
+      console.error(
+        '[DeliveryWorker] Error enqueueing slot generation:',
+        error
+      );
+    });
+
+    setInterval(() => {
+      enqueueSlotGenerationForAllActiveUsers().catch((error) => {
+        console.error(
+          '[DeliveryWorker] Error enqueueing slot generation:',
+          error
+        );
+      });
+    }, SLOTS_GENERATION_INTERVAL_MS);
+  }, SLOTS_GENERATION_INITIAL_DELAY_MS);
+
   console.log(
     `[DeliveryWorker] Worker scheduled (first check in ${INITIAL_DELAY_MS / 1000}s, then every ${INTERVAL_MS / 1000}s)`
   );
   console.log(
     `[DeliveryWorker] Text pool refill scheduled (first check in ${TEXT_POOL_REFILL_INITIAL_DELAY_MS / 1000 / 60} minutes, then every ${TEXT_POOL_REFILL_INTERVAL_MS / 1000 / 60} minutes)`
+  );
+  console.log(
+    `[DeliveryWorker] Slot generation scheduled (first in ${SLOTS_GENERATION_INITIAL_DELAY_MS / 1000 / 60} min, then every ${SLOTS_GENERATION_INTERVAL_MS / 1000 / 60} min)`
   );
 }
