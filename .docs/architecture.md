@@ -4,6 +4,17 @@
 • Фронтенд: Nuxt 4 + TypeScript + Pinia + TailwindCSS + shadcn-vue + vue-query.
 • Бэкенд: Nitro (Node.js runtime) + Postgres + Drizzle ORM.
 • Мобильность: Capacitor + Ionic (iOS/Android).
+• Safe-area на mobile: для iOS в layout (`default/auth/blank`) применяется только верхний safe-area (`safe-area-inset-top`) через класс `ios-safe-layout`; нижняя часть интерфейса (BottomNav/контент) не получает дополнительных iOS-отступов, чтобы сохранять прежнюю высоту и визуальный ритм.
+• iOS‑гайд и паритет с Android: см. `.docs/IOS_SETUP.md` (dev/prod, push, Apple Developer Program, FCM/APNs особенности).
+• iOS bundle id: `com.mentala.app` (prod) и `com.mentala.app.dev` (dev), отдельные схемы в Xcode.
+• Визуальный стеклянный слой (`.glass-deep`, `.glass-deep-bottom`) использует progressive enhancement: базовый плотный fallback (без `color-mix`) для старых iOS/WebView, затем `-webkit-backdrop-filter`/`backdrop-filter`, и только при поддержке `color-mix(in oklab, ...)` применяются целевые стили.
+• API-клиент в `app/plugins/api.ts` использует единую кроссплатформенную стратегию `baseURL`: на web берётся `NUXT_PUBLIC_API_SERVER_URL`; на native в dev сохраняется поведение с `window.location.origin`, но для iOS есть защита от custom scheme (`capacitor://...`) и fallback на `NUXT_PUBLIC_API_SERVER_URL` (иначе запросы уходят не на backend).
+• Резолв медиа (`app/utils/media.ts`): в `dev` приоритет у `window.location.origin` (если это `http/https` и отличается от `apiBase`) — это выравнивает поведение с native `server.url` в Capacitor на iOS/Android; далее fallback на `apiBase` и `mediaBaseUrl`. В `production` приоритет остаётся у `NUXT_PUBLIC_MEDIA_BASE_URL`.
+• Ошибки API на native логируются в `app/plugins/api.ts` с контекстом (`url`, `status`, `statusText`, `message`, `responseData`) для диагностики проблем сети/доступности backend.
+• Глобальный auth middleware (`app/middleware/auth.global.ts`) держит fail-fast стратегию в компактном виде: helper для public routes, gate по native session token (`mentai.session.token`) и единый `auth.me()` с timeout (`AUTH_ME_TIMEOUT_MS`) для избежания зависаний на мобильных сетевых сбоях.
+• Google OAuth на native: `@capgo/capacitor-social-login` использует `google.webClientId` (env `NUXT_OAUTH_GOOGLE_CLIENT_ID`) на Android/Web и `google.iOSClientId` (env `NUXT_PUBLIC_GOOGLE_IOS_CLIENT_ID`) на iOS. Без iOS client id initialize на iOS возвращает `No provider was initialized`. В `AppDelegate` обязательно обрабатываем callback через `GIDSignIn.sharedInstance.handle(url)`. Backend `/api/auth/google/native` валидирует `idToken` по аудиториям `web + iOS`.
+• Для `nuxt generate` фоновые notification/BullMQ воркеры не запускаются (guards в `server/plugins/notifications-worker.ts` и `server/plugins/bullmq-workers.ts`), чтобы static-сборка не зависала на Redis и `cap sync` всегда получал свежие web assets.
+• Дополнительно для static-сборки отключены фоновые cleanup-плагины (`server/plugins/auth-cleanup.ts`, `server/plugins/trial-usage-cleanup.ts`), а Redis-клиент BullMQ работает в `lazyConnect` режиме, чтобы `generate` не блокировался фоновыми коннектами.
 • Валидация и схемы: Zod (в связке с @vee-validate/zod).
 • Логи и мониторинг: Pino + Sentry.
 • Миграции БД: Drizzle Kit (SQL файлы хранятся для совместимости с будущими системами).
@@ -18,7 +29,7 @@
 • blank (fullscreen),
 • auth (центрирование форм; при входе на auth экран фоновые звуки и медитации принудительно выключаются).
 • Глобальная защита аудио: `app/plugins/audio-playback-guard.client.ts` отслеживает auth/роуты и через `setPlaybackAllowed` в `useSceneAudio` и `useMeditationPlayer` блокирует любой звук на публичных страницах и при разлогине.
-• UI‑настройки: `useUiSettingsStore` хранит локальные параметры интерфейса (яркость фона) в `persistentStorage` (web: localStorage, mobile: Capacitor Preferences). Яркость применяется к aurora‑слою и к затемнению фоновых изображений сцен (overlay). Дефолтная яркость — 85%.
+• UI‑настройки: `useUiSettingsStore` хранит локальные параметры интерфейса (яркость фона) в `persistentStorage` (web: localStorage, mobile: Capacitor Preferences) с ключом, привязанным к `userId` (чтобы разные аккаунты не наследовали яркость). Яркость применяется к aurora‑слою и к затемнению фоновых изображений сцен (overlay). Дефолтная яркость — 85%.
 • Тема интерфейса: приложение использует только тёмную тему (dark theme) по умолчанию. Переключение между светлой и тёмной темой не поддерживается. Все CSS-переменные настроены на тёмную палитру в `:root`, класс `.dark` не используется. PWA manifest (`site.webmanifest`) и favicon настроены на тёмные цвета.
 • Страницы:
 index, onboarding, chat (layout blank), therapy, habits, practices, breath-practices, profile/\*, settings, privacy, subscription, billing.
@@ -33,13 +44,20 @@ index, onboarding, chat (layout blank), therapy, habits, practices, breath-pract
 • В настройках: переключатель «Маркетинговые сообщения» пишет согласие через `PATCH /api/user/me`.
 • ID пользователя показывается внизу `/settings` с копированием (useClipboard/Capacitor Clipboard с fallback).
 • Чат: welcome‑ответ стартует при пустом `messages`, параметр `mode` удалён; `entryContext` приходит из разделов `/habits` и `/therapy` и учитывается в prompt.
+• Чат: приветствие используется только в welcome‑старте и не чаще 1 раза в день (локальная дата пользователя). Приветствие по имени — отдельный лимит; имя очищается до «только имя» без фамилии/никнеймов. Отметки хранятся в `chat_settings.last_greeting_at` и `chat_settings.last_name_greeting_at`. Инструкция про имя и выбор стартовой фразы добавляются только в первое сообщение дня, чтобы не раздувать токены.
 • Чат: suggested‑chips не сбрасываются при наборе текста, очищаются только при отправке/выборе.
 • Чат: микрофон в инпуте имеет индикацию записи через ::before/::after (пульсирующая точка), отправка на мобильных срабатывает на первый тап через pointerdown‑хэндлер даже во время записи.
 • Голосовой ввод: Whisper‑fallback временно отключён, используются только native/webspeech движки.
 • Чат: кнопки действий (микрофон/отправка) оформлены как отдельные «приподнятые» элементы с градиентом и мягкой тенью для лучшей читаемости.
 • Практики:
 • Хаб `/practices` объединяет дыхательные практики и медитации.
-• Дыхательные практики: страницы `/breath-practices` и `/breath-practices/:slug`, каталог в `app/lib/breathPracticesCatalog.ts`.
+• Дыхательные практики: страницы `/breath-practices` и `/breath-practices/:slug`, каталог в `app/lib/breathPracticesCatalog.ts`. Плеер вынесен в переиспользуемые компоненты: `BreathPracticePlayer.vue` (полный плеер с управлением, настройками, overlays) и `BreathOrb.vue` (визуализация сферы дыхания). Компоненты можно использовать в модалке SOS и других местах.
+• В `BreathPracticePlayer` добавлена отдельная настройка `Голос` (независимо от `Звуковые сигналы`): голосовые подсказки фаз (`inhale/hold/exhale/pause`) загружаются из `public/breath/voice/{informal|formal}/*.mp3`, с preloading и fallback при ошибках.
+• SOS: глобальная полноэкранная модалка `app/components/sos/SosModalRoot.vue`, монтируется в `default` layout и открывается из `PageHeader` через состояние `useSos()`. Сценарии: выбор состояния, короткие практики (5-4-3-2-1, квадратное дыхание через `BreathPracticePlayer` в SOS-режиме, PMR), финиш с переходом в чат. При входе в любой тренажёр (panic-grounding, panic-breathing, tension-practice) фоновые звуки сцены приглушаются; при выходе — возобновляются (как в дыхательных практиках и медитации).
+• SOS PMR Voice: для шага `tension-practice` добавлена локальная озвучка фаз (`clench`/`release`/`finish`) через файлы из `public/sos/tension/*`, с предзагрузкой, graceful fallback при ошибке аудио и отдельной локальной настройкой `voiceEnabled` (`app/utils/sosVoiceSettings.ts`).
+• SOS PMR UI стандартизирован под `BreathPracticePlayer`: такой же prep-overlay `3..2..1`, фиксированная нижняя панель (settings/stop/play-pause + прогресс). В хедере SOS при техниках отображается кнопка «Назад» (аналогично PageHeader). Модалка настроек в том же стиле + отдельные пункты `Голос` (voice prompts) и `Звуковые сигналы` (cue inhale/exhale), локальные настройки в `app/utils/sosTensionPracticeSettings.ts`.
+• Переход из SOS в чат: модалка закрывается, затем выполняется переход на `/` с `screen=chat`, контекст передается через `chat.entryContext` типа `sos` (`sos_entry`, `after_practice`).
+• Suggested chips: добавлен action `open_sos` (params: `sosEntry`, `source`) для переоткрытия SOS-модалки из чата на нужном шаге.
 • Контекст группы дыхательных практик передаётся через query `group` на `/breath-practices/:slug`; в плеере доступны кнопки «Назад/Вперёд» для перелистывания практик внутри выбранной группы (built-in: anxiety/sleep/focus/popular, custom: custom).
 • Кастомные практики и настройки хранятся в `app/stores/breathPractices.ts` через `app/utils/persistentStorage.ts` (web: localStorage, mobile: Capacitor Preferences).
 • Тренажёр использует `app/composables/useBreathPracticePlayer.ts` (тайминг фаз, отсчёт; при уходе в фон не ставим паузу).
@@ -121,7 +139,8 @@ server/
 • Политика удаления аккаунта: по умолчанию удаление происходит сразу (hard delete), но можно включить grace‑период через `AUTH_DELETE_GRACE_DAYS` (тогда используется 2‑фазное удаление и очередь).
 • Нативный Google Sign-In (Capacitor): клиент получает `idToken` и отправляет в `/api/auth/google/native`, сервер валидирует через `google-auth-library` и создаёт сессию.
 • Диагностика Google Sign-In на мобильных: клиент валидирует Web Client ID и показывает понятные ошибки по типовым кодам Google (DEVELOPER_ERROR, отмена входа, сеть).
-• Capacitor dev CORS: при запуске через `server.url` в dev клиент использует `window.location.origin` как API baseURL, чтобы избегать CORS между ngrok/локальным доменом.
+• Capacitor API baseURL: в native используется правило из `app/plugins/api.ts` — в dev приоритет у `window.location.origin` (для сохранения рабочего Android-потока), но на iOS non-http(s) origin (`capacitor://localhost`) запрещён и заменяется на `NUXT_PUBLIC_API_SERVER_URL` (apiBase).
+• Сборка для mobile: используем `pnpm generate` (script `build:mobile`) с `.env.development`, чтобы `NUXT_PUBLIC_API_SERVER_URL` попал в runtimeConfig.
 • Медитации v1:
 • Таблицы: `meditation_tracks` (каталог), `meditation_favorites` (избранное).
 • Настройки пользователя: `user_preferences.meditation_timer_minutes`.
@@ -190,10 +209,12 @@ server/
 • `custom_slot_times` — массив длиной до 5 значений (в минутах, 0–1439). `null` означает автоматическое распределение и теперь безопасно передаётся/сохраняется как `null` без 400 от API.
 • `entity_key` — единое поле для идентификации источника уведомлений. Для кастомных сущностей используется ID, для готовых шаблонов - ключ шаблона.
 • API `/api/notifications/prefs` поддерживает CRUD этих полей, принимает `subtype = mixed` для привычек и отдаёт то же значение; на уровне БД обновлённое ограничение `notification_prefs_subtype_check` теперь тоже разрешает `mixed`.
+• `PUT /api/notifications/prefs/:kind` больше не ждёт завершения тяжёлой slot-оркестрации в HTTP-цикле: для `textSource !== 'ai'` и для update-кейсов без AI-регенерации слоты запускаются в фоне (асинхронный fire-and-forget), поэтому UI не висит на долгом лоадере при изменении `customSlotTimes` и шаблонных настройках.
 • Фронт использует `WeekdaySelector`, `TimeRangeSelector`, а также кликабельные чипы под слайдером частоты для точного времени.
 • Планировщик (`scheduler.service.ts`) при генерации слотов даёт приоритет кастомным временам, остальное распределяет равномерно внутри выбранного окна.
-• Глобальная оркестрация слотов описана в `.docs/NOTIFICATION_SCHEDULING_ORCHESTRATION.md`: учитывается `sent/queued/planned` в текущем дне, допускается перевес групп, фиксированные времена не сдвигаются.
-• При изменении настроек уведомлений регенерация использует флаг `forceTodaySlots`: если до конца окна достаточно времени, гарантируется минимум 1 слот сегодня (и полное заполнение при раннем включении).
+• Логика распределения времени слотов (чередование, fixed times, интервалы внутри дня) описана в `.docs/NOTIFICATION_SCHEDULING_ORCHESTRATION.md`.
+• Источник истины по масштабированию и надёжности слотов: `.docs/notification_slots_scaling_tz.md` (queued не удаляются при регене, критерий горизонта — `planned+queued`, sharding/cursor/cycle, backpressure, lock-стратегия).
+• `forceTodaySlots` на текущем этапе считается техдолгом и находится вне scope scaling-этапа.
 • Logout отключает уведомления **только на текущем устройстве**: токен удаляется через `/api/notifications/unregister-token` (таблица `user_devices`).
 • При логине токен устройства повторно регистрируется (если есть) и в фоне проверяется наличие активных слотов: если нужно регенерировать или активные настройки есть, но слотов нет — запускается `generateAllSlotsForUser`.
 • AI‑генерация текстов уведомлений выполняется через очередь BullMQ `ai-text-generation` с debounce‑dedup (`id = ai-gen-{preferenceId}`, TTL≈20с) и лимитом на пользователя (не больше 3 активных задач одновременно). При ошибках AI слоты **не** создаются, задача ретраится с backoff; после успешной генерации выполняется глобальная регенерация слотов. При повторных сбоях объём генерации снижается (50 → 25 → 12), чтобы не срывать процесс.
@@ -201,14 +222,15 @@ server/
 • AI‑промпты запрещают ложные утверждения о достижениях пользователя: формулировки только нейтральные/поддерживающие без фиксации «успеха».
 • При изменении глобальных настроек (`tone`, `addressing`) через `/api/settings/preferences` ставится регенерация AI‑пулов для всех `ai` preferences пользователя (через ту же очередь).
 • Шаблонные тексты из `notificationTemplates` по умолчанию без изображений (`imageTag = null`), но могут иметь явный `imageTag`.
-• В native (Capacitor) регистрация push‑токена всегда идёт через `$api` и `NUXT_PUBLIC_API_SERVER_URL`, чтобы запросы не уходили на `capacitor://localhost` и `user_devices` корректно заполнялась.
+• Контент каталога `notificationTemplates` поддерживается через регулярную чистку: спорные/неестественные шаблоны удаляются целыми блоками, а в оставшихся текстах нормализуется типографика (например `5 Минут` → `5 минут`). После правок выполняется синхронизация в БД через `scripts/migrate-templates-to-db.ts`.
+• В native (Capacitor) регистрация push‑токена всегда идёт через `$api` и использует ту же стратегию выбора `baseURL`, что и остальные API-запросы (`app/plugins/api.ts`), чтобы не было расхождений между auth и push.
 • Доставка слотов: если planned-слот опоздал больше чем на 10 минут, он не отправляется, помечается как `skipped` и считается выполненным для дневной квоты.
 • UI (habits и therapy) отражает вручную заданные слоты: под слайдером частоты отображается интерактивный список слотов с тайм-пикерами; компонент TimePicker использует Radix ScrollArea без `overflow-hidden`, поэтому свайпы/прокрутка работают нативно, а кнопки синхронно центрируют выбранное значение.
 • NotificationSettingsPage визуально сгруппирован в `glass-deep` карточки с внутренними подложками, чтобы текст читался на фоне обоев и сохранялась иерархия блоков.
 • NotificationTextsEditorPage использует общий `glass-deep` контейнер для списка текстов с внутренними карточками-подложками; кнопка сохранения закреплена липкой панелью над BottomNav.
 • NotificationSettingsPage показывает блок «Мои пожелания» для **шаблонных** тем (не для кастомных). Пожелания сохраняются в `custom_prompt_notification` и влияют на AI-генерацию.
 • Изображения уведомлений: подбираются по `kind/entityKey` из `public/notifications/*` **без гендерных подкаталогов** (только нейтральные наборы). Порядок: сущностные (`/notifications/habits/{entityKey}/{imageTag}/`), затем общие (`/notifications/common/{imageTag}/`). Для therapy допускаются сущностные папки (`/notifications/therapy/{entityKey}/{imageTag}/` и вложенные `/notifications/therapy/{entityKey}/**/{imageTag}/`); если есть верхний уровень и вложенные — они миксуются между собой и с common. Для кастомных сущностей (`entityKey = null`) разрешены только нейтральные теги (`activity/nature/meditation/daily_life/neutral_abstract`), `harm_*` запрещены. Legacy‑пулы (старый формат без `imageTag/subtype`) используют только safe‑only fallback `nature` → `neutral_abstract`, `harm_*` запрещены. `harm_*` допускаются в common только как универсальные медицинские визуалы без предметных контекстов, сущностные `harm_*` остаются в habits. Ротация изображений должна быть устойчивой и бесконечной: минимизировать повторы и сохранять позицию между перегенерациями текстов и изменениями настроек. URL строится от `NUXT_PUBLIC_MEDIA_BASE_URL` (fallback: `PUBLIC_APP_ORIGIN`/`NUXT_PUBLIC_APP_URL`). Нормализация файлов выполняется скриптом, который переносит `male/female` в нейтральные каталоги и затем синхронизирует Yandex Object Storage с `--delete`.
-• Для отдельных тем можно задавать специальные ограничения `imageTag` через `IMAGE_TAG_POLICY_OVERRIDES` (например `junk_food` → только `neutral_abstract`, `harm_appearance`, `harm_organs`).
+• Для отдельных тем можно задавать специальные ограничения `imageTag` через `IMAGE_TAG_POLICY_OVERRIDES` (например `nutrition` → только `neutral_abstract`, `harm_appearance`, `harm_organs`).
 • Где находится: `server/application/notifications/ai-generation.service.ts`.
 • Как матчится: `entityKey` нормализуется через `trim().toLowerCase()` и сравнивается с `key/keys`; опционально учитывается `kind` (`habits`/`therapy`).
 • Поля override: `keys` (массив ключей), `kind` (опционально), `allowedTags` (строго разрешённые теги), `fallbackTag` (чем заменить запрещённый/неуместный тег), `disallowHarmForPositive` (если `true`, harm_* запрещён для нейтральных/позитивных текстов).
@@ -217,6 +239,17 @@ server/
 • Для **шаблонов** картинки выключены по умолчанию (`imageTag = null`), но их можно включить точечно, задав `imageTag` в шаблоне.
 • Если для выбранного `imageTag` нет файлов ни в сущности, ни в common (AI‑источник), используется safe‑fallback в порядке `nature → daily_life → activity → meditation → neutral_abstract`. Для привычки `meditation` допускается только `meditation`. Для привычки `water` в промпте задано требование `imageTag = neutral_abstract`.
 • Android push: канал `mentai_high` создаётся нативно в `MainApplication` и задан как `default_notification_channel_id` в манифесте; fallback канал `fcm_fallback_notification_channel` удаляется, чтобы все уведомления были в одном разделе. Для FCM используется `tag = slotId`, чтобы Android не перезаписывал уведомления внутри группы.
+• Android push (важно): для Android отправляются **data-only** сообщения. Нативный сервис `MentalaMessagingService` сам строит уведомление (title/body/image из `data`) и привязывает `contentIntent`, чтобы тап работал и в раскрытом виде. В фореграунде системное уведомление не показываем (только JS-обработка). В интент обязательно кладём `google.message_id`, чтобы `PushNotificationsPlugin` эмитил `pushNotificationActionPerformed` на холодном старте.
+• iOS push: сервер принимает **FCM registration token**. На iOS токен берём через `@capacitor-community/fcm`; APNs token хранится только для диагностики и не используется для отправки.
+• iOS rich‑image: сервер ставит `aps.mutableContent = true`, прокидывает картинку в `apns.fcmOptions.imageUrl` и дублирует URL в `data.image` для Notification Service Extension.
+• Разделение окружений push: клиент шлёт `X-App-Env` и `appEnv`, в `user_devices` хранится `app_env`; отправка фильтруется по текущему окружению (dev/prod).
+• Push‑навигация: payload слота содержит `deepLink`, `navigation`, а также `data.action` + параметры (`trackId`/`practiceId`) для fallback‑маршрута. Клиент выполняет переход только при системном тапе; snooze/yes/no не должны запускать навигацию. При отсутствии данных fallback на `/`.
+• Приоритет навигации: `deepLink` → `data.action` → `navigation/navType` → `/`.
+• Надёжность push‑переходов (client): целевая навигация кладётся в очередь (Preferences/localStorage) с TTL, дедуплицируется по `messageId` и «специфичности» пути (например `/meditations?trackId=...` сильнее `/meditations`). Переход выполняется после `router.isReady()` и попытки `auth.me()`; если маршрут свернулся до базового пути, выполняется одноразовый retry через `router.replace`.
+• `actionHint` хранится в `notification_texts` и `notification_text_presets` (а для AI — в `ai_generated_notification_texts.texts[]`) и используется на сервере для вычисления `navigation`.
+• Если `actionHint` отсутствует или равен `none`, сервер применяет эвристику по тексту и `imageTag` (медитация/дыхание) как fallback, чтобы не терять навигацию.
+• Android clickAction: сейчас **не задаётся** (используем дефолтное поведение Android — открытие приложения по тапу). Если когда‑нибудь понадобится кастомный `clickAction`, он должен строго совпадать с `intent-filter` `MainActivity`, иначе тап по уведомлению не откроет приложение.
+• Дефолтные цели перехода (медитация/дыхание) задаются на сервере конфигом и могут меняться без релиза клиента.
 
 • Режимы генерации текстов (`textSource`):
 • `templates` — использование готовых шаблонов или пользовательских текстов (для кастомных привычек/терапии)
@@ -256,6 +289,8 @@ server/
 • Данные и таблицы:
 • `subscription_plans` — конфигурация тарифов (`basic/pro/premium`), лимиты минут, фичи.
 • `user_subscriptions` — периоды подписок пользователя + статус оплаты (`active/pending/expired/canceled`) + `billing_period`.
+• To-be: для операционных аномалий используется отдельное поле `checkoutStatus` (`in_progress`/`manual_review`/`closed`), а `paymentStatus` остается доменным статусом доступа.
+• To-be: default для нового pending-checkout — `checkoutStatus=in_progress` (без `NULL`).
 • `subscription_events` — аудит/аналитика (trial_started, checkout_started, purchase_success/failed, subscription_canceled и т.д.).
 • `payments` — идемпотентность webhook по `payment.id` YooKassa (PK = text).
 • `idempotency_keys` — идемпотентность команд (ключ = userId+route+Idempotency-Key), хранит `response_json` для повторов.
@@ -272,20 +307,61 @@ server/
 • Ретеншн PII для `trial_usage_tracking`: 1 год после последнего использования Trial или удаления аккаунта (см. `.docs/trial_abuse_prevention_tz.md`).
 • Очистка ретеншна: ежедневная фоновая очистка `trial_usage_tracking` (можно отключить `TRIAL_USAGE_CLEANUP_ENABLED=false`).
 
-• Checkout (MVP, без реального YooKassa checkout):
+• Checkout (as-is):
 • `POST /api/subscriptions/start-checkout` требует заголовок `Idempotency-Key`.
+• `idempotency_keys` работает с TTL (по умолчанию 24ч): повтор с тем же ключом возвращает тот же `response_json`, пока ключ не истёк.
+• To-be: повтор с тем же `Idempotency-Key`, но другим payload (`planId`/`billingPeriod`) должен возвращать `409`.
 • Создаёт `pending` подписку и сохраняет «ожидаемые» checkout-поля прямо в `user_subscriptions`:
 `checkout_amount`, `checkout_currency`, `billing_credit_applied`, `billing_credit_granted`, `yookassa_payment_id`.
 • Кредит `billingCredit` **резервируется** на старте checkout (уменьшаем `users.billing_credit`) и:
 • при `payment.succeeded` не списывается повторно,
 • при `payment.canceled` возвращается.
 • Если `toPay === 0` — финализация происходит сразу в `start-checkout` (без webhook).
+• Zero-pay путь: резерв кредита, активация и audit event выполняются в одной транзакции.
+• Если `toPay > 0`, сейчас возвращается mock `paymentUrl` (реальный create payment в YooKassa — в roadmap).
+• `paymentUrl` в текущем состоянии не является подтверждением оплаты и не используется как источник истины в бизнес-логике.
 
 • YooKassa webhook:
 • В `POST /api/payments/yookassa/webhook` подлинность уведомления подтверждается через API YooKassa:
 `GET https://api.yookassa.ru/v3/payments/{payment_id}` (Basic Auth `shopId:secretKey`).
+• IP allowlist используется как мягкая проверка (не блокирующая), источник истины — ответ API YooKassa.
 • Сумма/валюта сверяются с `user_subscriptions.checkout_*` перед активацией.
+• To-be: при real checkout в metadata платежа обязательно передаётся `subscriptionId/orderId`; финализация запрещена при неконсистентной привязке.
+• To-be: если в pending-подписке уже установлен `yookassa_payment_id`, webhook с другим `payment.id` не может её финализировать.
+• To-be: в рамках одного pending checkout `yookassa_payment_id` неизменяем; второй платеж для того же pending не создается.
+• To-be: при повторном `start-checkout` и уже существующем pending + `yookassa_payment_id` возвращается тот же `confirmation_url` (или требуется явная отмена pending перед новым процессом).
 • Все мутации — в транзакции; конкурентные повторы защищены `ON CONFLICT DO NOTHING` по `payments.id`.
+• Инварианты:
+• переход `pending -> active` только после валидного `payment.succeeded`;
+• дубль webhook не приводит к повторной активации;
+• один `payment.id` не может быть применен дважды (один платеж -> одна финализация);
+• повторный webhook не должен повторно начислять `billingCreditGranted`;
+• после активации старая активная подписка пользователя переводится в `expired`.
+• Текущее усиление от гонок: PK `payments.id` + `ON CONFLICT DO NOTHING` + conditional update `pending -> active`; дополнительная row-level блокировка в webhook — часть hardening roadmap.
+• Обязательный hardening: "не более одной active подписки на пользователя" (частичный unique index или row-level lock в критических транзакциях).
+• Обязательный hardening: reconciliation pending-подписок при потерянном/задержанном webhook через verify API YooKassa (порог конфигурируемый 15-30 минут, по умолчанию 15 минут) и только при наличии `yookassa_payment_id`.
+• Обязательный hardening: кейсы mismatch/несовпадений переводятся в `checkoutStatus=manual_review` (видимый в API/админке), а не остаются только в логах.
+• Для `manual_review` вводятся идемпотентные админ-операции approve/reject с обязательным audit event и переводом кейса в терминальный статус.
+• Операционные переходы `checkoutStatus`: `succeeded`/zero-pay/canceled финализируют checkout и переводят кейс в `closed`.
+• Для `pending` без `yookassa_payment_id` verify/reconciliation не запускается; такие "висяки" закрываются TTL-политикой.
+• Вводится `pending_ttl_hours` (default 24 часа): cron переводит просроченные `pending` в `canceled`, возвращает зарезервированный кредит и пишет audit event.
+
+• To-be roadmap (без ломки текущих контрактов):
+• Phase 1: реальный `POST /v3/payments` в `start-checkout`, запись `yookassa_payment_id`, возврат `confirmation.confirmation_url`, запрет бизнес-решений по `paymentUrl`.
+• Phase 1 UX: после возврата с оплаты клиент проверяет `/api/subscriptions/current`; до webhook UI показывает "Оплата обрабатывается".
+• Phase 1 reliability: внедряется reconciliation (job и/или защищенный endpoint "Я оплатил") для server-side проверки pending платежей через `GET /v3/payments/{id}`.
+• `checkoutStatus` не входит в scope базового Phase 1 и вводится на этапе hardening (Phase 1.5).
+• Phase 1.5 migration: `user_subscriptions.checkout_status` вводится через миграцию БД (`NOT NULL DEFAULT 'in_progress'`) с backfill существующих записей.
+• Phase 2: интеграция отмены автопродления у провайдера в `POST /api/subscriptions/cancel` + ретраи/мониторинг recurring.
+• Phase 3: server-side paywall config (регион/канал), затем Stripe (global web) и IAP verify (iOS/Android).
+• Phase 4: унифицированный entitlement-слой и rollout через feature flags.
+• До Phase 2 endpoint `POST /api/subscriptions/cancel` трактуется как soft cancel (`autoRenew=false` в нашей модели), без гарантии провайдерной отмены.
+• Для UI to-be: в ответе `/api/subscriptions/current` добавить явный флаг `cancelAtPeriodEnd`.
+
+• Вне текущего scope (не считать реализованным):
+• runtime-маршрутизация `apple_iap / google_play / ios_external`;
+• iOS External Link entitlement как рабочий production flow;
+• server-side merge entitlement между несколькими провайдерами (`max(expire_at)` по источникам).
 
 • Доступ к AI и лимиты:
 • Сервер жёстко проверяет доступ к AI и недельный лимит минут (с overdraft `WEEKLY_OVERDRAFT_MINUTES`).
@@ -318,11 +394,34 @@ server/
 • Брокер: Redis (локально через Docker, в production через Upstash).
 • Node.js: BullMQ 5.x для обработки фоновых задач.
 • Структура очередей:
-• `notification-slots-generation` — генерация слотов уведомлений для пользователей
+• `notification-slots-generation` — генерация слотов уведомлений. Для production применяется масштабируемая модель из `.docs/notification_slots_scaling_tz.md`: sharded enqueue с cursor/cycle state в Postgres, критерий регенерации по `planned+queued` + `min_horizon_hours`, `queued` при регенерации не удаляются, backpressure по queue lag (SLO/soft/hard пороги).
 • `notification-delivery` — отправка уведомлений через FCM
 • `ai-text-pool-refill` — пополнение пула AI-генерированных текстов
 • Воркеры запускаются автоматически через плагин `server/plugins/bullmq-workers.ts`.
+• Для production process split обязателен: `scheduler (enqueue)` / `slots worker` / `delivery worker`.
 • Конфигурация: `BULLMQ_ENABLE_WORKERS` (по умолчанию `true`, для масштабирования можно отключить на web-контейнерах).
+• Реализован scheduler-state слой в БД:
+• `slots_scheduler_cursor(shard PK, last_user_id, cycle_id, updated_at)` — курсор инкрементального обхода по shard.
+• `slots_scheduler_state(id='global', global_cycle_id, next_shard, completed_shards, updated_at)` — глобальное состояние цикла и round-robin.
+• Реализован dedup контракт jobs:
+• `jobId = slotsgen:{userId}:{cycle_id}`.
+• Перед постановкой проверяется наличие job с тем же `jobId` в любом состоянии (чтобы исключить `already exists` и повторный enqueue одного цикла).
+• При lock/timeout текущая active job переводится в delayed через `moveToDelayed(..., token)` + `DelayedError` (без смены `jobId` и `cycle_id`).
+• Реализованы DB-инварианты для идемпотентности и производительности:
+• partial index `idx_notification_preferences_enabled_user` на `notification_preferences(user_id) where enabled=true`.
+• partial unique index `uk_notification_slots_active` на `(user_id, kind, entity_key, scheduled_at) where status in ('planned','queued')`.
+• Безопасная регенерация slots:
+• диапазон пересоздания вычисляется как `regen_range_start = now + max(SLOTS_REGEN_SAFE_WINDOW_MINUTES, SLOTS_SAFE_QUEUED_WINDOW_MINUTES)` и `regen_range_end = now + SLOTS_TARGET_HORIZON_HOURS`.
+• в регенерации удаляются только `planned` слоты в диапазоне; `queued` никогда не удаляются.
+• вставка новых `planned` выполняется через upsert `ON CONFLICT DO NOTHING` по active-уникальности.
+• межпроцессная координация регенерации — через PostgreSQL transaction-level lock: `pg_try_advisory_xact_lock(user_id, LOCK_NAMESPACE_SLOTS_GENERATION)` с таймаутом `SLOTS_LOCK_TIMEOUT_MS`; при contention задача уходит в delayed backoff.
+• В delivery state-machine запрещён переход `queued -> planned`:
+• `planned -> queued` выполняется через конкурентно-безопасный `UPDATE ... WHERE status='planned' RETURNING`.
+• при ошибке постановки в очередь статус переводится в `failed`, а не откатывается в `planned`.
+• Реализован runtime backpressure для scheduler:
+• soft mode (`queue_lag >= 5m` или queue depth > X): уменьшается batch, увеличивается интервал, включается `only_users_below_horizon`.
+• hard mode (`queue_lag >= 15m`): агрессивное снижение нагрузки, восстановление к baseline через `SLOTS_BACKPRESSURE_RECOVERY_CYCLES`.
+• Централизованный конфиг scaling находится в `server/application/notifications/slots-scaling.config.ts` (feature flags + `SLOTS_*` env + lock namespace).
 • Payload: JSON-структуры, совместимые между системами.
 • Retry механизм: 3 попытки с exponential backoff (10 секунд между ретраями).
 • Graceful shutdown: все воркеры корректно завершаются при получении SIGTERM/SIGINT.
@@ -335,6 +434,7 @@ server/
 
 📋 Связанные документы
 • `.docs/notifications.md` - Полная документация по системе уведомлений (архитектура, API, настройка, тестирование)
+• `.docs/notification_slots_preprod_stress_tz.md` - ВАЖНО! Предрелизный чеклист стресс-тестов и chaos-сценариев для нового slots scheduler/worker split
 • `.docs/mentai_tz_product.md` - Общие требования к продукту
 • `.docs/mentai_tz_frontend.md` - Требования к фронтенду
 • `.docs/mentai_tz_backend.md` - Требования к бэкенду

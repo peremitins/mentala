@@ -16,6 +16,12 @@ import { responseIdStore } from '../../utils/responseIdStore';
 import { readChatSettings } from '../../utils/storage';
 import { welcomePromptStore } from '../../utils/welcomePromptStore';
 import {
+  getDailyGreetingName,
+  pickAlternativeOpening,
+  reserveDailyGreeting,
+  resolveUserTimezone,
+} from '@/server/application/chat/name-greeting.service';
+import {
   buildSummaryPrompt,
   buildChatPrelude,
   buildDeveloperContext,
@@ -1201,6 +1207,40 @@ export const openaiProvider: LlmProviderPort = {
         }
       }
 
+      const numericUserId =
+        options?.userId !== undefined ? Number(options.userId) : null;
+      const timezone = resolveUserTimezone(options?.user_timezone);
+      const now = new Date();
+      let canUseGreeting = false;
+      let greetingName: string | null = null;
+      let alternativeOpening: string | null = null;
+
+      if (numericUserId && !Number.isNaN(numericUserId)) {
+        canUseGreeting = await reserveDailyGreeting({
+          userId: numericUserId,
+          timezone,
+          now,
+        });
+
+        if (canUseGreeting) {
+          greetingName = await getDailyGreetingName({
+            userId: numericUserId,
+            rawName: options?.user_name,
+            timezone,
+            now,
+          });
+        } else {
+          alternativeOpening = pickAlternativeOpening({
+            userId: numericUserId,
+            timezone,
+            now,
+          });
+        }
+      }
+
+      const openingMode =
+        canUseGreeting || !alternativeOpening ? 'greeting' : 'alternative';
+
       // Формируем стартовый промпт
       const welcomePrompt = buildWelcomePrompt({
         isFirstSession: isFirst,
@@ -1209,6 +1249,10 @@ export const openaiProvider: LlmProviderPort = {
         user_locale: options?.user_locale,
         user_name: options?.user_name,
         user_gender: options?.user_gender,
+        greetingName,
+        includeNameValidationPrompt: Boolean(greetingName),
+        openingMode,
+        openingLine: alternativeOpening ?? undefined,
         welcomePromptContent: welcomePromptContent || undefined,
         entryContext: options?.entryContext,
       });

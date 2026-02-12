@@ -39,6 +39,23 @@ export function getNowLocal(timezone: string): Date {
 }
 
 /**
+ * Получить начало локального дня в UTC (для сравнений в БД)
+ */
+export function getStartOfLocalDayUtc(date: Date, timezone: string): Date {
+  const local = toZonedTime(date, timezone);
+  const startLocal = new Date(
+    local.getFullYear(),
+    local.getMonth(),
+    local.getDate(),
+    0,
+    0,
+    0,
+    0
+  );
+  return fromZonedTime(startLocal, timezone);
+}
+
+/**
  * Преобразовать UTC время в локальное время пользователя
  * Возвращает Date объект с компонентами локального времени
  */
@@ -181,7 +198,7 @@ export async function updateUserTimezone(
       const { generateAllSlotsForUser } = await import(
         '@/server/application/notifications/scheduler.service'
       );
-      await generateAllSlotsForUser(userId);
+      await generateAllSlotsForUser(userId, { reason: 'timezone_changed' });
       console.log(
         `[Timezone] ✅ Regenerated all slots for user ${userId} with new timezone ${newTimezone}`
       );

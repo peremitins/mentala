@@ -32,7 +32,9 @@ export default defineNuxtRouteMiddleware(async (to) => {
           subscriptionStore.fetchCurrentSubscription(), // Кэш на 5 минут
         ]);
       }
-    } catch {}
+    } catch (error) {
+      console.warn('[AuthMiddleware] auth.me() failed in initial guard', error);
+    }
   } else {
     // Если пользователь уже есть, проверяем кэш подписки
     // Если кэш устарел или отсутствует - обновляем в фоне
@@ -48,7 +50,12 @@ export default defineNuxtRouteMiddleware(async (to) => {
   if (!auth.user.onboarding) {
     try {
       await auth.me();
-    } catch {}
+    } catch (error) {
+      console.warn(
+        '[AuthMiddleware] auth.me() failed in onboarding check',
+        error
+      );
+    }
   }
 
   const onboardingCompleted = auth.user?.onboarding?.welcome === true;

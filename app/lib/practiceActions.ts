@@ -18,7 +18,6 @@ const HABIT_PRACTICE_HIDDEN_KEYS = new Set<HabitKey>([
   'smoking',
   'alcohol',
   'sugar',
-  'junk_food',
   'procrastination',
 ]);
 

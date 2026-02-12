@@ -14,6 +14,7 @@ export type BreathCueMode = 'cue';
 export interface BreathPracticeSettings {
   sessionMinutes: number;
   soundEnabled: boolean;
+  voiceEnabled: boolean;
   volume: number;
   hapticsEnabled: boolean;
   cueMode: BreathCueMode;
@@ -22,6 +23,7 @@ export interface BreathPracticeSettings {
 const DEFAULT_SETTINGS: BreathPracticeSettings = {
   sessionMinutes: 5,
   soundEnabled: true,
+  voiceEnabled: false,
   volume: 100,
   hapticsEnabled: true,
   cueMode: 'cue',

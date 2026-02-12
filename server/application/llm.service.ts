@@ -32,6 +32,7 @@ export async function chatViaProvider(params: {
     user_locale?: string;
     user_name?: string;
     user_gender?: string;
+    user_timezone?: string;
     userId?: number | string;
     isFirstSession?: boolean;
     userPrompt?: string;
@@ -142,6 +143,7 @@ export function chatStreamViaProvider(params: {
     user_locale?: string;
     user_name?: string;
     user_gender?: string;
+    user_timezone?: string;
     userId?: number | string;
     isFirstSession?: boolean;
     userPrompt?: string;

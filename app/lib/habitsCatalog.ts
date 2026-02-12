@@ -14,7 +14,6 @@ export type HabitKey =
   | 'smoking'
   | 'alcohol'
   | 'sugar'
-  | 'junk_food'
   | 'procrastination'
   | 'caffeine';
 
@@ -58,10 +57,11 @@ export const HABITS_CATALOG: readonly HabitCatalogItem[] = [
   },
   {
     habitKey: 'nutrition',
-    name: 'Регулярное питание',
+    name: 'Здоровое питание',
     emoji: '🥗',
     intent: 'build',
-    description: 'Регулярные приёмы пищи без переедания и перекусов «на бегу»',
+    description:
+      'Регулярные приёмы пищи и меньше вредной еды для устойчивой энергии и самочувствия',
   },
   {
     habitKey: 'gratitude',
@@ -113,14 +113,6 @@ export const HABITS_CATALOG: readonly HabitCatalogItem[] = [
     emoji: '🚫',
     intent: 'quit',
     description: 'Меньше сахара для поддержки здоровья и самочувствия',
-  },
-  {
-    habitKey: 'junk_food',
-    name: 'Меньше вредной пищи',
-    emoji: '🚫',
-    intent: 'quit',
-    description:
-      'Сокращение вредной пищи для сохранения здоровья в долгосрочной перспективе',
   },
   {
     habitKey: 'procrastination',

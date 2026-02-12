@@ -143,7 +143,7 @@
               v-if="shouldShowQuickChat(item)"
               variant="outline"
               size="sm"
-              class="flex-1 border-white/20 bg-white/5 text-xs text-foreground/80 hover:border-white/40 hover:bg-white/10"
+              class="flex-1 border-white/20 bg-white/5 text-[8px] min-[375px]:text-xs text-foreground/80 hover:border-white/40 hover:bg-white/10"
               @click.stop="handleQuickChat(item)"
             >
               <IconMessageCircle class="h-4 w-4" />
@@ -154,7 +154,7 @@
               v-if="shouldShowQuickMeditation(item)"
               variant="outline"
               size="sm"
-              class="flex-1 border-white/20 bg-white/5 text-xs text-foreground/80 hover:border-white/40 hover:bg-white/10"
+              class="flex-1 border-white/20 bg-white/5 text-[8px] min-[375px]:text-xs text-foreground/80 hover:border-white/40 hover:bg-white/10"
               @click.stop="handleQuickMeditation(item)"
             >
               <IconLeaf class="h-4 w-4" />
@@ -165,7 +165,7 @@
               v-if="shouldShowQuickBreath(item)"
               variant="outline"
               size="sm"
-              class="flex-1 border-white/20 bg-white/5 text-xs text-foreground/80 hover:border-white/40 hover:bg-white/10"
+              class="flex-1 border-white/20 bg-white/5 text-[8px] min-[375px]:text-xs text-foreground/80 hover:border-white/40 hover:bg-white/10"
               @click.stop="handleQuickBreath(item)"
             >
               <IconWind class="h-4 w-4" />

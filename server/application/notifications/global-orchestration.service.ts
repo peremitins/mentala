@@ -28,15 +28,21 @@ function resolveTone(value?: string | null): Tone {
   }
   return 'neutral';
 }
-import { toLocalTime, toUTC, getTimezoneFromPrefs } from './timezone.utils';
+import {
+  toLocalTime,
+  toUTC,
+  getTimezoneFromPrefs,
+  isValidTimezone,
+} from './timezone.utils';
 import { findEnabledPreferencesByUser } from './repositories/notification-preferences.repository';
 import {
-  deleteAllPlannedSlotsForUser,
+  countActiveSlotsInRange,
   countSentSlotsForToday,
+  deletePlannedSlotsInRangeWithLimit,
+  getActiveSlotsHorizonTail,
   insertSlot,
 } from './repositories/notification-slots.repository';
 import { preventSimultaneousNotifications } from './prevent-overlap.service';
-import { generateSlotTimes } from './slot-times.service';
 import { loadTextsForPreference } from './notification-texts.service';
 import {
   pickTextForSlot,
@@ -53,12 +59,23 @@ import {
 import { enqueueAiTextGenerationJob } from './queues/aiTextGeneration.queue';
 import { computeGenerationConfigHash } from '@/server/utils/notification-ai-config-hash';
 import { computeDayOfYear } from './notification-date.utils';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { pickNotificationImage } from './notification-images.service';
 import type {
   NotificationPayload,
   NotificationSubtype,
+  NotificationActionHint,
+  NotificationNavigation,
 } from '@/shared/dto/notifications';
+import {
+  DEFAULT_NOTIFICATION_TIME_RANGE_END,
+  DEFAULT_NOTIFICATION_TIME_RANGE_START,
+  DEFAULT_NOTIFICATION_TIMEZONE,
+  LOCK_NAMESPACE_SLOTS_GENERATION,
+  hoursToMs,
+  minutesToMs,
+  slotsScalingConfig,
+} from './slots-scaling.config';
 
 /**
  * Детерминированный джиттер для равномерного распределения слотов
@@ -90,9 +107,91 @@ const DEBUG_NOTIFICATIONS = process.env.DEBUG_NOTIFICATIONS === 'true';
 
 const SCHEDULE_CONFIG = {
   horizonDays: 2, // Сегодня + завтра
-  jitterMinutes: 15,
-  minGapMinutes: 10,
+  jitterMinutes: slotsScalingConfig.regeneration.jitterMinutes,
+  minGapMinutes: slotsScalingConfig.regeneration.minGapMinutes,
 };
+
+const DEFAULT_MEDITATION_TRACK_ID =
+  process.env.DEFAULT_MEDITATION_TRACK_ID?.trim() || 'ultimate-relaxation';
+const DEFAULT_BREATH_PRACTICE_SLUG =
+  process.env.DEFAULT_BREATH_PRACTICE_SLUG?.trim() || '4-7-8';
+
+export class SlotsGenerationLockTimeoutError extends Error {
+  constructor(timeoutMs: number) {
+    super(`Slots regeneration lock timeout after ${timeoutMs}ms`);
+    this.name = 'SlotsGenerationLockTimeoutError';
+  }
+}
+
+async function sleepMs(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+type RegenTransactionResult = {
+  locked: boolean;
+  deletedCount: number;
+  insertedCount: number;
+  lockAcquireMs: number;
+};
+
+function resolveNavigationFromActionHint(
+  actionHint?: NotificationActionHint | null
+): NotificationNavigation {
+  // Источник истины — actionHint из текста, навигация вычисляется на сервере.
+  if (actionHint === 'meditation') {
+    return {
+      type: 'meditation_track',
+      trackId: DEFAULT_MEDITATION_TRACK_ID,
+    };
+  }
+  if (actionHint === 'breathing') {
+    return {
+      type: 'breath_practice',
+      slug: DEFAULT_BREATH_PRACTICE_SLUG,
+    };
+  }
+  return { type: 'home' };
+}
+
+function buildDeepLinkFromNavigation(
+  navigation: NotificationNavigation
+): string {
+  // Строим путь внутри приложения, чтобы клиент мог сделать fallback.
+  switch (navigation.type) {
+    case 'meditation_track':
+      return `/meditations?trackId=${encodeURIComponent(navigation.trackId)}`;
+    case 'breath_practice':
+      return `/breath-practices/${encodeURIComponent(navigation.slug)}${
+        navigation.slug === DEFAULT_BREATH_PRACTICE_SLUG ? '?group=popular' : ''
+      }`;
+    case 'breath_practices':
+      return '/breath-practices';
+    default:
+      return '/';
+  }
+}
+
+function buildActionFromNavigation(navigation: NotificationNavigation): {
+  action: string;
+  params?: Record<string, string>;
+} {
+  switch (navigation.type) {
+    case 'meditation_track':
+      return {
+        action: 'open_meditation_track',
+        params: { trackId: navigation.trackId },
+      };
+    case 'breath_practices':
+      return { action: 'open_breath_practices' };
+    case 'breath_practice':
+      return {
+        action: 'open_breath_practice',
+        params: { practiceId: navigation.slug },
+      };
+    default:
+      return { action: 'open_home' };
+  }
+}
 
 /**
  * Интерфейс для источника уведомлений
@@ -125,33 +224,64 @@ interface SlotInSequence {
   scheduledAt?: Date; // Время слота (назначается позже)
 }
 
-/**
- * Удаляет planned и queued слоты пользователя в пределах горизонта планирования (сегодня и завтра)
- * Согласно ТЗ: удаляем только слоты в пределах горизонта, чтобы не трогать слоты дальше
- */
-async function deleteAllPlannedSlotsForUserInternal(
-  userId: number,
-  timezone: string
-): Promise<number> {
-  const nowUTC = new Date();
-  const nowLocal = toLocalTime(nowUTC, timezone);
+function normalizeCustomSlotTimesForGeneration(params: {
+  userId: number;
+  kind: NotificationKind;
+  entityKey: string | null;
+  customSlotTimes: (number | null)[] | null;
+}): (number | null)[] | null {
+  const { customSlotTimes } = params;
+  if (!customSlotTimes || customSlotTimes.length === 0) return null;
 
-  // Начало сегодняшнего дня (00:00:00)
-  const startOfToday = new Date(nowLocal);
-  startOfToday.setHours(0, 0, 0, 0);
-  const startOfTodayUTC = toUTC(startOfToday, timezone);
+  const seen = new Set<number>();
+  const duplicateMinutes = new Set<number>();
 
-  // Конец завтрашнего дня (23:59:59)
-  const endOfTomorrow = new Date(nowLocal);
-  endOfTomorrow.setDate(endOfTomorrow.getDate() + 1);
-  endOfTomorrow.setHours(23, 59, 59, 999);
-  const endOfTomorrowUTC = toUTC(endOfTomorrow, timezone);
+  const normalized = customSlotTimes.map((value) => {
+    if (value === null || value === undefined) return null;
 
-  return await deleteAllPlannedSlotsForUser(
-    userId,
-    startOfTodayUTC,
-    endOfTomorrowUTC
+    const minute = Math.round(value);
+    if (seen.has(minute)) {
+      duplicateMinutes.add(minute);
+      // Для дубликатов не создаём второй fixed-слот в то же время:
+      // иначе срабатывает active-slot unique и одна запись тихо пропадает.
+      return null;
+    }
+
+    seen.add(minute);
+    return minute;
+  });
+
+  if (duplicateMinutes.size > 0) {
+    console.warn(
+      `[GlobalOrchestration] ⚠️ duplicate customSlotTimes detected for user=${params.userId}, source=${params.kind}:${params.entityKey ?? 'null'}, duplicateMinutes=${[...duplicateMinutes].join(',')}. Duplicates are treated as flexible slots.`
+    );
+  }
+
+  return normalized.some((value) => value !== null) ? normalized : null;
+}
+
+function buildRegenRangeUtc(params: { nowUtc: Date; timezone: string }): {
+  regenRangeStartUtc: Date;
+  regenRangeEndUtc: Date;
+} {
+  const nowLocal = toLocalTime(params.nowUtc, params.timezone);
+  const safeStartMinutes = Math.max(
+    slotsScalingConfig.regeneration.safeWindowMinutes,
+    slotsScalingConfig.regeneration.safeQueuedWindowMinutes
   );
+
+  const regenRangeStartLocal = new Date(
+    nowLocal.getTime() + minutesToMs(safeStartMinutes)
+  );
+  const regenRangeEndLocal = new Date(
+    nowLocal.getTime() +
+      hoursToMs(slotsScalingConfig.regeneration.targetHorizonHours)
+  );
+
+  return {
+    regenRangeStartUtc: toUTC(regenRangeStartLocal, params.timezone),
+    regenRangeEndUtc: toUTC(regenRangeEndLocal, params.timezone),
+  };
 }
 
 /**
@@ -159,17 +289,11 @@ async function deleteAllPlannedSlotsForUserInternal(
  */
 function calculatePartialSlotsForToday(
   source: SourceInfo,
-  nowLocal: Date,
-  timezone: string
+  nowLocal: Date
 ): number {
   const currentMinutes = nowLocal.getHours() * 60 + nowLocal.getMinutes();
-  const {
-    timeRangeStart,
-    timeRangeEnd,
-    crossesMidnight,
-    interval,
-    remainingSlots,
-  } = source;
+  const { timeRangeStart, timeRangeEnd, crossesMidnight, remainingSlots } =
+    source;
 
   // Проверяем, попадает ли текущее время в диапазон
   let isInRange = false;
@@ -482,7 +606,6 @@ function buildDailySequence(
 
     // Определяем, является ли слот фиксированным (после возможной замены темы)
     // ВАЖНО: Сохраняем исходный индекс для возможного отката
-    const slotIndex = selectedPoolItem.slotIndex;
     const customSlotTimes = selectedSource.customSlotTimes;
     let fixedTime: number | null = null;
     let isFixed = false;
@@ -692,7 +815,7 @@ function assignTimesToSequence(
 
         // Преобразуем в минуты дня для расчёта интервалов
         // Для crossesMidnight и day=1: ограничиваем только вечерней частью
-        let effectiveRangeStart = timeRangeStart;
+        const effectiveRangeStart = timeRangeStart;
         let effectiveRangeEnd = timeRangeEnd;
 
         if (crossesMidnight && day === 1) {
@@ -908,7 +1031,7 @@ function assignTimesToSequence(
 
         // Вычисляем интервал между слотами
         let effectiveRangeStart = timeRangeStart;
-        let effectiveRangeEnd = timeRangeEnd;
+        const effectiveRangeEnd = timeRangeEnd;
 
         // ВАЖНО: Для сегодня (day=0) нужно учитывать текущее время
         // Если сейчас уже прошло начало диапазона, начинаем с текущего времени
@@ -947,13 +1070,6 @@ function assignTimesToSequence(
         // ВАЖНО: Для завтра (day=1) используем полный диапазон от timeRangeStart до timeRangeEnd
         // Не ограничиваем только вечерней частью, так как это следующий день целиком
         // Для завтра с crossesMidnight используем полное окно (вечерняя часть + утренняя часть следующего дня)
-
-        const windowDuration =
-          crossesMidnight && day === 1
-            ? 1440 - effectiveRangeStart + effectiveRangeEnd // Полное окно для завтра (вечер + утро следующего дня)
-            : crossesMidnight && day === 0
-              ? 1440 - effectiveRangeStart + effectiveRangeEnd // Полное окно для сегодня (с учётом текущего времени)
-              : effectiveRangeEnd - effectiveRangeStart; // Обычный режим
 
         // ВАЖНО: Распределяем слоты равномерно от effectiveRangeStart до effectiveRangeEnd включительно
         // Используем равномерное распределение, чтобы использовать весь диапазон
@@ -1028,17 +1144,38 @@ function assignTimesToSequence(
 /**
  * Главная функция оркестрации всех слотов для пользователя
  */
+export type OrchestrateSlotsResult = {
+  userId: number;
+  reason: string;
+  timezone: string;
+  timezoneConflict: boolean;
+  regenRangeStartUtc: Date;
+  regenRangeEndUtc: Date;
+  deletedCount: number;
+  insertedCount: number;
+  plannedCount: number;
+  queuedCount: number;
+  horizonBefore: number;
+  horizonAfter: number;
+  lockAcquireMs: number;
+};
+
 export async function orchestrateAllSlotsForUser(
   userId: number,
   options?: {
     forceTodaySlots?: boolean;
+    reason?: string;
+    traceId?: string;
+    jobId?: string;
   }
-): Promise<void> {
+): Promise<OrchestrateSlotsResult> {
   console.log(
     `[GlobalOrchestration] Starting orchestration for user ${userId}`
   );
 
   try {
+    const nowUTC = new Date();
+
     // Проверяем, что пользователь существует
     const [user] = await db
       .select({ id: users.id, isBlocked: users.isBlocked })
@@ -1048,43 +1185,136 @@ export async function orchestrateAllSlotsForUser(
 
     if (!user) {
       console.warn(`[GlobalOrchestration] User ${userId} does not exist`);
-      return;
+      const noopRange = buildRegenRangeUtc({
+        nowUtc: nowUTC,
+        timezone: DEFAULT_NOTIFICATION_TIMEZONE,
+      });
+      return {
+        userId,
+        reason: options?.reason ?? 'manual',
+        timezone: DEFAULT_NOTIFICATION_TIMEZONE,
+        timezoneConflict: false,
+        regenRangeStartUtc: noopRange.regenRangeStartUtc,
+        regenRangeEndUtc: noopRange.regenRangeEndUtc,
+        deletedCount: 0,
+        insertedCount: 0,
+        plannedCount: 0,
+        queuedCount: 0,
+        horizonBefore: 0,
+        horizonAfter: 0,
+        lockAcquireMs: 0,
+      };
     }
 
     if (user.isBlocked) {
       console.warn(`[GlobalOrchestration] User ${userId} is blocked`);
-      return;
-    }
-
-    // Этап 0: Проверка активных настроек ПЕРЕД удалением слотов
-    const allPrefs = await findEnabledPreferencesByUser(userId);
-    const timezone = getTimezoneFromPrefs(allPrefs);
-
-    // ВАЖНО: Если активных настроек нет, нужно очистить расписание
-    // Иначе при выключении последнего уведомления останутся старые слоты
-    if (allPrefs.length === 0) {
-      const deletedCount = await deleteAllPlannedSlotsForUserInternal(
+      const noopRange = buildRegenRangeUtc({
+        nowUtc: nowUTC,
+        timezone: DEFAULT_NOTIFICATION_TIMEZONE,
+      });
+      return {
         userId,
-        timezone
-      );
-      console.log(
-        `[GlobalOrchestration] No active preferences for user ${userId}, deleted ${deletedCount} planned/queued slots within planning horizon (today + tomorrow)`
-      );
-      return;
+        reason: options?.reason ?? 'manual',
+        timezone: DEFAULT_NOTIFICATION_TIMEZONE,
+        timezoneConflict: false,
+        regenRangeStartUtc: noopRange.regenRangeStartUtc,
+        regenRangeEndUtc: noopRange.regenRangeEndUtc,
+        deletedCount: 0,
+        insertedCount: 0,
+        plannedCount: 0,
+        queuedCount: 0,
+        horizonBefore: 0,
+        horizonAfter: 0,
+        lockAcquireMs: 0,
+      };
     }
 
-    // ВАЖНО: Удаляем planned/queued слоты только после проверки наличия активных настроек
-    // Это предотвращает потерю слотов, если настройки были отключены
-    const deletedCount = await deleteAllPlannedSlotsForUserInternal(
+    // Этап 0: Проверка активных настроек.
+    const allPrefs = await findEnabledPreferencesByUser(userId);
+    const timezoneFromPrefs = getTimezoneFromPrefs(allPrefs);
+    const timezone = isValidTimezone(timezoneFromPrefs)
+      ? timezoneFromPrefs
+      : DEFAULT_NOTIFICATION_TIMEZONE;
+    const timezoneConflict =
+      allPrefs.length > 1 &&
+      allPrefs.some((pref) => pref.timezone !== allPrefs[0]?.timezone);
+
+    if (timezoneConflict) {
+      console.warn(
+        `[GlobalOrchestration] ⚠️ timezone_conflict for user ${userId}: using ${timezone}`
+      );
+    }
+
+    const { regenRangeStartUtc, regenRangeEndUtc } = buildRegenRangeUtc({
+      nowUtc: nowUTC,
+      timezone,
+    });
+
+    const horizonBeforeStats = await countActiveSlotsInRange(
       userId,
-      timezone
+      regenRangeStartUtc,
+      regenRangeEndUtc
     );
-    console.log(
-      `[GlobalOrchestration] Deleted ${deletedCount} planned/queued slots within planning horizon (today + tomorrow)`
+    const horizonBeforeTail = await getActiveSlotsHorizonTail(
+      userId,
+      regenRangeStartUtc,
+      regenRangeEndUtc
     );
+    const horizonBefore = horizonBeforeTail.lastScheduledAt
+      ? Math.max(
+          0,
+          (horizonBeforeTail.lastScheduledAt.getTime() - nowUTC.getTime()) /
+            3_600_000
+        )
+      : 0;
+
+    // Если активных prefs нет, очищаем только planned-слоты в диапазоне регенерации.
+    if (allPrefs.length === 0) {
+      const deletedCount = await deletePlannedSlotsInRangeWithLimit(
+        userId,
+        regenRangeStartUtc,
+        regenRangeEndUtc,
+        slotsScalingConfig.regeneration.maxRowsPerRegen
+      );
+      const afterStats = await countActiveSlotsInRange(
+        userId,
+        regenRangeStartUtc,
+        regenRangeEndUtc
+      );
+      const afterTail = await getActiveSlotsHorizonTail(
+        userId,
+        regenRangeStartUtc,
+        regenRangeEndUtc
+      );
+      const horizonAfter = afterTail.lastScheduledAt
+        ? Math.max(
+            0,
+            (afterTail.lastScheduledAt.getTime() - nowUTC.getTime()) / 3_600_000
+          )
+        : 0;
+
+      console.log(
+        `[GlobalOrchestration] No active preferences for user ${userId}, deleted planned=${deletedCount}, reason=prefs_missing_or_disabled`
+      );
+
+      return {
+        userId,
+        reason: 'prefs_missing_or_disabled',
+        timezone,
+        timezoneConflict,
+        regenRangeStartUtc,
+        regenRangeEndUtc,
+        deletedCount,
+        insertedCount: 0,
+        plannedCount: afterStats.plannedCount,
+        queuedCount: afterStats.queuedCount,
+        horizonBefore,
+        horizonAfter,
+        lockAcquireMs: 0,
+      };
+    }
 
     // Этап 1: Подготовка данных
-    const nowUTC = new Date();
     const nowLocal = toLocalTime(nowUTC, timezone);
 
     const startOfToday = new Date(nowLocal);
@@ -1104,11 +1334,18 @@ export async function orchestrateAllSlotsForUser(
         pref.entityKey ?? undefined
       );
 
-      const timeRangeStart = pref.timeRangeStart ?? 540;
-      const timeRangeEnd = pref.timeRangeEnd ?? 1350;
+      const timeRangeStart =
+        pref.timeRangeStart ?? DEFAULT_NOTIFICATION_TIME_RANGE_START;
+      const timeRangeEnd =
+        pref.timeRangeEnd ?? DEFAULT_NOTIFICATION_TIME_RANGE_END;
       const crossesMidnight = timeRangeStart > timeRangeEnd;
-      const customSlotTimes =
-        (pref.customSlotTimes as (number | null)[] | null) ?? null;
+      const customSlotTimes = normalizeCustomSlotTimesForGeneration({
+        userId,
+        kind: pref.kind as NotificationKind,
+        entityKey: pref.entityKey,
+        customSlotTimes:
+          (pref.customSlotTimes as (number | null)[] | null) ?? null,
+      });
 
       // Вычисляем интервал
       const windowDuration = crossesMidnight
@@ -1165,8 +1402,7 @@ export async function orchestrateAllSlotsForUser(
           ...source,
           remainingSlots: remainingSlotsForToday,
         },
-        nowLocal,
-        timezone
+        nowLocal
       );
       todaySlotsCount.set(
         `${source.kind}:${source.entityKey || 'null'}`,
@@ -1279,11 +1515,10 @@ export async function orchestrateAllSlotsForUser(
 
     const addressing = globalPrefs?.addressing || 'informal';
     const [userRecord] = await db
-      .select({ name: users.name, gender: users.gender })
+      .select({ gender: users.gender })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);
-    const userName = userRecord?.name ?? null;
     const userGender =
       userRecord?.gender === 'male' || userRecord?.gender === 'female'
         ? userRecord.gender
@@ -1301,13 +1536,24 @@ export async function orchestrateAllSlotsForUser(
       slotsBySource.get(key)!.push(slot);
     }
 
+    const slotsToInsert: Array<{
+      id: string;
+      userId: number;
+      kind: NotificationKind;
+      entityKey: string | null;
+      entityDisplayName: string | null;
+      scheduledAt: Date;
+      payload: NotificationPayload;
+      templateId: string;
+      status: 'planned';
+    }> = [];
+
     // Обрабатываем каждый источник отдельно
-    for (const [sourceKey, sourceSlots] of slotsBySource) {
+    for (const [, sourceSlots] of slotsBySource) {
       if (sourceSlots.length === 0) continue;
 
       const source = sourceSlots[0].source;
       const daySequenceCounters = new Map<string, number>();
-      const dayMs = 24 * 60 * 60 * 1000;
 
       // Получаем intent для habits
       let intent: 'build' | 'quit' | null = null;
@@ -1470,12 +1716,13 @@ export async function orchestrateAllSlotsForUser(
         // actualSubtype используется только для выбора шаблонных текстов, но не для хеша
         // Это обеспечивает стабильность пула AI-текстов и совпадение хеша с генерацией
         // ВАЖНО: subtype влияет на смысл текста, поэтому учитываем его для всех сущностей
-        const subtypeForHash = (source.preference.subtype as
-          | 'reminder'
-          | 'informational'
-          | 'motivational'
-          | 'mixed'
-          | null) ?? null;
+        const subtypeForHash =
+          (source.preference.subtype as
+            | 'reminder'
+            | 'informational'
+            | 'motivational'
+            | 'mixed'
+            | null) ?? null;
 
         // Вычисляем configHash с исходным subtype (не actualSubtype)
         configHash = computeGenerationConfigHash({
@@ -1557,19 +1804,22 @@ export async function orchestrateAllSlotsForUser(
         const dayKey = slotDate ? slotDate.toISOString().split('T')[0] : 'na';
         const daySlotIndex = daySequenceCounters.get(dayKey) ?? 0;
         daySequenceCounters.set(dayKey, daySlotIndex + 1);
-        const dayNumber = slotDate
-          ? Math.floor(
-              Date.UTC(
-                slotDate.getUTCFullYear(),
-                slotDate.getUTCMonth(),
-                slotDate.getUTCDate()
-              ) / dayMs
-            )
-          : 0;
         if (!slot.scheduledAt) continue;
 
-        const effectiveTextSource: 'templates' | 'ai' =
-          textSource as 'templates' | 'ai';
+        // Регенерируем только в безопасном диапазоне пересоздания.
+        if (slot.scheduledAt < regenRangeStartUtc) continue;
+        if (slot.scheduledAt > regenRangeEndUtc) continue;
+
+        if (
+          slotsToInsert.length >=
+          slotsScalingConfig.regeneration.maxRowsPerRegen
+        ) {
+          continue;
+        }
+
+        const effectiveTextSource: 'templates' | 'ai' = textSource as
+          | 'templates'
+          | 'ai';
 
         const pickParams: PickTextParams = {
           slotIndex: slotIndex, // Локальный индекс внутри sourceSlots, а не глобальный
@@ -1578,9 +1828,9 @@ export async function orchestrateAllSlotsForUser(
           templateTexts: loadedTexts.texts.map((t) => ({
             text: t.text,
             imageTag: t.imageTag ?? null,
+            actionHint: t.actionHint ?? 'none',
           })),
           aiTexts: aiTextsAvailable ? aiTexts : null, // Передаём null если AI-тексты недоступны
-          userName,
           userGender,
         };
 
@@ -1593,7 +1843,8 @@ export async function orchestrateAllSlotsForUser(
           continue;
         }
 
-        const { text, templateIdForSlot, imageTag, subtype } = pickResult;
+        const { text, templateIdForSlot, imageTag, subtype, actionHint } =
+          pickResult;
 
         const slotId = nanoid();
         const effectiveSubtypeForImage =
@@ -1614,13 +1865,18 @@ export async function orchestrateAllSlotsForUser(
           habitIntent: source.kind === 'habits' ? intent : null,
         });
 
+        const navigation = resolveNavigationFromActionHint(actionHint);
+        const deepLink = buildDeepLinkFromNavigation(navigation);
+        const actionMeta = buildActionFromNavigation(navigation);
+
         // Создаём payload
         const payload: NotificationPayload = {
           title: entityName || '',
           body: text,
           templateId: templateIdForSlot,
           action: 'open',
-          deepLink: source.kind === 'therapy' ? '/support' : '/habits',
+          deepLink,
+          navigation,
           image: imageUrl || undefined,
           data: {
             kind: source.kind,
@@ -1632,37 +1888,174 @@ export async function orchestrateAllSlotsForUser(
               slot.isFixed && slot.fixedTime !== null
                 ? slot.fixedTime
                 : undefined, // Флаг для защиты от сдвига
+            // Fallback-навигация для push: action + параметры (для iOS/Android).
+            action: actionMeta.action,
+            ...(actionMeta.params ?? {}),
           },
         };
 
-        // Сохраняем слот
-        await insertSlot(
-          {
-            id: slotId,
-            userId,
-            kind: source.kind,
-            entityKey: source.normalizedEntityKey,
-            entityDisplayName: source.preference.entityKey ?? null,
-            scheduledAt: slot.scheduledAt,
-            payload,
-            templateId: templateIdForSlot,
-            status: 'planned',
-          },
-          timezone
-        );
+        slotsToInsert.push({
+          id: slotId,
+          userId,
+          kind: source.kind,
+          entityKey: source.normalizedEntityKey,
+          entityDisplayName: source.preference.entityKey ?? null,
+          scheduledAt: slot.scheduledAt,
+          payload,
+          templateId: templateIdForSlot,
+          status: 'planned',
+        });
       }
     }
 
-    // Применяем preventSimultaneousNotifications
+    let deletedCount = 0;
+    let insertedCount = 0;
+    let lockAcquireMs = 0;
+    const rowsToInsert = slotsToInsert.slice(
+      0,
+      slotsScalingConfig.regeneration.maxRowsPerRegen
+    );
+    const txTimeoutMs = Math.max(
+      1_000,
+      slotsScalingConfig.regeneration.txTimeoutMs
+    );
+    const lockTimeoutMs = Math.max(
+      100,
+      slotsScalingConfig.regeneration.lockTimeoutMs
+    );
+    const lockRetryDelayMs = 120;
+    const lockAttemptStartedAt = Date.now();
+    let lockAcquired = false;
+
+    while (Date.now() - lockAttemptStartedAt < lockTimeoutMs) {
+      const txResult = await db.transaction<RegenTransactionResult>(
+        async (tx) => {
+          await tx.execute(
+            sql.raw(`set local statement_timeout = ${txTimeoutMs}`)
+          );
+
+          const lockResult = await tx.execute(
+            sql`select pg_try_advisory_xact_lock(${userId}, ${LOCK_NAMESPACE_SLOTS_GENERATION}) as locked`
+          );
+          const locked = Boolean((lockResult as any)?.rows?.[0]?.locked);
+          if (!locked) {
+            return {
+              locked: false,
+              deletedCount: 0,
+              insertedCount: 0,
+              lockAcquireMs: 0,
+            };
+          }
+
+          const txLockAcquireMs = Date.now() - lockAttemptStartedAt;
+          const txDeletedCount = await deletePlannedSlotsInRangeWithLimit(
+            userId,
+            regenRangeStartUtc,
+            regenRangeEndUtc,
+            slotsScalingConfig.regeneration.maxRowsPerRegen,
+            tx as any
+          );
+
+          let txInsertedCount = 0;
+          for (const slotRow of rowsToInsert) {
+            const inserted = await insertSlot(slotRow, timezone, tx as any);
+            if (inserted) {
+              txInsertedCount += 1;
+            }
+          }
+
+          return {
+            locked: true,
+            deletedCount: txDeletedCount,
+            insertedCount: txInsertedCount,
+            lockAcquireMs: txLockAcquireMs,
+          };
+        }
+      );
+
+      if (txResult.locked) {
+        deletedCount = txResult.deletedCount;
+        insertedCount = txResult.insertedCount;
+        lockAcquireMs = txResult.lockAcquireMs;
+        lockAcquired = true;
+        break;
+      }
+
+      await sleepMs(lockRetryDelayMs);
+    }
+
+    if (!lockAcquired) {
+      throw new SlotsGenerationLockTimeoutError(lockTimeoutMs);
+    }
+
+    // Пост-обработка anti-overlap выполняется после пересоздания planned-части.
     await preventSimultaneousNotifications(
       userId,
       SCHEDULE_CONFIG.minGapMinutes
     );
 
-    console.log(
-      `[GlobalOrchestration] ✅ Created ${allSlots.length} slots for user ${userId}`
+    const horizonAfterStats = await countActiveSlotsInRange(
+      userId,
+      regenRangeStartUtc,
+      regenRangeEndUtc
     );
+    const horizonAfterTail = await getActiveSlotsHorizonTail(
+      userId,
+      regenRangeStartUtc,
+      regenRangeEndUtc
+    );
+    const horizonAfter = horizonAfterTail.lastScheduledAt
+      ? Math.max(
+          0,
+          (horizonAfterTail.lastScheduledAt.getTime() - nowUTC.getTime()) /
+            3_600_000
+        )
+      : 0;
+
+    const result: OrchestrateSlotsResult = {
+      userId,
+      reason: options?.reason ?? 'manual',
+      timezone,
+      timezoneConflict,
+      regenRangeStartUtc,
+      regenRangeEndUtc,
+      deletedCount,
+      insertedCount,
+      plannedCount: horizonAfterStats.plannedCount,
+      queuedCount: horizonAfterStats.queuedCount,
+      horizonBefore,
+      horizonAfter,
+      lockAcquireMs,
+    };
+
+    console.log(
+      JSON.stringify({
+        event: 'notification_slots_orchestration',
+        user_id: userId,
+        job_id: options?.jobId ?? null,
+        trace_id: options?.traceId ?? null,
+        reason: result.reason,
+        horizon_before: result.horizonBefore,
+        horizon_after: result.horizonAfter,
+        deleted_count: result.deletedCount,
+        inserted_count: result.insertedCount,
+        planned_count: horizonBeforeStats.plannedCount,
+        queued_count: horizonBeforeStats.queuedCount,
+        lock_acquire_ms: result.lockAcquireMs,
+        regen_range_start_utc: result.regenRangeStartUtc.toISOString(),
+        regen_range_end_utc: result.regenRangeEndUtc.toISOString(),
+      })
+    );
+
+    return result;
   } catch (error) {
+    if (error instanceof SlotsGenerationLockTimeoutError) {
+      console.warn(
+        `[GlobalOrchestration] ⏳ Lock timeout during orchestration for user ${userId}: ${error.message}`
+      );
+      throw error;
+    }
+
     console.error(
       `[GlobalOrchestration] ❌ Error orchestrating slots for user ${userId}:`,
       error

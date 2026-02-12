@@ -13,6 +13,12 @@ import IORedis from 'ioredis';
 const redisHost = process.env.REDIS_HOST || '127.0.0.1';
 const redisPort = Number(process.env.REDIS_PORT || 6379);
 const redisPassword = process.env.REDIS_PASSWORD || undefined;
+const isStaticBuild =
+  process.env.NITRO_PRESET === 'static' ||
+  process.env.npm_lifecycle_event === 'generate';
+const isNotificationsWorkerEnabled =
+  process.env.ENABLE_NOTIFICATIONS_WORKER !== 'false';
+const isBullMqDisabled = isStaticBuild || !isNotificationsWorkerEnabled;
 
 // Логирование конфигурации Redis для диагностики
 console.log('[Redis] Configuration:', {
@@ -23,35 +29,76 @@ console.log('[Redis] Configuration:', {
     REDIS_HOST: process.env.REDIS_HOST,
     REDIS_PORT: process.env.REDIS_PORT,
     BULLMQ_ENABLE_WORKERS: process.env.BULLMQ_ENABLE_WORKERS,
+    ENABLE_NOTIFICATIONS_WORKER: process.env.ENABLE_NOTIFICATIONS_WORKER,
   },
 });
 
-// Единое подключение к Redis для всех очередей
-// maxRetriesPerRequest: null - критично для BullMQ
-// enableReadyCheck: false - критично для BullMQ
-export const redisConnection = new IORedis({
-  host: redisHost,
-  port: redisPort,
-  password: redisPassword,
-  maxRetriesPerRequest: null, // Критично для BullMQ
-  enableReadyCheck: false, // Критично для BullMQ
-  enableOfflineQueue: true, // Позволяет ставить задачи в очередь до подключения к Redis
-  retryStrategy: (times) => {
-    const delay = Math.min(times * 50, 2000);
-    return delay;
-  },
-  reconnectOnError: (err) => {
-    const targetError = 'READONLY';
-    if (err.message.includes(targetError)) {
-      return true; // Переподключаемся при READONLY ошибке
-    }
-    return false;
-  },
-});
+if (isBullMqDisabled) {
+  console.log('[Redis] BullMQ disabled for current process', {
+    isStaticBuild,
+    isNotificationsWorkerEnabled,
+  });
+}
+
+let redisConnectionInstance: IORedis | null = null;
+if (!isBullMqDisabled) {
+  // Единое подключение к Redis для всех очередей
+  // maxRetriesPerRequest: null - критично для BullMQ
+  // enableReadyCheck: false - критично для BullMQ
+  redisConnectionInstance = new IORedis({
+    host: redisHost,
+    port: redisPort,
+    password: redisPassword,
+    maxRetriesPerRequest: null, // Критично для BullMQ
+    enableReadyCheck: false, // Критично для BullMQ
+    enableOfflineQueue: true, // Позволяет ставить задачи в очередь до подключения к Redis
+    retryStrategy: (times) => {
+      const delay = Math.min(times * 50, 2000);
+      return delay;
+    },
+    reconnectOnError: (err) => {
+      const targetError = 'READONLY';
+      if (err.message.includes(targetError)) {
+        return true; // Переподключаемся при READONLY ошибке
+      }
+      return false;
+    },
+  });
+}
+
+export const redisConnection = redisConnectionInstance as unknown as IORedis;
+
+function createNoopQueue<T>(name: string): Queue<T> {
+  const queue = {
+    name,
+    add: async (jobName: string, data: unknown) =>
+      ({
+        id: `noop-${Date.now()}`,
+        name: jobName,
+        data,
+      }) as any,
+    close: async () => undefined,
+  } as any;
+  return queue as Queue<T>;
+}
+
+function createNoopWorker<TData = any, TResult = any>(
+  name: string
+): Worker<TData, TResult> {
+  const worker = {
+    name,
+    on: () => worker,
+    close: async () => undefined,
+  } as any;
+  return worker as Worker<TData, TResult>;
+}
 
 // Обработка ошибок подключения
 let connectionErrorLogged = false;
-redisConnection.on('error', (err) => {
+redisConnectionInstance?.on('error', (err) => {
+  // Во время static generate Redis может быть не нужен — не спамим лог.
+  if (isStaticBuild) return;
+
   // Логируем ошибку только один раз, чтобы не спамить
   if (!connectionErrorLogged) {
     if (err.message.includes('ECONNREFUSED')) {
@@ -68,12 +115,14 @@ redisConnection.on('error', (err) => {
   }
 });
 
-redisConnection.on('connect', () => {
+redisConnectionInstance?.on('connect', () => {
+  if (isStaticBuild) return;
   connectionErrorLogged = false; // Сбрасываем флаг при успешном подключении
   console.log('[Redis] ✅ Connected successfully');
 });
 
-redisConnection.on('ready', () => {
+redisConnectionInstance?.on('ready', () => {
+  if (isStaticBuild) return;
   console.log('[Redis] ✅ Ready to accept commands');
 });
 
@@ -88,8 +137,12 @@ export function createQueue<T = any>(
     limiter?: { max: number; duration: number };
   } = {}
 ): Queue<T> {
+  if (isBullMqDisabled || !redisConnectionInstance) {
+    return createNoopQueue<T>(name);
+  }
+
   return new BullQueue<T>(name, {
-    connection: redisConnection,
+    connection: redisConnectionInstance,
     defaultJobOptions: {
       attempts: 3, // 3 попытки (первая + 2 повтора)
       backoff: {
@@ -121,11 +174,15 @@ export function createQueue<T = any>(
  */
 export function createWorker<TData = any, TResult = any>(
   name: string,
-  processor: (job: Job<TData, TResult>) => Promise<TResult>,
+  processor: (job: Job<TData, TResult>, token?: string) => Promise<TResult>,
   options: Omit<WorkerOptions, 'connection'> = {}
 ): Worker<TData, TResult> {
+  if (isBullMqDisabled || !redisConnectionInstance) {
+    return createNoopWorker<TData, TResult>(name);
+  }
+
   const worker = new BullWorker<TData, TResult>(name, processor, {
-    connection: redisConnection,
+    connection: redisConnectionInstance,
     concurrency: 5, // По умолчанию 5 параллельных задач
     // Защита от застрявших задач
     stalledInterval: 30000, // Проверка каждые 30 секунд
@@ -175,7 +232,9 @@ export function registerWorker(worker: Worker): void {
 export async function shutdownWorkers(): Promise<void> {
   console.log('[BullMQ] Shutting down workers...');
   await Promise.all(workers.map((w) => w.close()));
-  await redisConnection.quit();
+  if (redisConnectionInstance) {
+    await redisConnectionInstance.quit();
+  }
   console.log('[BullMQ] All workers shut down');
 }
 

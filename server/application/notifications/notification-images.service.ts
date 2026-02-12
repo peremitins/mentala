@@ -8,7 +8,10 @@ import notificationImageMap from './notification-image-map.json';
 import { getNextRotationIndex } from './repositories/notification-image-rotation.repository';
 
 const IMAGE_BASE_PATH = '/notifications';
-const notificationImageMapLookup = notificationImageMap as Record<string, string>;
+const notificationImageMapLookup = notificationImageMap as Record<
+  string,
+  string
+>;
 
 type ImageTag =
   | 'harm_organs'
@@ -226,7 +229,7 @@ function resolveSequenceForTag(params: {
   const entityKeySafe = entityKey ?? null;
   const entityLists =
     entityKeySafe && (kind === 'habits' || kind === 'therapy')
-      ? IMAGE_INDEX.entity.get(`${kind}:${entityKeySafe}:${imageTag}`) ?? null
+      ? (IMAGE_INDEX.entity.get(`${kind}:${entityKeySafe}:${imageTag}`) ?? null)
       : null;
 
   const entityRoot = entityLists?.root ?? [];

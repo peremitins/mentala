@@ -4,9 +4,9 @@
     class="flex-[0_0_auto] inset-x-0 mt-2 sticky bottom-0"
     :style="isMeditationPlayer ? { backdropFilter: 'blur(1px)' } : undefined"
   >
-    <section class="glass-deep px-0 py-3">
+    <section :class="['glass-deep-bottom px-4 py-3 ']">
       <ul class="grid grid-cols-5 gap-1 text-xs">
-        <li class="flex flex-col items-center gap-1 w-full">
+        <li class="flex flex-col items-center gap-0 w-full">
           <NuxtLink
             to="/"
             @click="handleChatClick"
@@ -15,7 +15,7 @@
           >
             <span
               :class="[
-                'glass-deep icon-disc w-12 h-12 flex items-center justify-center mb-1',
+                'glass-deep icon-disc w-10 h-10 flex items-center justify-center mb-1',
                 { 'icon-disc-active': isActive('/') },
               ]"
               :style="{ borderRadius: 'var(--radius-icon)' }"
@@ -36,7 +36,7 @@
           >
             <span
               :class="[
-                'glass-deep icon-disc w-12 h-12 flex items-center justify-center mb-1',
+                'glass-deep icon-disc w-10 h-10 flex items-center justify-center mb-1',
                 { 'icon-disc-active': isActive('/therapy') },
               ]"
               :style="{ borderRadius: 'var(--radius-icon)' }"
@@ -57,7 +57,7 @@
           >
             <span
               :class="[
-                'glass-deep icon-disc w-12 h-12 flex items-center justify-center mb-1',
+                'glass-deep icon-disc w-10 h-10 flex items-center justify-center mb-1',
                 { 'icon-disc-active': isActive('/habits') },
               ]"
               :style="{ borderRadius: 'var(--radius-icon)' }"
@@ -78,7 +78,7 @@
           >
             <span
               :class="[
-                'glass-deep icon-disc w-12 h-12 flex items-center justify-center mb-1',
+                'glass-deep icon-disc w-10 h-10 flex items-center justify-center mb-1',
                 { 'icon-disc-active': isPracticesActive },
               ]"
               :style="{ borderRadius: 'var(--radius-icon)' }"
@@ -99,7 +99,7 @@
           >
             <span
               :class="[
-                'glass-deep icon-disc w-12 h-12 flex items-center justify-center mb-1',
+                'glass-deep icon-disc w-10 h-10 flex items-center justify-center mb-1',
                 { 'icon-disc-active': isActive('/settings') },
               ]"
               :style="{ borderRadius: 'var(--radius-icon)' }"
@@ -154,7 +154,7 @@ const isPracticesActive = computed(() => {
 });
 
 // Обработчик клика на кнопку "Чат"
-function handleChatClick(event: MouseEvent) {
+function handleChatClick() {
   // Если уже на странице чата и есть сообщения - очищаем чат и переходим на welcome
   if (isActive('/')) {
     router.push({ path: '/', query: { screen: 'welcome' } });

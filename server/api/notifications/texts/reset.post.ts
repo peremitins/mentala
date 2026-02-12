@@ -142,6 +142,7 @@ export default defineEventHandler(
               intent: preset.intent,
               subtype: preset.subtype,
               imageTag: preset.imageTag ?? null,
+              actionHint: preset.actionHint ?? null,
               directness: preset.directness,
               addressing: preset.addressing,
               locale: preset.locale,
@@ -186,7 +187,7 @@ export default defineEventHandler(
     (async () => {
       try {
         // ВАЖНО: Используем глобальную оркестрацию для правильного чередования тем
-        await generateAllSlotsForUser(userId);
+        await generateAllSlotsForUser(userId, { reason: 'manual' });
         console.log(
           `[NotificationTexts] ✅ Slots regenerated after reset: user ${userId}, kind: ${body.kind}, entityKey: ${normalizedEntityKey}`
         );
