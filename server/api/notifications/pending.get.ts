@@ -7,7 +7,7 @@
 import { getSessionUser } from '@/server/application/auth/session';
 import { db } from '@/server/infrastructure/db/client';
 import { notificationSlots } from '@/server/infrastructure/db/schema';
-import { and, eq, lte } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import {
   getUserTimezone,
   toLocalTime,

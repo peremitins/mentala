@@ -209,10 +209,12 @@ server/
 • `custom_slot_times` — массив длиной до 5 значений (в минутах, 0–1439). `null` означает автоматическое распределение и теперь безопасно передаётся/сохраняется как `null` без 400 от API.
 • `entity_key` — единое поле для идентификации источника уведомлений. Для кастомных сущностей используется ID, для готовых шаблонов - ключ шаблона.
 • API `/api/notifications/prefs` поддерживает CRUD этих полей, принимает `subtype = mixed` для привычек и отдаёт то же значение; на уровне БД обновлённое ограничение `notification_prefs_subtype_check` теперь тоже разрешает `mixed`.
+• `PUT /api/notifications/prefs/:kind` больше не ждёт завершения тяжёлой slot-оркестрации в HTTP-цикле: для `textSource !== 'ai'` и для update-кейсов без AI-регенерации слоты запускаются в фоне (асинхронный fire-and-forget), поэтому UI не висит на долгом лоадере при изменении `customSlotTimes` и шаблонных настройках.
 • Фронт использует `WeekdaySelector`, `TimeRangeSelector`, а также кликабельные чипы под слайдером частоты для точного времени.
 • Планировщик (`scheduler.service.ts`) при генерации слотов даёт приоритет кастомным временам, остальное распределяет равномерно внутри выбранного окна.
-• Глобальная оркестрация слотов описана в `.docs/NOTIFICATION_SCHEDULING_ORCHESTRATION.md`: учитывается `sent/queued/planned` в текущем дне, допускается перевес групп, фиксированные времена не сдвигаются.
-• При изменении настроек уведомлений регенерация использует флаг `forceTodaySlots`: если до конца окна достаточно времени, гарантируется минимум 1 слот сегодня (и полное заполнение при раннем включении).
+• Логика распределения времени слотов (чередование, fixed times, интервалы внутри дня) описана в `.docs/NOTIFICATION_SCHEDULING_ORCHESTRATION.md`.
+• Источник истины по масштабированию и надёжности слотов: `.docs/notification_slots_scaling_tz.md` (queued не удаляются при регене, критерий горизонта — `planned+queued`, sharding/cursor/cycle, backpressure, lock-стратегия).
+• `forceTodaySlots` на текущем этапе считается техдолгом и находится вне scope scaling-этапа.
 • Logout отключает уведомления **только на текущем устройстве**: токен удаляется через `/api/notifications/unregister-token` (таблица `user_devices`).
 • При логине токен устройства повторно регистрируется (если есть) и в фоне проверяется наличие активных слотов: если нужно регенерировать или активные настройки есть, но слотов нет — запускается `generateAllSlotsForUser`.
 • AI‑генерация текстов уведомлений выполняется через очередь BullMQ `ai-text-generation` с debounce‑dedup (`id = ai-gen-{preferenceId}`, TTL≈20с) и лимитом на пользователя (не больше 3 активных задач одновременно). При ошибках AI слоты **не** создаются, задача ретраится с backoff; после успешной генерации выполняется глобальная регенерация слотов. При повторных сбоях объём генерации снижается (50 → 25 → 12), чтобы не срывать процесс.
@@ -392,11 +394,34 @@ server/
 • Брокер: Redis (локально через Docker, в production через Upstash).
 • Node.js: BullMQ 5.x для обработки фоновых задач.
 • Структура очередей:
-• `notification-slots-generation` — генерация слотов уведомлений. Планировщик `notificationSlots.scheduler` каждые 2 часа ставит задачи для пользователей с активными настройками; воркер генерирует только при нехватке planned (< 80%), иначе слоты не пополняются после отправки (горизонт 2 дня).
+• `notification-slots-generation` — генерация слотов уведомлений. Для production применяется масштабируемая модель из `.docs/notification_slots_scaling_tz.md`: sharded enqueue с cursor/cycle state в Postgres, критерий регенерации по `planned+queued` + `min_horizon_hours`, `queued` при регенерации не удаляются, backpressure по queue lag (SLO/soft/hard пороги).
 • `notification-delivery` — отправка уведомлений через FCM
 • `ai-text-pool-refill` — пополнение пула AI-генерированных текстов
 • Воркеры запускаются автоматически через плагин `server/plugins/bullmq-workers.ts`.
+• Для production process split обязателен: `scheduler (enqueue)` / `slots worker` / `delivery worker`.
 • Конфигурация: `BULLMQ_ENABLE_WORKERS` (по умолчанию `true`, для масштабирования можно отключить на web-контейнерах).
+• Реализован scheduler-state слой в БД:
+• `slots_scheduler_cursor(shard PK, last_user_id, cycle_id, updated_at)` — курсор инкрементального обхода по shard.
+• `slots_scheduler_state(id='global', global_cycle_id, next_shard, completed_shards, updated_at)` — глобальное состояние цикла и round-robin.
+• Реализован dedup контракт jobs:
+• `jobId = slotsgen:{userId}:{cycle_id}`.
+• Перед постановкой проверяется наличие job с тем же `jobId` в любом состоянии (чтобы исключить `already exists` и повторный enqueue одного цикла).
+• При lock/timeout текущая active job переводится в delayed через `moveToDelayed(..., token)` + `DelayedError` (без смены `jobId` и `cycle_id`).
+• Реализованы DB-инварианты для идемпотентности и производительности:
+• partial index `idx_notification_preferences_enabled_user` на `notification_preferences(user_id) where enabled=true`.
+• partial unique index `uk_notification_slots_active` на `(user_id, kind, entity_key, scheduled_at) where status in ('planned','queued')`.
+• Безопасная регенерация slots:
+• диапазон пересоздания вычисляется как `regen_range_start = now + max(SLOTS_REGEN_SAFE_WINDOW_MINUTES, SLOTS_SAFE_QUEUED_WINDOW_MINUTES)` и `regen_range_end = now + SLOTS_TARGET_HORIZON_HOURS`.
+• в регенерации удаляются только `planned` слоты в диапазоне; `queued` никогда не удаляются.
+• вставка новых `planned` выполняется через upsert `ON CONFLICT DO NOTHING` по active-уникальности.
+• межпроцессная координация регенерации — через PostgreSQL transaction-level lock: `pg_try_advisory_xact_lock(user_id, LOCK_NAMESPACE_SLOTS_GENERATION)` с таймаутом `SLOTS_LOCK_TIMEOUT_MS`; при contention задача уходит в delayed backoff.
+• В delivery state-machine запрещён переход `queued -> planned`:
+• `planned -> queued` выполняется через конкурентно-безопасный `UPDATE ... WHERE status='planned' RETURNING`.
+• при ошибке постановки в очередь статус переводится в `failed`, а не откатывается в `planned`.
+• Реализован runtime backpressure для scheduler:
+• soft mode (`queue_lag >= 5m` или queue depth > X): уменьшается batch, увеличивается интервал, включается `only_users_below_horizon`.
+• hard mode (`queue_lag >= 15m`): агрессивное снижение нагрузки, восстановление к baseline через `SLOTS_BACKPRESSURE_RECOVERY_CYCLES`.
+• Централизованный конфиг scaling находится в `server/application/notifications/slots-scaling.config.ts` (feature flags + `SLOTS_*` env + lock namespace).
 • Payload: JSON-структуры, совместимые между системами.
 • Retry механизм: 3 попытки с exponential backoff (10 секунд между ретраями).
 • Graceful shutdown: все воркеры корректно завершаются при получении SIGTERM/SIGINT.
@@ -409,6 +434,7 @@ server/
 
 📋 Связанные документы
 • `.docs/notifications.md` - Полная документация по системе уведомлений (архитектура, API, настройка, тестирование)
+• `.docs/notification_slots_preprod_stress_tz.md` - ВАЖНО! Предрелизный чеклист стресс-тестов и chaos-сценариев для нового slots scheduler/worker split
 • `.docs/mentai_tz_product.md` - Общие требования к продукту
 • `.docs/mentai_tz_frontend.md` - Требования к фронтенду
 • `.docs/mentai_tz_backend.md` - Требования к бэкенду

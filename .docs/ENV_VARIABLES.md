@@ -371,6 +371,74 @@ ADMIN_EMAILS=admin@mentala.com,superadmin@mentala.com
 
 ---
 
+## 🔔 Масштабирование слотов уведомлений
+
+### Feature flags
+
+```bash
+slots_scheduler_enabled=true
+slots_regen_enabled=true
+slots_sharding_enabled=true
+slots_backpressure_enabled=true
+slots_db_unique_constraint_enabled=true
+```
+
+Поддерживаются также UPPER_SNAKE_CASE варианты:
+`SLOTS_SCHEDULER_ENABLED`, `SLOTS_REGEN_ENABLED`, `SLOTS_SHARDING_ENABLED`, `SLOTS_BACKPRESSURE_ENABLED`, `SLOTS_DB_UNIQUE_CONSTRAINT_ENABLED`.
+
+### Scheduler / enqueue
+
+```bash
+SLOTS_SCHEDULER_BATCH_SIZE=200
+SLOTS_SCHEDULER_INTERVAL_MS=60000
+SLOTS_SCHEDULER_JITTER_MS=15000
+SLOTS_SCHEDULER_SHARDS=16
+SLOTS_CURSOR_STALE_MS=7680000
+SLOTS_FAIRNESS_MAX_DELAY_HOURS=6
+```
+
+Примечание: дефолт `SLOTS_CURSOR_STALE_MS` вычисляется динамически как
+`max(10 минут, SLOTS_SCHEDULER_INTERVAL_MS * SLOTS_SCHEDULER_SHARDS * 8)`.
+
+### Worker / regen
+
+```bash
+SLOTS_WORKER_CONCURRENCY=2
+SLOTS_REGEN_THRESHOLD_PERCENT=80
+SLOTS_SAFE_QUEUED_WINDOW_MINUTES=15
+SLOTS_REGEN_SAFE_WINDOW_MINUTES=10
+SLOTS_TARGET_HORIZON_HOURS=48
+SLOTS_MIN_HORIZON_HOURS=36
+SLOTS_LOCK_TIMEOUT_MS=2000
+SLOTS_REGEN_MAX_RUNTIME_MS=60000
+SLOTS_REGEN_TX_TIMEOUT_MS=20000
+SLOTS_MAX_ROWS_PER_REGEN=500
+SLOTS_MIN_REGEN_INTERVAL_MINUTES=30
+SLOTS_JITTER_MINUTES=15
+SLOTS_MIN_GAP_MINUTES=10
+```
+
+### Backpressure / queue
+
+```bash
+SLOTS_BACKPRESSURE_QUEUE_DEPTH=1000
+SLOTS_BACKPRESSURE_QUEUE_LAG_MS=300000
+SLOTS_BACKPRESSURE_RECOVERY_CYCLES=3
+SLOTS_JOB_DEDUP_TTL_MS=21600000
+SLOTS_RESCHEDULE_BASE_DELAY_MS=30000
+SLOTS_RESCHEDULE_MAX_DELAY_MS=900000
+SLOTS_TRACE_PREFIX=slots
+```
+
+### Где используется
+
+- sharded scheduler: `server/application/notifications/schedulers/notificationSlots.scheduler.ts`
+- worker регенерации: `server/application/notifications/workers/notificationSlots.worker.ts`
+- безопасная регенерация + xact lock: `server/application/notifications/global-orchestration.service.ts`
+- единый конфиг и дефолты: `server/application/notifications/slots-scaling.config.ts`
+
+---
+
 ## 📚 Дополнительная информация
 
 Подробнее о реализации см. в `.docs/auth_tz.md` (Часть II. Безопасность авторизации).

@@ -21,6 +21,7 @@
     "prepare": "husky",
     "db:generate": "tsx scripts/db/generate.ts",
     "db:migrate": "tsx scripts/db/migrate.ts",
+    "db:cleanup-slots-duplicates": "tsx scripts/db/cleanup-notification-slot-duplicates.ts",
     "db:baseline": "tsx scripts/db/baseline.ts",
     "seed:subscription-plans": "tsx server/infrastructure/db/seed-subscription-plans.ts",
     "seed:meditations": "tsx server/infrastructure/db/seed-meditations.ts",

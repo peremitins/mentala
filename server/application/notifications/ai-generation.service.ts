@@ -17,7 +17,7 @@ import {
   userPreferences,
 } from '@@/server/infrastructure/db/schema';
 import { computeGenerationConfigHash } from '@@/server/utils/notification-ai-config-hash';
-import { eq, and, or, sql, lte } from 'drizzle-orm';
+import { eq, and, sql, lte } from 'drizzle-orm';
 import { enqueueAiTextPoolRefillJob } from '@@/server/application/notifications/queues/aiTextPool.queue';
 import { createHash } from 'node:crypto';
 import type { LlmProviderPort } from '@@/server/ports';
@@ -382,7 +382,7 @@ export function normalizeTextForSemanticHash(text: string): string {
       // в нижний регистр
       .toLowerCase()
       // заменяем знаки препинания и лишние символы на пробел
-      .replace(/[.,!?;:()[\]"«»„""—\-]/g, ' ')
+      .replace(/[.,!?;:()[\]"«»„""—-]/g, ' ')
       // все виды пробелов/переносов → один пробел
       .replace(/\s+/g, ' ')
       // обрезаем пробелы по краям
@@ -784,9 +784,12 @@ export function normalizeNotificationItems(
     rebalanceMixedSubtypes(normalized);
   }
 
-  return normalized
-    .slice(0, expectedCount)
-    .map(({ subtypeRestored, ...item }) => item);
+  return normalized.slice(0, expectedCount).map((item) => ({
+    text: item.text,
+    imageTag: item.imageTag,
+    subtype: item.subtype,
+    actionHint: item.actionHint,
+  }));
 }
 
 function extractTextValue(item: string | AiNotificationText): string {
@@ -1783,15 +1786,17 @@ ${params.description ? '- Используй описание как основ�
 - Прямолинейная, конкретная польза с прямыми формулировками
 - Фокус на конкретных выгодах и снижении рисков`;
           }
-          
+
           // СПЕЦИАЛЬНОЕ ПРАВИЛО ДЛЯ КОФЕИНА/КОФЕ
           const entityKeyLower = params.entityKey.trim().toLowerCase();
           const entityNameLower = params.entityName.trim().toLowerCase();
-          if (entityKeyLower === 'caffeine' || 
-              entityKeyLower.includes('кофеин') ||
-              entityKeyLower.includes('кофе') ||
-              entityNameLower.includes('кофеин') ||
-              entityNameLower.includes('кофе')) {
+          if (
+            entityKeyLower === 'caffeine' ||
+            entityKeyLower.includes('кофеин') ||
+            entityKeyLower.includes('кофе') ||
+            entityNameLower.includes('кофеин') ||
+            entityNameLower.includes('кофе')
+          ) {
             subtypeInstructions = `${habitContext}
 - ВАЖНО: Кофе полезен! НЕ говори о вреде кофе. Проблема в чрезмерных дозах и времени приёма (после 14:00 мешает сну).
 - Фокус: баланс и время. Используй разнообразные формулировки.`;

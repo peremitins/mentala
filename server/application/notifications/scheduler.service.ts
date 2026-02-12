@@ -10,7 +10,10 @@ import { db } from '@/server/infrastructure/db/client';
 import { notificationPreferences } from '@/server/infrastructure/db/schema';
 import type { NotificationKind } from '@/shared/dto/notifications';
 import { needsSlotRegenerationInternal } from './needs-regeneration.service';
-import { orchestrateAllSlotsForUser } from './global-orchestration.service';
+import {
+  orchestrateAllSlotsForUser,
+  type OrchestrateSlotsResult,
+} from './global-orchestration.service';
 
 // ==========================================
 // Защита от параллельных регенераций
@@ -18,8 +21,8 @@ import { orchestrateAllSlotsForUser } from './global-orchestration.service';
 
 // Защита от одновременных вызовов generateAllSlotsForUser для одного пользователя
 // Ключ: userId (number)
-// Значение: Promise<void> - промис выполняющейся операции
-const activeRegenerations = new Map<number, Promise<void>>();
+// Значение: Promise<OrchestrateSlotsResult> - промис выполняющейся операции
+const activeRegenerations = new Map<number, Promise<OrchestrateSlotsResult>>();
 
 // ==========================================
 // УДАЛЕНО: Функция inferHabitKey была костылем
@@ -43,8 +46,11 @@ export async function generateAllSlotsForUser(
   userId: number,
   options?: {
     forceTodaySlots?: boolean;
+    reason?: string;
+    traceId?: string;
+    jobId?: string;
   }
-): Promise<void> {
+): Promise<OrchestrateSlotsResult> {
   // Проверяем, не выполняется ли уже регенерация для этого пользователя
   const existingRegeneration = activeRegenerations.get(userId);
   if (existingRegeneration) {
@@ -53,11 +59,11 @@ export async function generateAllSlotsForUser(
     );
     // Ждем завершения существующей операции
     try {
-      await existingRegeneration;
+      const result = await existingRegeneration;
       console.log(
         `[Scheduler] ✅ Previous regeneration completed, skipping duplicate call for user ${userId}`
       );
-      return;
+      return result;
     } catch (error) {
       // Если предыдущая операция завершилась с ошибкой, продолжаем
       console.warn(
@@ -79,7 +85,7 @@ export async function generateAllSlotsForUser(
     // - Частичное распределение при позднем включении
     // - Поддержку фиксированных времен
     // - Поддержку AI-текстов
-    await orchestrateAllSlotsForUser(userId, options);
+    return await orchestrateAllSlotsForUser(userId, options);
   })();
 
   // ✅ КОРРЕКТНАЯ РЕАЛИЗАЦИЯ: Сохраняем промис в Map ПЕРЕД await
@@ -88,10 +94,11 @@ export async function generateAllSlotsForUser(
 
   try {
     // Ждем завершения операции
-    await regenerationPromise;
+    const result = await regenerationPromise;
     console.log(
       `[Scheduler] ✅ Completed global orchestration for user ${userId}`
     );
+    return result;
   } finally {
     // ✅ КОРРЕКТНАЯ РЕАЛИЗАЦИЯ: Удаляем промис из Map после завершения операции (всегда, даже при ошибке)
     // Это гарантирует, что Map не будет расти бесконечно и последующие вызовы смогут создать новую операцию
@@ -114,7 +121,8 @@ export async function generateAllSlotsForUser(
  * @returns true если нужно регенерировать слоты
  */
 export async function needsSlotRegeneration(userId: number): Promise<boolean> {
-  return needsSlotRegenerationInternal(userId);
+  const decision = await needsSlotRegenerationInternal(userId);
+  return decision.shouldRegenerate;
 }
 
 /**
@@ -143,7 +151,7 @@ export async function regenerateAllSlots(): Promise<void> {
 
   for (const { userId } of activeUsers) {
     try {
-      await generateAllSlotsForUser(userId);
+      await generateAllSlotsForUser(userId, { reason: 'manual' });
     } catch (error) {
       console.error(
         `[Scheduler] Failed to regenerate slots for user ${userId}:`,
@@ -181,7 +189,7 @@ export async function regenerateSlotsForSource(
   console.log(
     `[Scheduler] regenerateSlotsForSource called for user ${userId}, kind: ${kind}, entityKey: ${options?.entityKey || 'none'}. Using global orchestration instead (all sources will be regenerated).`
   );
-  await generateAllSlotsForUser(userId);
+  await generateAllSlotsForUser(userId, { reason: 'prefs_changed' });
 }
 
 /**
@@ -202,5 +210,6 @@ export async function triggerSlotRegeneration(
   // При изменении настроек одного источника пересоздаём все слоты с новой логикой
   await generateAllSlotsForUser(userId, {
     forceTodaySlots: options?.forceTodaySlots ?? false,
+    reason: 'prefs_changed',
   });
 }

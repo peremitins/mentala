@@ -40,7 +40,6 @@ export async function regenerateAiTextsForEntity(params: {
   entityDescription: string | null;
 }): Promise<void> {
   const { userId, kind, entityKey, entityName, entityDescription } = params;
-  const userIdStr = String(userId); // Преобразуем в строку для использования в запросах
 
   try {
     // Находим все preferences для этой сущности
@@ -210,7 +209,7 @@ export async function regenerateAiTextsForEntity(params: {
         try {
           // ВАЖНО: Используем глобальную оркестрацию для правильного чередования тем
           // При регенерации AI-текстов пересоздаём все слоты с новой логикой
-          await generateAllSlotsForUser(Number(userId));
+          await generateAllSlotsForUser(Number(userId), { reason: 'manual' });
           console.log(
             `[RegenerateAI] ✅ Slots regenerated using global orchestration for user ${userId}`
           );
