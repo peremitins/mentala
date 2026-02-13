@@ -33,6 +33,13 @@
       cancel-label="Отмена"
       @confirm="confirmDeleteTopic"
     />
+
+    <FeaturePaywallModal
+      v-model:open="paywallOpen"
+      :feature-key="paywallFeatureKey"
+      :required-plan="paywallAccess?.requiredPlan || null"
+      :paywall="paywallAccess?.paywall || null"
+    />
   </div>
 </template>
 
@@ -61,6 +68,11 @@ import {
   isTherapyPracticeHidden,
   mapTherapyToBreathGroup,
 } from '@/app/lib/practiceActions';
+import FeaturePaywallModal from '@/app/components/subscription/FeaturePaywallModal.vue';
+import {
+  extractFeaturePlanRequiredError,
+  useEntitlements,
+} from '@/app/composables/useEntitlements';
 
 const colorSchemes: Record<string, string> = {
   blue: 'from-blue-500 to-cyan-500',
@@ -81,6 +93,7 @@ const notificationsStore = useNotificationsStore();
 const { topics: userTopics } = storeToRefs(therapyStore);
 const router = useRouter();
 const route = useRoute();
+const { getFeatureAccess, refreshEntitlements } = useEntitlements();
 
 // Загружаем данные после монтирования компонента (с кэшированием)
 // Защита от двойного вызова реализована в store через isSkeletonLoading флаг
@@ -119,6 +132,12 @@ const customTopicItems = computed<NotificationIndexItem[]>(() =>
       canDelete: true,
       notificationsEnabled: pref?.enabled ?? false,
       quickActions: buildTherapyQuickActions(topic.id, true),
+      lockBadgeEmoji: customTherapyAccess.value.available
+        ? undefined
+        : getPlanBadgeEmoji(customTherapyAccess.value.requiredPlan),
+      lockBadgeTitle: customTherapyAccess.value.available
+        ? undefined
+        : 'Личная терапия доступна в Premium',
     };
   })
 );
@@ -141,25 +160,48 @@ const baseTopicItems = computed<NotificationIndexItem[]>(() =>
   })
 );
 
-const createCard: NotificationIndexItem = {
+const createCard = computed<NotificationIndexItem>(() => ({
   id: '__create_topic',
   name: 'Создать свою терапию',
-  description: 'Сформулируйте собственный запрос и настройте тексты под себя',
+  description: customTherapyAccess.value.available
+    ? 'Сформулируйте собственный запрос и настройте тексты под себя'
+    : 'Создание личной терапии доступно в Premium',
   emoji: '✏️',
   gradientClass: 'from-gray-500 to-gray-700',
   payload: { action: 'create-topic' },
   quickActions: {},
-};
+  lockBadgeEmoji: customTherapyAccess.value.available
+    ? undefined
+    : getPlanBadgeEmoji(customTherapyAccess.value.requiredPlan),
+  lockBadgeTitle: customTherapyAccess.value.available
+    ? undefined
+    : 'Создание личной терапии доступно в Premium',
+}));
 
 const topicItems = computed<NotificationIndexItem[]>(() => [
   ...customTopicItems.value,
   ...baseTopicItems.value,
-  createCard,
+  createCard.value,
 ]);
 
 const createModalOpen = ref(false);
 const deleteModalRef = ref<InstanceType<typeof ConfirmModal> | null>(null);
 const pendingDeleteItem = ref<NotificationIndexItem | null>(null);
+const paywallOpen = ref(false);
+const paywallFeatureKey = ref<string | null>(null);
+const meditationsAccess = computed(() =>
+  getFeatureAccess('meditations.library.full')
+);
+const breathCatalogAccess = computed(() =>
+  getFeatureAccess('breath.catalog.full')
+);
+const chatAssistantAccess = computed(() => getFeatureAccess('chat.assistant'));
+const customTherapyAccess = computed(() =>
+  getFeatureAccess('therapy.custom.create')
+);
+const paywallAccess = computed(() =>
+  paywallFeatureKey.value ? getFeatureAccess(paywallFeatureKey.value) : null
+);
 const { startEntryChat } = useEntryChat();
 
 async function safeNavigate(target: RouteLocationRaw) {
@@ -181,14 +223,34 @@ async function safeNavigate(target: RouteLocationRaw) {
   }
 }
 
-function handleTopicSelect(item: NotificationIndexItem) {
+async function refreshEntitlementsForAction() {
+  try {
+    await refreshEntitlements();
+  } catch (error) {
+    console.warn('[Therapy] Failed to refresh entitlements on action:', error);
+  }
+}
+
+async function handleTopicSelect(item: NotificationIndexItem) {
+  await refreshEntitlementsForAction();
+
   const payload = item.payload as
     | { action?: string; type?: string }
     | undefined;
   if (payload?.action === 'create-topic') {
+    if (!customTherapyAccess.value.available) {
+      openPaywall('therapy.custom.create');
+      return;
+    }
     createModalOpen.value = true;
     return;
   }
+
+  if (isCustomTherapyItem(item) && !customTherapyAccess.value.available) {
+    openPaywall('therapy.custom.create');
+    return;
+  }
+
   // Используем ID для навигации
   safeNavigate(`/therapy/${item.id}`);
 }
@@ -199,7 +261,9 @@ function handleTopicCreated(topic: TherapyTopicDto) {
   safeNavigate(`/therapy/${topic.id}`);
 }
 
-function handleTopicRemove(item: NotificationIndexItem) {
+async function handleTopicRemove(item: NotificationIndexItem) {
+  await refreshEntitlementsForAction();
+
   pendingDeleteItem.value = item;
   deleteModalRef.value?.open();
 }
@@ -223,6 +287,12 @@ async function confirmDeleteTopic() {
       navigateTo('/therapy');
     }
   } catch (error: any) {
+    const featureError = extractFeaturePlanRequiredError(error);
+    if (featureError) {
+      openPaywall(featureError.featureKey);
+      return;
+    }
+
     console.error('[Therapy] Failed to delete topic:', error);
     useToast(error?.message || 'Не удалось удалить тему');
   } finally {
@@ -254,11 +324,23 @@ function buildTherapyEntryContext(
 }
 
 async function handleTherapyQuickChat(item: NotificationIndexItem) {
+  await refreshEntitlementsForAction();
+
+  if (isCustomTherapyItem(item) && !customTherapyAccess.value.available) {
+    openPaywall('therapy.custom.create');
+    return;
+  }
+
+  if (!chatAssistantAccess.value.available) {
+    openPaywall('chat.assistant');
+    return;
+  }
+
   const chat = useChatStore();
   chat.entryContext = buildTherapyEntryContext(item);
 
   try {
-    startEntryChat();
+    await startEntryChat();
   } catch {
     // useEntryChat уже показал toast
   }
@@ -274,6 +356,11 @@ function resolveTherapyTopicKey(item: NotificationIndexItem): string | null {
 }
 
 async function handleTherapyQuickMeditation(item: NotificationIndexItem) {
+  if (!meditationsAccess.value.available) {
+    openPaywall('meditations.library.full');
+    return;
+  }
+
   const topicKey = resolveTherapyTopicKey(item);
   if (!topicKey) return;
   const meditationTopicKey = mapTherapyToMeditationTopic(topicKey);
@@ -289,6 +376,11 @@ async function handleTherapyQuickMeditation(item: NotificationIndexItem) {
 }
 
 async function handleTherapyQuickBreath(item: NotificationIndexItem) {
+  if (!breathCatalogAccess.value.available) {
+    openPaywall('breath.catalog.full');
+    return;
+  }
+
   const topicKey = resolveTherapyTopicKey(item);
   if (!topicKey) return;
   const groupKey = mapTherapyToBreathGroup(topicKey);
@@ -311,4 +403,28 @@ async function handleTherapyQuickBreath(item: NotificationIndexItem) {
     query: { group: groupKey },
   });
 }
+
+function openPaywall(featureKey: string) {
+  paywallFeatureKey.value = featureKey;
+  paywallOpen.value = true;
+}
+
+function isCustomTherapyItem(item: NotificationIndexItem): boolean {
+  const payload = item.payload as
+    | { type?: string; action?: string }
+    | undefined;
+  return payload?.type === 'custom' && payload?.action !== 'create-topic';
+}
+
+function getPlanBadgeEmoji(plan: string) {
+  return plan === 'premium' ? '💎' : '⭐';
+}
+
+onMounted(async () => {
+  try {
+    await refreshEntitlements();
+  } catch (error) {
+    console.warn('[Therapy] Failed to refresh entitlements:', error);
+  }
+});
 </script>

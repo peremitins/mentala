@@ -31,6 +31,7 @@ import type {
   HabitSubtype,
   Tone,
 } from '@/shared/dto/notifications';
+import { ensureAiNotificationAccessConsistency } from '@/server/application/notifications/notification-source-access.service';
 
 function resolveTone(value?: string | null): Tone {
   if (
@@ -173,6 +174,8 @@ export function startAiTextGenerationWorker() {
             id: users.id,
             isBlocked: users.isBlocked,
             gender: users.gender,
+            roleId: users.roleId,
+            trialEndedAt: users.trialEndedAt,
           })
           .from(users)
           .where(eq(users.id, userId))
@@ -190,6 +193,20 @@ export function startAiTextGenerationWorker() {
             `[AI Generation Worker] ❌ User ${userId} is blocked, skipping job ${job.id}`
           );
           return { skipped: true, reason: 'user_blocked' };
+        }
+
+        // Важно: entitlement проверяем в самом воркере, чтобы после окончания Trial
+        // новые AI-генерации не продолжались в фоне без открытия настроек.
+        const aiAccess = await ensureAiNotificationAccessConsistency({
+          userId,
+          trialEndedAt: user.trialEndedAt,
+          userRole: user.roleId,
+        });
+        if (!aiAccess.canUseAiNotifications) {
+          console.log(
+            `[AI Generation Worker] ⏭️ AI notifications access disabled for user ${userId}, skipping job ${job.id}`
+          );
+          return { skipped: true, reason: 'ai_access_disabled' };
         }
 
         // Загружаем preference

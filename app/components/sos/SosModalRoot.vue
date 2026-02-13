@@ -83,8 +83,20 @@
                   class="glass-deep w-full rounded-xl p-4 text-left transition hover:border-white/30"
                   @click="goToChat('vent')"
                 >
-                  <p class="text-base font-semibold">Хочу выговориться</p>
-                  <p class="mt-1 text-sm text-white/75">Поговорить в чате</p>
+                  <div class="flex items-start justify-between gap-3">
+                    <div>
+                      <p class="text-base font-semibold">Хочу выговориться</p>
+                      <p class="mt-1 text-sm text-white/75">
+                        Поговорить в чате
+                      </p>
+                    </div>
+                    <span
+                      v-if="!chatHandoffAccess.available"
+                      class="inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-white/20 bg-black/45 text-sm leading-none"
+                    >
+                      {{ getPlanBadgeEmoji(chatHandoffAccess.requiredPlan) }}
+                    </span>
+                  </div>
                 </button>
               </div>
             </section>
@@ -296,7 +308,15 @@
                   size="lg"
                   @click="goToChat(finishEntry, true)"
                 >
-                  Продолжить в чате
+                  <span class="inline-flex items-center gap-2">
+                    <span>Продолжить в чате</span>
+                    <span
+                      v-if="!chatHandoffAccess.available"
+                      class="inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/20 bg-black/45 text-sm leading-none"
+                    >
+                      {{ getPlanBadgeEmoji(chatHandoffAccess.requiredPlan) }}
+                    </span>
+                  </span>
                 </Button>
                 <Button
                   variant="ghost"
@@ -424,6 +444,13 @@
               </div>
             </DialogContent>
           </Dialog>
+
+          <FeaturePaywallModal
+            v-model:open="paywallOpen"
+            :feature-key="paywallFeatureKey"
+            :required-plan="paywallAccess?.requiredPlan || null"
+            :paywall="paywallAccess?.paywall || null"
+          />
         </div>
       </div>
     </Transition>
@@ -447,6 +474,7 @@ import { findBreathPractice } from '@/app/lib/breathPracticesCatalog';
 import type { BreathPhase } from '@/app/lib/breathPracticesCatalog';
 import BreathPracticePlayer from '@/app/components/breath-practices/BreathPracticePlayer.vue';
 import BreathOrb from '@/app/components/breath-practices/BreathOrb.vue';
+import FeaturePaywallModal from '@/app/components/subscription/FeaturePaywallModal.vue';
 import {
   Dialog,
   DialogContent,
@@ -457,6 +485,7 @@ import TimePicker from '@/app/components/TimePicker.vue';
 import { useSos, type SosEntry, type SosStep } from '@/app/composables/useSos';
 import { useChatStore } from '@/app/stores/chat';
 import { useNotificationsSettings } from '@/app/composables/useNotificationsSettings';
+import { useEntitlements } from '@/app/composables/useEntitlements';
 import { useToast } from '@/app/composables/useToast';
 import { useBreathPracticeAudio } from '@/app/composables/useBreathPracticeAudio';
 import { useBreathPracticeHaptics } from '@/app/composables/useBreathPracticeHaptics';
@@ -494,6 +523,7 @@ const groundingSteps = SOS_GROUNDING_STEPS;
 const { isOpen, step, finish, close, setStep, setFinish } = useSos();
 const chat = useChatStore();
 const { fetchGlobalPreferences } = useNotificationsSettings();
+const { getFeatureAccess } = useEntitlements();
 const {
   playCue: playTensionCue,
   prepare: prepareTensionCueAudio,
@@ -511,6 +541,8 @@ const finishEntry = computed<SosEntry>(() => finish.value?.entry ?? 'panic');
 const lastCompletedStep = ref<SosStep | null>(null);
 
 const groundingIndex = ref(0);
+const paywallOpen = ref(false);
+const paywallFeatureKey = ref<string | null>(null);
 
 const tensionCycleIndex = ref(0);
 const tensionStepType = ref<'clench' | 'release'>('clench');
@@ -539,14 +571,6 @@ const tensionVoiceCache = new Map<string, HTMLAudioElement>();
 const tensionVoicePreloaded = new Set<string>();
 const tensionVoicePreloadInFlight = new Set<string>();
 const tensionVoiceScheduleTimers = new Set<number>();
-
-const TENSION_VOICE_FALLBACK_MS: Record<SosTensionAudioKey, number> = {
-  intro: 2400,
-  clench: 2100,
-  release: 3600,
-  finish: 1800,
-};
-const TENSION_VOICE_GAP_MS = 140;
 
 const groundingCurrent = computed(() => {
   const step = groundingSteps[groundingIndex.value] ?? groundingSteps[0];
@@ -587,6 +611,10 @@ const tensionSessionRemainingLabel = computed(() =>
 const tensionSessionTotalLabel = computed(() =>
   formatSeconds(tensionSessionDurationSeconds.value)
 );
+const paywallAccess = computed(() =>
+  paywallFeatureKey.value ? getFeatureAccess(paywallFeatureKey.value) : null
+);
+const chatHandoffAccess = computed(() => getFeatureAccess('sos.chat_handoff'));
 
 const tensionOrbPhase = computed<BreathPhase>(() => {
   const isClench = tensionStepType.value === 'clench';
@@ -622,7 +650,7 @@ function clearTensionVoiceSchedule() {
 
 function canUseTensionVoicePlayback() {
   return (
-    !process.server && isDocumentAvailable() && typeof Audio !== 'undefined'
+    !import.meta.server && isDocumentAvailable() && typeof Audio !== 'undefined'
   );
 }
 
@@ -682,7 +710,7 @@ const GROUNDING_STEP_KEYS: SosGroundingStepKey[] = [
 async function playGroundingVoice(stepIndex: number) {
   if (
     !tensionVoiceEnabled.value ||
-    process.server ||
+    import.meta.server ||
     !isDocumentAvailable() ||
     typeof Audio === 'undefined'
   ) {
@@ -705,7 +733,8 @@ async function playGroundingVoice(stepIndex: number) {
         () => {
           groundingHintTimerId = setTimeout(() => {
             groundingHintTimerId = null;
-            if (groundingIndex.value !== 0 || !tensionVoiceEnabled.value) return;
+            if (groundingIndex.value !== 0 || !tensionVoiceEnabled.value)
+              return;
             const hintSrc = SOS_GROUNDING_AUDIO[addr]['step1_hint'];
             const hintAudio = new Audio(hintSrc);
             groundingCurrentAudio = hintAudio;
@@ -724,16 +753,6 @@ async function playGroundingVoice(stepIndex: number) {
     if (error?.name === 'AbortError') return;
     console.error('[SOS Grounding] Failed to play clip:', error);
   }
-}
-
-function getTensionVoiceDurationMs(audioKey: SosTensionAudioKey): number {
-  const voiceAddressing = resolveTensionAddressing();
-  const audio = getOrCreateTensionAudio(audioKey, voiceAddressing);
-  const durationSec = audio?.duration;
-  if (durationSec && Number.isFinite(durationSec) && durationSec > 0) {
-    return Math.round(durationSec * 1000);
-  }
-  return TENSION_VOICE_FALLBACK_MS[audioKey];
 }
 
 function getOrCreateTensionAudio(
@@ -904,11 +923,6 @@ function handleBack() {
   }
 }
 
-function backToSosRoot() {
-  clearAllTimers();
-  setStep('select');
-}
-
 function repeatLastPractice() {
   clearAllTimers();
 
@@ -1028,7 +1042,21 @@ async function onTensionVoiceEnabledChange(next: boolean) {
   }
 }
 
+function openPaywall(featureKey: string) {
+  paywallFeatureKey.value = featureKey;
+  paywallOpen.value = true;
+}
+
+function getPlanBadgeEmoji(plan: string) {
+  return plan === 'premium' ? '💎' : '⭐';
+}
+
 async function goToChat(entry: SosEntry, afterPractice = false) {
+  if (!chatHandoffAccess.value.available) {
+    openPaywall('sos.chat_handoff');
+    return;
+  }
+
   try {
     clearAllTimers();
     close();

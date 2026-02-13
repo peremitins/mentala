@@ -7,21 +7,21 @@ import {
   aiNotificationTextUsage,
 } from '@/server/infrastructure/db/schema';
 import { db } from '@/server/infrastructure/db/client';
-import { getSessionUser } from '@/server/application/auth/session';
+import { getSessionUserWithRole } from '@/server/utils/require-role';
 
 /**
  * DELETE /api/therapy/custom/:id
  * Удалить пользовательскую тему терапии
  */
 export default defineEventHandler(async (event) => {
-  const sessionResult = await getSessionUser(event);
-  if (!sessionResult?.user?.id) {
+  const sessionUser = await getSessionUserWithRole(event);
+  if (!sessionUser?.id) {
     throw createError({
       statusCode: 401,
       message: 'Unauthorized',
     });
   }
-  const userId = sessionResult.user.id;
+  const userId = sessionUser.id;
 
   const id = getRouterParam(event, 'id');
   if (!id) {

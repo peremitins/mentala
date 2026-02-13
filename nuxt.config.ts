@@ -156,6 +156,7 @@ export default defineNuxtConfig({
         process.env.NUXT_PUBLIC_SPEECH_DEFAULT_ENGINE || 'auto', // auto | native | webspeech | whisper
       isDev: process.env.NUXT_PUBLIC_IS_DEV === 'true', // Режим разработки (для управления функционалом в UI)
       chatIdleTimeoutMs: 2 * 60 * 1000, // 2 минуты в миллисекундах
+      featureTtsEnabled: process.env.NUXT_FEATURE_TTS_ENABLED === 'true',
     },
   },
   nitro: {

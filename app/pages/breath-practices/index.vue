@@ -23,7 +23,11 @@
 
       <section
         class="animate-slide-up"
-        :style="animationStyle(builtInSections.length)"
+        :style="
+          animationStyle(
+            builtInSections.length + (fullCatalogAccess.available ? 0 : 1)
+          )
+        "
       >
         <div class="flex items-center justify-between gap-3 pb-2 pt-4 px-4">
           <div>
@@ -36,7 +40,10 @@
           </div>
         </div>
 
-        <div v-if="customItems.length" class="relative">
+        <div
+          v-if="customManageAccess.available && customItems.length"
+          class="relative"
+        >
           <div
             class="flex gap-4 overflow-x-auto pb-4 pl-4 pr-6 no-scrollbar"
             data-lenis-prevent
@@ -55,11 +62,15 @@
           </div>
         </div>
 
-        <div v-else class="glass-deep p-4 text-sm text-foreground/80 mb-4 mx-4">
+        <div
+          v-else-if="customManageAccess.available"
+          class="glass-deep p-4 text-sm text-foreground/80 mb-4 mx-4"
+        >
           Пока нет сохранённых практик. Собери свою!
         </div>
 
         <NuxtLink
+          v-if="customCreateAccess.available"
           to="/breath-practices/custom"
           class="flex group relative overflow-hidden rounded-lg border border-dashed border-white/20 bg-white/5 p-5 m-4 transition hover:-translate-y-0.5 hover:border-white/30"
         >
@@ -83,16 +94,47 @@
             </div>
           </div>
         </NuxtLink>
+
+        <button
+          v-else
+          type="button"
+          class="flex group relative overflow-hidden rounded-lg border border-dashed border-white/20 bg-white/5 p-5 mx-4 mb-4 mt-0 transition hover:-translate-y-0.5 hover:border-white/30 text-left w-[calc(100%-2rem)]"
+          @click="openPaywall('breath.custom.create')"
+        >
+          <div class="pointer-events-none absolute inset-0">
+            <div
+              class="absolute -right-8 -top-6 h-24 w-24 rounded-full bg-gradient-to-br from-fuchsia-500/25 via-purple-500/10 to-transparent blur-2xl"
+            />
+          </div>
+          <div
+            class="relative w-full z-10 flex items-center justify-between gap-4"
+          >
+            <div class="space-y-1">
+              <p class="text-base font-semibold text-foreground">
+                Создать свою практику
+              </p>
+              <p class="text-xs text-foreground/80">
+                Эта функция доступна в
+                {{ getPlanBadgeLabel(customCreateAccess.requiredPlan) }}
+              </p>
+            </div>
+            <span
+              class="rounded-full border border-white/20 bg-white/10 px-2 py-1 text-[10px]"
+            >
+              {{ getPlanBadgeEmoji(customCreateAccess.requiredPlan) }}
+            </span>
+          </div>
+        </button>
       </section>
     </div>
 
     <Dialog v-model:open="dialogOpen">
       <DialogContent
-        class="max-w-3xl bg-gradient-to-b from-slate-900 via-indigo-950 to-slate-950 text-white border-white/10"
+        class="glass-deep max-w-3xl border-white/15 text-foreground sm:max-w-2xl"
       >
         <DialogHeader>
           <DialogTitle>{{ dialogTitle }}</DialogTitle>
-          <DialogDescription class="text-white/70">
+          <DialogDescription class="text-foreground/70">
             Полный список практик раздела.
           </DialogDescription>
         </DialogHeader>
@@ -101,9 +143,15 @@
             v-for="item in dialogItems"
             :key="item.practice.slug"
             type="button"
-            class="group flex w-full items-center gap-3 rounded-2xl bg-white/5 p-3 text-left transition hover:bg-white/10"
+            class="group relative flex w-full items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-3 text-left transition hover:bg-white/10"
             @click="openPracticeInGroup(dialogSectionKey, item.practice.slug)"
           >
+            <span
+              v-if="item.locked"
+              class="absolute right-2 top-2 z-10 inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/20 bg-black/45 text-xs leading-none"
+            >
+              {{ getPlanBadgeEmoji(item.requiredPlan || 'pro') }}
+            </span>
             <div
               class="relative h-16 w-16 overflow-hidden rounded-2xl bg-gradient-to-br"
               :class="item.accentClass"
@@ -139,11 +187,19 @@
       cancel-label="Отмена"
       @confirm="confirmDeletePractice"
     />
+
+    <FeaturePaywallModal
+      v-model:open="paywallOpen"
+      :feature-key="paywallFeatureKey"
+      :required-plan="paywallAccess?.requiredPlan || null"
+      :paywall="paywallAccess?.paywall || null"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import PageHeader from '@/app/components/PageHeader.vue';
 import IconPlus from '~icons/lucide/plus';
 import { navigateTo } from '#app';
@@ -165,9 +221,14 @@ import {
   DialogTitle,
 } from '@/app/components/ui/dialog';
 import ConfirmModal from '@/app/components/ui/ConfirmModal.vue';
+import FeaturePaywallModal from '@/app/components/subscription/FeaturePaywallModal.vue';
 import { useToast } from '@/app/composables/useToast';
+import { useEntitlements } from '@/app/composables/useEntitlements';
 
 const store = useBreathPracticesStore();
+const route = useRoute();
+const router = useRouter();
+const { getFeatureAccess } = useEntitlements();
 
 // Подбираем акцентный градиент под характер практики.
 const TAG_GRADIENTS: Record<BreathPracticeTag, string> = {
@@ -210,32 +271,62 @@ const dialogOpen = ref(false);
 const dialogSectionKey = ref<BreathPracticeTag | null>(null);
 const deleteModalRef = ref<InstanceType<typeof ConfirmModal> | null>(null);
 const pendingDeleteId = ref<string | null>(null);
+const paywallOpen = ref(false);
+const paywallFeatureKey = ref<string | null>(null);
+
+const BASIC_FREE_SLUGS = new Set(['4-7-8', 'box-breathing']);
+
+const fullCatalogAccess = computed(() =>
+  getFeatureAccess('breath.catalog.full')
+);
+const customCreateAccess = computed(() =>
+  getFeatureAccess('breath.custom.create')
+);
+const customManageAccess = computed(() =>
+  getFeatureAccess('breath.custom.manage')
+);
+const paywallAccess = computed(() =>
+  paywallFeatureKey.value ? getFeatureAccess(paywallFeatureKey.value) : null
+);
 
 type BreathPracticeGroupKey = BreathPracticeTag | 'custom';
 
 const builtInSections = computed(() =>
   SECTION_META.map((section) => {
-    const items: BreathPracticeCardItem[] = BREATH_PRACTICES.filter(
-      (practice) => practice.tags.includes(section.key)
-    ).map((practice) => ({
-      practice,
-      accentClass: TAG_GRADIENTS[section.key],
-    }));
+    const visiblePractices = BREATH_PRACTICES.filter((practice) =>
+      practice.tags.includes(section.key)
+    );
+
+    const items: BreathPracticeCardItem[] = visiblePractices.map(
+      (practice) => ({
+        practice,
+        accentClass: TAG_GRADIENTS[section.key],
+        locked:
+          !fullCatalogAccess.value.available &&
+          !BASIC_FREE_SLUGS.has(practice.slug),
+        requiredPlan:
+          fullCatalogAccess.value.requiredPlan === 'premium'
+            ? 'premium'
+            : 'pro',
+      })
+    );
 
     return {
       ...section,
       items,
     };
-  }).filter((section) => section.items.length)
+  })
 );
 
 const customItems = computed<BreathPracticeCardItem[]>(() =>
-  store.customPractices.map((practice) => ({
-    practice: mapCustomPractice(practice),
-    accentClass: CUSTOM_GRADIENT,
-    isCustom: true,
-    customId: practice.id, // Сохраняем ID для удаления
-  }))
+  customManageAccess.value.available
+    ? store.customPractices.map((practice) => ({
+        practice: mapCustomPractice(practice),
+        accentClass: CUSTOM_GRADIENT,
+        isCustom: true,
+        customId: practice.id, // Сохраняем ID для удаления
+      }))
+    : []
 );
 
 function animationStyle(index: number) {
@@ -249,6 +340,11 @@ const dialogItems = computed<BreathPracticeCardItem[]>(() => {
     (practice) => ({
       practice,
       accentClass: TAG_GRADIENTS[key],
+      locked:
+        !fullCatalogAccess.value.available &&
+        !BASIC_FREE_SLUGS.has(practice.slug),
+      requiredPlan:
+        fullCatalogAccess.value.requiredPlan === 'premium' ? 'premium' : 'pro',
     })
   );
 });
@@ -265,6 +361,16 @@ function openPracticeInGroup(
   groupKey: BreathPracticeGroupKey | null | undefined,
   slug: string
 ) {
+  if (slug.startsWith('custom-') && !customManageAccess.value.available) {
+    openPaywall('breath.custom.manage');
+    return;
+  }
+
+  if (!fullCatalogAccess.value.available && !BASIC_FREE_SLUGS.has(slug)) {
+    openPaywall('breath.catalog.full');
+    return;
+  }
+
   dialogOpen.value = false;
   // Передаём группу, чтобы в плеере работали кнопки назад/вперёд.
   const query = groupKey ? { group: groupKey } : undefined;
@@ -278,6 +384,19 @@ function openViewAll(key: BreathPracticeTag) {
 
 function goBack() {
   navigateTo('/practices');
+}
+
+function openPaywall(featureKey: string) {
+  paywallFeatureKey.value = featureKey;
+  paywallOpen.value = true;
+}
+
+function getPlanBadgeEmoji(plan: string) {
+  return plan === 'premium' ? '💎' : '⭐';
+}
+
+function getPlanBadgeLabel(plan: string) {
+  return plan === 'premium' ? 'Premium' : 'PRO и Premium';
 }
 
 function handleDeletePractice(id: string) {
@@ -301,6 +420,29 @@ async function confirmDeletePractice() {
 }
 
 onMounted(async () => {
-  await store.load();
+  if (customManageAccess.value.available) {
+    await store.load();
+  }
+
+  const rawLockedFeature = route.query.lockedFeature;
+  const lockedFeature = Array.isArray(rawLockedFeature)
+    ? rawLockedFeature[0]
+    : rawLockedFeature;
+
+  if (typeof lockedFeature === 'string' && lockedFeature.trim().length > 0) {
+    openPaywall(lockedFeature.trim());
+    const nextQuery = { ...route.query };
+    delete (nextQuery as any).lockedFeature;
+    void router.replace({ query: nextQuery });
+  }
 });
+
+watch(
+  () => customManageAccess.value.available,
+  async (available, prev) => {
+    if (available && !prev) {
+      await store.load(true);
+    }
+  }
+);
 </script>

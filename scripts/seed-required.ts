@@ -84,6 +84,11 @@ const tasks: SeedTask[] = [
     args: ['tsx', 'server/infrastructure/db/seed-subscription-plans.ts'],
   },
   {
+    name: 'feature-access-policies',
+    command: 'pnpm',
+    args: ['tsx', 'server/infrastructure/db/seed-feature-access-policies.ts'],
+  },
+  {
     name: 'meditations',
     command: 'pnpm',
     args: ['tsx', 'server/infrastructure/db/seed-meditations.ts'],

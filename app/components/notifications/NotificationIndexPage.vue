@@ -76,6 +76,15 @@
                     {{ item.name }}
                   </h3>
                   <div class="flex items-center gap-1 flex-shrink-0">
+                    <span
+                      v-if="item.lockBadgeEmoji"
+                      class="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/20 bg-black/35 text-[10px] leading-none"
+                      :title="
+                        item.lockBadgeTitle || 'Доступно в старшем тарифе'
+                      "
+                    >
+                      {{ item.lockBadgeEmoji }}
+                    </span>
                     <!-- Иконка состояния уведомлений: колокольчик вкл / перечёркнутый выкл -->
                     <span
                       v-if="item.notificationsEnabled !== undefined"
@@ -143,11 +152,18 @@
               v-if="shouldShowQuickChat(item)"
               variant="outline"
               size="sm"
-              class="flex-1 border-white/20 bg-white/5 text-[8px] min-[375px]:text-xs text-foreground/80 hover:border-white/40 hover:bg-white/10"
+              class="relative flex-1 border-white/20 bg-white/5 pr-8 text-[8px] min-[375px]:text-xs text-foreground/80 hover:border-white/40 hover:bg-white/10"
               @click.stop="handleQuickChat(item)"
             >
               <IconMessageCircle class="h-4 w-4" />
               Поговорить
+              <span
+                v-if="item.lockBadgeEmoji"
+                class="absolute right-2 inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/20 bg-black/35 text-[10px] leading-none"
+                :title="item.lockBadgeTitle || 'Доступно в старшем тарифе'"
+              >
+                {{ item.lockBadgeEmoji }}
+              </span>
             </Button>
 
             <Button
@@ -205,6 +221,8 @@ export interface NotificationIndexItem {
   gradientClass: string;
   payload?: unknown;
   canDelete?: boolean;
+  lockBadgeEmoji?: string;
+  lockBadgeTitle?: string;
   /** Включены ли уведомления по этой теме (undefined — не показывать иконку, напр. карточка «Создать») */
   notificationsEnabled?: boolean;
   quickActions?: {

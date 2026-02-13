@@ -8,7 +8,10 @@
     ]"
   >
     <div class="flex items-start justify-between gap-2">
-      <h3 class="text-lg font-semibold">{{ getPlanName() }}</h3>
+      <h3 class="text-lg font-semibold">
+        {{ getPlanName() }}
+        {{ plan.name === 'premium' ? '💎' : plan.name === 'pro' ? '⭐' : '' }}
+      </h3>
       <div class="flex items-center gap-2">
         <span
           v-if="plan.name === 'basic' && props.trialActive"
@@ -16,7 +19,6 @@
         >
           Бесплатный пробный период
         </span>
-        <span v-if="plan.name === 'premium'" class="text-xl">👑</span>
         <span
           v-if="plan.name === 'premium'"
           class="text-xs bg-primary-ui/10 text-primary-ui px-2 py-1 rounded"
@@ -64,11 +66,23 @@
     <ul class="space-y-2 text-sm">
       <li
         v-for="feature in getFeatures()"
-        :key="feature"
+        :key="feature.label"
         class="flex items-start gap-2"
       >
         <span class="text-primary-ui mt-0.5">✓</span>
-        <span>{{ feature }}</span>
+        <span class="inline-flex items-start gap-1.5">
+          <span>{{ feature.label }}</span>
+          <span
+            v-if="feature.tooltip"
+            v-tooltip="feature.tooltip"
+            class="mt-[1px] inline-flex h-4 w-4 flex-shrink-0 cursor-help select-none items-center justify-center rounded-full border border-white/25 bg-black/30 text-[10px] font-semibold leading-none text-foreground/90"
+            aria-label="Подробнее о пользе изображений"
+            role="button"
+            tabindex="0"
+          >
+            ?
+          </span>
+        </span>
       </li>
     </ul>
 
@@ -84,7 +98,7 @@
       :disabled="isCurrent"
       @click.stop="handleButtonClick"
     >
-      {{ isCurrent ? 'Активный' : 'Выбрать' }}
+      {{ getButtonLabel() }}
     </button>
   </div>
 </template>
@@ -96,6 +110,21 @@ interface Plan {
   basePrice: number;
   weeklyMinutesLimit: number;
 }
+
+type PlanFeature = {
+  label: string;
+  tooltip?: PlanTooltip;
+};
+
+type PlanTooltip = {
+  content: string;
+  html?: boolean;
+  popperClass?: string;
+  placement?: string;
+  distance?: number;
+  overflowPadding?: number;
+  triggers: string[];
+};
 
 const props = defineProps<{
   plan: Plan;
@@ -138,33 +167,86 @@ function getPrice() {
 }
 
 function getFeatures() {
-  const features: string[] = [];
+  const features: PlanFeature[] = [];
+
+  // Единый пресет tooltip для карточек тарифа:
+  // hover/focus для desktop и click для мобильных устройств.
+  const createPlanTooltip = (content: string): PlanTooltip => ({
+    content,
+    triggers: ['hover', 'focus', 'click'],
+    popperClass: 'plan-feature-tooltip',
+    placement: 'top',
+    distance: 10,
+    overflowPadding: 16,
+  });
+
+  // Подсказка объясняет эффект "картинка + текст": визуальные стимулы
+  // улучшают запоминание и повышают вероятность целевого действия.
+  const imageReminderTooltip = createPlanTooltip(
+    'Сочетание текста и изображения помогает лучше запоминать и быстрее воспринимать информацию. Этот эффект подтверждён исследованиями когнитивной психологии'
+  );
+  const sosTooltip = createPlanTooltip(
+    'Быстрые упражнения для снижения тревоги и стабилизации состояния'
+  );
+  const standardRemindersTooltip: PlanTooltip = {
+    ...createPlanTooltip(
+      'Сила регулярности.<br>Без триггера намерение часто остаётся намерением. Напоминание превращает его в действие'
+    ),
+    // Разрешаем HTML только для контролируемой статической строки.
+    html: true,
+  };
+  const personalAiStyleTooltip = createPlanTooltip(
+    'Вы управляете тем, как звучат напоминания. Добавьте свои правила и примеры, и ИИ будет подстраивать тексты под ваш стиль и цели'
+  );
 
   if (props.plan.name === 'basic') {
     if (props.trialActive) {
-      // Basic с Trial = Premium функционал
-      // Используем формулировки как в известных приложениях (Spotify, Netflix)
-      features.push('7 дней бесплатно');
-      features.push('Полный доступ к Premium функционалу');
-      features.push('AI-чат с искусственным интеллектом');
-      features.push('100 минут в неделю');
+      // Trial-период на базе Basic.
+      features.push({ label: 'Пробный период 7 дней' });
+      features.push({ label: 'Полный доступ к функциям Premium' });
+      features.push({ label: 'Безлимитные ИИ-сессии' });
     } else {
-      // Basic без Trial
-      features.push('Уведомления с шаблонами');
-      features.push('Трекер привычек (базовый)');
+      features.push({
+        label: 'SOS-техники для быстрой стабилизации',
+        tooltip: sosTooltip,
+      });
+      features.push({ label: 'Базовые дыхательные практики' });
+      features.push({
+        label: 'Стандартные напоминания',
+        tooltip: standardRemindersTooltip,
+      });
     }
   } else if (props.plan.name === 'pro') {
-    features.push('Неограниченный чат с ИИ');
-    features.push('Напоминания и трекер привычек');
-    features.push('Базовые отчёты и статистика');
-    features.push('100 минут в неделю');
+    features.push({ label: 'Всё из Basic' });
+    features.push({ label: 'ИИ-сессии для регулярной поддержки' });
+    features.push({ label: 'До 100 минут в неделю' });
+    features.push({ label: 'Полная библиотека медитаций' });
+    features.push({ label: 'Доступ ко всем дыхательным практикам' });
+    features.push({
+      label: 'ИИ-напоминания с изображениями для усиления эффекта',
+      tooltip: imageReminderTooltip,
+    });
   } else if (props.plan.name === 'premium') {
-    features.push('Всё из PRO');
-    features.push('Расширенные рекомендации и аналитика');
-    features.push('Приоритетная поддержка');
-    features.push('100 минут в неделю');
+    features.push({ label: 'Всё из PRO' });
+    features.push({ label: 'Безлимитные ИИ-сессии' });
+    features.push({
+      label: 'Персональный стиль ИИ-напоминаний',
+      tooltip: personalAiStyleTooltip,
+    });
+    features.push({ label: 'Создание и управление своими практиками' });
+    features.push({ label: 'Создание своих привычек' });
+    features.push({ label: 'Создание личной терапии' });
+    features.push({ label: 'Приоритетная поддержка' });
   }
 
   return features;
+}
+
+function getButtonLabel() {
+  if (!props.isCurrent) {
+    return 'Выбрать';
+  }
+
+  return props.plan.name === 'basic' ? 'Активный' : 'Текущий план';
 }
 </script>

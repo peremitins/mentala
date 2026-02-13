@@ -106,7 +106,15 @@
         class="glass-deep p-3 space-y-2"
       >
         <div class="flex items-center justify-between">
-          <p class="text-sm font-semibold">Мои пожелания</p>
+          <p class="flex items-center gap-2 text-sm font-semibold">
+            <span>Мои пожелания</span>
+            <span
+              v-if="!canUseCustomPrompt"
+              class="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/20 bg-black/45 text-[10px] leading-none"
+            >
+              {{ getPlanBadgeEmoji(customPromptAccess.requiredPlan) }}
+            </span>
+          </p>
           <p class="text-xs text-foreground/70">
             {{ customPromptNotificationLength }}/{{
               MAX_CUSTOM_PROMPT_NOTIFICATION_LENGTH
@@ -114,11 +122,25 @@
           </p>
         </div>
 
-        <TextareaResize
-          v-model="customPromptNotification"
-          :maxlength="MAX_CUSTOM_PROMPT_NOTIFICATION_LENGTH"
-          :placeholder="descriptionPlaceholder"
-        />
+        <div class="relative">
+          <TextareaResize
+            v-model="customPromptNotification"
+            :maxlength="MAX_CUSTOM_PROMPT_NOTIFICATION_LENGTH"
+            :placeholder="descriptionPlaceholder"
+            :disabled="!canUseCustomPrompt"
+          />
+          <button
+            v-if="!canUseCustomPrompt"
+            type="button"
+            class="absolute inset-0 z-10 rounded-[15px]"
+            aria-label="Открыть информацию о тарифе для блока «Мои пожелания»"
+            @click="openPaywall('notifications.custom_prompt_ai')"
+          />
+        </div>
+        <p v-if="!canUseCustomPrompt" class="text-xs text-foreground/70">
+          Персональные пожелания доступны в
+          {{ getPlanBadgeLabel(customPromptAccess.requiredPlan) }}.
+        </p>
       </section>
 
       <!-- Карточка расписания уведомлений -->
@@ -379,9 +401,10 @@
             </div>
 
             <ToggleGroup
-              v-model="textSource"
+              :model-value="textSource"
               type="single"
               class="inline-flex w-full gap-2 overflow-auto"
+              @update:model-value="onTextSourceChange"
             >
               <ToggleGroupItem
                 value="templates"
@@ -393,7 +416,15 @@
                 value="ai"
                 class="flex-1 rounded-lg px-3 py-2 text-xs xs:text-sm whitespace-nowrap font-medium transition-all"
               >
-                ✨ ИИ
+                <span class="inline-flex items-center gap-1.5">
+                  <span>✨ ИИ</span>
+                  <span
+                    v-if="!canUseAiTextSource"
+                    class="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/20 bg-black/45 text-[10px] leading-none"
+                  >
+                    {{ getPlanBadgeEmoji(aiTextSourceAccess.requiredPlan) }}
+                  </span>
+                </span>
               </ToggleGroupItem>
             </ToggleGroup>
           </div>
@@ -463,6 +494,13 @@
           {{ loading ? 'Сохранение...' : 'Сохранить' }}
         </button>
       </section>
+
+      <FeaturePaywallModal
+        v-model:open="paywallOpen"
+        :feature-key="paywallFeatureKey"
+        :required-plan="paywallAccess?.requiredPlan || null"
+        :paywall="paywallAccess?.paywall || null"
+      />
     </div>
   </div>
 </template>
@@ -473,16 +511,16 @@ import { onClickOutside } from '@vueuse/core';
 import { SliderRange, SliderRoot, SliderThumb, SliderTrack } from 'radix-vue';
 import { useToast } from '@/app/composables/useToast';
 import OverloadBanner from '@/app/components/notifications/OverloadBanner.vue';
-import Combobox from '@/app/components/Combobox.vue';
 import WeekdaySelector from '@/app/components/WeekdaySelector.vue';
 import TimeRangeSelector from '@/app/components/TimeRangeSelector.vue';
 import TimePicker from '@/app/components/TimePicker.vue';
 import { useTimeSlotControls } from '@/app/composables/useTimeSlotControls';
+import FeaturePaywallModal from '@/app/components/subscription/FeaturePaywallModal.vue';
+import { useEntitlements } from '@/app/composables/useEntitlements';
 import {
   SUBTYPE_OPTIONS,
   SUBTYPE_OPTIONS_BUILD,
   SUBTYPE_OPTIONS_QUIT,
-  TEXT_SOURCE_OPTIONS,
   DIRECTNESS_OPTIONS,
 } from '@/app/constants/select-options';
 import ToggleGroup from '@/app/components/ui/toggle-group/ToggleGroup.vue';
@@ -501,24 +539,19 @@ import type {
   TherapyTopicDto,
   Addressing,
   Directness,
-  HabitSubtype,
   NotificationSubtype,
   NotificationPreferencesDto,
   Tone,
   UpdateNotificationPreferencesDto,
   UserPreferencesDto,
 } from '@/shared/dto/notifications';
-import {
-  MAX_NOTIFICATION_TEXT_LENGTH,
-  MAX_CUSTOM_PROMPT_NOTIFICATION_LENGTH,
-} from '@/shared/dto/notifications';
+import { MAX_CUSTOM_PROMPT_NOTIFICATION_LENGTH } from '@/shared/dto/notifications';
 
 const props = defineProps<{
   mentaiMode: 'habits' | 'therapy';
   entityKey: string;
 }>();
 
-const route = useRoute();
 const router = useRouter();
 
 // Навигация к редактору текстов с передачей фильтров
@@ -539,6 +572,35 @@ function goToTextsEditor() {
     path: `/notifications/${props.mentaiMode}/${props.entityKey}/texts`,
     query,
   });
+}
+
+function openPaywall(featureKey: string) {
+  paywallFeatureKey.value = featureKey;
+  paywallOpen.value = true;
+}
+
+function getPlanBadgeEmoji(plan: string) {
+  return plan === 'premium' ? '💎' : '⭐';
+}
+
+function getPlanBadgeLabel(plan: string) {
+  return plan === 'premium' ? 'Premium' : 'PRO и Premium';
+}
+
+function onTextSourceChange(value: string | string[] | undefined) {
+  const normalizedValue = Array.isArray(value) ? value[0] : value;
+
+  if (normalizedValue !== 'templates' && normalizedValue !== 'ai') {
+    return;
+  }
+
+  if (normalizedValue === 'ai' && !canUseAiTextSource.value) {
+    textSource.value = 'templates';
+    openPaywall('notifications.text_source_ai');
+    return;
+  }
+
+  textSource.value = normalizedValue;
 }
 
 const isHabits = computed(() => props.mentaiMode === 'habits');
@@ -622,39 +684,25 @@ const entityEmoji = computed(() =>
     : (therapyEntity.value?.emoji ?? '💬')
 );
 
-const colorSchemes: Record<string, string> = {
-  blue: 'from-blue-500 to-cyan-500',
-  gray: 'from-gray-500 to-gray-600',
-  yellow: 'from-yellow-500 to-orange-500',
-  purple: 'from-purple-500 to-pink-500',
-  red: 'from-red-500 to-rose-500',
-  pink: 'from-pink-500 to-rose-500',
-  green: 'from-green-500 to-emerald-500',
-  indigo: 'from-indigo-500 to-purple-500',
-  slate: 'from-slate-500 to-gray-500',
-  orange: 'from-orange-500 to-red-500',
-};
-const habitGradients: Record<string, string> = {
-  build: 'from-blue-500 to-purple-500',
-  quit: 'from-red-500 to-orange-500',
-  custom: 'from-gray-500 to-slate-500',
-};
-
-const headerGradient = computed(() => {
-  if (isHabits.value) {
-    const intentKey = entityIntent.value ?? 'build';
-    return habitGradients[intentKey] ?? 'from-blue-500 to-purple-500';
-  }
-  const topic = therapyEntity.value;
-  if (topic && 'color' in topic && topic.color) {
-    return colorSchemes[topic.color] ?? 'from-blue-500 to-purple-500';
-  }
-  return 'from-blue-500 to-purple-500';
-});
-
 const notificationsStore = useNotificationsStore();
 const userHabitsStore = useUserHabitsStore();
 const therapyTopicsStore = useTherapyTopicsStore();
+const { getFeatureAccess, refreshEntitlements } = useEntitlements();
+
+const paywallOpen = ref(false);
+const paywallFeatureKey = ref<string | null>(null);
+
+const aiTextSourceAccess = computed(() =>
+  getFeatureAccess('notifications.text_source_ai')
+);
+const customPromptAccess = computed(() =>
+  getFeatureAccess('notifications.custom_prompt_ai')
+);
+const paywallAccess = computed(() =>
+  paywallFeatureKey.value ? getFeatureAccess(paywallFeatureKey.value) : null
+);
+
+const canUseAiTextSource = computed(() => aiTextSourceAccess.value.available);
 
 const enabled = ref(false);
 const timesPerDay = ref(3);
@@ -680,17 +728,19 @@ const customPromptNotificationLength = computed(
   () => (customPromptNotification.value ?? '').length
 );
 
-// Условное отображение информационного блока про AI
-const showAiInfo = computed(() => {
-  const source = textSource.value;
-  return source === 'ai';
-});
-
 const isCustomEntity = computed(() =>
   isHabits.value ? isCustomHabit.value : isCustomTherapy.value
 );
+const canUseCustomPrompt = computed(
+  () =>
+    !isCustomEntity.value &&
+    customPromptAccess.value.available &&
+    textSource.value === 'ai'
+);
 const showCustomPromptNotification = computed(
-  () => !isCustomEntity.value && textSource.value === 'ai'
+  () =>
+    !isCustomEntity.value &&
+    (textSource.value === 'ai' || !canUseAiTextSource.value)
 );
 const canEditCustomEntity = computed(() => {
   if (isHabits.value) {
@@ -706,8 +756,6 @@ const titleInputRef = ref<InstanceType<typeof InputComponent> | null>(null);
 const titleInputContainerRef = ref<HTMLElement | null>(null);
 const subtitleInputRef = ref<InstanceType<typeof TextareaResize> | null>(null);
 const subtitleInputContainerRef = ref<HTMLElement | null>(null);
-const inlineTitleLoading = ref(false);
-const inlineSubtitleLoading = ref(false);
 
 const {
   slots: slotControls,
@@ -725,15 +773,6 @@ function startEditTitle() {
   nextTick(() => {
     titleInputRef.value?.focus();
   });
-}
-
-function cancelTitleEdit() {
-  // Восстанавливаем исходное значение
-  const target = isHabits.value ? customHabit.value : customTherapy.value;
-  if (target) {
-    titleDraft.value = target.name;
-  }
-  isEditingTitle.value = false;
 }
 
 function finishTitleEdit() {
@@ -776,15 +815,6 @@ function startEditSubtitle() {
   });
 }
 
-function cancelSubtitleEdit() {
-  // Восстанавливаем исходное значение
-  const target = isHabits.value ? customHabit.value : customTherapy.value;
-  if (target) {
-    subtitleDraft.value = target.description ?? '';
-  }
-  isEditingSubtitle.value = false;
-}
-
 function finishSubtitleEdit() {
   // Сохраняем введенное значение в реальную сущность для отображения
   // Это позволяет показывать обновленное описание даже после выхода из режима редактирования
@@ -805,6 +835,22 @@ watch(isCustomEntity, (value) => {
   if (!value) {
     isEditingTitle.value = false;
     isEditingSubtitle.value = false;
+  }
+});
+
+watch(canUseAiTextSource, async (available) => {
+  if (available || textSource.value !== 'ai') {
+    return;
+  }
+
+  textSource.value = 'templates';
+  try {
+    await forceTemplatesTextSourceForCurrentEntity();
+  } catch (error) {
+    console.error(
+      '[NotificationSettings] Failed to force templates textSource after access downgrade:',
+      error
+    );
   }
 });
 
@@ -844,7 +890,7 @@ function computeStateSignature() {
       : customTherapy.value?.description ||
         catalogTherapy.value?.description ||
         null;
-  const currentCustomPrompt = showCustomPromptNotification.value
+  const currentCustomPrompt = canUseCustomPrompt.value
     ? normalizedCustomPrompt
     : null;
 
@@ -1037,7 +1083,7 @@ const currentTotalPerDay = computed(() => {
   }
 
   // Логирование для отладки (только в dev режиме)
-  if (process.dev) {
+  if (import.meta.dev) {
     const otherTotal = otherPreferences.reduce((s, p) => {
       const times = Number(p.timesPerDay);
       return s + (isNaN(times) || times < 0 ? 0 : times);
@@ -1080,9 +1126,36 @@ const currentTotalPerDay = computed(() => {
   return total;
 });
 
+async function forceTemplatesTextSourceForCurrentEntity() {
+  const { $api } = useNuxtApp();
+  const prefsUrl = isHabits.value
+    ? '/api/notifications/prefs/habits'
+    : '/api/notifications/prefs/therapy';
+
+  const updated = await $api<NotificationPreferencesDto>(prefsUrl, {
+    method: 'PUT',
+    body: {
+      entityKey: props.entityKey,
+      meta: {
+        textSource: 'templates',
+      },
+    } satisfies Partial<UpdateNotificationPreferencesDto>,
+  });
+
+  notificationsStore.updateLocal(updated);
+}
+
 onMounted(async () => {
   try {
     const { $api } = useNuxtApp();
+    try {
+      await refreshEntitlements();
+    } catch (error) {
+      console.warn(
+        '[NotificationSettings] Failed to refresh entitlements, continue with cached snapshot:',
+        error
+      );
+    }
     await notificationsStore.fetchAll();
 
     const globalPrefs = await $api<UserPreferencesDto>(
@@ -1131,6 +1204,13 @@ onMounted(async () => {
       customSlotTimes.value = pref.customSlotTimes ?? [];
       textSource.value = pref.meta?.textSource === 'ai' ? 'ai' : 'templates';
       customPromptNotification.value = pref.customPromptNotification ?? '';
+
+      // Если доступ к AI-уведомлениям больше недоступен (например, Trial истёк),
+      // сразу переводим источник на шаблоны, чтобы не терять отправку уведомлений.
+      if (textSource.value === 'ai' && !canUseAiTextSource.value) {
+        textSource.value = 'templates';
+        await forceTemplatesTextSourceForCurrentEntity();
+      }
     } else {
       textSource.value = 'templates';
       customPromptNotification.value = '';
@@ -1241,7 +1321,11 @@ async function saveSettings() {
     const hasManualSlots = customSlotTimes.value.some(
       (value) => value !== null
     );
-    const normalizedCustomPrompt = showCustomPromptNotification.value
+    const effectiveTextSource: 'templates' | 'ai' =
+      canUseAiTextSource.value && textSource.value === 'ai'
+        ? 'ai'
+        : 'templates';
+    const normalizedCustomPrompt = canUseCustomPrompt.value
       ? customPromptNotification.value == null
         ? ''
         : String(customPromptNotification.value).trim()
@@ -1259,16 +1343,12 @@ async function saveSettings() {
     } satisfies Partial<UpdateNotificationPreferencesDto>;
 
     // Упрощенная логика: все настройки сохраняются одинаково для всех типов
-    const isCustomEntity = isHabits.value
-      ? isCustomHabit.value
-      : isCustomTherapy.value;
-
     const updateData: UpdateNotificationPreferencesDto = {
       ...baseData,
       entityKey: props.entityKey,
       subtype: subtype.value, // Всегда сохраняем subtype для всех типов
       meta: {
-        textSource: textSource.value,
+        textSource: effectiveTextSource,
       },
       // Добавляем название и описание, если они изменены
       ...(nameChanged && newName !== undefined ? { name: newName } : {}),
@@ -1276,7 +1356,7 @@ async function saveSettings() {
         ? { description: newDescription }
         : {}),
     };
-    if (showCustomPromptNotification.value) {
+    if (canUseCustomPrompt.value) {
       updateData.customPromptNotification = normalizedCustomPrompt || null;
     }
 

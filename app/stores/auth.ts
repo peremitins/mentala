@@ -18,6 +18,7 @@ import { useMeditationPlayer } from '@/app/composables/useMeditationPlayer';
 import { useSceneAudio } from '@/app/composables/useSceneAudio';
 import { getErrorDiagnosticsLog } from '@/app/utils/errorDiagnostics';
 import { AuthRegisterResponseDto } from '@/shared/dto/auth';
+import type { UserBilling } from '@/shared/dto/user';
 
 const SESSION_TOKEN_KEY = 'mentai.session.token';
 const GOOGLE_WEB_CLIENT_ID_REGEX = /\.apps\.googleusercontent\.com$/i;
@@ -129,6 +130,7 @@ export const useAuthStore = defineStore('auth', {
         backgroundPlayMinutes?: number | null;
         animateBackground?: boolean | null;
       };
+      billing?: UserBilling;
     } | null,
     loading: false,
     isLoggedIn: false,
@@ -136,6 +138,13 @@ export const useAuthStore = defineStore('auth', {
     isLoggingOut: false,
   }),
   actions: {
+    setBillingSnapshot(billing: UserBilling | null) {
+      if (!this.user) return;
+      this.user = {
+        ...this.user,
+        billing: billing || undefined,
+      };
+    },
     async me() {
       try {
         const response: any = await useAPI('/api/user/me', {

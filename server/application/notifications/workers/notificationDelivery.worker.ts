@@ -13,6 +13,8 @@ import {
   type NotificationDeliveryJobData,
 } from '../queues/notificationDelivery.queue';
 import { sendToUser } from '@/server/application/notifications/delivery.service';
+import { resolveEntityKeyForSlots } from '@/server/application/notifications/entity-key.service';
+import { getCustomNotificationSourceAccessByKind } from '@/server/application/notifications/notification-source-access.service';
 import { db } from '@/server/infrastructure/db/client';
 import { notificationSlots } from '@/server/infrastructure/db/schema';
 import { eq, and } from 'drizzle-orm';
@@ -35,6 +37,9 @@ export function startNotificationDeliveryWorker() {
           .select({
             id: notificationSlots.id,
             status: notificationSlots.status,
+            kind: notificationSlots.kind,
+            entityKey: notificationSlots.entityKey,
+            userId: notificationSlots.userId,
           })
           .from(notificationSlots)
           .where(eq(notificationSlots.id, slotId))
@@ -45,6 +50,46 @@ export function startNotificationDeliveryWorker() {
             `[Notification Delivery Worker] ⏭️ Slot ${slotId} missing or not queued (status: ${slot?.status ?? 'missing'}), skipping send`
           );
           return { skipped: true, reason: 'slot_not_queued' };
+        }
+
+        if (
+          slot.entityKey &&
+          (slot.kind === 'habits' || slot.kind === 'therapy')
+        ) {
+          const resolvedEntity = await resolveEntityKeyForSlots(
+            slot.userId,
+            slot.kind as 'habits' | 'therapy',
+            slot.entityKey
+          );
+
+          if (resolvedEntity.isCustom) {
+            const sourceAccess = await getCustomNotificationSourceAccessByKind({
+              userId: slot.userId,
+            });
+            const hasCustomAccess =
+              slot.kind === 'habits'
+                ? sourceAccess.habits
+                : sourceAccess.therapy;
+
+            if (!hasCustomAccess) {
+              const updateResult = await db
+                .update(notificationSlots)
+                .set({ status: 'skipped' })
+                .where(
+                  and(
+                    eq(notificationSlots.id, slotId),
+                    eq(notificationSlots.status, 'queued')
+                  )
+                );
+              const rowsAffected = updateResult.rowCount || 0;
+              if (rowsAffected > 0) {
+                console.warn(
+                  `[Notification Delivery Worker] ⏭️ Slot ${slotId} skipped: custom source locked by plan (user=${slot.userId}, source=${slot.kind}:${slot.entityKey})`
+                );
+              }
+              return { skipped: true, reason: 'custom_source_locked' };
+            }
+          }
         }
 
         // Отправляем уведомление

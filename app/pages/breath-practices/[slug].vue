@@ -125,7 +125,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import BreathPracticePlayer from '@/app/components/breath-practices/BreathPracticePlayer.vue';
 import PageHeader from '@/app/components/PageHeader.vue';
@@ -135,11 +135,11 @@ import { Input } from '@/app/components/ui/shadcn/input';
 import { ToggleGroup, ToggleGroupItem } from '@/app/components/ui/toggle-group';
 import { useToast } from '@/app/composables/useToast';
 import { useBreathPracticesStore } from '@/app/stores/breathPractices';
+import { useEntitlements } from '@/app/composables/useEntitlements';
 import {
   BREATH_PRACTICES,
   buildCustomPhases,
   findBreathPractice,
-  formatBreathSteps,
   mapCustomPractice,
   type BreathPracticeTag,
   type BreathPhase,
@@ -150,6 +150,19 @@ const MAX_CUSTOM_SECONDS = 30;
 
 const route = useRoute();
 const store = useBreathPracticesStore();
+const { getFeatureAccess } = useEntitlements();
+
+const BASIC_FREE_SLUGS = new Set(['4-7-8', 'box-breathing']);
+
+const fullCatalogAccess = computed(() =>
+  getFeatureAccess('breath.catalog.full')
+);
+const customCreateAccess = computed(() =>
+  getFeatureAccess('breath.custom.create')
+);
+const customManageAccess = computed(() =>
+  getFeatureAccess('breath.custom.manage')
+);
 
 const slug = computed(() => String(route.params.slug || ''));
 const isBuilder = computed(() => slug.value === 'custom');
@@ -197,6 +210,26 @@ const customPractice = computed(() =>
   customId.value ? store.customById(customId.value) : null
 );
 
+const lockFeatureKey = computed<string | null>(() => {
+  if (isBuilder.value && !customCreateAccess.value.available) {
+    return 'breath.custom.create';
+  }
+
+  if (customId.value && !customManageAccess.value.available) {
+    return 'breath.custom.manage';
+  }
+
+  if (
+    builtInPractice.value &&
+    !fullCatalogAccess.value.available &&
+    !BASIC_FREE_SLUGS.has(builtInPractice.value.slug)
+  ) {
+    return 'breath.catalog.full';
+  }
+
+  return null;
+});
+
 const practice = computed(() => {
   if (builtInPractice.value) return builtInPractice.value;
   if (customPractice.value) return mapCustomPractice(customPractice.value);
@@ -212,7 +245,6 @@ const phaseCount = ref<2 | 3 | 4>(3);
 const customPhases = ref<BreathPhase[]>(buildCustomPhases(3));
 const customName = ref('');
 
-const previewSteps = computed(() => formatBreathSteps(customPhases.value));
 const showHoldWarning = computed(() =>
   customPhases.value.some(
     (phase) =>
@@ -300,7 +332,35 @@ async function saveCustom() {
   navigateTo(`/breath-practices/custom-${created.id}`);
 }
 
+async function redirectToLockedPaywall(featureKey: string) {
+  await navigateTo(
+    {
+      path: '/breath-practices',
+      query: {
+        lockedFeature: featureKey,
+      },
+    },
+    { replace: true }
+  );
+}
+
 onMounted(async () => {
-  await store.load();
+  if (lockFeatureKey.value) {
+    await redirectToLockedPaywall(lockFeatureKey.value);
+    return;
+  }
+
+  // Загружаем пользовательские практики только когда они реально нужны.
+  if (customId.value && customManageAccess.value.available) {
+    await store.load();
+  }
 });
+
+watch(
+  () => lockFeatureKey.value,
+  async (featureKey) => {
+    if (!featureKey) return;
+    await redirectToLockedPaywall(featureKey);
+  }
+);
 </script>

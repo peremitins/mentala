@@ -23,6 +23,8 @@
 
       <WelcomeScreen
         v-if="showWelcomeScreen"
+        :locked="!chatAssistantAccess.available"
+        :required-plan="chatAssistantAccess.requiredPlan"
         @select="handleWelcomeSelect"
         class="flex-1"
       />
@@ -137,6 +139,13 @@
         </section>
       </div>
     </div>
+
+    <FeaturePaywallModal
+      v-model:open="paywallOpen"
+      :feature-key="paywallFeatureKey"
+      :required-plan="paywallAccess?.requiredPlan || null"
+      :paywall="paywallAccess?.paywall || null"
+    />
   </div>
 </template>
 
@@ -167,8 +176,11 @@ import WelcomeScreen from '@/app/components/WelcomeScreen.vue';
 import AvatarVoiceControls from '@/app/components/AvatarVoiceControls.vue';
 import SuggestedChips from '@/app/components/chat/SuggestedChips.vue';
 import ChatLoadingIndicator from '@/app/components/chat/ChatLoadingIndicator.vue';
+import FeaturePaywallModal from '@/app/components/subscription/FeaturePaywallModal.vue';
 import type { SuggestedChip } from '@/shared/dto';
 import { useSos } from '@/app/composables/useSos';
+import { useEntitlements } from '@/app/composables/useEntitlements';
+import { useRuntimeConfig } from '#imports';
 
 const emit = defineEmits<{ (e: 'send', text: string): void }>();
 
@@ -195,6 +207,10 @@ const showWelcomeScreen = computed(() => {
 
   // Если в URL указан screen=chat, показываем chat
   if (screenParam === 'chat') {
+    // Если чат недоступен и нет истории, остаёмся на welcome с paywall-CTA.
+    if (!chatAssistantAccess.value.available && chat.messages.length === 0) {
+      return true;
+    }
     return false;
   }
 
@@ -207,9 +223,20 @@ const showWelcomeScreen = computed(() => {
 const speechBase = ref('');
 const lastPartial = ref(''); // Последний partial для сохранения в базу
 const chat = useChatStore();
+const { getFeatureAccess } = useEntitlements();
 const { settings, start, stop, onPartial, onFinal } = useSpeechEngine();
 const speechStore = useSpeechStore();
 const chatSettings = useChatSettingsStore();
+const runtimeConfig = useRuntimeConfig();
+const isTtsEnabled = computed(
+  () => runtimeConfig.public.featureTtsEnabled === true
+);
+const paywallOpen = ref(false);
+const paywallFeatureKey = ref<string | null>(null);
+const chatAssistantAccess = computed(() => getFeatureAccess('chat.assistant'));
+const paywallAccess = computed(() =>
+  paywallFeatureKey.value ? getFeatureAccess(paywallFeatureKey.value) : null
+);
 
 // Ограничение длины пользовательского ввода для защиты бюджета.
 const MAX_USER_TEXT_LENGTH = 2500;
@@ -301,6 +328,10 @@ function updateURL(screen: 'welcome' | 'chat') {
 
 // Обработчик выбора на приветственном экране
 async function handleWelcomeSelect() {
+  if (!ensureChatAccessOrPaywall()) {
+    return;
+  }
+
   console.log('chat.messages?.length111', chat.messages?.length);
   if (chat.messages?.length) {
     console.log('chat.messages?.length', chat.messages?.length);
@@ -322,7 +353,7 @@ async function handleWelcomeSelect() {
     if (res?.ok) {
       // Озвучим ответ ассистента после получения
       await nextTick();
-      if (chatSettings.voice === true) {
+      if (isTtsEnabled.value && chatSettings.voice === true) {
         const last = [...chat.messages]
           .reverse()
           .find((m) => m.role === 'assistant');
@@ -364,6 +395,7 @@ async function toggleMic() {
 }
 
 function emitSend() {
+  if (!ensureChatAccessOrPaywall()) return;
   if (!chat.userText?.trim()) return;
   if (isUserTextOverLimit.value) return;
   if (isSending.value) return;
@@ -393,7 +425,7 @@ function handleKeydown(e: KeyboardEvent) {
 }
 
 async function speakLastMessage(content: string) {
-  if (content && chatSettings.voice) {
+  if (content && isTtsEnabled.value && chatSettings.voice) {
     // Используем только TTS для озвучки
     // useTTS автоматически останавливает предыдущую озвучку
     await speakTTS(content);
@@ -403,6 +435,7 @@ async function speakLastMessage(content: string) {
 const textareaRef = ref<InstanceType<typeof TextareaResize> | null>(null);
 
 const sendText = async (rawText: string) => {
+  if (!ensureChatAccessOrPaywall()) return;
   const textToSend = rawText?.trim();
   if (!textToSend) return;
 
@@ -441,7 +474,7 @@ const sendText = async (rawText: string) => {
     chat.startSession();
 
     // Озвучим последний ответ ассистента через TTS OpenAI
-    if (chatSettings.voice === true) {
+    if (isTtsEnabled.value && chatSettings.voice === true) {
       const last = [...chat.messages]
         .reverse()
         .find((m) => m.role === 'assistant');
@@ -460,6 +493,7 @@ const sendText = async (rawText: string) => {
 };
 
 const onSend = async () => {
+  if (!ensureChatAccessOrPaywall()) return;
   if (isSending.value) return;
   if (isUserTextOverLimit.value) return;
   if (!chat.userText?.trim()) return;
@@ -632,6 +666,17 @@ onMounted(async () => {
 
   // Восстанавливаем состояние из query параметров
   const screenParam = route.query.screen as string | undefined;
+  const rawLockedFeature = route.query.lockedFeature;
+  const lockedFeature = Array.isArray(rawLockedFeature)
+    ? rawLockedFeature[0]
+    : rawLockedFeature;
+
+  if (typeof lockedFeature === 'string' && lockedFeature.trim().length > 0) {
+    openPaywall(lockedFeature.trim());
+    const nextQuery = { ...route.query };
+    delete (nextQuery as any).lockedFeature;
+    await router.replace({ path: route.path, query: nextQuery });
+  }
 
   // Если screen не указан в URL, но есть сообщения - устанавливаем screen=chat
   if (!screenParam && chat.messages.length > 0) {
@@ -672,6 +717,20 @@ onMounted(async () => {
     scrollToBottom('auto'); // на старте — без анимации
   }
 });
+
+function openPaywall(featureKey: string) {
+  paywallFeatureKey.value = featureKey;
+  paywallOpen.value = true;
+}
+
+function ensureChatAccessOrPaywall() {
+  if (chatAssistantAccess.value.available) {
+    return true;
+  }
+
+  openPaywall('chat.assistant');
+  return false;
+}
 
 // Завершаем therapy сессию и останавливаем сервисы при уходе со страницы
 onBeforeUnmount(() => {

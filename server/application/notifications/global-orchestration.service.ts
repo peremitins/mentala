@@ -61,6 +61,7 @@ import { computeGenerationConfigHash } from '@/server/utils/notification-ai-conf
 import { computeDayOfYear } from './notification-date.utils';
 import { and, eq, sql } from 'drizzle-orm';
 import { pickNotificationImage } from './notification-images.service';
+import { getCustomNotificationSourceAccessByKind } from './notification-source-access.service';
 import type {
   NotificationPayload,
   NotificationSubtype,
@@ -1178,7 +1179,11 @@ export async function orchestrateAllSlotsForUser(
 
     // Проверяем, что пользователь существует
     const [user] = await db
-      .select({ id: users.id, isBlocked: users.isBlocked })
+      .select({
+        id: users.id,
+        isBlocked: users.isBlocked,
+        roleId: users.roleId,
+      })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);
@@ -1326,6 +1331,10 @@ export async function orchestrateAllSlotsForUser(
     const endOfTodayUTC = toUTC(endOfToday, timezone);
 
     const sources: SourceInfo[] = [];
+    const customSourceAccess = await getCustomNotificationSourceAccessByKind({
+      userId,
+      userRole: user.roleId,
+    });
 
     for (const pref of allPrefs) {
       const entityKeyInfo = await resolveEntityKeyForSlots(
@@ -1333,6 +1342,18 @@ export async function orchestrateAllSlotsForUser(
         pref.kind as NotificationKind,
         pref.entityKey ?? undefined
       );
+
+      const isCustomWithoutAccess =
+        entityKeyInfo.isCustom &&
+        ((pref.kind === 'habits' && !customSourceAccess.habits) ||
+          (pref.kind === 'therapy' && !customSourceAccess.therapy));
+
+      if (isCustomWithoutAccess) {
+        console.log(
+          `[GlobalOrchestration] ⏭️ Skip custom source without access: user=${userId}, source=${pref.kind}:${pref.entityKey || 'null'}`
+        );
+        continue;
+      }
 
       const timeRangeStart =
         pref.timeRangeStart ?? DEFAULT_NOTIFICATION_TIME_RANGE_START;

@@ -1,4 +1,4 @@
-import { eq, and, inArray, sql } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 import {
   habits,
   notificationPreferences,
@@ -7,7 +7,7 @@ import {
   aiNotificationTextUsage,
 } from '@/server/infrastructure/db/schema';
 import { db } from '@/server/infrastructure/db/client';
-import { getSessionUser } from '@/server/application/auth/session';
+import { getSessionUserWithRole } from '@/server/utils/require-role';
 
 /**
  * DELETE /api/habits/:id
@@ -15,14 +15,14 @@ import { getSessionUser } from '@/server/application/auth/session';
  */
 export default defineEventHandler(
   async (event): Promise<{ success: boolean }> => {
-    const sessionResult = await getSessionUser(event);
-    if (!sessionResult?.user?.id) {
+    const sessionUser = await getSessionUserWithRole(event);
+    if (!sessionUser?.id) {
       throw createError({
         statusCode: 401,
         message: 'Unauthorized',
       });
     }
-    const userId = sessionResult.user.id;
+    const userId = sessionUser.id;
 
     const id = getRouterParam(event, 'id');
     if (!id) {

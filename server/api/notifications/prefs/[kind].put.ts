@@ -20,6 +20,7 @@ import { loadAiGeneratedTexts } from '@/server/application/notifications/ai-gene
 import { computeGenerationConfigHash } from '@/server/utils/notification-ai-config-hash';
 import { userPreferences } from '@/server/infrastructure/db/schema';
 import { enqueueAiTextGenerationJob } from '@/server/application/notifications/queues/aiTextGeneration.queue';
+import { ensureAiNotificationAccessConsistency } from '@/server/application/notifications/notification-source-access.service';
 
 function normalizeCustomSlotTimes(
   input: (number | null)[] | null | undefined,
@@ -165,6 +166,31 @@ export default defineEventHandler(
     }
 
     const body = await readBody<UpdateNotificationPreferencesDto>(event);
+
+    // Проверяем доступ к AI-уведомлениям и при необходимости
+    // автоматически переводим старые AI-настройки в шаблоны.
+    const { canUseAiNotifications } =
+      await ensureAiNotificationAccessConsistency({
+        userId,
+        trialEndedAt: (sessionResult.user as any)?.trialEndedAt ?? null,
+        userRole: (sessionResult.user as any)?.roleId ?? null,
+      });
+
+    // Если доступ к AI-уведомлениям недоступен (например, Trial закончился),
+    // принудительно сохраняем templates, даже если клиент прислал ai.
+    const requestedTextSource = body.meta?.textSource;
+    const normalizedRequestedTextSource: 'templates' | 'ai' | undefined =
+      requestedTextSource === undefined
+        ? undefined
+        : requestedTextSource === 'ai' && canUseAiNotifications
+          ? 'ai'
+          : 'templates';
+
+    if (requestedTextSource === 'ai' && !canUseAiNotifications) {
+      console.warn(
+        `[NotificationPrefs] AI textSource rejected by entitlement, forcing templates: user=${userId}, kind=${kind}`
+      );
+    }
 
     // Валидация
     if (body.timesPerDay !== undefined) {
@@ -435,9 +461,9 @@ export default defineEventHandler(
       // Объединяем существующие meta с новыми (только textSource)
       const finalMeta: NotificationPreferenceMeta = {
         ...(existingMeta || {}),
-        ...(body.meta?.textSource !== undefined
+        ...(normalizedRequestedTextSource !== undefined
           ? {
-              textSource: body.meta.textSource === 'ai' ? 'ai' : 'templates',
+              textSource: normalizedRequestedTextSource,
             }
           : {}),
       };
@@ -994,7 +1020,7 @@ export default defineEventHandler(
         body.timeRangeEnd !== undefined ||
         body.customSlotTimes !== undefined ||
         body.subtype !== undefined ||
-        body.meta?.textSource !== undefined;
+        normalizedRequestedTextSource !== undefined;
 
       if (settingsChanged && !shouldRegenerateSlotsAfterAi) {
         runSlotsRegenerationInBackground({
@@ -1124,10 +1150,9 @@ export default defineEventHandler(
           ? (() => {
               const meta: NotificationPreferenceMeta = {};
 
-              // Сохраняем textSource из body.meta
-              if (body.meta?.textSource !== undefined) {
-                meta.textSource =
-                  body.meta.textSource === 'ai' ? 'ai' : 'templates';
+              // Сохраняем textSource из запроса с учётом entitlement-понижения.
+              if (normalizedRequestedTextSource !== undefined) {
+                meta.textSource = normalizedRequestedTextSource;
               }
 
               // Возвращаем meta только если есть хотя бы одно поле

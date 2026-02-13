@@ -430,6 +430,16 @@ SLOTS_RESCHEDULE_MAX_DELAY_MS=900000
 SLOTS_TRACE_PREFIX=slots
 ```
 
+### Delivery / due slots
+
+```bash
+NOTIFICATION_MAX_SLOT_AGE_HOURS_BEFORE_SKIP=24
+```
+
+- `NOTIFICATION_MAX_SLOT_AGE_HOURS_BEFORE_SKIP` — максимальный возраст due-слота (в часах), после которого слот помечается `skipped` вместо отправки.
+- `0` отключает skip по возрасту полностью (все due-слоты отправляются).
+- По умолчанию: `24` часа.
+
 ### Где используется
 
 - sharded scheduler: `server/application/notifications/schedulers/notificationSlots.scheduler.ts`

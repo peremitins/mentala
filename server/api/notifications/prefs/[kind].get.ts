@@ -11,6 +11,7 @@ import type {
   NotificationSubtype,
 } from '@/shared/dto/notifications';
 import { getSessionUser } from '@/server/application/auth/session';
+import { ensureAiNotificationAccessConsistency } from '@/server/application/notifications/notification-source-access.service';
 
 /**
  * GET /api/notifications/prefs/:kind?entityKey=:key
@@ -27,6 +28,12 @@ export default defineEventHandler(
       });
     }
     const userId = sessionResult.user.id;
+
+    await ensureAiNotificationAccessConsistency({
+      userId,
+      trialEndedAt: (sessionResult.user as any)?.trialEndedAt ?? null,
+      userRole: (sessionResult.user as any)?.roleId ?? null,
+    });
 
     const kind = getRouterParam(event, 'kind');
     if (!kind || !['therapy', 'habits'].includes(kind)) {

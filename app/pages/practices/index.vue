@@ -4,6 +4,7 @@
 
     <div class="grid gap-4 grid-cols-1 xxs:grid-cols-2">
       <NuxtLink
+        v-if="meditationsAccess.available"
         to="/meditations"
         class="glass-deep p-5 group relative overflow-hidden transition hover:-translate-y-1 animate-slide-up"
         style="animation-delay: 0.05s; animation-fill-mode: both"
@@ -29,6 +30,41 @@
           </div>
         </div>
       </NuxtLink>
+
+      <button
+        v-else
+        type="button"
+        class="glass-deep p-5 group relative overflow-hidden transition hover:-translate-y-1 animate-slide-up text-left"
+        style="animation-delay: 0.05s; animation-fill-mode: both"
+        @click="openPaywall('meditations.library.full')"
+      >
+        <div
+          class="pointer-events-none absolute inset-0 transition group-hover:opacity-100"
+        >
+          <div
+            class="tile-orb absolute -right-16 -bottom-8 h-44 w-44 rounded-full bg-gradient-to-br from-amber-400/35 via-rose-400/20 to-transparent blur-2xl"
+          />
+          <div
+            class="tile-orb tile-orb--delay absolute -left-14 top-0 h-32 w-32 rounded-full bg-gradient-to-br from-purple-500/25 via-fuchsia-500/20 to-transparent blur-2xl"
+          />
+        </div>
+        <div
+          class="absolute right-3 top-3 inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/25 bg-black/30 text-sm leading-none"
+        >
+          <span aria-hidden="true">{{
+            getPlanBadgeEmoji(meditationsAccess.requiredPlan)
+          }}</span>
+        </div>
+        <div class="relative z-10 space-y-3">
+          <span class="text-3xl">🧘‍♀️</span>
+          <div class="space-y-1">
+            <h2 class="text-lg font-semibold text-foreground">Медитации</h2>
+            <p class="text-sm text-foreground/80">
+              Открой библиотеку медитаций в PRO и Premium
+            </p>
+          </div>
+        </div>
+      </button>
 
       <NuxtLink
         to="/breath-practices"
@@ -59,12 +95,42 @@
         </div>
       </NuxtLink>
     </div>
+
+    <FeaturePaywallModal
+      v-model:open="paywallOpen"
+      :feature-key="paywallFeatureKey"
+      :required-plan="paywallAccess?.requiredPlan || null"
+      :paywall="paywallAccess?.paywall || null"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed, ref } from 'vue';
 import PageHeader from '@/app/components/PageHeader.vue';
-import IconArrowRight from '~icons/lucide/arrow-right';
+import FeaturePaywallModal from '@/app/components/subscription/FeaturePaywallModal.vue';
+import { useEntitlements } from '@/app/composables/useEntitlements';
+
+const { getFeatureAccess } = useEntitlements();
+
+const paywallOpen = ref(false);
+const paywallFeatureKey = ref<string | null>(null);
+
+const meditationsAccess = computed(() =>
+  getFeatureAccess('meditations.library.full')
+);
+const paywallAccess = computed(() =>
+  paywallFeatureKey.value ? getFeatureAccess(paywallFeatureKey.value) : null
+);
+
+function openPaywall(featureKey: string) {
+  paywallFeatureKey.value = featureKey;
+  paywallOpen.value = true;
+}
+
+function getPlanBadgeEmoji(plan: string) {
+  return plan === 'premium' ? '💎' : '⭐';
+}
 </script>
 
 <style scoped>

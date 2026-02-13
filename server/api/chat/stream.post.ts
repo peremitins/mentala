@@ -6,11 +6,19 @@ import { readChatSettings } from '@/server/utils/storage';
 import { db } from '@/server/infrastructure/db/client';
 import { therapySessions } from '@/server/infrastructure/db/schema';
 import { and, eq, isNull } from 'drizzle-orm';
-import { getAiUsageGate } from '@/server/application/subscriptions/ai-usage.service';
+import {
+  getAiUsageGate,
+  toUnifiedAiLimitPayload,
+} from '@/server/application/subscriptions/ai-usage.service';
 import { CHAT_IDLE_TIMEOUT_MS } from '@/server/config/subscription';
 import { endTherapySession } from '@/server/application/subscriptions/session-time.service';
 import type { ChatEntryContext, SuggestedChip } from '@/shared/dto';
 import { generateSuggestedChips } from '@/server/application/suggested-chips.service';
+import {
+  estimateChatRequestUpperBoundUSD,
+  isChatRequestOverBudget,
+  resolveAllowedChatModel,
+} from '@/server/application/chat/chat-guard.service';
 
 export default defineEventHandler(async (event) => {
   // Не логируем ключи API (чувствительные данные)
@@ -125,15 +133,35 @@ export default defineEventHandler(async (event) => {
     // Серверная проверка доступа к AI и лимита минут
     const gate = await getAiUsageGate(Number(uid), sessionResult.role);
     if (gate.status === 'no_ai_access') {
-      writeSseError('E_FORBIDDEN', 'AI access is not available for your plan');
+      writeSseError('no_ai_access', 'AI access is not available for your plan');
       return;
     }
     if (gate.status === 'weekly_limit_reached') {
-      writeSseError('E_RATE', 'Weekly minutes limit exceeded', {
-        weeklyLimit: gate.weeklyLimit,
-        usedMinutes: gate.usedMinutes,
-        overdraftUsed: gate.overdraftUsed,
+      const payload = toUnifiedAiLimitPayload(gate);
+      writeSseError(payload.code, payload.message, {
+        nextResetAt: payload.nextResetAt,
+        weeklyLimit: payload.weeklyLimit,
+        usedMinutes: payload.usedMinutes,
+        overdraftUsed: payload.overdraftUsed,
+        aiChatMode: payload.aiChatMode,
       });
+      return;
+    }
+
+    // Жёсткий allowlist модели: клиент не может протолкнуть дорогую модель.
+    const effectiveModel = resolveAllowedChatModel(body?.model);
+
+    // Budget guard для stream: pre-check до обращения к LLM.
+    const preEstimated = estimateChatRequestUpperBoundUSD({
+      messages: body?.messages || [],
+      model: effectiveModel,
+    });
+    if (isChatRequestOverBudget(preEstimated)) {
+      writeSseError(
+        'budget_guard_exceeded',
+        'Запрос временно отклонён по лимиту стоимости. Попробуйте переформулировать сообщение.',
+        { estimated: preEstimated }
+      );
       return;
     }
 
@@ -176,7 +204,7 @@ export default defineEventHandler(async (event) => {
 
       const stream = chatStreamViaProvider({
         provider: 'openai',
-        model: body?.model,
+        model: effectiveModel,
         messages: body?.messages || [],
         options: {
           sessionId: body?.sessionId,

@@ -662,6 +662,21 @@ export const notificationTextPresets = pgTable('notification_text_presets', {
 
 // === Subscription System ===
 
+// Политики доступа к платным функциям (lock/paywall).
+export const featureAccessPolicies = pgTable('feature_access_policies', {
+  featureKey: text('feature_key').primaryKey(),
+  requiredPlan: varchar('required_plan', { length: 20 }).notNull(), // basic | pro | premium
+  trialUnlocked: boolean('trial_unlocked').default(false).notNull(),
+  lockIcon: varchar('lock_icon', { length: 20 }).notNull(), // pro | premium
+  paywallTitle: text('paywall_title').notNull(),
+  paywallDescription: text('paywall_description').notNull(),
+  paywallCtaText: text('paywall_cta_text').notNull(),
+  paywallTargetPlan: varchar('paywall_target_plan', { length: 20 }).notNull(), // pro | premium
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
 // Отслеживание использования trial по email (anti-abuse)
 export const trialUsageTracking = pgTable(
   'trial_usage_tracking',

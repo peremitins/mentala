@@ -22,6 +22,8 @@ import { enqueueAiTextPoolRefillForAllActivePreferences } from '@/server/applica
 import { startNotificationSlotsSchedulerLoop } from '@/server/application/notifications/schedulers/notificationSlots.scheduler';
 import { notificationDeliveryQueue } from '@/server/application/notifications/queues/notificationDelivery.queue';
 import { getUserTimezone, toLocalTime } from './timezone.utils';
+import { resolveEntityKeyForSlots } from './entity-key.service';
+import { getCustomNotificationSourceAccessByKind } from './notification-source-access.service';
 import admin from 'firebase-admin';
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve, isAbsolute } from 'node:path';
@@ -37,6 +39,36 @@ function resolveServerAppEnv(): 'dev' | 'prod' {
   const normalized = raw.trim().toLowerCase();
   if (normalized === 'prod' || normalized === 'production') return 'prod';
   return 'dev';
+}
+
+const DEFAULT_MAX_SLOT_AGE_HOURS_BEFORE_SKIP = 24;
+
+/**
+ * Возвращает максимальный возраст due-слота для принудительного skip.
+ * - `0` отключает skip по возрасту полностью;
+ * - положительное значение — лимит в минутах;
+ * - невалидное значение откатывается на дефолт.
+ */
+function getMaxSlotAgeMinutesBeforeSkip(): number | null {
+  const rawValue = process.env.NOTIFICATION_MAX_SLOT_AGE_HOURS_BEFORE_SKIP;
+
+  if (!rawValue || rawValue.trim() === '') {
+    return DEFAULT_MAX_SLOT_AGE_HOURS_BEFORE_SKIP * 60;
+  }
+
+  const parsedHours = Number(rawValue);
+  if (!Number.isFinite(parsedHours) || parsedHours < 0) {
+    console.warn(
+      `[DeliveryWorker] ⚠️ Invalid NOTIFICATION_MAX_SLOT_AGE_HOURS_BEFORE_SKIP="${rawValue}", using default ${DEFAULT_MAX_SLOT_AGE_HOURS_BEFORE_SKIP}h`
+    );
+    return DEFAULT_MAX_SLOT_AGE_HOURS_BEFORE_SKIP * 60;
+  }
+
+  if (parsedHours === 0) {
+    return null;
+  }
+
+  return Math.round(parsedHours * 60);
 }
 
 /**
@@ -388,7 +420,7 @@ export async function sendToUser(
  */
 export async function processDueSlots(): Promise<void> {
   const nowUTC = new Date();
-  const LATE_DELIVERY_GRACE_MINUTES = 10;
+  const maxSlotAgeMinutesBeforeSkip = getMaxSlotAgeMinutesBeforeSkip();
 
   // Логируем UTC время (основной критерий due остаётся в UTC)
   // Детальное логирование в локальном времени будет для каждого слота отдельно
@@ -419,6 +451,11 @@ export async function processDueSlots(): Promise<void> {
     // Группируем слоты по пользователям для получения timezone (избегаем N+1 запросов)
     const userIds = [...new Set(dueSlots.map((s) => s.userId))];
     const timezoneMap = new Map<number, string>();
+    const customSourceAccessMap = new Map<
+      number,
+      { habits: boolean; therapy: boolean }
+    >();
+    const customEntityCache = new Map<string, boolean>();
 
     for (const userId of userIds) {
       try {
@@ -430,6 +467,19 @@ export async function processDueSlots(): Promise<void> {
           error
         );
         timezoneMap.set(userId, 'Europe/Moscow'); // Fallback для российского приложения
+      }
+
+      try {
+        const sourceAccess = await getCustomNotificationSourceAccessByKind({
+          userId,
+        });
+        customSourceAccessMap.set(userId, sourceAccess);
+      } catch (error) {
+        console.error(
+          `[DeliveryWorker] Failed to get custom source access for user ${userId}:`,
+          error
+        );
+        customSourceAccessMap.set(userId, { habits: true, therapy: true });
       }
     }
 
@@ -453,7 +503,60 @@ export async function processDueSlots(): Promise<void> {
       }
 
       try {
-        if (lateMinutes > LATE_DELIVERY_GRACE_MINUTES) {
+        if (
+          slot.entityKey &&
+          (slot.kind === 'habits' || slot.kind === 'therapy')
+        ) {
+          const cacheKey = `${slot.userId}:${slot.kind}:${slot.entityKey}`;
+          let isCustomEntity = customEntityCache.get(cacheKey);
+
+          if (isCustomEntity === undefined) {
+            const resolvedEntity = await resolveEntityKeyForSlots(
+              slot.userId,
+              slot.kind as 'habits' | 'therapy',
+              slot.entityKey
+            );
+            isCustomEntity = resolvedEntity.isCustom;
+            customEntityCache.set(cacheKey, isCustomEntity);
+          }
+
+          if (isCustomEntity) {
+            const sourceAccess = customSourceAccessMap.get(slot.userId) || {
+              habits: true,
+              therapy: true,
+            };
+            const hasCustomAccess =
+              slot.kind === 'habits'
+                ? sourceAccess.habits
+                : sourceAccess.therapy;
+
+            if (!hasCustomAccess) {
+              const updateResult = await db
+                .update(notificationSlots)
+                .set({ status: 'skipped' })
+                .where(
+                  and(
+                    eq(notificationSlots.id, slot.id),
+                    eq(notificationSlots.status, 'planned')
+                  )
+                );
+
+              const rowsAffected = updateResult.rowCount || 0;
+              if (rowsAffected > 0) {
+                skippedCount++;
+                console.warn(
+                  `[DeliveryWorker] ⏭️ Slot ${slot.id} skipped: custom source locked by plan (user=${slot.userId}, source=${slot.kind}:${slot.entityKey})`
+                );
+              }
+              continue;
+            }
+          }
+        }
+
+        if (
+          maxSlotAgeMinutesBeforeSkip !== null &&
+          lateMinutes > maxSlotAgeMinutesBeforeSkip
+        ) {
           const updateResult = await db
             .update(notificationSlots)
             .set({ status: 'skipped' })
@@ -467,7 +570,7 @@ export async function processDueSlots(): Promise<void> {
           if (rowsAffected > 0) {
             skippedCount++;
             console.warn(
-              `[DeliveryWorker] ⏭️ Slot ${slot.id} is late by ${lateMinutes.toFixed(1)} min (local=${slotLocal.toISOString()}), marking as skipped`
+              `[DeliveryWorker] ⏭️ Slot ${slot.id} is stale by ${lateMinutes.toFixed(1)} min (limit=${maxSlotAgeMinutesBeforeSkip} min, local=${slotLocal.toISOString()}), marking as skipped`
             );
           }
           continue;

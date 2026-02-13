@@ -7,6 +7,14 @@
       class="relative flex w-full flex-col overflow-hidden rounded-xl text-left transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-primary-ui/60"
       @click="emit('open', practice.slug)"
     >
+      <div
+        v-if="locked"
+        class="absolute right-2 top-2 z-20 inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/20 bg-black/55 text-sm leading-none text-white"
+      >
+        <span aria-hidden="true">{{
+          requiredPlan === 'premium' ? '💎' : '⭐'
+        }}</span>
+      </div>
       <div class="absolute inset-0 bg-gradient-to-br" :class="accentClass" />
       <div
         class="absolute inset-0 bg-gradient-to-t from-black/60 via-black/35 to-black/5"
@@ -58,6 +66,8 @@ defineProps<{
   practice: BreathPractice;
   accentClass: string;
   isCustom?: boolean;
+  locked?: boolean;
+  requiredPlan?: 'pro' | 'premium';
   customId?: string; // ID кастомной практики для удаления
 }>();
 
