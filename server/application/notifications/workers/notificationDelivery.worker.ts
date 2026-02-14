@@ -92,10 +92,11 @@ export function startNotificationDeliveryWorker() {
           }
         }
 
-        // Отправляем уведомление
-        const successCount = await sendToUser(userId, payload);
+        // Отправляем уведомление.
+        // Важно: sent ставим только при реальной доставке в FCM/APNs (без mock-режима).
+        const deliveryResult = await sendToUser(userId, payload);
 
-        if (successCount > 0) {
+        if (deliveryResult.hasRealDelivery) {
           // КРИТИЧНО: Атомарно обновляем статус только если слот еще в статусе 'queued'
           // Это предотвращает перезапись статуса, если слот уже был обработан другим воркером
           const updateResult = await db
@@ -117,15 +118,15 @@ export function startNotificationDeliveryWorker() {
             // Не считаем это ошибкой - уведомление было отправлено успешно
             return {
               success: true,
-              devicesCount: successCount,
+              devicesCount: deliveryResult.sentCount,
               alreadyProcessed: true,
             };
           }
 
           console.log(
-            `[Notification Delivery Worker] ✅ Job ${job.id} completed: sent to ${successCount} device(s)`
+            `[Notification Delivery Worker] ✅ Job ${job.id} completed: sent=${deliveryResult.sentCount}, mock=${deliveryResult.mockCount}, failed=${deliveryResult.failedCount}, total=${deliveryResult.deviceCount}`
           );
-          return { success: true, devicesCount: successCount };
+          return { success: true, devicesCount: deliveryResult.sentCount };
         } else {
           // КРИТИЧНО: Атомарно обновляем статус только если слот еще в статусе 'queued'
           const updateResult = await db
@@ -146,15 +147,15 @@ export function startNotificationDeliveryWorker() {
             );
             return {
               success: false,
-              reason: 'no_devices',
+              reason: 'no_real_delivery',
               alreadyProcessed: true,
             };
           }
 
           console.log(
-            `[Notification Delivery Worker] ⚠️ Job ${job.id} failed: no devices`
+            `[Notification Delivery Worker] ⚠️ Job ${job.id} failed: no real delivery (sent=${deliveryResult.sentCount}, mock=${deliveryResult.mockCount}, failed=${deliveryResult.failedCount}, total=${deliveryResult.deviceCount})`
           );
-          return { success: false, reason: 'no_devices' };
+          return { success: false, reason: 'no_real_delivery' };
         }
       } catch (error) {
         // КРИТИЧНО: Атомарно обновляем статус только если слот еще в статусе 'queued'

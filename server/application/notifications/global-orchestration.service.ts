@@ -261,15 +261,24 @@ function normalizeCustomSlotTimesForGeneration(params: {
   return normalized.some((value) => value !== null) ? normalized : null;
 }
 
-function buildRegenRangeUtc(params: { nowUtc: Date; timezone: string }): {
+function buildRegenRangeUtc(params: {
+  nowUtc: Date;
+  timezone: string;
+  forceTodaySlots?: boolean;
+}): {
   regenRangeStartUtc: Date;
   regenRangeEndUtc: Date;
 } {
   const nowLocal = toLocalTime(params.nowUtc, params.timezone);
-  const safeStartMinutes = Math.max(
-    slotsScalingConfig.regeneration.safeWindowMinutes,
-    slotsScalingConfig.regeneration.safeQueuedWindowMinutes
-  );
+
+  // Для ручных изменений расписания (forceTodaySlots=true) начинаем пересоздание
+  // с текущего момента, чтобы будущие слоты сегодняшнего дня вступали в силу сразу.
+  const safeStartMinutes = params.forceTodaySlots
+    ? 0
+    : Math.max(
+        slotsScalingConfig.regeneration.safeWindowMinutes,
+        slotsScalingConfig.regeneration.safeQueuedWindowMinutes
+      );
 
   const regenRangeStartLocal = new Date(
     nowLocal.getTime() + minutesToMs(safeStartMinutes)
@@ -1253,7 +1262,14 @@ export async function orchestrateAllSlotsForUser(
     const { regenRangeStartUtc, regenRangeEndUtc } = buildRegenRangeUtc({
       nowUtc: nowUTC,
       timezone,
+      forceTodaySlots: options?.forceTodaySlots ?? false,
     });
+
+    if (options?.forceTodaySlots) {
+      console.log(
+        `[GlobalOrchestration] forceTodaySlots enabled: regen range starts from now for user ${userId}`
+      );
+    }
 
     const horizonBeforeStats = await countActiveSlotsInRange(
       userId,

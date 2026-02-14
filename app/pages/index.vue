@@ -188,7 +188,7 @@ const route = useRoute();
 const router = useRouter();
 const sos = useSos();
 const chatViewportStyle = computed(() => {
-  const bottomOffset = '100px';
+  const bottomOffset = '95px';
 
   return {
     bottom: bottomOffset,
