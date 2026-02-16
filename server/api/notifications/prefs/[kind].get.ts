@@ -12,6 +12,10 @@ import type {
 } from '@/shared/dto/notifications';
 import { getSessionUser } from '@/server/application/auth/session';
 import { ensureAiNotificationAccessConsistency } from '@/server/application/notifications/notification-source-access.service';
+import {
+  clampNotificationTimesPerDay,
+  normalizeCustomSlotTimesByLimit,
+} from '@/server/application/notifications/preferences-limits.utils';
 
 /**
  * GET /api/notifications/prefs/:kind?entityKey=:key
@@ -114,19 +118,25 @@ export default defineEventHandler(
     // Упрощенная логика: entityKey уже нормализован в БД
     const normalizedEntityKey = prefs.entityKey;
 
+    const normalizedTimesPerDay = clampNotificationTimesPerDay(
+      prefs.timesPerDay
+    );
+
     const response = {
       id: prefs.id,
       userId: prefs.userId,
       kind: prefs.kind as 'therapy' | 'habits',
       entityKey: normalizedEntityKey ?? null, // ID для кастомных, ключ шаблона для шаблонных
       enabled: prefs.enabled,
-      timesPerDay: prefs.timesPerDay,
+      timesPerDay: normalizedTimesPerDay,
       directness: prefs.directness as 'soft' | 'moderate' | 'hard',
       timezone: prefs.timezone,
       subtype: prefs.subtype as NotificationSubtype | null, // Возвращаем subtype для всех типов
       activeDays: (prefs.activeDays as number[]) ?? [0, 1, 2, 3, 4, 5, 6],
-      customSlotTimes:
+      customSlotTimes: normalizeCustomSlotTimesByLimit(
         (prefs.customSlotTimes as (number | null)[] | null) ?? null,
+        normalizedTimesPerDay
+      ),
       timeRangeStart: prefs.timeRangeStart,
       timeRangeEnd: prefs.timeRangeEnd,
       customPromptNotification: prefs.customPromptNotification ?? null,

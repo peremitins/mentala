@@ -21,27 +21,19 @@ import { computeGenerationConfigHash } from '@/server/utils/notification-ai-conf
 import { userPreferences } from '@/server/infrastructure/db/schema';
 import { enqueueAiTextGenerationJob } from '@/server/application/notifications/queues/aiTextGeneration.queue';
 import { ensureAiNotificationAccessConsistency } from '@/server/application/notifications/notification-source-access.service';
+import {
+  clampNotificationTimesPerDay,
+  DEFAULT_NOTIFICATION_TIMES_PER_DAY,
+  MAX_NOTIFICATION_TIMES_PER_DAY,
+  MIN_NOTIFICATION_TIMES_PER_DAY,
+  normalizeCustomSlotTimesByLimit,
+} from '@/server/application/notifications/preferences-limits.utils';
 
 function normalizeCustomSlotTimes(
   input: (number | null)[] | null | undefined,
   limit: number
 ): (number | null)[] | null {
-  if (!input || limit <= 0) {
-    return null;
-  }
-
-  const normalized = input
-    .slice(0, limit)
-    .map((value) =>
-      value === null || value === undefined ? null : Math.round(value)
-    );
-
-  // Удаляем хвостовые null, чтобы не хранить лишние значения
-  while (normalized.length && normalized[normalized.length - 1] === null) {
-    normalized.pop();
-  }
-
-  return normalized.length ? normalized : null;
+  return normalizeCustomSlotTimesByLimit(input, limit);
 }
 
 function hasDuplicateCustomSlotTimes(
@@ -194,10 +186,13 @@ export default defineEventHandler(
 
     // Валидация
     if (body.timesPerDay !== undefined) {
-      if (body.timesPerDay < 1 || body.timesPerDay > 8) {
+      if (
+        body.timesPerDay < MIN_NOTIFICATION_TIMES_PER_DAY ||
+        body.timesPerDay > MAX_NOTIFICATION_TIMES_PER_DAY
+      ) {
         throw createError({
           statusCode: 400,
-          message: 'timesPerDay must be between 1 and 8',
+          message: `timesPerDay must be between ${MIN_NOTIFICATION_TIMES_PER_DAY} and ${MAX_NOTIFICATION_TIMES_PER_DAY}`,
         });
       }
     }
@@ -306,10 +301,10 @@ export default defineEventHandler(
       }
 
       if (Array.isArray(body.customSlotTimes)) {
-        if (body.customSlotTimes.length > 8) {
+        if (body.customSlotTimes.length > MAX_NOTIFICATION_TIMES_PER_DAY) {
           throw createError({
             statusCode: 400,
-            message: 'customSlotTimes length must not exceed 8 entries',
+            message: `customSlotTimes length must not exceed ${MAX_NOTIFICATION_TIMES_PER_DAY} entries`,
           });
         }
 
@@ -441,7 +436,10 @@ export default defineEventHandler(
     let shouldRegenerateSlotsAfterAi = false;
 
     if (existing) {
-      const nextTimesPerDay = body.timesPerDay ?? existing.timesPerDay;
+      // ВАЖНО: нормализуем значение и для body, и для legacy-данных из БД.
+      const nextTimesPerDay = clampNotificationTimesPerDay(
+        body.timesPerDay ?? existing.timesPerDay
+      );
       const customSlotTimesInput =
         body.customSlotTimes !== undefined
           ? body.customSlotTimes
@@ -705,7 +703,7 @@ export default defineEventHandler(
         .update(notificationPreferences)
         .set({
           enabled: body.enabled ?? existing.enabled,
-          timesPerDay: body.timesPerDay ?? existing.timesPerDay,
+          timesPerDay: nextTimesPerDay,
           directness: body.directness ?? existing.directness,
           timezone: body.timezone ?? existing.timezone,
           subtype: nextSubtype, // Сохраняем subtype для всех типов сущностей
@@ -1088,7 +1086,9 @@ export default defineEventHandler(
           timezone = 'Europe/Moscow';
         }
       }
-      const initialTimesPerDay = body.timesPerDay ?? 3;
+      const initialTimesPerDay = clampNotificationTimesPerDay(
+        body.timesPerDay ?? DEFAULT_NOTIFICATION_TIMES_PER_DAY
+      );
       const initialCustomSlotTimes = normalizeCustomSlotTimes(
         body.customSlotTimes ?? null,
         initialTimesPerDay

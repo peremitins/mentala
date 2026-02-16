@@ -124,7 +124,7 @@ server/
 • Шифрование данных: end-to-end для чатов, ключи разделяются (как в Telegram).
 • Middleware:
 • helmet (защита заголовков),
-• rate-limit (DDOS),
+• rate-limit (DDOS) только для `/api/*`, с конфигом через ENV `RATE_LIMIT_MAX` и `RATE_LIMIT_WINDOW_MS` (дефолт: `180` запросов за `60000` мс),
 • cors (whitelist origins из env),
 • csrf (для cookie-канала, state-changing методы).
 • Логирование security events (csrf_mismatch, origin_mismatch, ip_mismatch и т.д.).
@@ -218,16 +218,21 @@ server/
 • `forceTodaySlots` на текущем этапе считается техдолгом и находится вне scope scaling-этапа.
 • Logout отключает уведомления **только на текущем устройстве**: токен удаляется через `/api/notifications/unregister-token` (таблица `user_devices`).
 • При логине токен устройства повторно регистрируется (если есть) и в фоне проверяется наличие активных слотов: если нужно регенерировать или активные настройки есть, но слотов нет — запускается `generateAllSlotsForUser`.
-• AI‑генерация текстов уведомлений выполняется через очередь BullMQ `ai-text-generation` с debounce‑dedup (`id = ai-gen-{preferenceId}`, TTL≈20с) и лимитом на пользователя (не больше 3 активных задач одновременно). При ошибках AI слоты **не** создаются, задача ретраится с backoff; после успешной генерации выполняется глобальная регенерация слотов. При повторных сбоях объём генерации снижается (50 → 25 → 12), чтобы не срывать процесс.
+• AI-генерация теперь reason-aware: воркер `aiTextGeneration.worker.ts` запускает `generateAllSlotsForUser(...)` только для пользовательских причин (`prefs_create/prefs_update/settings_* / onboarding_complete / user_gender_update / login / timezone_changed / manual`). Для фоновых причин (`missing_ai_texts`, `retry_after_provider_error` и др.) автоматический полный пересчёт слотов отключён, чтобы расписание/тексты не менялись самопроизвольно.
+• В `global-orchestration.service.ts` добавлен жёсткий инвариант: слот с `scheduledAt <= now` не вставляется в `notification_slots` (даже если попал в расчёт), чтобы delivery не отправлял его как overdue «сразу». Для диагностики логируются события `notification_slots_orchestration_start` (кто/почему запустил пересборку) и `notification_slots_past_guard` (сколько прошлых слотов отфильтровано + sample).
+• Delivery stale-policy: в `processDueSlots` массовый перевод в `skipped` больше не зависит от окна `lookAhead`; в `skipped` уходят только действительно протухшие `planned`-слоты старше `NOTIFICATION_MAX_SLOT_AGE_HOURS_BEFORE_SKIP`. Overdue-слоты в пределах этого возраста попадают в обработку и могут быть доставлены.
+• AI‑генерация текстов уведомлений выполняется через очередь BullMQ `ai-text-generation` с debounce‑dedup (`id = ai-gen-{preferenceId}`, TTL≈20с) и лимитом на пользователя (не больше 3 активных задач одновременно). При ошибках AI слоты **не** создаются, задача ретраится с backoff; после успешной генерации пересчёт слотов выполняется только для пользовательских причин (а не для фоновых refill/missing-кейсов). При повторных сбоях объём генерации снижается (50 → 25 → 12), чтобы не срывать процесс.
 • Префикс AI‑текстов: для шаблонных тем используется `✨`, для кастомных — `✏️` (префикс учитывается в лимите длины).
 • AI‑промпты запрещают ложные утверждения о достижениях пользователя: формулировки только нейтральные/поддерживающие без фиксации «успеха».
 • При изменении глобальных настроек (`tone`, `addressing`) через `/api/settings/preferences` ставится регенерация AI‑пулов для всех `ai` preferences пользователя (через ту же очередь).
 • Шаблонные тексты из `notificationTemplates` по умолчанию без изображений (`imageTag = null`), но могут иметь явный `imageTag`.
 • Контент каталога `notificationTemplates` поддерживается через регулярную чистку: спорные/неестественные шаблоны удаляются целыми блоками, а в оставшихся текстах нормализуется типографика (например `5 Минут` → `5 минут`). После правок выполняется синхронизация в БД через `scripts/migrate-templates-to-db.ts`.
 • В native (Capacitor) регистрация push‑токена всегда идёт через `$api` и использует ту же стратегию выбора `baseURL`, что и остальные API-запросы (`app/plugins/api.ts`), чтобы не было расхождений между auth и push.
-• Доставка due-слотов больше не режется по жёсткому порогу 10 минут: слоты отправляются даже при заметной задержке. Принудительный `planned -> skipped` остаётся только для сильно устаревших слотов по порогу `NOTIFICATION_MAX_SLOT_AGE_HOURS_BEFORE_SKIP` (по умолчанию 24 часа; `0` отключает skip по возрасту).
-• Delivery scheduler для push работает по окну `now..now+lookahead` и ставит `notification-delivery` jobs с `delay = scheduledAt - now` (BullMQ delayed jobs). Это убирает «пачечную» отправку на границе polling-интервала и сохраняет время исходного расписания слота.
+• Delivery scheduler для push работает по симметричному окну `now-lookahead .. now+lookahead` и ставит `notification-delivery` jobs с `delay = scheduledAt - now` (BullMQ delayed jobs). Это сохраняет точный тайминг внутри окна и исключает поздние «догоняющие» отправки спустя часы.
+• Перед выборкой due-слотов delivery-процесс массово помечает `planned -> skipped` только для действительно протухших записей старше `NOTIFICATION_MAX_SLOT_AGE_HOURS_BEFORE_SKIP`; записи моложе этого порога попадают в due-выборку как overdue и могут быть доставлены.
 • При ручном изменении notification preferences (`forceTodaySlots=true`) диапазон пересоздания слотов начинается с `now` (без safe-window), поэтому будущие слоты текущего дня пересчитываются сразу, а не откладываются на завтра.
+• Жёсткий инвариант по частоте источника: `timesPerDay` ограничен диапазоном `1..5` на backend. `customSlotTimes` тоже ограничен максимумом 5 и считается внутри этого лимита (ручные времена не добавляют «дополнительные» слоты сверх 5).
+• Глобальный post-shift anti-overlap отключён: оркестратор больше не двигает `planned`-слоты после вставки. Равномерность достигается на этапе распределения времени внутри источника (краевые слоты фиксируются на границах диапазона, джиттер применяется только к внутренним слотам).
 • Статус `sent` фиксируется только при реальной успешной отправке в FCM/APNs (`send result = sent`). Mock-отправка не переводит слот в `sent`; при отсутствии реальной доставки слот переводится в `failed`, чтобы статус не был ложноположительным.
 • Collapse key для push формируется на уровне конкретного `slotId`, а не `kind/entity`. Это сохраняет дедупликацию ретраев одного слота, но исключает схлопывание разных слотов в одно уведомление.
 • Для custom-источников уведомлений (`habits/therapy`) доставка и генерация учитывают entitlement: при отсутствии доступа custom-слоты не генерируются и переводятся в `skipped` на этапах `planned` и `queued`, чтобы после окончания Trial/понижения плана уведомления по закрытым сущностям не отправлялись.
@@ -254,6 +259,7 @@ server/
 • Приоритет навигации: `deepLink` → `data.action` → `navigation/navType` → `/`.
 • Надёжность push‑переходов (client): целевая навигация кладётся в очередь (Preferences/localStorage) с TTL, дедуплицируется по `messageId` и «специфичности» пути (например `/meditations?trackId=...` сильнее `/meditations`). Переход выполняется после `router.isReady()` и попытки `auth.me()`; если маршрут свернулся до базового пути, выполняется одноразовый retry через `router.replace`.
 • `actionHint` хранится в `notification_texts` и `notification_text_presets` (а для AI — в `ai_generated_notification_texts.texts[]`) и используется на сервере для вычисления `navigation`.
+• Для `actionHint=breathing` сервер сначала пытается определить конкретную технику по тексту: `4-7-8` → slug `4-7-8`, `4-4-4-4`/«квадратное»/«коробочное» дыхание → slug `box-breathing`; если явной техники нет, используется fallback `DEFAULT_BREATH_PRACTICE_SLUG` (по умолчанию `box-breathing`).
 • Если `actionHint` отсутствует или равен `none`, сервер применяет эвристику по тексту и `imageTag` (медитация/дыхание) как fallback, чтобы не терять навигацию.
 • Android clickAction: сейчас **не задаётся** (используем дефолтное поведение Android — открытие приложения по тапу). Если когда‑нибудь понадобится кастомный `clickAction`, он должен строго совпадать с `intent-filter` `MainActivity`, иначе тап по уведомлению не откроет приложение.
 • Дефолтные цели перехода (медитация/дыхание) задаются на сервере конфигом и могут меняться без релиза клиента.
@@ -425,6 +431,7 @@ server/
 • Node.js: BullMQ 5.x для обработки фоновых задач.
 • Структура очередей:
 • `notification-slots-generation` — генерация слотов уведомлений. Для production применяется масштабируемая модель из `.docs/notification_slots_scaling_tz.md`: sharded enqueue с cursor/cycle state в Postgres, критерий регенерации по `planned+queued` + `min_horizon_hours`, `queued` при регенерации не удаляются, backpressure по queue lag (SLO/soft/hard пороги).
+• Scheduler enqueue фильтрует только существующих пользователей (`INNER JOIN users`), чтобы не создавать циклические `slotsgen`-джобы по осиротевшим `notification_preferences`.
 • `notification-delivery` — отправка уведомлений через FCM
 • `ai-text-pool-refill` — пополнение пула AI-генерированных текстов
 • Воркеры запускаются автоматически через плагин `server/plugins/bullmq-workers.ts`.
@@ -442,6 +449,8 @@ server/
 • partial unique index `uk_notification_slots_active` на `(user_id, kind, entity_key, scheduled_at) where status in ('planned','queued')`.
 • Безопасная регенерация slots:
 • диапазон пересоздания вычисляется как `regen_range_start = now + max(SLOTS_REGEN_SAFE_WINDOW_MINUTES, SLOTS_SAFE_QUEUED_WINDOW_MINUTES)` и `regen_range_end = now + SLOTS_TARGET_HORIZON_HOURS`.
+• автопереген в фоне запускается только при почти пустом горизонте: `activeSlots=0` или `actualSlotsByHours < SLOTS_MIN_HORIZON_HOURS` (по умолчанию 2 часа).
+• `thresholdPercent` (`expectedSlots` vs `actualSlots`) сохраняется как диагностическая метрика, но не используется как самостоятельный триггер фоновой регенерации.
 • в регенерации удаляются только `planned` слоты в диапазоне; `queued` никогда не удаляются.
 • вставка новых `planned` выполняется через upsert `ON CONFLICT DO NOTHING` по active-уникальности.
 • межпроцессная координация регенерации — через PostgreSQL transaction-level lock: `pg_try_advisory_xact_lock(user_id, LOCK_NAMESPACE_SLOTS_GENERATION)` с таймаутом `SLOTS_LOCK_TIMEOUT_MS`; при contention задача уходит в delayed backoff.
@@ -452,6 +461,10 @@ server/
 • soft mode (`queue_lag >= 5m` или queue depth > X): уменьшается batch, увеличивается интервал, включается `only_users_below_horizon`.
 • hard mode (`queue_lag >= 15m`): агрессивное снижение нагрузки, восстановление к baseline через `SLOTS_BACKPRESSURE_RECOVERY_CYCLES`.
 • Централизованный конфиг scaling находится в `server/application/notifications/slots-scaling.config.ts` (feature flags + `SLOTS_*` env + lock namespace).
+• Алгоритм построения дневной последовательности слотов вынесен в `server/application/notifications/daily-sequence.utils.ts` и обязан сохранять точные квоты `remainingSlots` по каждому `kind:entityKey`.
+• В anti-repeat логике запрещены внутригрупповые подмены источников (только межгрупповые), чтобы не допускать дрейфа квот и появления 6+ слотов на одну тему при AI-регенерации.
+• Назначение времени для auto-слотов использует глобальные фазы источников в рамках дня (`buildSourcePhaseMap`), чтобы равномерно размазывать темы по окну и избегать пиков в одинаковых минутах (например, массовых `09:00` / `22:30`).
+• Fixed/manual слоты остаются неизменяемыми: фазовое распределение и джиттер применяются только к гибким (auto) слотам.
 • Payload: JSON-структуры, совместимые между системами.
 • Retry механизм: 3 попытки с exponential backoff (10 секунд между ретраями).
 • Graceful shutdown: все воркеры корректно завершаются при получении SIGTERM/SIGINT.

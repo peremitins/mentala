@@ -7,7 +7,7 @@
  * См. FIREBASE_SETUP.md для инструкций по настройке
  */
 
-import { eq, and, lte, asc } from 'drizzle-orm';
+import { eq, and, gte, lte, lt, asc } from 'drizzle-orm';
 import {
   db,
   isDbConnectionError,
@@ -506,7 +506,7 @@ export async function sendToUser(
 // ==========================================
 
 /**
- * Обрабатывает planned-слоты в окне [now, now + lookahead] и ставит задачи в очередь.
+ * Обрабатывает planned-слоты в окне [now - lookahead, now + lookahead] и ставит задачи в очередь.
  * За счет delayed jobs BullMQ слот отправляется ближе к scheduledAt, а не к тикеру polling.
  */
 export async function processDueSlots(
@@ -514,26 +514,58 @@ export async function processDueSlots(
 ): Promise<void> {
   const nowUTC = new Date();
   const lookAheadMs = Math.max(0, Math.round(options.lookAheadMs ?? 0));
+  const processWindowStartUTC = new Date(nowUTC.getTime() - lookAheadMs);
   const processWindowEndUTC = new Date(nowUTC.getTime() + lookAheadMs);
   const maxSlotAgeMinutesBeforeSkip = getMaxSlotAgeMinutesBeforeSkip();
+  const dueWindowStartUTC =
+    maxSlotAgeMinutesBeforeSkip === null
+      ? new Date(0)
+      : new Date(
+          nowUTC.getTime() - Math.round(maxSlotAgeMinutesBeforeSkip * 60_000)
+        );
 
   console.log(
-    `[DeliveryWorker] Checking slots window: now=${nowUTC.toISOString()}, lookAheadMs=${lookAheadMs}, windowEnd=${processWindowEndUTC.toISOString()}`
+    `[DeliveryWorker] Checking slots window: start=${processWindowStartUTC.toISOString()}, now=${nowUTC.toISOString()}, lookAheadMs=${lookAheadMs}, windowEnd=${processWindowEndUTC.toISOString()}, dueWindowStart=${dueWindowStartUTC.toISOString()}`
   );
 
   try {
-    // Берем planned-слоты до границы окна.
-    // Future-слоты внутри окна пойдут в BullMQ с delay до их scheduledAt.
+    // Критично: не скипаем "просто просроченные на lookahead" слоты.
+    // Иначе при кратковременном лаге/рестарте слоты внезапно теряются и пользователь видит random skipped.
+    // Принудительно скипаем только действительно протухшие слоты старше max-slot-age.
+    if (maxSlotAgeMinutesBeforeSkip !== null) {
+      const staleBeforeUTC = dueWindowStartUTC;
+      const staleUpdate = await db
+        .update(notificationSlots)
+        .set({ status: 'skipped' })
+        .where(
+          and(
+            eq(notificationSlots.status, 'planned'),
+            lt(notificationSlots.scheduledAt, staleBeforeUTC)
+          )
+        );
+
+      const staleSkippedCount = staleUpdate.rowCount || 0;
+      if (staleSkippedCount > 0) {
+        console.warn(
+          `[DeliveryWorker] ⏭️ Skipped stale planned slots: ${staleSkippedCount} (before ${staleBeforeUTC.toISOString()})`
+        );
+      }
+    }
+
+    // Берем planned-слоты в диапазоне [dueWindowStart, now + lookahead].
+    // Это позволяет обрабатывать overdue-слоты (в пределах max age), а не терять их.
+    // Future-слоты внутри окна пойдут в BullMQ с delay до scheduledAt.
     const dueSlots = await db
       .select()
       .from(notificationSlots)
       .where(
         and(
           eq(notificationSlots.status, 'planned'), // Только planned слоты
+          gte(notificationSlots.scheduledAt, dueWindowStartUTC),
           lte(notificationSlots.scheduledAt, processWindowEndUTC)
         )
       )
-      .orderBy(asc(notificationSlots.scheduledAt)) // Сортируем по времени - старые слоты обрабатываем первыми
+      .orderBy(asc(notificationSlots.scheduledAt))
       .limit(100); // Батч из 100 слотов
 
     console.log(
