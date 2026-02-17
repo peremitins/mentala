@@ -367,7 +367,12 @@ function getConfirmDialogDescription(): string {
     billingPeriod === 'year'
       ? Math.round(pendingPlanChange.value.basePrice * 12 * 0.8)
       : pendingPlanChange.value.basePrice;
-  const priceText = `Стоимость: ${price.toLocaleString('ru-RU')} ₽/${billingPeriod === 'year' ? 'год' : 'месяц'}`;
+  const savings =
+    billingPeriod === 'year'
+      ? Math.max(0, pendingPlanChange.value.basePrice * 12 - price)
+      : 0;
+
+  const priceText = `Стоимость: ${price.toLocaleString('ru-RU')} ₽/${billingPeriod === 'year' ? 'год' : 'месяц'}${savings > 0 ? ` · Экономия: ${savings.toLocaleString('ru-RU')} ₽` : ''}`;
 
   if (currentSubscription.value) {
     const currentPlanName = getPlanDisplayName(

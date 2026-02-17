@@ -10,7 +10,7 @@
           label="Стиль общения"
           size="sm"
           variant="outline"
-          description="Эти параметры влияют на стиль общения AI-ассистента и текст всех уведомлений."
+          description="Эти параметры влияют на стиль общения ИИ-ассистента и текст всех уведомлений."
           item-max-width="200px"
         />
         <p v-if="toneWasUnknown" class="text-xs text-foreground">

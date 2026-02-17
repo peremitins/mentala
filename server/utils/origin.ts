@@ -2,6 +2,17 @@ import { getHeader } from 'h3';
 
 const isProd = process.env.NODE_ENV === 'production';
 
+function normalizeOrigin(origin: string): string {
+  return origin.trim().replace(/\/+$/, '');
+}
+
+function parseOrigins(envValue?: string): string[] {
+  return (envValue || '')
+    .split(',')
+    .map((o) => normalizeOrigin(o))
+    .filter(Boolean);
+}
+
 /**
  * Получает список разрешенных origins
  */
@@ -15,7 +26,7 @@ function getAllowedOrigins(): string[] {
 
     const allowedOrigins = process.env.ALLOWED_ORIGINS;
     if (allowedOrigins) {
-      return allowedOrigins.split(',').map((o) => o.trim());
+      return parseOrigins(allowedOrigins);
     }
 
     throw new Error(
@@ -23,18 +34,21 @@ function getAllowedOrigins(): string[] {
     );
   } else {
     // В development: whitelist из env
-    const devOrigins = process.env.DEV_ALLOWED_ORIGINS?.split(',') || [
+    const devOrigins = parseOrigins(process.env.DEV_ALLOWED_ORIGINS);
+    const defaults = [
       'http://localhost:3000',
       'http://127.0.0.1:3000',
+      'http://localhost:3001',
+      'http://127.0.0.1:3001',
     ];
-    return devOrigins.map((o) => o.trim());
+    return [...new Set([...defaults, ...devOrigins])];
   }
 }
 
 /**
  * Проверяет Origin/Referer для cookie-канала
  * Возвращает true если origin разрешен
- * 
+ *
  * ВАЖНО: Для Capacitor (header-канал) эта проверка не применяется,
  * так как Capacitor использует X-Session-Token header, а не cookies
  */
@@ -53,7 +67,7 @@ export function verifyOrigin(event: any): boolean {
 
   // Точное совпадение origin (scheme + host + port)
   if (origin) {
-    return allowedOrigins.includes(origin);
+    return allowedOrigins.includes(normalizeOrigin(origin));
   }
 
   if (referer) {
@@ -70,4 +84,3 @@ export function verifyOrigin(event: any): boolean {
   // Возвращаем false, но это не блокирует запрос (только логируется)
   return false; // Нет Origin и Referer
 }
-

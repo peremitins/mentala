@@ -195,6 +195,44 @@ export const sessions = pgTable('sessions', {
   metadata: jsonb('metadata'),
 });
 
+// === Landing ===
+
+export const landingConfig = pgTable('landing_config', {
+  id: serial('id').primaryKey(),
+  isReleased: boolean('is_released').notNull().default(false),
+  ctaUrl: varchar('cta_url', { length: 255 })
+    .notNull()
+    .default('https://my.mentala.app/auth'),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+export const landingLeads = pgTable(
+  'landing_leads',
+  {
+    id: serial('id').primaryKey(),
+    name: varchar('name', { length: 120 }).notNull(),
+    email: varchar('email', { length: 255 }).notNull(),
+    emailNormalized: varchar('email_normalized', { length: 255 }).notNull(),
+    emailHash: varchar('email_hash', { length: 64 }).notNull(),
+    goalKey: varchar('goal_key', { length: 50 }),
+    utmSource: varchar('utm_source', { length: 120 }),
+    utmMedium: varchar('utm_medium', { length: 120 }),
+    utmCampaign: varchar('utm_campaign', { length: 120 }),
+    referrer: text('referrer'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    emailHashUnique: uniqueIndex('uk_landing_leads_email_hash').on(
+      table.emailHash
+    ),
+    createdAtIdx: index('idx_landing_leads_created_at').on(table.createdAt),
+  })
+);
+
 // === User Prompts ===
 export const userPrompts = pgTable('user_prompts', {
   id: serial('id').primaryKey(),

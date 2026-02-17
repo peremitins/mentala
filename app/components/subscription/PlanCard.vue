@@ -56,7 +56,16 @@
     </div>
 
     <div class="space-y-1">
-      <p class="text-3xl font-bold">{{ getPrice() }} ₽</p>
+      <div class="flex items-end gap-2 flex-wrap">
+        <p class="text-3xl font-bold">{{ getPrice() }} ₽</p>
+
+        <span
+          v-if="shouldShowSavingsBadge"
+          class="inline-flex items-center rounded-full border border-green-400/25 bg-green-400/10 px-2.5 py-1 text-xs font-semibold text-green-300"
+        >
+          Экономия: {{ savingsValue.toLocaleString('ru-RU') }} ₽
+        </span>
+      </div>
       <p v-if="plan.name !== 'basic'" class="text-sm text-foreground">
         {{ billingPeriod === 'year' ? 'в год' : 'в месяц' }}
       </p>
@@ -165,6 +174,25 @@ function getPrice() {
       : props.plan.basePrice; // Месячная цена
   return price.toLocaleString('ru-RU');
 }
+
+const savingsValue = computed(() => {
+  // Экономия = 12 месяцев по базовой цене минус цена за год со скидкой.
+  if (props.plan.name === 'basic') {
+    return 0;
+  }
+
+  const yearlyPrice = Math.round(props.plan.basePrice * 12 * 0.8);
+  const savings = props.plan.basePrice * 12 - yearlyPrice;
+  return savings > 0 ? savings : 0;
+});
+
+const shouldShowSavingsBadge = computed(() => {
+  return (
+    props.plan.name !== 'basic' &&
+    props.billingPeriod === 'year' &&
+    savingsValue.value > 0
+  );
+});
 
 function getFeatures() {
   const features: PlanFeature[] = [];
