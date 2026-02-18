@@ -8,6 +8,7 @@
     "landing:dev": "nuxt dev apps/landing --dotenv .env.development --host localhost --port 3001",
     "landing:dev:network": "nuxt dev apps/landing --dotenv .env.development --host 0.0.0.0 --port 3001",
     "landing:build": "nuxt build apps/landing",
+    "landing:generate": "nuxt generate apps/landing",
     "landing:preview": "nuxt preview apps/landing --port 3001",
     "dev:redis:up": "./scripts/start-redis.sh",
     "dev:redis:down": "docker compose -f docker-compose.dev.yml down redis",

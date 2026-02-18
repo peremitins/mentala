@@ -25,8 +25,15 @@ export default defineNuxtConfig({
   ],
   routeRules: {
     // В dev не кэшируем HTML, чтобы после правок не было hydration mismatch (старый HTML с сервера vs новый клиентский бандл).
-    // В production — гибридный SSR + SWR для снижения нагрузки.
+    // В production (при nuxt build) — гибридный SSR + SWR. При nuxt generate эти правила не меняют статический экспорт.
     '/': { swr: process.env.NODE_ENV === 'development' ? 0 : 120 },
+  },
+  // Статический экспорт (nuxt generate): предрендер только маршрута / и статичных файлов из public/
+  nitro: {
+    prerender: {
+      crawlLinks: false,
+      routes: ['/'],
+    },
   },
   app: {
     head: {
@@ -44,6 +51,8 @@ export default defineNuxtConfig({
         process.env.NUXT_PUBLIC_APP_AUTH_URL || 'https://my.mentala.app/auth',
       landingSiteUrl:
         process.env.NUXT_PUBLIC_LANDING_SITE_URL || 'https://mentala.app',
+      /** ID счётчика Яндекс.Метрики для лендинга (аналитика v1). Пустой — скрипт не подключается. */
+      yandexMetrikaId: process.env.NUXT_PUBLIC_YANDEX_METRIKA_ID || '',
     },
   },
   vite: {

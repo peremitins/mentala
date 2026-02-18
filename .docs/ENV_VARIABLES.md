@@ -477,6 +477,18 @@ NOTIFICATION_MAX_SLOT_AGE_HOURS_BEFORE_SKIP=24
 
 ---
 
+## 🌐 Лендинг (apps/landing)
+
+### `NUXT_PUBLIC_YANDEX_METRIKA_ID` (опционально)
+
+**Описание:** Числовой ID счётчика Яндекс.Метрики для аналитики лендинга. Если не задан, скрипт Метрики не подключается, цели не отправляются.
+
+**Где используется:** плагин `apps/landing/plugins/yandex-metrika.client.ts`, композабл `useLandingAnalytics`. События: `landing_view`, `landing_cta_click`, `landing_modal_open`, `landing_lead_submit_*`, `landing_scroll_depth_*`, `landing_auth_redirect_click`.
+
+**Пример:** `NUXT_PUBLIC_YANDEX_METRIKA_ID=98765432`
+
+---
+
 ## 📚 Дополнительная информация
 
 Подробнее о реализации см. в `.docs/auth_tz.md` (Часть II. Безопасность авторизации).

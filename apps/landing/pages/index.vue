@@ -774,6 +774,7 @@ import { Badge } from '../components/ui/shadcn/badge';
 import { Button } from '../components/ui/shadcn/button';
 import { Input } from '../components/ui/shadcn/input';
 import { useLandingConfig } from '../composables/useLandingConfig';
+import { useLandingAnalytics } from '../composables/useLandingAnalytics';
 
 type FeatureStep = {
   key: string;
@@ -815,6 +816,7 @@ const route = useRoute();
 const reducedMotion = usePreferredReducedMotion();
 
 const { data: landingConfig } = await useLandingConfig();
+const { reachGoal, trackScrollDepth } = useLandingAnalytics();
 
 const billingPeriod = ref<'month' | 'year'>('month');
 const waitlistOpen = ref(false);
@@ -1126,12 +1128,13 @@ function scrollToSection(sectionId: string) {
 
 function openPrimaryCTA() {
   if (isReleased.value) {
+    reachGoal('landing_auth_redirect_click');
     if (typeof window !== 'undefined') {
       window.location.href = ctaUrl.value;
     }
     return;
   }
-
+  reachGoal('landing_cta_click');
   waitlistOpen.value = true;
 }
 
@@ -1173,13 +1176,19 @@ async function submitLead() {
     submitStatus.value = response.status;
 
     if (response.status === 'created') {
+      reachGoal('landing_lead_submit_success');
       leadForm.name = '';
       leadForm.email = '';
       leadForm.goalKey = '';
       leadForm.website = '';
+    } else {
+      reachGoal('landing_lead_submit_duplicate');
     }
   } catch (error: any) {
     submitStatus.value = 'error';
+    reachGoal('landing_lead_submit_error', {
+      message: error?.data?.message || error?.message || 'unknown',
+    });
     submitErrorText.value =
       error?.data?.message || error?.message || 'Не удалось отправить форму.';
   } finally {
@@ -1187,7 +1196,16 @@ async function submitLead() {
   }
 }
 
+// Аналитика: открытие модалки waitlist
+watch(waitlistOpen, (open) => {
+  if (open) reachGoal('landing_modal_open');
+});
+
 onMounted(() => {
+  // Аналитика v1: просмотр лендинга и глубина скролла
+  reachGoal('landing_view');
+  trackScrollDepth();
+
   // Guard на браузерные API для кросс-платформенности.
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     return;

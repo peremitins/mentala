@@ -489,7 +489,7 @@ server/
 
 🌐 Лендинг (зафиксировано, 16 февраля 2026)
 • Архитектура: отдельная сборка `apps/landing` (не внутри CSR-приложения `app/`), чтобы обеспечить корректный SEO-контур.
-• Реализация лендинга находится в `apps/landing` (Nuxt), запуск: `pnpm landing:dev`, сборка: `pnpm landing:build`.
+• Реализация лендинга находится в `apps/landing` (Nuxt), запуск: `pnpm landing:dev`, сборка сервера: `pnpm landing:build`, статический экспорт для деплоя: `pnpm landing:generate` (результат в `apps/landing/.output/public`).
 • Для стабильного dev-резолва в multi-app режиме Nuxt CSS подключается абсолютным путём из `nuxt.config.ts` (через `fileURLToPath`), а не через alias `@` в массиве `css`.
 • Рендеринг лендинга: `SSR + SWR (гибрид)` — серверный HTML для индексации + короткий SWR-кэш для производительности.
 • Для домашней страницы лендинга включён route rule `swr` (короткий TTL), анимации и тяжелые эффекты работают как progressive enhancement с fallback для `prefers-reduced-motion`.
@@ -520,7 +520,7 @@ server/
 • Переход к `#landing-pricing` выполняется плавной прокруткой; для `prefers-reduced-motion: reduce` используется мгновенный переход без анимации.
 • Источник истины по тарифным описаниям: `app/components/subscription/PlanCard.vue` + серверные сиды тарифов/доступов (`seed-subscription-plans.ts`, `seed-feature-access-policies.ts`).
 • Адаптивность лендинга обязательна с ширины `320px`; кроссбраузерная поддержка — популярные desktop/mobile браузеры по матрице из `.docs/landing.md`.
-• **CI/CD и деплой лендинга**: текущие workflow (`.github/workflows/deploy-prod.yml`, `deploy-dev.yml`) при пуше в `main`/`dev` собирают и деплоят только **основное приложение** (Dockerfile → `pnpm build` = корневой Nuxt). Лендинг (`apps/landing`) — отдельная Nuxt-сборка (`pnpm landing:build`), в пайплайне не собирается и не разворачивается. Для автоматического деплоя лендинга на `mentala.app` / dev-домен нужно добавить отдельный шаг сборки лендинга, образ/сервис и деплой (или статику + nginx).
+• **CI/CD и деплой лендинга**: при пуше в `main`/`dev` workflow (`deploy-prod.yml`, `deploy-dev.yml`) выполняют **статический экспорт** лендинга (`pnpm landing:generate`) и деплой статики на сервер: rsync в `/var/www/landing/releases/<id>/`, атомарное переключение symlink `current`, хранение последних 5 релизов. Лендинг отдаётся Nginx (на хосте или в контейнере), Traefik маршрутизирует `mentala.app` на статику. Подробности — `.docs/landing_static_deploy_tz.md`.
 
 ⸻
 
