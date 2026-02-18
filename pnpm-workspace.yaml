@@ -1,2 +1,7 @@
+# Monorepo: корневой пакет + приложения в apps/* (включая apps/landing).
+packages:
+  - '.'
+  - 'apps/*'
+
 ignoredBuiltDependencies:
   - argon2

@@ -73,7 +73,8 @@ frontend/
 - Лендинг: `mentala.app`
 - Приложение/API: `my.mentala.app`
 - Междоменный запрос: `mentala.app -> my.mentala.app/api/landing/*`
-- Для CORS в production используем `ALLOWED_ORIGINS` (comma-separated), включая `https://mentala.app`.
+- Для CORS в production используем `ALLOWED_ORIGINS` (comma-separated), включая `https://mentala.app` и `https://www.mentala.app`.
+- **Важно:** если на `my.mentala.app` включён Basic Auth (например, через Traefik), preflight OPTIONS до Nuxt не доходит (401), и браузер сообщает об ошибке CORS. Нужно **исключить путь `/api/landing/lead` из Basic Auth** (только этот эндпоинт), чтобы OPTIONS и POST обрабатывались приложением и возвращали заголовки `Access-Control-Allow-Origin` и т.д.
 
 ### 3.3 Стратегия рендеринга и кеша (SEO)
 
@@ -88,8 +89,9 @@ frontend/
 
 1. **Чистая пересборка после правок**  
    После изменений в лендинге перезапускай dev с очисткой кэша Nuxt:
+
    - Остановить `landing:dev`, удалить `apps/landing/.nuxt` и при необходимости `node_modules/.cache`, затем снова `pnpm landing:dev`.  
-   Так серверный и клиентский бандлы собираются из одного и того же кода.
+     Так серверный и клиентский бандлы собираются из одного и того же кода.
 
 2. **Не кэшировать HTML в dev**  
    В `apps/landing/nuxt.config.ts` для маршрута `/` в режиме разработки задано `swr: 0`, чтобы каждый запрос получал свежий SSR-ответ, а не закэшированную старую разметку.
