@@ -73,25 +73,54 @@
         </div>
 
         <Button
-          class="mt-5 w-full justify-center !py-3 text-base font-semibold"
-          variant="default"
+          class="relative mt-5 w-full justify-center !py-3 text-base font-semibold"
+          variant="outline"
           size="lg"
           :loading="loaders.isPageLoading"
           @click="startConversation"
         >
           <IconMessageCircle class="mr-2 h-5 w-5" />
           Поговорить об этом
+          <span
+            v-if="!chatAssistantAccess.available"
+            class="absolute right-3 inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/20 bg-black/35 text-[10px] leading-none"
+          >
+            {{ getPlanBadgeEmoji(chatAssistantAccess.requiredPlan) }}
+          </span>
         </Button>
 
         <Button
-          v-if="isMeditationHabit"
-          class="mt-3 w-full justify-center !py-3 text-base font-semibold"
+          v-if="meditationTopicKey"
+          class="relative mt-3 w-full justify-center !py-3 text-base font-semibold"
           variant="outline"
           size="lg"
           @click="goToMeditations"
         >
           <IconLeaf class="mr-2 h-5 w-5" />
           Открыть медитации
+          <span
+            v-if="!meditationsAccess.available"
+            class="absolute right-3 inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/20 bg-black/35 text-[10px] leading-none"
+          >
+            {{ getPlanBadgeEmoji(meditationsAccess.requiredPlan) }}
+          </span>
+        </Button>
+
+        <Button
+          v-if="breathGroupKey"
+          class="relative mt-3 w-full justify-center !py-3 text-base font-semibold"
+          variant="outline"
+          size="lg"
+          @click="goToBreathPractices"
+        >
+          <IconWind class="mr-2 h-5 w-5" />
+          Открыть дыхание
+          <span
+            v-if="!breathCatalogAccess.available"
+            class="absolute right-3 inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/20 bg-black/35 text-[10px] leading-none"
+          >
+            {{ getPlanBadgeEmoji(breathCatalogAccess.requiredPlan) }}
+          </span>
         </Button>
       </div>
 
@@ -107,6 +136,13 @@
         <p class="text-sm text-center">{{ notificationError }}</p>
       </StateBlock>
     </div>
+
+    <FeaturePaywallModal
+      v-model:open="paywallOpen"
+      :feature-key="paywallFeatureKey"
+      :required-plan="paywallAccess?.requiredPlan || null"
+      :paywall="paywallAccess?.paywall || null"
+    />
   </div>
 </template>
 
@@ -121,6 +157,7 @@ import { Input } from '@/app/components/ui/shadcn/input';
 import InputComponent from '@/app/components/ui/shadcn/input/Input.vue';
 import IconMessageCircle from '~icons/lucide/message-circle';
 import IconLeaf from '~icons/lucide/leaf';
+import IconWind from '~icons/lucide/wind';
 import { useNotificationsSettings } from '@/app/composables/useNotificationsSettings';
 import { useChatStore } from '@/app/stores/chat';
 import { useToast } from '@/app/composables/useToast';
@@ -129,14 +166,28 @@ import type { HabitDto, HabitIntent } from '@/shared/dto/notifications';
 import { findHabitByKey } from '@/app/lib/habitsCatalog';
 import type { NotificationPreferencesDto } from '@/shared/dto/notifications';
 import type { ChatEntryContext } from '@/shared/dto';
+import { useEntryChat } from '@/app/composables/useEntryChat';
 import { onClickOutside } from '@vueuse/core';
 import { useUserHabitsStore } from '@/app/stores/userHabits';
 import { useLoadersStore } from '@/app/stores/loaders';
+import FeaturePaywallModal from '@/app/components/subscription/FeaturePaywallModal.vue';
+import {
+  extractFeaturePlanRequiredError,
+  useEntitlements,
+} from '@/app/composables/useEntitlements';
+import { mapHabitToMeditationTopic } from '@/app/lib/meditations';
+import { mapHabitToBreathGroup } from '@/app/lib/practiceActions';
+import {
+  BREATH_PRACTICES,
+  type BreathPracticeTag,
+} from '@/app/lib/breathPracticesCatalog';
 
 const route = useRoute();
 const chat = useChatStore();
+const { startEntryChat } = useEntryChat();
 const userHabitsStore = useUserHabitsStore();
 const loaders = useLoadersStore();
+const { getFeatureAccess, refreshEntitlements } = useEntitlements();
 const { fetchNotificationPreferences, updateNotificationPreferences } =
   useNotificationsSettings();
 
@@ -152,6 +203,8 @@ const preference = ref<NotificationPreferencesDto | null>(null);
 const prefLoading = ref(true);
 const prefToggleLoading = ref(false);
 const notificationError = ref<string | null>(null);
+const paywallOpen = ref(false);
+const paywallFeatureKey = ref<string | null>(null);
 
 const habitGradients: Record<string, string> = {
   build: 'from-blue-500 to-cyan-500',
@@ -161,8 +214,28 @@ const habitGradients: Record<string, string> = {
 
 const entityData = computed(() => catalogHabit.value || customHabit.value);
 const isCustom = computed(() => !!customHabit.value && !catalogHabit.value);
-const isMeditationHabit = computed(
-  () => catalogHabit.value?.habitKey === 'meditation'
+const meditationTopicKey = computed(() => {
+  const habitKey = catalogHabit.value?.habitKey;
+  if (!habitKey) return null;
+  return mapHabitToMeditationTopic(habitKey);
+});
+const breathGroupKey = computed<BreathPracticeTag | null>(() => {
+  const habitKey = catalogHabit.value?.habitKey;
+  if (!habitKey) return null;
+  return mapHabitToBreathGroup(habitKey);
+});
+const meditationsAccess = computed(() =>
+  getFeatureAccess('meditations.library.full')
+);
+const breathCatalogAccess = computed(() =>
+  getFeatureAccess('breath.catalog.full')
+);
+const chatAssistantAccess = computed(() => getFeatureAccess('chat.assistant'));
+const customHabitsAccess = computed(() =>
+  getFeatureAccess('habits.custom.create')
+);
+const paywallAccess = computed(() =>
+  paywallFeatureKey.value ? getFeatureAccess(paywallFeatureKey.value) : null
 );
 
 const isEditingTitle = ref(false);
@@ -183,10 +256,6 @@ const entityIntent = computed<HabitIntent>(() => {
   return (entityData.value.intent || 'build') as HabitIntent;
 });
 
-const intentLabel = computed(() =>
-  entityIntent.value === 'quit' ? 'Избавиться' : 'Приобрести'
-);
-
 const entityDescription = computed(
   () =>
     entityData.value?.description ||
@@ -205,7 +274,11 @@ const resolvedIntentForFilters = computed(() =>
 );
 
 const canEditCustomEntity = computed(
-  () => isCustom.value && !!customHabit.value
+  () =>
+    isCustom.value && !!customHabit.value && customHabitsAccess.value.available
+);
+const isCustomLocked = computed(
+  () => isCustom.value && !customHabitsAccess.value.available
 );
 
 function goBack() {
@@ -218,8 +291,50 @@ function goBack() {
   navigateTo(`/habits?intent=${intent}`);
 }
 
-function goToMeditations() {
-  navigateTo('/meditations');
+function openPaywall(featureKey: string) {
+  paywallFeatureKey.value = featureKey;
+  paywallOpen.value = true;
+}
+
+function getPlanBadgeEmoji(plan: string) {
+  return plan === 'premium' ? '💎' : '⭐';
+}
+
+async function goToMeditations() {
+  if (!meditationTopicKey.value) return;
+
+  if (!meditationsAccess.value.available) {
+    openPaywall('meditations.library.full');
+    return;
+  }
+
+  await navigateTo({
+    path: '/meditations',
+    query: { topic: meditationTopicKey.value },
+  });
+}
+
+async function goToBreathPractices() {
+  const groupKey = breathGroupKey.value;
+  if (!groupKey) return;
+
+  if (!breathCatalogAccess.value.available) {
+    openPaywall('breath.catalog.full');
+    return;
+  }
+
+  const firstPractice = BREATH_PRACTICES.find((practice) =>
+    practice.tags.includes(groupKey)
+  );
+  if (!firstPractice) {
+    useToast('Подборка дыхательных практик пока недоступна');
+    return;
+  }
+
+  await navigateTo({
+    path: `/breath-practices/${firstPractice.slug}`,
+    query: { group: groupKey },
+  });
 }
 
 function startEditTitle() {
@@ -257,6 +372,13 @@ async function finishTitleEdit() {
     userHabitsStore.updateLocal(updated);
     useToast('Название обновлено');
   } catch (error: any) {
+    const featureError = extractFeaturePlanRequiredError(error);
+    if (featureError) {
+      openPaywall(featureError.featureKey);
+      await navigateTo('/', { replace: true });
+      return;
+    }
+
     console.error('[HabitDetail] Failed to update title:', error);
     useToast(error?.message || 'Не удалось сохранить название');
     titleDraft.value = customHabit.value?.name || entityName.value;
@@ -272,6 +394,11 @@ onClickOutside(titleInputContainerRef, () => {
   }
 });
 function goToNotifications() {
+  if (isCustomLocked.value) {
+    openPaywall('habits.custom.create');
+    return;
+  }
+
   const intentQuery = route.query.intent as string | undefined;
   const query = intentQuery ? `?intent=${intentQuery}` : '';
   navigateTo(`/habits/${entityKey.value}/notifications${query}`);
@@ -295,6 +422,13 @@ async function loadCustomHabit() {
     const data = await $api<HabitDto>(`/api/habits/${entityKey.value}`);
     customHabit.value = data;
   } catch (error: any) {
+    const featureError = extractFeaturePlanRequiredError(error);
+    if (featureError) {
+      openPaywall(featureError.featureKey);
+      await navigateTo('/', { replace: true });
+      return;
+    }
+
     console.error('[HabitDetail] Failed to load habit:', error);
     entityError.value = error?.message || 'Привычка не найдена';
   } finally {
@@ -322,6 +456,11 @@ async function loadPreference() {
 /** Обновление включено/выключено уведомлений по переключателю на карточке */
 async function onToggleNotifications(enabled: boolean) {
   if (!entityKey.value) return;
+  if (isCustomLocked.value) {
+    openPaywall('habits.custom.create');
+    return;
+  }
+
   notificationError.value = null;
   prefToggleLoading.value = true;
   try {
@@ -347,28 +486,36 @@ const entryContext = computed<ChatEntryContext>(() => ({
 }));
 
 async function startConversation() {
+  if (isCustomLocked.value) {
+    openPaywall('habits.custom.create');
+    return;
+  }
+
+  if (!chatAssistantAccess.value.available) {
+    openPaywall('chat.assistant');
+    return;
+  }
+
   try {
     // Устанавливаем entryContext перед запуском разговора
     chat.entryContext = entryContext.value;
-    chat.startSession();
-
-    // Запускаем разговор без режима
-    chat.startConversation();
-
-    // Переходим на главную страницу с правильными query параметрами
-    navigateTo({
-      path: '/',
-      query: {
-        screen: 'chat',
-      },
-    });
+    await startEntryChat();
   } catch (error: any) {
     console.error('[HabitDetail] Failed to start conversation:', error);
     useToast(error?.message || 'Не удалось открыть чат');
   }
 }
 
+async function refreshEntitlementsSafely() {
+  try {
+    await refreshEntitlements();
+  } catch (error) {
+    console.warn('[HabitDetail] Failed to refresh entitlements:', error);
+  }
+}
+
 async function refresh() {
+  await refreshEntitlementsSafely();
   await Promise.all([loadCustomHabit(), loadPreference()]);
 }
 

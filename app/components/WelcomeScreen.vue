@@ -13,9 +13,16 @@
       <Button
         @click="handleSelect"
         variant="outline"
-        class="w-full rounded-xl p-4 flex items-center gap-4 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group animate-slide-up bg-transparent"
+        class="relative w-full rounded-xl p-4 flex items-center gap-4 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group animate-slide-up bg-transparent"
+        :class="{ 'pr-12': locked }"
         style="animation-delay: 0.2s; animation-fill-mode: both"
       >
+        <span
+          v-if="locked"
+          class="absolute right-3 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 bg-black/40 text-sm leading-none"
+        >
+          {{ requiredPlan === 'premium' ? '💎' : '⭐' }}
+        </span>
         Начать
       </Button>
     </div>
@@ -23,7 +30,10 @@
 </template>
 
 <script setup lang="ts">
-import IconMessageCircle from '~icons/lucide/message-circle';
+defineProps<{
+  locked?: boolean;
+  requiredPlan?: 'basic' | 'pro' | 'premium' | null;
+}>();
 
 const emit = defineEmits<{
   (e: 'select'): void;

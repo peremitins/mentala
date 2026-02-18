@@ -4,7 +4,7 @@
     :class="selectedTrackId ? '' : 'pb-[100px]'"
   >
     <MeditationDetailView
-      v-if="selectedTrackId"
+      v-if="selectedTrackId && meditationsAccess.available"
       :track-id="selectedTrackId"
       @close="closeDetail"
     />
@@ -15,6 +15,28 @@
         :show-back-button="true"
         @go-back="goBack"
       />
+
+      <div
+        v-if="!meditationsAccess.available"
+        class="glass-deep mx-4 rounded-xl border border-white/15 px-4 py-3 text-sm text-white/80"
+      >
+        <div class="flex items-start justify-between gap-3">
+          <p>
+            Полная библиотека медитаций доступна в
+            {{ getPlanBadgeLabel(meditationsAccess.requiredPlan) }}.
+          </p>
+          <button
+            type="button"
+            class="inline-flex items-center gap-1 rounded-full border border-white/25 bg-white/10 px-2 py-1 text-[10px] text-white"
+            @click="openPaywall('meditations.library.full')"
+          >
+            <span aria-hidden="true">{{
+              getPlanBadgeEmoji(meditationsAccess.requiredPlan)
+            }}</span>
+            <span>{{ getPlanBadgeLabel(meditationsAccess.requiredPlan) }}</span>
+          </button>
+        </div>
+      </div>
 
       <Skeleton
         v-if="loaders.isSkeletonLoading"
@@ -105,6 +127,13 @@
           </div>
         </DialogContent>
       </Dialog>
+
+      <FeaturePaywallModal
+        v-model:open="paywallOpen"
+        :feature-key="paywallFeatureKey"
+        :required-plan="paywallAccess?.requiredPlan || null"
+        :paywall="paywallAccess?.paywall || null"
+      />
     </template>
   </div>
 </template>
@@ -122,9 +151,9 @@ import { useMeditationsStore } from '@/app/stores/meditations';
 import { useLoadersStore } from '@/app/stores/loaders';
 import { useMeditationPlayer } from '@/app/composables/useMeditationPlayer';
 import { MEDITATION_TOPICS } from '@/shared/constants/meditations';
-import type { MeditationTopic } from '@/shared/constants/meditations';
 import { MEDITATION_TOPIC_GRADIENTS } from '@/app/lib/meditations';
 import { resolveMediaUrl } from '@/app/utils/media';
+import FeaturePaywallModal from '@/app/components/subscription/FeaturePaywallModal.vue';
 import type {
   MeditationTopicKey,
   MeditationTrackDto,
@@ -136,14 +165,25 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/app/components/ui/dialog';
+import { useEntitlements } from '@/app/composables/useEntitlements';
 
 const route = useRoute();
 const router = useRouter();
 const meditationsStore = useMeditationsStore();
 const loaders = useLoadersStore();
 const { currentTrack, setQueue } = useMeditationPlayer();
+const { getFeatureAccess } = useEntitlements();
 
 const wasSkeletonShown = ref(false);
+const paywallOpen = ref(false);
+const paywallFeatureKey = ref<string | null>(null);
+
+const meditationsAccess = computed(() =>
+  getFeatureAccess('meditations.library.full')
+);
+const paywallAccess = computed(() =>
+  paywallFeatureKey.value ? getFeatureAccess(paywallFeatureKey.value) : null
+);
 
 type SectionKey = MeditationTopicKey | 'favorites' | 'all';
 type Section = {
@@ -293,6 +333,23 @@ onMounted(async () => {
 });
 
 watch(
+  () => meditationsAccess.value.available,
+  async (available, prev) => {
+    if (available && !prev && meditationsStore.error) {
+      await meditationsStore.fetchAll(true);
+    }
+    if (!available) {
+      dialogOpen.value = false;
+    }
+  }
+);
+
+function openPaywall(featureKey: string) {
+  paywallFeatureKey.value = featureKey;
+  paywallOpen.value = true;
+}
+
+watch(
   () => meditationsStore.error,
   (value) => {
     if (value) {
@@ -313,9 +370,13 @@ watch(
 
 watch(
   () => selectedTrackId.value,
-  (value) => {
+  async (value) => {
     if (value) {
       dialogOpen.value = false;
+    }
+    if (value && !meditationsAccess.value.available) {
+      openPaywall('meditations.library.full');
+      await closeDetail();
     }
   }
 );
@@ -369,6 +430,11 @@ async function openTrack(
   sectionKey?: SectionKey,
   list?: MeditationTrackDto[]
 ) {
+  if (!meditationsAccess.value.available) {
+    openPaywall('meditations.library.full');
+    return;
+  }
+
   if (list?.length) {
     setQueue(
       list.map((t) => t.id),
@@ -412,11 +478,27 @@ async function closeDetail() {
 }
 
 function toggleFavorite(trackId: string) {
+  if (!meditationsAccess.value.available) {
+    openPaywall('meditations.library.full');
+    return;
+  }
   meditationsStore.toggleFavorite(trackId);
 }
 
 function openViewAll(key: SectionKey) {
+  if (!meditationsAccess.value.available) {
+    openPaywall('meditations.library.full');
+    return;
+  }
   dialogTopicKey.value = key;
   dialogOpen.value = true;
+}
+
+function getPlanBadgeEmoji(plan: string) {
+  return plan === 'premium' ? '💎' : '⭐';
+}
+
+function getPlanBadgeLabel(plan: string) {
+  return plan === 'premium' ? 'Premium' : 'PRO и Premium';
 }
 </script>

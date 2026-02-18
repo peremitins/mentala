@@ -24,6 +24,31 @@ import {
 // Значение: Promise<OrchestrateSlotsResult> - промис выполняющейся операции
 const activeRegenerations = new Map<number, Promise<OrchestrateSlotsResult>>();
 
+function resolveSchedulerCaller(): string | null {
+  const stack = new Error().stack;
+  if (!stack) return null;
+
+  const lines = stack.split('\n').slice(1);
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    // Пропускаем внутренние фреймы текущего файла и node internals.
+    if (
+      line.includes('generateAllSlotsForUser') ||
+      line.includes('scheduler.service.ts') ||
+      line.includes('node:internal')
+    ) {
+      continue;
+    }
+
+    return line.replace(/^at\s+/, '');
+  }
+
+  return null;
+}
+
 // ==========================================
 // УДАЛЕНО: Функция inferHabitKey была костылем
 // Теперь используем только универсальные шаблоны для habits
@@ -51,6 +76,24 @@ export async function generateAllSlotsForUser(
     jobId?: string;
   }
 ): Promise<OrchestrateSlotsResult> {
+  const reason = options?.reason ?? 'manual';
+  const forceTodaySlots = options?.forceTodaySlots ?? false;
+  const caller = resolveSchedulerCaller();
+
+  // Централизованный structured-log: фиксируем любой вход в глобальную оркестрацию.
+  // Это нужно для расследования "самопроизвольных" перегенераций.
+  console.log(
+    JSON.stringify({
+      event: 'notification_slots_generation_trigger',
+      user_id: userId,
+      reason,
+      force_today_slots: forceTodaySlots,
+      trace_id: options?.traceId ?? null,
+      job_id: options?.jobId ?? null,
+      caller,
+    })
+  );
+
   // Проверяем, не выполняется ли уже регенерация для этого пользователя
   const existingRegeneration = activeRegenerations.get(userId);
   if (existingRegeneration) {

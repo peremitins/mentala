@@ -7,15 +7,9 @@
     />
 
     <div class="space-y-2 pb-[100px]">
-      <div class="glass-deep p-4" style="animation-delay: 0.1s">
-        <p class="text-xs text-foreground">
-          Подберите план, который подойдёт именно вам. Вы всегда можете изменить
-          его позже.
-        </p>
-      </div>
-
       <!-- Текущий статус -->
       <div
+        v-if="shouldShowCurrentStatusCard"
         class="transition-[max-height,opacity] duration-300 ease-in-out overflow-hidden"
         :style="{
           maxHeight: subscriptionStore.loading.subscription ? '200px' : '500px',
@@ -50,7 +44,7 @@
                 class="mt-2 space-y-1"
               >
                 <p class="text-xs text-foreground">
-                  Доступен полный функционал Premium: AI-чат, 100 минут в неделю
+                  В пробном периоде доступен полный Premium-доступ
                 </p>
                 <p class="text-xs text-foreground">
                   Пробный период действует до:
@@ -70,7 +64,12 @@
                   v-else-if="currentSubscription.paymentStatus === 'active'"
                   class="text-sm text-foreground mt-1"
                 >
-                  Действует до: {{ formatDate(currentSubscription.endDate) }}
+                  <template v-if="currentSubscription.plan.name === 'basic'">
+                    Бесплатный план без срока окончания
+                  </template>
+                  <template v-else>
+                    Действует до: {{ formatDate(currentSubscription.endDate) }}
+                  </template>
                 </p>
                 <p
                   v-else-if="currentSubscription.paymentStatus === 'expired'"
@@ -170,9 +169,9 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
 import { useAPI } from '@/app/composables/useAPI';
-import { useRouter } from 'vue-router';
 import { useSubscriptionStore } from '@/app/stores/subscription';
 import { nanoid } from 'nanoid';
+import { useRoute } from 'vue-router';
 import PlanCard from '@/app/components/subscription/PlanCard.vue';
 import Skeleton from '@/app/components/ui/Skeleton.vue';
 import {
@@ -194,37 +193,8 @@ interface Plan {
   isVisibleInUI?: boolean;
 }
 
-interface Subscription {
-  id: number;
-  planId: string;
-  endDate: string;
-  paymentStatus: string;
-  billingPeriod?: 'month' | 'year';
-  plan: {
-    id: string;
-    name: string;
-  };
-}
-
-interface SubscriptionResponse {
-  plan: string;
-  trialActive: boolean;
-  trialExpiresAt: string | null;
-  features: {
-    ai: boolean;
-    weeklyMinutesLimit: number;
-  };
-  subscription: Subscription | null;
-  noActiveSubscription: boolean;
-  user?: {
-    billingCredit: number;
-    hasUsedTrial: boolean;
-    timezone: string;
-  };
-}
-
-const router = useRouter();
 const subscriptionStore = useSubscriptionStore();
+const route = useRoute();
 
 // Computed для удобства доступа
 const plans = computed(() => subscriptionStore.plans);
@@ -235,12 +205,22 @@ const trialActive = computed(() => subscriptionStore.trialActive);
 const trialExpiresAt = computed(
   () => subscriptionStore.subscriptionData?.trialExpiresAt || null
 );
-const features = computed(
-  () => subscriptionStore.subscriptionData?.features || null
-);
-const noActiveSubscription = computed(
-  () => subscriptionStore.subscriptionData?.noActiveSubscription ?? false
-);
+
+const shouldShowCurrentStatusCard = computed(() => {
+  if (subscriptionStore.loading.subscription) {
+    return true;
+  }
+
+  if (!currentSubscription.value) {
+    return true;
+  }
+
+  return !(
+    currentSubscription.value.plan.name === 'basic' &&
+    currentSubscription.value.paymentStatus === 'active' &&
+    !trialActive.value
+  );
+});
 // Храним период оплаты для каждого плана отдельно
 const planBillingPeriods = ref<Map<string, 'month' | 'year'>>(new Map());
 const selectedPlanId = ref<string | null>(null);
@@ -387,7 +367,12 @@ function getConfirmDialogDescription(): string {
     billingPeriod === 'year'
       ? Math.round(pendingPlanChange.value.basePrice * 12 * 0.8)
       : pendingPlanChange.value.basePrice;
-  const priceText = `Стоимость: ${price.toLocaleString('ru-RU')} ₽/${billingPeriod === 'year' ? 'год' : 'месяц'}`;
+  const savings =
+    billingPeriod === 'year'
+      ? Math.max(0, pendingPlanChange.value.basePrice * 12 - price)
+      : 0;
+
+  const priceText = `Стоимость: ${price.toLocaleString('ru-RU')} ₽/${billingPeriod === 'year' ? 'год' : 'месяц'}${savings > 0 ? ` · Экономия: ${savings.toLocaleString('ru-RU')} ₽` : ''}`;
 
   if (currentSubscription.value) {
     const currentPlanName = getPlanDisplayName(
@@ -505,5 +490,20 @@ onMounted(async () => {
       planBillingPeriods.value.set(plan.id, 'month');
     }
   });
+
+  // Если пришли с paywall, заранее выбираем нужный тариф.
+  const rawPlan = route.query.plan;
+  const requestedPlan = Array.isArray(rawPlan) ? rawPlan[0] : rawPlan;
+
+  if (typeof requestedPlan === 'string' && requestedPlan.trim().length > 0) {
+    const normalized = requestedPlan.trim().toLowerCase();
+    const matchedPlan = plans.value.find(
+      (plan) => plan.id === normalized || plan.name === normalized
+    );
+
+    if (matchedPlan) {
+      selectedPlanId.value = matchedPlan.id;
+    }
+  }
 });
 </script>

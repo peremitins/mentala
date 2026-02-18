@@ -3,7 +3,8 @@
  *
  * Контракты:
  * - считаем active slots как planned + queued;
- * - проверяем порог expected/actual и хвост горизонта в часах;
+ * - автопереген в фоне выполняем только когда горизонт почти пуст;
+ * - expected/threshold считаем как диагностические метрики;
  * - не используем хрупкое окно `hoursSinceGeneration <= 2` для night mode;
  * - частоту регенерации ограничиваем `SLOTS_MIN_REGEN_INTERVAL_MINUTES`.
  */
@@ -157,9 +158,10 @@ export async function needsSlotRegenerationInternal(
       )
     : 0;
 
-  const thresholdHit = activeSlots.totalCount < regenThreshold;
+  const isHorizonEmpty = activeSlots.totalCount === 0;
   const belowMinHorizon = actualSlotsByHours < minHorizonHours;
-  const criticalLowHorizon = actualSlotsByHours < minHorizonHours / 2;
+  // "Критический" режим: почти пустой горизонт, переген нужно запускать сразу.
+  const criticalLowHorizon = isHorizonEmpty || belowMinHorizon;
 
   let rateLimited = false;
   const minRegenIntervalMs = minutesToMs(
@@ -172,7 +174,8 @@ export async function needsSlotRegenerationInternal(
       nowUtc.getTime() - lastGeneratedAt.getTime() < minRegenIntervalMs;
   }
 
-  const regenRequested = thresholdHit || belowMinHorizon;
+  // Автопереген в фоне только при почти пустом горизонте.
+  const regenRequested = isHorizonEmpty || belowMinHorizon;
   const blockedByRateLimit =
     regenRequested && rateLimited && !criticalLowHorizon;
 
@@ -198,7 +201,7 @@ export async function needsSlotRegenerationInternal(
   if (regenRequested) {
     return {
       shouldRegenerate: true,
-      reason: belowMinHorizon ? 'below_horizon' : 'threshold_hit',
+      reason: 'below_horizon',
       timezone,
       timezoneConflict,
       expectedSlots,

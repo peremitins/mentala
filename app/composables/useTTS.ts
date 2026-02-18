@@ -1,6 +1,7 @@
-import { ref, computed } from 'vue';
+import { computed } from 'vue';
 import { Capacitor } from '@capacitor/core';
 import { getCsrfTokenForHeader } from '@/app/utils/csrf';
+import { useRuntimeConfig } from '#imports';
 
 /**
  * Composable для управления TTS озвучкой
@@ -64,6 +65,11 @@ export function useTTS() {
    * Автоматически останавливает предыдущую озвучку перед запуском новой
    */
   async function speak(text: string): Promise<void> {
+    const runtimeConfig = useRuntimeConfig();
+    if (runtimeConfig.public.featureTtsEnabled !== true) {
+      return;
+    }
+
     if (!text?.trim()) return;
 
     // Останавливаем предыдущую озвучку перед запуском новой

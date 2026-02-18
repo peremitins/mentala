@@ -5,15 +5,27 @@ import {
   estimateCostUSD,
 } from '../../application/llm.service';
 import { config } from '../../config';
-import { ChatRequestDto, ChatResponseDto, type SuggestedChip } from '@/shared/dto';
+import {
+  ChatRequestDto,
+  ChatResponseDto,
+  type SuggestedChip,
+} from '@/shared/dto';
 import { getSessionUserWithRole } from '@/server/utils/require-role';
 import { db } from '@/server/infrastructure/db/client';
 import { therapySessions } from '@/server/infrastructure/db/schema';
 import { eq, and, isNull } from 'drizzle-orm';
-import { getAiUsageGate } from '@/server/application/subscriptions/ai-usage.service';
+import {
+  getAiUsageGate,
+  toUnifiedAiLimitPayload,
+} from '@/server/application/subscriptions/ai-usage.service';
 import { CHAT_IDLE_TIMEOUT_MS } from '@/server/config/subscription';
 import { endTherapySession } from '@/server/application/subscriptions/session-time.service';
 import { generateSuggestedChips } from '@/server/application/suggested-chips.service';
+import {
+  estimateChatRequestUpperBoundUSD,
+  isChatRequestOverBudget,
+  resolveAllowedChatModel,
+} from '@/server/application/chat/chat-guard.service';
 
 export default defineEventHandler(async (event) => {
   try {
@@ -103,19 +115,46 @@ export default defineEventHandler(async (event) => {
       setResponseStatus(event, 403);
       return {
         error: true,
+        code: 'no_ai_access',
         message: 'AI access is not available for your plan',
       } as const;
     }
 
     if (gate.status === 'weekly_limit_reached') {
+      const payload = toUnifiedAiLimitPayload(gate);
       setResponseStatus(event, 402);
       return {
         error: true,
-        message: 'Weekly minutes limit exceeded',
-        weeklyLimit: gate.weeklyLimit,
-        usedMinutes: gate.usedMinutes,
+        code: payload.code,
+        message: payload.message,
+        nextResetAt: payload.nextResetAt,
+        weeklyLimit: payload.weeklyLimit,
+        usedMinutes: payload.usedMinutes,
+        overdraftUsed: payload.overdraftUsed,
+        aiChatMode: payload.aiChatMode,
       } as const;
     }
+
+    // Жёсткий allowlist модели: клиент не может выбрать произвольную/дорогую модель.
+    const effectiveModel = resolveAllowedChatModel(parsed.model);
+
+    // Budget guard для чата (pre-check до обращения к провайдеру).
+    const preEstimated = estimateChatRequestUpperBoundUSD({
+      messages: parsed.messages,
+      model: effectiveModel,
+    });
+
+    if (isChatRequestOverBudget(preEstimated)) {
+      setResponseStatus(event, 402);
+      return {
+        error: true,
+        code: 'budget_guard_exceeded',
+        message:
+          'Запрос временно отклонён по лимиту стоимости. Попробуйте переформулировать сообщение.',
+        estimated: preEstimated,
+      } as const;
+    }
+
     const commonOptions = {
       sessionId: parsed.sessionId,
       lang: parsed.lang,
@@ -134,7 +173,7 @@ export default defineEventHandler(async (event) => {
     if (parsed.messages.length === 0) {
       const stream = chatStreamViaProvider({
         provider: 'openai',
-        model: parsed.model,
+        model: effectiveModel,
         messages: parsed.messages,
         options: commonOptions,
       });
@@ -146,12 +185,12 @@ export default defineEventHandler(async (event) => {
 
       result = {
         content,
-        model: parsed.model || config.llm.openai.defaultModel,
+        model: effectiveModel || config.llm.openai.defaultModel,
       };
     } else {
       result = await chatViaProvider({
         provider: 'openai',
-        model: parsed.model,
+        model: effectiveModel,
         messages: parsed.messages,
         options: commonOptions,
       });
@@ -159,9 +198,8 @@ export default defineEventHandler(async (event) => {
     // Оценка токенов: история в OpenAI не передается, считаем только последнее сообщение пользователя.
     // Это снижает риск ложного отказа по бюджету при длинной локальной истории.
     const lastUserMessage =
-      parsed.messages
-        .filter((m) => m.role === 'user')
-        .slice(-1)[0]?.content || '';
+      parsed.messages.filter((m) => m.role === 'user').slice(-1)[0]?.content ||
+      '';
     const tokensIn = Math.ceil(lastUserMessage.length / 4);
     const tokensOut = Math.ceil((result.content || '').length / 4);
     const estimated = estimateCostUSD({
@@ -174,6 +212,7 @@ export default defineEventHandler(async (event) => {
       setResponseStatus(event, 402);
       return {
         error: true,
+        code: 'budget_guard_exceeded',
         message: 'Estimated cost too high for single request',
         estimated,
       };

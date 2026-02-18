@@ -5,6 +5,7 @@ import { db } from '@/server/infrastructure/db/client';
 import { users } from '@/server/infrastructure/db/schema';
 import { UserMePatchDto, UserMeDto } from '@/shared/dto/user';
 import { toIsoString } from '@/server/utils/serialize';
+import { getBillingSnapshot } from '@/server/application/subscriptions/entitlements.service';
 
 function detectMarketingSource(event: any): 'web' | 'ios' | 'android' {
   const userAgent = getHeader(event, 'user-agent') || '';
@@ -88,6 +89,7 @@ export default defineEventHandler(async (event) => {
     .where(eq(users.id, user.id));
 
   const onboarding = (user as any)?.onboarding || {};
+  const billing = await getBillingSnapshot(user.id, (user as any)?.role);
   const response = {
     user: {
       id: user.id,
@@ -107,6 +109,7 @@ export default defineEventHandler(async (event) => {
       marketingConsent: hasMarketingUpdate
         ? body.marketingConsent
         : Boolean((user as any)?.marketingConsentAt),
+      billing,
     },
   };
 

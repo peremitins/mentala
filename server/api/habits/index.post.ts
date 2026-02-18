@@ -1,27 +1,42 @@
 import { nanoid } from 'nanoid';
-import { eq } from 'drizzle-orm';
 import {
   habits,
   notificationPreferences,
 } from '@/server/infrastructure/db/schema';
 import { db } from '@/server/infrastructure/db/client';
 import type { HabitDto, CreateHabitDto } from '@/shared/dto/notifications';
-import { getSessionUser } from '@/server/application/auth/session';
+import { getSessionUserWithRole } from '@/server/utils/require-role';
 import { getUserTimezone } from '@/server/application/notifications/timezone.utils';
+import {
+  getBillingSnapshot,
+  getFeatureAccessOrDefault,
+  toFeaturePlanRequiredPayload,
+} from '@/server/application/subscriptions/entitlements.service';
 
 /**
  * POST /api/habits
  * Создать новую привычку
  */
 export default defineEventHandler(async (event): Promise<HabitDto> => {
-  const sessionResult = await getSessionUser(event);
-  if (!sessionResult?.user?.id) {
+  const sessionUser = await getSessionUserWithRole(event);
+  if (!sessionUser?.id) {
     throw createError({
       statusCode: 401,
       message: 'Unauthorized',
     });
   }
-  const userId = sessionResult.user.id;
+  const userId = sessionUser.id;
+
+  const featureKey = 'habits.custom.create';
+  const billing = await getBillingSnapshot(userId, sessionUser.role);
+  const access = getFeatureAccessOrDefault(billing, featureKey);
+  if (!access.available) {
+    throw createError({
+      statusCode: 402,
+      statusMessage: 'Feature requires higher plan',
+      data: toFeaturePlanRequiredPayload({ featureKey, access }),
+    });
+  }
 
   const body = await readBody<CreateHabitDto>(event);
 

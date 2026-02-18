@@ -35,6 +35,8 @@
           :practice="item.practice"
           :accent-class="item.accentClass"
           :is-custom="item.isCustom"
+          :locked="item.locked"
+          :required-plan="item.requiredPlan"
           @open="emit('open', $event)"
         />
       </div>
@@ -52,6 +54,8 @@ export interface BreathPracticeCardItem {
   practice: BreathPractice;
   accentClass: string;
   isCustom?: boolean;
+  locked?: boolean;
+  requiredPlan?: 'pro' | 'premium';
   customId?: string; // ID кастомной практики для удаления
 }
 

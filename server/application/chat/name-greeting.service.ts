@@ -1,7 +1,8 @@
 import { and, eq, isNull, lt, or } from 'drizzle-orm';
-import { toZonedTime } from 'date-fns-tz';
 import { db } from '@/server/infrastructure/db/client';
 import { chatSettings } from '@/server/infrastructure/db/schema';
+import type { ChatEntryContext } from '@/shared/dto';
+import type { Gender } from '@/shared/dto/onboarding';
 import {
   getStartOfLocalDayUtc,
   isValidTimezone,
@@ -53,26 +54,248 @@ const CYRILLIC_SURNAME_SUFFIXES = [
   'евич',
 ];
 
-const LATIN_SURNAME_SUFFIXES = [
-  'ov',
-  'ev',
-  'in',
-  'sky',
-  'ski',
-  'son',
-  'sen',
-];
+const LATIN_SURNAME_SUFFIXES = ['ov', 'ev', 'in', 'sky', 'ski', 'son', 'sen'];
 
 const NAME_VOWELS = /[AEIOUYАЕЁИОУЫЭЮЯ]/i;
 const INVALID_NAME_CHARS = /[^A-Za-zА-Яа-яЁё-\s]/;
+const MAX_OPENING_CACHE_SIZE = 5000;
+const lastOpeningIndexByContext = new Map<string, number>();
 
-const ALTERNATIVE_OPENINGS = [
-  'Я здесь. Чем могу помочь сейчас?',
-  'Я на связи. Хочешь продолжить или начать новую тему?',
-  'Я рядом. О чем поговорим сейчас?',
+// Нейтральные стартовые фразы используем только для входа в чат с главной.
+const HOME_ALTERNATIVE_OPENINGS = [
   'Чем могу помочь прямо сейчас?',
-  'Можем продолжить разговор, если хочешь.',
+  'Продолжим разговор или начнём новую тему?',
+  'Что сейчас важнее всего для тебя?',
+  'С чего тебе удобнее начать: с ситуации, мыслей или ощущений в теле?',
 ];
+
+const THERAPY_FALLBACK_OPENINGS = [
+  'Давай разберём эту тему. Что сейчас в ней самое тяжёлое?',
+  'Начнём с главного: что в этой теме сейчас самое острое?',
+  'С чего тебе важнее начать прямо сейчас?',
+];
+
+const HABIT_BUILD_FALLBACK_OPENINGS = [
+  'Давай разберём эту привычку. Что сейчас мешает делать её регулярно?',
+  'Что уже получается, а где чаще всего стопор?',
+  'Хочешь, найдём самый маленький шаг, который реально сделать сегодня?',
+];
+
+const HABIT_QUIT_FALLBACK_OPENINGS = [
+  'Что обычно запускает желание вернуться к ней?',
+  'Какой момент дня для тебя самый сложный?',
+  'Давай выберем один ближайший триггер и разберём его по шагам.',
+];
+
+// Варианты фразы по полу. Если пол не задан — используем нейтральную версию,
+// чтобы не ошибаться в окончаниях и не показывать пользователю служебные формы.
+type GenderedText = {
+  neutral: string;
+  male?: string;
+  female?: string;
+};
+
+function pickGenderedText(text: GenderedText, gender: Gender | null): string {
+  if (gender === 'male' && text.male) {
+    return text.male;
+  }
+  if (gender === 'female' && text.female) {
+    return text.female;
+  }
+  return text.neutral;
+}
+
+const SOS_OPENINGS: Record<'panic' | 'tension' | 'vent', GenderedText[]> = {
+  panic: [
+    {
+      neutral: 'Спасибо, что ты здесь. Что сейчас пугает сильнее всего?',
+      male: 'Спасибо, что написал. Что сейчас пугает сильнее всего?',
+      female: 'Спасибо, что написала. Что сейчас пугает сильнее всего?',
+    },
+    {
+      neutral:
+        'Я рядом. Давай на минуту замедлимся: что происходит прямо сейчас?',
+    },
+    {
+      neutral:
+        'Что сейчас сильнее всего: ощущения в теле, мысли или сама ситуация?',
+    },
+  ],
+  tension: [
+    {
+      neutral: 'Я рядом. Где в теле сейчас больше всего напряжения?',
+    },
+    {
+      neutral: 'Что сейчас сильнее всего держит тебя в напряжении?',
+    },
+    {
+      neutral: 'Если выбрать одно: что прямо сейчас хочется отпустить?',
+    },
+  ],
+  vent: [
+    {
+      neutral: 'Я слушаю. С чего хочешь начать?',
+    },
+    {
+      neutral:
+        'Можно выговориться как есть. Что сейчас тяжелее всего держать внутри?',
+    },
+    {
+      neutral: 'Расскажи, что происходит. Что сейчас давит сильнее всего?',
+    },
+  ],
+};
+
+function normalizeContextLabel(rawValue?: string | null): string | null {
+  if (!rawValue || typeof rawValue !== 'string') {
+    return null;
+  }
+
+  const normalized = rawValue.replace(/\s+/g, ' ').trim();
+  if (!normalized) {
+    return null;
+  }
+
+  if (normalized.length <= 72) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, 71)}…`;
+}
+
+function resolveContextSeedKey(entryContext?: ChatEntryContext | null): string {
+  if (!entryContext) {
+    return 'home';
+  }
+
+  if (entryContext.type === 'habit') {
+    const name = normalizeContextLabel(entryContext.habit_name) || '';
+    return `habit:${entryContext.habit_id}:${entryContext.habit_intent || ''}:${name}`;
+  }
+
+  if (entryContext.type === 'therapy_topic') {
+    const name = normalizeContextLabel(entryContext.topic_name) || '';
+    return `therapy_topic:${entryContext.topic_id}:${name}`;
+  }
+
+  return `sos:${entryContext.sos_entry}:${entryContext.after_practice ? '1' : '0'}`;
+}
+
+function pickRandomIndexExcludingPrevious(
+  optionsCount: number,
+  previousIndex?: number
+): number {
+  if (optionsCount <= 1) {
+    return 0;
+  }
+
+  if (
+    typeof previousIndex !== 'number' ||
+    previousIndex < 0 ||
+    previousIndex >= optionsCount
+  ) {
+    return Math.floor(Math.random() * optionsCount);
+  }
+
+  const next = Math.floor(Math.random() * (optionsCount - 1));
+  return next >= previousIndex ? next + 1 : next;
+}
+
+function buildTherapyOpenings(
+  context: Extract<ChatEntryContext, { type: 'therapy_topic' }>
+): string[] {
+  const topicLabel =
+    normalizeContextLabel(context.topic_name) ||
+    normalizeContextLabel(context.topic_description);
+
+  if (!topicLabel) {
+    return THERAPY_FALLBACK_OPENINGS;
+  }
+
+  return [
+    `Давай поговорим о теме «${topicLabel}». Что сейчас в ней самое тяжёлое?`,
+    `Про «${topicLabel}». Что больше всего беспокоит прямо сейчас?`,
+    `С чего начнём в теме «${topicLabel}»: с ситуации, мыслей или ощущений в теле?`,
+  ];
+}
+
+function buildHabitOpenings(
+  context: Extract<ChatEntryContext, { type: 'habit' }>
+): string[] {
+  const habitLabel =
+    normalizeContextLabel(context.habit_name) ||
+    normalizeContextLabel(context.habit_description);
+
+  const isQuit = context.habit_intent === 'quit';
+  const fallbackOpenings = isQuit
+    ? HABIT_QUIT_FALLBACK_OPENINGS
+    : HABIT_BUILD_FALLBACK_OPENINGS;
+
+  if (!habitLabel) {
+    return fallbackOpenings;
+  }
+
+  if (isQuit) {
+    return [
+      `Давай разберём привычку «${habitLabel}». В какие моменты она включается чаще всего?`,
+      `Про «${habitLabel}». Что обычно запускает желание вернуться к ней?`,
+      `Хочешь, соберём план на один ближайший сложный момент?`,
+    ];
+  }
+
+  return [
+    `Давай разберём привычку «${habitLabel}». Что сейчас мешает делать её регулярно?`,
+    `Про «${habitLabel}». Что уже получается, а где чаще всего стопор?`,
+    `Хочешь, найдём самый маленький шаг по «${habitLabel}», который реально сделать сегодня?`,
+  ];
+}
+
+function buildSosOpenings(
+  context: Extract<ChatEntryContext, { type: 'sos' }>,
+  userGender: Gender | null
+): string[] {
+  if (!context.after_practice) {
+    return SOS_OPENINGS[context.sos_entry].map((text) =>
+      pickGenderedText(text, userGender)
+    );
+  }
+
+  if (context.sos_entry === 'panic') {
+    return [
+      'Что сейчас остаётся самым тревожным?',
+      'Что тебе важно проговорить прямо сейчас, чтобы стало спокойнее?',
+    ];
+  }
+
+  if (context.sos_entry === 'tension') {
+    return [
+      'Что сейчас держит в напряжении: мысли, ситуация или тело?',
+      'Что поможет снизить напряжение в ближайшие 10 минут?',
+    ];
+  }
+
+  return SOS_OPENINGS.vent.map((text) => pickGenderedText(text, userGender));
+}
+
+function resolveAlternativeOpenings(
+  entryContext: ChatEntryContext | null | undefined,
+  userGender: Gender | null
+): string[] {
+  // При входе из конкретного раздела старт должен сразу отражать выбранный контекст.
+  if (!entryContext) {
+    return HOME_ALTERNATIVE_OPENINGS;
+  }
+
+  if (entryContext.type === 'therapy_topic') {
+    return buildTherapyOpenings(entryContext);
+  }
+
+  if (entryContext.type === 'habit') {
+    return buildHabitOpenings(entryContext);
+  }
+
+  return buildSosOpenings(entryContext, userGender);
+}
 
 function looksLikeSurname(token: string): boolean {
   const lower = token.toLowerCase();
@@ -152,27 +375,34 @@ export function resolveUserTimezone(rawTimezone?: string | null): string {
   return 'Europe/Moscow';
 }
 
-function getLocalDaySeed(date: Date, timezone: string): number {
-  const local = toZonedTime(date, timezone);
-  const startOfYear = Date.UTC(local.getFullYear(), 0, 0);
-  const currentDay = Date.UTC(
-    local.getFullYear(),
-    local.getMonth(),
-    local.getDate()
-  );
-  return Math.floor((currentDay - startOfYear) / 86_400_000);
-}
-
 export function pickAlternativeOpening(params: {
   userId: number;
   timezone: string;
+  sessionId?: string | null;
+  entryContext?: ChatEntryContext | null;
+  userGender?: Gender | null;
   now?: Date;
 }): string {
-  const now = params.now ?? new Date();
-  const seed = getLocalDaySeed(now, params.timezone);
-  const index =
-    Math.abs(params.userId + seed) % ALTERNATIVE_OPENINGS.length;
-  return ALTERNATIVE_OPENINGS[index];
+  const openings = resolveAlternativeOpenings(
+    params.entryContext,
+    params.userGender ?? null
+  );
+  const contextKey = resolveContextSeedKey(params.entryContext);
+  const cacheKey = `${params.userId}:${contextKey}`;
+  const previousIndex = lastOpeningIndexByContext.get(cacheKey);
+  const index = pickRandomIndexExcludingPrevious(
+    openings.length,
+    previousIndex
+  );
+
+  lastOpeningIndexByContext.set(cacheKey, index);
+
+  // Ограничиваем рост in-memory кэша для долгоживущего процесса.
+  if (lastOpeningIndexByContext.size > MAX_OPENING_CACHE_SIZE) {
+    lastOpeningIndexByContext.clear();
+  }
+
+  return openings[index] || openings[0] || HOME_ALTERNATIVE_OPENINGS[0];
 }
 
 /**

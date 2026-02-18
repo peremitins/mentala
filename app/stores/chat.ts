@@ -11,6 +11,25 @@ import {
 } from '@/shared/dto';
 import { CHAT_STREAM_MODE } from '@/app/constants/chat';
 
+function extractApiErrorMessage(error: any): string | null {
+  const payloadMessage =
+    error?.data?.message ||
+    error?.data?.error?.message ||
+    error?.response?._data?.message ||
+    error?.response?._data?.error?.message ||
+    null;
+
+  if (typeof payloadMessage === 'string' && payloadMessage.trim().length > 0) {
+    return payloadMessage.trim();
+  }
+
+  if (typeof error?.message === 'string' && error.message.trim().length > 0) {
+    return error.message.trim();
+  }
+
+  return null;
+}
+
 export const useChatStore = defineStore('chat', {
   state: () => ({
     messages: [] as Array<{ role: 'user' | 'assistant'; content: string }>,
@@ -26,6 +45,7 @@ export const useChatStore = defineStore('chat', {
     isEndingSession: false as boolean, // Флаг для предотвращения множественных вызовов endTherapySession
     entryContext: null as ChatEntryContext | null,
     isGenerating: false as boolean, // Флаг для отображения индикатора загрузки при генерации ответа
+    lastStartSessionError: null as string | null,
   }),
   actions: {
     startSession(sessionId?: string) {
@@ -62,6 +82,7 @@ export const useChatStore = defineStore('chat', {
           this.lastActivityAt = new Date();
           this.lastPingAt = Date.now();
           this.resetIdleTimeout();
+          this.lastStartSessionError = null;
           console.log(
             '[Chat Store] Therapy session started:',
             response.sessionId
@@ -69,6 +90,9 @@ export const useChatStore = defineStore('chat', {
         }
       } catch (error) {
         console.error('[Chat Store] Failed to start therapy session:', error);
+        this.lastStartSessionError =
+          extractApiErrorMessage(error) ||
+          'Не удалось начать сессию (возможно нет доступа к ИИ или исчерпан лимит минут).';
         // Не блокируем работу чата, если не удалось начать сессию
       }
     },
@@ -264,7 +288,7 @@ export const useChatStore = defineStore('chat', {
           buffer += decoder.decode(value, { stream: true });
           buffer = buffer.replace(/\r\n/g, '\n');
 
-          while (true) {
+          for (;;) {
             const separatorIndex = buffer.indexOf('\n\n');
             if (separatorIndex === -1) break;
 
@@ -439,6 +463,7 @@ export const useChatStore = defineStore('chat', {
         this.messages.push({
           role: 'assistant',
           content:
+            this.lastStartSessionError ||
             'Не удалось начать сессию (возможно нет доступа к ИИ или исчерпан лимит минут).',
         });
         return { ok: false } as any;
@@ -539,11 +564,14 @@ export const useChatStore = defineStore('chat', {
         }
 
         // В случае ошибки заменяем пустое сообщение на текст ошибки
-        const errorMessage = e?.message?.includes('quota')
-          ? 'Превышен лимит запросов. Пожалуйста, попробуйте позже.'
-          : e?.message?.includes('network') || e?.message?.includes('fetch')
-            ? 'Ошибка сети. Проверьте подключение к интернету.'
-            : 'Не удалось получить ответ. Попробуйте еще раз.';
+        const apiMessage = extractApiErrorMessage(e);
+        const errorMessage = apiMessage
+          ? apiMessage
+          : e?.message?.includes('quota')
+            ? 'Превышен лимит запросов. Пожалуйста, попробуйте позже.'
+            : e?.message?.includes('network') || e?.message?.includes('fetch')
+              ? 'Ошибка сети. Проверьте подключение к интернету.'
+              : 'Не удалось получить ответ. Попробуйте еще раз.';
 
         if (idx >= 0) {
           const errorMsg = this.messages[idx];
@@ -582,6 +610,7 @@ export const useChatStore = defineStore('chat', {
           this.messages.push({
             role: 'assistant',
             content:
+              this.lastStartSessionError ||
               'Не удалось начать сессию (возможно нет доступа к ИИ или исчерпан лимит минут).',
           });
           return { ok: false } as any;
@@ -690,11 +719,14 @@ export const useChatStore = defineStore('chat', {
         }
 
         // В случае ошибки заполняем сообщение текстом ошибки
-        const errorMessage = e?.message?.includes('quota')
-          ? 'Превышен лимит запросов. Пожалуйста, попробуйте позже.'
-          : e?.message?.includes('network') || e?.message?.includes('fetch')
-            ? 'Ошибка сети. Проверьте подключение к интернету.'
-            : 'Не удалось получить ответ. Попробуйте еще раз.';
+        const apiMessage = extractApiErrorMessage(e);
+        const errorMessage = apiMessage
+          ? apiMessage
+          : e?.message?.includes('quota')
+            ? 'Превышен лимит запросов. Пожалуйста, попробуйте позже.'
+            : e?.message?.includes('network') || e?.message?.includes('fetch')
+              ? 'Ошибка сети. Проверьте подключение к интернету.'
+              : 'Не удалось получить ответ. Попробуйте еще раз.';
 
         if (idx >= 0 && this.messages[idx]) {
           const msg = this.messages[idx];

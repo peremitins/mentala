@@ -14,6 +14,7 @@ import { nanoid } from 'nanoid';
 import { db } from '@/server/infrastructure/db/client';
 import {
   notificationPreferences,
+  users,
   slotsSchedulerCursor,
   slotsSchedulerState,
 } from '@/server/infrastructure/db/schema';
@@ -200,9 +201,12 @@ async function listActiveUsersBatch(params: {
   afterUserId: number;
   limit: number;
 }): Promise<number[]> {
+  // Важно: берём только реально существующих пользователей.
+  // Иначе scheduler бесконечно будет ставить jobs для "осиротевших" preferences.
   const rows = await db
     .select({ userId: notificationPreferences.userId })
     .from(notificationPreferences)
+    .innerJoin(users, eq(users.id, notificationPreferences.userId))
     .where(
       and(
         eq(notificationPreferences.enabled, true),

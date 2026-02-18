@@ -42,7 +42,6 @@ import {
   getActiveSlotsHorizonTail,
   insertSlot,
 } from './repositories/notification-slots.repository';
-import { preventSimultaneousNotifications } from './prevent-overlap.service';
 import { loadTextsForPreference } from './notification-texts.service';
 import {
   pickTextForSlot,
@@ -61,10 +60,10 @@ import { computeGenerationConfigHash } from '@/server/utils/notification-ai-conf
 import { computeDayOfYear } from './notification-date.utils';
 import { and, eq, sql } from 'drizzle-orm';
 import { pickNotificationImage } from './notification-images.service';
+import { getCustomNotificationSourceAccessByKind } from './notification-source-access.service';
 import type {
   NotificationPayload,
   NotificationSubtype,
-  NotificationActionHint,
   NotificationNavigation,
 } from '@/shared/dto/notifications';
 import {
@@ -76,6 +75,24 @@ import {
   minutesToMs,
   slotsScalingConfig,
 } from './slots-scaling.config';
+import {
+  buildDeepLinkFromNavigation,
+  resolveNavigationFromActionHint,
+} from './breath-navigation.utils';
+import {
+  applyFlexibleSlotJitter,
+  buildFlexibleSlotMinutes,
+  buildSourcePhaseMap,
+} from './slot-distribution.utils';
+import {
+  buildDailySequence as buildDailySequenceByQuota,
+  type DailySequenceSlot,
+} from './daily-sequence.utils';
+import {
+  clampNotificationTimesPerDay,
+  MAX_NOTIFICATION_TIMES_PER_DAY,
+  normalizeCustomSlotTimesByLimit,
+} from './preferences-limits.utils';
 
 /**
  * Детерминированный джиттер для равномерного распределения слотов
@@ -108,13 +125,7 @@ const DEBUG_NOTIFICATIONS = process.env.DEBUG_NOTIFICATIONS === 'true';
 const SCHEDULE_CONFIG = {
   horizonDays: 2, // Сегодня + завтра
   jitterMinutes: slotsScalingConfig.regeneration.jitterMinutes,
-  minGapMinutes: slotsScalingConfig.regeneration.minGapMinutes,
 };
-
-const DEFAULT_MEDITATION_TRACK_ID =
-  process.env.DEFAULT_MEDITATION_TRACK_ID?.trim() || 'ultimate-relaxation';
-const DEFAULT_BREATH_PRACTICE_SLUG =
-  process.env.DEFAULT_BREATH_PRACTICE_SLUG?.trim() || '4-7-8';
 
 export class SlotsGenerationLockTimeoutError extends Error {
   constructor(timeoutMs: number) {
@@ -133,43 +144,6 @@ type RegenTransactionResult = {
   insertedCount: number;
   lockAcquireMs: number;
 };
-
-function resolveNavigationFromActionHint(
-  actionHint?: NotificationActionHint | null
-): NotificationNavigation {
-  // Источник истины — actionHint из текста, навигация вычисляется на сервере.
-  if (actionHint === 'meditation') {
-    return {
-      type: 'meditation_track',
-      trackId: DEFAULT_MEDITATION_TRACK_ID,
-    };
-  }
-  if (actionHint === 'breathing') {
-    return {
-      type: 'breath_practice',
-      slug: DEFAULT_BREATH_PRACTICE_SLUG,
-    };
-  }
-  return { type: 'home' };
-}
-
-function buildDeepLinkFromNavigation(
-  navigation: NotificationNavigation
-): string {
-  // Строим путь внутри приложения, чтобы клиент мог сделать fallback.
-  switch (navigation.type) {
-    case 'meditation_track':
-      return `/meditations?trackId=${encodeURIComponent(navigation.trackId)}`;
-    case 'breath_practice':
-      return `/breath-practices/${encodeURIComponent(navigation.slug)}${
-        navigation.slug === DEFAULT_BREATH_PRACTICE_SLUG ? '?group=popular' : ''
-      }`;
-    case 'breath_practices':
-      return '/breath-practices';
-    default:
-      return '/';
-  }
-}
 
 function buildActionFromNavigation(navigation: NotificationNavigation): {
   action: string;
@@ -229,14 +203,25 @@ function normalizeCustomSlotTimesForGeneration(params: {
   kind: NotificationKind;
   entityKey: string | null;
   customSlotTimes: (number | null)[] | null;
+  limit: number;
 }): (number | null)[] | null {
-  const { customSlotTimes } = params;
-  if (!customSlotTimes || customSlotTimes.length === 0) return null;
+  const { customSlotTimes, limit } = params;
+  if (!customSlotTimes || customSlotTimes.length === 0 || limit <= 0) {
+    return null;
+  }
+
+  const normalizedInput = normalizeCustomSlotTimesByLimit(
+    customSlotTimes,
+    limit
+  );
+  if (!normalizedInput || normalizedInput.length === 0) {
+    return null;
+  }
 
   const seen = new Set<number>();
   const duplicateMinutes = new Set<number>();
 
-  const normalized = customSlotTimes.map((value) => {
+  const normalized = normalizedInput.map((value) => {
     if (value === null || value === undefined) return null;
 
     const minute = Math.round(value);
@@ -260,15 +245,24 @@ function normalizeCustomSlotTimesForGeneration(params: {
   return normalized.some((value) => value !== null) ? normalized : null;
 }
 
-function buildRegenRangeUtc(params: { nowUtc: Date; timezone: string }): {
+function buildRegenRangeUtc(params: {
+  nowUtc: Date;
+  timezone: string;
+  forceTodaySlots?: boolean;
+}): {
   regenRangeStartUtc: Date;
   regenRangeEndUtc: Date;
 } {
   const nowLocal = toLocalTime(params.nowUtc, params.timezone);
-  const safeStartMinutes = Math.max(
-    slotsScalingConfig.regeneration.safeWindowMinutes,
-    slotsScalingConfig.regeneration.safeQueuedWindowMinutes
-  );
+
+  // Для ручных изменений расписания (forceTodaySlots=true) начинаем пересоздание
+  // с текущего момента, чтобы будущие слоты сегодняшнего дня вступали в силу сразу.
+  const safeStartMinutes = params.forceTodaySlots
+    ? 0
+    : Math.max(
+        slotsScalingConfig.regeneration.safeWindowMinutes,
+        slotsScalingConfig.regeneration.safeQueuedWindowMinutes
+      );
 
   const regenRangeStartLocal = new Date(
     nowLocal.getTime() + minutesToMs(safeStartMinutes)
@@ -391,326 +385,14 @@ function calculatePartialSlotsForToday(
  * Строит последовательность слотов на день с учетом чередования тем
  * Использует weighted round-robin по группам и темам
  */
-function buildDailySequence(
+export function buildDailySequence(
   sources: SourceInfo[],
   day: 0 | 1
 ): SlotInSequence[] {
-  const sequence: SlotInSequence[] = [];
-
-  // Создаём рабочие копии источников с отслеживанием использованных слотов
-  const workingSources = sources.map((s) => ({
-    ...s,
-    usedSlots: 0, // Сколько слотов уже использовано из этого источника
-    customTimeIndex: 0, // Индекс для кастомных времен
-  }));
-
-  // Разделяем источники по группам
-  const therapySources = workingSources.filter((s) => s.kind === 'therapy');
-  const habitsSources = workingSources.filter((s) => s.kind === 'habits');
-
-  // Вычисляем веса групп (сумма remainingSlots)
-  const therapyWeight = therapySources.reduce(
-    (sum, s) => sum + s.remainingSlots,
-    0
-  );
-  const habitsWeight = habitsSources.reduce(
-    (sum, s) => sum + s.remainingSlots,
-    0
-  );
-
-  // Определяем, есть ли обе группы
-  const hasBothGroups = therapySources.length > 0 && habitsSources.length > 0;
-
-  // Создаём пулы слотов для каждой темы (для weighted round-robin внутри группы)
-  const therapyPool: Array<{
-    source: (typeof workingSources)[0];
-    slotIndex: number;
-  }> = [];
-  const habitsPool: Array<{
-    source: (typeof workingSources)[0];
-    slotIndex: number;
-  }> = [];
-
-  for (const source of therapySources) {
-    for (let i = 0; i < source.remainingSlots; i++) {
-      therapyPool.push({ source, slotIndex: i });
-    }
-  }
-
-  for (const source of habitsSources) {
-    for (let i = 0; i < source.remainingSlots; i++) {
-      habitsPool.push({ source, slotIndex: i });
-    }
-  }
-
-  // Индексы для пулов
-  let therapyPoolIndex = 0;
-  let habitsPoolIndex = 0;
-
-  // Счетчики для weighted round-robin по группам
-  let therapyUsed = 0;
-  let habitsUsed = 0;
-
-  // Последние использованные темы для проверки чередования
-  const lastTopics: string[] = [];
-
-  const totalSlots = workingSources.reduce(
-    (sum, s) => sum + s.remainingSlots,
-    0
-  );
-
-  while (sequence.length < totalSlots) {
-    let selectedPoolItem: {
-      source: (typeof workingSources)[0];
-      slotIndex: number;
-    } | null = null;
-
-    if (hasBothGroups && therapyWeight > 0 && habitsWeight > 0) {
-      // Weighted round-robin по группам
-      const totalWeight = therapyWeight + habitsWeight;
-      const currentPosition = sequence.length;
-
-      // Вычисляем целевое соотношение
-      const therapyTarget = Math.floor(
-        (currentPosition * therapyWeight) / totalWeight
-      );
-      const habitsTarget = Math.floor(
-        (currentPosition * habitsWeight) / totalWeight
-      );
-
-      // Выбираем группу на основе весов
-      if (
-        therapyUsed <= therapyTarget &&
-        therapyPoolIndex < therapyPool.length
-      ) {
-        selectedPoolItem = therapyPool[therapyPoolIndex];
-        therapyPoolIndex++;
-        therapyUsed++;
-      } else if (
-        habitsUsed <= habitsTarget &&
-        habitsPoolIndex < habitsPool.length
-      ) {
-        selectedPoolItem = habitsPool[habitsPoolIndex];
-        habitsPoolIndex++;
-        habitsUsed++;
-      } else {
-        // Fallback: выбираем группу с меньшим использованием
-        if (
-          therapyUsed <= habitsUsed &&
-          therapyPoolIndex < therapyPool.length
-        ) {
-          selectedPoolItem = therapyPool[therapyPoolIndex];
-          therapyPoolIndex++;
-          therapyUsed++;
-        } else if (habitsPoolIndex < habitsPool.length) {
-          selectedPoolItem = habitsPool[habitsPoolIndex];
-          habitsPoolIndex++;
-          habitsUsed++;
-        }
-      }
-    } else {
-      // Только одна группа - используем соответствующий пул
-      if (therapySources.length > 0 && therapyPoolIndex < therapyPool.length) {
-        selectedPoolItem = therapyPool[therapyPoolIndex];
-        therapyPoolIndex++;
-      } else if (
-        habitsSources.length > 0 &&
-        habitsPoolIndex < habitsPool.length
-      ) {
-        selectedPoolItem = habitsPool[habitsPoolIndex];
-        habitsPoolIndex++;
-      }
-    }
-
-    if (!selectedPoolItem) {
-      break;
-    }
-
-    // Проверяем чередование тем (не более 2 подряд) ДО определения fixed
-    // Это нужно для правильного выбора альтернативы
-    let selectedSource = selectedPoolItem.source;
-    let sourceKey = `${selectedSource.kind}:${selectedSource.entityKey || 'null'}`;
-    const lastTwo = lastTopics.slice(-2);
-
-    if (
-      lastTwo.length === 2 &&
-      lastTwo[0] === sourceKey &&
-      lastTwo[1] === sourceKey
-    ) {
-      // Если уже 2 подряд этой темы, ищем альтернативу
-      let alternativePoolItem: typeof selectedPoolItem | null = null;
-
-      if (hasBothGroups) {
-        // Ищем в другой группе
-        if (
-          selectedSource.kind === 'therapy' &&
-          habitsPoolIndex < habitsPool.length
-        ) {
-          alternativePoolItem = habitsPool[habitsPoolIndex];
-        } else if (
-          selectedSource.kind === 'habits' &&
-          therapyPoolIndex < therapyPool.length
-        ) {
-          alternativePoolItem = therapyPool[therapyPoolIndex];
-        }
-      }
-
-      // Если не нашли в другой группе, ищем в той же группе другую тему
-      if (!alternativePoolItem) {
-        const sameGroupPool =
-          selectedSource.kind === 'therapy' ? therapyPool : habitsPool;
-        const currentIndex =
-          selectedSource.kind === 'therapy'
-            ? therapyPoolIndex
-            : habitsPoolIndex;
-        for (let i = currentIndex; i < sameGroupPool.length; i++) {
-          const item = sameGroupPool[i];
-          const itemKey = `${item.source.kind}:${item.source.entityKey || 'null'}`;
-          if (itemKey !== sourceKey) {
-            alternativePoolItem = item;
-            break;
-          }
-        }
-      }
-
-      if (alternativePoolItem) {
-        // ВАЖНО: Откатываем customTimeIndex для исходного источника, если он был увеличен
-        // (но мы ещё не знаем, был ли он увеличен, так как определение isFixed происходит после)
-        // Поэтому откатываем только если индекс был увеличен в предыдущей итерации
-        // Но на самом деле, мы ещё не увеличили индекс - это происходит ниже
-        // Так что откат не нужен здесь, но нужен будет во второй проверке
-
-        // Обновляем индексы пулов
-        if (selectedSource.kind === 'therapy') {
-          therapyPoolIndex--;
-          therapyUsed--;
-        } else {
-          habitsPoolIndex--;
-          habitsUsed--;
-        }
-
-        if (alternativePoolItem.source.kind === 'therapy') {
-          therapyPoolIndex++;
-          therapyUsed++;
-        } else {
-          habitsPoolIndex++;
-          habitsUsed++;
-        }
-
-        selectedPoolItem = alternativePoolItem;
-        // ВАЖНО: Пересчитываем selectedSource и sourceKey после замены
-        selectedSource = selectedPoolItem.source;
-        sourceKey = `${selectedSource.kind}:${selectedSource.entityKey || 'null'}`;
-      }
-    }
-
-    // Определяем, является ли слот фиксированным (после возможной замены темы)
-    // ВАЖНО: Сохраняем исходный индекс для возможного отката
-    const customSlotTimes = selectedSource.customSlotTimes;
-    let fixedTime: number | null = null;
-    let isFixed = false;
-    const originalCustomTimeIndex = selectedSource.customTimeIndex; // Сохраняем для возможного отката
-
-    if (customSlotTimes && customSlotTimes.length > 0) {
-      // Идём строго по индексу без циклического повтора
-      // null означает "гибкое место" и не увеличивает индекс кастомных слотов
-      if (selectedSource.customTimeIndex < customSlotTimes.length) {
-        const customTime = customSlotTimes[selectedSource.customTimeIndex];
-        if (customTime !== null && customTime !== undefined) {
-          fixedTime = customTime;
-          isFixed = true;
-        }
-        // Увеличиваем индекс только после проверки (null тоже считается)
-        selectedSource.customTimeIndex++;
-      }
-      // Если индекс вышел за пределы массива - слот гибкий (isFixed остаётся false)
-    }
-
-    // Если альтернативы нет, допускаем 3 подряд ТОЛЬКО если текущий слот fixed
-    // Иначе ищем другую тему/группу или снижаем количество
-    if (
-      lastTwo.length === 2 &&
-      lastTwo[0] === sourceKey &&
-      lastTwo[1] === sourceKey &&
-      !isFixed
-    ) {
-      // Если слот не фиксированный и уже 2 подряд - ищем любую другую тему
-      const allSources = [...therapySources, ...habitsSources];
-      const alternativeSource = allSources.find(
-        (s) =>
-          `${s.kind}:${s.entityKey || 'null'}` !== sourceKey &&
-          s.remainingSlots > 0
-      );
-      if (alternativeSource) {
-        // Находим альтернативу в пулах
-        const altPool =
-          alternativeSource.kind === 'therapy' ? therapyPool : habitsPool;
-        const altIndex =
-          alternativeSource.kind === 'therapy'
-            ? therapyPoolIndex
-            : habitsPoolIndex;
-        if (altIndex < altPool.length) {
-          const alternativePoolItem = altPool[altIndex];
-          if (alternativeSource.kind === 'therapy') {
-            therapyPoolIndex++;
-            therapyUsed++;
-          } else {
-            habitsPoolIndex++;
-            habitsUsed++;
-          }
-          // ВАЖНО: Откатываем customTimeIndex для исходного источника
-          // так как мы уже увеличили его выше, но теперь используем другой источник
-          selectedSource.customTimeIndex = originalCustomTimeIndex;
-
-          // Откатываем текущий выбор
-          if (selectedSource.kind === 'therapy') {
-            therapyPoolIndex--;
-            therapyUsed--;
-          } else {
-            habitsPoolIndex--;
-            habitsUsed--;
-          }
-          selectedPoolItem = alternativePoolItem;
-          // ВАЖНО: Пересчитываем selectedSource, sourceKey и isFixed после замены
-          selectedSource = selectedPoolItem.source;
-          sourceKey = `${selectedSource.kind}:${selectedSource.entityKey || 'null'}`;
-
-          // Сбрасываем fixedTime и isFixed перед пересчётом для нового источника
-          fixedTime = null;
-          isFixed = false;
-
-          // Пересчитываем isFixed и fixedTime для нового источника
-          const newCustomSlotTimes = selectedSource.customSlotTimes;
-          if (newCustomSlotTimes && newCustomSlotTimes.length > 0) {
-            if (selectedSource.customTimeIndex < newCustomSlotTimes.length) {
-              const customTime =
-                newCustomSlotTimes[selectedSource.customTimeIndex];
-              if (customTime !== null && customTime !== undefined) {
-                fixedTime = customTime;
-                isFixed = true;
-              }
-              selectedSource.customTimeIndex++;
-            }
-          }
-        }
-      }
-    }
-    // Если альтернативы нет и слот fixed - допускаем 3 подряд (только из-за фиксированного времени)
-
-    // Создаём слот
-    const slot: SlotInSequence = {
-      source: selectedSource,
-      day,
-      fixedTime,
-      isFixed,
-    };
-
-    sequence.push(slot);
-    lastTopics.push(sourceKey);
-    selectedSource.usedSlots++;
-  }
-
-  return sequence;
+  return buildDailySequenceByQuota(
+    sources,
+    day
+  ) as DailySequenceSlot<SourceInfo>[];
 }
 
 /**
@@ -733,6 +415,34 @@ function assignTimesToSequence(
     slotsByDayAndSource.get(key)!.push(slot);
   }
 
+  // Строим фазы источников по каждому дню только для источников с гибкими слотами.
+  // habits и therapy участвуют в одной общей сетке времени.
+  const phaseByDayAndSource = new Map<string, number>();
+  const flexibleSourceKeysByDay = new Map<0 | 1, string[]>();
+
+  for (const [key, daySlots] of slotsByDayAndSource) {
+    const [dayStr] = key.split(':');
+    const day = parseInt(dayStr) as 0 | 1;
+    const hasFlexibleSlots = daySlots.some((slot) => !slot.isFixed);
+    if (!hasFlexibleSlots) continue;
+
+    if (!flexibleSourceKeysByDay.has(day)) {
+      flexibleSourceKeysByDay.set(day, []);
+    }
+    flexibleSourceKeysByDay.get(day)!.push(key);
+  }
+
+  for (const [day, sourceKeys] of flexibleSourceKeysByDay) {
+    const dayPhaseMap = buildSourcePhaseMap({ sourceKeys });
+    for (const [sourceKey, phase] of dayPhaseMap) {
+      phaseByDayAndSource.set(sourceKey, phase);
+    }
+
+    console.log(
+      `[GlobalOrchestration] Day ${day}: phase map built for ${dayPhaseMap.size} flexible sources`
+    );
+  }
+
   // Обрабатываем каждый день и источник отдельно
   for (const [key, daySlots] of slotsByDayAndSource) {
     if (daySlots.length === 0) continue;
@@ -744,6 +454,7 @@ function assignTimesToSequence(
     dayDate.setHours(0, 0, 0, 0);
 
     const source = daySlots[0].source;
+    const sourcePhase = phaseByDayAndSource.get(key) ?? 0.5;
     const { timeRangeStart, timeRangeEnd, crossesMidnight, customSlotTimes } =
       source;
 
@@ -967,12 +678,15 @@ function assignTimesToSequence(
         // Назначаем времена для каждого интервала
         for (const interval of intervals) {
           if (interval.slots.length === 0) continue;
-
-          const intervalDuration = interval.end - interval.start;
-          const step = intervalDuration / (interval.slots.length + 1);
+          const intervalBaseMinutes = buildFlexibleSlotMinutes({
+            rangeStart: interval.start,
+            rangeEnd: interval.end,
+            slotsCount: interval.slots.length,
+            phaseFraction: sourcePhase,
+          });
 
           for (let i = 0; i < interval.slots.length; i++) {
-            let minutesInDay = interval.start + step * (i + 1);
+            let minutesInDay = intervalBaseMinutes[i] ?? interval.start;
 
             // Добавляем детерминированный джиттер для гибких слотов
             const jitter = generateDeterministicJitter(
@@ -983,7 +697,12 @@ function assignTimesToSequence(
               source.kind,
               source.entityKey
             );
-            minutesInDay += jitter;
+            minutesInDay = applyFlexibleSlotJitter({
+              baseMinutes: minutesInDay,
+              slotIndex: i,
+              slotsCount: interval.slots.length,
+              jitterMinutes: jitter,
+            });
 
             // Ограничиваем в пределах интервала
             minutesInDay = Math.max(
@@ -1073,20 +792,16 @@ function assignTimesToSequence(
 
         // ВАЖНО: Распределяем слоты равномерно от effectiveRangeStart до effectiveRangeEnd включительно
         // Используем равномерное распределение, чтобы использовать весь диапазон
-        const step =
-          flexibleSlots.length > 1
-            ? (effectiveRangeEnd - effectiveRangeStart) /
-              (flexibleSlots.length - 1)
-            : 0; // Если один слот, ставим его в середину диапазона
+        const baseMinutes = buildFlexibleSlotMinutes({
+          rangeStart: effectiveRangeStart,
+          rangeEnd: effectiveRangeEnd,
+          slotsCount: flexibleSlots.length,
+          phaseFraction: sourcePhase,
+        });
 
         // Назначаем времена гибким слотам
         for (let i = 0; i < flexibleSlots.length; i++) {
-          // Распределяем от начала до конца диапазона включительно
-          let minutesInDay =
-            flexibleSlots.length === 1
-              ? effectiveRangeStart +
-                (effectiveRangeEnd - effectiveRangeStart) / 2 // Один слот - в середину
-              : effectiveRangeStart + step * i; // Несколько слотов - равномерно от start до end
+          let minutesInDay = baseMinutes[i] ?? effectiveRangeStart;
 
           // Добавляем детерминированный джиттер
           const jitter = generateDeterministicJitter(
@@ -1097,7 +812,12 @@ function assignTimesToSequence(
             source.kind,
             source.entityKey
           );
-          minutesInDay += jitter;
+          minutesInDay = applyFlexibleSlotJitter({
+            baseMinutes: minutesInDay,
+            slotIndex: i,
+            slotsCount: flexibleSlots.length,
+            jitterMinutes: jitter,
+          });
 
           // Ограничиваем в пределах диапазона
           minutesInDay = Math.max(
@@ -1175,10 +895,28 @@ export async function orchestrateAllSlotsForUser(
 
   try {
     const nowUTC = new Date();
+    const orchestrationReason = options?.reason ?? 'manual';
+
+    // Структурированный старт-лог для расследования спонтанных пересборок.
+    console.log(
+      JSON.stringify({
+        event: 'notification_slots_orchestration_start',
+        user_id: userId,
+        reason: orchestrationReason,
+        force_today_slots: options?.forceTodaySlots ?? false,
+        trace_id: options?.traceId ?? null,
+        job_id: options?.jobId ?? null,
+        now_utc: nowUTC.toISOString(),
+      })
+    );
 
     // Проверяем, что пользователь существует
     const [user] = await db
-      .select({ id: users.id, isBlocked: users.isBlocked })
+      .select({
+        id: users.id,
+        isBlocked: users.isBlocked,
+        roleId: users.roleId,
+      })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);
@@ -1248,8 +986,14 @@ export async function orchestrateAllSlotsForUser(
     const { regenRangeStartUtc, regenRangeEndUtc } = buildRegenRangeUtc({
       nowUtc: nowUTC,
       timezone,
+      forceTodaySlots: options?.forceTodaySlots ?? false,
     });
 
+    if (options?.forceTodaySlots) {
+      console.log(
+        `[GlobalOrchestration] forceTodaySlots enabled: regen range starts from now for user ${userId}`
+      );
+    }
     const horizonBeforeStats = await countActiveSlotsInRange(
       userId,
       regenRangeStartUtc,
@@ -1326,6 +1070,10 @@ export async function orchestrateAllSlotsForUser(
     const endOfTodayUTC = toUTC(endOfToday, timezone);
 
     const sources: SourceInfo[] = [];
+    const customSourceAccess = await getCustomNotificationSourceAccessByKind({
+      userId,
+      userRole: user.roleId,
+    });
 
     for (const pref of allPrefs) {
       const entityKeyInfo = await resolveEntityKeyForSlots(
@@ -1334,10 +1082,28 @@ export async function orchestrateAllSlotsForUser(
         pref.entityKey ?? undefined
       );
 
+      const isCustomWithoutAccess =
+        entityKeyInfo.isCustom &&
+        ((pref.kind === 'habits' && !customSourceAccess.habits) ||
+          (pref.kind === 'therapy' && !customSourceAccess.therapy));
+
+      if (isCustomWithoutAccess) {
+        console.log(
+          `[GlobalOrchestration] ⏭️ Skip custom source without access: user=${userId}, source=${pref.kind}:${pref.entityKey || 'null'}`
+        );
+        continue;
+      }
+
       const timeRangeStart =
         pref.timeRangeStart ?? DEFAULT_NOTIFICATION_TIME_RANGE_START;
       const timeRangeEnd =
         pref.timeRangeEnd ?? DEFAULT_NOTIFICATION_TIME_RANGE_END;
+      const timesPerDay = clampNotificationTimesPerDay(pref.timesPerDay);
+      if (timesPerDay !== pref.timesPerDay) {
+        console.warn(
+          `[GlobalOrchestration] ⚠️ Clamped invalid timesPerDay for user=${userId}, source=${pref.kind}:${pref.entityKey ?? 'null'}: raw=${pref.timesPerDay}, clamped=${timesPerDay}, max=${MAX_NOTIFICATION_TIMES_PER_DAY}`
+        );
+      }
       const crossesMidnight = timeRangeStart > timeRangeEnd;
       const customSlotTimes = normalizeCustomSlotTimesForGeneration({
         userId,
@@ -1345,15 +1111,14 @@ export async function orchestrateAllSlotsForUser(
         entityKey: pref.entityKey,
         customSlotTimes:
           (pref.customSlotTimes as (number | null)[] | null) ?? null,
+        limit: timesPerDay,
       });
 
       // Вычисляем интервал
       const windowDuration = crossesMidnight
         ? 1440 - timeRangeStart + timeRangeEnd
         : timeRangeEnd - timeRangeStart;
-      const interval = customSlotTimes
-        ? windowDuration / pref.timesPerDay
-        : windowDuration / pref.timesPerDay;
+      const interval = windowDuration / timesPerDay;
 
       // Получаем количество отправленных слотов сегодня
       const sentToday = await countSentSlotsForToday(
@@ -1364,7 +1129,7 @@ export async function orchestrateAllSlotsForUser(
         endOfTodayUTC
       );
 
-      const remainingSlots = Math.max(0, pref.timesPerDay - sentToday);
+      const remainingSlots = Math.max(0, timesPerDay - sentToday);
 
       sources.push({
         preference: pref,
@@ -1372,7 +1137,7 @@ export async function orchestrateAllSlotsForUser(
         entityKey: pref.entityKey,
         normalizedEntityKey: entityKeyInfo.normalized,
         isCustomEntity: entityKeyInfo.isCustom,
-        timesPerDay: pref.timesPerDay,
+        timesPerDay,
         timeRangeStart,
         timeRangeEnd,
         customSlotTimes,
@@ -1546,6 +1311,14 @@ export async function orchestrateAllSlotsForUser(
       payload: NotificationPayload;
       templateId: string;
       status: 'planned';
+    }> = [];
+    let droppedPastSlotsCount = 0;
+    const droppedPastSlotsSample: Array<{
+      kind: NotificationKind;
+      entityKey: string | null;
+      scheduledAtUtc: string;
+      day: 0 | 1;
+      isFixed: boolean;
     }> = [];
 
     // Обрабатываем каждый источник отдельно
@@ -1810,6 +1583,22 @@ export async function orchestrateAllSlotsForUser(
         if (slot.scheduledAt < regenRangeStartUtc) continue;
         if (slot.scheduledAt > regenRangeEndUtc) continue;
 
+        // Жёсткий guard: в БД не должны попадать слоты в прошлом/на текущий момент.
+        // Иначе delivery подхватит их как overdue и отправит "сразу".
+        if (slot.scheduledAt.getTime() <= nowUTC.getTime()) {
+          droppedPastSlotsCount += 1;
+          if (droppedPastSlotsSample.length < 10) {
+            droppedPastSlotsSample.push({
+              kind: source.kind,
+              entityKey: source.normalizedEntityKey,
+              scheduledAtUtc: slot.scheduledAt.toISOString(),
+              day: slot.day,
+              isFixed: slot.isFixed,
+            });
+          }
+          continue;
+        }
+
         if (
           slotsToInsert.length >=
           slotsScalingConfig.regeneration.maxRowsPerRegen
@@ -1865,7 +1654,7 @@ export async function orchestrateAllSlotsForUser(
           habitIntent: source.kind === 'habits' ? intent : null,
         });
 
-        const navigation = resolveNavigationFromActionHint(actionHint);
+        const navigation = resolveNavigationFromActionHint(actionHint, text);
         const deepLink = buildDeepLinkFromNavigation(navigation);
         const actionMeta = buildActionFromNavigation(navigation);
 
@@ -1906,6 +1695,19 @@ export async function orchestrateAllSlotsForUser(
           status: 'planned',
         });
       }
+    }
+
+    if (droppedPastSlotsCount > 0) {
+      console.warn(
+        JSON.stringify({
+          event: 'notification_slots_past_guard',
+          user_id: userId,
+          reason: orchestrationReason,
+          dropped_count: droppedPastSlotsCount,
+          sample: droppedPastSlotsSample,
+          now_utc: nowUTC.toISOString(),
+        })
+      );
     }
 
     let deletedCount = 0;
@@ -1987,12 +1789,6 @@ export async function orchestrateAllSlotsForUser(
     if (!lockAcquired) {
       throw new SlotsGenerationLockTimeoutError(lockTimeoutMs);
     }
-
-    // Пост-обработка anti-overlap выполняется после пересоздания planned-части.
-    await preventSimultaneousNotifications(
-      userId,
-      SCHEDULE_CONFIG.minGapMinutes
-    );
 
     const horizonAfterStats = await countActiveSlotsInRange(
       userId,

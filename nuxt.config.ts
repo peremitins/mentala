@@ -128,6 +128,8 @@ export default defineNuxtConfig({
     OAUTH_VK_CLIENT_ID: process.env.NUXT_OAUTH_VK_CLIENT_ID,
     OAUTH_VK_CLIENT_SECRET: process.env.NUXT_OAUTH_VK_CLIENT_SECRET,
     TELEGRAM_BOT_TOKEN: process.env.NUXT_TELEGRAM_BOT_TOKEN,
+    telegramLeadsChatId: process.env.NUXT_TELEGRAM_LEADS_CHAT_ID,
+    landingLeadsEmailTo: process.env.NUXT_LANDING_LEADS_EMAIL_TO,
     FIREBASE_SERVICE_ACCOUNT_JSON:
       process.env.NUXT_FIREBASE_SERVICE_ACCOUNT_JSON,
     authEmailCodeSecret: process.env.AUTH_EMAIL_CODE_SECRET,
@@ -156,6 +158,7 @@ export default defineNuxtConfig({
         process.env.NUXT_PUBLIC_SPEECH_DEFAULT_ENGINE || 'auto', // auto | native | webspeech | whisper
       isDev: process.env.NUXT_PUBLIC_IS_DEV === 'true', // Режим разработки (для управления функционалом в UI)
       chatIdleTimeoutMs: 2 * 60 * 1000, // 2 минуты в миллисекундах
+      featureTtsEnabled: process.env.NUXT_FEATURE_TTS_ENABLED === 'true',
     },
   },
   nitro: {
