@@ -25,7 +25,7 @@ function getSafeErrorMessage(error: unknown): string {
 export function useLandingConfig() {
   const runtimeConfig = useRuntimeConfig();
 
-  return useAsyncData<LandingConfig>(
+  const result = useAsyncData<LandingConfig>(
     'landing-config',
     async () => {
       try {
@@ -63,4 +63,12 @@ export function useLandingConfig() {
       }),
     }
   );
+
+  // На клиенте при каждой загрузке страницы запрашиваем конфиг заново, чтобы смена
+  // is_released в БД (landing_config) отражалась без пересборки/редиплоя статики.
+  onMounted(() => {
+    result.refresh();
+  });
+
+  return result;
 }

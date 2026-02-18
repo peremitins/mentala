@@ -487,6 +487,8 @@ NOTIFICATION_MAX_SLOT_AGE_HOURS_BEFORE_SKIP=24
 
 **Пример:** `NUXT_PUBLIC_YANDEX_METRIKA_ID=98765432`
 
+**GitHub Actions (деплой лендинга):** в workflow подставляется и **Repository variable**, и **Repository secret** с именем `NUXT_PUBLIC_YANDEX_METRIKA_ID`. Settings → Secrets and variables → Actions → создать Variable или Secret, после этого пересобрать/задеплоить лендинг.
+
 ---
 
 ## 📚 Дополнительная информация
