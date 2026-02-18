@@ -1,14 +1,14 @@
 import { MEDITATION_TOPICS } from '@/shared/constants/meditations';
 import { MeditationTopicsDto } from '@/shared/dto/meditations';
-import { getSessionUser } from '@/server/application/auth/session';
+import { getSessionUserWithRole } from '@/server/utils/require-role';
 
 /**
  * GET /api/meditations/topics
  * Список тем для фильтрации медитаций
  */
 export default defineEventHandler(async (event) => {
-  const sessionResult = await getSessionUser(event);
-  if (!sessionResult?.user?.id) {
+  const sessionUser = await getSessionUserWithRole(event);
+  if (!sessionUser?.id) {
     throw createError({
       statusCode: 401,
       message: 'Unauthorized',

@@ -135,7 +135,7 @@ export async function countPlannedSlotsForTomorrowNightMode(
 }
 
 /**
- * Находит все planned и queued слоты пользователя после указанного времени
+ * Находит все planned-слоты пользователя после указанного времени
  * @param userId - ID пользователя
  * @param now - текущее время
  * @returns массив слотов, отсортированных по времени
@@ -151,7 +151,7 @@ export async function findPlannedSlotsForUserAfterNow(
     .where(
       and(
         eq(notificationSlots.userId, userId),
-        sql`${notificationSlots.status} IN ('planned', 'queued')`, // Включаем planned и queued
+        eq(notificationSlots.status, 'planned'),
         gt(notificationSlots.scheduledAt, now)
       )
     )

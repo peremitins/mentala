@@ -1,8 +1,16 @@
 import { defineEventHandler, readBody, setHeader, createError } from 'h3';
 import { $fetch } from 'ofetch';
 import { getSessionUser } from '@/server/application/auth/session';
+import { FEATURE_TTS_ENABLED } from '@/server/config/features';
 
 export default defineEventHandler(async (event) => {
+  if (!FEATURE_TTS_ENABLED) {
+    throw createError({
+      statusCode: 503,
+      message: 'Chat TTS is temporarily disabled',
+    });
+  }
+
   const sessionResult = await getSessionUser(event);
   if (!sessionResult?.user?.id) {
     throw createError({ statusCode: 401, statusMessage: 'Unauthorized' });

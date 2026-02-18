@@ -27,6 +27,7 @@ import type {
   Directness,
   HabitSubtype,
 } from '@/shared/dto/notifications';
+import { ensureAiNotificationAccessConsistency } from '@/server/application/notifications/notification-source-access.service';
 
 function resolveTone(value?: string | null): Tone {
   if (
@@ -66,6 +67,30 @@ export function startAiTextPoolWorker() {
           throw new Error(`Preference ${preferenceId} not found`);
         }
 
+        const [userProfile] = await db
+          .select({
+            gender: users.gender,
+            roleId: users.roleId,
+            trialEndedAt: users.trialEndedAt,
+          })
+          .from(users)
+          .where(eq(users.id, userId))
+          .limit(1);
+
+        // Важно: entitlement проверяем внутри воркера.
+        // Если Trial закончился, переключаем AI-настройки в templates и не продолжаем генерацию.
+        const aiAccess = await ensureAiNotificationAccessConsistency({
+          userId,
+          trialEndedAt: userProfile?.trialEndedAt ?? null,
+          userRole: userProfile?.roleId ?? null,
+        });
+        if (!aiAccess.canUseAiNotifications) {
+          console.log(
+            `[AI Text Pool Worker] ⏭️ AI notifications access disabled for user ${userId}, skipping job ${job.id}`
+          );
+          return { skipped: true, reason: 'ai_access_disabled' };
+        }
+
         // Проверяем, используется ли AI-генерация
         const meta = (pref.meta || {}) as any;
         const textSource = meta.textSource;
@@ -89,11 +114,6 @@ export function startAiTextPoolWorker() {
         const directness = (pref.directness as Directness) || 'moderate';
         const subtype = (pref.subtype as HabitSubtype | null) || null;
 
-        const [userProfile] = await db
-          .select({ gender: users.gender })
-          .from(users)
-          .where(eq(users.id, userId))
-          .limit(1);
         const userGender =
           userProfile?.gender === 'male' || userProfile?.gender === 'female'
             ? userProfile.gender

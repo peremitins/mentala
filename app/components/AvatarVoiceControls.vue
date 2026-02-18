@@ -1,5 +1,5 @@
 <template>
-  <div class="flex gap-2 py-2 z-100">
+  <div v-if="isTtsEnabled" class="flex gap-2 py-2 z-100">
     <!-- Кнопка аватара -->
     <button
       v-if="false"
@@ -46,6 +46,7 @@ import IconVideoOff from '~icons/lucide/video-off';
 import IconVolume2 from '~icons/lucide/volume-2';
 import IconVolumeX from '~icons/lucide/volume-x';
 import { computed } from 'vue';
+import { useRuntimeConfig } from '#imports';
 import { useChatSettingsStore } from '@/app/stores/chatSettings';
 import { useChatStore } from '@/app/stores/chat';
 import { useLoadersStore } from '@/app/stores/loaders';
@@ -55,6 +56,10 @@ const chatSettings = useChatSettingsStore();
 const chat = useChatStore();
 const loaders = useLoadersStore();
 const { stop: stopTTS } = useTTS();
+const runtimeConfig = useRuntimeConfig();
+const isTtsEnabled = computed(
+  () => runtimeConfig.public.featureTtsEnabled === true
+);
 
 // Проверяем, находимся ли на welcome screen
 const showWelcomeScreen = computed(() => chat.messages.length === 0);

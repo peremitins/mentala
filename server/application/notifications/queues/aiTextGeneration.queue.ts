@@ -16,6 +16,8 @@ export type AiTextGenerationJobData = {
   preferenceId: string;
   // Хеш конфигурации генерации (нужен для защиты от устаревших задач)
   configHash?: string;
+  // Причина постановки задачи (нужна для контроля последующей регенерации слотов)
+  reason?: string;
 };
 
 // Более щадящая очередь для AI-генерации (меньше параллелизма и больше retry)
@@ -94,6 +96,7 @@ export async function enqueueAiTextGenerationJob(params: {
         userId: params.userId,
         preferenceId: params.preferenceId,
         configHash: params.configHash,
+        reason: params.reason,
       },
       {
         delay: delayMs,

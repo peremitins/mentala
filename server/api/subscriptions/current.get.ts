@@ -128,7 +128,13 @@ export default defineEventHandler(async (event) => {
             plan,
             targetUserRole
           )
-        : { ai: false, avatar: false, weeklyMinutesLimit: 0 };
+        : {
+            ai: false,
+            avatar: false,
+            aiChatMode: 'disabled' as const,
+            weeklyMinutesLimit: 0,
+            fairUseGuardMinutesPerWeek: null,
+          };
 
       // Не отдаём внутренние поля checkout/billing, только публичные данные подписки
       const subscriptionDto = {
@@ -222,7 +228,13 @@ export default defineEventHandler(async (event) => {
         plan,
         targetUserRole
       )
-    : { ai: false, avatar: false, weeklyMinutesLimit: 0 };
+    : {
+        ai: false,
+        avatar: false,
+        aiChatMode: 'disabled' as const,
+        weeklyMinutesLimit: 0,
+        fairUseGuardMinutesPerWeek: null,
+      };
 
   // Не отдаём внутренние поля checkout/billing, только публичные данные подписки
   const subscriptionDto = {

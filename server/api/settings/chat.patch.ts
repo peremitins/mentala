@@ -2,6 +2,7 @@ import { readBody } from 'h3';
 import { getSessionUser } from '@@/server/application/auth/session';
 import { writeChatSettings } from '@/server/utils/storage';
 import { responseIdStore } from '@/server/utils/responseIdStore';
+import { FEATURE_TTS_ENABLED } from '@/server/config/features';
 type Payload = Partial<{
   voice: boolean;
   avatar: boolean;
@@ -16,6 +17,10 @@ export default defineEventHandler(async (event) => {
   }
   const uid = Number(sessionResult.user.id);
   const body = await readBody<Payload>(event);
+  // Принудительно выключаем voice, если TTS kill-switch неактивен.
+  if (!FEATURE_TTS_ENABLED && body && body.voice !== undefined) {
+    body.voice = false;
+  }
   const next = await writeChatSettings(String(uid), body || {});
 
   const enablePreviousResponseId = next?.enablePreviousResponseId ?? true;
@@ -32,7 +37,10 @@ export default defineEventHandler(async (event) => {
         isFirstSession = false;
       }
     } catch (err) {
-      console.error('[Chat Settings] Failed to check previous_response_id:', err);
+      console.error(
+        '[Chat Settings] Failed to check previous_response_id:',
+        err
+      );
     }
   }
 

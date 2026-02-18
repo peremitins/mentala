@@ -115,7 +115,9 @@ const SOS_TECHNIQUE_STEPS = [
 const isSosTechniqueActive = computed(
   () =>
     sos.isOpen.value &&
-    SOS_TECHNIQUE_STEPS.includes(sos.step.value as (typeof SOS_TECHNIQUE_STEPS)[number])
+    SOS_TECHNIQUE_STEPS.includes(
+      sos.step.value as (typeof SOS_TECHNIQUE_STEPS)[number]
+    )
 );
 const canPlaySceneAudio = computed(() => {
   // Во время logout фон не должен стартовать заново.
@@ -351,7 +353,7 @@ watch(
   inset: -10%;
   width: 120%;
   height: 120%;
-  animation: meditation-pan-diagonal 40s ease-in-out infinite;
+  animation: meditation-pan-diagonal 60s ease-in-out infinite;
   will-change: transform;
   overflow: hidden;
   background: #000;

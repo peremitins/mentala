@@ -95,6 +95,34 @@ DEV_ALLOWED_ORIGINS=http://localhost:3000,http://10.0.2.2:3000
 
 ---
 
+### `RATE_LIMIT_MAX`
+
+**Описание:** Максимум запросов в окне глобального API rate-limit middleware.
+
+**Формат:** Целое число `>= 1`
+
+**Дефолт:** `180`
+
+**Где используется:**
+
+- `server/middleware/rate-limit.ts` (только для `/api/*`).
+
+---
+
+### `RATE_LIMIT_WINDOW_MS`
+
+**Описание:** Длительность окна для глобального API rate-limit middleware в миллисекундах.
+
+**Формат:** Целое число `>= 1000`
+
+**Дефолт:** `60000`
+
+**Где используется:**
+
+- `server/middleware/rate-limit.ts` (только для `/api/*`).
+
+---
+
 ## 📝 Примеры конфигурации
 
 ### Локальная разработка (только на компьютере)
@@ -430,12 +458,34 @@ SLOTS_RESCHEDULE_MAX_DELAY_MS=900000
 SLOTS_TRACE_PREFIX=slots
 ```
 
+### Delivery / due slots
+
+```bash
+NOTIFICATION_MAX_SLOT_AGE_HOURS_BEFORE_SKIP=24
+```
+
+- `NOTIFICATION_MAX_SLOT_AGE_HOURS_BEFORE_SKIP` — максимальный возраст due-слота (в часах), после которого слот помечается `skipped` вместо отправки.
+- `0` отключает skip по возрасту полностью (все due-слоты отправляются).
+- По умолчанию: `24` часа.
+
 ### Где используется
 
 - sharded scheduler: `server/application/notifications/schedulers/notificationSlots.scheduler.ts`
 - worker регенерации: `server/application/notifications/workers/notificationSlots.worker.ts`
 - безопасная регенерация + xact lock: `server/application/notifications/global-orchestration.service.ts`
 - единый конфиг и дефолты: `server/application/notifications/slots-scaling.config.ts`
+
+---
+
+## 🌐 Лендинг (apps/landing)
+
+### `NUXT_PUBLIC_YANDEX_METRIKA_ID` (опционально)
+
+**Описание:** Числовой ID счётчика Яндекс.Метрики для аналитики лендинга. Если не задан, скрипт Метрики не подключается, цели не отправляются.
+
+**Где используется:** плагин `apps/landing/plugins/yandex-metrika.client.ts`, композабл `useLandingAnalytics`. События: `landing_view`, `landing_cta_click`, `landing_modal_open`, `landing_lead_submit_*`, `landing_scroll_depth_*`, `landing_auth_redirect_click`.
+
+**Пример:** `NUXT_PUBLIC_YANDEX_METRIKA_ID=98765432`
 
 ---
 

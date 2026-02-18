@@ -23,7 +23,6 @@ import {
 } from '@/server/application/chat/name-greeting.service';
 import {
   buildSummaryPrompt,
-  buildChatPrelude,
   buildDeveloperContext,
   buildSessionMemoryText,
   buildChatPreludeWithMemory,
@@ -735,7 +734,9 @@ export const openaiProvider: LlmProviderPort = {
               );
               isFirst = false; // Если есть summary - это не первая сессия
             }
-          } catch {}
+          } catch {
+            // Игнорируем: summary отключена на уровне продукта и не должна ломать чат.
+          }
         }
 
         // Если есть previous_response_id - это точно не первая сессия
@@ -1163,7 +1164,9 @@ export const openaiProvider: LlmProviderPort = {
           );
           isFirst = false; // Если есть summary - это не первая сессия
         }
-      } catch {}
+      } catch {
+        // Игнорируем: summary отключена на уровне продукта и не должна ломать чат.
+      }
     }
 
     // Если есть previous_response_id - это точно не первая сессия
@@ -1210,6 +1213,11 @@ export const openaiProvider: LlmProviderPort = {
       const numericUserId =
         options?.userId !== undefined ? Number(options.userId) : null;
       const timezone = resolveUserTimezone(options?.user_timezone);
+      // Нормализуем пол: берём только allowlist значений из профиля.
+      const userGender =
+        options?.user_gender === 'male' || options?.user_gender === 'female'
+          ? options.user_gender
+          : null;
       const now = new Date();
       let canUseGreeting = false;
       let greetingName: string | null = null;
@@ -1233,6 +1241,9 @@ export const openaiProvider: LlmProviderPort = {
           alternativeOpening = pickAlternativeOpening({
             userId: numericUserId,
             timezone,
+            sessionId: options?.sessionId,
+            entryContext: options?.entryContext,
+            userGender,
             now,
           });
         }

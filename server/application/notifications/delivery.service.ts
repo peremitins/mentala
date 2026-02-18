@@ -7,7 +7,7 @@
  * См. FIREBASE_SETUP.md для инструкций по настройке
  */
 
-import { eq, and, lte, asc } from 'drizzle-orm';
+import { eq, and, gte, lte, lt, asc } from 'drizzle-orm';
 import {
   db,
   isDbConnectionError,
@@ -22,6 +22,8 @@ import { enqueueAiTextPoolRefillForAllActivePreferences } from '@/server/applica
 import { startNotificationSlotsSchedulerLoop } from '@/server/application/notifications/schedulers/notificationSlots.scheduler';
 import { notificationDeliveryQueue } from '@/server/application/notifications/queues/notificationDelivery.queue';
 import { getUserTimezone, toLocalTime } from './timezone.utils';
+import { resolveEntityKeyForSlots } from './entity-key.service';
+import { getCustomNotificationSourceAccessByKind } from './notification-source-access.service';
 import admin from 'firebase-admin';
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve, isAbsolute } from 'node:path';
@@ -37,6 +39,97 @@ function resolveServerAppEnv(): 'dev' | 'prod' {
   const normalized = raw.trim().toLowerCase();
   if (normalized === 'prod' || normalized === 'production') return 'prod';
   return 'dev';
+}
+
+const DEFAULT_MAX_SLOT_AGE_HOURS_BEFORE_SKIP = 24;
+const DEFAULT_DUE_LOOKAHEAD_BUFFER_MS = 15_000;
+let mockDeliveryDisabledWarningPrinted = false;
+
+export type NotificationSendResult = 'sent' | 'mock' | 'failed';
+
+export type SendToUserResult = {
+  deviceCount: number;
+  sentCount: number;
+  mockCount: number;
+  failedCount: number;
+  hasRealDelivery: boolean;
+};
+
+type ProcessDueSlotsOptions = {
+  lookAheadMs?: number;
+};
+
+/**
+ * Возвращает максимальный возраст due-слота для принудительного skip.
+ * - `0` отключает skip по возрасту полностью;
+ * - положительное значение — лимит в минутах;
+ * - невалидное значение откатывается на дефолт.
+ */
+function getMaxSlotAgeMinutesBeforeSkip(): number | null {
+  const rawValue = process.env.NOTIFICATION_MAX_SLOT_AGE_HOURS_BEFORE_SKIP;
+
+  if (!rawValue || rawValue.trim() === '') {
+    return DEFAULT_MAX_SLOT_AGE_HOURS_BEFORE_SKIP * 60;
+  }
+
+  const parsedHours = Number(rawValue);
+  if (!Number.isFinite(parsedHours) || parsedHours < 0) {
+    console.warn(
+      `[DeliveryWorker] ⚠️ Invalid NOTIFICATION_MAX_SLOT_AGE_HOURS_BEFORE_SKIP="${rawValue}", using default ${DEFAULT_MAX_SLOT_AGE_HOURS_BEFORE_SKIP}h`
+    );
+    return DEFAULT_MAX_SLOT_AGE_HOURS_BEFORE_SKIP * 60;
+  }
+
+  if (parsedHours === 0) {
+    return null;
+  }
+
+  return Math.round(parsedHours * 60);
+}
+
+/**
+ * Флаг mock-отправки в dev.
+ * По умолчанию выключен, чтобы статус sent оставался достоверным.
+ */
+function isMockDeliveryEnabled(): boolean {
+  const rawValue = process.env.NOTIFICATION_ALLOW_MOCK_DELIVERY;
+  if (!rawValue || rawValue.trim() === '') {
+    return false;
+  }
+
+  const normalized = rawValue.trim().toLowerCase();
+  return (
+    normalized === '1' ||
+    normalized === 'true' ||
+    normalized === 'yes' ||
+    normalized === 'on'
+  );
+}
+
+/**
+ * Возвращает окно lookahead для processDueSlots.
+ * Значение задается в секундах через env, иначе берется check interval + safety buffer.
+ */
+function getDueLookAheadMs(checkIntervalMs: number): number {
+  const fallbackMs = Math.max(
+    0,
+    Math.round(checkIntervalMs + DEFAULT_DUE_LOOKAHEAD_BUFFER_MS)
+  );
+  const rawValue = process.env.NOTIFICATION_DUE_LOOKAHEAD_SECONDS;
+
+  if (!rawValue || rawValue.trim() === '') {
+    return fallbackMs;
+  }
+
+  const parsedSeconds = Number(rawValue);
+  if (!Number.isFinite(parsedSeconds) || parsedSeconds < 0) {
+    console.warn(
+      `[DeliveryWorker] ⚠️ Invalid NOTIFICATION_DUE_LOOKAHEAD_SECONDS="${rawValue}", using fallback ${Math.round(fallbackMs / 1000)}s`
+    );
+    return fallbackMs;
+  }
+
+  return Math.round(parsedSeconds * 1000);
 }
 
 /**
@@ -144,33 +237,33 @@ export function initializeFirebase(): void {
 // ==========================================
 
 /**
- * Генерирует collapse key для группировки уведомлений
+ * Генерирует collapse key для дедупликации одного и того же слота.
+ * Важно: разные слоты НЕ должны схлопываться между собой.
  * @param payload - данные уведомления
- * @returns collapse key для FCM/APNs
+ * @returns collapse key для FCM/APNs или null
  */
-function generateCollapseKey(payload: NotificationPayload): string {
-  const kind = payload.data?.kind;
-  const entityKey = payload.data?.entityKey;
+function generateCollapseKey(payload: NotificationPayload): string | null {
+  const rawSlotId = payload.data?.slotId;
+  const slotId = String(rawSlotId ?? '').trim();
 
-  if (kind && entityKey) {
-    return `${kind}_${entityKey}`;
-  }
+  if (!slotId) return null;
 
-  // Fallback: по типу или общий
-  return kind || 'mentai';
+  // По спецификации APNs collapse-id ограничен 64 символами.
+  // nanoid короче, но всё равно ограничиваем длину на всякий случай.
+  return `slot_${slotId}`.slice(0, 64);
 }
 
 /**
  * Отправить FCM уведомление на устройство
  * @param token - FCM токен устройства
  * @param payload - данные уведомления
- * @returns true если успешно отправлено
+ * @returns sent|mock|failed
  */
 export async function sendFCMNotification(
   token: string,
   payload: NotificationPayload,
   platform?: string | null
-): Promise<boolean> {
+): Promise<NotificationSendResult> {
   // Если Firebase не инициализирован
   if (!firebaseApp) {
     const isProduction = process.env.NODE_ENV === 'production';
@@ -183,15 +276,25 @@ export async function sendFCMNotification(
       console.error(
         '[FCM] Notification was NOT sent. Set NUXT_FIREBASE_SERVICE_ACCOUNT_JSON environment variable.'
       );
-      return false; // Возвращаем false, чтобы система знала, что отправка не удалась
+      return 'failed';
     } else {
-      // В development разрешаем mock mode для удобства разработки
-      console.log('[FCM] (MOCK) Sending notification:', {
-        token: token.substring(0, 20) + '...',
-        title: payload.title,
-        body: payload.body,
-      });
-      return true;
+      // В development mock разрешаем только явным флагом.
+      if (isMockDeliveryEnabled()) {
+        console.log('[FCM] (MOCK) Sending notification:', {
+          token: token.substring(0, 20) + '...',
+          title: payload.title,
+          body: payload.body,
+        });
+        return 'mock';
+      }
+
+      if (!mockDeliveryDisabledWarningPrinted) {
+        mockDeliveryDisabledWarningPrinted = true;
+        console.warn(
+          '[FCM] ⚠️ Firebase is not initialized and mock delivery is disabled (set NOTIFICATION_ALLOW_MOCK_DELIVERY=true to enable mock mode in development)'
+        );
+      }
+      return 'failed';
     }
   }
 
@@ -238,8 +341,7 @@ export async function sendFCMNotification(
       });
     }
 
-    // Формируем collapse key для группировки уведомлений
-    // Для habits: habits_{entityKey}, для therapy: therapy_{entityKey} или therapy
+    // Collapse ключ строго на уровне slotId, чтобы разные слоты не схлопывались.
     const collapseKey = generateCollapseKey(payload);
 
     // Подготовка notification объекта с опциональным изображением
@@ -276,7 +378,7 @@ export async function sendFCMNotification(
       android: {
         priority: 'high',
         ttl: 60 * 60 * 1000, // 1 час (3600 секунд)
-        collapseKey,
+        ...(collapseKey ? { collapseKey } : {}),
         ...(isAndroid ? {} : { notification: androidNotification }),
       },
       ...(isAndroid ? {} : { notification: notificationPayload }),
@@ -287,7 +389,7 @@ export async function sendFCMNotification(
               headers: {
                 'apns-priority': '10',
                 'apns-expiration': String(Math.floor(Date.now() / 1000) + 3600), // 1 час
-                'apns-collapse-id': collapseKey,
+                ...(collapseKey ? { 'apns-collapse-id': collapseKey } : {}),
               },
               payload: {
                 aps: {
@@ -313,7 +415,7 @@ export async function sendFCMNotification(
 
     const response = await admin.messaging().send(message);
     console.log('[FCM] ✅ Message sent successfully:', response);
-    return true;
+    return 'sent';
   } catch (error: any) {
     console.error('[FCM] ❌ Failed to send message:', error);
 
@@ -327,7 +429,7 @@ export async function sendFCMNotification(
       await db.delete(userDevices).where(eq(userDevices.token, token));
     }
 
-    return false;
+    return 'failed';
   }
 }
 
@@ -335,12 +437,12 @@ export async function sendFCMNotification(
  * Отправить уведомление всем устройствам пользователя
  * @param userId - ID пользователя
  * @param payload - данные уведомления
- * @returns количество успешных отправок
+ * @returns агрегированный результат отправки по устройствам
  */
 export async function sendToUser(
   userId: number,
   payload: NotificationPayload
-): Promise<number> {
+): Promise<SendToUserResult> {
   const appEnv = resolveServerAppEnv();
   console.log(`[FCM] Looking for devices for user ${userId} (env=${appEnv})`);
   const devices = await db
@@ -354,28 +456,49 @@ export async function sendToUser(
 
   if (devices.length === 0) {
     console.warn(`[FCM] No devices found for user ${userId}`);
-    return 0;
+    return {
+      deviceCount: 0,
+      sentCount: 0,
+      mockCount: 0,
+      failedCount: 0,
+      hasRealDelivery: false,
+    };
   }
 
-  let successCount = 0;
+  let sentCount = 0;
+  let mockCount = 0;
+  let failedCount = 0;
+
   for (const device of devices) {
     console.log(
       `[FCM] Sending to device: ${device.platform} (token: ${device.token.substring(0, 20)}...)`
     );
-    const success = await sendFCMNotification(
+    const result = await sendFCMNotification(
       device.token,
       payload,
       device.platform
     );
-    if (success) {
-      successCount++;
+
+    if (result === 'sent') {
+      sentCount++;
+    } else if (result === 'mock') {
+      mockCount++;
+    } else {
+      failedCount++;
     }
   }
 
   console.log(
-    `[FCM] Sent to ${successCount}/${devices.length} device(s) for user ${userId}`
+    `[FCM] Delivery summary for user ${userId}: sent=${sentCount}, mock=${mockCount}, failed=${failedCount}, total=${devices.length}`
   );
-  return successCount;
+
+  return {
+    deviceCount: devices.length,
+    sentCount,
+    mockCount,
+    failedCount,
+    hasRealDelivery: sentCount > 0,
+  };
 }
 
 // ==========================================
@@ -383,42 +506,80 @@ export async function sendToUser(
 // ==========================================
 
 /**
- * Обработать все due-слоты (те, которые пора отправить)
- * Вызывается периодически (например, каждые 5 минут)
+ * Обрабатывает planned-слоты в окне [now - lookahead, now + lookahead] и ставит задачи в очередь.
+ * За счет delayed jobs BullMQ слот отправляется ближе к scheduledAt, а не к тикеру polling.
  */
-export async function processDueSlots(): Promise<void> {
+export async function processDueSlots(
+  options: ProcessDueSlotsOptions = {}
+): Promise<void> {
   const nowUTC = new Date();
-  const LATE_DELIVERY_GRACE_MINUTES = 10;
+  const lookAheadMs = Math.max(0, Math.round(options.lookAheadMs ?? 0));
+  const processWindowStartUTC = new Date(nowUTC.getTime() - lookAheadMs);
+  const processWindowEndUTC = new Date(nowUTC.getTime() + lookAheadMs);
+  const maxSlotAgeMinutesBeforeSkip = getMaxSlotAgeMinutesBeforeSkip();
+  const dueWindowStartUTC =
+    maxSlotAgeMinutesBeforeSkip === null
+      ? new Date(0)
+      : new Date(
+          nowUTC.getTime() - Math.round(maxSlotAgeMinutesBeforeSkip * 60_000)
+        );
 
-  // Логируем UTC время (основной критерий due остаётся в UTC)
-  // Детальное логирование в локальном времени будет для каждого слота отдельно
   console.log(
-    `[DeliveryWorker] Checking for due slots at UTC=${nowUTC.toISOString()}`
+    `[DeliveryWorker] Checking slots window: start=${processWindowStartUTC.toISOString()}, now=${nowUTC.toISOString()}, lookAheadMs=${lookAheadMs}, windowEnd=${processWindowEndUTC.toISOString()}, dueWindowStart=${dueWindowStartUTC.toISOString()}`
   );
 
   try {
-    // Получаем все слоты, которые пора отправить
-    // Выбираем только 'planned' слоты - 'queued' слоты уже обрабатываются воркером BullMQ
-    // Основной критерий due остаётся в UTC (если слоты генерируются с учётом timezone, это корректно)
+    // Критично: не скипаем "просто просроченные на lookahead" слоты.
+    // Иначе при кратковременном лаге/рестарте слоты внезапно теряются и пользователь видит random skipped.
+    // Принудительно скипаем только действительно протухшие слоты старше max-slot-age.
+    if (maxSlotAgeMinutesBeforeSkip !== null) {
+      const staleBeforeUTC = dueWindowStartUTC;
+      const staleUpdate = await db
+        .update(notificationSlots)
+        .set({ status: 'skipped' })
+        .where(
+          and(
+            eq(notificationSlots.status, 'planned'),
+            lt(notificationSlots.scheduledAt, staleBeforeUTC)
+          )
+        );
+
+      const staleSkippedCount = staleUpdate.rowCount || 0;
+      if (staleSkippedCount > 0) {
+        console.warn(
+          `[DeliveryWorker] ⏭️ Skipped stale planned slots: ${staleSkippedCount} (before ${staleBeforeUTC.toISOString()})`
+        );
+      }
+    }
+
+    // Берем planned-слоты в диапазоне [dueWindowStart, now + lookahead].
+    // Это позволяет обрабатывать overdue-слоты (в пределах max age), а не терять их.
+    // Future-слоты внутри окна пойдут в BullMQ с delay до scheduledAt.
     const dueSlots = await db
       .select()
       .from(notificationSlots)
       .where(
         and(
           eq(notificationSlots.status, 'planned'), // Только planned слоты
-          lte(notificationSlots.scheduledAt, nowUTC)
+          gte(notificationSlots.scheduledAt, dueWindowStartUTC),
+          lte(notificationSlots.scheduledAt, processWindowEndUTC)
         )
       )
-      .orderBy(asc(notificationSlots.scheduledAt)) // Сортируем по времени - старые слоты обрабатываем первыми
+      .orderBy(asc(notificationSlots.scheduledAt))
       .limit(100); // Батч из 100 слотов
 
     console.log(
-      `[DeliveryWorker] Found ${dueSlots.length} due slots to process`
+      `[DeliveryWorker] Found ${dueSlots.length} slot(s) in processing window`
     );
 
     // Группируем слоты по пользователям для получения timezone (избегаем N+1 запросов)
     const userIds = [...new Set(dueSlots.map((s) => s.userId))];
     const timezoneMap = new Map<number, string>();
+    const customSourceAccessMap = new Map<
+      number,
+      { habits: boolean; therapy: boolean }
+    >();
+    const customEntityCache = new Map<string, boolean>();
 
     for (const userId of userIds) {
       try {
@@ -431,9 +592,24 @@ export async function processDueSlots(): Promise<void> {
         );
         timezoneMap.set(userId, 'Europe/Moscow'); // Fallback для российского приложения
       }
+
+      try {
+        const sourceAccess = await getCustomNotificationSourceAccessByKind({
+          userId,
+        });
+        customSourceAccessMap.set(userId, sourceAccess);
+      } catch (error) {
+        console.error(
+          `[DeliveryWorker] Failed to get custom source access for user ${userId}:`,
+          error
+        );
+        customSourceAccessMap.set(userId, { habits: true, therapy: true });
+      }
     }
 
     let enqueuedCount = 0;
+    let delayedCount = 0;
+    let immediateCount = 0;
     let skippedCount = 0;
     let errorCount = 0;
 
@@ -444,16 +620,73 @@ export async function processDueSlots(): Promise<void> {
       const nowLocal = toLocalTime(nowUTC, userTimezone);
       const lateMinutes =
         (nowUTC.getTime() - slot.scheduledAt.getTime()) / (60 * 1000);
+      const delayMs = Math.max(
+        0,
+        slot.scheduledAt.getTime() - nowUTC.getTime()
+      );
 
       if (enqueuedCount < 5) {
         // Логируем первые 5 слотов для отладки
         console.log(
-          `[DeliveryWorker] Due slot: UTC=${slot.scheduledAt.toISOString()}, Local=${slotLocal.toISOString()} (${userTimezone}), now Local=${nowLocal.toISOString()}`
+          `[DeliveryWorker] Slot candidate: UTC=${slot.scheduledAt.toISOString()}, Local=${slotLocal.toISOString()} (${userTimezone}), now Local=${nowLocal.toISOString()}, delayMs=${delayMs}`
         );
       }
 
       try {
-        if (lateMinutes > LATE_DELIVERY_GRACE_MINUTES) {
+        if (
+          slot.entityKey &&
+          (slot.kind === 'habits' || slot.kind === 'therapy')
+        ) {
+          const cacheKey = `${slot.userId}:${slot.kind}:${slot.entityKey}`;
+          let isCustomEntity = customEntityCache.get(cacheKey);
+
+          if (isCustomEntity === undefined) {
+            const resolvedEntity = await resolveEntityKeyForSlots(
+              slot.userId,
+              slot.kind as 'habits' | 'therapy',
+              slot.entityKey
+            );
+            isCustomEntity = resolvedEntity.isCustom;
+            customEntityCache.set(cacheKey, isCustomEntity);
+          }
+
+          if (isCustomEntity) {
+            const sourceAccess = customSourceAccessMap.get(slot.userId) || {
+              habits: true,
+              therapy: true,
+            };
+            const hasCustomAccess =
+              slot.kind === 'habits'
+                ? sourceAccess.habits
+                : sourceAccess.therapy;
+
+            if (!hasCustomAccess) {
+              const updateResult = await db
+                .update(notificationSlots)
+                .set({ status: 'skipped' })
+                .where(
+                  and(
+                    eq(notificationSlots.id, slot.id),
+                    eq(notificationSlots.status, 'planned')
+                  )
+                );
+
+              const rowsAffected = updateResult.rowCount || 0;
+              if (rowsAffected > 0) {
+                skippedCount++;
+                console.warn(
+                  `[DeliveryWorker] ⏭️ Slot ${slot.id} skipped: custom source locked by plan (user=${slot.userId}, source=${slot.kind}:${slot.entityKey})`
+                );
+              }
+              continue;
+            }
+          }
+        }
+
+        if (
+          maxSlotAgeMinutesBeforeSkip !== null &&
+          lateMinutes > maxSlotAgeMinutesBeforeSkip
+        ) {
           const updateResult = await db
             .update(notificationSlots)
             .set({ status: 'skipped' })
@@ -467,7 +700,7 @@ export async function processDueSlots(): Promise<void> {
           if (rowsAffected > 0) {
             skippedCount++;
             console.warn(
-              `[DeliveryWorker] ⏭️ Slot ${slot.id} is late by ${lateMinutes.toFixed(1)} min (local=${slotLocal.toISOString()}), marking as skipped`
+              `[DeliveryWorker] ⏭️ Slot ${slot.id} is stale by ${lateMinutes.toFixed(1)} min (limit=${maxSlotAgeMinutesBeforeSkip} min, local=${slotLocal.toISOString()}), marking as skipped`
             );
           }
           continue;
@@ -503,6 +736,8 @@ export async function processDueSlots(): Promise<void> {
             payload: slot.payload as NotificationPayload,
           },
           {
+            // Точный тайминг: job активируется ближе к scheduledAt, а не к ближайшему polling-тику.
+            delay: delayMs,
             jobId: `delivery-${slot.id}`, // Уникальный ID для предотвращения дубликатов
             removeOnComplete: {
               age: 3600, // Хранить завершённые задачи 1 час для отладки
@@ -516,6 +751,11 @@ export async function processDueSlots(): Promise<void> {
         );
 
         enqueuedCount++;
+        if (delayMs > 0) {
+          delayedCount++;
+        } else {
+          immediateCount++;
+        }
       } catch (error: any) {
         errorCount++;
         const errorMessage = error?.message || String(error);
@@ -564,7 +804,7 @@ export async function processDueSlots(): Promise<void> {
     }
 
     console.log(
-      `[DeliveryWorker] ✅ Enqueued ${enqueuedCount} slots, skipped ${skippedCount}, errors ${errorCount} (total due: ${dueSlots.length})`
+      `[DeliveryWorker] ✅ Enqueued ${enqueuedCount} slot(s): immediate=${immediateCount}, delayed=${delayedCount}, skipped=${skippedCount}, errors=${errorCount} (total in window: ${dueSlots.length})`
     );
   } catch (error: any) {
     // Улучшенная обработка ошибок подключения к БД
@@ -638,6 +878,7 @@ export function startDeliveryWorker(): void {
   const isDevelopment = process.env.NODE_ENV !== 'production';
   const INTERVAL_MS = isDevelopment ? 30 * 1000 : 5 * 60 * 1000; // 30 сек в dev, 5 минут в prod
   const INITIAL_DELAY_MS = isDevelopment ? 10 * 1000 : 60 * 1000; // 10 сек в dev, 1 минута в prod
+  const DUE_LOOKAHEAD_MS = getDueLookAheadMs(INTERVAL_MS);
 
   // Интервал для проверки и догенерации текстов (раз в час, с небольшим смещением)
   const TEXT_POOL_REFILL_INTERVAL_MS = 60 * 60 * 1000; // 1 час
@@ -647,16 +888,19 @@ export function startDeliveryWorker(): void {
     `[DeliveryWorker] Mode: ${isDevelopment ? 'development' : 'production'}`
   );
   console.log(`[DeliveryWorker] Check interval: ${INTERVAL_MS / 1000} seconds`);
+  console.log(
+    `[DeliveryWorker] Due lookahead: ${Math.round(DUE_LOOKAHEAD_MS / 1000)} seconds`
+  );
 
   // Первый запуск обработки due-слотов
   setTimeout(() => {
-    processDueSlots().catch((error) => {
+    processDueSlots({ lookAheadMs: DUE_LOOKAHEAD_MS }).catch((error) => {
       console.error('[DeliveryWorker] Error in worker:', error);
     });
 
     // Последующие запуски обработки due-слотов
     setInterval(() => {
-      processDueSlots().catch((error) => {
+      processDueSlots({ lookAheadMs: DUE_LOOKAHEAD_MS }).catch((error) => {
         console.error('[DeliveryWorker] Error in worker:', error);
       });
     }, INTERVAL_MS);

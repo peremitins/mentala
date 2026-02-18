@@ -30,7 +30,9 @@ interface SubscriptionResponse {
   features: {
     ai: boolean;
     avatar: boolean;
-    weeklyMinutesLimit: number;
+    aiChatMode: 'disabled' | 'limited' | 'unlimited_fair_use';
+    weeklyMinutesLimit: number | null;
+    fairUseGuardMinutesPerWeek: number | null;
   };
   subscription: Subscription | null;
   noActiveSubscription: boolean;
@@ -86,7 +88,7 @@ export const useSubscriptionStore = defineStore('subscription', {
         if (aIsCurrent && !bIsCurrent) return -1;
         if (!aIsCurrent && bIsCurrent) return 1;
 
-      // Затем по порядку: Basic, Pro, Premium
+        // Затем по порядку: Basic, Pro, Premium
         const aIndex = order.indexOf(a.name);
         const bIndex = order.indexOf(b.name);
         if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
@@ -102,8 +104,12 @@ export const useSubscriptionStore = defineStore('subscription', {
       return state.subscriptionData?.trialActive || false;
     },
 
-    weeklyMinutesLimit: (state) => {
-      return state.subscriptionData?.features?.weeklyMinutesLimit || 0;
+    weeklyMinutesLimit: (state): number | null => {
+      return state.subscriptionData?.features?.weeklyMinutesLimit ?? 0;
+    },
+
+    aiChatMode: (state): 'disabled' | 'limited' | 'unlimited_fair_use' => {
+      return state.subscriptionData?.features?.aiChatMode || 'disabled';
     },
   },
 

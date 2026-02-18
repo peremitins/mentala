@@ -9,7 +9,7 @@ import {
 import { eq, and, desc, gt } from 'drizzle-orm';
 import { getUsageForCurrentWeek } from '@/server/application/subscriptions/session-time.service';
 import {
-  getWeeklyMinutesLimit,
+  getFeatures,
   isTrialActive,
 } from '@/server/application/subscriptions/access.service';
 import { WEEKLY_OVERDRAFT_MINUTES } from '@/server/config/subscription';
@@ -33,6 +33,7 @@ export default defineEventHandler(async (event) => {
       id: users.id,
       timezone: users.timezone,
       trialEndedAt: users.trialEndedAt,
+      roleId: users.roleId,
     })
     .from(users)
     .where(eq(users.id, sessionResult.user.id))
@@ -64,29 +65,33 @@ export default defineEventHandler(async (event) => {
     .orderBy(desc(userSubscriptions.createdAt))
     .limit(1);
 
-  // Используем getWeeklyMinutesLimit для правильного расчета лимита (учитывает Trial)
+  // Получаем единые фичи доступа, чтобы usage не расходился с gate в chat endpoints.
   let weeklyLimit = 0;
-  if (activeSubscription.length && userRecord) {
-    const sub = activeSubscription[0];
-    const subscriptionForFeatures = {
-      planId: sub.subscription.planId,
-    };
-    weeklyLimit = await getWeeklyMinutesLimit(
+  let aiChatMode: 'disabled' | 'limited' | 'unlimited_fair_use' = 'disabled';
+
+  if (userRecord) {
+    const activeSub = activeSubscription[0];
+    const hasTrialWithoutSubscription =
+      !activeSub && isTrialActive(userRecord) === true;
+
+    const subscriptionForFeatures = activeSub
+      ? { planId: activeSub.subscription.planId }
+      : hasTrialWithoutSubscription
+        ? { planId: 'basic' }
+        : null;
+
+    const features = await getFeatures(
       userRecord,
       subscriptionForFeatures,
-      sub.plan
+      activeSub?.plan ?? null,
+      userRecord.roleId || undefined
     );
-  } else if (userRecord) {
-    // Если нет активной подписки, но есть пользователь - проверяем Trial для Basic
-    // Если Trial активен, даем DEFAULT_WEEKLY_MINUTES_LIMIT минут (как Premium)
-    if (isTrialActive(userRecord)) {
-      const { DEFAULT_WEEKLY_MINUTES_LIMIT } = await import(
-        '@/server/config/subscription'
-      );
-      weeklyLimit = DEFAULT_WEEKLY_MINUTES_LIMIT;
-    } else {
-      weeklyLimit = 0;
-    }
+
+    aiChatMode = features.aiChatMode;
+    weeklyLimit =
+      features.aiChatMode === 'unlimited_fair_use'
+        ? features.fairUseGuardMinutesPerWeek || 0
+        : features.weeklyMinutesLimit || 0;
   }
 
   // Получаем использование
@@ -94,25 +99,29 @@ export default defineEventHandler(async (event) => {
 
   // Вычисляем дополнительные поля
   let availableMinutes: number;
-  let overdraftUsed: number;
 
-  // availableMinutes = лимит - использовано + overdraft (overdraft всегда доступен)
-  // Если превышен лимит, то availableMinutes = overdraft - перерасход
+  const allowOverdraft = aiChatMode === 'limited';
+
+  // availableMinutes = лимит - использовано (+ overdraft только для limited).
   if (usage.usedMinutes <= weeklyLimit) {
-    // В пределах лимита: доступно = лимит - использовано + overdraft
     availableMinutes =
-      weeklyLimit - usage.usedMinutes + WEEKLY_OVERDRAFT_MINUTES;
-  } else {
-    // Превышен лимит: доступно = overdraft - перерасход
+      weeklyLimit -
+      usage.usedMinutes +
+      (allowOverdraft ? WEEKLY_OVERDRAFT_MINUTES : 0);
+  } else if (allowOverdraft) {
     const overdraft = usage.usedMinutes - weeklyLimit;
     availableMinutes = Math.max(0, WEEKLY_OVERDRAFT_MINUTES - overdraft);
+  } else {
+    availableMinutes = 0;
   }
 
-  // overdraftUsed = сколько минут использовано сверх лимита (но не больше overdraft)
-  overdraftUsed = Math.max(
-    0,
-    Math.min(usage.usedMinutes - weeklyLimit, WEEKLY_OVERDRAFT_MINUTES)
-  );
+  // Считаем overdraft только для limited режима.
+  const overdraftUsed = allowOverdraft
+    ? Math.max(
+        0,
+        Math.min(usage.usedMinutes - weeklyLimit, WEEKLY_OVERDRAFT_MINUTES)
+      )
+    : 0;
 
   return {
     ...usage,

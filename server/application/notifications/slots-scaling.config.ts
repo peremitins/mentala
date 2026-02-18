@@ -192,7 +192,7 @@ export const slotsScalingConfig = {
     }),
     minHorizonHours: parseNumberEnv({
       keys: ['SLOTS_MIN_HORIZON_HOURS'],
-      defaultValue: 36,
+      defaultValue: 2,
       min: 1,
     }),
     lockTimeoutMs: parseNumberEnv({

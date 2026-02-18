@@ -3,6 +3,7 @@ export * from './auth';
 export * from './onboarding';
 export * from './meditations';
 export * from './user';
+export * from './landing';
 
 export const UserDto = z.object({
   id: z.string().uuid().optional(),

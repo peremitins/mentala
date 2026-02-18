@@ -63,46 +63,34 @@ function isWithinRange(
 }
 
 /**
- * Ищет ближайшее свободное время в обе стороны (вперёд и назад)
+ * Ищет ближайшее свободное время только вперёд от базового времени
  * @param baseTime - базовое время (UTC)
  * @param existingSlots - массив существующих слотов
  * @param minGapMinutes - минимальный интервал в минутах
  * @param range - диапазон времени
  * @param timezone - IANA timezone пользователя
+ * @param minAllowedUtc - минимально допустимое время (UTC)
  * @returns свободное время в UTC или null если не найдено
  */
-function findNearestFreeTimeInBothDirections(
+function findNearestFreeTimeForward(
   baseTime: Date,
   existingSlots: Array<{ scheduledAt: Date }>,
   minGapMinutes: number,
   range: { start: number; end: number; crossesMidnight: boolean },
-  timezone: string
+  timezone: string,
+  minAllowedUtc: Date
 ): Date | null {
   const baseLocal = toLocalTime(baseTime, timezone);
   const minGapMs = minGapMinutes * 60 * 1000;
-  const maxSearchRange = 2 * 60 * 60 * 1000; // Увеличиваем до 2 часов в обе стороны
+  const maxSearchRange = 2 * 60 * 60 * 1000; // До 2 часов вперед
 
-  // Ищем вперёд (приоритет - идти вперёд)
+  // Ищем только вперёд, чтобы не сдвигать уведомления в прошлое
   for (let offset = minGapMs; offset < maxSearchRange; offset += minGapMs) {
-    // Шаг = minGapMinutes (более точный поиск)
     const candidateTime = new Date(baseLocal.getTime() + offset);
     const candidateUTC = toUTC(candidateTime, timezone);
 
     if (
-      isTimeFree(candidateUTC, existingSlots, minGapMs, timezone) &&
-      isWithinRange(candidateTime, range, timezone)
-    ) {
-      return candidateUTC;
-    }
-  }
-
-  // Ищем назад (если вперёд не нашли)
-  for (let offset = minGapMs; offset < maxSearchRange; offset += minGapMs) {
-    // Шаг = minGapMinutes
-    const candidateTime = new Date(baseLocal.getTime() - offset);
-    const candidateUTC = toUTC(candidateTime, timezone);
-
-    if (
+      candidateUTC.getTime() >= minAllowedUtc.getTime() &&
       isTimeFree(candidateUTC, existingSlots, minGapMs, timezone) &&
       isWithinRange(candidateTime, range, timezone)
     ) {
@@ -117,7 +105,7 @@ function findNearestFreeTimeInBothDirections(
  * Предотвращает одновременные уведомления, сдвигая пересекающиеся слоты
  * Проверяет все planned слоты пользователя и сдвигает те, которые находятся слишком близко друг к другу
  * ВАЖНО: Учитывает персональный диапазон для каждого источника и не выходит за его границы
- * Ищет свободное время в обе стороны (вперёд и назад)
+ * Ищет свободное время только вперёд
  * @param userId - ID пользователя
  * @param minGapMinutes - минимальный интервал между уведомлениями в минутах (по умолчанию 10)
  */
@@ -183,7 +171,7 @@ export async function preventSimultaneousNotifications(
     const gapMinutes =
       (currentTimeLocal.getTime() - prevTimeLocal.getTime()) / (1000 * 60);
 
-    // Если интервал меньше минимального, ищем свободное время в обе стороны
+    // Если интервал меньше минимального, ищем свободное время только вперед
     if (gapMinutes < minGapMinutes) {
       // Получаем диапазон для текущего слота
       const slotKey = `${currentSlot.kind}:${currentSlot.entityKey || 'null'}`;
@@ -213,13 +201,14 @@ export async function preventSimultaneousNotifications(
         continue;
       }
 
-      // Ищем свободное время в обе стороны (только для гибких слотов)
-      let freeTime = findNearestFreeTimeInBothDirections(
+      // Ищем свободное время только вперед (только для гибких слотов)
+      let freeTime = findNearestFreeTimeForward(
         currentSlot.scheduledAt,
         allSlots.slice(0, i), // Все предыдущие слоты
         minGapMinutes,
         slotRange,
-        userTimezone
+        userTimezone,
+        nowUTC
       );
 
       // Если не нашли свободное время, пытаемся найти ближайшее место с минимальным интервалом
@@ -274,6 +263,7 @@ export async function preventSimultaneousNotifications(
         // Проверяем, что скорректированное время свободно
         const adjustedUTC = toUTC(adjustedTimeLocal, userTimezone);
         if (
+          adjustedUTC.getTime() >= nowUTC.getTime() &&
           isTimeFree(
             adjustedUTC,
             allSlots.slice(0, i),
@@ -312,6 +302,7 @@ export async function preventSimultaneousNotifications(
             const candidateUTC = toUTC(candidateTimeLocal, userTimezone);
 
             if (
+              candidateUTC.getTime() >= nowUTC.getTime() &&
               isTimeFree(
                 candidateUTC,
                 allSlots.slice(0, i),
@@ -388,10 +379,16 @@ export async function preventSimultaneousNotifications(
         const finalMin = finalMinutes % 60;
         const finalTimeLocal = new Date(newTimeLocal);
         finalTimeLocal.setHours(finalHour, finalMin, 0, 0);
-        const finalUTC = toUTC(finalTimeLocal, userTimezone);
+        let finalUTC = toUTC(finalTimeLocal, userTimezone);
+
+        // Не допускаем сдвиги в прошлое: в крайнем случае оставляем исходное время слота.
+        if (finalUTC.getTime() < nowUTC.getTime()) {
+          finalUTC = currentSlot.scheduledAt;
+        }
+        const finalLogLocal = toLocalTime(finalUTC, userTimezone);
 
         console.warn(
-          `[Scheduler] ⚠️ Cannot find free time for slot ${currentSlot.id.substring(0, 8)}..., forcing shift to: UTC=${finalUTC.toISOString()}, Local=${finalTimeLocal.toISOString()} (range: [${slotRange.start}-${slotRange.end}])`
+          `[Scheduler] ⚠️ Cannot find free time for slot ${currentSlot.id.substring(0, 8)}..., forcing shift to: UTC=${finalUTC.toISOString()}, Local=${finalLogLocal.toISOString()} (range: [${slotRange.start}-${slotRange.end}])`
         );
 
         // Обновляем payload с новым временем

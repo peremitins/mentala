@@ -2,6 +2,7 @@
 import { db } from '@@/server/infrastructure/db/client';
 import { chatSettings } from '@@/server/infrastructure/db/schema';
 import { eq } from 'drizzle-orm';
+import { FEATURE_TTS_ENABLED } from '@/server/config/features';
 
 type ChatSettings = {
   voice: boolean;
@@ -11,7 +12,8 @@ type ChatSettings = {
 };
 
 const DEFAULT_SETTINGS: ChatSettings = {
-  voice: true,
+  // Чатовая озвучка управляется глобальным kill-switch.
+  voice: FEATURE_TTS_ENABLED,
   avatar: false,
   enablePreviousResponseId: true,
   enableSummary: true,
@@ -36,7 +38,8 @@ export async function readChatSettings(uid: string): Promise<ChatSettings> {
 
     const row = result[0];
     return {
-      voice: row.voice ?? true,
+      // При выключенном kill-switch принудительно отдаём false.
+      voice: FEATURE_TTS_ENABLED ? (row.voice ?? true) : false,
       avatar: row.avatar ?? true,
       enablePreviousResponseId: row.enablePreviousResponseId ?? true,
       enableSummary: row.enableSummary ?? true,
@@ -59,6 +62,11 @@ export async function writeChatSettings(
   try {
     const prev = await readChatSettings(uid);
     const next = { ...prev, ...patch };
+
+    // Не даём включить voice, пока kill-switch выключен.
+    if (!FEATURE_TTS_ENABLED) {
+      next.voice = false;
+    }
 
     await db
       .insert(chatSettings)

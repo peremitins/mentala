@@ -9420,18 +9420,6 @@ const rawHabitsTemplates: NotificationTemplate[] = [
 
   // Informational (факты) - universal формат (один текст для всех)
   {
-    id: 'habit_smoking_info_01',
-    kind: 'habits',
-    entityKey: 'smoking',
-    intent: 'quit',
-    subtype: 'informational',
-    directness: ['universal'],
-    ru: {
-      universal:
-        'Через 20 минут после отказа от курения пульс и давление нормализуются.',
-    },
-  },
-  {
     id: 'habit_smoking_info_03',
     kind: 'habits',
     entityKey: 'smoking',
