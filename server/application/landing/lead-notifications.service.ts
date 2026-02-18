@@ -5,7 +5,7 @@ import type { LandingGoalKey } from '@/shared/dto/landing';
 type LeadNotificationPayload = {
   name: string;
   email: string;
-  goalKey?: LandingGoalKey;
+  goalKeys?: LandingGoalKey[];
   utmSource?: string;
   utmMedium?: string;
   utmCampaign?: string;
@@ -21,6 +21,7 @@ const GOAL_LABELS: Record<LandingGoalKey, string> = {
   reduce_caffeine: 'Сократить кофеин',
   build_habits: 'Развить полезные привычки',
   try_ai_support: 'Попробовать ИИ-поддержку',
+  other: 'Другое',
 };
 
 function formatDate(value: Date): string {
@@ -31,11 +32,13 @@ function formatDate(value: Date): string {
   }).format(value);
 }
 
-function formatGoal(goalKey?: LandingGoalKey): string {
-  if (!goalKey) {
-    return 'Не выбрана';
+function formatGoals(goalKeys?: LandingGoalKey[]): string {
+  if (!goalKeys?.length) {
+    return 'Не выбраны';
   }
-  return `${GOAL_LABELS[goalKey] || goalKey} (${goalKey})`;
+  return goalKeys
+    .map((key) => `${GOAL_LABELS[key] || key} (${key})`)
+    .join(', ');
 }
 
 function getSmtpConfig() {
@@ -89,7 +92,7 @@ export async function sendLandingLeadTeamEmail(
     },
   });
 
-  const goalText = formatGoal(payload.goalKey);
+  const goalText = formatGoals(payload.goalKeys);
   const utmText = [payload.utmSource, payload.utmMedium, payload.utmCampaign]
     .filter(Boolean)
     .join(' / ');
@@ -102,7 +105,7 @@ export async function sendLandingLeadTeamEmail(
       'Новая заявка с лендинга Mentala',
       `Имя: ${payload.name}`,
       `Email: ${payload.email}`,
-      `Цель: ${goalText}`,
+      `Цели: ${goalText}`,
       `UTM: ${utmText || '—'}`,
       `Дата: ${formatDate(payload.createdAt)}`,
     ].join('\n'),
@@ -122,7 +125,7 @@ export async function sendLandingLeadTelegram(
     return;
   }
 
-  const goalText = formatGoal(payload.goalKey);
+  const goalText = formatGoals(payload.goalKeys);
   const utmText = [payload.utmSource, payload.utmMedium, payload.utmCampaign]
     .filter(Boolean)
     .join(' / ');
@@ -131,7 +134,7 @@ export async function sendLandingLeadTelegram(
     'Новая заявка Mentala',
     `Имя: ${payload.name}`,
     `Email: ${payload.email}`,
-    `Цель: ${goalText}`,
+    `Цели: ${goalText}`,
     `UTM: ${utmText || '—'}`,
     `Дата: ${formatDate(payload.createdAt)}`,
   ].join('\n');

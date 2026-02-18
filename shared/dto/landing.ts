@@ -9,6 +9,7 @@ export const LandingGoalKeyEnum = z.enum([
   'reduce_caffeine',
   'build_habits',
   'try_ai_support',
+  'other',
 ]);
 
 export const LandingConfigDto = z.object({
@@ -20,7 +21,8 @@ export const LandingConfigDto = z.object({
 export const LandingLeadRequestDto = z.object({
   name: z.string().trim().min(1).max(120),
   email: z.string().trim().email().max(255),
-  goalKey: LandingGoalKeyEnum.optional(),
+  /** Мультивыбор целей; сохраняется в БД как JSON в goal_key */
+  goalKeys: z.array(LandingGoalKeyEnum).optional(),
   utmSource: z.string().trim().max(120).optional(),
   utmMedium: z.string().trim().max(120).optional(),
   utmCampaign: z.string().trim().max(120).optional(),
