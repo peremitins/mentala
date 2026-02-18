@@ -15,6 +15,11 @@ import {
   sendLandingLeadTeamEmail,
   sendLandingLeadTelegram,
 } from '@/server/application/landing/lead-notifications.service';
+import {
+  setLandingCorsHeaders,
+  getLandingAllowedOrigins,
+  normalizeLandingOrigin,
+} from '@/server/utils/landing-cors';
 
 type RateLimitResult = {
   allowed: boolean;
@@ -27,35 +32,8 @@ const localRateLimitBuckets = new Map<
   { count: number; resetAt: number }
 >();
 
-function normalizeOrigin(origin: string): string {
-  return origin.trim().replace(/\/+$/, '');
-}
-
-function parseAllowedOrigins(): string[] {
-  if (process.env.NODE_ENV === 'production') {
-    return String(process.env.ALLOWED_ORIGINS || '')
-      .split(',')
-      .map((origin) => normalizeOrigin(origin))
-      .filter(Boolean);
-  }
-
-  const devOrigins = String(process.env.DEV_ALLOWED_ORIGINS || '')
-    .split(',')
-    .map((origin) => normalizeOrigin(origin))
-    .filter(Boolean);
-
-  const defaults = [
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
-    'http://localhost:3001',
-    'http://127.0.0.1:3001',
-  ];
-
-  return [...new Set([...defaults, ...devOrigins])];
-}
-
 function verifyLandingOrigin(event: any): boolean {
-  const allowedOrigins = parseAllowedOrigins();
+  const allowedOrigins = getLandingAllowedOrigins();
   if (!allowedOrigins.length) {
     return process.env.NODE_ENV !== 'production';
   }
@@ -64,7 +42,7 @@ function verifyLandingOrigin(event: any): boolean {
   const referer = getHeader(event, 'referer');
 
   if (origin) {
-    return allowedOrigins.includes(normalizeOrigin(origin));
+    return allowedOrigins.includes(normalizeLandingOrigin(origin));
   }
 
   if (referer) {
@@ -125,6 +103,9 @@ export default defineEventHandler(
   ): Promise<
     LandingLeadResponseDto | { message: string; issues?: unknown }
   > => {
+    // CORS-заголовки в начале, чтобы все ответы (в т.ч. 400/403/429) были доступны с mentala.app
+    setLandingCorsHeaders(event);
+
     const parsedBody = LandingLeadRequestDto.safeParse(await readBody(event));
 
     if (!parsedBody.success) {
@@ -179,6 +160,11 @@ export default defineEventHandler(
     }
 
     const now = new Date();
+    const goalKeyJson =
+      body.goalKeys?.length ?
+        JSON.stringify(body.goalKeys)
+      : null;
+
     const inserted = await db
       .insert(landingLeads)
       .values({
@@ -186,7 +172,7 @@ export default defineEventHandler(
         email: body.email,
         emailNormalized,
         emailHash,
-        goalKey: body.goalKey,
+        goalKey: goalKeyJson,
         utmSource: body.utmSource,
         utmMedium: body.utmMedium,
         utmCampaign: body.utmCampaign,
@@ -205,7 +191,7 @@ export default defineEventHandler(
         sendLandingLeadTeamEmail({
           name: body.name,
           email: body.email,
-          goalKey: body.goalKey,
+          goalKeys: body.goalKeys,
           utmSource: body.utmSource,
           utmMedium: body.utmMedium,
           utmCampaign: body.utmCampaign,
@@ -214,7 +200,7 @@ export default defineEventHandler(
         sendLandingLeadTelegram({
           name: body.name,
           email: body.email,
-          goalKey: body.goalKey,
+          goalKeys: body.goalKeys,
           utmSource: body.utmSource,
           utmMedium: body.utmMedium,
           utmCampaign: body.utmCampaign,

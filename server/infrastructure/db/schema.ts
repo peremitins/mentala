@@ -216,7 +216,8 @@ export const landingLeads = pgTable(
     email: varchar('email', { length: 255 }).notNull(),
     emailNormalized: varchar('email_normalized', { length: 255 }).notNull(),
     emailHash: varchar('email_hash', { length: 64 }).notNull(),
-    goalKey: varchar('goal_key', { length: 50 }),
+    /** JSON-массив ключей целей, например ["reduce_anxiety","other"] */
+    goalKey: text('goal_key'),
     utmSource: varchar('utm_source', { length: 120 }),
     utmMedium: varchar('utm_medium', { length: 120 }),
     utmCampaign: varchar('utm_campaign', { length: 120 }),

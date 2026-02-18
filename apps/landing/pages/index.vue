@@ -1,5 +1,5 @@
 <template>
-  <div class="relative min-h-screen overflow-x-clip pb-16">
+  <div class="relative min-h-screen overflow-x-clip pb-4">
     <div class="landing-grid-glow" />
     <div class="noise-overlay" />
 
@@ -81,7 +81,7 @@
       </div>
     </header>
 
-    <main class="pt-28 sm:pt-42">
+    <main class="pt-28 lg:pt-42">
       <section id="hero" class="scroll-mt-header">
         <div
           class="landing-container grid lg:grid-cols-2 gap-6 sm:gap-8 items-center"
@@ -117,23 +117,48 @@
           </div>
 
           <div class="relative reveal-item order-1 lg:order-2">
-            <figure class="hero-media">
+            <!--
+              Inline-стили здесь — намеренно: это critical layout для первого экрана.
+              На некоторых устройствах при обновлении страницы картинка может успеть отрисоваться до загрузки CSS
+              и «выпрыгнуть» на весь экран из-за своих огромных intrinsic размеров (4000×3200).
+              Инлайн фиксирует размеры/обрезку до прихода landing.css.
+            -->
+            <figure
+              class="hero-media"
+              style="
+                position: relative;
+                width: 100%;
+                aspect-ratio: 5/4;
+                overflow: hidden;
+                border-radius: 1.75rem;
+                background: #111a2f;
+              "
+            >
               <img
                 src="/landing/features/hero_bg.jpg"
                 alt="Пользователи Mentala в повседневных сценариях"
                 class="hero-media-image"
-                loading="eager"
+                loading="lazy"
                 fetchpriority="high"
                 decoding="async"
+                width="4000"
+                height="3200"
+                style="
+                  display: block;
+                  width: 100%;
+                  height: 100%;
+                  object-fit: cover;
+                  object-position: center;
+                "
               />
             </figure>
           </div>
         </div>
       </section>
 
-      <section id="features" class="scroll-mt-header mt-24 sm:mt-42">
+      <section id="features" class="scroll-mt-header mt-20 lg:mt-42">
         <div class="landing-container">
-          <div class="max-w-2xl space-y-4 mb-8">
+          <div class="max-w-2xl space-y-4 mb-5">
             <h2 class="font-display text-3xl sm:text-4xl font-bold reveal-item">
               Возможности Mentala
             </h2>
@@ -242,9 +267,9 @@
         </div>
       </section>
 
-      <section id="scenarios" class="scroll-mt-header mt-24 sm:mt-28">
+      <section id="scenarios" class="scroll-mt-header mt-20 lg:mt-28">
         <div class="landing-container">
-          <div class="mb-8 space-y-3">
+          <div class="mb-5 space-y-3">
             <h2 class="font-display text-3xl sm:text-4xl font-bold reveal-item">
               Сценарии
             </h2>
@@ -281,7 +306,7 @@
               class="h-auto"
             >
               <article
-                class="glass-panel rounded-2xl p-5 h-full min-h-[185px] flex flex-col"
+                class="glass-panel rounded-2xl p-5 h-full min-h-[150px] flex flex-col"
               >
                 <span class="text-2xl mb-3">{{ item.emoji }}</span>
                 <h3 class="font-semibold text-lg mb-2">{{ item.title }}</h3>
@@ -292,9 +317,9 @@
         </div>
       </section>
 
-      <section id="how-it-works" class="scroll-mt-header mt-24 sm:mt-28">
+      <section id="how-it-works" class="scroll-mt-header mt-20 lg:mt-28">
         <div class="landing-container">
-          <div class="mb-8 space-y-3">
+          <div class="mb-5 space-y-3">
             <h2 class="font-display text-3xl sm:text-4xl font-bold reveal-item">
               Как это работает
             </h2>
@@ -321,9 +346,9 @@
         </div>
       </section>
 
-      <section id="why-mentala" class="scroll-mt-header mt-24 sm:mt-28">
+      <section id="why-mentala" class="scroll-mt-header mt-20 lg:mt-28">
         <div class="landing-container">
-          <div class="mb-8 space-y-3">
+          <div class="mb-5 space-y-3">
             <Badge variant="accent" class="reveal-item">
               Дополняет, не заменяет
             </Badge>
@@ -359,8 +384,12 @@
                     <button
                       v-if="point.tooltip"
                       type="button"
-                      v-tooltip="point.tooltip"
-                      class="ml-1 inline-flex h-3 w-3 shrink-0 align-middle items-center justify-center rounded-full border border-white/25 bg-white/5 text-[10px] font-semibold text-white/70 hover:bg-white/10 hover:text-white cursor-help"
+                      v-tooltip="{
+                        content: point.tooltip,
+                        triggers: ['hover', 'focus', 'click'],
+                        placement: 'top',
+                      }"
+                      class="ml-1 inline-flex h-4 w-4 shrink-0 align-middle items-center justify-center rounded-full border border-white/25 bg-white/5 text-[10px] font-semibold text-white/70 hover:bg-white/10 hover:text-white cursor-help"
                       :aria-label="`Подробнее: ${point.text}`"
                     >
                       ?
@@ -400,9 +429,9 @@
         </div>
       </section>
 
-      <section id="landing-pricing" class="scroll-mt-header mt-24 sm:mt-28">
+      <section id="landing-pricing" class="scroll-mt-header mt-20 lg:mt-28">
         <div class="landing-container">
-          <div class="mb-8 space-y-3">
+          <div class="mb-5 space-y-3">
             <h2 class="font-display text-3xl sm:text-4xl font-bold reveal-item">
               Тарифы
             </h2>
@@ -514,7 +543,7 @@
       </section>
 
       <section
-        class="reveal-item glass-panel rounded-xl px-5 py-4 text-xs sm:text-sm text-white/80 border-white/25 max-w-3xl mx-auto mt-24 sm:mt-28 text-center"
+        class="reveal-item glass-panel rounded-xl px-5 py-4 text-xs sm:text-sm text-white/80 border-white/25 max-w-3xl mx-auto mt-20 sm:mt-28 text-center"
       >
         Mentala создана для психологической поддержки и самопомощи. Это не
         медицинская услуга и не замена врачу или психотерапевту. Если вы
@@ -522,7 +551,7 @@
         откладывайте визит к квалифицированному специалисту.
       </section>
 
-      <section id="privacy" class="scroll-mt-header mt-24 sm:mt-28">
+      <section id="privacy" class="scroll-mt-header mt-20 lg:mt-28">
         <div class="landing-container">
           <div class="max-w-2xl space-y-3 sm:space-y-4">
             <Badge variant="accent" class="reveal-item"
@@ -561,7 +590,7 @@
         </div>
       </section>
 
-      <section id="faq" class="scroll-mt-header mt-24 sm:mt-28">
+      <section id="faq" class="scroll-mt-header mt-20 lg:mt-28">
         <div class="landing-container">
           <h2
             class="font-display text-3xl sm:text-4xl font-bold mb-7 reveal-item"
@@ -604,13 +633,13 @@
         </div>
       </section>
 
-      <footer class="mt-24 sm:mt-28">
+      <footer class="mt-20 sm:mt-28">
         <div class="landing-container">
           <div
-            class="glass-panel rounded-2xl p-6 sm:p-7 flex flex-col md:flex-row gap-5 md:items-center md:justify-between"
+            class="glass-panel rounded-2xl p-6 sm:p-7 flex flex-col md:flex-row gap-1 lg:gap-5 md:items-center md:justify-between"
           >
             <div
-              class="flex gap-3 items-center justify-center text-sm text-white/75"
+              class="flex px-3 py-2 gap-3 items-center justify-center text-sm text-white/75"
             >
               <p class="flex text-xs text-white/55 leading-0">
                 © {{ new Date().getFullYear() }} Mentala
@@ -624,7 +653,9 @@
               </a>
             </div>
 
-            <div class="flex flex-wrap items-center gap-3 text-sm">
+            <div
+              class="flex flex-wrap items-center justify-center gap-1 lg:gap-3 text-sm"
+            >
               <a
                 class="rounded-lg px-3 py-2 hover:bg-white/10"
                 href="https://my.mentala.app/legal/privacy-policy.html"
@@ -712,21 +743,67 @@
             </div>
 
             <div class="space-y-1.5">
-              <label class="text-xs text-white/70" for="lead-goal">Цель</label>
-              <select
-                id="lead-goal"
-                v-model="leadForm.goalKey"
-                class="h-11 w-full rounded-xl border border-white/20 bg-white/5 px-4 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
-              >
-                <option
-                  v-for="option in goalOptions"
-                  :key="option.value || 'empty'"
-                  :value="option.value"
-                  class="bg-[#0b1222] text-white"
+              <label class="text-xs text-white/70" for="lead-goal">
+                Цели (можно несколько)
+              </label>
+
+              <div ref="goalDropdownRef" class="relative">
+                <button
+                  id="lead-goal"
+                  type="button"
+                  class="h-11 w-full rounded-xl border border-white/20 bg-white/5 px-4 text-left text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                  :aria-expanded="goalDropdownOpen"
+                  aria-haspopup="listbox"
+                  @click="goalDropdownOpen = !goalDropdownOpen"
+                  @keydown.esc.stop.prevent="goalDropdownOpen = false"
                 >
-                  {{ option.label }}
-                </option>
-              </select>
+                  <span class="block truncate pr-7">{{ selectedGoalsText }}</span>
+                  <span
+                    class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-white/70"
+                    aria-hidden="true"
+                  >
+                    <svg
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path
+                        d="M6 9l6 6 6-6"
+                        stroke="currentColor"
+                        stroke-width="1.7"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                  </span>
+                </button>
+
+                <div
+                  v-if="goalDropdownOpen"
+                  class="absolute z-50 mt-2 w-full rounded-xl border border-white/15 bg-[#0b1222] p-2 shadow-[0_18px_60px_rgba(0,0,0,0.55)]"
+                  role="listbox"
+                  aria-label="Выбор целей"
+                  @keydown.esc.stop.prevent="goalDropdownOpen = false"
+                >
+                  <div class="max-h-56 overflow-auto">
+                    <label
+                      v-for="option in goalOptions"
+                      :key="option.value"
+                      class="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-sm text-white transition hover:bg-white/5"
+                    >
+                      <input
+                        v-model="leadForm.goalKeys"
+                        type="checkbox"
+                        :value="option.value"
+                        class="h-4 w-4 rounded border-white/30 bg-white/5 text-primary focus-visible:ring-2 focus-visible:ring-white/70"
+                      />
+                      <span>{{ option.label }}</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <input
@@ -741,11 +818,8 @@
               {{ submittingLead ? 'Отправляем...' : 'Получить ранний доступ' }}
             </Button>
 
-            <p v-if="submitStatus === 'created'" class="text-sm text-[#bbffb7]">
-              Спасибо, вы в списке раннего доступа.
-            </p>
             <p
-              v-else-if="submitStatus === 'duplicate'"
+              v-if="submitStatus === 'duplicate'"
               class="text-sm text-white/75"
             >
               Этот email уже в списке. Мы напишем при запуске.
@@ -760,13 +834,54 @@
         </section>
       </div>
     </Transition>
+
+    <!-- Маленькая модалка об успехе после отправки лида -->
+    <Transition
+      enter-active-class="transition duration-200 ease-out"
+      enter-from-class="opacity-0"
+      enter-to-class="opacity-100"
+      leave-active-class="transition duration-150 ease-in"
+      leave-from-class="opacity-100"
+      leave-to-class="opacity-0"
+    >
+      <div
+        v-if="successModalOpen"
+        class="fixed inset-0 z-[91] p-4 grid place-items-center"
+      >
+        <button
+          class="absolute inset-0 bg-black/70 backdrop-blur-sm"
+          type="button"
+          aria-label="Закрыть"
+          @click="successModalOpen = false"
+        />
+        <div
+          class="relative w-full max-w-sm rounded-2xl border border-white/20 bg-[#0b1222]/95 backdrop-blur p-6 shadow-xl"
+          role="dialog"
+          aria-labelledby="success-modal-title"
+          aria-modal="true"
+        >
+          <p
+            id="success-modal-title"
+            class="text-center text-base text-white mb-5"
+          >
+            Спасибо, вы в списке раннего доступа.
+          </p>
+          <Button
+            class="w-full"
+            @click="successModalOpen = false"
+          >
+            Отлично
+          </Button>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
 <script setup lang="ts">
 import { Autoplay, Pagination, A11y } from 'swiper/modules';
 import { Swiper, SwiperSlide } from 'swiper/vue';
-import { usePreferredReducedMotion } from '@vueuse/core';
+import { onClickOutside, usePreferredReducedMotion } from '@vueuse/core';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { useRuntimeConfig } from 'nuxt/app';
@@ -820,6 +935,8 @@ const { reachGoal, trackScrollDepth } = useLandingAnalytics();
 
 const billingPeriod = ref<'month' | 'year'>('month');
 const waitlistOpen = ref(false);
+/** Маленькая модалка «Успех» после отправки лида */
+const successModalOpen = ref(false);
 const submittingLead = ref(false);
 const submitStatus = ref<'idle' | 'created' | 'duplicate' | 'error'>('idle');
 const submitErrorText = ref('');
@@ -831,11 +948,35 @@ const featurePhoneRef = ref<HTMLElement | null>(null);
 let gsapContext: gsap.Context | null = null;
 let gsapMedia: gsap.MatchMedia | null = null;
 
-const leadForm = reactive({
+const leadForm = reactive<{
+  name: string;
+  email: string;
+  goalKeys: string[];
+  website: string;
+}>({
   name: '',
   email: '',
-  goalKey: '',
+  goalKeys: [],
   website: '', // honeypot
+});
+
+const goalDropdownOpen = ref(false);
+const goalDropdownRef = ref<HTMLElement | null>(null);
+
+const selectedGoalsText = computed(() => {
+  if (!leadForm.goalKeys.length) {
+    return 'Выберите цели (необязательно)';
+  }
+
+  const selected = goalOptions
+    .filter((option) => leadForm.goalKeys.includes(option.value))
+    .map((option) => option.label);
+
+  return selected.length ? selected.join(', ') : 'Выберите цели (необязательно)';
+});
+
+onClickOutside(goalDropdownRef, () => {
+  goalDropdownOpen.value = false;
 });
 
 const featureSteps: FeatureStep[] = [
@@ -1048,7 +1189,6 @@ const faq: FaqItem[] = [
 ];
 
 const goalOptions = [
-  { value: '', label: 'Выберите цель (необязательно)' },
   { value: 'reduce_anxiety', label: 'Снизить тревожность' },
   { value: 'sleep_better', label: 'Улучшить сон' },
   { value: 'reduce_stress', label: 'Снизить стресс и выгорание' },
@@ -1057,6 +1197,7 @@ const goalOptions = [
   { value: 'reduce_caffeine', label: 'Сократить кофеин' },
   { value: 'build_habits', label: 'Развить полезные привычки' },
   { value: 'try_ai_support', label: 'Попробовать ИИ-поддержку' },
+  { value: 'other', label: 'Другое' },
 ];
 
 const swiperModules = [Autoplay, Pagination, A11y];
@@ -1090,6 +1231,9 @@ const siteUrl = computed(() =>
 );
 
 const canonicalUrl = computed(() => `${siteUrl.value}/`);
+const ogImageUrl = computed(
+  () => new URL('/landing/features/hero_bg.jpg', canonicalUrl.value).href
+);
 
 function toSingleQueryValue(value: unknown): string | undefined {
   if (Array.isArray(value)) {
@@ -1165,7 +1309,7 @@ async function submitLead() {
       body: {
         name: leadForm.name,
         email: leadForm.email,
-        goalKey: leadForm.goalKey || undefined,
+        goalKeys: leadForm.goalKeys.length > 0 ? leadForm.goalKeys : undefined,
         utmSource: toSingleQueryValue(route.query.utm_source),
         utmMedium: toSingleQueryValue(route.query.utm_medium),
         utmCampaign: toSingleQueryValue(route.query.utm_campaign),
@@ -1179,8 +1323,11 @@ async function submitLead() {
       reachGoal('landing_lead_submit_success');
       leadForm.name = '';
       leadForm.email = '';
-      leadForm.goalKey = '';
+      leadForm.goalKeys = [];
       leadForm.website = '';
+      waitlistOpen.value = false;
+      await nextTick();
+      successModalOpen.value = true;
     } else {
       reachGoal('landing_lead_submit_duplicate');
     }
@@ -1300,15 +1447,25 @@ onBeforeUnmount(() => {
 });
 
 useSeoMeta({
-  title: 'Mentala - психологическая поддержка каждый день',
+  title: 'Mentala — психологическая поддержка 24/7',
   description:
-    'ИИ-чат, дыхательные практики, медитации и поддержка привычек в одном приложении. Мягкий формат 24/7.',
-  ogTitle: 'Mentala - психологическая поддержка каждый день',
+    'ИИ‑чат поддержки, дыхательные практики, медитации и привычки — в одном приложении. Начните бесплатно (Basic) или попробуйте Premium на 7 дней.',
+  robots:
+    'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1',
+  ogTitle: 'Mentala — психологическая поддержка 24/7',
   ogDescription:
-    'ИИ-чат, медитации, дыхание, SOS и персональные напоминания. Начните с Basic или trial на 7 дней.',
+    'ИИ‑чат, медитации, дыхание, SOS‑практики и персональные напоминания. Начните бесплатно или попробуйте Premium на 7 дней.',
   ogType: 'website',
   ogUrl: canonicalUrl.value,
+  ogSiteName: 'Mentala',
+  ogLocale: 'ru_RU',
+  ogImage: ogImageUrl.value,
+  ogImageAlt: 'Mentala — психологическая поддержка 24/7',
   twitterCard: 'summary_large_image',
+  twitterTitle: 'Mentala — психологическая поддержка 24/7',
+  twitterDescription:
+    'ИИ‑чат, медитации, дыхательные практики и привычки. Начните бесплатно или попробуйте Premium на 7 дней.',
+  twitterImage: ogImageUrl.value,
 });
 
 useHead({
@@ -1321,6 +1478,40 @@ useHead({
         '@type': 'Organization',
         name: 'Mentala',
         url: canonicalUrl.value,
+        logo: new URL('/logo.svg', canonicalUrl.value).href,
+        contactPoint: [
+          {
+            '@type': 'ContactPoint',
+            contactType: 'customer support',
+            email: 'hello@mentala.app',
+            availableLanguage: ['ru'],
+          },
+        ],
+      }),
+    },
+    {
+      type: 'application/ld+json',
+      textContent: JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'WebSite',
+        name: 'Mentala',
+        url: canonicalUrl.value,
+        inLanguage: 'ru',
+      }),
+    },
+    {
+      type: 'application/ld+json',
+      textContent: JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'WebPage',
+        name: 'Mentala — психологическая поддержка 24/7',
+        url: canonicalUrl.value,
+        inLanguage: 'ru',
+        primaryImageOfPage: ogImageUrl.value,
+        isPartOf: {
+          '@type': 'WebSite',
+          url: canonicalUrl.value,
+        },
       }),
     },
     {
@@ -1328,6 +1519,7 @@ useHead({
       textContent: JSON.stringify({
         '@context': 'https://schema.org',
         '@type': 'FAQPage',
+        inLanguage: 'ru',
         mainEntity: faq.map((item) => ({
           '@type': 'Question',
           name: item.question,
