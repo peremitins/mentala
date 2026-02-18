@@ -595,7 +595,9 @@ UX-инварианты для всех экранов:
 
 Провайдер первой версии: `Яндекс Метрика`.
 
-Подключение: счётчик подключается только на клиенте, если задана переменная окружения `NUXT_PUBLIC_YANDEX_METRIKA_ID` (числовой ID счётчика из кабинета Метрики). Плагин `plugins/yandex-metrika.client.ts` вставляет официальный код загрузки, композабл `useLandingAnalytics` отправляет цели (`reachGoal`). Без ID скрипт не загружается.
+Подключение: модуль `nuxt-yandex-metrika` подключает счётчик на клиенте. ID задаётся через `NUXT_PUBLIC_YANDEX_METRIKA_ID` (в `.env.development` для локальной разработки). Композабл `useLandingAnalytics` отправляет цели (`reachGoal`), скролл-глубину и т.д.
+
+**Локальная проверка:** задай `NUXT_PUBLIC_YANDEX_METRIKA_ID` в `.env.development` и запусти `pnpm landing:dev`. В кабинете Метрики в настройках счётчика можно добавить `http://localhost:3001` в адреса сайта, чтобы визиты с localhost учитывались.
 
 **Для продакшна (деплой через GitHub Actions):** ID подставляется при сборке из GitHub. Репозиторий → **Settings** → **Secrets and variables** → **Actions**. Создать **Repository variable** (Variables → New repository variable) или **Repository secret** (Secrets → New repository secret): имя `NUXT_PUBLIC_YANDEX_METRIKA_ID`, значение — числовой ID счётчика (например `106891177`). После сохранения пересобрать и задеплоить лендинг (пушить в ветку `landing` или перезапустить workflow).
 

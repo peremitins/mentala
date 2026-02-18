@@ -17,7 +17,17 @@ export default defineNuxtConfig({
   alias: {
     '@': landingRoot,
   },
-  modules: ['@vueuse/nuxt', 'floating-vue/nuxt'],
+  modules: ['@vueuse/nuxt', 'floating-vue/nuxt', 'nuxt-yandex-metrika'],
+  /** Яндекс.Метрика: ID из env (в CI — GitHub variable/secret). Пустой — счётчик не подключается. */
+  yandexMetrika: {
+    id: String(process.env.NUXT_PUBLIC_YANDEX_METRIKA_ID || '').trim() || undefined,
+    options: {
+      webvisor: true,
+      clickmap: true,
+      trackLinks: true,
+      accurateTrackBounce: true,
+    },
+  },
   css: [
     landingCss,
     'swiper/css',
@@ -92,7 +102,7 @@ export default defineNuxtConfig({
         process.env.NUXT_PUBLIC_APP_AUTH_URL || 'https://my.mentala.app/auth',
       landingSiteUrl:
         process.env.NUXT_PUBLIC_LANDING_SITE_URL || 'https://mentala.app',
-      /** ID счётчика Яндекс.Метрики для лендинга (аналитика v1). Пустой — скрипт не подключается. */
+      /** ID счётчика Яндекс.Метрики. Задаётся через NUXT_PUBLIC_YANDEX_METRIKA_ID (на проде — в CI). */
       yandexMetrikaId: process.env.NUXT_PUBLIC_YANDEX_METRIKA_ID || '',
     },
   },

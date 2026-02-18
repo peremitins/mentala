@@ -1,44 +1,26 @@
 /**
- * Аналитика лендинга v1: Яндекс.Метрика.
- * События по ТЗ: landing_view, landing_cta_click, landing_modal_open,
+ * Аналитика лендинга: цели и скролл через nuxt-yandex-metrika.
+ * События: landing_view, landing_cta_click, landing_modal_open,
  * landing_lead_submit_*, landing_scroll_depth_*, landing_auth_redirect_click.
  */
-declare global {
-  interface Window {
-    ym?: ((counterId: number, action: string, ...args: unknown[]) => void) & {
-      a?: unknown[];
-      l?: number;
-    };
-  }
-}
-
-function toCounterId(value: unknown): number {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value;
-  }
-  if (typeof value === 'string' && value.trim() !== '') {
-    const n = Number(value.trim());
-    return Number.isFinite(n) ? n : NaN;
-  }
-  return NaN;
-}
-
 export function useLandingAnalytics() {
+  const metrika = useYandexMetrika();
   const config = useRuntimeConfig();
-  const counterId = toCounterId(config.public.yandexMetrikaId);
+  const rawId = config.public.yandexMetrikaId;
+  const hasMetrika =
+    (typeof rawId === 'number' && Number.isFinite(rawId)) ||
+    (typeof rawId === 'string' && String(rawId).trim() !== '');
 
   function reachGoal(eventName: string, params?: Record<string, unknown>) {
-    if (typeof window === 'undefined' || !window.ym || !Number.isFinite(counterId)) {
-      return;
-    }
+    if (!hasMetrika) return;
     try {
-      if (params && Object.keys(params).length > 0) {
-        window.ym(counterId, 'reachGoal', eventName, params);
-      } else {
-        window.ym(counterId, 'reachGoal', eventName);
-      }
+      // nuxt-yandex-metrika: reachGoal(name, params?)
+      (metrika.reachGoal as (name: string, params?: Record<string, unknown>) => void)(
+        eventName,
+        params ?? {}
+      );
     } catch {
-      // Игнорируем ошибки метрики (блокировщики рекламы и т.п.)
+      // Игнорируем ошибки (блокировщики и т.п.)
     }
   }
 
@@ -46,9 +28,7 @@ export function useLandingAnalytics() {
    * Подписывается на скролл и один раз отправляет landing_scroll_depth_25/50/75/100.
    */
   function trackScrollDepth() {
-    if (typeof window === 'undefined' || typeof document === 'undefined') {
-      return;
-    }
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
     const sent = { 25: false, 50: false, 75: false, 100: false };
     const thresholds = [25, 50, 75, 100] as const;
 
@@ -57,7 +37,6 @@ export function useLandingAnalytics() {
       const scrollTop = window.scrollY || doc.scrollTop;
       const scrollHeight = (doc.scrollHeight - window.innerHeight) || 1;
       const percent = Math.round((scrollTop / scrollHeight) * 100);
-
       for (const t of thresholds) {
         if (percent >= t && !sent[t]) {
           sent[t] = true;
@@ -67,8 +46,8 @@ export function useLandingAnalytics() {
     }
 
     window.addEventListener('scroll', check, { passive: true });
-    check(); // на случай если уже проскроллено
+    check();
   }
 
-  return { reachGoal, trackScrollDepth, hasMetrika: Number.isFinite(counterId) };
+  return { reachGoal, trackScrollDepth, hasMetrika: !!hasMetrika };
 }
