@@ -281,7 +281,7 @@
               class="h-auto"
             >
               <article
-                class="glass-panel rounded-2xl p-5 h-full min-h-[185px] flex flex-col"
+                class="glass-panel rounded-2xl p-5 h-full min-h-[150px] flex flex-col"
               >
                 <span class="text-2xl mb-3">{{ item.emoji }}</span>
                 <h3 class="font-semibold text-lg mb-2">{{ item.title }}</h3>
