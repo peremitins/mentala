@@ -18,9 +18,11 @@ export default defineNuxtConfig({
     '@': landingRoot,
   },
   modules: ['@vueuse/nuxt', 'floating-vue/nuxt', 'nuxt-yandex-metrika'],
-  /** Яндекс.Метрика: ID из env (в CI — GitHub variable/secret). Пустой — счётчик не подключается. */
+  /** Яндекс.Метрика: ID из env. cdn: true — скрипт грузится с jsDelivr, обход ERR_SSL_PROTOCOL_ERROR на mc.yandex.ru у части пользователей. */
+  // cdn: true — скрипт с jsDelivr, обход ERR_SSL_PROTOCOL_ERROR на mc.yandex.ru у части пользователей
   yandexMetrika: {
     id: String(process.env.NUXT_PUBLIC_YANDEX_METRIKA_ID || '').trim() || undefined,
+    cdn: true,
     options: {
       webvisor: true,
       clickmap: true,

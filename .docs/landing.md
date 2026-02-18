@@ -595,7 +595,7 @@ UX-инварианты для всех экранов:
 
 Провайдер первой версии: `Яндекс Метрика`.
 
-Подключение: модуль `nuxt-yandex-metrika` подключает счётчик на клиенте. ID задаётся через `NUXT_PUBLIC_YANDEX_METRIKA_ID` (в `.env.development` для локальной разработки). Композабл `useLandingAnalytics` отправляет цели (`reachGoal`), скролл-глубину и т.д.
+Подключение: модуль `nuxt-yandex-metrika` подключает счётчик на клиенте. ID задаётся через `NUXT_PUBLIC_YANDEX_METRIKA_ID` (в `.env.development` для локальной разработки). Включён режим **cdn: true** — скрипт загружается с jsDelivr (`yandex-metrica-watch/tag.js`), а не с `mc.yandex.ru`, чтобы обойти ошибку `net::ERR_SSL_PROTOCOL_ERROR` у части пользователей (провайдеры/фаерволы). Композабл `useLandingAnalytics` отправляет цели (`reachGoal`), скролл-глубину и т.д.
 
 **Локальная проверка:** задай `NUXT_PUBLIC_YANDEX_METRIKA_ID` в `.env.development` и запусти `pnpm landing:dev`. В кабинете Метрики в настройках счётчика можно добавить `http://localhost:3001` в адреса сайта, чтобы визиты с localhost учитывались.
 
