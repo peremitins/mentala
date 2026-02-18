@@ -1,5 +1,5 @@
 <template>
-  <div class="relative min-h-screen overflow-x-clip pb-16">
+  <div class="relative min-h-screen overflow-x-clip pb-4">
     <div class="landing-grid-glow" />
     <div class="noise-overlay" />
 
@@ -81,7 +81,7 @@
       </div>
     </header>
 
-    <main class="pt-28 sm:pt-42">
+    <main class="pt-28 lg:pt-42">
       <section id="hero" class="scroll-mt-header">
         <div
           class="landing-container grid lg:grid-cols-2 gap-6 sm:gap-8 items-center"
@@ -117,23 +117,48 @@
           </div>
 
           <div class="relative reveal-item order-1 lg:order-2">
-            <figure class="hero-media">
+            <!--
+              Inline-стили здесь — намеренно: это critical layout для первого экрана.
+              На некоторых устройствах при обновлении страницы картинка может успеть отрисоваться до загрузки CSS
+              и «выпрыгнуть» на весь экран из-за своих огромных intrinsic размеров (4000×3200).
+              Инлайн фиксирует размеры/обрезку до прихода landing.css.
+            -->
+            <figure
+              class="hero-media"
+              style="
+                position: relative;
+                width: 100%;
+                aspect-ratio: 5/4;
+                overflow: hidden;
+                border-radius: 1.75rem;
+                background: #111a2f;
+              "
+            >
               <img
                 src="/landing/features/hero_bg.jpg"
                 alt="Пользователи Mentala в повседневных сценариях"
                 class="hero-media-image"
-                loading="eager"
+                loading="lazy"
                 fetchpriority="high"
                 decoding="async"
+                width="4000"
+                height="3200"
+                style="
+                  display: block;
+                  width: 100%;
+                  height: 100%;
+                  object-fit: cover;
+                  object-position: center;
+                "
               />
             </figure>
           </div>
         </div>
       </section>
 
-      <section id="features" class="scroll-mt-header mt-24 sm:mt-42">
+      <section id="features" class="scroll-mt-header mt-20 lg:mt-42">
         <div class="landing-container">
-          <div class="max-w-2xl space-y-4 mb-8">
+          <div class="max-w-2xl space-y-4 mb-5">
             <h2 class="font-display text-3xl sm:text-4xl font-bold reveal-item">
               Возможности Mentala
             </h2>
@@ -242,9 +267,9 @@
         </div>
       </section>
 
-      <section id="scenarios" class="scroll-mt-header mt-24 sm:mt-28">
+      <section id="scenarios" class="scroll-mt-header mt-20 lg:mt-28">
         <div class="landing-container">
-          <div class="mb-8 space-y-3">
+          <div class="mb-5 space-y-3">
             <h2 class="font-display text-3xl sm:text-4xl font-bold reveal-item">
               Сценарии
             </h2>
@@ -292,9 +317,9 @@
         </div>
       </section>
 
-      <section id="how-it-works" class="scroll-mt-header mt-24 sm:mt-28">
+      <section id="how-it-works" class="scroll-mt-header mt-20 lg:mt-28">
         <div class="landing-container">
-          <div class="mb-8 space-y-3">
+          <div class="mb-5 space-y-3">
             <h2 class="font-display text-3xl sm:text-4xl font-bold reveal-item">
               Как это работает
             </h2>
@@ -321,9 +346,9 @@
         </div>
       </section>
 
-      <section id="why-mentala" class="scroll-mt-header mt-24 sm:mt-28">
+      <section id="why-mentala" class="scroll-mt-header mt-20 lg:mt-28">
         <div class="landing-container">
-          <div class="mb-8 space-y-3">
+          <div class="mb-5 space-y-3">
             <Badge variant="accent" class="reveal-item">
               Дополняет, не заменяет
             </Badge>
@@ -359,8 +384,12 @@
                     <button
                       v-if="point.tooltip"
                       type="button"
-                      v-tooltip="point.tooltip"
-                      class="ml-1 inline-flex h-3 w-3 shrink-0 align-middle items-center justify-center rounded-full border border-white/25 bg-white/5 text-[10px] font-semibold text-white/70 hover:bg-white/10 hover:text-white cursor-help"
+                      v-tooltip="{
+                        content: point.tooltip,
+                        triggers: ['hover', 'focus', 'click'],
+                        placement: 'top',
+                      }"
+                      class="ml-1 inline-flex h-4 w-4 shrink-0 align-middle items-center justify-center rounded-full border border-white/25 bg-white/5 text-[10px] font-semibold text-white/70 hover:bg-white/10 hover:text-white cursor-help"
                       :aria-label="`Подробнее: ${point.text}`"
                     >
                       ?
@@ -400,9 +429,9 @@
         </div>
       </section>
 
-      <section id="landing-pricing" class="scroll-mt-header mt-24 sm:mt-28">
+      <section id="landing-pricing" class="scroll-mt-header mt-20 lg:mt-28">
         <div class="landing-container">
-          <div class="mb-8 space-y-3">
+          <div class="mb-5 space-y-3">
             <h2 class="font-display text-3xl sm:text-4xl font-bold reveal-item">
               Тарифы
             </h2>
@@ -514,7 +543,7 @@
       </section>
 
       <section
-        class="reveal-item glass-panel rounded-xl px-5 py-4 text-xs sm:text-sm text-white/80 border-white/25 max-w-3xl mx-auto mt-24 sm:mt-28 text-center"
+        class="reveal-item glass-panel rounded-xl px-5 py-4 text-xs sm:text-sm text-white/80 border-white/25 max-w-3xl mx-auto mt-20 sm:mt-28 text-center"
       >
         Mentala создана для психологической поддержки и самопомощи. Это не
         медицинская услуга и не замена врачу или психотерапевту. Если вы
@@ -522,7 +551,7 @@
         откладывайте визит к квалифицированному специалисту.
       </section>
 
-      <section id="privacy" class="scroll-mt-header mt-24 sm:mt-28">
+      <section id="privacy" class="scroll-mt-header mt-20 lg:mt-28">
         <div class="landing-container">
           <div class="max-w-2xl space-y-3 sm:space-y-4">
             <Badge variant="accent" class="reveal-item"
@@ -561,7 +590,7 @@
         </div>
       </section>
 
-      <section id="faq" class="scroll-mt-header mt-24 sm:mt-28">
+      <section id="faq" class="scroll-mt-header mt-20 lg:mt-28">
         <div class="landing-container">
           <h2
             class="font-display text-3xl sm:text-4xl font-bold mb-7 reveal-item"
@@ -604,13 +633,13 @@
         </div>
       </section>
 
-      <footer class="mt-24 sm:mt-28">
+      <footer class="mt-20 sm:mt-28">
         <div class="landing-container">
           <div
-            class="glass-panel rounded-2xl p-6 sm:p-7 flex flex-col md:flex-row gap-5 md:items-center md:justify-between"
+            class="glass-panel rounded-2xl p-6 sm:p-7 flex flex-col md:flex-row gap-1 lg:gap-5 md:items-center md:justify-between"
           >
             <div
-              class="flex gap-3 items-center justify-center text-sm text-white/75"
+              class="flex px-3 py-2 gap-3 items-center justify-center text-sm text-white/75"
             >
               <p class="flex text-xs text-white/55 leading-0">
                 © {{ new Date().getFullYear() }} Mentala
@@ -624,7 +653,9 @@
               </a>
             </div>
 
-            <div class="flex flex-wrap items-center gap-3 text-sm">
+            <div
+              class="flex flex-wrap items-center justify-center gap-1 lg:gap-3 text-sm"
+            >
               <a
                 class="rounded-lg px-3 py-2 hover:bg-white/10"
                 href="https://my.mentala.app/legal/privacy-policy.html"
@@ -1090,6 +1121,9 @@ const siteUrl = computed(() =>
 );
 
 const canonicalUrl = computed(() => `${siteUrl.value}/`);
+const ogImageUrl = computed(
+  () => new URL('/landing/features/hero_bg.jpg', canonicalUrl.value).href
+);
 
 function toSingleQueryValue(value: unknown): string | undefined {
   if (Array.isArray(value)) {
@@ -1300,15 +1334,25 @@ onBeforeUnmount(() => {
 });
 
 useSeoMeta({
-  title: 'Mentala - психологическая поддержка каждый день',
+  title: 'Mentala — психологическая поддержка 24/7',
   description:
-    'ИИ-чат, дыхательные практики, медитации и поддержка привычек в одном приложении. Мягкий формат 24/7.',
-  ogTitle: 'Mentala - психологическая поддержка каждый день',
+    'ИИ‑чат поддержки, дыхательные практики, медитации и привычки — в одном приложении. Начните бесплатно (Basic) или попробуйте Premium на 7 дней.',
+  robots:
+    'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1',
+  ogTitle: 'Mentala — психологическая поддержка 24/7',
   ogDescription:
-    'ИИ-чат, медитации, дыхание, SOS и персональные напоминания. Начните с Basic или trial на 7 дней.',
+    'ИИ‑чат, медитации, дыхание, SOS‑практики и персональные напоминания. Начните бесплатно или попробуйте Premium на 7 дней.',
   ogType: 'website',
   ogUrl: canonicalUrl.value,
+  ogSiteName: 'Mentala',
+  ogLocale: 'ru_RU',
+  ogImage: ogImageUrl.value,
+  ogImageAlt: 'Mentala — психологическая поддержка 24/7',
   twitterCard: 'summary_large_image',
+  twitterTitle: 'Mentala — психологическая поддержка 24/7',
+  twitterDescription:
+    'ИИ‑чат, медитации, дыхательные практики и привычки. Начните бесплатно или попробуйте Premium на 7 дней.',
+  twitterImage: ogImageUrl.value,
 });
 
 useHead({
@@ -1321,6 +1365,40 @@ useHead({
         '@type': 'Organization',
         name: 'Mentala',
         url: canonicalUrl.value,
+        logo: new URL('/logo.svg', canonicalUrl.value).href,
+        contactPoint: [
+          {
+            '@type': 'ContactPoint',
+            contactType: 'customer support',
+            email: 'hello@mentala.app',
+            availableLanguage: ['ru'],
+          },
+        ],
+      }),
+    },
+    {
+      type: 'application/ld+json',
+      textContent: JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'WebSite',
+        name: 'Mentala',
+        url: canonicalUrl.value,
+        inLanguage: 'ru',
+      }),
+    },
+    {
+      type: 'application/ld+json',
+      textContent: JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'WebPage',
+        name: 'Mentala — психологическая поддержка 24/7',
+        url: canonicalUrl.value,
+        inLanguage: 'ru',
+        primaryImageOfPage: ogImageUrl.value,
+        isPartOf: {
+          '@type': 'WebSite',
+          url: canonicalUrl.value,
+        },
       }),
     },
     {
@@ -1328,6 +1406,7 @@ useHead({
       textContent: JSON.stringify({
         '@context': 'https://schema.org',
         '@type': 'FAQPage',
+        inLanguage: 'ru',
         mainEntity: faq.map((item) => ({
           '@type': 'Question',
           name: item.question,
