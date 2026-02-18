@@ -8,6 +8,11 @@ body,
   box-sizing: border-box;
 }
 
+body {
+  max-width: 960px;
+  margin: 0 auto;
+}
+
 :root {
   /* Safe area insets для iOS (на Android/Web обычно 0px). */
   --ios-safe-area-inset-top: env(safe-area-inset-top, 0px);
