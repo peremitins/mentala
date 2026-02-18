@@ -743,21 +743,67 @@
             </div>
 
             <div class="space-y-1.5">
-              <label class="text-xs text-white/70" for="lead-goal">Цель</label>
-              <select
-                id="lead-goal"
-                v-model="leadForm.goalKey"
-                class="h-11 w-full rounded-xl border border-white/20 bg-white/5 px-4 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
-              >
-                <option
-                  v-for="option in goalOptions"
-                  :key="option.value || 'empty'"
-                  :value="option.value"
-                  class="bg-[#0b1222] text-white"
+              <label class="text-xs text-white/70" for="lead-goal">
+                Цели (можно несколько)
+              </label>
+
+              <div ref="goalDropdownRef" class="relative">
+                <button
+                  id="lead-goal"
+                  type="button"
+                  class="h-11 w-full rounded-xl border border-white/20 bg-white/5 px-4 text-left text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                  :aria-expanded="goalDropdownOpen"
+                  aria-haspopup="listbox"
+                  @click="goalDropdownOpen = !goalDropdownOpen"
+                  @keydown.esc.stop.prevent="goalDropdownOpen = false"
                 >
-                  {{ option.label }}
-                </option>
-              </select>
+                  <span class="block truncate pr-7">{{ selectedGoalsText }}</span>
+                  <span
+                    class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-white/70"
+                    aria-hidden="true"
+                  >
+                    <svg
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path
+                        d="M6 9l6 6 6-6"
+                        stroke="currentColor"
+                        stroke-width="1.7"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                  </span>
+                </button>
+
+                <div
+                  v-if="goalDropdownOpen"
+                  class="absolute z-50 mt-2 w-full rounded-xl border border-white/15 bg-[#0b1222] p-2 shadow-[0_18px_60px_rgba(0,0,0,0.55)]"
+                  role="listbox"
+                  aria-label="Выбор целей"
+                  @keydown.esc.stop.prevent="goalDropdownOpen = false"
+                >
+                  <div class="max-h-56 overflow-auto">
+                    <label
+                      v-for="option in goalOptions"
+                      :key="option.value"
+                      class="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-sm text-white transition hover:bg-white/5"
+                    >
+                      <input
+                        v-model="leadForm.goalKeys"
+                        type="checkbox"
+                        :value="option.value"
+                        class="h-4 w-4 rounded border-white/30 bg-white/5 text-primary focus-visible:ring-2 focus-visible:ring-white/70"
+                      />
+                      <span>{{ option.label }}</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <input
@@ -772,11 +818,8 @@
               {{ submittingLead ? 'Отправляем...' : 'Получить ранний доступ' }}
             </Button>
 
-            <p v-if="submitStatus === 'created'" class="text-sm text-[#bbffb7]">
-              Спасибо, вы в списке раннего доступа.
-            </p>
             <p
-              v-else-if="submitStatus === 'duplicate'"
+              v-if="submitStatus === 'duplicate'"
               class="text-sm text-white/75"
             >
               Этот email уже в списке. Мы напишем при запуске.
@@ -791,13 +834,54 @@
         </section>
       </div>
     </Transition>
+
+    <!-- Маленькая модалка об успехе после отправки лида -->
+    <Transition
+      enter-active-class="transition duration-200 ease-out"
+      enter-from-class="opacity-0"
+      enter-to-class="opacity-100"
+      leave-active-class="transition duration-150 ease-in"
+      leave-from-class="opacity-100"
+      leave-to-class="opacity-0"
+    >
+      <div
+        v-if="successModalOpen"
+        class="fixed inset-0 z-[91] p-4 grid place-items-center"
+      >
+        <button
+          class="absolute inset-0 bg-black/70 backdrop-blur-sm"
+          type="button"
+          aria-label="Закрыть"
+          @click="successModalOpen = false"
+        />
+        <div
+          class="relative w-full max-w-sm rounded-2xl border border-white/20 bg-[#0b1222]/95 backdrop-blur p-6 shadow-xl"
+          role="dialog"
+          aria-labelledby="success-modal-title"
+          aria-modal="true"
+        >
+          <p
+            id="success-modal-title"
+            class="text-center text-base text-white mb-5"
+          >
+            Спасибо, вы в списке раннего доступа.
+          </p>
+          <Button
+            class="w-full"
+            @click="successModalOpen = false"
+          >
+            Отлично
+          </Button>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
 <script setup lang="ts">
 import { Autoplay, Pagination, A11y } from 'swiper/modules';
 import { Swiper, SwiperSlide } from 'swiper/vue';
-import { usePreferredReducedMotion } from '@vueuse/core';
+import { onClickOutside, usePreferredReducedMotion } from '@vueuse/core';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { useRuntimeConfig } from 'nuxt/app';
@@ -851,6 +935,8 @@ const { reachGoal, trackScrollDepth } = useLandingAnalytics();
 
 const billingPeriod = ref<'month' | 'year'>('month');
 const waitlistOpen = ref(false);
+/** Маленькая модалка «Успех» после отправки лида */
+const successModalOpen = ref(false);
 const submittingLead = ref(false);
 const submitStatus = ref<'idle' | 'created' | 'duplicate' | 'error'>('idle');
 const submitErrorText = ref('');
@@ -862,11 +948,35 @@ const featurePhoneRef = ref<HTMLElement | null>(null);
 let gsapContext: gsap.Context | null = null;
 let gsapMedia: gsap.MatchMedia | null = null;
 
-const leadForm = reactive({
+const leadForm = reactive<{
+  name: string;
+  email: string;
+  goalKeys: string[];
+  website: string;
+}>({
   name: '',
   email: '',
-  goalKey: '',
+  goalKeys: [],
   website: '', // honeypot
+});
+
+const goalDropdownOpen = ref(false);
+const goalDropdownRef = ref<HTMLElement | null>(null);
+
+const selectedGoalsText = computed(() => {
+  if (!leadForm.goalKeys.length) {
+    return 'Выберите цели (необязательно)';
+  }
+
+  const selected = goalOptions
+    .filter((option) => leadForm.goalKeys.includes(option.value))
+    .map((option) => option.label);
+
+  return selected.length ? selected.join(', ') : 'Выберите цели (необязательно)';
+});
+
+onClickOutside(goalDropdownRef, () => {
+  goalDropdownOpen.value = false;
 });
 
 const featureSteps: FeatureStep[] = [
@@ -1079,7 +1189,6 @@ const faq: FaqItem[] = [
 ];
 
 const goalOptions = [
-  { value: '', label: 'Выберите цель (необязательно)' },
   { value: 'reduce_anxiety', label: 'Снизить тревожность' },
   { value: 'sleep_better', label: 'Улучшить сон' },
   { value: 'reduce_stress', label: 'Снизить стресс и выгорание' },
@@ -1088,6 +1197,7 @@ const goalOptions = [
   { value: 'reduce_caffeine', label: 'Сократить кофеин' },
   { value: 'build_habits', label: 'Развить полезные привычки' },
   { value: 'try_ai_support', label: 'Попробовать ИИ-поддержку' },
+  { value: 'other', label: 'Другое' },
 ];
 
 const swiperModules = [Autoplay, Pagination, A11y];
@@ -1199,7 +1309,7 @@ async function submitLead() {
       body: {
         name: leadForm.name,
         email: leadForm.email,
-        goalKey: leadForm.goalKey || undefined,
+        goalKeys: leadForm.goalKeys.length > 0 ? leadForm.goalKeys : undefined,
         utmSource: toSingleQueryValue(route.query.utm_source),
         utmMedium: toSingleQueryValue(route.query.utm_medium),
         utmCampaign: toSingleQueryValue(route.query.utm_campaign),
@@ -1213,8 +1323,11 @@ async function submitLead() {
       reachGoal('landing_lead_submit_success');
       leadForm.name = '';
       leadForm.email = '';
-      leadForm.goalKey = '';
+      leadForm.goalKeys = [];
       leadForm.website = '';
+      waitlistOpen.value = false;
+      await nextTick();
+      successModalOpen.value = true;
     } else {
       reachGoal('landing_lead_submit_duplicate');
     }
