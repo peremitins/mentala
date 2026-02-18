@@ -597,7 +597,7 @@ UX-инварианты для всех экранов:
 
 Подключение: счётчик подключается только на клиенте, если задана переменная окружения `NUXT_PUBLIC_YANDEX_METRIKA_ID` (числовой ID счётчика из кабинета Метрики). Плагин `plugins/yandex-metrika.client.ts` вставляет официальный код загрузки, композабл `useLandingAnalytics` отправляет цели (`reachGoal`). Без ID скрипт не загружается.
 
-**Для продакшна (деплой через GitHub Actions):** ID подставляется при сборке из **переменной репозитория** в GitHub. Куда вписать: репозиторий → **Settings** → **Secrets and variables** → **Actions** → вкладка **Variables** → **New repository variable**. Имя: `NUXT_PUBLIC_YANDEX_METRIKA_ID`, значение: числовой ID счётчика (например `106891177`). После сохранения пересобрать и задеплоить лендинг (пушить в ветку `landing` или перезапустить workflow «Deploy PROD to mentala.app»).
+**Для продакшна (деплой через GitHub Actions):** ID подставляется при сборке из GitHub. Репозиторий → **Settings** → **Secrets and variables** → **Actions**. Создать **Repository variable** (Variables → New repository variable) или **Repository secret** (Secrets → New repository secret): имя `NUXT_PUBLIC_YANDEX_METRIKA_ID`, значение — числовой ID счётчика (например `106891177`). После сохранения пересобрать и задеплоить лендинг (пушить в ветку `landing` или перезапустить workflow).
 
 Минимальный набор событий (реализованы):
 

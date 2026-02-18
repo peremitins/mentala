@@ -19,9 +19,11 @@ export default defineNuxtPlugin(() => {
     return;
   }
 
-  // Официальный код загрузки: URL с ?id= и init-опции как в кабинете Метрики (HTML/SPA)
+  // Официальный сниппет Яндекс.Метрики (как в кабинете): загрузчик tag.js + init с теми же опциями
   const scriptUrl = `https://mc.yandex.ru/metrika/tag.js?id=${counterNum}`;
-  const scriptContent = `(function(m,e,t,r,i,k,a){m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};m[i].l=1*new Date();for(var j=0;j<document.scripts.length;j++){if(document.scripts[j].src===r){return}}k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)})(window,document,"script","${scriptUrl}","ym");ym(${counterNum},"init",{ssr:true,webvisor:true,clickmap:true,ecommerce:"dataLayer",referrer:document.referrer,url:location.href,accurateTrackBounce:true,trackLinks:true});`;
+  const scriptContent =
+    `(function(m,e,t,r,i,k,a){m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};m[i].l=1*new Date();for(var j=0;j<document.scripts.length;j++){if(document.scripts[j].src===r){return}}k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)})(window,document,"script","${scriptUrl}","ym");` +
+    `ym(${counterNum},"init",{ssr:true,webvisor:true,clickmap:true,ecommerce:"dataLayer",referrer:document.referrer,url:location.href,accurateTrackBounce:true,trackLinks:true});`;
 
   const script = document.createElement('script');
   script.type = 'text/javascript';
