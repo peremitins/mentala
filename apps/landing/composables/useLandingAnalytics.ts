@@ -5,17 +5,27 @@
  */
 declare global {
   interface Window {
-    ym?: (counterId: number, action: string, ...args: unknown[]) => void;
+    ym?: ((counterId: number, action: string, ...args: unknown[]) => void) & {
+      a?: unknown[];
+      l?: number;
+    };
   }
+}
+
+function toCounterId(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string' && value.trim() !== '') {
+    const n = Number(value.trim());
+    return Number.isFinite(n) ? n : NaN;
+  }
+  return NaN;
 }
 
 export function useLandingAnalytics() {
   const config = useRuntimeConfig();
-  const id = config.public.yandexMetrikaId;
-  const counterId =
-    typeof id === 'string' && id.trim() !== ''
-      ? Number(id.trim())
-      : NaN;
+  const counterId = toCounterId(config.public.yandexMetrikaId);
 
   function reachGoal(eventName: string, params?: Record<string, unknown>) {
     if (typeof window === 'undefined' || !window.ym || !Number.isFinite(counterId)) {

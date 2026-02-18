@@ -1,17 +1,32 @@
 /**
  * Подключает счётчик Яндекс.Метрики на лендинге (только клиент).
- * Соответствует официальному сниппету: tag.js?id=ID, init с ssr/webvisor/clickmap/ecommerce/referrer/url.
+ * Совместимо с Nuxt 3: загрузка tag.js по src, инициализация в onload.
+ * ID принимается как number или string (в payload может прийти число).
  */
-export default defineNuxtPlugin(() => {
-  const config = useRuntimeConfig();
-  const id = config.public.yandexMetrikaId;
-  if (!id || typeof id !== 'string' || id.trim() === '') {
-    return;
+declare global {
+  interface Window {
+    ym?: ((counterId: number, action: string, ...args: unknown[]) => void) & {
+      a?: unknown[];
+      l?: number;
+    };
   }
+}
 
-  const counterId = id.trim();
-  const counterNum = Number(counterId);
-  if (!Number.isFinite(counterNum)) {
+function toCounterId(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string' && value.trim() !== '') {
+    const n = Number(value.trim());
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+export default defineNuxtPlugin((nuxtApp) => {
+  const config = useRuntimeConfig();
+  const counterId = toCounterId(config.public.yandexMetrikaId);
+  if (counterId === null) {
     return;
   }
 
@@ -19,20 +34,58 @@ export default defineNuxtPlugin(() => {
     return;
   }
 
-  // Официальный сниппет Яндекс.Метрики (как в кабинете): загрузчик tag.js + init с теми же опциями
-  const scriptUrl = `https://mc.yandex.ru/metrika/tag.js?id=${counterNum}`;
-  const scriptContent =
-    `(function(m,e,t,r,i,k,a){m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};m[i].l=1*new Date();for(var j=0;j<document.scripts.length;j++){if(document.scripts[j].src===r){return}}k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)})(window,document,"script","${scriptUrl}","ym");` +
-    `ym(${counterNum},"init",{ssr:true,webvisor:true,clickmap:true,ecommerce:"dataLayer",referrer:document.referrer,url:location.href,accurateTrackBounce:true,trackLinks:true});`;
+  // Очередь вызовов до загрузки tag.js (официальная рекомендация Яндекса)
+  if (!window.ym) {
+    const queue: unknown[] = [];
+    const q = function (...args: unknown[]) {
+      queue.push(args);
+    };
+    (q as { a?: unknown[]; l?: number }).a = queue;
+    (q as { a?: unknown[]; l?: number }).l = 1 * new Date().getTime();
+    window.ym = q as Window['ym'];
+  }
+
+  const scriptUrl = `https://mc.yandex.ru/metrika/tag.js?id=${counterId}`;
+
+  // Проверяем, не подключён ли уже скрипт
+  const existing = document.querySelector(`script[src="${scriptUrl}"]`);
+  if (existing) {
+    window.ym?.(counterId, 'init', {
+      clickmap: true,
+      trackLinks: true,
+      accurateTrackBounce: true,
+      webvisor: true,
+      defer: true,
+      referrer: document.referrer,
+      url: location.href,
+    });
+    return;
+  }
 
   const script = document.createElement('script');
   script.type = 'text/javascript';
-  script.textContent = scriptContent;
   script.async = true;
+  script.src = scriptUrl;
+  script.onload = () => {
+    window.ym?.(counterId, 'init', {
+      clickmap: true,
+      trackLinks: true,
+      accurateTrackBounce: true,
+      webvisor: true,
+      defer: true,
+      referrer: document.referrer,
+      url: location.href,
+    });
+  };
   const first = document.getElementsByTagName('script')[0];
-  if (first && first.parentNode) {
+  if (first?.parentNode) {
     first.parentNode.insertBefore(script, first);
   } else {
     document.head.appendChild(script);
   }
+
+  // SPA: хит при смене страницы (у лендинга одна страница, но хук не помешает)
+  nuxtApp.hook('page:finish', () => {
+    window.ym?.(counterId, 'hit', window.location.href);
+  });
 });
