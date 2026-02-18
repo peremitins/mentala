@@ -2,21 +2,37 @@ import { eq, and } from 'drizzle-orm';
 import { therapyTopicsCustom } from '@/server/infrastructure/db/schema';
 import { db } from '@/server/infrastructure/db/client';
 import type { TherapyTopicDto } from '@/shared/dto/notifications';
-import { getSessionUser } from '@/server/application/auth/session';
+import { getSessionUserWithRole } from '@/server/utils/require-role';
+import {
+  getBillingSnapshot,
+  getFeatureAccessOrDefault,
+  toFeaturePlanRequiredPayload,
+} from '@/server/application/subscriptions/entitlements.service';
 
 /**
  * GET /api/therapy/custom/:id
  * Получить пользовательскую тему терапии по ID
  */
 export default defineEventHandler(async (event): Promise<TherapyTopicDto> => {
-  const sessionResult = await getSessionUser(event);
-  if (!sessionResult?.user?.id) {
+  const sessionUser = await getSessionUserWithRole(event);
+  if (!sessionUser?.id) {
     throw createError({
       statusCode: 401,
       message: 'Unauthorized',
     });
   }
-  const userId = sessionResult.user.id;
+  const userId = sessionUser.id;
+
+  const featureKey = 'therapy.custom.create';
+  const billing = await getBillingSnapshot(userId, sessionUser.role);
+  const access = getFeatureAccessOrDefault(billing, featureKey);
+  if (!access.available) {
+    throw createError({
+      statusCode: 402,
+      statusMessage: 'Feature requires higher plan',
+      data: toFeaturePlanRequiredPayload({ featureKey, access }),
+    });
+  }
 
   const id = getRouterParam(event, 'id');
   if (!id) {

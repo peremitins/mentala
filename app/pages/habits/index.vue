@@ -33,6 +33,13 @@
       cancel-label="Отмена"
       @confirm="confirmDeleteHabit"
     />
+
+    <FeaturePaywallModal
+      v-model:open="paywallOpen"
+      :feature-key="paywallFeatureKey"
+      :required-plan="paywallAccess?.requiredPlan || null"
+      :paywall="paywallAccess?.paywall || null"
+    />
   </div>
 </template>
 
@@ -61,6 +68,11 @@ import {
   isHabitPracticeHidden,
   mapHabitToBreathGroup,
 } from '@/app/lib/practiceActions';
+import FeaturePaywallModal from '@/app/components/subscription/FeaturePaywallModal.vue';
+import {
+  extractFeaturePlanRequiredError,
+  useEntitlements,
+} from '@/app/composables/useEntitlements';
 
 const intentColors: Record<string, string> = {
   build: 'from-blue-500 to-cyan-500',
@@ -73,6 +85,7 @@ const chat = useChatStore();
 const loadersStore = useLoadersStore();
 const notificationsStore = useNotificationsStore();
 const { habits: userHabits } = storeToRefs(userHabitsStore);
+const { getFeatureAccess, refreshEntitlements } = useEntitlements();
 
 // Загружаем данные после монтирования компонента (с кэшированием)
 // Защита от двойного вызова реализована в store через isSkeletonLoading флаг
@@ -140,34 +153,63 @@ const customHabitItems = computed(() =>
       canDelete: true,
       notificationsEnabled: pref?.enabled ?? false,
       quickActions: buildHabitQuickActions(habit.id, true),
+      lockBadgeEmoji: customHabitsAccess.value.available
+        ? undefined
+        : getPlanBadgeEmoji(customHabitsAccess.value.requiredPlan),
+      lockBadgeTitle: customHabitsAccess.value.available
+        ? undefined
+        : 'Кастомные привычки доступны в Premium',
     };
   })
 );
 
-const createCard: NotificationIndexItem = {
+const createCard = computed<NotificationIndexItem>(() => ({
   id: '__create_habit',
   name: 'Создать свою привычку',
-  description: 'Настройте свои напоминания под себя: название, текст и частоту',
+  description: customHabitsAccess.value.available
+    ? 'Настройте свои напоминания под себя: название, текст и частоту'
+    : 'Создание кастомных привычек доступно в Premium',
   emoji: '✏️',
   gradientClass: 'from-gray-500 to-gray-700',
   payload: {
     action: 'create-habit',
   },
   quickActions: {},
-};
+  lockBadgeEmoji: customHabitsAccess.value.available
+    ? undefined
+    : getPlanBadgeEmoji(customHabitsAccess.value.requiredPlan),
+  lockBadgeTitle: customHabitsAccess.value.available
+    ? undefined
+    : 'Создание кастомных привычек доступно в Premium',
+}));
 
 const habitItems = computed(() => [
   ...customHabitItems.value,
   ...baseHabitItems.value,
-  createCard,
+  createCard.value,
 ]);
 
 const createModalOpen = ref(false);
 const deletingId = ref<string | null>(null);
 const deleteModalRef = ref<InstanceType<typeof ConfirmModal> | null>(null);
 const pendingDeleteItem = ref<NotificationIndexItem | null>(null);
+const paywallOpen = ref(false);
+const paywallFeatureKey = ref<string | null>(null);
 const route = useRoute();
 const router = useRouter();
+const meditationsAccess = computed(() =>
+  getFeatureAccess('meditations.library.full')
+);
+const breathCatalogAccess = computed(() =>
+  getFeatureAccess('breath.catalog.full')
+);
+const chatAssistantAccess = computed(() => getFeatureAccess('chat.assistant'));
+const customHabitsAccess = computed(() =>
+  getFeatureAccess('habits.custom.create')
+);
+const paywallAccess = computed(() =>
+  paywallFeatureKey.value ? getFeatureAccess(paywallFeatureKey.value) : null
+);
 const defaultIntent = computed<'build' | 'quit'>(() =>
   (route.query.intent as 'build' | 'quit') === 'quit' ? 'quit' : 'build'
 );
@@ -193,18 +235,37 @@ async function safeNavigate(target: RouteLocationRaw) {
   }
 }
 
-function handleGoalSelect(item: NotificationIndexItem) {
+async function refreshEntitlementsForAction() {
+  try {
+    await refreshEntitlements();
+  } catch (error) {
+    console.warn('[Habits] Failed to refresh entitlements on action:', error);
+  }
+}
+
+async function handleGoalSelect(item: NotificationIndexItem) {
+  await refreshEntitlementsForAction();
+
   const payload = item.payload as
     | (HabitCatalogItem & { type?: string })
     | (HabitDto & { type?: string; action?: string })
     | undefined;
 
   if (payload && 'action' in payload && payload.action === 'create-habit') {
+    if (!customHabitsAccess.value.available) {
+      openPaywall('habits.custom.create');
+      return;
+    }
     createModalOpen.value = true;
     return;
   }
 
   if (!payload) return;
+
+  if (payload.type === 'user' && !customHabitsAccess.value.available) {
+    openPaywall('habits.custom.create');
+    return;
+  }
 
   if ('habitKey' in payload && payload.habitKey) {
     safeNavigate(`/habits/${payload.habitKey}?intent=${payload.intent}`);
@@ -224,7 +285,9 @@ function handleHabitCreated(payload: HabitDto | TherapyTopicDto) {
   safeNavigate(`/habits/${habit.id}?intent=${habit.intent || 'build'}`);
 }
 
-function handleHabitDelete(item: NotificationIndexItem) {
+async function handleHabitDelete(item: NotificationIndexItem) {
+  await refreshEntitlementsForAction();
+
   const habit = item.payload as HabitDto | undefined;
   if (!habit) return;
   pendingDeleteItem.value = item;
@@ -244,6 +307,12 @@ async function confirmDeleteHabit() {
       navigateTo('/habits');
     }
   } catch (error: any) {
+    const featureError = extractFeaturePlanRequiredError(error);
+    if (featureError) {
+      openPaywall(featureError.featureKey);
+      return;
+    }
+
     console.error('[Habits] Failed to delete habit:', error);
     useToast(error?.message || 'Не удалось удалить привычку');
   } finally {
@@ -274,7 +343,26 @@ function buildHabitEntryContext(
   };
 }
 
+function isCustomHabitItem(item: NotificationIndexItem): boolean {
+  const payload = item.payload as
+    | { type?: string; action?: string }
+    | undefined;
+  return payload?.type === 'user' && payload?.action !== 'create-habit';
+}
+
 async function handleHabitQuickChat(item: NotificationIndexItem) {
+  await refreshEntitlementsForAction();
+
+  if (isCustomHabitItem(item) && !customHabitsAccess.value.available) {
+    openPaywall('habits.custom.create');
+    return;
+  }
+
+  if (!chatAssistantAccess.value.available) {
+    openPaywall('chat.assistant');
+    return;
+  }
+
   chat.entryContext = buildHabitEntryContext(item);
 
   try {
@@ -294,6 +382,11 @@ function resolveHabitKey(item: NotificationIndexItem): string | null {
 }
 
 async function handleHabitQuickMeditation(item: NotificationIndexItem) {
+  if (!meditationsAccess.value.available) {
+    openPaywall('meditations.library.full');
+    return;
+  }
+
   const habitKey = resolveHabitKey(item);
   if (!habitKey) return;
   const meditationTopicKey = mapHabitToMeditationTopic(habitKey);
@@ -309,6 +402,11 @@ async function handleHabitQuickMeditation(item: NotificationIndexItem) {
 }
 
 async function handleHabitQuickBreath(item: NotificationIndexItem) {
+  if (!breathCatalogAccess.value.available) {
+    openPaywall('breath.catalog.full');
+    return;
+  }
+
   const habitKey = resolveHabitKey(item);
   if (!habitKey) return;
   const groupKey = mapHabitToBreathGroup(habitKey);
@@ -330,4 +428,21 @@ async function handleHabitQuickBreath(item: NotificationIndexItem) {
     query: { group: groupKey },
   });
 }
+
+function openPaywall(featureKey: string) {
+  paywallFeatureKey.value = featureKey;
+  paywallOpen.value = true;
+}
+
+function getPlanBadgeEmoji(plan: string) {
+  return plan === 'premium' ? '💎' : '⭐';
+}
+
+onMounted(async () => {
+  try {
+    await refreshEntitlements();
+  } catch (error) {
+    console.warn('[Habits] Failed to refresh entitlements:', error);
+  }
+});
 </script>

@@ -7,7 +7,10 @@ import {
 import { db } from '@/server/infrastructure/db/client';
 import { therapySessions } from '@/server/infrastructure/db/schema';
 import { and, desc, eq, isNull } from 'drizzle-orm';
-import { getAiUsageGate } from '@/server/application/subscriptions/ai-usage.service';
+import {
+  getAiUsageGate,
+  toUnifiedAiLimitPayload,
+} from '@/server/application/subscriptions/ai-usage.service';
 import { CHAT_IDLE_TIMEOUT_MS } from '@/server/config/subscription';
 
 /**
@@ -34,14 +37,12 @@ export default defineEventHandler(async (event) => {
     });
   }
   if (gate.status === 'weekly_limit_reached') {
+    const payload = toUnifiedAiLimitPayload(gate);
     throw createError({
       statusCode: 402,
-      statusMessage: 'Weekly minutes limit exceeded',
+      statusMessage: payload.message,
       data: {
-        code: 'weekly_limit_reached',
-        weeklyLimit: gate.weeklyLimit,
-        usedMinutes: gate.usedMinutes,
-        overdraftUsed: gate.overdraftUsed,
+        ...payload,
       },
     });
   }

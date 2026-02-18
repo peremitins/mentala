@@ -2,10 +2,14 @@ import { defineEventHandler } from 'h3';
 
 const isProd = process.env.NODE_ENV === 'production';
 
+function normalizeOrigin(origin: string): string {
+  return origin.trim().replace(/\/+$/, '');
+}
+
 function parseOrigins(envValue?: string): string[] {
   return (envValue || '')
     .split(',')
-    .map((o) => o.trim())
+    .map((o) => normalizeOrigin(o))
     .filter(Boolean);
 }
 
@@ -28,8 +32,15 @@ function getAllowedOrigins(): string[] {
   }
 
   const fromEnv = parseOrigins(process.env.DEV_ALLOWED_ORIGINS);
-  const defaults = ['http://localhost:3000', 'http://127.0.0.1:3000'];
-  for (const o of fromEnv.length ? fromEnv : defaults) base.add(o);
+  // В dev всегда разрешаем стандартные локальные origins для web-приложения и лендинга.
+  const defaults = [
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'http://localhost:3001',
+    'http://127.0.0.1:3001',
+  ];
+  for (const o of defaults) base.add(o);
+  for (const o of fromEnv) base.add(o);
 
   return [...base];
 }
@@ -44,6 +55,7 @@ export default defineEventHandler((event) => {
   const res = event.node.res;
 
   const origin = req.headers.origin;
+  const normalizedOrigin = origin ? normalizeOrigin(origin) : '';
   if (!origin) {
     if (req.method === 'OPTIONS') {
       res.statusCode = 204;
@@ -52,7 +64,7 @@ export default defineEventHandler((event) => {
     return;
   }
 
-  if (!allowedOrigins.has(origin)) {
+  if (!allowedOrigins.has(normalizedOrigin)) {
     if (req.method === 'OPTIONS') {
       res.statusCode = 204;
       res.end();

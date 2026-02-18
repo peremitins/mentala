@@ -13,6 +13,8 @@ import {
   type NotificationDeliveryJobData,
 } from '../queues/notificationDelivery.queue';
 import { sendToUser } from '@/server/application/notifications/delivery.service';
+import { resolveEntityKeyForSlots } from '@/server/application/notifications/entity-key.service';
+import { getCustomNotificationSourceAccessByKind } from '@/server/application/notifications/notification-source-access.service';
 import { db } from '@/server/infrastructure/db/client';
 import { notificationSlots } from '@/server/infrastructure/db/schema';
 import { eq, and } from 'drizzle-orm';
@@ -35,6 +37,9 @@ export function startNotificationDeliveryWorker() {
           .select({
             id: notificationSlots.id,
             status: notificationSlots.status,
+            kind: notificationSlots.kind,
+            entityKey: notificationSlots.entityKey,
+            userId: notificationSlots.userId,
           })
           .from(notificationSlots)
           .where(eq(notificationSlots.id, slotId))
@@ -47,10 +52,51 @@ export function startNotificationDeliveryWorker() {
           return { skipped: true, reason: 'slot_not_queued' };
         }
 
-        // Отправляем уведомление
-        const successCount = await sendToUser(userId, payload);
+        if (
+          slot.entityKey &&
+          (slot.kind === 'habits' || slot.kind === 'therapy')
+        ) {
+          const resolvedEntity = await resolveEntityKeyForSlots(
+            slot.userId,
+            slot.kind as 'habits' | 'therapy',
+            slot.entityKey
+          );
 
-        if (successCount > 0) {
+          if (resolvedEntity.isCustom) {
+            const sourceAccess = await getCustomNotificationSourceAccessByKind({
+              userId: slot.userId,
+            });
+            const hasCustomAccess =
+              slot.kind === 'habits'
+                ? sourceAccess.habits
+                : sourceAccess.therapy;
+
+            if (!hasCustomAccess) {
+              const updateResult = await db
+                .update(notificationSlots)
+                .set({ status: 'skipped' })
+                .where(
+                  and(
+                    eq(notificationSlots.id, slotId),
+                    eq(notificationSlots.status, 'queued')
+                  )
+                );
+              const rowsAffected = updateResult.rowCount || 0;
+              if (rowsAffected > 0) {
+                console.warn(
+                  `[Notification Delivery Worker] ⏭️ Slot ${slotId} skipped: custom source locked by plan (user=${slot.userId}, source=${slot.kind}:${slot.entityKey})`
+                );
+              }
+              return { skipped: true, reason: 'custom_source_locked' };
+            }
+          }
+        }
+
+        // Отправляем уведомление.
+        // Важно: sent ставим только при реальной доставке в FCM/APNs (без mock-режима).
+        const deliveryResult = await sendToUser(userId, payload);
+
+        if (deliveryResult.hasRealDelivery) {
           // КРИТИЧНО: Атомарно обновляем статус только если слот еще в статусе 'queued'
           // Это предотвращает перезапись статуса, если слот уже был обработан другим воркером
           const updateResult = await db
@@ -72,15 +118,15 @@ export function startNotificationDeliveryWorker() {
             // Не считаем это ошибкой - уведомление было отправлено успешно
             return {
               success: true,
-              devicesCount: successCount,
+              devicesCount: deliveryResult.sentCount,
               alreadyProcessed: true,
             };
           }
 
           console.log(
-            `[Notification Delivery Worker] ✅ Job ${job.id} completed: sent to ${successCount} device(s)`
+            `[Notification Delivery Worker] ✅ Job ${job.id} completed: sent=${deliveryResult.sentCount}, mock=${deliveryResult.mockCount}, failed=${deliveryResult.failedCount}, total=${deliveryResult.deviceCount}`
           );
-          return { success: true, devicesCount: successCount };
+          return { success: true, devicesCount: deliveryResult.sentCount };
         } else {
           // КРИТИЧНО: Атомарно обновляем статус только если слот еще в статусе 'queued'
           const updateResult = await db
@@ -101,15 +147,15 @@ export function startNotificationDeliveryWorker() {
             );
             return {
               success: false,
-              reason: 'no_devices',
+              reason: 'no_real_delivery',
               alreadyProcessed: true,
             };
           }
 
           console.log(
-            `[Notification Delivery Worker] ⚠️ Job ${job.id} failed: no devices`
+            `[Notification Delivery Worker] ⚠️ Job ${job.id} failed: no real delivery (sent=${deliveryResult.sentCount}, mock=${deliveryResult.mockCount}, failed=${deliveryResult.failedCount}, total=${deliveryResult.deviceCount})`
           );
-          return { success: false, reason: 'no_devices' };
+          return { success: false, reason: 'no_real_delivery' };
         }
       } catch (error) {
         // КРИТИЧНО: Атомарно обновляем статус только если слот еще в статусе 'queued'

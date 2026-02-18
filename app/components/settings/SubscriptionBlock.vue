@@ -3,7 +3,7 @@
     <div class="flex items-center justify-between">
       <h3 class="text-sm font-semibold">Подписка</h3>
       <span v-if="subscription?.plan?.name === 'premium'" class="text-lg"
-        >👑</span
+        >⭐</span
       >
     </div>
 
@@ -28,7 +28,7 @@
           class="mt-2 space-y-1"
         >
           <p class="text-xs text-foreground">
-            Доступен полный функционал Premium: AI-чат, 100 минут в неделю
+            В пробном периоде доступен полный Premium-доступ
           </p>
           <p class="text-xs text-foreground">
             Пробный период действует до:
@@ -48,7 +48,12 @@
             v-else-if="subscription.paymentStatus === 'active'"
             class="text-xs text-foreground mt-1"
           >
-            Действует до: {{ formatDate(subscription.endDate) }}
+            <template v-if="subscription.plan.name === 'basic'">
+              Бесплатный план без срока окончания
+            </template>
+            <template v-else>
+              Действует до: {{ formatDate(subscription.endDate) }}
+            </template>
           </p>
           <p
             v-else-if="subscription.paymentStatus === 'expired'"
@@ -68,18 +73,21 @@
         <div class="flex items-center justify-between text-xs">
           <span class="text-foreground">Использовано:</span>
           <span class="font-medium">
-            {{ usage?.usedMinutes || 0 }} из {{ weeklyMinutesLimit }} минут на
-            этой неделе
+            {{ usage?.usedMinutes || 0 }} из {{ weeklyMinutesLimitValue }} минут
+            на этой неделе
           </span>
         </div>
         <div class="h-2 w-full rounded-full bg-primary-ui/20 overflow-hidden">
           <div
             class="h-full transition-all duration-300"
             :class="
-              getProgressBarColor(usage?.usedMinutes || 0, weeklyMinutesLimit)
+              getProgressBarColor(
+                usage?.usedMinutes || 0,
+                weeklyMinutesLimitValue
+              )
             "
             :style="{
-              width: `${Math.min(100, ((usage?.usedMinutes || 0) / weeklyMinutesLimit) * 100)}%`,
+              width: `${Math.min(100, ((usage?.usedMinutes || 0) / weeklyMinutesLimitValue) * 100)}%`,
             }"
           />
         </div>
@@ -99,7 +107,7 @@
         <p class="text-xs text-muted-foreground">
           На тарифе Basic без пробного периода доступны только уведомления с
           шаблонами. Выберите тариф PRO или Premium, чтобы получить доступ к
-          AI-чату.
+          ИИ-чату.
         </p>
       </div>
 
@@ -126,38 +134,6 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue';
 import { useSubscriptionStore } from '@/app/stores/subscription';
-
-interface Subscription {
-  id: number;
-  planId: string;
-  endDate: string;
-  paymentStatus: string;
-  plan: {
-    id: string;
-    name: string;
-    isAnnual?: boolean;
-  };
-}
-
-interface SubscriptionResponse {
-  plan: string;
-  trialActive: boolean;
-  trialExpiresAt: string | null;
-  features: {
-    ai: boolean;
-    weeklyMinutesLimit: number;
-  };
-  subscription: Subscription | null;
-  noActiveSubscription: boolean;
-  paymentStatus?: string;
-}
-
-interface Usage {
-  usedMinutes: number;
-  weeklyLimit: number;
-  overdraftUsed: number;
-  availableMinutes: number;
-}
 
 const subscriptionStore = useSubscriptionStore();
 
@@ -222,9 +198,10 @@ function getDaysWord(days: number): string {
 }
 
 // Получаем лимит минут из features (учитывает Trial)
-const weeklyMinutesLimit = computed(() => {
-  return subscriptionStore.weeklyMinutesLimit;
-});
+const aiChatMode = computed(() => subscriptionStore.aiChatMode);
+const weeklyMinutesLimitValue = computed(
+  () => subscriptionStore.weeklyMinutesLimit ?? 0
+);
 
 // Проверяем, нужно ли показывать прогресс-бар
 const shouldShowProgressBar = computed(() => {
@@ -234,7 +211,8 @@ const shouldShowProgressBar = computed(() => {
   // 3. Есть данные об использовании
   return (
     subscription.value?.paymentStatus === 'active' &&
-    weeklyMinutesLimit.value > 0 &&
+    aiChatMode.value !== 'disabled' &&
+    weeklyMinutesLimitValue.value > 0 &&
     usage.value !== null
   );
 });
@@ -246,7 +224,7 @@ const shouldShowNoAccessInfo = computed(() => {
   // 2. Лимит минут = 0 (нет доступа к ИИ)
   return (
     subscription.value?.paymentStatus === 'active' &&
-    weeklyMinutesLimit.value === 0
+    aiChatMode.value === 'disabled'
   );
 });
 

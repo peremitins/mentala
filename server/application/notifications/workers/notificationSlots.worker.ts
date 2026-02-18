@@ -27,6 +27,7 @@ import {
 import { needsSlotRegenerationInternal } from '@/server/application/notifications/needs-regeneration.service';
 import { generateAllSlotsForUser } from '@/server/application/notifications/scheduler.service';
 import { SlotsGenerationLockTimeoutError } from '@/server/application/notifications/global-orchestration.service';
+import { ensureAiNotificationAccessConsistency } from '@/server/application/notifications/notification-source-access.service';
 
 class RegenerationTimeoutError extends Error {
   constructor(timeoutMs: number) {
@@ -129,7 +130,12 @@ export function startNotificationSlotsWorker() {
 
       // Блок "валидность пользователя" держим быстрым и дешёвым.
       const [user] = await db
-        .select({ id: users.id, isBlocked: users.isBlocked })
+        .select({
+          id: users.id,
+          isBlocked: users.isBlocked,
+          roleId: users.roleId,
+          trialEndedAt: users.trialEndedAt,
+        })
         .from(users)
         .where(eq(users.id, userId))
         .limit(1);
@@ -147,6 +153,15 @@ export function startNotificationSlotsWorker() {
         );
         return { skipped: true, reason: 'user_blocked' };
       }
+
+      // Важно: если Trial/тариф больше не даёт доступ к AI-уведомлениям,
+      // принудительно переводим source на templates, чтобы не останавливать
+      // доставку и не запускать новые AI-генерации.
+      await ensureAiNotificationAccessConsistency({
+        userId,
+        trialEndedAt: user.trialEndedAt,
+        userRole: user.roleId,
+      });
 
       const beforeDecision = await needsSlotRegenerationInternal(userId);
       if (!beforeDecision.shouldRegenerate) {

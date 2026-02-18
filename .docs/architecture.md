@@ -12,6 +12,7 @@
 • Резолв медиа (`app/utils/media.ts`): в `dev` приоритет у `window.location.origin` (если это `http/https` и отличается от `apiBase`) — это выравнивает поведение с native `server.url` в Capacitor на iOS/Android; далее fallback на `apiBase` и `mediaBaseUrl`. В `production` приоритет остаётся у `NUXT_PUBLIC_MEDIA_BASE_URL`.
 • Ошибки API на native логируются в `app/plugins/api.ts` с контекстом (`url`, `status`, `statusText`, `message`, `responseData`) для диагностики проблем сети/доступности backend.
 • Глобальный auth middleware (`app/middleware/auth.global.ts`) держит fail-fast стратегию в компактном виде: helper для public routes, gate по native session token (`mentai.session.token`) и единый `auth.me()` с timeout (`AUTH_ME_TIMEOUT_MS`) для избежания зависаний на мобильных сетевых сбоях.
+• Глобальный feature-access middleware (`app/middleware/feature-access.global.ts`) выполняет тарифный gate на уровне роутера: закрывает прямой доступ к `meditations`, lock-маршрутам `breath-practices/:slug` (кроме free slugs), а также к custom-маршрутам `habits/:id` и `therapy/:key` (если ключ не из каталога и нет premium entitlement). При отсутствии доступа делает `navigateTo('/', { replace: true })`.
 • Google OAuth на native: `@capgo/capacitor-social-login` использует `google.webClientId` (env `NUXT_OAUTH_GOOGLE_CLIENT_ID`) на Android/Web и `google.iOSClientId` (env `NUXT_PUBLIC_GOOGLE_IOS_CLIENT_ID`) на iOS. Без iOS client id initialize на iOS возвращает `No provider was initialized`. В `AppDelegate` обязательно обрабатываем callback через `GIDSignIn.sharedInstance.handle(url)`. Backend `/api/auth/google/native` валидирует `idToken` по аудиториям `web + iOS`.
 • Для `nuxt generate` фоновые notification/BullMQ воркеры не запускаются (guards в `server/plugins/notifications-worker.ts` и `server/plugins/bullmq-workers.ts`), чтобы static-сборка не зависала на Redis и `cap sync` всегда получал свежие web assets.
 • Дополнительно для static-сборки отключены фоновые cleanup-плагины (`server/plugins/auth-cleanup.ts`, `server/plugins/trial-usage-cleanup.ts`), а Redis-клиент BullMQ работает в `lazyConnect` режиме, чтобы `generate` не блокировался фоновыми коннектами.
@@ -45,6 +46,7 @@ index, onboarding, chat (layout blank), therapy, habits, practices, breath-pract
 • ID пользователя показывается внизу `/settings` с копированием (useClipboard/Capacitor Clipboard с fallback).
 • Чат: welcome‑ответ стартует при пустом `messages`, параметр `mode` удалён; `entryContext` приходит из разделов `/habits` и `/therapy` и учитывается в prompt.
 • Чат: приветствие используется только в welcome‑старте и не чаще 1 раза в день (локальная дата пользователя). Приветствие по имени — отдельный лимит; имя очищается до «только имя» без фамилии/никнеймов. Отметки хранятся в `chat_settings.last_greeting_at` и `chat_settings.last_name_greeting_at`. Инструкция про имя и выбор стартовой фразы добавляются только в первое сообщение дня, чтобы не раздувать токены.
+• Чат: альтернативная стартовая фраза в welcome‑режиме учитывает `entryContext` (`therapy_topic` / `habit` / `sos`) и `user_gender` (если есть) для естественных формулировок. Выбор фразы выполняется случайно, при этом для одного `userId + context` исключается повтор предыдущей фразы подряд (in-memory anti-repeat). Общий нейтральный шаблон используется только при входе с главной (`entryContext = null`), а при переходе из темы/привычки/SOS старт сразу формулируется по выбранному контексту.
 • Чат: suggested‑chips не сбрасываются при наборе текста, очищаются только при отправке/выборе.
 • Чат: микрофон в инпуте имеет индикацию записи через ::before/::after (пульсирующая точка), отправка на мобильных срабатывает на первый тап через pointerdown‑хэндлер даже во время записи.
 • Голосовой ввод: Whisper‑fallback временно отключён, используются только native/webspeech движки.
@@ -123,7 +125,7 @@ server/
 • Шифрование данных: end-to-end для чатов, ключи разделяются (как в Telegram).
 • Middleware:
 • helmet (защита заголовков),
-• rate-limit (DDOS),
+• rate-limit (DDOS) только для `/api/*`, с конфигом через ENV `RATE_LIMIT_MAX` и `RATE_LIMIT_WINDOW_MS` (дефолт: `180` запросов за `60000` мс),
 • cors (whitelist origins из env),
 • csrf (для cookie-канала, state-changing методы).
 • Логирование security events (csrf_mismatch, origin_mismatch, ip_mismatch и т.д.).
@@ -217,14 +219,25 @@ server/
 • `forceTodaySlots` на текущем этапе считается техдолгом и находится вне scope scaling-этапа.
 • Logout отключает уведомления **только на текущем устройстве**: токен удаляется через `/api/notifications/unregister-token` (таблица `user_devices`).
 • При логине токен устройства повторно регистрируется (если есть) и в фоне проверяется наличие активных слотов: если нужно регенерировать или активные настройки есть, но слотов нет — запускается `generateAllSlotsForUser`.
-• AI‑генерация текстов уведомлений выполняется через очередь BullMQ `ai-text-generation` с debounce‑dedup (`id = ai-gen-{preferenceId}`, TTL≈20с) и лимитом на пользователя (не больше 3 активных задач одновременно). При ошибках AI слоты **не** создаются, задача ретраится с backoff; после успешной генерации выполняется глобальная регенерация слотов. При повторных сбоях объём генерации снижается (50 → 25 → 12), чтобы не срывать процесс.
+• AI-генерация теперь reason-aware: воркер `aiTextGeneration.worker.ts` запускает `generateAllSlotsForUser(...)` только для пользовательских причин (`prefs_create/prefs_update/settings_* / onboarding_complete / user_gender_update / login / timezone_changed / manual`). Для фоновых причин (`missing_ai_texts`, `retry_after_provider_error` и др.) автоматический полный пересчёт слотов отключён, чтобы расписание/тексты не менялись самопроизвольно.
+• В `global-orchestration.service.ts` добавлен жёсткий инвариант: слот с `scheduledAt <= now` не вставляется в `notification_slots` (даже если попал в расчёт), чтобы delivery не отправлял его как overdue «сразу». Для диагностики логируются события `notification_slots_orchestration_start` (кто/почему запустил пересборку) и `notification_slots_past_guard` (сколько прошлых слотов отфильтровано + sample).
+• Delivery stale-policy: в `processDueSlots` массовый перевод в `skipped` больше не зависит от окна `lookAhead`; в `skipped` уходят только действительно протухшие `planned`-слоты старше `NOTIFICATION_MAX_SLOT_AGE_HOURS_BEFORE_SKIP`. Overdue-слоты в пределах этого возраста попадают в обработку и могут быть доставлены.
+• AI‑генерация текстов уведомлений выполняется через очередь BullMQ `ai-text-generation` с debounce‑dedup (`id = ai-gen-{preferenceId}`, TTL≈20с) и лимитом на пользователя (не больше 3 активных задач одновременно). При ошибках AI слоты **не** создаются, задача ретраится с backoff; после успешной генерации пересчёт слотов выполняется только для пользовательских причин (а не для фоновых refill/missing-кейсов). При повторных сбоях объём генерации снижается (50 → 25 → 12), чтобы не срывать процесс.
 • Префикс AI‑текстов: для шаблонных тем используется `✨`, для кастомных — `✏️` (префикс учитывается в лимите длины).
 • AI‑промпты запрещают ложные утверждения о достижениях пользователя: формулировки только нейтральные/поддерживающие без фиксации «успеха».
 • При изменении глобальных настроек (`tone`, `addressing`) через `/api/settings/preferences` ставится регенерация AI‑пулов для всех `ai` preferences пользователя (через ту же очередь).
 • Шаблонные тексты из `notificationTemplates` по умолчанию без изображений (`imageTag = null`), но могут иметь явный `imageTag`.
 • Контент каталога `notificationTemplates` поддерживается через регулярную чистку: спорные/неестественные шаблоны удаляются целыми блоками, а в оставшихся текстах нормализуется типографика (например `5 Минут` → `5 минут`). После правок выполняется синхронизация в БД через `scripts/migrate-templates-to-db.ts`.
 • В native (Capacitor) регистрация push‑токена всегда идёт через `$api` и использует ту же стратегию выбора `baseURL`, что и остальные API-запросы (`app/plugins/api.ts`), чтобы не было расхождений между auth и push.
-• Доставка слотов: если planned-слот опоздал больше чем на 10 минут, он не отправляется, помечается как `skipped` и считается выполненным для дневной квоты.
+• Delivery scheduler для push работает по симметричному окну `now-lookahead .. now+lookahead` и ставит `notification-delivery` jobs с `delay = scheduledAt - now` (BullMQ delayed jobs). Это сохраняет точный тайминг внутри окна и исключает поздние «догоняющие» отправки спустя часы.
+• Перед выборкой due-слотов delivery-процесс массово помечает `planned -> skipped` только для действительно протухших записей старше `NOTIFICATION_MAX_SLOT_AGE_HOURS_BEFORE_SKIP`; записи моложе этого порога попадают в due-выборку как overdue и могут быть доставлены.
+• При ручном изменении notification preferences (`forceTodaySlots=true`) диапазон пересоздания слотов начинается с `now` (без safe-window), поэтому будущие слоты текущего дня пересчитываются сразу, а не откладываются на завтра.
+• Жёсткий инвариант по частоте источника: `timesPerDay` ограничен диапазоном `1..5` на backend. `customSlotTimes` тоже ограничен максимумом 5 и считается внутри этого лимита (ручные времена не добавляют «дополнительные» слоты сверх 5).
+• Глобальный post-shift anti-overlap отключён: оркестратор больше не двигает `planned`-слоты после вставки. Равномерность достигается на этапе распределения времени внутри источника (краевые слоты фиксируются на границах диапазона, джиттер применяется только к внутренним слотам).
+• Статус `sent` фиксируется только при реальной успешной отправке в FCM/APNs (`send result = sent`). Mock-отправка не переводит слот в `sent`; при отсутствии реальной доставки слот переводится в `failed`, чтобы статус не был ложноположительным.
+• Collapse key для push формируется на уровне конкретного `slotId`, а не `kind/entity`. Это сохраняет дедупликацию ретраев одного слота, но исключает схлопывание разных слотов в одно уведомление.
+• Для custom-источников уведомлений (`habits/therapy`) доставка и генерация учитывают entitlement: при отсутствии доступа custom-слоты не генерируются и переводятся в `skipped` на этапах `planned` и `queued`, чтобы после окончания Trial/понижения плана уведомления по закрытым сущностям не отправлялись.
+• `POST /api/notifications/mark-delivered` поддерживает батч-пометку: принимает `slotId` или `slotIds[]`, и помимо явных ID помечает `sent -> skipped` для слотов того же пользователя с тем же `scheduledAt` (чтобы в группе уведомлений не оставались “хвосты” со статусом `sent`).
 • UI (habits и therapy) отражает вручную заданные слоты: под слайдером частоты отображается интерактивный список слотов с тайм-пикерами; компонент TimePicker использует Radix ScrollArea без `overflow-hidden`, поэтому свайпы/прокрутка работают нативно, а кнопки синхронно центрируют выбранное значение.
 • NotificationSettingsPage визуально сгруппирован в `glass-deep` карточки с внутренними подложками, чтобы текст читался на фоне обоев и сохранялась иерархия блоков.
 • NotificationTextsEditorPage использует общий `glass-deep` контейнер для списка текстов с внутренними карточками-подложками; кнопка сохранения закреплена липкой панелью над BottomNav.
@@ -233,7 +246,7 @@ server/
 • Для отдельных тем можно задавать специальные ограничения `imageTag` через `IMAGE_TAG_POLICY_OVERRIDES` (например `nutrition` → только `neutral_abstract`, `harm_appearance`, `harm_organs`).
 • Где находится: `server/application/notifications/ai-generation.service.ts`.
 • Как матчится: `entityKey` нормализуется через `trim().toLowerCase()` и сравнивается с `key/keys`; опционально учитывается `kind` (`habits`/`therapy`).
-• Поля override: `keys` (массив ключей), `kind` (опционально), `allowedTags` (строго разрешённые теги), `fallbackTag` (чем заменить запрещённый/неуместный тег), `disallowHarmForPositive` (если `true`, harm_* запрещён для нейтральных/позитивных текстов).
+• Поля override: `keys` (массив ключей), `kind` (опционально), `allowedTags` (строго разрешённые теги), `fallbackTag` (чем заменить запрещённый/неуместный тег), `disallowHarmForPositive` (если `true`, harm\_\* запрещён для нейтральных/позитивных текстов).
 • Порядок применения: сначала override, затем дефолтная политика (meditation-only, safe‑теги).
 • Важно: override применяется только к AI‑генерации; чтобы вступило в силу, нужен ре‑ген AI‑пула (смена `subtype/directness` или переключение `textSource`).
 • Для **шаблонов** картинки выключены по умолчанию (`imageTag = null`), но их можно включить точечно, задав `imageTag` в шаблоне.
@@ -247,6 +260,7 @@ server/
 • Приоритет навигации: `deepLink` → `data.action` → `navigation/navType` → `/`.
 • Надёжность push‑переходов (client): целевая навигация кладётся в очередь (Preferences/localStorage) с TTL, дедуплицируется по `messageId` и «специфичности» пути (например `/meditations?trackId=...` сильнее `/meditations`). Переход выполняется после `router.isReady()` и попытки `auth.me()`; если маршрут свернулся до базового пути, выполняется одноразовый retry через `router.replace`.
 • `actionHint` хранится в `notification_texts` и `notification_text_presets` (а для AI — в `ai_generated_notification_texts.texts[]`) и используется на сервере для вычисления `navigation`.
+• Для `actionHint=breathing` сервер сначала пытается определить конкретную технику по тексту: `4-7-8` → slug `4-7-8`, `4-4-4-4`/«квадратное»/«коробочное» дыхание → slug `box-breathing`; если явной техники нет, используется fallback `DEFAULT_BREATH_PRACTICE_SLUG` (по умолчанию `box-breathing`).
 • Если `actionHint` отсутствует или равен `none`, сервер применяет эвристику по тексту и `imageTag` (медитация/дыхание) как fallback, чтобы не терять навигацию.
 • Android clickAction: сейчас **не задаётся** (используем дефолтное поведение Android — открытие приложения по тапу). Если когда‑нибудь понадобится кастомный `clickAction`, он должен строго совпадать с `intent-filter` `MainActivity`, иначе тап по уведомлению не откроет приложение.
 • Дефолтные цели перехода (медитация/дыхание) задаются на сервере конфигом и могут меняться без релиза клиента.
@@ -299,13 +313,29 @@ server/
 
 • Trial:
 • Trial — это **состояние пользователя**, а не отдельный план: `users.has_used_trial`, `users.trial_started_at`, `users.trial_ended_at`.
-• При регистрации создаётся `Basic` подписка; если Trial активен — функционал как Premium на 7 дней.
+• При регистрации создаётся `Basic` подписка; если Trial активен — для Basic включается полный AI-доступ уровня Premium на 7 дней (с Premium fair-use guard).
 • Идентификатор Trial: сейчас **email обязателен**, без email регистрация не поддерживается.
 • Нормализация email: `normalizeEmail` (lowercase + Gmail aliases + Unicode NFKC) — единая для auth и trial tracking.
 • Идентификатор: `email_hash` (HMAC‑SHA256 + `EMAIL_HASH_PEPPER`) как ключ; `email_normalized` хранится для поддержки.
 • Консистентность: операции Trial выполняются в одной транзакции; `trial_usage_tracking` обновляется через UPSERT.
 • Ретеншн PII для `trial_usage_tracking`: 1 год после последнего использования Trial или удаления аккаунта (см. `.docs/trial_abuse_prevention_tz.md`).
 • Очистка ретеншна: ежедневная фоновая очистка `trial_usage_tracking` (можно отключить `TRIAL_USAGE_CLEANUP_ENABLED=false`).
+
+• Тарифная матрица (зафиксированная целевая v1, до этапа внедрения):
+• `Basic` (0₽): AI-чат отключён, AI-уведомления отключены, доступны шаблонные уведомления + SOS-техники + 2 популярные дыхательные практики.
+• `PRO` (349₽): всё из Basic + текстовый AI-чат с лимитом `100 мин/нед` + полная библиотека медитаций + все дыхательные практики + AI-уведомления.
+• `Premium` (649₽): всё из PRO + текстовый AI-чат «безлимит*» + персональный стиль AI-напоминаний + создание/управление своими практиками, где `*`= обязательная серверная fair-use защита.
+• Premium fair-use guard: единый stop-порог`900 мин/нед`(временная блокировка до reset окна).
+• Формулировка «безлимитный AI-чат» допустима только с пометкой`\*fair-use`.
+• Чатовая TTS-озвучка временно выключена глобально для всех планов через kill-switch `FEATURE_TTS_ENABLED=false` (до отдельного voice-этапа и привязки к Premium).
+• Для закрытых функций применяется единый lock/paywall контракт: иконка premium-доступа в UI + модалка с CTA на нужный тариф.
+• Правила lock/paywall хранятся в БД (`feature_access_policies`) и отдаются через entitlement API, фронт не хардкодит тексты/тариф.
+• Обязательный bootstrap реализован: `GET /api/user/me`возвращает объект`billing`(plan/trial/aiChatMode/entitlements snapshot), чтобы при старте приложения UI сразу знал, показывать lock-иконки и paywall-модалки или нет.
+• Для общего входа в чат используется entitlement`chat.assistant`: блоки «Начать/Поговорить в чате» показывают lock-иконку (`⭐`/`💎`) и открывают paywall-модалку вместо попытки запуска чата на недоступном тарифе.
+• Кастомные привычки и кастомная терапия закрыты entitlement-ключами `habits.custom.create` и `therapy.custom.create`: create/open/update API отдают `feature_plan_required`, а индексные карточки показывают lock-бейдж и открывают стандартную paywall-модалку вместо модалки создания.
+• Исключение по UX: удаление уже созданных кастомных привычек/тем терапии разрешено всегда (для владельца), даже если entitlement на создание/открытие больше недоступен; блокируются только вход в карточку/настройки и взаимодействия, требующие доступа к фиче.
+• Для уведомлений введён авто-fallback: если у пользователя нет entitlement на `notifications.text_source_ai`(например, Trial истёк на Basic), сервер принудительно переводит`textSource=ai`в`templates`в API prefs и в фоновых AI-воркерах, чтобы не останавливать уже настроенные уведомления и не запускать новые AI-генерации без доступа.
+• В`NotificationSettingsPage` блоки «Способ создания / ИИ» и «Мои пожелания» используют entitlement-gate с lock-иконкой (`⭐`/`💎`) и paywall-модалкой; поле пожеланий остаётся read-only без доступа и не участвует в AI-генерации до открытия тарифа.
 
 • Checkout (as-is):
 • `POST /api/subscriptions/start-checkout` требует заголовок `Idempotency-Key`.
@@ -353,10 +383,11 @@ server/
 • `checkoutStatus` не входит в scope базового Phase 1 и вводится на этапе hardening (Phase 1.5).
 • Phase 1.5 migration: `user_subscriptions.checkout_status` вводится через миграцию БД (`NOT NULL DEFAULT 'in_progress'`) с backfill существующих записей.
 • Phase 2: интеграция отмены автопродления у провайдера в `POST /api/subscriptions/cancel` + ретраи/мониторинг recurring.
-• Phase 3: server-side paywall config (регион/канал), затем Stripe (global web) и IAP verify (iOS/Android).
+• Phase 3: server-side paywall config (регион/канал) поверх текущего entitlement-слоя, затем Stripe (global web) и IAP verify (iOS/Android).
 • Phase 4: унифицированный entitlement-слой и rollout через feature flags.
 • До Phase 2 endpoint `POST /api/subscriptions/cancel` трактуется как soft cancel (`autoRenew=false` в нашей модели), без гарантии провайдерной отмены.
 • Для UI to-be: в ответе `/api/subscriptions/current` добавить явный флаг `cancelAtPeriodEnd`.
+• Для быстрого рендера paywall/UI-гейтов источник первого экрана — `billing` в `/api/user/me`; `/api/subscriptions/entitlements` используется для детального рефреша.
 
 • Вне текущего scope (не считать реализованным):
 • runtime-маршрутизация `apple_iap / google_play / ios_external`;
@@ -367,6 +398,12 @@ server/
 • Сервер жёстко проверяет доступ к AI и недельный лимит минут (с overdraft `WEEKLY_OVERDRAFT_MINUTES`).
 • `/api/therapy/session/start` откажет, если нет доступа к AI или лимит исчерпан.
 • `/api/chat/stream` требует `therapySessionId`, обновляет `last_activity_at` на сервере и проверяет лимиты перед запросом к LLM.
+• Поведение stream-лимитов (as-is): проверка выполняется перед стартом генерации; активный ответ не обрывается посреди потока; блок ставится только на новые ответы после завершения/закрытия текущей сессии.
+• Для `PRO` действует жёсткий лимит минут (`100 мин/нед`); для `Premium` действует единый fair-use guardrail (`900 мин/нед`).
+• `textSource=ai` для уведомлений допускается на `PRO/Premium`; для `Basic` — только `templates` с жёсткой server-side проверкой на запись prefs.
+• Технический anti-abuse считается только по успешно отданным AI-ответам; провайдерные ошибки/таймауты не должны списывать лимиты.
+• Контракт ответа `/api/subscriptions/current`: `features.aiChatMode = disabled|limited|unlimited_fair_use`; `features.weeklyMinutesLimit = number|null` (`null` для unlimited); `features.fairUseGuardMinutesPerWeek` задан только для `unlimited_fair_use`.
+• Контракт ошибки лимита унифицирован: `HTTP 402`, `code=premium_fair_use_limit_reached`, `message`, `nextResetAt` (включая SSE-ветку `/api/chat/stream`).
 • Suggested replies (чипы): возвращаются отдельным финальным SSE‑чанком в `/api/chat/stream` перед `[DONE]`, формат и поля описываются в Zod‑DTO.
 • Клиентский SSE‑парсер буферизует чанки и разбивает по пустой строке, чтобы не терять события при разрезании данных по сети.
 • Relay‑клиентский SSE‑парсер использует TextDecoder для корректной UTF‑8‑декодировки через границы чанков (иначе возможны пропуски дельт на кириллице).
@@ -395,6 +432,7 @@ server/
 • Node.js: BullMQ 5.x для обработки фоновых задач.
 • Структура очередей:
 • `notification-slots-generation` — генерация слотов уведомлений. Для production применяется масштабируемая модель из `.docs/notification_slots_scaling_tz.md`: sharded enqueue с cursor/cycle state в Postgres, критерий регенерации по `planned+queued` + `min_horizon_hours`, `queued` при регенерации не удаляются, backpressure по queue lag (SLO/soft/hard пороги).
+• Scheduler enqueue фильтрует только существующих пользователей (`INNER JOIN users`), чтобы не создавать циклические `slotsgen`-джобы по осиротевшим `notification_preferences`.
 • `notification-delivery` — отправка уведомлений через FCM
 • `ai-text-pool-refill` — пополнение пула AI-генерированных текстов
 • Воркеры запускаются автоматически через плагин `server/plugins/bullmq-workers.ts`.
@@ -412,6 +450,8 @@ server/
 • partial unique index `uk_notification_slots_active` на `(user_id, kind, entity_key, scheduled_at) where status in ('planned','queued')`.
 • Безопасная регенерация slots:
 • диапазон пересоздания вычисляется как `regen_range_start = now + max(SLOTS_REGEN_SAFE_WINDOW_MINUTES, SLOTS_SAFE_QUEUED_WINDOW_MINUTES)` и `regen_range_end = now + SLOTS_TARGET_HORIZON_HOURS`.
+• автопереген в фоне запускается только при почти пустом горизонте: `activeSlots=0` или `actualSlotsByHours < SLOTS_MIN_HORIZON_HOURS` (по умолчанию 2 часа).
+• `thresholdPercent` (`expectedSlots` vs `actualSlots`) сохраняется как диагностическая метрика, но не используется как самостоятельный триггер фоновой регенерации.
 • в регенерации удаляются только `planned` слоты в диапазоне; `queued` никогда не удаляются.
 • вставка новых `planned` выполняется через upsert `ON CONFLICT DO NOTHING` по active-уникальности.
 • межпроцессная координация регенерации — через PostgreSQL transaction-level lock: `pg_try_advisory_xact_lock(user_id, LOCK_NAMESPACE_SLOTS_GENERATION)` с таймаутом `SLOTS_LOCK_TIMEOUT_MS`; при contention задача уходит в delayed backoff.
@@ -422,6 +462,10 @@ server/
 • soft mode (`queue_lag >= 5m` или queue depth > X): уменьшается batch, увеличивается интервал, включается `only_users_below_horizon`.
 • hard mode (`queue_lag >= 15m`): агрессивное снижение нагрузки, восстановление к baseline через `SLOTS_BACKPRESSURE_RECOVERY_CYCLES`.
 • Централизованный конфиг scaling находится в `server/application/notifications/slots-scaling.config.ts` (feature flags + `SLOTS_*` env + lock namespace).
+• Алгоритм построения дневной последовательности слотов вынесен в `server/application/notifications/daily-sequence.utils.ts` и обязан сохранять точные квоты `remainingSlots` по каждому `kind:entityKey`.
+• В anti-repeat логике запрещены внутригрупповые подмены источников (только межгрупповые), чтобы не допускать дрейфа квот и появления 6+ слотов на одну тему при AI-регенерации.
+• Назначение времени для auto-слотов использует глобальные фазы источников в рамках дня (`buildSourcePhaseMap`), чтобы равномерно размазывать темы по окну и избегать пиков в одинаковых минутах (например, массовых `09:00` / `22:30`).
+• Fixed/manual слоты остаются неизменяемыми: фазовое распределение и джиттер применяются только к гибким (auto) слотам.
 • Payload: JSON-структуры, совместимые между системами.
 • Retry механизм: 3 попытки с exponential backoff (10 секунд между ретраями).
 • Graceful shutdown: все воркеры корректно завершаются при получении SIGTERM/SIGINT.
@@ -435,10 +479,48 @@ server/
 📋 Связанные документы
 • `.docs/notifications.md` - Полная документация по системе уведомлений (архитектура, API, настройка, тестирование)
 • `.docs/notification_slots_preprod_stress_tz.md` - ВАЖНО! Предрелизный чеклист стресс-тестов и chaos-сценариев для нового slots scheduler/worker split
+• `.docs/landing.md` - ТЗ лендинга (архитектура `apps/landing`, API и контентные ограничения)
 • `.docs/mentai_tz_product.md` - Общие требования к продукту
 • `.docs/mentai_tz_frontend.md` - Требования к фронтенду
 • `.docs/mentai_tz_backend.md` - Требования к бэкенду
 • `.docs/security_requirements.md` - Требования к безопасности
+
+⸻
+
+🌐 Лендинг (зафиксировано, 16 февраля 2026)
+• Архитектура: отдельная сборка `apps/landing` (не внутри CSR-приложения `app/`), чтобы обеспечить корректный SEO-контур.
+• Реализация лендинга находится в `apps/landing` (Nuxt), запуск: `pnpm landing:dev`, сборка сервера: `pnpm landing:build`, статический экспорт для деплоя: `pnpm landing:generate` (результат в `apps/landing/.output/public`).
+• Для стабильного dev-резолва в multi-app режиме Nuxt CSS подключается абсолютным путём из `nuxt.config.ts` (через `fileURLToPath`), а не через alias `@` в массиве `css`.
+• Рендеринг лендинга: `SSR + SWR (гибрид)` — серверный HTML для индексации + короткий SWR-кэш для производительности.
+• Для домашней страницы лендинга включён route rule `swr` (короткий TTL), анимации и тяжелые эффекты работают как progressive enhancement с fallback для `prefers-reduced-motion`.
+• Домены: `mentala.app` (лендинг) и `my.mentala.app` (продукт + API).
+• Публичные API лендинга размещаются в текущем Nitro backend: `/api/landing/config`, `/api/landing/lead`.
+• CORS в production конфигурируется через `ALLOWED_ORIGINS` (comma-separated) и должен явно включать `https://mentala.app` для вызовов `my.mentala.app/api/landing/*`.
+• В development CORS и origin-check используют объединение `DEV_ALLOWED_ORIGINS` + локальных defaults (`http://localhost:3000/3001`, `127.0.0.1:3000/3001`) и нормализуют origins (без хвостового `/`), чтобы лендинг на `3001` стабильно работал с API на `3000`.
+• `GET /api/landing/config` — источник истины release-режима; кэш-политика: `Cache-Control: public, max-age=60, stale-while-revalidate=120`.
+• `POST /api/landing/lead` публичный: Zod-валидация DTO, honeypot, rate-limit (ip/email/ip+email), идемпотентность через `landing_leads.email_hash`, уведомления по email и в Telegram только для новых лидов.
+• UI лендинга использует Tailwind + shadcn-паттерн компонентов; для выразительных эффектов применяются `gsap` (scroll reveal/scroll-driven motion) и `swiper` (сценарные карточки), с обязательным fallback без анимаций при reduced motion.
+• Визуальная система лендинга смещена в более «мягкий» wellness-тон: чуть светлее фон, ослабленная контрастность фоновой сетки, акценты на базе продуктовой палитры (`cyan/emerald`) + деликатный warm glow.
+• Блок `features-story` синхронизирует активный текст и экран телефона через `ScrollTrigger` (desktop): телефон пинится при достижении верхней зоны под хедером, переключение `1→2→3→4→5` происходит в момент, когда текущая карточка начинает уходить под хедер, а распин выполняется на 5-й карточке (по `endTrigger` последнего шага). Пин-враппер не используется как `flex`-контейнер, чтобы `pinSpacing` корректно увеличивал высоту секции и не давал следующему блоку наезжать.
+• В `features-story` на mobile вместо статичного экрана используется свайп-карусель по всем 5 скринам телефона (`Swiper`), на desktop сохраняется scroll-driven синхронизация.
+• В `features-story` используется единый набор из 5 карточек, синхронизированных со сменой экранов телефона; дублирующий нижний блок «возможностей» удалён, чтобы не размывать смысл.
+• Для лендинга `landingApiBase` берётся из `NUXT_PUBLIC_API_SERVER_URL` (приоритетно), затем из `NUXT_PUBLIC_LANDING_API_BASE` (legacy fallback), и в крайнем случае из `http://localhost:3000`.
+• `useLandingConfig` работает в fail-safe режиме: при недоступности `landingApiBase` (например, локально без backend) возвращается дефолтная конфигурация без падения SSR; в dev логируется только строковое сообщение (без non-POJO объекта ошибки).
+• Юридический дисклеймер лендинга размещается отдельным центрированным блоком сразу под заголовком секции `Возможности Mentala` с ограничением ширины (`max-width`), чтобы не перегружать hero и сторителлинг-секцию.
+• FAQ реализован как кастомный аккордеон с анимированным раскрытием/схлопыванием (transition по высоте и opacity) вместо нативного `details`.
+• Для `apps/landing` добавлен локальный `tsconfig.json` (extends `./.nuxt/tsconfig.json`) с alias-путями, чтобы IDE корректно резолвила типы и импорты в подприложении.
+• Антиспам v1 обязателен: rate-limit + honeypot для `POST /api/landing/lead`.
+• Аналитика v1: Яндекс Метрика.
+• Юридические ссылки на лендинге ведут на действующие документы в `my.mentala.app/legal/*`.
+• Перед блоком тарифов добавлена секция `#why-mentala` («Почему Mentala удобно»): слева 4 карточки преимуществ (доступность в моменте, экономия времени/денег, без осуждения, всё в одном месте), справа блок «Границы и честность» (не заменяет специалиста + когда обращаться к врачу), внизу CTA-кнопка `Посмотреть тарифы` и ссылка `Как работает приватность` со скроллом к соответствующим секциям.
+• Блок `#privacy` реализован как компактная секция: вводный заголовок, 3 короткие карточки понятным языком (личные диалоги, защита данных, ненавязчивая поддержка ИИ) и нижняя плашка с кратким правилом про email + ссылками на `Privacy Policy` и `Terms of Service` прямо в секции (дополнительно к футеру). Адаптив: mobile — 1 колонка, tablet — 2 колонки, desktop — 3 колонки.
+• Контент тарифов на лендинге синхронизирован с продуктовой матрицей (`Basic 0 ₽`, `PRO 349 ₽`, `Premium 649 ₽`).
+• Для `PRO` и `Premium` в UI карточек поддерживается переключение периода `месяц/год` со скидкой `-20%` в годовом варианте.
+• В header лендинга обязательна ссылка `Тарифы`, которая ведёт к блоку `#landing-pricing`.
+• Переход к `#landing-pricing` выполняется плавной прокруткой; для `prefers-reduced-motion: reduce` используется мгновенный переход без анимации.
+• Источник истины по тарифным описаниям: `app/components/subscription/PlanCard.vue` + серверные сиды тарифов/доступов (`seed-subscription-plans.ts`, `seed-feature-access-policies.ts`).
+• Адаптивность лендинга обязательна с ширины `320px`; кроссбраузерная поддержка — популярные desktop/mobile браузеры по матрице из `.docs/landing.md`.
+• **CI/CD и деплой лендинга**: при пуше в `main`/`dev` workflow (`deploy-prod.yml`, `deploy-dev.yml`) выполняют **статический экспорт** лендинга (`pnpm landing:generate`) и деплой статики на сервер: rsync в `/var/www/landing/releases/<id>/`, атомарное переключение symlink `current`, хранение последних 5 релизов. Лендинг отдаётся Nginx (на хосте или в контейнере), Traefik маршрутизирует `mentala.app` на статику. Подробности — `.docs/landing_static_deploy_tz.md`.
 
 ⸻
 

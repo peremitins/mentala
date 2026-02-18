@@ -31,6 +31,11 @@ import type {
   HabitSubtype,
   Tone,
 } from '@/shared/dto/notifications';
+import { ensureAiNotificationAccessConsistency } from '@/server/application/notifications/notification-source-access.service';
+import {
+  resolveSlotsRegenerationReasonFromAiReason,
+  shouldRegenerateSlotsAfterAiGeneration,
+} from '@/server/application/notifications/ai-slot-regeneration-reason.utils';
 
 function resolveTone(value?: string | null): Tone {
   if (
@@ -160,10 +165,11 @@ export function startAiTextGenerationWorker() {
     AI_TEXT_GENERATION_QUEUE,
     async (job: Job<AiTextGenerationJobData>) => {
       const { userId, preferenceId } = job.data;
+      const jobReason = job.data.reason ?? null;
       const attemptsMade = job.attemptsMade ?? 0;
 
       console.log(
-        `[AI Generation Worker] ▶️ Processing job ${job.id} for preference ${preferenceId}`
+        `[AI Generation Worker] ▶️ Processing job ${job.id} for preference ${preferenceId} (reason=${jobReason ?? 'unknown'})`
       );
 
       try {
@@ -173,6 +179,8 @@ export function startAiTextGenerationWorker() {
             id: users.id,
             isBlocked: users.isBlocked,
             gender: users.gender,
+            roleId: users.roleId,
+            trialEndedAt: users.trialEndedAt,
           })
           .from(users)
           .where(eq(users.id, userId))
@@ -190,6 +198,20 @@ export function startAiTextGenerationWorker() {
             `[AI Generation Worker] ❌ User ${userId} is blocked, skipping job ${job.id}`
           );
           return { skipped: true, reason: 'user_blocked' };
+        }
+
+        // Важно: entitlement проверяем в самом воркере, чтобы после окончания Trial
+        // новые AI-генерации не продолжались в фоне без открытия настроек.
+        const aiAccess = await ensureAiNotificationAccessConsistency({
+          userId,
+          trialEndedAt: user.trialEndedAt,
+          userRole: user.roleId,
+        });
+        if (!aiAccess.canUseAiNotifications) {
+          console.log(
+            `[AI Generation Worker] ⏭️ AI notifications access disabled for user ${userId}, skipping job ${job.id}`
+          );
+          return { skipped: true, reason: 'ai_access_disabled' };
         }
 
         // Загружаем preference
@@ -286,14 +308,42 @@ export function startAiTextGenerationWorker() {
         // Небольшая задержка, чтобы тексты точно сохранились в БД
         await new Promise((resolve) => setTimeout(resolve, 1000));
 
-        // Перегенерируем слоты только после успешной генерации AI-текстов
-        await generateAllSlotsForUser(userId, {
-          forceTodaySlots: true,
-          reason: 'manual',
-        });
+        // Критично: не пересчитываем слоты по фоновым причинам (например, missing_ai_texts),
+        // чтобы расписание не менялось "само" без действий пользователя.
+        const regenTriggered =
+          shouldRegenerateSlotsAfterAiGeneration(jobReason);
+        const regenReason = regenTriggered
+          ? resolveSlotsRegenerationReasonFromAiReason(jobReason)
+          : null;
 
+        if (regenTriggered) {
+          await generateAllSlotsForUser(userId, {
+            forceTodaySlots: true,
+            reason: regenReason,
+          });
+
+          console.log(
+            `[AI Generation Worker] ✅ Slots regenerated after AI generation for preference ${preferenceId} (reason=${jobReason})`
+          );
+        } else {
+          console.log(
+            `[AI Generation Worker] ⏭️ Slots regeneration skipped after AI generation for preference ${preferenceId} (reason=${jobReason ?? 'unknown'})`
+          );
+        }
+
+        // Structured-log для прод-диагностики: кто и почему триггернул (или не триггернул) регенерацию слотов.
         console.log(
-          `[AI Generation Worker] ✅ Slots regenerated after AI generation for preference ${preferenceId}`
+          JSON.stringify({
+            event: 'notification_ai_generation_completed',
+            user_id: userId,
+            preference_id: preferenceId,
+            job_id: String(job.id),
+            reason: jobReason ?? 'unknown',
+            regenTriggered,
+            regen_reason: regenReason,
+            texts_generated: result.texts.length,
+            attempts_made: attemptsMade,
+          })
         );
 
         return { success: true, textsGenerated: result.texts.length };
@@ -309,7 +359,8 @@ export function startAiTextGenerationWorker() {
           await enqueueAiTextGenerationJob({
             userId,
             preferenceId,
-            reason: 'retry_after_provider_error',
+            // Сохраняем исходную причину, чтобы не потерять контекст и поведение.
+            reason: jobReason ?? 'retry_after_provider_error',
             configHash: job.data.configHash,
             delayMs,
           });

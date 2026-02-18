@@ -1,6 +1,7 @@
 import { getSessionUserWithRole } from '@/server/utils/require-role';
 import { UserMeDto } from '@/shared/dto/user';
 import { toIsoString } from '@/server/utils/serialize';
+import { getBillingSnapshot } from '@/server/application/subscriptions/entitlements.service';
 
 export default defineEventHandler(async (event) => {
   const user = await getSessionUserWithRole(event);
@@ -8,6 +9,7 @@ export default defineEventHandler(async (event) => {
   // Если пользователь авторизован - возвращаем его данные
   if (user?.id) {
     const onboarding = (user as any)?.onboarding || {};
+    const billing = await getBillingSnapshot(user.id, (user as any)?.role);
     const response = {
       user: {
         id: user.id,
@@ -25,6 +27,7 @@ export default defineEventHandler(async (event) => {
         hasPassword: !!user.passwordHash,
         sceneSettings: (user as any)?.sceneSettings || {},
         marketingConsent: Boolean((user as any)?.marketingConsentAt),
+        billing,
       },
     };
     return UserMeDto.parse(response);

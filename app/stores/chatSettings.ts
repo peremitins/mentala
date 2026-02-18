@@ -4,7 +4,7 @@ import { useLoadersStore } from '@/app/stores/loaders';
 export const useChatSettingsStore = defineStore('chatSettings', {
   state: () => ({
     // Голос/озвучка ответа ассистента
-    voice: true,
+    voice: false,
     // Визуальный аватар (видео)
     avatar: true,
     // Оптимизация контекста (previous_response_id)

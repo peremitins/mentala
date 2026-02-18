@@ -1,7 +1,48 @@
+function parseNumberEnv(params: {
+  keys: string[];
+  defaultValue: number;
+  min?: number;
+  max?: number;
+}): number {
+  const { keys, defaultValue, min, max } = params;
+
+  for (const key of keys) {
+    const rawValue = process.env[key];
+    if (!rawValue) continue;
+
+    const parsed = Number(rawValue);
+    if (!Number.isFinite(parsed)) continue;
+
+    let normalized = parsed;
+    if (typeof min === 'number') {
+      normalized = Math.max(min, normalized);
+    }
+    if (typeof max === 'number') {
+      normalized = Math.min(max, normalized);
+    }
+
+    return normalized;
+  }
+
+  return defaultValue;
+}
+
 export const config = {
-  rateLimit: { windowMs: 60_000, max: 60 },
+  // Глобальный rate-limit применяется middleware только к /api запросам.
+  rateLimit: {
+    windowMs: parseNumberEnv({
+      keys: ['RATE_LIMIT_WINDOW_MS'],
+      defaultValue: 60_000,
+      min: 1_000,
+    }),
+    max: parseNumberEnv({
+      keys: ['RATE_LIMIT_MAX'],
+      defaultValue: 180,
+      min: 1,
+    }),
+  },
   llm: {
-    defaultProvider: 'openai' as 'openai',
+    defaultProvider: 'openai' as const,
     openai: {
       // Общая модель по умолчанию (fallback)
       defaultModel: 'gpt-4o-mini',
