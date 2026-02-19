@@ -806,7 +806,7 @@ export default defineEventHandler(
               `[NotificationPrefs] 🔍 Found custom habit in DB: id=${habit.id}, name="${habit.name}", intent=${habitIntent}, isCustomEntity=${isCustomEntity}, nameChanged=${nameChanged}, descriptionChanged=${descriptionChanged}`
             );
           } else {
-            // Готовый шаблон привычки (water, meditation, training и т.д.)
+            // Готовый шаблон привычки (water, steps, meditation и т.д.)
             isCustomEntity = false;
             // ВАЖНО: Используем читаемое название из каталога, чтобы хеш совпадал с генерацией
             const { findHabitByKey } = await import('@/app/lib/habitsCatalog');
