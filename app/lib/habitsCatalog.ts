@@ -77,21 +77,6 @@ export const HABITS_CATALOG: readonly HabitCatalogItem[] = [
     intent: 'build',
     description: 'Сокращение кофе и энергетиков, последняя порция днём',
   },
-  // {
-  //   habitKey: 'morning_routine',
-  //   name: 'Утренний ритуал',
-  //   emoji: '🌅',
-  //   intent: 'build',
-  //   description:
-  //     'Простой утренний ритуал: вода, немного движения и план на день',
-  // },
-  // {
-  //   habitKey: 'planning',
-  //   name: 'План на день',
-  //   emoji: '🗒️',
-  //   intent: 'build',
-  //   description: 'Мини-план из 3 главных дел на день',
-  // },
   // quit
   {
     habitKey: 'smoking',
@@ -121,13 +106,6 @@ export const HABITS_CATALOG: readonly HabitCatalogItem[] = [
     intent: 'quit',
     description: 'Правило 2 минут и микрошаги, чтобы легче начинать дела',
   },
-  // {
-  //   habitKey: 'screentime',
-  //   name: 'Меньше телефона ночью',
-  //   emoji: '📵',
-  //   intent: 'quit',
-  //   description: 'Засыпание без скролла и яркого экрана перед сном',
-  // },
 ] as const;
 
 /**

@@ -309,6 +309,13 @@
       "when": 1771236729172,
       "tag": "0047_nebulous_baron_strucker",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1771300000000,
+      "tag": "0048_migrate_training_to_steps",
+      "breakpoints": true
     }
   ]
 }

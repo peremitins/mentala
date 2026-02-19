@@ -552,7 +552,7 @@ export const notificationInteractions = pgTable('notification_interactions', {
   meta: jsonb('meta'),
   kind: varchar('kind', { length: 20 }).notNull(), // 'therapy' | 'habits'
   type: varchar('type', { length: 50 }), // breath_cue | grounding | body_scan | ...
-  metric: varchar('metric', { length: 50 }), // steps | training | breath | ...
+  metric: varchar('metric', { length: 50 }), // steps | breath | ... (training объединён со steps)
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull(),
