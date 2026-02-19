@@ -1220,7 +1220,7 @@ export async function generateNotificationTexts(
       const catalogHabit = findHabitByKey(params.entityKey);
 
       if (catalogHabit) {
-        // Это готовый шаблон привычки (water, meditation, training и т.д.)
+        // Это готовый шаблон привычки (water, steps, meditation и т.д.)
         isCustomHabit = false;
         // Используем читаемое название из каталога вместо ключа
         entityName = catalogHabit.name;
