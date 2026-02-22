@@ -97,7 +97,7 @@
           @click="goToMeditations"
         >
           <IconLeaf class="mr-2 h-5 w-5" />
-          Попробовать практику
+          Открыть медитацию
           <span
             v-if="!meditationsAccess.available"
             class="absolute right-3 inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/20 bg-black/35 text-[10px] leading-none"

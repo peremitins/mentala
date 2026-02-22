@@ -11,11 +11,12 @@ import {
   subscriptionEvents,
   trialUsageTracking,
 } from '@/server/infrastructure/db/schema';
-import { eq, and, gt } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import {
   normalizeEmail,
   hashEmail,
 } from '@/server/application/auth/verification';
+import { getCurrentActiveSubscription } from './current-subscription.service';
 
 /**
  * Активировать Trial для нового пользователя
@@ -51,24 +52,17 @@ export async function activateTrialForUser(
 
   // Проверяем, есть ли уже активная подписка у пользователя (не истекшая)
   const now = new Date();
-  const existingSubscription = await db
-    .select()
-    .from(userSubscriptions)
-    .where(
-      and(
-        eq(userSubscriptions.userId, userId),
-        eq(userSubscriptions.paymentStatus, 'active'),
-        gt(userSubscriptions.endDate, now) // подписка не истекла
-      )
-    )
-    .limit(1);
+  const existingSubscription = await getCurrentActiveSubscription({
+    userId,
+    now,
+  });
 
   // Если уже есть активная подписка - не создаем новую
-  if (existingSubscription.length) {
+  if (existingSubscription) {
     console.log(
-      `[Trial] ✅ User ${userId} already has active subscription (planId=${existingSubscription[0].planId}), skipping`
+      `[Trial] ✅ User ${userId} already has active subscription (planId=${existingSubscription.planId}), skipping`
     );
-    return existingSubscription[0];
+    return existingSubscription;
   }
 
   console.log(

@@ -26,7 +26,23 @@ interface Subscription {
 interface SubscriptionResponse {
   plan: string;
   trialActive: boolean;
-  trialExpiresAt: string | null;
+  trialEndsAt: string | null;
+  currentEntitlementsPlan?: 'basic' | 'pro' | 'premium';
+  billingPlan?: 'pro' | 'premium' | null;
+  billingPeriod?: 'month' | 'year' | null;
+  nextChargeAt?: string | null;
+  paymentMethodBound?: boolean;
+  paymentMethod?: {
+    id: string;
+    type: string | null;
+    title: string | null;
+    cardBrand: string | null;
+    last4: string | null;
+    expiryMonth: string | null;
+    expiryYear: string | null;
+  } | null;
+  billingCollectionStatus?: 'none' | 'scheduled' | 'past_due';
+  graceEndsAt?: string | null;
   features: {
     ai: boolean;
     avatar: boolean;
@@ -37,6 +53,11 @@ interface SubscriptionResponse {
   subscription: Subscription | null;
   noActiveSubscription: boolean;
   paymentStatus?: string;
+  scheduledChange?: {
+    planId: string;
+    billingPeriod: 'month' | 'year';
+    effectiveAt: string;
+  } | null;
   user?: {
     billingCredit: number;
     hasUsedTrial: boolean;
@@ -79,16 +100,9 @@ export const useSubscriptionStore = defineStore('subscription', {
         return p.isVisibleInUI !== false;
       });
 
-      // Сортируем: активный план первым, затем Basic, Pro, Premium
+      // Сортируем по фиксированному порядку: Basic, Pro, Premium
       const order = ['basic', 'pro', 'premium'];
       const sorted = filtered.sort((a, b) => {
-        // Активный план всегда первый
-        const aIsCurrent = state.currentSubscription?.planId === a.id;
-        const bIsCurrent = state.currentSubscription?.planId === b.id;
-        if (aIsCurrent && !bIsCurrent) return -1;
-        if (!aIsCurrent && bIsCurrent) return 1;
-
-        // Затем по порядку: Basic, Pro, Premium
         const aIndex = order.indexOf(a.name);
         const bIndex = order.indexOf(b.name);
         if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
@@ -166,10 +180,12 @@ export const useSubscriptionStore = defineStore('subscription', {
 
       this.loading.subscription = true;
       try {
+        const query = force ? { _ts: Date.now() } : undefined;
         const response = await useAPI<SubscriptionResponse>(
           '/api/subscriptions/current',
           {
             method: 'GET',
+            query,
           }
         );
 

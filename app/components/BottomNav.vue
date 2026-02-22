@@ -4,7 +4,7 @@
     class="flex-[0_0_auto] inset-x-0 mt-2 sticky bottom-0"
     :style="isMeditationPlayer ? { backdropFilter: 'blur(1px)' } : undefined"
   >
-    <section :class="['glass-deep-bottom px-4 py-3 ']">
+    <section :class="['glass-deep-bottom px-4 pt-3 pb-4 ']">
       <ul class="grid grid-cols-5 gap-1 text-xs">
         <li class="flex flex-col items-center gap-0 w-full">
           <NuxtLink
