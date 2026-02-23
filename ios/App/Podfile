@@ -30,6 +30,11 @@ target 'App' do
   # Add your Pods here
 end
 
+target 'MentalaNotificationService' do
+  # Firebase helper для автоматического прикрепления rich image в iOS push.
+  pod 'Firebase/Messaging'
+end
+
 post_install do |installer|
   assertDeploymentTarget(installer)
 end

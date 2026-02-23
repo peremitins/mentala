@@ -24,6 +24,7 @@ import { notificationDeliveryQueue } from '@/server/application/notifications/qu
 import { getUserTimezone, toLocalTime } from './timezone.utils';
 import { resolveEntityKeyForSlots } from './entity-key.service';
 import { getCustomNotificationSourceAccessByKind } from './notification-source-access.service';
+import { validateNotificationImageUrl } from './notification-image-validation';
 import admin from 'firebase-admin';
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve, isAbsolute } from 'node:path';
@@ -253,6 +254,15 @@ function generateCollapseKey(payload: NotificationPayload): string | null {
   return `slot_${slotId}`.slice(0, 64);
 }
 
+function resolveFirebaseProjectId(): string | null {
+  return (
+    firebaseApp?.options.projectId ||
+    process.env.GCLOUD_PROJECT ||
+    process.env.GOOGLE_CLOUD_PROJECT ||
+    null
+  );
+}
+
 /**
  * Отправить FCM уведомление на устройство
  * @param token - FCM токен устройства
@@ -301,6 +311,26 @@ export async function sendFCMNotification(
   try {
     const normalizedPlatform = String(platform || '').toLowerCase();
     const isAndroid = normalizedPlatform === 'android';
+    const imageValidation =
+      payload.image && payload.image.trim()
+        ? validateNotificationImageUrl(payload.image)
+        : null;
+    const validatedImageUrl = imageValidation?.valid
+      ? imageValidation.normalizedUrl
+      : null;
+    const imageSkipReason =
+      imageValidation && !imageValidation.valid
+        ? imageValidation.reason
+        : 'image_not_provided';
+
+    if (payload.image && !validatedImageUrl) {
+      console.warn('[FCM] ⚠️ Rich image skipped after validation:', {
+        slotId: payload.data?.slotId ?? null,
+        platform: normalizedPlatform || null,
+        reason: imageSkipReason,
+        imageUrl: payload.image,
+      });
+    }
 
     // Подготовка data - все значения должны быть строками
     const dataPayload: Record<string, string> = {
@@ -313,11 +343,6 @@ export async function sendFCMNotification(
     if (isAndroid) {
       dataPayload.title = payload.title || '';
       dataPayload.body = payload.body || '';
-    }
-
-    // URL изображения нужен и для iOS Extension — кладём всегда.
-    if (payload.image) {
-      dataPayload.image = payload.image;
     }
 
     if (payload.navigation) {
@@ -341,6 +366,15 @@ export async function sendFCMNotification(
       });
     }
 
+    // Принудительно контролируем image-поля после merge payload.data,
+    // чтобы в пуш не просочились невалидные/тяжёлые URL.
+    delete dataPayload.image;
+    delete dataPayload.imageUrl;
+    if (validatedImageUrl) {
+      dataPayload.image = validatedImageUrl;
+      dataPayload.imageUrl = validatedImageUrl;
+    }
+
     // Collapse ключ строго на уровне slotId, чтобы разные слоты не схлопывались.
     const collapseKey = generateCollapseKey(payload);
 
@@ -351,8 +385,8 @@ export async function sendFCMNotification(
     };
 
     // Добавляем изображение, если оно указано
-    if (payload.image) {
-      notificationPayload.imageUrl = payload.image;
+    if (validatedImageUrl) {
+      notificationPayload.imageUrl = validatedImageUrl;
     }
 
     // Подготовка Android notification
@@ -368,8 +402,8 @@ export async function sendFCMNotification(
     };
 
     // Добавляем изображение для Android (Android 7+)
-    if (payload.image) {
-      androidNotification.imageUrl = payload.image;
+    if (validatedImageUrl) {
+      androidNotification.imageUrl = validatedImageUrl;
     }
 
     const message: admin.messaging.Message = {
@@ -399,19 +433,28 @@ export async function sendFCMNotification(
                   },
                   sound: 'default',
                   category: 'MENTAI_CATEGORY',
-                  ...(payload.image ? { mutableContent: true } : {}),
+                  ...(validatedImageUrl ? { mutableContent: true } : {}),
                 },
               },
-              ...(payload.image
+              ...(validatedImageUrl
                 ? {
                     fcmOptions: {
-                      imageUrl: payload.image,
+                      imageUrl: validatedImageUrl,
                     },
                   }
                 : {}),
             },
           }),
     };
+
+    console.log('[FCM] Send payload meta:', {
+      platform: normalizedPlatform || null,
+      slotId: payload.data?.slotId ?? null,
+      imageUrl: validatedImageUrl,
+      hasMutableContent: Boolean(validatedImageUrl && !isAndroid),
+      hasApnsImageField: Boolean(validatedImageUrl && !isAndroid),
+      firebaseProjectId: resolveFirebaseProjectId(),
+    });
 
     const response = await admin.messaging().send(message);
     console.log('[FCM] ✅ Message sent successfully:', response);
