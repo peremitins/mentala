@@ -419,14 +419,52 @@ export async function sendFCMNotification(
   } catch (error: any) {
     console.error('[FCM] ❌ Failed to send message:', error);
 
-    // Обработка ошибок невалидного токена
     const errorCode = error?.code;
-    if (
+    const errorInfoCode = error?.errorInfo?.code;
+    const errorMessage = String(
+      error?.message || error?.errorInfo?.message || ''
+    ).toLowerCase();
+    const isSenderMismatch =
+      errorCode === 'messaging/mismatched-credential' ||
+      errorInfoCode === 'messaging/mismatched-credential' ||
+      errorMessage.includes('senderid mismatch');
+    const isInvalidToken =
       errorCode === 'messaging/invalid-registration-token' ||
-      errorCode === 'messaging/registration-token-not-registered'
-    ) {
-      console.log('[FCM] Invalid token, removing from database:', token);
+      errorCode === 'messaging/registration-token-not-registered' ||
+      errorInfoCode === 'messaging/invalid-registration-token' ||
+      errorInfoCode === 'messaging/registration-token-not-registered';
+    const isAuthCredentialError =
+      errorCode === 'messaging/authentication-error' ||
+      errorCode === 'messaging/third-party-auth-error' ||
+      errorInfoCode === 'messaging/authentication-error' ||
+      errorInfoCode === 'messaging/third-party-auth-error' ||
+      errorMessage.includes('missing required authentication credential');
+
+    console.error('[FCM] send error details:', {
+      tokenPrefix: token.substring(0, 20),
+      errorCode,
+      errorInfoCode,
+      errorMessage: (error?.message || error?.errorInfo?.message || '').slice(
+        0,
+        300
+      ),
+    });
+
+    // Удаляем токены, которые точно невалидны для текущего Firebase проекта.
+    if (isInvalidToken || isSenderMismatch) {
+      console.log('[FCM] Removing invalid/mismatched token from database:', {
+        tokenPrefix: token.substring(0, 20),
+        reason: isSenderMismatch ? 'sender_mismatch' : 'invalid_token',
+      });
       await db.delete(userDevices).where(eq(userDevices.token, token));
+    }
+
+    // Для iOS обычно означает проблему APNs-кредитов в Firebase проекте
+    // (APNs key/cert отсутствует, невалиден или не соответствует Team ID/App ID).
+    if (isAuthCredentialError) {
+      console.error(
+        '[FCM] Authentication credential error. Check APNs credentials in Firebase Cloud Messaging (Key ID/Team ID/key status) and iOS App ID alignment for this environment.'
+      );
     }
 
     return 'failed';
