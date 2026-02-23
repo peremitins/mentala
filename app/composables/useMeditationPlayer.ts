@@ -10,6 +10,7 @@ const QUICK_STOP_FADE_MS = 80;
 const TICK_MS = 500;
 const LOOP_THRESHOLD_SEC = 0.12; // небольшой зазор перед концом для мгновенного рестарта
 const LOOP_REARM_SEC = 0.3; // окно, в котором разрешаем снова сработать триггер
+const AUDIO_SESSION_PLAYBACK = 'playback';
 // Максимальный размер файла для WebAudio на мобильных (50MB)
 const MAX_WEB_AUDIO_SIZE_MB = 50;
 
@@ -22,6 +23,12 @@ function isMobileUserAgent() {
   const ua = getUserAgent();
   if (!ua) return false;
   return /iphone|ipad|ipod|android/i.test(ua);
+}
+
+function isIosUserAgent() {
+  const ua = getUserAgent();
+  if (!ua) return false;
+  return /iphone|ipad|ipod/i.test(ua);
 }
 
 // Таймаут загрузки аудио файла (30 секунд для мобильных, 15 для десктопа)
@@ -89,6 +96,10 @@ const globalState = {
   audioUnlocked: false,
   playbackActionId: 0,
   loopResetTriggered: false,
+  visibilityBound: false,
+  appStateBound: false,
+  audioContextPrimed: false,
+  audioContextRecoveryInProgress: false,
 };
 
 function getAudioContextCtor(): typeof AudioContext | null {
@@ -113,6 +124,55 @@ function clearGestureUnlock() {
   globalState.pendingGesturePlay = null;
 }
 
+type ExtendedAudioContextState = AudioContextState | 'interrupted';
+type NavigatorWithAudioSession = Navigator & {
+  audioSession?: {
+    type?: string;
+  };
+};
+
+function getAudioContextState(
+  context: AudioContext
+): ExtendedAudioContextState {
+  return context.state as ExtendedAudioContextState;
+}
+
+function ensurePlaybackAudioSessionType() {
+  if (typeof navigator === 'undefined') return;
+  const session = (navigator as NavigatorWithAudioSession).audioSession;
+  if (!session) return;
+  try {
+    if (session.type !== AUDIO_SESSION_PLAYBACK) {
+      session.type = AUDIO_SESSION_PLAYBACK;
+    }
+  } catch {
+    // В старых WebView API может отсутствовать или быть read-only.
+  }
+}
+
+async function ensureAudioContextRunning(context: AudioContext) {
+  if (getAudioContextState(context) === 'running') return true;
+  try {
+    await context.resume();
+  } catch {
+    return false;
+  }
+  return getAudioContextState(context) === 'running';
+}
+
+async function primeAudioContext(context: AudioContext) {
+  if (!isIosUserAgent()) return;
+  if (globalState.audioContextPrimed) return;
+  // Тихий короткий старт прогревает аудиопайплайн на первом запуске.
+  const buffer = context.createBuffer(1, 1, 22050);
+  const source = context.createBufferSource();
+  source.buffer = buffer;
+  source.connect(context.destination);
+  source.start(0);
+  source.stop(context.currentTime + 0.001);
+  globalState.audioContextPrimed = true;
+}
+
 async function setPlaybackAllowed(allowed: boolean) {
   globalState.playbackAllowed.value = allowed;
   if (allowed) return;
@@ -125,21 +185,11 @@ async function unlockAudioContext(): Promise<boolean> {
   if (!isDocumentAvailable() || typeof window === 'undefined') return false;
   const context = ensureAudioContext();
   if (!context) return false;
+  ensurePlaybackAudioSessionType();
 
-  const state = context.state as AudioContextState;
-  // Явно приводим тип состояния, чтобы не терять значение 'running'.
-  if (state === 'running') {
-    globalState.audioUnlocked = true;
-    return true;
-  }
-
-  try {
-    await context.resume();
-  } catch {
-    return false;
-  }
-
-  if (context.state === 'running') {
+  const running = await ensureAudioContextRunning(context);
+  if (running) {
+    await primeAudioContext(context);
     globalState.audioUnlocked = true;
     return true;
   }
@@ -152,6 +202,7 @@ function ensureGlobalGestureUnlock() {
   if (globalState.globalUnlockCleanup) return;
 
   const handler = () => {
+    ensurePlaybackAudioSessionType();
     void (async () => {
       // WebAudio можно резюмить только после пользовательского жеста.
       const unlocked = await unlockAudioContext();
@@ -194,6 +245,7 @@ function scheduleGestureUnlock(
   globalState.pendingGesturePlay = { track, timerMinutes };
 
   const handler = () => {
+    ensurePlaybackAudioSessionType();
     void (async () => {
       const pending = globalState.pendingGesturePlay;
       clearGestureUnlock();
@@ -280,9 +332,66 @@ function ensureAudioContext(): AudioContext | null {
   const ctor = getAudioContextCtor();
   if (!ctor) return null;
   if (!globalState.audioContext) {
-    globalState.audioContext = new ctor();
+    const context = new ctor();
+    context.onstatechange = () => {
+      if (globalState.audioContext !== context) return;
+      if (globalState.playbackMode !== 'webaudio') return;
+      if (!globalState.isPlaying.value) return;
+      if (getAudioContextState(context) === 'running') return;
+      void maybeRecoverWebAudioPlayback();
+    };
+    globalState.audioContext = context;
+    globalState.audioContextPrimed = false;
   }
   return globalState.audioContext;
+}
+
+async function maybeRecoverWebAudioPlayback() {
+  if (globalState.playbackMode !== 'webaudio') return;
+  if (!globalState.isPlaying.value) return;
+  if (globalState.audioContextRecoveryInProgress) return;
+  const context = globalState.audioContext;
+  if (!context) return;
+
+  globalState.audioContextRecoveryInProgress = true;
+  try {
+    ensurePlaybackAudioSessionType();
+    const running = await ensureAudioContextRunning(context);
+    if (!running) return;
+    if (!globalState.audioSource && globalState.audioBuffer) {
+      createWebAudioSource(globalState.webAudioOffset);
+    }
+  } finally {
+    globalState.audioContextRecoveryInProgress = false;
+  }
+}
+
+function handleVisibilityChange() {
+  if (!isDocumentAvailable() || typeof document === 'undefined') return;
+  if (document.visibilityState !== 'visible') return;
+  void maybeRecoverWebAudioPlayback();
+}
+
+function ensureVisibilityListener() {
+  if (!isDocumentAvailable() || typeof document === 'undefined') return;
+  if (globalState.visibilityBound) return;
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+  globalState.visibilityBound = true;
+}
+
+function ensureAppStateListener() {
+  if (globalState.appStateBound) return;
+  globalState.appStateBound = true;
+  import('@capacitor/app')
+    .then(({ App }) => {
+      App.addListener('appStateChange', ({ isActive }) => {
+        if (!isActive) return;
+        void maybeRecoverWebAudioPlayback();
+      });
+    })
+    .catch(() => {
+      // На Web fallback уже закрыт visibilitychange.
+    });
 }
 
 function ensureAudioGain(context: AudioContext): GainNode {
@@ -356,18 +465,13 @@ async function prepareWebAudioTrack(
 
   const context = ensureAudioContext();
   if (!context) return null;
+  ensurePlaybackAudioSessionType();
 
-  if (context.state === 'suspended') {
-    try {
-      await context.resume();
-    } catch {
-      // Без пользовательского жеста WebAudio может не стартовать.
-      return null;
-    }
-  }
-  if (context.state !== 'running') {
+  const running = await ensureAudioContextRunning(context);
+  if (!running) {
     return null;
   }
+  await primeAudioContext(context);
 
   const url = resolveMediaUrl(track.audioPath);
   if (!url) return null;
@@ -471,6 +575,17 @@ function createWebAudioSource(
   source.connect(gain);
   source.onended = () => {
     if (globalState.audioSource !== source) return;
+    const isLooping =
+      Boolean(globalState.currentTrack.value?.isLoop) ||
+      globalState.isRepeating.value;
+    if (isLooping) {
+      // Если loop-источник неожиданно завершился (часто после iOS interruption),
+      // сохраняем позицию и пытаемся восстановить звук.
+      updateWebAudioOffset();
+      globalState.audioSource = null;
+      void maybeRecoverWebAudioPlayback();
+      return;
+    }
     globalState.isPlaying.value = false;
     clearTimer();
     globalState.currentTime.value = 0;
@@ -763,6 +878,9 @@ async function play(track: MeditationTrackDto, timerMinutes?: number | null) {
   const isActionActive = () => isPlaybackActionActive(actionId);
   clearGestureUnlock();
   ensureGlobalGestureUnlock();
+  ensureVisibilityListener();
+  ensureAppStateListener();
+  ensurePlaybackAudioSessionType();
 
   resetLoopGuard();
 
@@ -930,41 +1048,48 @@ async function play(track: MeditationTrackDto, timerMinutes?: number | null) {
       if (abortIfStale()) return;
       if (!globalState.audio) return;
 
-      // Ждём готовности файла перед воспроизведением (критично для мобильных)
+      // Ждём минимальной готовности файла перед воспроизведением.
       const audio = globalState.audio;
-      if (audio.readyState < HTMLMediaElement.HAVE_ENOUGH_DATA) {
-        // Ждём загрузки достаточного количества данных
+      if (audio.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
         await new Promise<void>((resolve, reject) => {
           const timeoutMs = getAudioLoadTimeout();
           const timeoutId = setTimeout(() => {
-            audio.removeEventListener('canplaythrough', onCanPlay);
+            audio.removeEventListener('loadedmetadata', onReady);
+            audio.removeEventListener('canplay', onReady);
+            audio.removeEventListener('canplaythrough', onReady);
             audio.removeEventListener('error', onError);
             reject(new Error(`Audio load timeout after ${timeoutMs}ms`));
           }, timeoutMs);
 
-          const onCanPlay = () => {
+          const onReady = () => {
             clearTimeout(timeoutId);
-            audio.removeEventListener('canplaythrough', onCanPlay);
+            audio.removeEventListener('loadedmetadata', onReady);
+            audio.removeEventListener('canplay', onReady);
+            audio.removeEventListener('canplaythrough', onReady);
             audio.removeEventListener('error', onError);
             resolve();
           };
 
           const onError = () => {
             clearTimeout(timeoutId);
-            audio.removeEventListener('canplaythrough', onCanPlay);
+            audio.removeEventListener('loadedmetadata', onReady);
+            audio.removeEventListener('canplay', onReady);
+            audio.removeEventListener('canplaythrough', onReady);
             audio.removeEventListener('error', onError);
             reject(
               new Error(`Audio load error: ${audio.error?.code || 'unknown'}`)
             );
           };
 
-          if (audio.readyState >= HTMLMediaElement.HAVE_ENOUGH_DATA) {
+          if (audio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
             clearTimeout(timeoutId);
             resolve();
             return;
           }
 
-          audio.addEventListener('canplaythrough', onCanPlay, { once: true });
+          audio.addEventListener('loadedmetadata', onReady, { once: true });
+          audio.addEventListener('canplay', onReady, { once: true });
+          audio.addEventListener('canplaythrough', onReady, { once: true });
           audio.addEventListener('error', onError, { once: true });
         }).catch((error) => {
           console.error('[MeditationPlayer] Audio ready check failed:', error);
@@ -1131,6 +1256,9 @@ function clearQueue() {
 export function useMeditationPlayer() {
   // Регистрируем слушатель жестов заранее, чтобы автозапуск был стабильнее.
   ensureGlobalGestureUnlock();
+  ensureVisibilityListener();
+  ensureAppStateListener();
+  ensurePlaybackAudioSessionType();
   return {
     currentTrack: computed(() => globalState.currentTrack.value),
     isPlaying: computed(() => globalState.isPlaying.value),
