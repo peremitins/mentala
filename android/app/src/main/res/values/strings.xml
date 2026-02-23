@@ -1,0 +1,8 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Mentala</string>
+    <string name="title_activity_main">Mentala</string>
+    <string name="package_name">com.mentala.app</string>
+    <string name="custom_url_scheme">mentala</string>
+    <string name="default_notification_channel_id">mentai_high</string>
+</resources>
