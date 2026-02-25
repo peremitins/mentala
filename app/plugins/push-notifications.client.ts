@@ -2,12 +2,13 @@ import { Capacitor } from '@capacitor/core';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Preferences } from '@capacitor/preferences';
-import { nextTick } from 'vue';
+import { nextTick, watch } from 'vue';
 import type {
   InteractionAction,
   NotificationNavigation,
 } from '@/shared/dto/notifications';
 import { useAuthStore } from '@/app/stores/auth';
+import { useMeditationPlayer } from '@/app/composables/useMeditationPlayer';
 
 export default defineNuxtPlugin({
   name: 'push-notifications',
@@ -19,12 +20,16 @@ export default defineNuxtPlugin({
 
     const NON_NAV_ACTIONS = new Set(['yes', 'no', 'later']);
     const PENDING_NAV_STORAGE_KEY = 'mentai.push.pendingNavigation';
+    const NATIVE_PUSH_LAUNCH_KEY = 'mentai.push.launchPayload';
     const PENDING_NAV_TTL_MS = 5 * 60 * 1000;
+    const NATIVE_PUSH_LAUNCH_TTL_MS = 5 * 60 * 1000;
     const NAV_DEDUP_WINDOW_MS = 12 * 1000;
     const NAV_RETRY_DELAY_MS = 900;
+    const AUTH_ENSURE_COOLDOWN_MS = 2500;
 
     const canUsePreferences = Capacitor.isPluginAvailable('Preferences');
     const auth = useAuthStore();
+    const meditationPlayer = useMeditationPlayer();
     const isIos = platform === 'ios';
     const isAndroid = platform === 'android';
     const PUSH_TOKEN_STORAGE_KEY = 'pushToken';
@@ -78,11 +83,28 @@ export default defineNuxtPlugin({
 
     let pendingNavigation: PendingNavigation | null = null;
     let isFlushingNavigation = false;
+    let navigationRetryTimer: ReturnType<typeof setTimeout> | null = null;
+    let authEnsureInFlight: Promise<void> | null = null;
+    let lastAuthEnsureAt = 0;
     let lastNavigation: {
       path: string;
       messageId?: string | null;
       at: number;
     } | null = null;
+
+    function clearNavigationRetryTimer() {
+      if (!navigationRetryTimer) return;
+      clearTimeout(navigationRetryTimer);
+      navigationRetryTimer = null;
+    }
+
+    function schedulePendingNavigationRetry(delayMs = NAV_RETRY_DELAY_MS) {
+      if (navigationRetryTimer) return;
+      navigationRetryTimer = setTimeout(() => {
+        navigationRetryTimer = null;
+        void flushPendingNavigation();
+      }, delayMs);
+    }
 
     function isTapAction(actionId?: string | null): boolean {
       // Считаем тапом все, что не является action-кнопкой snooze/yes/no/later.
@@ -356,16 +378,19 @@ export default defineNuxtPlugin({
       try {
         const parsed = JSON.parse(raw) as PendingNavigation;
         if (!parsed?.targetPath) {
+          pendingNavigation = null;
           await writeStoredValue(PENDING_NAV_STORAGE_KEY, null);
           return null;
         }
         if (Date.now() - parsed.createdAt > PENDING_NAV_TTL_MS) {
+          pendingNavigation = null;
           await writeStoredValue(PENDING_NAV_STORAGE_KEY, null);
           return null;
         }
         pendingNavigation = parsed;
         return parsed;
       } catch {
+        pendingNavigation = null;
         await writeStoredValue(PENDING_NAV_STORAGE_KEY, null);
         return null;
       }
@@ -394,6 +419,57 @@ export default defineNuxtPlugin({
       if (raw === null || raw === undefined) return null;
       const value = String(raw).trim();
       return value ? value : null;
+    }
+
+    async function consumeNativeLaunchNavigation(): Promise<void> {
+      const raw = await readStoredValue(NATIVE_PUSH_LAUNCH_KEY);
+      if (!raw) return;
+      // Потребляем launch-payload один раз: дальнейшие ретраи делает pending queue.
+      await writeStoredValue(NATIVE_PUSH_LAUNCH_KEY, null);
+
+      let payload: Record<string, any> | null = null;
+      try {
+        const parsed = JSON.parse(raw) as Record<string, any>;
+        payload = parsed && typeof parsed === 'object' ? parsed : null;
+      } catch {
+        return;
+      }
+      if (!payload) return;
+
+      const createdAt = Number(payload.createdAt || 0);
+      if (
+        Number.isFinite(createdAt) &&
+        createdAt > 0 &&
+        Date.now() - createdAt > NATIVE_PUSH_LAUNCH_TTL_MS
+      ) {
+        return;
+      }
+
+      const navigation = resolveNavigation(payload);
+      const deepLink =
+        typeof payload.deepLink === 'string' && payload.deepLink.trim()
+          ? payload.deepLink.trim()
+          : null;
+      const actionPath = resolveActionTargetPath(payload);
+      const targetPath =
+        deepLink ||
+        actionPath ||
+        (navigation ? buildPathFromNavigation(navigation) : null);
+      if (!targetPath) return;
+
+      const messageId = resolveMessageId(payload, {});
+      // Для cold/warm старта из push заранее фиксируем жест,
+      // чтобы автозапуск трека не терялся на iOS/WebAudio.
+      try {
+        await meditationPlayer.registerUserGesture();
+      } catch (error) {
+        console.warn(
+          '[PushPlugin] Failed to register gesture from native launch payload:',
+          error
+        );
+      }
+      await enqueueNavigation(targetPath, messageId);
+      await flushPendingNavigation();
     }
 
     // Дедуплицируем быстрые повторы, чтобы не перетирать более точный маршрут.
@@ -426,11 +502,25 @@ export default defineNuxtPlugin({
 
     async function ensureAuthReady(): Promise<void> {
       if (auth.user || auth.isLoggedIn) return;
-      try {
-        await auth.me();
-      } catch {
-        // Если авторизация недоступна, не блокируем навигацию.
+      if (authEnsureInFlight) {
+        await authEnsureInFlight;
+        return;
       }
+      const now = Date.now();
+      if (now - lastAuthEnsureAt < AUTH_ENSURE_COOLDOWN_MS) {
+        return;
+      }
+      lastAuthEnsureAt = now;
+      authEnsureInFlight = (async () => {
+        try {
+          await auth.me();
+        } catch {
+          // Если авторизация недоступна, не блокируем навигацию.
+        } finally {
+          authEnsureInFlight = null;
+        }
+      })();
+      await authEnsureInFlight;
     }
 
     // Если уже навигировались недавно, не затираем менее точным переходом.
@@ -448,9 +538,9 @@ export default defineNuxtPlugin({
       }
       const age = Date.now() - lastNavigation.at;
       if (age > NAV_DEDUP_WINDOW_MS) return false;
-      const currentScore = scoreTargetPath(lastNavigation.path);
-      const nextScore = scoreTargetPath(targetPath);
-      return currentScore >= nextScore;
+      const currentPath = normalizeTargetPath(lastNavigation.path);
+      const nextPath = normalizeTargetPath(targetPath);
+      return currentPath === nextPath;
     }
 
     async function enqueueNavigation(
@@ -470,38 +560,45 @@ export default defineNuxtPlugin({
     async function navigateToTarget(
       targetPath: string,
       messageId?: string | null
-    ) {
+    ): Promise<boolean> {
       try {
         const normalized = normalizeTargetPath(targetPath);
         if (shouldSkipNavigation(normalized, messageId)) {
-          return;
+          return true;
         }
         await ensureAuthReady();
         await nuxtApp.$router.isReady();
-        if (nuxtApp.$router.currentRoute.value.fullPath === normalized) {
-          return;
-        }
-        await nuxtApp.$router.push(normalized);
-        await nextTick();
 
         const expected = nuxtApp.$router.resolve(normalized);
-        setTimeout(() => {
-          const current = nuxtApp.$router.currentRoute.value;
-          if (current.path === expected.path) {
-            if (current.fullPath !== expected.fullPath) {
-              void nuxtApp.$router.replace(expected.fullPath);
-            }
-            return;
-          }
-        }, NAV_RETRY_DELAY_MS);
+        const expectedFullPath = expected.fullPath;
+        if (nuxtApp.$router.currentRoute.value.fullPath === expectedFullPath) {
+          lastNavigation = {
+            path: expectedFullPath,
+            messageId,
+            at: Date.now(),
+          };
+          return true;
+        }
+        await nuxtApp.$router.push(expectedFullPath);
+        await nextTick();
+        if (nuxtApp.$router.currentRoute.value.fullPath !== expectedFullPath) {
+          await wait(NAV_RETRY_DELAY_MS);
+          await nuxtApp.$router.replace(expectedFullPath);
+          await nextTick();
+        }
+        if (nuxtApp.$router.currentRoute.value.fullPath !== expectedFullPath) {
+          return false;
+        }
 
         lastNavigation = {
-          path: normalized,
+          path: expectedFullPath,
           messageId,
           at: Date.now(),
         };
+        return true;
       } catch (error) {
         console.error('[PushPlugin] Failed to navigate:', error);
+        return false;
       }
     }
 
@@ -519,9 +616,26 @@ export default defineNuxtPlugin({
       isFlushingNavigation = true;
       try {
         const pending = await loadPendingNavigation();
-        if (!pending) return;
-        await navigateToTarget(pending.targetPath, pending.messageId);
-        await savePendingNavigation(null);
+        if (!pending) {
+          clearNavigationRetryTimer();
+          return;
+        }
+        const success = await navigateToTarget(
+          pending.targetPath,
+          pending.messageId
+        );
+        if (success) {
+          clearNavigationRetryTimer();
+          await savePendingNavigation(null);
+          return;
+        }
+        // В случае гонок middleware/инициализации не теряем pending-навигацию:
+        // повторяем до TTL записи.
+        const retryDelay =
+          auth.user || auth.isLoggedIn
+            ? NAV_RETRY_DELAY_MS
+            : NAV_RETRY_DELAY_MS * 4;
+        schedulePendingNavigationRetry(retryDelay);
       } finally {
         isFlushingNavigation = false;
       }
@@ -726,6 +840,17 @@ export default defineNuxtPlugin({
 
           // Навигация выполняется только при системном тапе.
           if (isTap) {
+            // Для старта медитации из push заранее фиксируем пользовательское намерение
+            // и пытаемся разблокировать аудио-контекст до роутинга.
+            try {
+              await meditationPlayer.registerUserGesture();
+            } catch (error) {
+              console.warn(
+                '[PushPlugin] Failed to register gesture for meditation audio:',
+                error
+              );
+            }
+
             const deepLink =
               typeof payload?.deepLink === 'string' && payload.deepLink.trim()
                 ? payload.deepLink.trim()
@@ -793,8 +918,35 @@ export default defineNuxtPlugin({
       );
       setTimeout(initNotifications, 3000);
 
+      // Восстанавливаем launch-переход из Android intent (холодный старт),
+      // затем пробуем pending-навигацию из JS-очереди.
+      void consumeNativeLaunchNavigation();
+
       // Восстанавливаем отложенную навигацию, если тап пришёл до инициализации.
       void flushPendingNavigation();
+      setTimeout(() => {
+        void flushPendingNavigation();
+      }, NAV_RETRY_DELAY_MS);
+      setTimeout(() => {
+        void flushPendingNavigation();
+      }, NAV_RETRY_DELAY_MS * 3);
+
+      // На warm-start после тапа по push событие action иногда не приходит в JS.
+      // Поэтому повторно читаем native launch payload при возврате в active.
+      import('@capacitor/app')
+        .then(({ App }) => {
+          App.addListener('appStateChange', ({ isActive }) => {
+            if (!isActive) return;
+            void consumeNativeLaunchNavigation();
+            void flushPendingNavigation();
+          });
+        })
+        .catch((error) => {
+          console.warn(
+            '[PushPlugin] Failed to bind appState listener for push fallback:',
+            error
+          );
+        });
 
       // Fallback polling отключен - используем только реальные FCM push-уведомления
 
@@ -802,5 +954,19 @@ export default defineNuxtPlugin({
         '[PushPlugin] Using FCM push notifications (fallback polling disabled)'
       );
     });
+
+    // Если переход был перехвачен middleware/инициализацией, повторяем pending-навигацию.
+    nuxtApp.$router.afterEach(() => {
+      void flushPendingNavigation();
+    });
+
+    watch(
+      () => auth.isLoggedIn,
+      (loggedIn) => {
+        if (!loggedIn) return;
+        void flushPendingNavigation();
+      },
+      { immediate: true }
+    );
   },
 });

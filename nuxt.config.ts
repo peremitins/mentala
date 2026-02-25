@@ -161,6 +161,10 @@ export default defineNuxtConfig({
       isDev: process.env.NUXT_PUBLIC_IS_DEV === 'true', // Режим разработки (для управления функционалом в UI)
       chatIdleTimeoutMs: 2 * 60 * 1000, // 2 минуты в миллисекундах
       featureTtsEnabled: process.env.NUXT_FEATURE_TTS_ENABLED === 'true',
+      featureNativeMeditationAudioEnabled:
+        // На mobile native-плеер должен быть включён по умолчанию для фонового воспроизведения.
+        // Явное отключение: NUXT_FEATURE_NATIVE_MEDITATION_AUDIO_ENABLED=false
+        process.env.NUXT_FEATURE_NATIVE_MEDITATION_AUDIO_ENABLED !== 'false',
     },
   },
   nitro: {

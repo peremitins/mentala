@@ -8,6 +8,13 @@
         <p class="text-lg font-semibold text-foreground">
           {{ statusLabel }}
         </p>
+        <button
+          type="button"
+          class="mt-1 inline-flex text-xs font-medium text-foreground/70 underline decoration-dotted underline-offset-4 transition hover:text-foreground"
+          @click="reminderEffectModalOpen = true"
+        >
+          Как напоминания усиливают прогресс
+        </button>
       </div>
       <Switch
         :checked="preference?.enabled ?? false"
@@ -56,26 +63,32 @@
     </div>
 
     <Button
-      size="sm"
+      size="lg"
       variant="outline"
-      class="mt-4 w-full text-[12px] justify-between"
+      class="mt-4 w-full justify-between !py-3 text-base font-semibold"
       :disabled="loading"
       @click="$emit('edit')"
     >
       Настройки уведомлений
-      <IconChevronRight class="h-4 w-4 text-muted-foreground" />
+      <IconChevronRight class="h-5 w-5 text-muted-foreground" />
     </Button>
+
+    <ReminderEffectModal
+      :open="reminderEffectModalOpen"
+      @update:open="reminderEffectModalOpen = $event"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { Button } from '@/app/components/ui/button';
 import { Switch } from '@/app/components/ui/shadcn/switch';
 import type { NotificationPreferencesDto } from '@/shared/dto/notifications';
 import { formatMinutesToTime, formatActiveDays } from '@/app/utils/time';
 import Skeleton from '@/app/components/ui/Skeleton.vue';
 import IconChevronRight from '~icons/lucide/chevron-right';
+import ReminderEffectModal from '@/app/components/notifications/ReminderEffectModal.vue';
 
 const props = defineProps<{
   preference: NotificationPreferencesDto | null;
@@ -85,7 +98,7 @@ const props = defineProps<{
   toggleLoading?: boolean;
 }>();
 
-const emit = defineEmits<{
+defineEmits<{
   (e: 'edit'): void;
   (e: 'toggle', value: boolean): void;
 }>();
@@ -106,4 +119,6 @@ const statusLabel = computed(() => {
   if (!props.preference) return 'Не настроено';
   return props.preference.enabled ? 'Включены' : 'Выключены';
 });
+
+const reminderEffectModalOpen = ref(false);
 </script>

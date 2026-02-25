@@ -56,18 +56,16 @@
         />
       </ClientOnly>
       <BottomNav />
-      <SosModalRoot />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useMediaQuery, useWindowSize } from '@vueuse/core';
 import BottomNav from '@/app/components/BottomNav.vue';
 import MiniMeditationPlayer from '@/app/components/meditations/MiniMeditationPlayer.vue';
-import SosModalRoot from '@/app/components/sos/SosModalRoot.vue';
 import { useMeditationPlayer } from '@/app/composables/useMeditationPlayer';
 import { useMeditationsStore } from '@/app/stores/meditations';
 import { useSceneSettingsStore } from '@/app/stores/sceneSettings';
@@ -78,6 +76,7 @@ import { findSceneTrack } from '@/app/lib/sceneSelectionCatalog';
 import { resolveMediaUrl } from '@/app/utils/media';
 import { useAuthStore } from '@/app/stores/auth';
 import { usePlatform } from '@/app/composables/usePlatform';
+import { Capacitor } from '@capacitor/core';
 
 const {
   currentTrack,
@@ -105,18 +104,18 @@ const isIos = computed(() => platform.value === 'ios');
 const sceneSettings = useSceneSettingsStore();
 const uiSettings = useUiSettingsStore();
 const sceneAudio = useSceneAudio();
-const sos = useSos();
 const SOS_TECHNIQUE_STEPS = [
   'panic-grounding',
   'panic-breathing',
   'tension-practice',
   'finish',
 ] as const;
+const { step: sosStep } = useSos();
 const isSosTechniqueActive = computed(
   () =>
-    sos.isOpen.value &&
+    route.path === '/sos' &&
     SOS_TECHNIQUE_STEPS.includes(
-      sos.step.value as (typeof SOS_TECHNIQUE_STEPS)[number]
+      sosStep.value as (typeof SOS_TECHNIQUE_STEPS)[number]
     )
 );
 const canPlaySceneAudio = computed(() => {
@@ -209,21 +208,21 @@ const showSceneBackground = computed(() => {
   );
 });
 
-const isMeditationAudioActive = computed(() => Boolean(currentTrack.value));
+const isMeditationAudioActive = computed(
+  () => isPlaying.value || isBuffering.value
+);
 const isBreathPracticePage = computed(() => {
   const path = route.path || '';
-  // Исключаем страницу создания кастомной практики, чтобы показывать фон обоев
-  if (path === '/breath-practices/custom') {
-    return false;
-  }
-  // Глушим фон только на детальной практике, например /breath-practices/4-7-8
+  // На любых дыхательных практиках фон сцены всегда глушится.
   return path.startsWith('/breath-practices/');
 });
 
 const shouldMuteSceneAudio = computed(() => {
-  // Пока открыт трек медитации, активен мини‑плеер, дыхательные практики или техники SOS — фон сцены молчит.
+  // Фон сцены глушим только при реально активном медитационном аудио,
+  // на дыхательных практиках и в SOS-техниках.
+  // Важно: открытый экран медитации сам по себе не должен блокировать фон,
+  // иначе после stop() сцена не возобновляется.
   return (
-    isMeditationDetail.value ||
     isMeditationAudioActive.value ||
     isBreathPracticePage.value ||
     isSosTechniqueActive.value
@@ -254,11 +253,59 @@ function openDetail() {
   void navigateTo({ path: '/meditations', query: nextQuery });
 }
 
+let sceneKickstartCleanup: (() => void) | null = null;
+
+function bindFirstGestureSceneKickstart() {
+  if (typeof window === 'undefined') return;
+  if (sceneKickstartCleanup) return;
+
+  const handler = () => {
+    void (async () => {
+      if (!canPlaySceneAudio.value) return;
+      if (shouldMuteSceneAudio.value) return;
+      if (sceneSettings.volume <= 0) return;
+      const scene = currentScene.value;
+      if (!scene?.audioPath) return;
+      try {
+        await sceneAudio.kickstart(scene);
+      } catch (error) {
+        console.warn(
+          '[SceneAudio] Не удалось выполнить first-gesture kickstart:',
+          error
+        );
+      } finally {
+        // Снимаем listener только после первой реальной попытки старта сцены.
+        sceneKickstartCleanup?.();
+      }
+    })();
+  };
+
+  // Регистрируем типичные mobile/desktop жесты и держим их,
+  // пока сцена не получит первую попытку старта.
+  window.addEventListener('pointerdown', handler, {
+    passive: true,
+  });
+  window.addEventListener('touchstart', handler, { passive: true });
+  window.addEventListener('click', handler, { passive: true });
+
+  sceneKickstartCleanup = () => {
+    window.removeEventListener('pointerdown', handler);
+    window.removeEventListener('touchstart', handler);
+    window.removeEventListener('click', handler);
+    sceneKickstartCleanup = null;
+  };
+}
+
 onMounted(async () => {
   await sceneSettings.ensureLoaded();
   sceneAudio.setVolume(sceneSettings.volume / 100);
   sceneAudio.setBackgroundPlayMinutes(sceneSettings.backgroundPlayMinutes);
+  bindFirstGestureSceneKickstart();
   await syncSceneAudioState();
+});
+
+onBeforeUnmount(() => {
+  sceneKickstartCleanup?.();
 });
 
 watch(
@@ -275,22 +322,48 @@ watch(
   }
 );
 
-async function syncSceneAudioState() {
+let syncSceneAudioRunId = 0;
+
+/** Флаг: переход с mute на unmute (остановка медитации). Нужен для задержки на Android. */
+async function syncSceneAudioState(options?: {
+  transitioningFromMute?: boolean;
+}) {
+  const runId = ++syncSceneAudioRunId;
+  const transitioningFromMute = options?.transitioningFromMute ?? false;
+
   // На неавторизованных экранах фон всегда выключен.
   if (!canPlaySceneAudio.value) {
     await sceneAudio.stop(false);
     return;
   }
   await sceneSettings.ensureLoaded();
+  if (runId !== syncSceneAudioRunId) return;
   if (!currentScene.value) return;
   // Обновляем текущую сцену, чтобы не было рассинхрона при смене.
   await sceneAudio.setScene(currentScene.value);
+  if (runId !== syncSceneAudioRunId) return;
+  // Нулевая громкость = сцена полностью выключена.
+  if (sceneSettings.volume <= 0) {
+    await sceneAudio.stop(false);
+    return;
+  }
   // Пока открыт трек медитации или активен мини‑плеер — фоновые звуки выключены.
   if (shouldMuteSceneAudio.value) {
     await sceneAudio.suspend();
     return;
   }
+
+  // На Android при переходе с медитации на сцену даём ExoPlayer освободить audio focus,
+  // иначе накладываются два трека (медитация ещё в хвосте + сцена стартует).
+  const isAndroid =
+    typeof Capacitor !== 'undefined' && Capacitor.getPlatform() === 'android';
+  if (isAndroid && transitioningFromMute) {
+    await new Promise<void>((resolve) => setTimeout(resolve, 280));
+    if (runId !== syncSceneAudioRunId) return;
+  }
+
   await sceneAudio.resume();
+  if (runId !== syncSceneAudioRunId) return;
   if (!sceneAudio.isPlaying.value) {
     await sceneAudio.play(currentScene.value);
   }
@@ -302,8 +375,11 @@ watch(
     () => canPlaySceneAudio.value,
     () => currentScene.value?.id,
   ],
-  () => {
-    void syncSceneAudioState();
+  ([mute], [oldMute]) => {
+    const transitioningFromMute = oldMute === true && mute === false;
+    void syncSceneAudioState({
+      transitioningFromMute,
+    });
   },
   { immediate: true }
 );

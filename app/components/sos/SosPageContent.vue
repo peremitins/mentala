@@ -1,473 +1,426 @@
 <template>
-  <Teleport to="body">
-    <Transition name="fade">
-      <div
-        v-if="isOpen"
-        class="fixed inset-0 z-[130] text-white"
-        role="dialog"
-        aria-modal="true"
-      >
-        <div
-          class="absolute inset-0 backdrop-blur-md bg-gradient-to-b from-slate-900/95 via-indigo-950/90 to-slate-950/95"
-        />
-        <div
-          class="relative z-10 flex h-full flex-col"
-          :style="{
-            paddingTop: 'var(--ios-safe-area-inset-top)',
-            paddingBottom: 'var(--ios-safe-area-inset-bottom)',
-          }"
+  <div class="glass-deep min-h-0 flex-1 p-5 overflow-auto">
+    <section
+      v-if="step === 'select'"
+      class="flex min-h-full flex-col items-center justify-center space-y-4 py-2"
+    >
+      <div class="space-y-1 text-center">
+        <h3 class="text-xl font-semibold text-foreground">
+          Что ты чувствуешь сейчас?
+        </h3>
+      </div>
+
+      <div class="w-full space-y-2">
+        <button
+          type="button"
+          class="glass-deep w-full rounded-xl p-4 text-left transition hover:border-white/30"
+          @click="setStep('panic-techniques')"
         >
-          <div class="flex items-center justify-between px-4 pt-3 pb-2">
-            <div class="flex min-w-0 flex-1 items-center gap-2">
-              <Button
-                v-if="step !== 'select'"
-                variant="ghost"
-                size="icon"
-                class="h-8 w-8 flex-shrink-0 border-0 hover:border-0 hover:bg-primary-ui/10"
-                aria-label="Назад"
-                @click="handleBack"
-              >
-                <IconChevronLeft class="h-4 w-4" />
-              </Button>
-              <h2
-                class="text-base font-semibold tracking-wide flex items-center gap-2 truncate"
-              >
-                <IconHeartPulse class="h-4 w-4 flex-shrink-0" /> Быстрая
-                стабилизация
-              </h2>
+          <p class="text-base font-semibold text-foreground">
+            Тревога и паника
+          </p>
+          <p class="mt-1 text-sm text-foreground/80">
+            Снизить тревогу и успокоиться
+          </p>
+        </button>
+
+        <button
+          type="button"
+          class="glass-deep w-full rounded-xl p-4 text-left transition hover:border-white/30"
+          @click="setStep('tension-practice')"
+        >
+          <p class="text-base font-semibold text-foreground">
+            Сильное напряжение
+          </p>
+          <p class="mt-1 text-sm text-foreground/80">
+            Расслабить тело и сделать дыхание ровнее
+          </p>
+        </button>
+
+        <button
+          type="button"
+          class="glass-deep w-full rounded-xl p-4 text-left transition hover:border-white/30"
+          @click="goToChat('vent')"
+        >
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <p class="text-base font-semibold text-foreground">
+                Хочу выговориться
+              </p>
+              <p class="mt-1 text-sm text-foreground/80">Поговорить в чате</p>
             </div>
-            <button
-              type="button"
-              class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border border-white/20 text-white/80 transition hover:border-white/40 hover:text-white"
-              aria-label="Закрыть SOS"
-              @click="handleClose"
+            <span
+              v-if="!chatHandoffAccess.available"
+              class="inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-white/20 bg-black/45 text-sm leading-none"
             >
-              <IconX class="h-4 w-4" />
-            </button>
+              {{ getPlanBadgeEmoji(chatHandoffAccess.requiredPlan) }}
+            </span>
           </div>
+        </button>
+      </div>
+    </section>
 
-          <div class="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
-            <section
-              v-if="step === 'select'"
-              class="flex min-h-full flex-col items-center justify-center space-y-4 py-2"
-            >
-              <div class="space-y-1 text-center">
-                <h3 class="text-xl font-semibold">Что ты чувствуешь сейчас?</h3>
-              </div>
+    <section
+      v-else-if="step === 'panic-techniques'"
+      class="flex min-h-full flex-col items-center justify-center space-y-4 py-2"
+    >
+      <div class="space-y-1 text-center">
+        <p class="text-sm text-foreground/70">Тревога и паника</p>
+        <h3 class="text-xl font-semibold text-foreground">
+          Выбери короткую технику
+        </h3>
+      </div>
 
-              <div class="w-full max-w-md space-y-4">
-                <button
-                  type="button"
-                  class="glass-deep w-full rounded-xl p-4 text-left transition hover:border-white/30"
-                  @click="setStep('panic-techniques')"
-                >
-                  <p class="text-base font-semibold">Тревога и паника</p>
-                  <p class="mt-1 text-sm text-white/75">
-                    Снизить тревогу и успокоиться
-                  </p>
-                </button>
+      <div class="w-full space-y-2">
+        <button
+          type="button"
+          class="glass-deep w-full rounded-xl p-4 text-left transition hover:border-white/30"
+          @click="setStep('panic-grounding')"
+        >
+          <p class="text-base font-semibold text-foreground">5-4-3-2-1</p>
+          <p class="mt-1 text-sm text-foreground/80">
+            Заземление через наблюдение и ощущения.
+          </p>
+        </button>
 
-                <button
-                  type="button"
-                  class="glass-deep w-full rounded-xl p-4 text-left transition hover:border-white/30"
-                  @click="setStep('tension-practice')"
-                >
-                  <p class="text-base font-semibold">Сильное напряжение</p>
-                  <p class="mt-1 text-sm text-white/75">
-                    Расслабить тело и сделать дыхание ровнее
-                  </p>
-                </button>
+        <button
+          type="button"
+          class="glass-deep w-full rounded-xl p-4 text-left transition hover:border-white/30"
+          @click="setStep('panic-breathing')"
+        >
+          <p class="text-base font-semibold text-foreground">
+            Квадратное дыхание 4-4-4-4
+          </p>
+          <p class="mt-1 text-sm text-foreground/80">
+            Дыши в ритме и возвращай контроль.
+          </p>
+        </button>
+      </div>
+    </section>
 
-                <button
-                  type="button"
-                  class="glass-deep w-full rounded-xl p-4 text-left transition hover:border-white/30"
-                  @click="goToChat('vent')"
-                >
-                  <div class="flex items-start justify-between gap-3">
-                    <div>
-                      <p class="text-base font-semibold">Хочу выговориться</p>
-                      <p class="mt-1 text-sm text-white/75">
-                        Поговорить в чате
-                      </p>
-                    </div>
-                    <span
-                      v-if="!chatHandoffAccess.available"
-                      class="inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-white/20 bg-black/45 text-sm leading-none"
-                    >
-                      {{ getPlanBadgeEmoji(chatHandoffAccess.requiredPlan) }}
-                    </span>
-                  </div>
-                </button>
-              </div>
-            </section>
+    <section
+      v-else-if="step === 'panic-grounding'"
+      class="flex min-h-full flex-col items-center justify-center space-y-4 py-2"
+    >
+      <div class="space-y-1 text-center">
+        <p class="text-sm text-foreground/70">5-4-3-2-1</p>
+        <h3 class="text-xl font-semibold text-foreground">
+          {{ groundingCurrent.title }}
+        </h3>
+      </div>
 
-            <section
-              v-else-if="step === 'panic-techniques'"
-              class="flex min-h-full flex-col items-center justify-center space-y-4 py-2"
-            >
-              <div class="space-y-1 text-center">
-                <p class="text-sm text-white/70">Тревога и паника</p>
-                <h3 class="text-xl font-semibold">Выбери короткую технику</h3>
-              </div>
+      <div class="w-full space-y-2">
+        <div class="glass-deep rounded-xl p-4">
+          <p class="text-sm text-center text-foreground/80">
+            {{ groundingCurrent.description }}
+          </p>
+        </div>
 
-              <div class="w-full max-w-md space-y-4">
-                <button
-                  type="button"
-                  class="glass-deep w-full rounded-xl p-4 text-left transition hover:border-white/30"
-                  @click="setStep('panic-grounding')"
-                >
-                  <p class="text-base font-semibold">5-4-3-2-1</p>
-                  <p class="mt-1 text-sm text-white/75">
-                    Заземление через наблюдение и ощущения.
-                  </p>
-                </button>
-
-                <button
-                  type="button"
-                  class="glass-deep w-full rounded-xl p-4 text-left transition hover:border-white/30"
-                  @click="setStep('panic-breathing')"
-                >
-                  <p class="text-base font-semibold">
-                    Квадратное дыхание 4-4-4-4
-                  </p>
-                  <p class="mt-1 text-sm text-white/75">
-                    Дыши в ритме и возвращай контроль.
-                  </p>
-                </button>
-              </div>
-            </section>
-
-            <section
-              v-else-if="step === 'panic-grounding'"
-              class="flex min-h-full flex-col items-center justify-center space-y-4 py-2"
-            >
-              <div class="space-y-1 text-center">
-                <p class="text-sm text-white/70">5-4-3-2-1</p>
-                <h3 class="text-xl font-semibold">
-                  {{ groundingCurrent.title }}
-                </h3>
-              </div>
-
-              <div class="w-full max-w-md space-y-4">
-                <div class="glass-deep rounded-xl p-4">
-                  <p class="text-sm text-center text-white/75">
-                    {{ groundingCurrent.description }}
-                  </p>
-                </div>
-
-                <div
-                  class="flex items-center justify-between gap-4 text-sm text-white/80"
-                >
-                  <span
-                    >Шаг {{ groundingIndex + 1 }} из
-                    {{ groundingSteps.length }}</span
-                  >
-                  <div class="flex items-center gap-2 shrink-0">
-                    <span class="text-white/70">Голос</span>
-                    <Switch
-                      :checked="tensionVoiceEnabled"
-                      :loading="tensionVoiceSaving"
-                      @update:checked="onGroundingVoiceChange"
-                    />
-                  </div>
-                </div>
-
-                <div class="grid grid-cols-2 gap-3">
-                  <Button
-                    variant="outline"
-                    class="w-full"
-                    :disabled="groundingIndex === 0"
-                    @click="groundingPrev"
-                  >
-                    Назад
-                  </Button>
-                  <Button class="w-full" @click="groundingNext">
-                    {{
-                      groundingIndex === groundingSteps.length - 1
-                        ? 'Завершить'
-                        : 'Дальше'
-                    }}
-                  </Button>
-                </div>
-              </div>
-            </section>
-
-            <section
-              v-else-if="step === 'panic-breathing' && panicBreathingPractice"
-              class="relative h-full"
-            >
-              <BreathPracticePlayer
-                :practice="panicBreathingPractice"
-                :show-navigation="false"
-                :show-settings="true"
-                :show-completion-overlay="false"
-                :session-minutes="2"
-                :auto-start="true"
-                :overlay-z-index="140"
-                settings-dialog-class="z-[160]"
-                settings-overlay-class="z-[150]"
-                @complete="handlePracticeComplete('panic')"
-              />
-            </section>
-
-            <section
-              v-else-if="step === 'tension-practice'"
-              class="relative h-full"
-            >
-              <div class="flex h-full flex-col justify-between space-y-2">
-                <div class="flex flex-col items-center gap-2 text-center">
-                  <p
-                    class="text-sm font-semibold text-white/90 min-h-[40px] px-[5vw]"
-                  >
-                    {{ tensionInstruction }}
-                  </p>
-                  <p class="text-xs text-white/60">
-                    Подход {{ tensionCurrentCycle }} / {{ tensionTotalCycles }}
-                  </p>
-                </div>
-
-                <div class="flex flex-col items-center gap-2 justify-center">
-                  <BreathOrb
-                    :current-phase="tensionOrbPhase"
-                    :phase-remaining-seconds="tensionStepRemaining"
-                    :is-running="tensionIsRunning && !tensionIsPaused"
-                    :prep-countdown="tensionPrepCountdown"
-                  />
-                </div>
-
-                <div
-                  class="glass-deep space-y-4 p-4 text-elevated-strong"
-                  :style="{ backdropFilter: 'blur(1px)' }"
-                >
-                  <div class="space-y-1">
-                    <div
-                      class="relative h-2 w-full overflow-hidden rounded-full border border-white/70"
-                    >
-                      <div
-                        class="h-full rounded-full bg-gradient-to-r from-primary-ui via-cyan-400 to-emerald-400 transition-all duration-300"
-                        :style="{ width: `${tensionSessionProgress}%` }"
-                      />
-                    </div>
-                    <div
-                      class="flex items-center justify-between text-xs text-white/70"
-                    >
-                      <span>Осталось: {{ tensionSessionRemainingLabel }}</span>
-                      <span>{{ tensionSessionTotalLabel }}</span>
-                    </div>
-                  </div>
-
-                  <div class="grid grid-cols-3 gap-3">
-                    <button
-                      type="button"
-                      class="flex h-12 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
-                      :disabled="Boolean(tensionPrepCountdown)"
-                      @click="tensionSettingsOpen = true"
-                    >
-                      <IconSettings class="h-5 w-5" />
-                    </button>
-
-                    <button
-                      type="button"
-                      class="flex h-12 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
-                      :disabled="!tensionIsRunning"
-                      @click="stopTensionSession"
-                    >
-                      <IconSquare class="h-5 w-5" />
-                    </button>
-
-                    <button
-                      type="button"
-                      class="flex h-12 items-center justify-center rounded-full bg-primary/80 text-primary-foreground shadow-lg transition hover:bg-primary disabled:cursor-not-allowed disabled:opacity-70"
-                      :disabled="Boolean(tensionPrepCountdown)"
-                      @click="toggleTensionPlayback"
-                    >
-                      <IconPause
-                        v-if="tensionIsRunning && !tensionIsPaused"
-                        class="h-5 w-5"
-                      />
-                      <IconPlay v-else class="h-5 w-5" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <section
-              v-else-if="step === 'finish'"
-              class="flex min-h-full flex-col items-center justify-center space-y-4"
-            >
-              <div class="space-y-1 text-center">
-                <p class="text-sm text-white/70">Практика завершена</p>
-                <h3 class="text-2xl font-semibold">Следующий шаг</h3>
-              </div>
-
-              <div class="w-full max-w-md space-y-4">
-                <Button
-                  variant="outline"
-                  class="w-full"
-                  size="lg"
-                  @click="goToChat(finishEntry, true)"
-                >
-                  <span class="inline-flex items-center gap-2">
-                    <span>Продолжить в чате</span>
-                    <span
-                      v-if="!chatHandoffAccess.available"
-                      class="inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/20 bg-black/45 text-sm leading-none"
-                    >
-                      {{ getPlanBadgeEmoji(chatHandoffAccess.requiredPlan) }}
-                    </span>
-                  </span>
-                </Button>
-                <Button
-                  variant="ghost"
-                  class="w-full"
-                  size="lg"
-                  @click="repeatLastPractice"
-                >
-                  Повторить
-                </Button>
-              </div>
-            </section>
-          </div>
-
-          <Teleport to="body">
-            <Transition name="fade">
-              <div
-                v-if="step === 'tension-practice' && tensionPrepCountdown"
-                class="fixed inset-0 z-[140] flex flex-col items-center justify-center gap-2 bg-black/50 text-white backdrop-blur"
-              >
-                <p class="text-sm uppercase tracking-[0.2em] text-white/70">
-                  {{ tensionPrepPromptText }}
-                </p>
-                <p class="text-5xl font-semibold">{{ tensionPrepCountdown }}</p>
-              </div>
-            </Transition>
-          </Teleport>
-
-          <Dialog
-            v-if="step === 'tension-practice'"
-            v-model:open="tensionSettingsOpen"
+        <div
+          class="flex items-center justify-between gap-4 text-sm text-foreground/80"
+        >
+          <span
+            >Шаг {{ groundingIndex + 1 }} из {{ groundingSteps.length }}</span
           >
-            <DialogContent
-              overlay-class="z-[150]"
-              class="z-[160] max-w-lg overflow-visible text-white"
-            >
-              <div
-                id="sos-tension-settings-portal"
-                class="relative z-[60] h-0"
-              />
-              <DialogHeader>
-                <DialogTitle>Настройки практики</DialogTitle>
-              </DialogHeader>
+          <div class="flex items-center gap-2 shrink-0">
+            <span class="text-foreground/70">Голос</span>
+            <Switch
+              :checked="tensionVoiceEnabled"
+              :loading="tensionVoiceSaving"
+              @update:checked="onGroundingVoiceChange"
+            />
+          </div>
+        </div>
 
-              <div class="space-y-5">
-                <div class="space-y-2">
-                  <TimePicker
-                    v-model="tensionSessionMinutes"
-                    mode="minutes"
-                    :label="'Длительность'"
-                    :minute-min="1"
-                    :minute-max="60"
-                    portal-to="#sos-tension-settings-portal"
-                  >
-                    <template #trigger="{ formattedTime }">
-                      <Button
-                        variant="outline"
-                        class="w-full justify-between rounded-full border-white/20 bg-white/5 text-white/90 hover:bg-white/10"
-                      >
-                        <span class="text-sm font-medium">{{
-                          formattedTime
-                        }}</span>
-                        <IconClock class="h-4 w-4 opacity-70" />
-                      </Button>
-                    </template>
-                  </TimePicker>
-                </div>
-
-                <div class="space-y-3">
-                  <div class="flex items-center justify-between">
-                    <div>
-                      <p class="text-sm font-semibold">Голос</p>
-                      <p class="text-xs text-white/60">Озвучка голосом</p>
-                    </div>
-                    <Switch
-                      :checked="tensionVoiceEnabled"
-                      :loading="tensionVoiceSaving"
-                      @update:checked="onTensionVoiceEnabledChange"
-                    />
-                  </div>
-                </div>
-
-                <div class="space-y-3">
-                  <div class="flex items-center justify-between">
-                    <div>
-                      <p class="text-sm font-semibold">Звуковые сигналы</p>
-                      <p class="text-xs text-white/60">
-                        Короткие сигналы inhale/exhale
-                      </p>
-                    </div>
-                    <Switch
-                      :checked="tensionSoundEnabled"
-                      :loading="tensionSoundSaving"
-                      @update:checked="onTensionSoundEnabledChange"
-                    />
-                  </div>
-                  <div class="space-y-2">
-                    <div
-                      class="flex items-center justify-between text-xs text-white/60"
-                    >
-                      <span>Громкость</span>
-                      <span>{{ tensionSoundVolume }}%</span>
-                    </div>
-                    <input
-                      v-model.number="tensionSoundVolume"
-                      type="range"
-                      min="0"
-                      max="100"
-                      step="1"
-                      class="w-full accent-cyan-300"
-                      :disabled="!tensionSoundEnabled"
-                    />
-                  </div>
-                </div>
-
-                <div class="flex items-center justify-between">
-                  <div>
-                    <p class="text-sm font-semibold">Вибрация</p>
-                  </div>
-                  <Switch
-                    :checked="tensionHapticsEnabled"
-                    :loading="tensionHapticsSaving"
-                    @update:checked="onTensionHapticsEnabledChange"
-                  />
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
-
-          <FeaturePaywallModal
-            v-model:open="paywallOpen"
-            :feature-key="paywallFeatureKey"
-            :required-plan="paywallAccess?.requiredPlan || null"
-            :paywall="paywallAccess?.paywall || null"
-          />
+        <div class="grid grid-cols-2 gap-3">
+          <Button
+            variant="outline"
+            class="w-full"
+            :disabled="groundingIndex === 0"
+            @click="groundingPrev"
+          >
+            Назад
+          </Button>
+          <Button class="w-full" @click="groundingNext">
+            {{
+              groundingIndex === groundingSteps.length - 1
+                ? 'Завершить'
+                : 'Дальше'
+            }}
+          </Button>
         </div>
       </div>
-    </Transition>
-  </Teleport>
+    </section>
+
+    <section
+      v-else-if="step === 'panic-breathing' && panicBreathingPractice"
+      class="relative h-full"
+    >
+      <BreathPracticePlayer
+        :practice="panicBreathingPractice"
+        :show-navigation="false"
+        :show-settings="true"
+        :show-completion-overlay="false"
+        :session-minutes="2"
+        :auto-start="true"
+        :overlay-z-index="140"
+        settings-dialog-class="z-[160]"
+        settings-overlay-class="z-[150]"
+        @complete="handlePracticeComplete('panic')"
+      />
+    </section>
+
+    <section v-else-if="step === 'tension-practice'" class="relative h-full">
+      <div class="flex h-full flex-col justify-between space-y-2">
+        <div class="flex flex-col items-center gap-2 text-center">
+          <p
+            class="text-sm font-semibold text-foreground min-h-[40px] px-[5vw]"
+          >
+            {{ tensionInstruction }}
+          </p>
+          <p class="text-xs text-foreground/60">
+            Подход {{ tensionCurrentCycle }} / {{ tensionTotalCycles }}
+          </p>
+        </div>
+
+        <div class="flex flex-col items-center gap-2 justify-center">
+          <BreathOrb
+            :current-phase="tensionOrbPhase"
+            :phase-remaining-seconds="tensionStepRemaining"
+            :is-running="tensionIsRunning && !tensionIsPaused"
+            :prep-countdown="tensionPrepCountdown"
+          />
+        </div>
+
+        <div
+          class="glass-deep space-y-4 p-4 text-elevated-strong"
+          :style="{ backdropFilter: 'blur(1px)' }"
+        >
+          <div class="space-y-1">
+            <div
+              class="relative h-2 w-full overflow-hidden rounded-full border border-white/70"
+            >
+              <div
+                class="h-full rounded-full bg-gradient-to-r from-primary-ui via-cyan-400 to-emerald-400 transition-all duration-300"
+                :style="{ width: `${tensionSessionProgress}%` }"
+              />
+            </div>
+            <div
+              class="flex items-center justify-between text-xs text-foreground/70"
+            >
+              <span>Осталось: {{ tensionSessionRemainingLabel }}</span>
+              <span>{{ tensionSessionTotalLabel }}</span>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-3 gap-3">
+            <button
+              type="button"
+              class="flex h-12 items-center justify-center rounded-full bg-white/10 text-foreground transition hover:bg-white/20"
+              :disabled="Boolean(tensionPrepCountdown)"
+              @click="tensionSettingsOpen = true"
+            >
+              <IconSettings class="h-5 w-5" />
+            </button>
+
+            <button
+              type="button"
+              class="flex h-12 items-center justify-center rounded-full bg-white/10 text-foreground transition hover:bg-white/20"
+              :disabled="!tensionIsRunning"
+              @click="stopTensionSession"
+            >
+              <IconSquare class="h-5 w-5" />
+            </button>
+
+            <button
+              type="button"
+              class="flex h-12 items-center justify-center rounded-full bg-primary/80 text-primary-foreground shadow-lg transition hover:bg-primary disabled:cursor-not-allowed disabled:opacity-70"
+              :disabled="Boolean(tensionPrepCountdown)"
+              @click="toggleTensionPlayback"
+            >
+              <IconPause
+                v-if="tensionIsRunning && !tensionIsPaused"
+                class="h-5 w-5"
+              />
+              <IconPlay v-else class="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section
+      v-else-if="step === 'finish'"
+      class="flex min-h-full flex-col items-center justify-center space-y-4"
+    >
+      <div class="space-y-1 text-center">
+        <p class="text-sm text-foreground/70">Практика завершена</p>
+        <h3 class="text-2xl font-semibold text-foreground">Следующий шаг</h3>
+      </div>
+
+      <div class="w-full space-y-2">
+        <Button
+          variant="outline"
+          class="w-full"
+          size="lg"
+          @click="goToChat(finishEntry, true)"
+        >
+          <span class="inline-flex items-center gap-2">
+            <span>Продолжить в чате</span>
+            <span
+              v-if="!chatHandoffAccess.available"
+              class="inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/20 bg-black/45 text-sm leading-none"
+            >
+              {{ getPlanBadgeEmoji(chatHandoffAccess.requiredPlan) }}
+            </span>
+          </span>
+        </Button>
+        <Button
+          variant="ghost"
+          class="w-full"
+          size="lg"
+          @click="repeatLastPractice"
+        >
+          Повторить
+        </Button>
+        <Button
+          variant="ghost"
+          class="w-full"
+          size="lg"
+          @click="setStep('select')"
+        >
+          Выбрать другую технику
+        </Button>
+      </div>
+    </section>
+
+    <Teleport to="body">
+      <Transition name="fade">
+        <div
+          v-if="step === 'tension-practice' && tensionPrepCountdown"
+          class="fixed inset-0 z-[140] flex flex-col items-center justify-center gap-2 bg-black/50 text-foreground backdrop-blur"
+        >
+          <p class="text-sm uppercase tracking-[0.2em] text-foreground/70">
+            {{ tensionPrepPromptText }}
+          </p>
+          <p class="text-5xl font-semibold">{{ tensionPrepCountdown }}</p>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <Dialog
+      v-if="step === 'tension-practice'"
+      v-model:open="tensionSettingsOpen"
+    >
+      <DialogContent
+        overlay-class="z-[150]"
+        class="z-[160] max-w-lg overflow-visible"
+      >
+        <div id="sos-tension-settings-portal" class="relative z-[60] h-0" />
+        <DialogHeader>
+          <DialogTitle>Настройки практики</DialogTitle>
+        </DialogHeader>
+
+        <div class="space-y-5">
+          <div class="space-y-2">
+            <TimePicker
+              v-model="tensionSessionMinutes"
+              mode="minutes"
+              :label="'Длительность'"
+              :minute-min="1"
+              :minute-max="60"
+              portal-to="#sos-tension-settings-portal"
+            >
+              <template #trigger="{ formattedTime }">
+                <Button
+                  variant="outline"
+                  class="w-full justify-between rounded-full"
+                >
+                  <span class="text-sm font-medium">{{ formattedTime }}</span>
+                  <IconClock class="h-4 w-4 opacity-70" />
+                </Button>
+              </template>
+            </TimePicker>
+          </div>
+
+          <div class="space-y-3">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-semibold">Голос</p>
+                <p class="text-xs text-foreground/60">Озвучка голосом</p>
+              </div>
+              <Switch
+                :checked="tensionVoiceEnabled"
+                :loading="tensionVoiceSaving"
+                @update:checked="onTensionVoiceEnabledChange"
+              />
+            </div>
+          </div>
+
+          <div class="space-y-3">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-semibold">Звуковые сигналы</p>
+                <p class="text-xs text-foreground/60">
+                  Короткие сигналы inhale/exhale
+                </p>
+              </div>
+              <Switch
+                :checked="tensionSoundEnabled"
+                :loading="tensionSoundSaving"
+                @update:checked="onTensionSoundEnabledChange"
+              />
+            </div>
+            <div class="space-y-2">
+              <div
+                class="flex items-center justify-between text-xs text-foreground/60"
+              >
+                <span>Громкость</span>
+                <span>{{ tensionSoundVolume }}%</span>
+              </div>
+              <input
+                v-model.number="tensionSoundVolume"
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                class="w-full accent-cyan-300"
+                :disabled="!tensionSoundEnabled"
+              />
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm font-semibold">Вибрация</p>
+            </div>
+            <Switch
+              :checked="tensionHapticsEnabled"
+              :loading="tensionHapticsSaving"
+              @update:checked="onTensionHapticsEnabledChange"
+            />
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+
+    <FeaturePaywallModal
+      v-model:open="paywallOpen"
+      :feature-key="paywallFeatureKey"
+      :required-plan="paywallAccess?.requiredPlan || null"
+      :paywall="paywallAccess?.paywall || null"
+    />
+  </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { navigateTo } from '#app';
-import IconChevronLeft from '~icons/lucide/chevron-left';
-import IconX from '~icons/lucide/x';
 import IconPlay from '~icons/lucide/play';
 import IconPause from '~icons/lucide/pause';
 import IconSquare from '~icons/lucide/square';
 import IconSettings from '~icons/lucide/settings';
 import IconClock from '~icons/lucide/clock';
-import IconHeartPulse from '~icons/lucide/heart-pulse';
 import { Button } from '@/app/components/ui/button';
 import { Switch } from '@/app/components/ui/shadcn/switch';
 import { findBreathPractice } from '@/app/lib/breathPracticesCatalog';
@@ -520,7 +473,7 @@ const TENSION_CYCLE_SECONDS = TENSION_CLENCH_SECONDS + TENSION_RELEASE_SECONDS;
 
 const groundingSteps = SOS_GROUNDING_STEPS;
 
-const { isOpen, step, finish, close, setStep, setFinish } = useSos();
+const { step, finish, close, setStep, setFinish } = useSos();
 const chat = useChatStore();
 const { fetchGlobalPreferences } = useNotificationsSettings();
 const { getFeatureAccess } = useEntitlements();
@@ -573,11 +526,11 @@ const tensionVoicePreloadInFlight = new Set<string>();
 const tensionVoiceScheduleTimers = new Set<number>();
 
 const groundingCurrent = computed(() => {
-  const step = groundingSteps[groundingIndex.value] ?? groundingSteps[0];
+  const s = groundingSteps[groundingIndex.value] ?? groundingSteps[0];
   const addr = addressing.value;
   return {
-    title: step.title[addr],
-    description: step.description[addr],
+    title: s.title[addr],
+    description: s.description[addr],
   };
 });
 
@@ -726,7 +679,6 @@ async function playGroundingVoice(stepIndex: number) {
   try {
     audio.currentTime = 0;
     await audio.play();
-    // Только для шага 1: после окончания description — через несколько секунд озвучка подсказки.
     if (stepIndex === 0) {
       audio.addEventListener(
         'ended',
@@ -739,8 +691,8 @@ async function playGroundingVoice(stepIndex: number) {
             const hintAudio = new Audio(hintSrc);
             groundingCurrentAudio = hintAudio;
             hintAudio.currentTime = 0;
-            void hintAudio.play().catch((err: any) => {
-              if (err?.name !== 'AbortError') {
+            void hintAudio.play().catch((err: unknown) => {
+              if ((err as Error)?.name !== 'AbortError') {
                 console.error('[SOS Grounding] Failed to play hint:', err);
               }
             });
@@ -749,8 +701,8 @@ async function playGroundingVoice(stepIndex: number) {
         { once: true }
       );
     }
-  } catch (error: any) {
-    if (error?.name === 'AbortError') return;
+  } catch (error: unknown) {
+    if ((error as Error)?.name === 'AbortError') return;
     console.error('[SOS Grounding] Failed to play clip:', error);
   }
 }
@@ -798,7 +750,6 @@ async function preloadTensionVoiceClip(
 
       audio.addEventListener('canplaythrough', markDone, { once: true });
       audio.addEventListener('error', markDone, { once: true });
-      // Стартуем загрузку принудительно, чтобы убрать лаг перед первой подсказкой.
       audio.load();
     });
   } catch (error) {
@@ -832,11 +783,8 @@ async function playTensionVoice(audioKey: SosTensionAudioKey) {
   try {
     audio.currentTime = 0;
     await audio.play();
-  } catch (error: any) {
-    // При быстрых переключениях play() может быть прерван pause() — это штатный race-condition.
-    // Не считаем это ошибкой и не ломаем сценарий практики.
-    if (error?.name === 'AbortError') return;
-    // Если аудио недоступно, практика должна идти дальше без прерываний.
+  } catch (error: unknown) {
+    if ((error as Error)?.name === 'AbortError') return;
     console.error('[SOS Voice] Failed to play clip:', error);
   }
 }
@@ -868,7 +816,6 @@ function scheduleTensionStage(audioKey: SosTensionAudioKey, delayMs: number) {
 }
 
 function scheduleClenchPhaseVoice(offsetMs = 0) {
-  // Для фазы "сжатие" используем одну объединённую фразу.
   scheduleTensionStage('clench', offsetMs);
 }
 
@@ -903,30 +850,9 @@ function applyTensionCueVolume() {
   setTensionCueVolume(clampNumber(tensionSoundVolume.value, 0, 100) / 100);
 }
 
-function handleClose() {
-  clearAllTimers();
-  close();
-}
-
-function handleBack() {
-  if (step.value === 'panic-techniques') {
-    setStep('select');
-    return;
-  }
-  if (step.value === 'panic-grounding' || step.value === 'panic-breathing') {
-    setStep('panic-techniques');
-    return;
-  }
-  if (step.value === 'tension-practice' || step.value === 'finish') {
-    setStep('select');
-    return;
-  }
-}
-
 function repeatLastPractice() {
   clearAllTimers();
 
-  // Повторяем именно последний завершённый сценарий, если он известен.
   if (lastCompletedStep.value === 'panic-grounding') {
     setStep('panic-grounding');
     return;
@@ -940,8 +866,6 @@ function repeatLastPractice() {
     return;
   }
 
-  // Фолбэк: если источник не определён, возвращаем пользователя
-  // в наиболее ожидаемый поток по контексту завершения.
   if (finishEntry.value === 'tension') {
     setStep('tension-practice');
     return;
@@ -1071,12 +995,13 @@ async function goToChat(entry: SosEntry, afterPractice = false) {
         screen: 'chat',
       },
     });
-    // Не ждём ответ сервера, чтобы переход был мгновенным.
-    // На экране чата сразу показывается состояние генерации ("Пишу...").
     void chat.startConversation();
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[SOS] Failed to open chat from SOS:', error);
-    useToast('Не удалось открыть чат', error?.message || 'Попробуйте еще раз.');
+    useToast(
+      'Не удалось открыть чат',
+      (error as Error)?.message || 'Попробуйте еще раз.'
+    );
   }
 }
 
@@ -1121,7 +1046,6 @@ function startTensionExerciseLoop() {
         tensionStepType.value = 'clench';
         tensionStepRemaining.value = TENSION_CLENCH_SECONDS;
         clearTensionVoiceSchedule();
-        // Между циклами сразу переходим к следующей команде без отдельной озвучки.
         scheduleClenchPhaseVoice(0);
       }
     } else {
@@ -1158,7 +1082,6 @@ function startTensionPractice() {
 
   tensionPrepCountdown.value = 3;
   if (tensionVoiceEnabled.value) {
-    // Intro звучит в момент появления prep-оверлея.
     void playTensionVoice('intro');
   }
   if (typeof window === 'undefined') return;
@@ -1231,25 +1154,16 @@ function toggleTensionPlayback() {
   pauseTensionSession();
 }
 
-watch(
-  () => isOpen.value,
-  (opened) => {
-    if (!opened) {
-      clearAllTimers();
-      tensionSettingsOpen.value = false;
-      lastCompletedStep.value = null;
-      return;
-    }
-    void loadAddressing();
-    void loadTensionPracticeSettings();
-    void loadTensionVoicePreference();
-  }
-);
+onMounted(() => {
+  void loadAddressing();
+  void loadTensionPracticeSettings();
+  void loadTensionVoicePreference();
+});
 
 watch(
   () => addressing.value,
   (nextAddressing) => {
-    if (!isOpen.value || step.value !== 'tension-practice') return;
+    if (step.value !== 'tension-practice') return;
     if (!tensionVoiceEnabled.value) return;
     const voiceAddressing: SosTensionAddressing =
       nextAddressing === 'formal' ? 'formal' : 'informal';
@@ -1275,7 +1189,6 @@ watch(
     tensionPrepCountdown.value = 0;
     tensionSettingsOpen.value = false;
     tensionStage.value = 'intro';
-    if (!isOpen.value) return;
     if (next === 'panic-grounding') {
       groundingIndex.value = 0;
       return;
@@ -1300,7 +1213,6 @@ watch(
       return;
     }
     void saveSosTensionPracticeSettings({ sessionMinutes: safe });
-    // Синхронизируем оставшееся время с новой длительностью по аналогии с дыханием.
     tensionTotalRemaining.value = safe * 60;
     tensionCycleIndex.value = 0;
     tensionStepType.value = 'clench';

@@ -5,4 +5,8 @@
     <string name="package_name">com.mentala.app</string>
     <string name="custom_url_scheme">mentala</string>
     <string name="default_notification_channel_id">mentai_high</string>
+    <string name="audio_fg_channel_name">Mentala Audio</string>
+    <string name="audio_fg_channel_description">Воспроизведение медитаций в фоне</string>
+    <string name="audio_fg_default_title">Mentala</string>
+    <string name="audio_fg_default_subtitle">Идёт воспроизведение медитации</string>
 </resources>

@@ -257,6 +257,15 @@ textarea::placeholder {
   transition: all 0.3s ease;
 }
 
+/* Нижняя навигация: неактивные — opacity 0.6, активные — opacity 1 */
+.icon-disc-wrapper .icon-disc {
+  opacity: 0.7;
+  transition: opacity 0.25s ease;
+}
+.icon-disc-wrapper .icon-disc.icon-disc-active {
+  opacity: 1;
+}
+
 /* Кнопки действий чата — более выразительные, с мягкой глубиной */
 .chat-action-button {
   width: 44px;

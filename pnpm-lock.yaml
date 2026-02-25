@@ -29,6 +29,9 @@ importers:
       '@capacitor/core':
         specifier: ^7.4.3
         version: 7.4.3
+      '@capacitor/filesystem':
+        specifier: ^7.1.8
+        version: 7.1.8(@capacitor/core@7.4.3)
       '@capacitor/haptics':
         specifier: ^7.0.2
         version: 7.0.2(@capacitor/core@7.4.3)
@@ -56,6 +59,9 @@ importers:
       '@capgo/capacitor-social-login':
         specifier: ^8.2.5
         version: 8.2.5(@capacitor/core@7.4.3)
+      '@capgo/native-audio':
+        specifier: 7.11.2
+        version: 7.11.2(@capacitor/core@7.4.3)
       '@iconify-json/lucide':
         specifier: ^1.2.68
         version: 1.2.68
@@ -554,6 +560,11 @@ packages:
   '@capacitor/core@7.4.3':
     resolution: {integrity: sha512-wCWr8fQ9Wxn0466vPg7nMn0tivbNVjNy1yL4GvDSIZuZx7UpU2HeVGNe9QjN/quEd+YLRFeKEBLBw619VqUiNg==}
 
+  '@capacitor/filesystem@7.1.8':
+    resolution: {integrity: sha512-Qpw/2SE4/CzqAUvGgSM9hw/uXQ5qoOaF4wxbToXwpAaKPS+tzletS1h5ti3jjLmGcqizTs2sEXMtcsARW/Ceew==}
+    peerDependencies:
+      '@capacitor/core': '>=7.0.0'
+
   '@capacitor/haptics@7.0.2':
     resolution: {integrity: sha512-vqfeEM6s2zMgLjpITCTUIy7P/hadq/Gr5E/RClFgMJPB41Y5FsqOKD+j85/uwh8N2cf/aWaPeXUmjnTzJbEB2g==}
     peerDependencies:
@@ -594,10 +605,18 @@ packages:
     peerDependencies:
       '@capacitor/core': '>=7.0.0'
 
+  '@capacitor/synapse@1.0.4':
+    resolution: {integrity: sha512-/C1FUo8/OkKuAT4nCIu/34ny9siNHr9qtFezu4kxm6GY1wNFxrCFWjfYx5C1tUhVGz3fxBABegupkpjXvjCHrw==}
+
   '@capgo/capacitor-social-login@8.2.5':
     resolution: {integrity: sha512-0ulzswVTnUtLDoEXOxMvRmKWQ5FPBdlGVfnaS8c3FtczZlzHowFYZ1WJXx8bBkKU3szmEmIWpkUxil34Xeb3iQ==}
     peerDependencies:
       '@capacitor/core': '>=8.0.0'
+
+  '@capgo/native-audio@7.11.2':
+    resolution: {integrity: sha512-/V4NIeo9BN5o5QEYQkPpeyZWQ/XKxBV8xNweMepviD7nugePKKCFa9Iy5ETJCybh/sV7mnbk6bMNcKcp+ohNPQ==}
+    peerDependencies:
+      '@capacitor/core': '>=7.0.0'
 
   '@cloudflare/kv-asset-handler@0.4.0':
     resolution: {integrity: sha512-+tv3z+SPp+gqTIcImN9o0hqE9xyfQjI1XD9pL6NuKjua9B1y7mNYv0S9cP+QEbA4ppVgGZEmKOvHX5G5Ei1CVA==}
@@ -9915,6 +9934,11 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
+  '@capacitor/filesystem@7.1.8(@capacitor/core@7.4.3)':
+    dependencies:
+      '@capacitor/core': 7.4.3
+      '@capacitor/synapse': 1.0.4
+
   '@capacitor/haptics@7.0.2(@capacitor/core@7.4.3)':
     dependencies:
       '@capacitor/core': 7.4.3
@@ -9947,7 +9971,13 @@ snapshots:
     dependencies:
       '@capacitor/core': 7.4.3
 
+  '@capacitor/synapse@1.0.4': {}
+
   '@capgo/capacitor-social-login@8.2.5(@capacitor/core@7.4.3)':
+    dependencies:
+      '@capacitor/core': 7.4.3
+
+  '@capgo/native-audio@7.11.2(@capacitor/core@7.4.3)':
     dependencies:
       '@capacitor/core': 7.4.3
 

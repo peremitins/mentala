@@ -11,6 +11,44 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     private var audioSessionObserversInstalled = false
+    // Preferences на iOS хранит ключи с префиксом "CapacitorStorage."
+    // (см. @capacitor/preferences). Без этого JS-слой не прочитает payload.
+    private let pushLaunchPayloadKey = "CapacitorStorage.mentai.push.launchPayload"
+    private let pushSignalKeys: Set<String> = [
+        "google.message_id",
+        "deepLink",
+        "navigation",
+        "navType",
+        "navId",
+        "action",
+        "trackId",
+        "practiceId",
+        "slotId"
+    ]
+
+    private func persistPushLaunchPayload(_ userInfo: [AnyHashable: Any], reason: String) {
+        var payload: [String: Any] = [:]
+        for (key, value) in userInfo {
+            let normalizedKey = String(describing: key)
+            payload[normalizedKey] = String(describing: value)
+        }
+
+        let hasPushSignal = payload.keys.contains { pushSignalKeys.contains($0) }
+        if !hasPushSignal { return }
+
+        payload["createdAt"] = Int(Date().timeIntervalSince1970 * 1000)
+
+        guard JSONSerialization.isValidJSONObject(payload),
+              let data = try? JSONSerialization.data(withJSONObject: payload, options: []),
+              let raw = String(data: data, encoding: .utf8) else {
+            return
+        }
+
+        UserDefaults.standard.set(raw, forKey: pushLaunchPayloadKey)
+        #if DEBUG
+        print("[PushLaunch] persisted payload (\(reason))")
+        #endif
+    }
 
     /**
      * Фиксируем iOS audio session в playback-режиме, чтобы WebAudio
@@ -109,6 +147,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // Настраиваем аудиосессию сразу при запуске приложения.
         configurePlaybackAudioSession(reason: "didFinishLaunching")
         installAudioSessionObserversIfNeeded()
+        if let remotePayload = launchOptions?[.remoteNotification] as? [AnyHashable: Any] {
+            persistPushLaunchPayload(remotePayload, reason: "launchOptions")
+        }
         return true
     }
 
@@ -174,6 +215,15 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // Feel free to add additional processing here, but if you want the App API to support
         // tracking app url opens, make sure to keep this call
         return ApplicationDelegateProxy.shared.application(application, continue: userActivity, restorationHandler: restorationHandler)
+    }
+
+    func application(_ application: UIApplication,
+                     didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+                     fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+        persistPushLaunchPayload(userInfo, reason: "didReceiveRemoteNotification")
+        _ = ApplicationDelegateProxy.shared.application(application,
+                                                        didReceiveRemoteNotification: userInfo,
+                                                        fetchCompletionHandler: completionHandler)
     }
 
 }
