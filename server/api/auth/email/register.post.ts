@@ -150,22 +150,22 @@ export default defineEventHandler(async (event) => {
   const created = await db
     .insert(users)
     .values({
-    name: body.name ?? null,
-    email,
-    emailVerifiedAt: null,
-    passwordHash: null,
-    locale: body.locale ?? null,
-    timezone: timezone || 'Europe/Moscow',
-    // Фиксируем согласия на документы и маркетинг
-    termsAcceptedAt: now,
-    privacyAcceptedAt: now,
-    termsVersion: LEGAL_TERMS_VERSION,
-    privacyVersion: LEGAL_PRIVACY_VERSION,
-    acceptanceSource: acceptanceSource,
-    acceptanceIp: ip,
-    acceptanceUserAgent: userAgent,
-    marketingConsentAt: marketingConsentAt,
-    marketingConsentSource: marketingConsentAt ? acceptanceSource : null,
+      name: body.name ?? null,
+      email,
+      emailVerifiedAt: null,
+      passwordHash: null,
+      locale: body.locale ?? null,
+      timezone: timezone || 'Europe/Moscow',
+      // Фиксируем согласия на документы и маркетинг
+      termsAcceptedAt: now,
+      privacyAcceptedAt: now,
+      termsVersion: LEGAL_TERMS_VERSION,
+      privacyVersion: LEGAL_PRIVACY_VERSION,
+      acceptanceSource: acceptanceSource,
+      acceptanceIp: ip,
+      acceptanceUserAgent: userAgent,
+      marketingConsentAt: marketingConsentAt,
+      marketingConsentSource: marketingConsentAt ? acceptanceSource : null,
     })
     .returning({ id: users.id, email: users.email });
 

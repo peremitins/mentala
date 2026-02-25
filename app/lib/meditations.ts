@@ -13,12 +13,8 @@ export const THERAPY_TO_MEDITATION_TOPIC_MAP: Partial<
   Record<TherapyTopicKey, MeditationTopicKey>
 > = {
   anxiety: 'anxiety',
-  sos: 'anxiety',
   stress: 'stress',
   anger: 'stress',
-  mood: 'sleep',
-  grief: 'sleep',
-  perfectionism: 'stress',
 };
 
 export function mapTherapyToMeditationTopic(

@@ -64,7 +64,7 @@
       </StateBlock>
     </div>
 
-    <div v-else class="flex-1 overflow-y-auto space-y-4">
+    <div v-else class="flex-1 overflow-y-auto space-y-2">
       <div class="glass-deep p-5" :class="heroGradient">
         <div class="space-y-3">
           <p class="text-sm text-foreground">
@@ -73,7 +73,7 @@
         </div>
 
         <Button
-          class="relative mt-5 w-full justify-center !py-3 text-base font-semibold"
+          class="relative mt-3 w-full justify-center !py-3 text-base font-semibold"
           variant="outline"
           size="lg"
           :loading="loaders.isPageLoading"
@@ -97,7 +97,7 @@
           @click="goToMeditations"
         >
           <IconLeaf class="mr-2 h-5 w-5" />
-          Попробовать практику
+          Открыть медитацию
           <span
             v-if="!meditationsAccess.available"
             class="absolute right-3 inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/20 bg-black/35 text-[10px] leading-none"

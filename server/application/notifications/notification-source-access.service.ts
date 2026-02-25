@@ -1,14 +1,12 @@
-import { and, desc, eq, gt, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/server/infrastructure/db/client';
-import {
-  notificationPreferences,
-  userSubscriptions,
-} from '@/server/infrastructure/db/schema';
+import { notificationPreferences } from '@/server/infrastructure/db/schema';
 import { hasAiNotificationsAccess } from '@/server/application/subscriptions/access.service';
 import {
   getBillingSnapshot,
   getFeatureAccessOrDefault,
 } from '@/server/application/subscriptions/entitlements.service';
+import { getCurrentActiveSubscription } from '@/server/application/subscriptions/current-subscription.service';
 
 type SubscriptionRef = { planId: string } | null;
 
@@ -38,23 +36,11 @@ function normalizeTrialEndedAt(
 async function getCurrentSubscription(
   userId: number
 ): Promise<SubscriptionRef> {
-  const now = new Date();
-  const rows = await db
-    .select({
-      planId: userSubscriptions.planId,
-    })
-    .from(userSubscriptions)
-    .where(
-      and(
-        eq(userSubscriptions.userId, userId),
-        eq(userSubscriptions.paymentStatus, 'active'),
-        gt(userSubscriptions.endDate, now)
-      )
-    )
-    .orderBy(desc(userSubscriptions.createdAt))
-    .limit(1);
-
-  return rows[0] ? { planId: rows[0].planId } : null;
+  const active = await getCurrentActiveSubscription({
+    userId,
+    now: new Date(),
+  });
+  return active ? { planId: active.planId } : null;
 }
 
 /**

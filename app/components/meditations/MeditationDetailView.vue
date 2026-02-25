@@ -29,6 +29,7 @@
           <div
             class="relative h-2 w-full cursor-pointer overflow-hidden rounded-full border border-white/75"
             ref="progressRef"
+            @pointerdown="onProgressPointerDown"
             @click="onProgressClick"
           >
             <div
@@ -428,12 +429,19 @@ function playPrev() {
 }
 
 function onProgressClick(event: MouseEvent) {
+  seekFromClientX(event.clientX);
+}
+
+function onProgressPointerDown(event: PointerEvent) {
+  // Обрабатываем тач/стилус сразу по pointerdown; для мыши оставляем только левую кнопку.
+  if (event.pointerType === 'mouse' && event.button !== 0) return;
+  seekFromClientX(event.clientX);
+}
+
+function seekFromClientX(clientX: number) {
   if (!isActive.value || !progressRef.value || !displayDuration.value) return;
   const rect = progressRef.value.getBoundingClientRect();
-  const percent = Math.min(
-    Math.max(0, (event.clientX - rect.left) / rect.width),
-    1
-  );
+  const percent = Math.min(Math.max(0, (clientX - rect.left) / rect.width), 1);
   seekTo(displayDuration.value * percent);
 }
 

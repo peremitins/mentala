@@ -1,86 +1,111 @@
-# Техническое задание: Биллинг (актуализировано под текущую кодовую базу)
+# Техническое задание: Биллинг Mentala (финальная консолидация)
 
-**Дата:** 11 февраля 2026 г.  
-**Версия:** 4.2 (Aligned with current implementation)  
-**Статус:** Актуально для разработки и ревью  
-**Охват (факт):** Web checkout через YooKassa для всех платформ (Web/iOS/Android)  
-**Охват (план):** Добавление real checkout в YooKassa, затем Stripe + IAP verify
-
----
-
-## 1. Зачем нужна актуализация
-
-Предыдущая версия документа описывала гибридный сценарий (YooKassa SDK + Apple IAP + Google Play Billing + iOS External Link), но в текущем репозитории это **не реализовано как рабочий прод-флоу**.
-
-Этот документ фиксирует:
-
-1. Что уже работает в коде.
-2. Какие инварианты и контракты нельзя ломать.
-3. Какие шаги нужны для перехода к целевой гибридной модели без рассинхронизации архитектуры.
+**Дата:** 19 февраля 2026 г.  
+**Версия:** 5.0  
+**Статус:** Финальное ТЗ для реализации YooKassa в текущем репозитории  
+**Приоритет источников:** при конфликте решений первичен `.docs/billing_add.md`
 
 ---
 
-## 2. Текущее состояние (as-is)
+## 0. Правило приоритета и как читать документ
 
-### 2.1 Канал оплаты
+Этот документ объединяет:
 
-- Оплата и смена тарифа выполняются через `YooKassa` (серверный checkout flow).
-- На iOS/Android сейчас нет отдельного нативного платежного провайдера в runtime-логике.
-- Мобильные клиенты работают с теми же API подписок, что и web.
+1. Текущее состояние кода (`as-is`) в этом репозитории.
+2. Целевые решения из `.docs/billing_add.md` (`to-be`) как обязательный приоритет.
 
-### 2.2 Источник истины для доступа
+Если есть пересечение и противоречие, применяется решение из `.docs/billing_add.md`.
 
-- Доступ определяется **только сервером** по таблицам подписок и событий.
-- Клиент не вычисляет entitlement локально.
-- Статус подписки: `active | pending | expired | canceled`.
-- Семантика статусов в текущей модели:
-  - `pending` — ожидание оплаты (checkout создан, финализации еще нет);
-  - `active` — доступ активен до `endDate`;
-  - `canceled` — отменен именно pending-checkout (а не "доступ немедленно отключен");
-  - `expired` — период закончился или подписка вытеснена новой активной.
-- Сценарий "активна до конца периода, но автопродление выключено" в `as-is` выражается как `paymentStatus=active` + `autoRenew=false`.
-- `to-be` (обязательное расширение): оставить `paymentStatus` как доменный статус доступа (`active | pending | expired | canceled`) и добавить отдельное операционное поле `checkoutStatus`.
-- `manual_review` фиксируется именно в `checkoutStatus`, чтобы не смешивать доступ (`paymentStatus`) и инциденты обработки оплаты.
+Ключевые приоритетные решения из `.docs/billing_add.md`, обязательные для финальной архитектуры:
 
-### 2.3 Идемпотентность и конкурентность
-
-- `POST /api/subscriptions/start-checkout` требует заголовок `Idempotency-Key` (8..128).
-- Идемпотентность хранится в `idempotency_keys` (ключ: `user_id + route + key`).
-- TTL ключа по умолчанию: 24 часа (`DEFAULT_IDEMPOTENCY_TTL_MS`).
-- Для повторов с тем же ключом:
-  - если команда еще выполняется — возвращается `in_progress` (409),
-  - если уже завершена — возвращается тот же сохраненный `response_json`.
-- Просроченные записи очищаются при повторном обращении с тем же ключом (lazy cleanup).
-- Webhook-защита от дублей: таблица `payments` (PK = `payment.id` YooKassa) + `ON CONFLICT DO NOTHING`.
-- Hardening to-be (обязательный): если тот же `Idempotency-Key` приходит с другим payload (`planId`/`billingPeriod`), сервер должен вернуть `409` и не переиспользовать сохраненный результат.
+1. **Web + Android:** оплата через **YooKassa Checkout Widget** внутри интерфейса.
+2. **iOS:** оплата только через **внешний браузер** (out-of-app flow), без WebView внутри приложения.
+3. **Переход iOS -> Web:** пользователь должен попадать на web-оплату **без повторного логина**.
 
 ---
 
-## 3. Актуальный API-контракт
+## 1. Что реально есть в коде сейчас (`as-is`)
 
-### 3.1 Клиентские endpoints подписок
+### 1.1 Подписочный контур
 
-- `GET /api/subscriptions/plans` — список тарифов.
-- `GET /api/subscriptions/current` — текущая подписка пользователя.
-- `GET /api/subscriptions/usage` — использование минут и лимитов.
-- `POST /api/subscriptions/start-checkout` — запуск checkout.
-- `POST /api/subscriptions/cancel` — **soft cancel**: отключение `autoRenew` для активной подписки на нашей стороне.
+1. Используются тарифы `basic/pro/premium`, статусы `active/pending/expired/canceled`, trial и entitlement-слой.
+2. Команда оформления: `POST /api/subscriptions/start-checkout`.
+3. Старт checkout требует `Idempotency-Key`, ответ кэшируется в `idempotency_keys`.
+4. Сейчас для `toPay > 0` возвращается **mock `paymentUrl`**, без реального `POST /v3/payments`.
+5. Для `toPay === 0` подписка активируется сразу внутри транзакции.
 
-`to-be` для `GET /api/subscriptions/current`:
+### 1.2 YooKassa webhook
 
-- добавить явный флаг `cancelAtPeriodEnd` (или эквивалент), чтобы фронт не вычислял это через комбинацию `paymentStatus + autoRenew`.
-- вернуть `checkoutStatus`, чтобы UI и саппорт явно видели кейсы `manual_review`/`in_progress` без эвристик.
+1. Используется endpoint `POST /api/payments/yookassa/webhook`.
+2. Входящий webhook верифицируется через `GET /v3/payments/{payment_id}`.
+3. Идемпотентность webhook обеспечивается таблицей `payments` (PK=`payment.id`) + `ON CONFLICT DO NOTHING`.
+4. Выполняются проверки суммы/валюты и переход `pending -> active`.
 
-`to-be` для backoffice операций:
+### 1.3 UI и платформы
 
-- `POST /api/admin/subscriptions/:subscriptionId/manual-review/approve`
-- `POST /api/admin/subscriptions/:subscriptionId/manual-review/reject`
+1. Экран `/subscription` общий для платформ, без платформенной маршрутизации оплаты.
+2. В `settings` есть переход «Управлять подпиской» на внутренний `/subscription`.
+3. Composable `usePlatform` уже существует (`web/ios/android`).
+4. Специальный iOS external purchase flow сейчас **не реализован**.
 
-### 3.2 Webhook endpoint YooKassa
+---
 
-- `POST /api/payments/yookassa/webhook`
+## 2. Финальная целевая модель (обязательная, с приоритетом `billing_add`)
 
-### 3.3 Контракт `start-checkout`
+### 2.1 Платформенная матрица
+
+| Платформа           | Где платим                           | Технический канал                               | Обязательное правило                                |
+| ------------------- | ------------------------------------ | ----------------------------------------------- | --------------------------------------------------- |
+| Web                 | Внутри приложения (страница/модалка) | YooKassa Checkout Widget (`checkout-widget.js`) | Использовать `confirmation_token`                   |
+| Android (Capacitor) | Внутри приложения                    | YooKassa Checkout Widget                        | Допускается WebView-контур приложения               |
+| iOS (Capacitor)     | **Внешний системный браузер**        | Redirect на web-страницу оплаты                 | **Запрещено** проводить оплату в WebView приложения |
+
+### 2.2 Политика iOS (App Store-safe)
+
+1. В iOS приложении кнопка должна вести на внешний браузер и называться нейтрально: `Управление подпиской`.
+2. В iOS клиенте нельзя строить flow «Купить за N ₽» внутри приложения для цифрового контента без IAP.
+3. На iOS-экранах приложения не показывать агрессивный pricing CTA для внешней покупки.
+4. Оплата и изменение тарифа на iOS выполняются на web-странице Mentala во внешнем браузере.
+
+---
+
+## 3. Финальный E2E-флоу
+
+### 3.1 Web/Android (Widget flow)
+
+1. Клиент отправляет `POST /api/subscriptions/start-checkout` с `planId`, `billingPeriod`, `Idempotency-Key`, `X-Platform`.
+2. Сервер считает `toPay` с учетом `billingCredit`, создает/обновляет `pending` подписку.
+3. Если `toPay === 0`, сервер сразу активирует подписку (`status=active`).
+4. Если `toPay > 0`, сервер создает платеж в YooKassa с `confirmation.type=embedded`.
+5. Сервер возвращает `confirmation_token` + `paymentId`.
+6. Клиент открывает YooKassa Widget в модалке (`#payment-form`).
+7. Доступ активируется только после webhook verify на сервере.
+
+### 3.2 iOS (External browser flow)
+
+1. Пользователь в приложении нажимает `Управление подпиской`.
+2. Приложение запрашивает у backend одноразовый токен web-авторизации.
+3. Открывается внешний системный браузер по URL Mentala с этим токеном.
+4. Web backend валидирует токен, создает web cookie-сессию (`mentala.sid`) и редиректит на страницу оплаты/подписки.
+5. Дальше checkout идет на web-странице Mentala; для оплаты используется YooKassa (widget/redirect по реализации web-экрана).
+6. Пользователь не должен логиниться повторно.
+
+### 3.3 Возврат пользователя в приложение после web-оплаты (обязательно)
+
+1. На web success-странице после оплаты должна быть явная кнопка `Вернуться в приложение`.
+2. Кнопка должна использовать deep link (`mentala://payment-success?subscriptionId=...`) или universal link.
+3. В мобильном приложении обрабатывается входящий URL через `App.addListener('appUrlOpen', ...)`.
+4. После возврата в приложение запускается принудительное обновление подписки (`GET /api/subscriptions/current` + refresh entitlements).
+5. Если статус еще `pending`, UI должен показать состояние `Оплата обрабатывается`, а не ошибку.
+
+---
+
+## 4. API-контракты (финальные)
+
+### 4.1 `POST /api/subscriptions/start-checkout` (основная команда)
+
+`start-checkout` остается главным endpoint текущего проекта.  
+В терминах `.docs/billing_add.md` шаг `create payment` выполняется внутри этого endpoint (или вынесенным сервисом без изменения внешнего контракта).
 
 **Request body**
 
@@ -93,294 +118,280 @@
 
 **Headers**
 
-- `Idempotency-Key` — обязателен.
-- `X-Platform` — опционально (`web | ios | android`), для аналитики `sourcePlatform`.
+1. `Idempotency-Key` (обязателен).
+2. `X-Platform` (`web|ios|android`) для платформенного платежного сценария.
 
-**Response (текущее поведение)**
+**Response (единый формат)**
 
 ```json
 {
-  "paymentUrl": "https://... или null",
   "subscriptionId": 123,
   "amount": 649,
   "toPay": 649,
   "creditApplied": 0,
   "creditGranted": 0,
-  "status": "pending"
+  "status": "pending",
+  "paymentProvider": "yookassa",
+  "paymentId": "2d4f...",
+  "paymentMode": "widget",
+  "confirmationToken": "ct_xxx",
+  "paymentUrl": null
 }
 ```
 
-Примечание: сейчас `paymentUrl` формируется как внутренний URL приложения (mock-flow), интеграция реального `POST /v3/payments` в YooKassa отмечена как TODO в коде.
+Правила ответа:
 
-### 3.4 Критично про `paymentUrl` в `as-is`
+1. `toPay === 0` -> `status=active`, `paymentMode=none`, `paymentId/confirmationToken/paymentUrl = null`.
+2. `web/android` + `toPay > 0` -> `paymentMode=widget`, обязателен `confirmationToken`.
+3. `ios` + `toPay > 0` -> `paymentMode=redirect`, обязателен `paymentUrl` (URL на web checkout во внешнем браузере).
+4. `paymentUrl` не является подтверждением оплаты.
 
-- Пока реальный `POST /v3/payments` не внедрен, `paymentUrl` — технический заглушечный артефакт.
-- `paymentUrl` нельзя использовать как подтверждение факта оплаты и нельзя использовать для расчета доступа.
-- Источник истины по оплате — только серверная обработка webhook после verify через `GET /v3/payments/{payment_id}` и фиксация в `payments`.
-- После внедрения real checkout дополнительная связь с подпиской должна идти через `yookassa_payment_id`.
+### 4.2 `POST /api/payments/yookassa/webhook` (каноничный endpoint)
 
----
+1. Принимает уведомления YooKassa.
+2. Проверяет платеж через YooKassa API (`GET /v3/payments/{payment_id}`).
+3. Для `payment.succeeded`:
+   - валидирует сумму/валюту;
+   - применяет идемпотентность;
+   - активирует `pending` подписку;
+   - начисляет/возвращает кредиты по правилам.
+4. Для `payment.canceled`:
+   - переводит подписку в `canceled`;
+   - возвращает зарезервированный кредит.
+5. На текущем этапе верификация webhook выполняется через `GET /v3/payments/{payment_id}` + IP allowlist (мягкая проверка).
+6. `WEBHOOK_SIGNING_SECRET` в текущий scope **не входит** (не усложняем контур без необходимости).
 
-## 4. Модель данных и инварианты
+Совместимость с `.docs/billing_add.md`:
 
-### 4.1 Основные таблицы
+1. Эндпоинт из add-документа `POST /api/payments/webhook` трактуется как логический синоним.
+2. В кодовой базе каноничным остается `POST /api/payments/yookassa/webhook`.
 
-- `subscription_plans` — тарифы (`basic`, `pro`, `premium`), лимиты и фичи.
-- `user_subscriptions` — период, статус, billing period, checkout-поля, `sourcePlatform`.
-- `subscription_events` — аудит действий (`checkout_started`, `purchase_success`, `subscription_canceled` и т.д.).
-- `payments` — idempotency webhook и факт обработки платежа.
-- `idempotency_keys` — идемпотентность команд.
+### 4.3 Новый контур автоавторизации iOS -> web (обязательно)
 
-### 4.2 Checkout-поля в `user_subscriptions`
+#### 4.3.1 `POST /api/auth/external-session/create`
 
-Для безопасной финализации webhook используются:
+Назначение: выдать **одноразовый короткоживущий токен** перехода из мобильной сессии в web cookie-сессию.
 
-- `checkout_amount`
-- `checkout_currency`
-- `billing_credit_applied`
-- `billing_credit_granted`
-- `yookassa_payment_id`
-- `to-be`: `checkout_status` (`in_progress | manual_review | closed`)
+Минимальные требования:
 
-### 4.3 Критичные инварианты
+1. Авторизация обязательна (действующая мобильная сессия).
+2. TTL токена: 60-120 секунд.
+3. Токен одноразовый (`consumed_at`), повторное использование запрещено.
+4. В URL передается только transfer-token, не `X-Session-Token`.
 
-1. Активация `pending -> active` только после серверной валидации платежа.
-2. Валюта и сумма webhook обязаны совпасть с ожидаемыми `checkout_*`.
-3. Дубли webhook не должны менять состояние повторно.
-4. Один платеж (`payment.id`) может активировать подписку только один раз.
-5. Повторный `succeeded` webhook не должен повторно начислять `billingCreditGranted`.
-6. Одновременно активной остается только одна подписка пользователя (остальные переводятся в `expired`).
-7. В `as-is` гарантия "одна активная подписка" обеспечивается транзакционной логикой сервиса; в `to-be` рекомендуется дополнительно усилить это ограничением БД (частичный unique index) или явной блокировкой строки пользователя/подписки.
-8. `toPay === 0` (zero-pay activation) выполняется строго в одной транзакции и оставляет проверяемый audit trail.
-9. Повторный `start-checkout` с новым `Idempotency-Key` не должен позволять повторно активировать платный план без достаточного доступного кредита.
-10. `to-be` (Phase 1): если у pending-подписки уже зафиксирован `yookassa_payment_id`, webhook с другим `payment.id` не имеет права её финализировать.
-11. `to-be` (Phase 1): `webhook succeeded` финализирует только pending-подписку со **совпадающим** `yookassa_payment_id`.
-12. `to-be` (Phase 1): у пользователя может быть только одна актуальная pending-подписка, связанная с активным процессом оплаты.
-13. `to-be` (Phase 1): `yookassa_payment_id` для одной pending-подписки является неизменяемым (immutable).
-14. `to-be` (Phase 1): при повторном `start-checkout` и существующей pending-подписке с `yookassa_payment_id` сервер не создает новый платеж, а возвращает существующий `confirmation_url` (или требует явной отмены pending перед новым checkout).
-15. `to-be`: аномальные кейсы verify/webhook (например, `amount/currency/payment_id` mismatch) переводятся в формальный `checkoutStatus=manual_review` и не оставляются только в логах.
-16. Reconciliation запускается только для `pending`, у которых уже есть `yookassa_payment_id`; без `payment_id` verify-восстановление невозможно.
-17. Для `pending` фиксируется верхний срок жизни (`pending_ttl_hours`, default: 24 часа); записи старше TTL автоматически закрываются с возвратом зарезервированного кредита и audit event.
+#### 4.3.2 `GET /auth/external-session/consume?token=...`
 
----
+Назначение: на web-стороне поглотить токен, создать cookie-сессию и редиректить на `/subscription` или `/billing`.
 
-## 5. Checkout flow (as-is)
+Минимальные требования:
 
-1. Клиент вызывает `POST /api/subscriptions/start-checkout` с `Idempotency-Key`.
-2. Сервер проверяет пользователя, план, период и текущую подписку.
-3. Сервер рассчитывает `toPay`, `creditApplied`, `creditGranted`.
-4. Сервер создает/обновляет `pending` подписку в транзакции.
-5. При `creditApplied > 0` кредит резервируется сразу.
-6. Логируется `subscription_events.checkout_started`.
-7. Если `toPay === 0`, подписка финализируется сразу (`status=active`) без webhook.
-8. Если `toPay > 0`, возвращается `pending` с `paymentUrl` (пока mock).
-
-### 5.1 Zero-pay activation (критичный путь)
-
-Обязательные правила:
-
-- Резерв/перерасчет кредита, активация подписки и запись события выполняются в одной транзакции.
-- Для аудита используется `subscription_events.purchase_success` с `method=internal_credit`.
-- `to-be` (после ввода `checkoutStatus`): при zero-pay финализации `checkoutStatus` переводится в `closed`.
-- `to-be`: в metadata события добавить явную ссылку на источник кредита/основание начисления, чтобы упростить антифрод-разбор.
+1. Токен валидируется, помечается как использованный в одной транзакции.
+2. После успешного consume устанавливаются `mentala.sid` и CSRF-cookie.
+3. Выполняется редирект на целевую страницу оплаты.
+4. После успешного consume токен повторно использовать нельзя (hard fail `401/403`).
 
 ---
 
-## 6. Webhook flow YooKassa (as-is)
+## 5. Модель данных и миграции
 
-1. Входящее уведомление приходит в `POST /api/payments/yookassa/webhook`.
-2. IP allowlist используется как мягкая проверка (не блокирующая).
-3. Подлинность подтверждается через `GET https://api.yookassa.ru/v3/payments/{payment_id}` (Basic Auth `shopId:secretKey`).
-4. Проверяется, что webhook можно связать с `user_subscriptions`.
-5. Для `succeeded`:
-   - валидация суммы/валюты;
-   - запись в `payments` (идемпотентность);
-   - перевод подписки `pending -> active`;
-   - начисление `billingCreditGranted` (если есть);
-   - завершение trial для платных планов.
-6. Для `canceled`:
-   - запись в `payments`;
-   - перевод подписки `pending -> canceled`;
-   - возврат зарезервированного `billingCreditApplied`.
+### 5.1 Уже используемые таблицы
 
-### 6.1 Строгое сопоставление платежа и подписки (to-be, Phase 1)
+1. `subscription_plans`
+2. `user_subscriptions`
+3. `subscription_events`
+4. `payments`
+5. `idempotency_keys`
 
-- При создании платежа в YooKassa обязательно передавать `subscriptionId` (или `orderId`) в `metadata`.
-- Webhook должен однозначно маппить платеж на pending-подписку того же пользователя.
-- Если metadata отсутствует/неконсистентна, финализация запрещена.
-- Если у pending-подписки уже установлен `yookassa_payment_id`, допускается финализация **только** при точном совпадении с `payment.id` из webhook.
-- Если `payment.id` не совпал с уже сохраненным `yookassa_payment_id`, подписка не финализируется; кейс логируется как security/audit incident.
-- Дополнительно к `amount/currency` обязательно проверяются:
-  - финальный статус платежа (`succeeded`/`paid=true`),
-  - принадлежность платежа нашему мерчанту (через verify-запрос с нашим `shopId`/`secretKey`).
+### 5.2 Обязательные поля/инварианты checkout
 
-### 6.2 Reconciliation для потерянного/задержанного webhook (to-be)
+1. `user_subscriptions.checkout_amount`
+2. `user_subscriptions.checkout_currency`
+3. `user_subscriptions.billing_credit_applied`
+4. `user_subscriptions.billing_credit_granted`
+5. `user_subscriptions.yookassa_payment_id`
 
-Обязательный механизм восстановления состояния:
+### 5.3 Новое хранилище для iOS external auth (обязательно)
 
-1. Если подписка находится в `pending` дольше порога `N` минут, сервер инициирует reconciliation:
-   - фоновая job (предпочтительно),
-   - и/или защищенный endpoint "Я оплатил", который запускает **только серверную** verify-проверку.
-   - порог `N` — конфигурируемый, рекомендуемый диапазон 15-30 минут, значение по умолчанию: 15 минут.
-   - reconciliation применяется только к `pending` с заполненным `yookassa_payment_id`.
-2. Источник истины reconciliation — `GET /v3/payments/{payment_id}`.
-3. Если у `pending` отсутствует `yookassa_payment_id`, verify/reconciliation не выполняется:
-   - в dev/mocked сценариях такая запись считается неоплачиваемым mock-checkout,
-   - в production запись закрывается по `pending_ttl_hours` политике (см. 6.5), чтобы не висеть бесконечно.
-4. По результату verify:
-   - `succeeded` -> финализация подписки,
-   - `canceled` -> перевод в `canceled` + возврат зарезервированного кредита,
-   - неопределенный/промежуточный статус -> остаемся в `pending`, повторяем позже по политике ретраев.
-5. Клиенту в это время отдается состояние "Оплата обрабатывается", а не фатальная ошибка.
+Добавить таблицу одноразовых токенов перехода (например `external_auth_tokens`):
 
-### 6.3 Обязательная операционная модель `checkoutStatus` / `manual_review` (to-be)
+1. `id`
+2. `user_id`
+3. `token_hash` (храним только hash)
+4. `expires_at`
+5. `consumed_at`
+6. `created_at`
+7. `ip/user_agent` для аудита
 
-- Выбранная модель: `paymentStatus` не расширяется; операционные кейсы живут в отдельном поле `checkoutStatus`.
-- Минимальный `checkoutStatus`:
-  - `in_progress` — checkout создан, ждем webhook/reconciliation;
-  - `manual_review` — обнаружен спорный кейс, требуется ручное решение;
-  - `closed` — операционный кейс закрыт (успехом или отказом).
-- Значение по умолчанию при создании pending-подписки: `checkoutStatus=in_progress` (не `NULL`).
-- Нормальные переходы:
-  - `webhook succeeded` -> `paymentStatus=active`, `checkoutStatus=closed`;
-  - `webhook canceled` -> `paymentStatus=canceled`, `checkoutStatus=closed`;
-  - `zero-pay` финализация -> `paymentStatus=active`, `checkoutStatus=closed`.
-- Минимальные триггеры перевода в `checkoutStatus=manual_review`:
-  - mismatch `amount/currency`,
-  - несовпадение `payment.id` и уже зафиксированного `yookassa_payment_id`,
-  - неконсистентная привязка metadata/подписки.
-- Кейс в `manual_review`:
-  - не активирует доступ автоматически,
-  - виден в API/админке для саппорта,
-  - требует явного операционного решения через админ-операции:
-    - `approve_manual_review(subscriptionId)` -> переводит в терминальный доступный статус (`paymentStatus=active`), `checkoutStatus=closed`;
-    - `reject_manual_review(subscriptionId)` -> переводит в терминальный недоступный статус (`paymentStatus=canceled` или `expired` по правилам продукта), `checkoutStatus=closed`.
-- Оба действия:
-  - обязаны быть идемпотентными,
-  - обязаны писать audit event.
+### 5.4 Hardening-поле (следующий этап)
 
-### 6.4 Антигонки и replay-защита
+Добавить `user_subscriptions.checkout_status`:
 
-- Обязательное правило: "один `payment.id` -> одна финализация".
-- Конкурентные или повторные webhook не должны:
-  - повторно активировать подписку,
-  - повторно начислять кредит,
-  - менять `expire_at`/состояние уже активированной подписки.
-- Текущее ядро защиты: `payments` (PK), `ON CONFLICT DO NOTHING`, conditional update `pending -> active`.
-- Hardening to-be: добавить явную блокировку сущности подписки/пользователя в транзакции webhook (например, `SELECT ... FOR UPDATE`) для более прозрачной защиты от race-condition при высоком параллелизме.
+1. `in_progress`
+2. `manual_review`
+3. `closed`
 
-### 6.5 TTL pending и автоматическое закрытие "висяков" (to-be)
+С `NOT NULL DEFAULT 'in_progress'` и backfill существующих записей.
 
-- Вводится параметр `pending_ttl_hours` (значение по умолчанию: 24 часа).
-- Плановый cron/job обрабатывает `pending` старше TTL и переводит их в терминальный статус `canceled`.
-- При автозакрытии обязательно:
-  - вернуть зарезервированный кредит (`billing_credit_applied`), если резерв был выставлен;
-  - записать audit event (например, `subscription_pending_expired` с причиной `pending_ttl_exceeded`).
-- Правило действует как safety-net для потерянных webhook, mock/dev-checkout без `payment_id` и иных "зависших" случаев.
+### 5.5 Правило миграций в проекте
+
+При изменении схемы:
+
+1. Правим `server/infrastructure/db/schema.ts`.
+2. Выполняем `pnpm db:generate`.
+3. Выполняем `pnpm db:migrate`.
 
 ---
 
-## 7. Что удалено из текущего scope
+## 6. Критичные инварианты безопасности и консистентности
 
-Следующие элементы **не считаются реализованными в текущей кодовой базе** и не должны описываться как "готово":
-
-- `POST /api/v1/config/billing` с multi-signal region confidence.
-- `POST /api/v1/billing/yookassa/init` (нативная токенизация SDK).
-- Runtime-маршрутизация провайдеров `apple_iap / google_play / ios_external`.
-- iOS External Link entitlement как активный рабочий флоу.
-- Серверный merge entitlement из нескольких провайдеров (`max(expire_at)` между стором и YooKassa).
-
----
-
-## 8. Целевой roadmap (to-be, без конфликта с текущим кодом)
-
-### Phase 1 — Завершить YooKassa checkout
-
-1. В `start-checkout` заменить mock `paymentUrl` на реальный вызов `POST /v3/payments`.
-2. Сохранять `payment.id` в `user_subscriptions.yookassa_payment_id` в момент создания платежа.
-3. Возвращать `confirmation.confirmation_url` клиенту.
-4. Явно запретить бизнес-логику, основанную на `paymentUrl` (все решения только по webhook/verify).
-5. При создании платежа передавать `subscriptionId/orderId` в metadata для однозначного webhook-binding.
-6. Жестко валидировать связку `pending subscription <-> yookassa_payment_id <-> webhook payment.id`.
-7. Гарантировать single-pending правило: без явной отмены нельзя создать второй активный checkout-процесс.
-8. Граница этапов: `checkoutStatus` не входит в scope Phase 1 и внедряется в Phase 1.5.
-
-**Acceptance criteria (обязательно для закрытия Phase 1):**
-
-- `start-checkout` создает платеж в YooKassa и сохраняет `payment.id`.
-- Клиент получает `confirmation.confirmation_url`.
-- `webhook succeeded` активирует подписку.
-- `webhook canceled` переводит подписку в `canceled` и возвращает зарезервированный кредит.
-- Повторный webhook не меняет состояние повторно.
-- mismatch `amount/currency` не активирует подписку.
-- если у pending-подписки есть `yookassa_payment_id`, webhook с другим `payment.id` не финализирует подписку.
-- `confirmation_url` используется только как переход к оплате; доступ выдается только после webhook.
-- после возврата с оплаты клиент проверяет результат через `GET /api/subscriptions/current`.
-- если webhook еще не пришел, UI показывает состояние "Оплата обрабатывается" (а не ложную ошибку).
-- повторный `start-checkout` при существующем pending + `yookassa_payment_id` не создает новый платеж.
-- `yookassa_payment_id` не меняется в пределах одной pending-подписки.
-- `checkoutStatus` не проверяется в acceptance Phase 1 (он вводится отдельным этапом Phase 1.5).
-
-### Phase 1.5 — Конкурентность и инварианты на уровне хранилища (обязательный hardening)
-
-1. Внедрить дополнительную защиту "не более одной active подписки на пользователя":
-   - частичный unique index в БД **или**
-   - строгая row-level блокировка (`SELECT ... FOR UPDATE`) в `start-checkout` и `webhook succeeded`.
-2. Зафиксировать инвариант "один платеж -> одна финализация" на уровне транзакций и блокировок.
-3. Внедрить reconciliation-механизм для pending-подписок с потерянным/задержанным webhook (job и/или защищенный endpoint verify).
-4. Узаконить `checkoutStatus` (включая `manual_review`) в модели хранения и API-контрактах (не как комментарий в логах).
-5. Зафиксировать переходы `checkoutStatus`:
-   - default `in_progress` при создании pending,
-   - `closed` при `succeeded`/`canceled`/zero-pay финализации.
-6. Обязательная миграция БД для `checkout_status`:
-   - добавить колонку `user_subscriptions.checkout_status`,
-   - установить `NOT NULL` и `DEFAULT 'in_progress'` для новых pending-записей,
-   - выполнить backfill для существующих записей по правилам доменной миграции статусов.
-7. Ввести `pending_ttl_hours` + автоматическое закрытие pending старше TTL (`canceled` + возврат резерва кредита + audit event).
-
-### Phase 2 — Рекурренты и отмена
-
-1. Интегрировать отмену автопродления у провайдера в `POST /api/subscriptions/cancel`.
-2. Добавить фоновые ретраи и observability по failed renewal.
-3. До внедрения провайдерного cancel endpoint `/api/subscriptions/cancel` трактуется как soft cancel (локальный флаг); UI/UX обязан явно коммуницировать это пользователю.
-4. Добавить в контракт `/api/subscriptions/current` поле `cancelAtPeriodEnd` для однозначного UI-поведения.
-
-### Phase 3 — Мультирегион и мультипровайдер
-
-1. Ввести server-side paywall config (регион/канал оплаты) как отдельный endpoint.
-2. Добавить Stripe (global web) и IAP verify (iOS/Android).
-3. Перейти к унифицированному entitlement-сервису с merge-логикой по источникам.
-
-### Phase 4 — Полная гибридная модель
-
-1. Включить feature flags для rollout по платформам и странам.
-2. Добавить миграционный сценарий между провайдерами без потери доступа.
-3. Расширить QA матрицу (refund/revoke, race conditions, retries, downgrade/upgrade).
+1. Активация подписки только после серверного verify платежа.
+2. `paymentUrl`/редирект никогда не считается фактом оплаты.
+3. Один `payment.id` -> одна финализация.
+4. Дубли webhook не дают повторной активации/начислений.
+5. `amount/currency` mismatch не активирует подписку.
+6. Для одного пользователя одновременно не более одной актуальной `active` подписки.
+7. Для активного checkout-процесса не более одной `pending` подписки с `yookassa_payment_id`.
+8. `Idempotency-Key` с другим payload (`planId/billingPeriod`) должен возвращать `409`.
+9. Секреты и session-токены не попадают в URL, логи и клиентские хранилища web.
+10. External auth токен одноразовый и короткоживущий.
+11. External auth токен привязывается к fingerprint запроса: `User-Agent` + IP-risk-check.
+12. Проверка fingerprint должна быть риск-ориентированной, а не агрессивной: изолированный `User-Agent mismatch` (например, iPad Safari в desktop-режиме) не должен блокировать легитимного пользователя автоматически.
+13. Hard reject обязателен для явных high-risk кейсов (expired/consumed token, критический fingerprint mismatch, reuse), все такие случаи пишутся в security audit.
 
 ---
 
-## 9. Чеклист QA для текущей реализации
+## 7. Требования к frontend
 
-1. Повтор `start-checkout` с тем же `Idempotency-Key` возвращает тот же ответ.
-2. Webhook duplicate по тому же `payment.id` не приводит к двойной активации.
-3. Mismatch суммы/валюты не активирует подписку.
-4. `payment.canceled` возвращает ранее зарезервированный `billingCreditApplied`.
-5. При покупке платного плана trial завершается.
-6. При успешной активации старые активные подписки пользователя переводятся в `expired`.
-7. Путь `toPay === 0` финализируется в одной транзакции и логируется отдельным событием (`purchase_success` с `method=internal_credit`).
-8. `POST /api/subscriptions/cancel` не должен трактоваться как подтверждение провайдерной отмены, пока provider cancel не реализован.
+### 7.1 Общие
 
-### 9.1 Hardening checks (to-be)
+1. Использовать `usePlatform` для выбора сценария оплаты.
+2. Все async операции через `async/await` + `try/catch`.
+3. Перед доступом к браузерным API проверять доступность (`typeof window !== 'undefined'` и т.д.).
 
-1. Повтор с тем же `Idempotency-Key`, но другим payload, возвращает `409`.
-2. `amount/currency` mismatch не активирует подписку и переводит кейс в `checkoutStatus=manual_review` с записью security/audit события.
-3. Параллельные checkout/webhook на одного пользователя не приводят к двум активным подпискам.
+### 7.2 Web/Android
+
+1. Ленивая загрузка `https://yookassa.ru/checkout-widget/v1/checkout-widget.js`.
+2. Отрисовка виджета в контейнере (например `<div id="payment-form"></div>`).
+3. После возврата/закрытия виджета обязательно обновлять статус через `GET /api/subscriptions/current`.
+4. Если webhook еще не дошел, показывать статус `Оплата обрабатывается`.
+5. После старта оплаты включать short polling статуса подписки с прогрессивным интервалом: первые 5 секунд — каждые 1 сек, затем каждые 3 сек до 30 секунд (или до `active`).
+6. Если за окно polling статус не изменился, оставлять `pending`-экран с кнопкой ручного `Проверить оплату`.
+
+### 7.3 iOS
+
+1. В settings использовать CTA `Управление подпиской`.
+2. CTA открывает внешний браузер (default browser app), не WebView.
+3. Для Capacitor использовать открытие именно во внешнем браузере (`@capacitor/inappbrowser` -> `openInExternalBrowser`).
+4. Не использовать `@capacitor/browser` для этого сценария на iOS, так как он использует `SFSafariViewController` (in-app system browser).
+5. После возврата по deep link запускать short polling статуса подписки с тем же прогрессивным профилем (1 сек первые 5 секунд, затем 3 сек, общее окно до 30 секунд).
+6. Не использовать внутри iOS приложения кнопку вида `Купить Premium за ...`.
+7. На iOS в приложении показывать описание преимуществ тарифа без прямого ценового checkout CTA.
 
 ---
 
-## 10. Связанные документы
+## 8. Требования к backend
 
-- `.docs/subscription.md` — краткая спецификация подписок.
-- `.docs/architecture.md` — архитектурные принципы и текущее состояние.
-- `.docs/mentai_tz_product.md` — продуктовые требования (в т.ч. Stripe + IAP verify как целевое направление).
-- `.docs/security_requirements.md` — требования по безопасности.
+### 8.0 Окружение (Environment Variables)
+
+Обязательные переменные для текущего этапа:
+
+1. `NUXT_YOOKASSA_SHOP_ID` — Shop ID YooKassa (test/prod в зависимости от окружения).
+2. `NUXT_YOOKASSA_SECRET_KEY` — секретный API-ключ YooKassa для серверных запросов (`POST /v3/payments`, `GET /v3/payments/{id}`).
+3. `NUXT_YOOKASSA_TEST_MODE` — флаг тестового режима (`true|false`).
+
+Операционные переменные/параметры:
+
+1. `YOOKASSA_WEBHOOK_URL` (ops-параметр, не runtime переменная приложения) — полный URL webhook в кабинете YooKassa: `https://my.mentala.app/api/payments/yookassa/webhook`.
+
+Что **не вводим** в этой фазе:
+
+1. `WEBHOOK_SIGNING_SECRET` / `YOOKASSA_WEBHOOK_SECRET` — не используется в текущей архитектуре.
+2. Верификация webhook остается через серверный verify-запрос к YooKassa API и IP allowlist.
+
+### 8.1 Обязательный минимум (этап запуска YooKassa)
+
+1. В первую очередь отключить mock-ветку checkout в runtime (никаких заглушечных `paymentUrl` для боевого сценария).
+2. В `start-checkout` включить реальный `POST /v3/payments`.
+3. Для `web/android` использовать embedded-подтверждение и отдавать `confirmation_token`.
+4. Для `ios` использовать redirect-flow для внешнего браузера.
+5. Сохранять `payment.id` в `user_subscriptions.yookassa_payment_id`.
+6. Реализовать iOS external auth bridge (create/consume transfer-token).
+7. Сохранить существующие правила reserve/refund `billingCredit` и идемпотентности.
+8. Добавить endpoint/логику подтверждения оплаты для UI (`check-payment-status` или эквивалент server-side verify), чтобы polling не опирался только на локальные эвристики.
+
+### 8.2 Hardening (обязательный следующий этап)
+
+1. `checkout_status` + `manual_review` как операционный контур.
+2. Reconciliation `pending` платежей через verify API YooKassa.
+3. `pending_ttl_hours` + авто-закрытие зависших checkout.
+4. DB/transaction защита от гонок (`single-active`, `single-pending`).
+
+### 8.3 Дальнейший roadmap
+
+1. Provider-level cancel recurring в `POST /api/subscriptions/cancel`.
+2. Затем server-side мультипровайдерная маршрутизация (YooKassa/Stripe/IAP verify).
+
+---
+
+## 9. Критерии приемки
+
+### 9.1 Web/Android
+
+1. `start-checkout` при `toPay > 0` возвращает `paymentId + confirmationToken`.
+2. Widget открывается и приводит к оплате без перезагрузки приложения.
+3. После `payment.succeeded` подписка становится `active` только через webhook.
+4. Дубли webhook не меняют итог повторно.
+5. При задержке webhook UI корректно удерживает `pending` и обновляет статус через прогрессивный short polling без ложной ошибки.
+6. В боевом режиме `start-checkout` не возвращает mock URL-редиректы внутреннего приложения как способ оплаты.
+
+### 9.2 iOS
+
+1. В приложении нет внутреннего checkout в WebView.
+2. Кнопка `Управление подпиской` открывает внешний браузер.
+3. Пользователь попадает на web-страницу оплаты без повторного логина.
+4. Успешная оплата на web активирует подписку в мобильном приложении после синхронизации.
+5. На web success-странице есть рабочая кнопка `Вернуться в приложение` (deep link / universal link).
+
+### 9.3 Безопасность и отказоустойчивость
+
+1. `amount/currency mismatch` не активирует подписку.
+2. Повтор `Idempotency-Key` с тем же payload возвращает тот же ответ.
+3. Повтор `Idempotency-Key` с другим payload -> `409`.
+4. `pending`-висяки закрываются по TTL с корректным возвратом резерва.
+5. External auth token не проходит при истечении TTL, повторном использовании или high-risk fingerprint mismatch.
+6. Изолированный `User-Agent mismatch` (например iPad desktop mode) не блокирует легитимный flow без дополнительных risk-сигналов.
+
+### 9.4 Идемпотентность UI-команд
+
+1. Один `Idempotency-Key` = одна бизнес-команда checkout.
+2. Ретрай той же команды (тот же `planId` + `billingPeriod`) выполняется с тем же ключом.
+3. При смене тарифа/периода frontend обязан генерировать новый `Idempotency-Key`.
+4. При закрытии виджета и повторном запуске той же покупки клиент сначала проверяет существующий `pending` checkout, чтобы не плодить «мусорные» заказы.
+
+---
+
+## 10. App Store review notes (операционные)
+
+1. В metadata и review notes не использовать формулировки вида `дешевле на сайте`.
+2. Позиционирование: кроссплатформенный сервис, управление аккаунтом/подпиской доступно в web-версии.
+3. Для iOS-сборки явно проверять, что используется внешний браузер, а не встроенный webview/system in-app browser.
+
+---
+
+## 11. Что вне текущего scope
+
+1. Полноценный runtime-switch `apple_iap/google_play/yookassa` в production на этом этапе.
+2. Merge entitlement из нескольких провайдеров как финальный production-механизм.
+3. Полная IAP-валидация Apple/Google до отдельного этапа roadmap.
+
+---
+
+## 12. Связанные документы
+
+1. `.docs/billing_add.md` — приоритетный источник решений по YooKassa и iOS external flow.
+2. `.docs/subscription.md` — продуктовая матрица тарифов, лимиты, paywall и entitlement.
+3. `.docs/architecture.md` — текущая архитектура и инварианты.
+4. `.docs/arch_rules.md` — архитектурные правила команд/идемпотентности/безопасности.
+5. `.docs/mentai_tz_frontend.md` — кроссплатформенность и frontend-ограничения.
+6. `.docs/mentai_tz_backend.md` — backend-конвенции и API-подход.
+7. `.docs/security_requirements.md` — базовые требования безопасности и приватности.

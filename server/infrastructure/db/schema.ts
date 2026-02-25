@@ -53,6 +53,60 @@ export const users = pgTable('users', {
     .default('0')
     .notNull(), // внутренний кредит в рублях
   timezone: varchar('timezone', { length: 100 }), // IANA timezone для расчета недель
+  // Trial-scheduled биллинг (оплата в конце пробного периода).
+  billingPlanId: varchar('billing_plan_id', { length: 50 }).references(
+    () => subscriptionPlans.id,
+    { onDelete: 'set null' }
+  ),
+  billingPeriod: varchar('billing_period', { length: 10 }), // 'month' | 'year'
+  nextChargeAt: timestamp('next_charge_at', { withTimezone: true }),
+  paymentMethodBound: boolean('payment_method_bound').default(false).notNull(),
+  paymentMethodId: text('payment_method_id'),
+  paymentMethodType: varchar('payment_method_type', { length: 50 }),
+  paymentMethodTitle: text('payment_method_title'),
+  paymentMethodCardBrand: varchar('payment_method_card_brand', { length: 50 }),
+  paymentMethodCardLast4: varchar('payment_method_card_last4', { length: 4 }),
+  paymentMethodCardExpiryMonth: varchar('payment_method_card_expiry_month', {
+    length: 2,
+  }),
+  paymentMethodCardExpiryYear: varchar('payment_method_card_expiry_year', {
+    length: 4,
+  }),
+  paymentMethodBindingId: text('payment_method_binding_id'),
+  paymentMethodBindingSessionId: text('payment_method_binding_session_id'),
+  paymentMethodBindingStatus: varchar('payment_method_binding_status', {
+    length: 20,
+  })
+    .default('none')
+    .notNull(), // 'none' | 'pending' | 'active' | 'failed'
+  paymentMethodBindingUpdatedAt: timestamp(
+    'payment_method_binding_updated_at',
+    {
+      withTimezone: true,
+    }
+  ),
+  billingCollectionStatus: varchar('billing_collection_status', { length: 20 })
+    .default('none')
+    .notNull(), // 'none' | 'scheduled' | 'past_due'
+  graceEndsAt: timestamp('grace_ends_at', { withTimezone: true }),
+  billingReminderSentAt: timestamp('billing_reminder_sent_at', {
+    withTimezone: true,
+  }),
+  billingLockedAt: timestamp('billing_locked_at', { withTimezone: true }),
+  billingLockedBy: varchar('billing_locked_by', { length: 100 }),
+  // Запланированная смена тарифа (last-write-wins).
+  scheduledPlanId: varchar('scheduled_plan_id', { length: 50 }).references(
+    () => subscriptionPlans.id,
+    { onDelete: 'set null' }
+  ),
+  scheduledBillingPeriod: varchar('scheduled_billing_period', { length: 10 }), // 'month' | 'year'
+  scheduledChangeAt: timestamp('scheduled_change_at', { withTimezone: true }),
+  scheduledFromSubscriptionId: integer(
+    'scheduled_from_subscription_id'
+  ).references(() => userSubscriptions.id, { onDelete: 'set null' }),
+  scheduledChangeUpdatedAt: timestamp('scheduled_change_updated_at', {
+    withTimezone: true,
+  }),
   // Юридические согласия и версии документов
   termsAcceptedAt: timestamp('terms_accepted_at', { withTimezone: true }),
   privacyAcceptedAt: timestamp('privacy_accepted_at', { withTimezone: true }),
@@ -80,6 +134,48 @@ export const users = pgTable('users', {
     .defaultNow()
     .notNull(),
 });
+
+// История способов оплаты пользователя (active/archived).
+export const userPaymentMethods = pgTable(
+  'user_payment_methods',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    provider: varchar('provider', { length: 20 }).default('yookassa').notNull(),
+    providerPaymentMethodId: text('provider_payment_method_id').notNull(),
+    status: varchar('status', { length: 20 }).default('active').notNull(), // 'active' | 'archived'
+    isDefault: boolean('is_default').default(false).notNull(),
+    paymentMethodType: varchar('payment_method_type', { length: 50 }),
+    paymentMethodTitle: text('payment_method_title'),
+    cardBrand: varchar('card_brand', { length: 50 }),
+    cardLast4: varchar('card_last4', { length: 4 }),
+    cardExpiryMonth: varchar('card_expiry_month', { length: 2 }),
+    cardExpiryYear: varchar('card_expiry_year', { length: 4 }),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    metadata: jsonb('metadata'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    uniqueProviderMethodPerUser: unique(
+      'uk_user_payment_methods_user_provider_method'
+    ).on(table.userId, table.providerPaymentMethodId),
+    userStatusIdx: index('idx_user_payment_methods_user_status').on(
+      table.userId,
+      table.status
+    ),
+    userDefaultIdx: index('idx_user_payment_methods_user_default').on(
+      table.userId,
+      table.isDefault
+    ),
+  })
+);
 
 export const profiles = pgTable('profiles', {
   userId: integer('user_id').notNull(),
@@ -908,6 +1004,55 @@ export const payments = pgTable(
   })
 );
 
+// Попытки списаний для trial-scheduled billing (идемпотентность + ретраи).
+export const billingChargeAttempts = pgTable(
+  'billing_charge_attempts',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    chargeAttemptKey: varchar('charge_attempt_key', { length: 255 }).notNull(),
+    billingPlanId: varchar('billing_plan_id', { length: 50 })
+      .notNull()
+      .references(() => subscriptionPlans.id),
+    billingPeriod: varchar('billing_period', { length: 10 }).notNull(), // 'month' | 'year'
+    scheduledChargeAt: timestamp('scheduled_charge_at', {
+      withTimezone: true,
+    }).notNull(),
+    status: varchar('status', { length: 20 }).notNull(), // 'processing' | 'success' | 'failed' | 'noop'
+    providerPaymentId: text('provider_payment_id'),
+    attemptCount: integer('attempt_count').default(0).notNull(),
+    autoAttemptCount: integer('auto_attempt_count').default(0).notNull(),
+    lastAttemptAt: timestamp('last_attempt_at', { withTimezone: true }),
+    lastAutoAttemptAt: timestamp('last_auto_attempt_at', {
+      withTimezone: true,
+    }),
+    nextAutoRetryAt: timestamp('next_auto_retry_at', { withTimezone: true }),
+    lockAt: timestamp('lock_at', { withTimezone: true }),
+    lockBy: varchar('lock_by', { length: 100 }),
+    metadata: jsonb('metadata'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    chargeAttemptKeyUnique: unique('uk_billing_charge_attempt_key').on(
+      table.chargeAttemptKey
+    ),
+    userStatusIdx: index('idx_billing_charge_attempts_user_status').on(
+      table.userId,
+      table.status
+    ),
+    nextRetryIdx: index('idx_billing_charge_attempts_next_retry').on(
+      table.nextAutoRetryAt
+    ),
+  })
+);
+
 // Идемпотентность для команд (checkout, webhook, etc.)
 export const idempotencyKeys = pgTable(
   'idempotency_keys',
@@ -918,6 +1063,7 @@ export const idempotencyKeys = pgTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     route: varchar('route', { length: 255 }).notNull(), // путь API
     key: text('key').notNull(), // Idempotency-Key заголовок
+    requestHash: text('request_hash').notNull().default(''), // хеш бизнес-payload команды
     responseHash: text('response_hash'), // хеш ответа для возврата того же результата
     responseJson: jsonb('response_json'), // исходный JSON ответа для повторов
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(), // TTL для очистки старых ключей
@@ -934,6 +1080,37 @@ export const idempotencyKeys = pgTable(
     ),
     // Индекс для очистки просроченных ключей
     expiresIdx: index('idx_idempotency_expires').on(table.expiresAt),
+  })
+);
+
+// Одноразовые токены для перехода из мобильной сессии в web cookie-сессию
+export const externalAuthTokens = pgTable(
+  'external_auth_tokens',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(), // хранится только хеш токена
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+    createdIp: text('created_ip'),
+    createdUserAgent: text('created_user_agent'),
+    consumedIp: text('consumed_ip'),
+    consumedUserAgent: text('consumed_user_agent'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    tokenHashUnique: unique('uk_external_auth_tokens_token_hash').on(
+      table.tokenHash
+    ),
+    userExpiresIdx: index('idx_external_auth_tokens_user_expires').on(
+      table.userId,
+      table.expiresAt
+    ),
+    expiresIdx: index('idx_external_auth_tokens_expires').on(table.expiresAt),
   })
 );
 

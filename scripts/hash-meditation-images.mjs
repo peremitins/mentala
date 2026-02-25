@@ -14,6 +14,22 @@ const REFERENCE_FILES = [
 const IMAGE_EXT_RE = /\.(webp|png|jpe?g)$/i;
 const HASH_RE = /\.[a-f0-9]{8}(?:-portrait\d*)?\.(webp|png|jpe?g)$/i;
 
+/** Старые пути → новые (для обновления БД, если в ней остались пути до re-hash) */
+const LEGACY_MIGRATIONS = {
+  '/meditations/covers/ocean-slow.fd27232b.webp':
+    '/meditations/covers/ocean-slow.b4b7c127.webp',
+  '/meditations/covers/rain-night.6c73e019.webp':
+    '/meditations/covers/rain-night.9468982c.webp',
+  '/meditations/backgrounds/ocean-slow.08de5010.webp':
+    '/meditations/backgrounds/ocean-slow.574b17af.webp',
+  '/meditations/backgrounds/ocean-slow.08de5010-portrait.webp':
+    '/meditations/backgrounds/ocean-slow.574b17af-portrait.webp',
+  '/meditations/backgrounds/rain-night.405ab09f.webp':
+    '/meditations/backgrounds/rain-night.00d147c2.webp',
+  '/meditations/backgrounds/rain-night.405ab09f-portrait.webp':
+    '/meditations/backgrounds/rain-night.00d147c2-portrait.webp',
+};
+
 async function walk(dir) {
   const entries = await fs.readdir(dir, { withFileTypes: true });
   const files = [];
@@ -111,19 +127,34 @@ async function updateReferences(mapping) {
   }
 }
 
+/** Извлекает base и hash из имени вида base.hash.webp */
+function parseHashedCoverName(filePath) {
+  const name = path.basename(filePath);
+  const match = name.match(/^(.+)\.([a-f0-9]{8})\.(webp|png|jpe?g)$/i);
+  return match
+    ? { baseStem: match[1], ext: '.' + match[3], filenameHash: match[2] }
+    : null;
+}
+
 async function processCovers(mapping) {
   const files = await walk(COVERS_ROOT);
 
   for (const filePath of files) {
-    if (HASH_RE.test(filePath)) {
-      continue;
-    }
     const hash = await hashFile(filePath);
     const dir = path.dirname(filePath);
     const ext = path.extname(filePath);
-    const base = path.basename(filePath, ext);
+
+    // Уже хэшированный файл: проверяем, совпадает ли хэш в имени с реальным
+    const hashed = parseHashedCoverName(filePath);
+    if (hashed) {
+      if (hashed.filenameHash === hash) continue; // контент не менялся, пропускаем
+      // Контент изменился — переименовываем с новым хэшем
+    }
+
+    const base = hashed ? hashed.baseStem : path.basename(filePath, ext);
     const nextName = `${base}.${hash}${ext}`;
     const nextPath = path.join(dir, nextName);
+    if (filePath === nextPath) continue;
 
     await fs.rename(filePath, nextPath);
 
@@ -136,40 +167,67 @@ async function processCovers(mapping) {
 async function processBackgrounds(mapping) {
   const entries = await fs.readdir(BACKGROUNDS_ROOT, { withFileTypes: true });
   const groups = new Map();
-  const existingHashes = new Map();
+  const hashedFilesByStem = new Map(); // baseStem -> [{ parsed, fullPath }]
 
   for (const entry of entries) {
     if (!entry.isFile() || !IMAGE_EXT_RE.test(entry.name)) {
       continue;
     }
 
+    const fullPath = path.join(BACKGROUNDS_ROOT, entry.name);
+
     if (HASH_RE.test(entry.name)) {
       const parsed = parseHashedBackgroundName(entry.name);
       if (parsed) {
-        const current = existingHashes.get(parsed.baseStem);
-        if (current && current !== parsed.hash) {
-          throw new Error(
-            `Несовпадающие хэши для ${parsed.baseStem}: ${current} и ${parsed.hash}`
-          );
-        }
-        existingHashes.set(parsed.baseStem, parsed.hash);
+        const list = hashedFilesByStem.get(parsed.baseStem) || [];
+        list.push({ parsed, fullPath, entry });
+        hashedFilesByStem.set(parsed.baseStem, list);
       }
       continue;
     }
 
     const parsed = parseBackgroundName(entry.name);
-    const fullPath = path.join(BACKGROUNDS_ROOT, entry.name);
     const list = groups.get(parsed.baseStem) || [];
     list.push({ ...parsed, fileName: entry.name, fullPath });
     groups.set(parsed.baseStem, list);
   }
 
-  for (const [baseStem, items] of groups.entries()) {
-    let hash = existingHashes.get(baseStem);
-    if (!hash) {
-      const baseItem = items.find((item) => item.variant === 'base') || items[0];
-      hash = await hashFile(baseItem.fullPath);
+  // Пересчёт хэша для уже хэшированных файлов, если контент изменился
+  for (const [baseStem, items] of hashedFilesByStem.entries()) {
+    const baseItem = items.find((i) => !i.entry.name.includes('-portrait'));
+    const baseFile = baseItem || items[0];
+    const realHash = await hashFile(baseFile.fullPath);
+    const filenameHash = baseFile.parsed.hash;
+
+    if (realHash === filenameHash) continue; // контент не менялся
+
+    for (const { parsed, fullPath, entry } of items) {
+      const stem = path.basename(entry.name, parsed.ext);
+      const portraitMatch = stem.match(/-portrait(\d*)$/);
+      const variant = portraitMatch ? 'portrait-suffix' : 'base';
+      const portraitSuffix = portraitMatch ? portraitMatch[1] || '' : '';
+
+      const nextName = buildBackgroundName(baseStem, realHash, {
+        variant,
+        portraitSuffix,
+        ext: parsed.ext,
+      });
+      const nextPath = path.join(BACKGROUNDS_ROOT, nextName);
+      if (fullPath === nextPath) continue;
+
+      await fs.rename(fullPath, nextPath);
+
+      const oldPublic = toPublicPath(fullPath);
+      const newPublic = toPublicPath(nextPath);
+      mapping[oldPublic] = newPublic;
     }
+  }
+
+  // Обработка нехэшированных файлов (как раньше)
+  for (const [baseStem, items] of groups.entries()) {
+    const hash = await hashFile(
+      (items.find((i) => i.variant === 'base') || items[0]).fullPath
+    );
 
     for (const entry of items) {
       const nextName = buildBackgroundName(baseStem, hash, entry);
@@ -184,17 +242,75 @@ async function processBackgrounds(mapping) {
   }
 }
 
-async function main() {
+/** Строит полную карту logical→hashed по текущим файлам на диске */
+async function buildFullMapFromDisk() {
   const mapping = {};
 
-  await processCovers(mapping);
-  await processBackgrounds(mapping);
+  for (const filePath of await walk(COVERS_ROOT)) {
+    const parsed = parseHashedCoverName(filePath);
+    if (parsed) {
+      const logical = `/${path
+        .relative(
+          PUBLIC_ROOT,
+          path.join(path.dirname(filePath), parsed.baseStem + parsed.ext)
+        )
+        .split(path.sep)
+        .join('/')}`;
+      mapping[logical] = toPublicPath(filePath);
+    }
+  }
+
+  for (const entry of await fs.readdir(BACKGROUNDS_ROOT, {
+    withFileTypes: true,
+  })) {
+    if (!entry.isFile() || !IMAGE_EXT_RE.test(entry.name)) continue;
+    const parsed = parseHashedBackgroundName(entry.name);
+    if (parsed) {
+      const fullPath = path.join(BACKGROUNDS_ROOT, entry.name);
+      const publicPath = toPublicPath(fullPath);
+      const stem = path.basename(entry.name, parsed.ext);
+      const portraitSuffix = stem.match(/-portrait\d*$/)?.[0] || '';
+      mapping[
+        `/meditations/backgrounds/${parsed.baseStem}${portraitSuffix}${parsed.ext}`
+      ] = publicPath;
+    }
+  }
+
+  return mapping;
+}
+
+async function main() {
+  const newMappings = {};
+  await processCovers(newMappings);
+  await processBackgrounds(newMappings);
+
+  // Собираем полную карту: сначала с диска, потом дельта переименований
+  const mapping = await buildFullMapFromDisk();
+
+  for (const [oldPath, newPath] of Object.entries(newMappings)) {
+    mapping[oldPath] = newPath;
+    for (const [k, v] of [...Object.entries(mapping)]) {
+      if (v === oldPath && k !== oldPath) mapping[k] = newPath;
+    }
+  }
+
+  // Добавляем legacy-миграции (oldPath→newPath для обновления БД)
+  Object.assign(mapping, LEGACY_MIGRATIONS);
 
   await fs.writeFile(MAP_PATH, JSON.stringify(mapping, null, 2), 'utf8');
-  await updateReferences(mapping);
+  await updateReferences(newMappings);
 
-  console.log('✅ Картинки переименованы и ссылки обновлены.');
-  console.log(`🗺️  Карта сохранена в ${path.relative(process.cwd(), MAP_PATH)}`);
+  const changed = Object.keys(newMappings).length;
+  if (changed > 0) {
+    console.log(`✅ Переименовано файлов: ${changed}. Ссылки обновлены.`);
+  } else {
+    console.log(
+      '✅ Нет файлов для переименования (все хэши соответствуют контенту).'
+    );
+  }
+  console.log(
+    `🗺️  Карта сохранена в ${path.relative(process.cwd(), MAP_PATH)}`
+  );
 }
 
 main().catch((error) => {

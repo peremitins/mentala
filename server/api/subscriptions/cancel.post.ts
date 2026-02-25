@@ -5,7 +5,8 @@ import {
   userSubscriptions,
   subscriptionEvents,
 } from '@/server/infrastructure/db/schema';
-import { eq, and, gt } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
+import { getCurrentActiveSubscription } from '@/server/application/subscriptions/current-subscription.service';
 
 /**
  * POST /api/subscriptions/cancel
@@ -20,28 +21,21 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // Находим активную подписку (не истекшую)
+  // Находим текущую активную подписку по общей стратегии выбора.
   const now = new Date();
-  const activeSubscription = await db
-    .select()
-    .from(userSubscriptions)
-    .where(
-      and(
-        eq(userSubscriptions.userId, sessionResult.user.id),
-        eq(userSubscriptions.paymentStatus, 'active'),
-        gt(userSubscriptions.endDate, now) // подписка не истекла
-      )
-    )
-    .limit(1);
+  const activeSubscription = await getCurrentActiveSubscription({
+    userId: sessionResult.user.id,
+    now,
+  });
 
-  if (!activeSubscription.length) {
+  if (!activeSubscription) {
     throw createError({
       statusCode: 404,
       statusMessage: 'No active subscription found',
     });
   }
 
-  const subscription = activeSubscription[0];
+  const subscription = activeSubscription;
 
   // Отключаем автопродление
   await db

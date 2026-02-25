@@ -83,29 +83,19 @@
 - Возможность создавать APNs ключи и включать Push Notifications capability (роль Account Holder/Admin).
 - Без членства push на реальных iPhone не заработает: не получится выпустить App ID с Push и получить APNs ключ.
 
-## 6. Bundle identifier и схемы (dev/prod)
+## 6. Bundle identifier (единый)
 
-Обязательное решение: **два bundle identifier**.
-
-- prod: `com.mentala.app`
-- dev: `com.mentala.app.dev`
-
-Почему так:
-
-- Можно устанавливать dev и prod параллельно на одном iPhone.
-- Разделение пуш‑токенов, подписей, профилей, entitlement и Keychain.
-- TestFlight не мешает локальной dev‑сборке.
+Используем **один bundle identifier**: `com.mentala.app`.
 
 Как отражается в Firebase (один проект):
 
-- Создать два iOS приложения: Mentala iOS (prod) → `com.mentala.app`, Mentala iOS (dev) → `com.mentala.app.dev`.
-- Для каждого приложения скачать свой `GoogleService-Info.plist`.
+- Добавить одно iOS‑приложение с bundle id `com.mentala.app`.
+- Использовать один `GoogleService-Info.plist`.
 
 Как отражается в Xcode:
 
-- Две схемы: Dev и Prod.
-- Две сборочные конфигурации (например, Debug-Dev и Release-Prod).
-- У каждой схемы свой bundle id и свой `GoogleService-Info.plist`.
+- Одна iOS‑цель с bundle id `com.mentala.app`.
+- В ресурсах проекта используется только `GoogleService-Info.plist`.
 
 ## 7. Bootstrap iOS‑контейнера (Capacitor v7)
 
@@ -195,20 +185,20 @@ CAPACITOR_SERVER_URL=http://<LAN_IP>:3000 npx cap sync ios
 
 ### 9.1. Apple Developer Portal
 
-1. Создать два App ID: `com.mentala.app` (prod) и `com.mentala.app.dev` (dev).
-2. Включить Push Notifications capability для обоих.
+1. Создать App ID: `com.mentala.app`.
+2. Включить Push Notifications capability.
 3. Создать APNs ключ (p8) через Keys. Ключ бессрочный, работает для dev и prod. Сохранить `Key ID` и `Team ID`.
 
 ### 9.2. Firebase Console
 
 1. Открыть Firebase проект.
-2. Добавить два iOS‑приложения: `com.mentala.app` (prod) и `com.mentala.app.dev` (dev).
-3. Скачать два файла: `GoogleService-Info-Prod.plist` и `GoogleService-Info-Dev.plist`.
+2. Добавить iOS‑приложение: `com.mentala.app`.
+3. Скачать `GoogleService-Info.plist`.
 4. В Project Settings → Cloud Messaging загрузить APNs key и указать `Key ID`.
 
 ### 9.3. Xcode
 
-1. Добавить оба `GoogleService-Info.plist` в проект и настроить копирование нужного файла по схеме (через Build Phases).
+1. Добавить `GoogleService-Info.plist` в проект (Target Membership включен для `App`).
 2. Включить Capabilities: Push Notifications и Background Modes → Remote notifications.
 3. Добавить методы в `AppDelegate.swift` (из документации Capacitor):
 
@@ -223,10 +213,9 @@ func application(_ application: UIApplication, didFailToRegisterForRemoteNotific
 
 ### 9.4. Dev/Prod окружение и разделение токенов
 
-- Dev‑сборка отправляет токен с признаком окружения: `X-App-Env: dev` и `appEnv: dev` в теле.
-- Prod‑сборка отправляет `X-App-Env: prod` и `appEnv: prod`.
-- На сервере токены сохраняются с `app_env` и используются **только** в своём окружении.
-- Это исключает ситуацию, когда dev‑пуш приходит в prod‑приложение и наоборот.
+- Dev и prod используют один и тот же iOS bundle id: `com.mentala.app`.
+- Разделение доставки происходит на сервере по окружению backend (`MENTALA_DB_ENV`/`NODE_ENV`) через поле `app_env` в `user_devices`.
+- Клиентские `X-App-Env`/`appEnv` не являются источником истины и нужны только для диагностики.
 - Dev‑пуши отправляются **через сервер**, без ручных отправок из Firebase Console.
 
 ### 9.5. Изображения в пушах (Rich Notifications)
@@ -350,7 +339,7 @@ func application(_ application: UIApplication, didFailToRegisterForRemoteNotific
 4. Dev‑сервер недоступен. Проверь `CAPACITOR_SERVER_URL`, наличие IP в `DEV_ALLOWED_ORIGINS`, и ATS ограничения.
 5. Не запускается на iOS 13. Capacitor v7 официально поддерживает iOS 14+.
 6. Dev‑сервер виден в браузере, но не в приложении. Проверь доступ Local Network в настройках iOS.
-7. Пуш пришёл не в то приложение. Проверь bundle id, выбранную схему, правильный `GoogleService-Info.plist` и `X-App-Env`.
+7. Пуш пришёл не в то окружение. Проверь, что backend запущен в нужном `MENTALA_DB_ENV`, а в iOS проекте используется `GoogleService-Info.plist` для `com.mentala.app`.
 8. Google Login на iOS «ничего не делает». Проверь:
    `NUXT_PUBLIC_GOOGLE_IOS_CLIENT_ID` задан и попал в runtimeConfig;
    `CFBundleURLTypes` содержит reverse client id;
@@ -364,7 +353,7 @@ func application(_ application: UIApplication, didFailToRegisterForRemoteNotific
 4. Local Notifications приходят и не ломаются при перезапуске приложения.
 5. Speech Recognition корректно работает с разрешениями (granted/denied).
 6. TestFlight сборка установлена и пуши работают в релизной конфигурации.
-7. Dev и prod пуши не пересекаются (разные bundle id и app_env).
+7. Dev и prod пуши не пересекаются (серверный фильтр по `app_env`).
 8. Если в payload нет `deepLink` и `action`, событие фиксируется в Sentry.
 
 ## 15. Принятые решения
@@ -373,8 +362,8 @@ func application(_ application: UIApplication, didFailToRegisterForRemoteNotific
 - iOS токены: только FCM token через `@capacitor-community/fcm`.
 - Firebase проект: **один** (Android + iOS).
 - TestFlight: готовим в ближайший спринт.
-- Bundle id: `com.mentala.app` (prod) и `com.mentala.app.dev` (dev).
-- Разделение окружений: `app_env` в `user_devices`, клиент шлёт `X-App-Env`.
+- Bundle id: `com.mentala.app` (единый для локальной разработки и production).
+- Разделение окружений: сервер канонизирует `app_env` в `user_devices` по `MENTALA_DB_ENV`/`NODE_ENV`.
 
 ## 16. Источники
 
