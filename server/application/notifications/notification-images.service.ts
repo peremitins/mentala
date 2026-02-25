@@ -6,6 +6,7 @@ import type {
 
 import notificationImageMap from './notification-image-map.json';
 import { getNextRotationIndex } from './repositories/notification-image-rotation.repository';
+import { validateNotificationImagePath } from './notification-image-validation';
 
 const IMAGE_BASE_PATH = '/notifications';
 const notificationImageMapLookup = notificationImageMap as Record<
@@ -348,10 +349,37 @@ async function pickFromSequence(params: {
   }
 
   const safeIndex = Math.abs(rotationIndex) % sequence.length;
-  const selected = sequence[safeIndex];
   const baseUrl = resolvePublicBaseUrl();
+  const skippedReasons: Record<string, number> = {};
 
-  return `${baseUrl}${resolveHashedNotificationPath(selected)}`;
+  for (let offset = 0; offset < sequence.length; offset += 1) {
+    const selected = sequence[(safeIndex + offset) % sequence.length];
+    const hashedPath = resolveHashedNotificationPath(selected);
+    const validation = validateNotificationImagePath(hashedPath);
+
+    if (!validation.valid) {
+      skippedReasons[validation.reason] =
+        (skippedReasons[validation.reason] ?? 0) + 1;
+      continue;
+    }
+
+    return `${baseUrl}${hashedPath}`;
+  }
+
+  if (Object.keys(skippedReasons).length > 0) {
+    console.warn(
+      '[NotificationImages] ⚠️ No valid image candidate after checks',
+      {
+        userId,
+        kind,
+        entityKey,
+        imageTag,
+        skippedReasons,
+      }
+    );
+  }
+
+  return null;
 }
 
 export async function pickNotificationImage(

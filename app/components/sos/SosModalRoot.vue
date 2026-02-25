@@ -194,7 +194,7 @@
 
             <section
               v-else-if="step === 'panic-breathing' && panicBreathingPractice"
-              class="relative h-full py-2"
+              class="relative h-full"
             >
               <BreathPracticePlayer
                 :practice="panicBreathingPractice"
@@ -212,7 +212,7 @@
 
             <section
               v-else-if="step === 'tension-practice'"
-              class="relative h-full py-2"
+              class="relative h-full"
             >
               <div class="flex h-full flex-col justify-between space-y-2">
                 <div class="flex flex-col items-center gap-2 text-center">
@@ -294,7 +294,7 @@
 
             <section
               v-else-if="step === 'finish'"
-              class="flex min-h-full flex-col items-center justify-center space-y-4 py-8"
+              class="flex min-h-full flex-col items-center justify-center space-y-4"
             >
               <div class="space-y-1 text-center">
                 <p class="text-sm text-white/70">Практика завершена</p>
@@ -350,7 +350,7 @@
           >
             <DialogContent
               overlay-class="z-[150]"
-              class="z-[160] max-w-lg border-white/10 bg-gradient-to-b from-slate-900 via-indigo-950 to-slate-950 overflow-visible text-white"
+              class="z-[160] max-w-lg overflow-visible text-white"
             >
               <div
                 id="sos-tension-settings-portal"

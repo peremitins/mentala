@@ -178,7 +178,6 @@ import SuggestedChips from '@/app/components/chat/SuggestedChips.vue';
 import ChatLoadingIndicator from '@/app/components/chat/ChatLoadingIndicator.vue';
 import FeaturePaywallModal from '@/app/components/subscription/FeaturePaywallModal.vue';
 import type { SuggestedChip } from '@/shared/dto';
-import { useSos } from '@/app/composables/useSos';
 import { useEntitlements } from '@/app/composables/useEntitlements';
 import { useRuntimeConfig } from '#imports';
 
@@ -186,7 +185,6 @@ const emit = defineEmits<{ (e: 'send', text: string): void }>();
 
 const route = useRoute();
 const router = useRouter();
-const sos = useSos();
 const chatViewportStyle = computed(() => {
   const bottomOffset = '95px';
 
@@ -552,15 +550,14 @@ const handleActionChip = async (chip: SuggestedChip) => {
 
   if (chip.action === 'open_sos') {
     const entry = chip.params?.sosEntry;
-    if (
+    const query =
       entry === 'panic' ||
       entry === 'tension' ||
       entry === 'technique_picker'
-    ) {
-      sos.open(entry);
-      return;
-    }
-    sos.open();
+        ? { entry }
+        : {};
+    await router.push({ path: '/sos', query });
+    return;
   }
 };
 

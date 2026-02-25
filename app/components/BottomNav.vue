@@ -4,7 +4,7 @@
     class="flex-[0_0_auto] inset-x-0 mt-2 sticky bottom-0"
     :style="isMeditationPlayer ? { backdropFilter: 'blur(1px)' } : undefined"
   >
-    <section :class="['glass-deep-bottom px-4 py-3 ']">
+    <section :class="['glass-deep-bottom px-4 pt-3 pb-4 ']">
       <ul class="grid grid-cols-5 gap-1 text-xs">
         <li class="flex flex-col items-center gap-0 w-full">
           <NuxtLink
@@ -23,7 +23,12 @@
               <IconMessageCircleHeart class="w-5 h-5" />
             </span>
             <span
-              class="w-full text-center text-foreground text-[10px] group-hover:text-primary-ui transition-all duration-300"
+              :class="[
+                'w-full text-center text-[10px] transition-all duration-300',
+                isActive('/')
+                  ? 'text-foreground font-medium opacity-100'
+                  : 'text-foreground opacity-60 group-hover:opacity-80',
+              ]"
               >Чат</span
             >
           </NuxtLink>
@@ -44,7 +49,12 @@
               <IconBrain class="w-5 h-5" />
             </span>
             <span
-              class="w-full text-center text-foreground text-[10px] group-hover:text-primary-ui transition-all duration-300"
+              :class="[
+                'w-full text-center text-[10px] transition-all duration-300',
+                isActive('/therapy')
+                  ? 'text-foreground font-medium opacity-100'
+                  : 'text-foreground opacity-60 group-hover:opacity-80',
+              ]"
               >Терапия</span
             >
           </NuxtLink>
@@ -65,7 +75,12 @@
               <IconListCheck class="w-5 h-5" />
             </span>
             <span
-              class="w-full text-center text-foreground text-[10px] group-hover:text-primary-ui transition-all duration-300"
+              :class="[
+                'w-full text-center text-[10px] transition-all duration-300',
+                isActive('/habits')
+                  ? 'text-foreground font-medium opacity-100'
+                  : 'text-foreground opacity-60 group-hover:opacity-80',
+              ]"
               >Привычки</span
             >
           </NuxtLink>
@@ -86,7 +101,12 @@
               <IconActivity class="w-5 h-5" />
             </span>
             <span
-              class="w-full text-center text-foreground text-[10px] group-hover:text-primary-ui transition-all duration-300"
+              :class="[
+                'w-full text-center text-[10px] transition-all duration-300',
+                isPracticesActive
+                  ? 'text-foreground font-medium opacity-100'
+                  : 'text-foreground opacity-60 group-hover:opacity-80',
+              ]"
               >Практики</span
             >
           </NuxtLink>
@@ -107,7 +127,12 @@
               <IconSettings class="w-5 h-5" />
             </span>
             <span
-              class="w-full text-center text-foreground text-[10px] group-hover:text-primary-ui transition-all duration-300"
+              :class="[
+                'w-full text-center text-[10px] transition-all duration-300',
+                isActive('/settings')
+                  ? 'text-foreground font-medium opacity-100'
+                  : 'text-foreground opacity-60 group-hover:opacity-80',
+              ]"
               >Настройки</span
             >
           </NuxtLink>
@@ -142,6 +167,13 @@ const isMeditationPlayer = computed(() => {
 
 const isActive = (path: string) => {
   if (path === '/') return route.path === '/';
+  if (path === '/settings') {
+    return (
+      route.path === path ||
+      route.path.startsWith(`${path}/`) ||
+      route.path === '/scene-selection'
+    );
+  }
   return route.path === path || route.path.startsWith(`${path}/`);
 };
 

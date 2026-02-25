@@ -1,6 +1,9 @@
 import { defineStore } from 'pinia';
 import { useAuthStore } from '@/app/stores/auth';
-import { DEFAULT_SCENE_ID, findSceneTrack } from '@/app/lib/sceneSelectionCatalog';
+import {
+  DEFAULT_SCENE_ID,
+  findSceneTrack,
+} from '@/app/lib/sceneSelectionCatalog';
 
 const SAVE_DEBOUNCE_MS = 600;
 let saveTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -17,10 +20,12 @@ interface SceneSettingsState {
   saving: boolean;
 }
 
-type SceneSettingsPayload = Partial<Pick<
-  SceneSettingsState,
-  'sceneId' | 'volume' | 'backgroundPlayMinutes' | 'animateBackground'
->>;
+type SceneSettingsPayload = Partial<
+  Pick<
+    SceneSettingsState,
+    'sceneId' | 'volume' | 'backgroundPlayMinutes' | 'animateBackground'
+  >
+>;
 
 function clampNumber(value: number, min: number, max: number) {
   const safe = Number.isFinite(value) ? value : min;
@@ -35,8 +40,8 @@ function normalizeSceneId(value?: string | null) {
 export const useSceneSettingsStore = defineStore('sceneSettings', {
   state: (): SceneSettingsState => ({
     sceneId: DEFAULT_SCENE_ID,
-    // По умолчанию держим фон на 50%.
-    volume: 50,
+    // По умолчанию держим фон на 25%.
+    volume: 10,
     backgroundPlayMinutes: 0,
     // По умолчанию анимация обоев выключена.
     animateBackground: false,
@@ -70,8 +75,8 @@ export const useSceneSettingsStore = defineStore('sceneSettings', {
       } else {
         this.applySettings({
           sceneId: DEFAULT_SCENE_ID,
-          // По умолчанию держим фон на 50%.
-          volume: 50,
+          // По умолчанию держим фон на 25%.
+          volume: 10,
           backgroundPlayMinutes: 0,
           // По умолчанию анимация обоев выключена.
           animateBackground: false,

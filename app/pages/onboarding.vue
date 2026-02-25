@@ -148,7 +148,7 @@
               <div class="flex flex-col gap-2 sm:flex-row">
                 <Button
                   size="lg"
-                  class="w-full"
+                  class="w-full sm:w-[50%]"
                   :disabled="ageRange === 'unknown'"
                   @click="goNext"
                 >
@@ -157,7 +157,7 @@
                 <Button
                   size="lg"
                   variant="ghost"
-                  class="w-full"
+                  class="w-full sm:w-[50%]"
                   @click="skipAge"
                 >
                   Пропустить
@@ -186,7 +186,7 @@
               <div class="flex flex-col gap-2 sm:flex-row">
                 <Button
                   size="lg"
-                  class="w-full"
+                  class="w-full sm:w-[50%]"
                   :disabled="tone === 'unknown'"
                   @click="goNext"
                 >
@@ -195,7 +195,7 @@
                 <Button
                   size="lg"
                   variant="ghost"
-                  class="w-full"
+                  class="w-full sm:w-[50%]"
                   @click="skipTone"
                 >
                   Пропустить

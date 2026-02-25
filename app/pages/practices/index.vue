@@ -2,7 +2,7 @@
   <div class="relative h-full overflow-y-auto space-y-2 pb-[100px]">
     <PageHeader title="Практики" />
 
-    <div class="grid gap-4 grid-cols-1 xxs:grid-cols-2">
+    <div class="grid gap-2 grid-cols-1 xxs:grid-cols-2">
       <NuxtLink
         v-if="meditationsAccess.available"
         to="/meditations"

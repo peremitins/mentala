@@ -30,8 +30,6 @@ logs
 .cursor/mcp.json
 
 # Capacitor
-/android/
-/ios/
 .capacitor/
 *.log
 *.xcuserstate
