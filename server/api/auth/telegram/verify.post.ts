@@ -35,9 +35,10 @@ export default defineEventHandler(async (event) => {
       statusCode: 500,
       statusMessage: 'Не задан TELEGRAM_BOT_TOKEN',
     });
-  const body = await readBody<{ initData: Record<string, string>; email?: string }>(
-    event as any
-  );
+  const body = await readBody<{
+    initData: Record<string, string>;
+    email?: string;
+  }>(event as any);
   const data = body?.initData;
   if (!data)
     throw createError({

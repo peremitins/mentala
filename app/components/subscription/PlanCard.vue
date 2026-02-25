@@ -1,7 +1,7 @@
 <template>
   <div
     :class="[
-      'rounded-lg glass-deep p-4 space-y-4 transition-all',
+      'flex flex-col rounded-lg glass-deep p-4 space-y-4 transition-all',
       isSelected
         ? '!border-primary !bg-primary/5'
         : 'border-border bg-transparent hover:border-primary-ui/50',
@@ -17,13 +17,19 @@
           v-if="plan.name === 'basic' && props.trialActive"
           class="text-xs bg-primary-ui/10 text-primary-ui px-2 py-1 rounded font-medium text-end"
         >
-          Бесплатный пробный период
+          Пробный период
         </span>
         <span
           v-if="plan.name === 'premium'"
           class="text-xs bg-primary-ui/10 text-primary-ui px-2 py-1 rounded"
         >
           Рекомендуем
+        </span>
+        <span
+          v-if="props.isScheduled"
+          class="text-xs bg-amber-400/15 text-amber-300 px-2 py-1 rounded"
+        >
+          Запланировано
         </span>
       </div>
     </div>
@@ -97,7 +103,7 @@
 
     <button
       :class="[
-        'w-full rounded-md px-4 py-2 text-sm font-medium transition-colors',
+        'w-full rounded-md px-4 py-2 text-sm font-medium transition-colors mt-auto',
         isCurrent
           ? 'bg-primary text-primary-foreground cursor-not-allowed opacity-75'
           : isSelected
@@ -140,6 +146,7 @@ const props = defineProps<{
   billingPeriod: 'month' | 'year';
   isSelected: boolean;
   isCurrent: boolean;
+  isScheduled?: boolean;
   trialActive?: boolean;
 }>();
 
@@ -224,7 +231,7 @@ function getFeatures() {
     html: true,
   };
   const personalAiStyleTooltip = createPlanTooltip(
-    'Вы управляете тем, как звучат напоминания. Добавьте свои правила и примеры, и ИИ будет подстраивать тексты под ваш стиль и цели'
+    'Персональный промпт. Опишите свои пожелания, и ИИ будет писать их в вашем стиле.'
   );
 
   if (props.plan.name === 'basic') {

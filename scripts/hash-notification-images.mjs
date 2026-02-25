@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import process from 'node:process';
 
 const PUBLIC_ROOT = path.join(process.cwd(), 'public');
 const NOTIFICATIONS_ROOT = path.join(PUBLIC_ROOT, 'notifications');
@@ -9,6 +10,10 @@ const OUTPUT_ROOT = path.join(CACHE_ROOT, 'notifications');
 const MAP_PATH = path.join(
   process.cwd(),
   'server/application/notifications/notification-image-map.json'
+);
+const SIZE_MAP_PATH = path.join(
+  process.cwd(),
+  'server/application/notifications/notification-image-size-map.json'
 );
 
 const IMAGE_EXT_RE = /\.(webp|png|jpe?g)$/i;
@@ -43,6 +48,7 @@ async function prepareCache() {
 
 async function ensureMapFile() {
   await fs.mkdir(path.dirname(MAP_PATH), { recursive: true });
+  await fs.mkdir(path.dirname(SIZE_MAP_PATH), { recursive: true });
 }
 
 async function main() {
@@ -53,13 +59,16 @@ async function main() {
 
   const files = await walk(NOTIFICATIONS_ROOT);
   if (!files.length) {
-    console.log('ℹ️  Не найдено изображений для уведомлений в public/notifications');
+    console.log(
+      'ℹ️  Не найдено изображений для уведомлений в public/notifications'
+    );
   }
 
   await prepareCache();
   await ensureMapFile();
 
   const mapping = {};
+  const sizeMapping = {};
 
   for (const file of files) {
     const relPath = path.relative(NOTIFICATIONS_ROOT, file);
@@ -74,6 +83,7 @@ async function main() {
 
     await fs.mkdir(targetDir, { recursive: true });
     await fs.copyFile(file, targetPath);
+    const stat = await fs.stat(file);
 
     const sourcePublic = `/notifications/${normalizedRel}`;
     const hashedPublic =
@@ -82,13 +92,26 @@ async function main() {
         : `/notifications/${parsed.dir}/${hashedName}`;
 
     mapping[sourcePublic] = hashedPublic;
+    sizeMapping[hashedPublic] = stat.size;
   }
 
   await fs.writeFile(MAP_PATH, JSON.stringify(mapping, null, 2), 'utf8');
+  await fs.writeFile(
+    SIZE_MAP_PATH,
+    JSON.stringify(sizeMapping, null, 2),
+    'utf8'
+  );
 
   console.log('✅ Генерируем хэшированные изображения уведомлений');
-  console.log(`🗺️  Карта сохранена в ${path.relative(process.cwd(), MAP_PATH)}`);
-  console.log(`📦 Файлы записаны в ${path.relative(process.cwd(), CACHE_ROOT)}`);
+  console.log(
+    `🗺️  Карта сохранена в ${path.relative(process.cwd(), MAP_PATH)}`
+  );
+  console.log(
+    `📏 Размеры сохранены в ${path.relative(process.cwd(), SIZE_MAP_PATH)}`
+  );
+  console.log(
+    `📦 Файлы записаны в ${path.relative(process.cwd(), CACHE_ROOT)}`
+  );
 }
 
 main().catch((error) => {

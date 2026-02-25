@@ -6,7 +6,6 @@ import type { TherapyTopicKey } from '@/app/lib/therapyCatalog';
 const THERAPY_PRACTICE_HIDDEN_KEYS = new Set<TherapyTopicKey>([
   'selfesteem',
   'relations',
-  'loneliness',
 ]);
 
 const HABIT_PRACTICE_HIDDEN_KEYS = new Set<HabitKey>([
@@ -26,20 +25,15 @@ const THERAPY_TO_BREATH_GROUP_MAP: Partial<
   Record<TherapyTopicKey, BreathPracticeTag>
 > = {
   anxiety: 'anxiety',
-  sos: 'anxiety',
   stress: 'focus',
   anger: 'focus',
-  mood: 'sleep',
-  grief: 'sleep',
-  perfectionism: 'focus',
 };
 
 // Карта соответствий привычек и групп дыхательных практик.
-const HABIT_TO_BREATH_GROUP_MAP: Partial<
-  Record<HabitKey, BreathPracticeTag>
-> = {
-  meditation: 'anxiety',
-};
+const HABIT_TO_BREATH_GROUP_MAP: Partial<Record<HabitKey, BreathPracticeTag>> =
+  {
+    meditation: 'anxiety',
+  };
 
 export function isTherapyPracticeHidden(key: string): boolean {
   return THERAPY_PRACTICE_HIDDEN_KEYS.has(key as TherapyTopicKey);
@@ -49,9 +43,7 @@ export function isHabitPracticeHidden(key: string): boolean {
   return HABIT_PRACTICE_HIDDEN_KEYS.has(key as HabitKey);
 }
 
-export function mapTherapyToBreathGroup(
-  key: string
-): BreathPracticeTag | null {
+export function mapTherapyToBreathGroup(key: string): BreathPracticeTag | null {
   return (
     (THERAPY_TO_BREATH_GROUP_MAP as Record<string, BreathPracticeTag>)[key] ||
     null
@@ -60,6 +52,7 @@ export function mapTherapyToBreathGroup(
 
 export function mapHabitToBreathGroup(key: string): BreathPracticeTag | null {
   return (
-    (HABIT_TO_BREATH_GROUP_MAP as Record<string, BreathPracticeTag>)[key] || null
+    (HABIT_TO_BREATH_GROUP_MAP as Record<string, BreathPracticeTag>)[key] ||
+    null
   );
 }

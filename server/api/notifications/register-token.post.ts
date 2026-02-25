@@ -58,7 +58,19 @@ export default defineEventHandler(async (event): Promise<UserDeviceDto> => {
     String(event.node.req.headers['x-app-env'] || '')
   );
   const bodyAppEnv = normalizeAppEnv(body.appEnv);
-  const appEnv = headerAppEnv || bodyAppEnv || resolveServerAppEnv();
+  const requestedAppEnv = headerAppEnv || bodyAppEnv;
+  const appEnv = resolveServerAppEnv();
+
+  // Канонизируем окружение на сервере, чтобы клиентские dev/prod рассинхроны
+  // не уводили токен в "чужой" app_env и не ломали доставку на устройстве.
+  if (requestedAppEnv && requestedAppEnv !== appEnv) {
+    console.warn('[Notifications] register-token app_env mismatch', {
+      userId,
+      requestedAppEnv,
+      serverAppEnv: appEnv,
+      platform: body.platform,
+    });
+  }
 
   // Проверяем, существует ли этот токен
   const [existing] = await db

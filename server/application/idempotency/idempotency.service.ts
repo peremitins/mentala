@@ -8,6 +8,7 @@ export const DEFAULT_IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000; // 24 часа
 export type IdempotencyStartResult<T> =
   | { kind: 'hit'; response: T }
   | { kind: 'locked'; recordId: number }
+  | { kind: 'conflict' }
   | { kind: 'in_progress' };
 
 function hashResponseJson(payload: unknown): string {
@@ -28,6 +29,7 @@ export async function startIdempotentRequest<T>(params: {
   userId: number;
   route: string;
   key: string;
+  requestHash?: string;
   ttlMs?: number;
 }): Promise<IdempotencyStartResult<T>> {
   const now = new Date();
@@ -50,6 +52,7 @@ export async function startIdempotentRequest<T>(params: {
   const existing = await db
     .select({
       id: idempotencyKeys.id,
+      requestHash: idempotencyKeys.requestHash,
       responseJson: idempotencyKeys.responseJson,
     })
     .from(idempotencyKeys)
@@ -65,6 +68,17 @@ export async function startIdempotentRequest<T>(params: {
 
   if (existing.length) {
     const row = existing[0];
+    if (!row) {
+      return { kind: 'in_progress' };
+    }
+
+    if (
+      params.requestHash &&
+      row.requestHash &&
+      row.requestHash !== params.requestHash
+    ) {
+      return { kind: 'conflict' };
+    }
     if (row.responseJson) {
       return { kind: 'hit', response: row.responseJson as T };
     }
@@ -79,21 +93,30 @@ export async function startIdempotentRequest<T>(params: {
       route: params.route,
       key: params.key,
       expiresAt,
+      requestHash: params.requestHash ?? '',
       responseHash: null,
       responseJson: null,
     })
     .onConflictDoNothing({
-      target: [idempotencyKeys.userId, idempotencyKeys.route, idempotencyKeys.key],
+      target: [
+        idempotencyKeys.userId,
+        idempotencyKeys.route,
+        idempotencyKeys.key,
+      ],
     })
     .returning({ id: idempotencyKeys.id });
 
   if (inserted.length) {
-    return { kind: 'locked', recordId: inserted[0].id };
+    const insertedRow = inserted[0];
+    if (insertedRow) {
+      return { kind: 'locked', recordId: insertedRow.id };
+    }
   }
 
   // Кто-то успел вставить параллельно — читаем и возвращаем
   const raced = await db
     .select({
+      requestHash: idempotencyKeys.requestHash,
       responseJson: idempotencyKeys.responseJson,
     })
     .from(idempotencyKeys)
@@ -107,8 +130,19 @@ export async function startIdempotentRequest<T>(params: {
     )
     .limit(1);
 
-  if (raced.length && raced[0].responseJson) {
-    return { kind: 'hit', response: raced[0].responseJson as T };
+  const racedRow = raced[0];
+  if (racedRow) {
+    if (
+      params.requestHash &&
+      racedRow.requestHash &&
+      racedRow.requestHash !== params.requestHash
+    ) {
+      return { kind: 'conflict' };
+    }
+
+    if (racedRow.responseJson) {
+      return { kind: 'hit', response: racedRow.responseJson as T };
+    }
   }
 
   return { kind: 'in_progress' };

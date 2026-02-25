@@ -8,11 +8,13 @@ import {
 } from '@/server/infrastructure/db/schema';
 import { eq, and, desc, gt } from 'drizzle-orm';
 import { getUsageForCurrentWeek } from '@/server/application/subscriptions/session-time.service';
-import {
-  getFeatures,
-  isTrialActive,
-} from '@/server/application/subscriptions/access.service';
+import { getFeatures } from '@/server/application/subscriptions/access.service';
 import { WEEKLY_OVERDRAFT_MINUTES } from '@/server/config/subscription';
+import {
+  isTrialActiveAt,
+  normalizeBillingCollectionStatus,
+  resolveCurrentEntitlementsPlan,
+} from '@/server/application/subscriptions/trial-billing.service';
 
 /**
  * GET /api/subscriptions/usage
@@ -34,6 +36,9 @@ export default defineEventHandler(async (event) => {
       timezone: users.timezone,
       trialEndedAt: users.trialEndedAt,
       roleId: users.roleId,
+      billingPlanId: users.billingPlanId,
+      billingCollectionStatus: users.billingCollectionStatus,
+      graceEndsAt: users.graceEndsAt,
     })
     .from(users)
     .where(eq(users.id, sessionResult.user.id))
@@ -71,19 +76,30 @@ export default defineEventHandler(async (event) => {
 
   if (userRecord) {
     const activeSub = activeSubscription[0];
-    const hasTrialWithoutSubscription =
-      !activeSub && isTrialActive(userRecord) === true;
-
-    const subscriptionForFeatures = activeSub
-      ? { planId: activeSub.subscription.planId }
-      : hasTrialWithoutSubscription
-        ? { planId: 'basic' }
-        : null;
+    const trialActive = isTrialActiveAt(userRecord.trialEndedAt, now);
+    const entitlementsPlanId = resolveCurrentEntitlementsPlan({
+      now,
+      trialActive,
+      billingPlanId: userRecord.billingPlanId,
+      billingCollectionStatus: normalizeBillingCollectionStatus(
+        userRecord.billingCollectionStatus
+      ),
+      graceEndsAt: userRecord.graceEndsAt,
+      activePaidPlanId: activeSub?.subscription.planId ?? null,
+    });
+    const entitlementsPlanRows = await db
+      .select({
+        id: subscriptionPlans.id,
+        weeklyMinutesLimit: subscriptionPlans.weeklyMinutesLimit,
+      })
+      .from(subscriptionPlans)
+      .where(eq(subscriptionPlans.id, entitlementsPlanId))
+      .limit(1);
 
     const features = await getFeatures(
       userRecord,
-      subscriptionForFeatures,
-      activeSub?.plan ?? null,
+      { planId: entitlementsPlanId },
+      entitlementsPlanRows[0] ?? null,
       userRecord.roleId || undefined
     );
 
