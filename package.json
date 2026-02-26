@@ -79,6 +79,7 @@
     "@vueuse/nuxt": "^13.9.0",
     "argon2": "^0.40.1",
     "bullmq": "^5.65.1",
+    "capacitor-native-settings": "^7.0.2",
     "chart.js": "^4.5.0",
     "clsx": "^2.1.1",
     "date-fns-tz": "^3.0.0",
