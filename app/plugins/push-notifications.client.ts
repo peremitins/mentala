@@ -874,26 +874,111 @@ export default defineNuxtPlugin({
       console.error('[PushPlugin] Failed to add push listeners:', error);
     }
 
-    // Отложенная инициализация уведомлений после полной загрузки приложения
+    const PERMISSION_REQUESTED_KEY = 'mentai.push.permissionRequestedOnce';
+    const DENIED_PENDING_SYNC_KEY = 'mentai.push.deniedPendingSync';
+
+    async function patchPushEnabled(value: boolean): Promise<boolean> {
+      try {
+        await nuxtApp.$api('/api/user/me', {
+          method: 'PATCH',
+          body: { pushNotificationsEnabled: value },
+        });
+        if (auth.user) auth.user.pushNotificationsEnabled = value;
+        return true;
+      } catch (e) {
+        console.warn(
+          `[PushPlugin] PATCH pushNotificationsEnabled=${value} failed:`,
+          e
+        );
+        return false;
+      }
+    }
+
+    async function trySyncDeniedToServer(): Promise<void> {
+      const sessionToken =
+        typeof window !== 'undefined'
+          ? localStorage.getItem('mentai.session.token')
+          : null;
+      if (!sessionToken) return;
+      try {
+        const permStatus = await PushNotifications.checkPermissions();
+        if (permStatus.receive !== 'denied') return;
+        if (auth.user?.pushNotificationsEnabled === false) {
+          await writeStoredValue(DENIED_PENDING_SYNC_KEY, null);
+          return;
+        }
+        const ok = await patchPushEnabled(false);
+        if (ok) await writeStoredValue(DENIED_PENDING_SYNC_KEY, null);
+      } catch {
+        // ignore
+      }
+    }
+
+    // Отложенная инициализация уведомлений после полной загрузки приложения.
+    // Запрос показывается только при первом запуске (prompt + флаг не установлен).
+    // На части Android checkPermissions возвращает prompt каждый раз — флаг защищает от повторных запросов.
     const initNotifications = async () => {
       try {
         console.log('[PushPlugin] Starting notification initialization');
         await ensureHighPriorityChannel();
 
-        // Проверка и запрос разрешений для локальных уведомлений
-        const localPerm = await LocalNotifications.checkPermissions();
-        if (localPerm.display !== 'granted') {
-          await LocalNotifications.requestPermissions();
-        }
-
-        // Проверка и запрос разрешений
         const permStatus = await PushNotifications.checkPermissions();
-        if (permStatus.receive === 'prompt') {
-          await PushNotifications.requestPermissions();
+
+        if (permStatus.receive === 'denied') {
+          await writeStoredValue(PERMISSION_REQUESTED_KEY, '1');
+          await writeStoredValue(DENIED_PENDING_SYNC_KEY, '1');
+          const ok = await patchPushEnabled(false);
+          if (!ok) {
+            setTimeout(() => void trySyncDeniedToServer(), 2000);
+            setTimeout(() => void trySyncDeniedToServer(), 5000);
+          } else {
+            await writeStoredValue(DENIED_PENDING_SYNC_KEY, null);
+          }
+          return;
         }
 
-        // Пытаемся зарегистрировать push-уведомления
-        console.log('[PushPlugin] Attempting to register push notifications');
+        if (permStatus.receive === 'prompt') {
+          const alreadyRequested = await readStoredValue(PERMISSION_REQUESTED_KEY);
+          if (alreadyRequested === '1') {
+            return;
+          }
+          await writeStoredValue(PERMISSION_REQUESTED_KEY, '1');
+          const result = await PushNotifications.requestPermissions();
+          if (result.receive === 'denied') {
+            await writeStoredValue(DENIED_PENDING_SYNC_KEY, '1');
+            const ok = await patchPushEnabled(false);
+            if (!ok) {
+              setTimeout(() => void trySyncDeniedToServer(), 2000);
+              setTimeout(() => void trySyncDeniedToServer(), 5000);
+            } else {
+              await writeStoredValue(DENIED_PENDING_SYNC_KEY, null);
+            }
+            return;
+          }
+          // Пользователь разрешил — PATCH true, затем register
+          const sessionToken =
+            typeof window !== 'undefined'
+              ? localStorage.getItem('mentai.session.token')
+              : null;
+          if (sessionToken) {
+            try {
+              await nuxtApp.$api('/api/user/me', {
+                method: 'PATCH',
+                body: { pushNotificationsEnabled: true },
+              });
+              if (auth.user) auth.user.pushNotificationsEnabled = true;
+            } catch (e) {
+              console.warn(
+                '[PushPlugin] Не удалось синхронизировать pushNotificationsEnabled=true:',
+                e
+              );
+            }
+          }
+        } else if (permStatus.receive !== 'granted') {
+          return;
+        }
+
+        console.log('[PushPlugin] Permission granted, registering push');
         await PushNotifications.register();
       } catch (error: any) {
         // Проверяем, что это ошибка инициализации Firebase
@@ -939,6 +1024,9 @@ export default defineNuxtPlugin({
             if (!isActive) return;
             void consumeNativeLaunchNavigation();
             void flushPendingNavigation();
+            void readStoredValue(DENIED_PENDING_SYNC_KEY).then((v) => {
+              if (v === '1') void trySyncDeniedToServer();
+            });
           });
         })
         .catch((error) => {
@@ -960,10 +1048,16 @@ export default defineNuxtPlugin({
       void flushPendingNavigation();
     });
 
+    /** Синхронизация при логине: если отказали до входа или PATCH не прошёл — повторяем при появлении сессии */
+    function syncPushDeniedOnLogin() {
+      void trySyncDeniedToServer();
+    }
+
     watch(
       () => auth.isLoggedIn,
       (loggedIn) => {
         if (!loggedIn) return;
+        void syncPushDeniedOnLogin();
         void flushPendingNavigation();
       },
       { immediate: true }

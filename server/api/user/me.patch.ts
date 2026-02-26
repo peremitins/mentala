@@ -24,6 +24,7 @@ type SceneSettingsPayload = Partial<{
 type Payload = Partial<{
   sceneSettings: SceneSettingsPayload;
   marketingConsent: boolean;
+  pushNotificationsEnabled: boolean;
 }>;
 
 function clampNumber(value: number, min: number, max: number) {
@@ -73,6 +74,7 @@ export default defineEventHandler(async (event) => {
   const marketingConsentSource = body.marketingConsent
     ? detectMarketingSource(event)
     : null;
+  const hasPushUpdate = typeof body.pushNotificationsEnabled === 'boolean';
 
   await db
     .update(users)
@@ -83,6 +85,9 @@ export default defineEventHandler(async (event) => {
             marketingConsentAt,
             marketingConsentSource,
           }
+        : {}),
+      ...(hasPushUpdate
+        ? { pushNotificationsEnabled: body.pushNotificationsEnabled }
         : {}),
       updatedAt: new Date(),
     })
@@ -109,6 +114,10 @@ export default defineEventHandler(async (event) => {
       marketingConsent: hasMarketingUpdate
         ? body.marketingConsent
         : Boolean((user as any)?.marketingConsentAt),
+      pushNotificationsEnabled:
+        hasPushUpdate
+          ? body.pushNotificationsEnabled!
+          : Boolean((user as any)?.pushNotificationsEnabled ?? true),
       billing,
     },
   };
