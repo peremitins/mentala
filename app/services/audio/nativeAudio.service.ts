@@ -620,6 +620,8 @@ export class NativeAudioService implements AudioService {
     const options: ConfigureOptions = {
       focus: true,
       showNotification: true,
+      // На Android background нужен, чтобы NativeAudio не ставил паузу при onPause.
+      // Маршрутизацию держим в MODE_NORMAL на нативной стороне.
       background: true,
     };
 

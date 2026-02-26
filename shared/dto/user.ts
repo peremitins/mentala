@@ -45,12 +45,14 @@ export const UserMeDto = z.object({
       hasPassword: z.boolean().optional(),
       sceneSettings: z.record(z.any()).optional(),
       marketingConsent: z.boolean().optional(),
+      pushNotificationsEnabled: z.boolean().optional(),
       billing: UserBillingDto.optional(),
     })
     .nullable(),
 });
 
 export const UserMePatchDto = z.object({
+  pushNotificationsEnabled: z.boolean().optional(),
   sceneSettings: z
     .object({
       sceneId: z.string().nullable().optional(),

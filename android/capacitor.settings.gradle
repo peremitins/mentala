@@ -43,3 +43,6 @@ project(':capgo-capacitor-social-login').projectDir = new File('../node_modules/
 
 include ':capgo-native-audio'
 project(':capgo-native-audio').projectDir = new File('../node_modules/.pnpm/@capgo+native-audio@7.11.2_@capacitor+core@7.4.3/node_modules/@capgo/native-audio/android')
+
+include ':capacitor-native-settings'
+project(':capacitor-native-settings').projectDir = new File('../node_modules/.pnpm/capacitor-native-settings@7.0.2_@capacitor+core@7.4.3/node_modules/capacitor-native-settings/android')
