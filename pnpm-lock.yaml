@@ -98,6 +98,9 @@ importers:
       bullmq:
         specifier: ^5.65.1
         version: 5.65.1
+      capacitor-native-settings:
+        specifier: ^7.0.2
+        version: 7.0.2(@capacitor/core@7.4.3)
       chart.js:
         specifier: ^4.5.0
         version: 4.5.0
@@ -4238,6 +4241,11 @@ packages:
 
   caniuse-lite@1.0.30001745:
     resolution: {integrity: sha512-ywt6i8FzvdgrrrGbr1jZVObnVv6adj+0if2/omv9cmR2oiZs30zL4DIyaptKcbOrBdOIc74QTMoJvSE2QHh5UQ==}
+
+  capacitor-native-settings@7.0.2:
+    resolution: {integrity: sha512-s6xsLW0mJ6tywPgGtPXMgfDGTH5UqdSry1ZRlqh9T124IEIuPQyA35zpBaCywfHkmDKEZYdBik3/8Mdncjbniw==}
+    peerDependencies:
+      '@capacitor/core': '>=7.0.0'
 
   ccount@2.0.1:
     resolution: {integrity: sha512-eyrF0jiFpY+3drT6383f1qhkbGsLSifNAjA61IUjZjmLCWjItY6LB9ft9YhoDgwfmclB2zhu51Lc7+95b8NRAg==}
@@ -14104,6 +14112,10 @@ snapshots:
       lodash.uniq: 4.5.0
 
   caniuse-lite@1.0.30001745: {}
+
+  capacitor-native-settings@7.0.2(@capacitor/core@7.4.3):
+    dependencies:
+      '@capacitor/core': 7.4.3
 
   ccount@2.0.1: {}
 

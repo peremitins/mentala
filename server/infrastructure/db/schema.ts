@@ -1,4 +1,5 @@
 import {
+  type AnyPgColumn,
   pgTable,
   serial,
   text,
@@ -103,7 +104,9 @@ export const users = pgTable('users', {
   scheduledChangeAt: timestamp('scheduled_change_at', { withTimezone: true }),
   scheduledFromSubscriptionId: integer(
     'scheduled_from_subscription_id'
-  ).references(() => userSubscriptions.id, { onDelete: 'set null' }),
+  ).references((): AnyPgColumn => userSubscriptions.id, {
+    onDelete: 'set null',
+  }),
   scheduledChangeUpdatedAt: timestamp('scheduled_change_updated_at', {
     withTimezone: true,
   }),
@@ -117,6 +120,9 @@ export const users = pgTable('users', {
   acceptanceUserAgent: text('acceptance_user_agent'),
   marketingConsentAt: timestamp('marketing_consent_at', { withTimezone: true }),
   marketingConsentSource: varchar('marketing_consent_source', { length: 16 }),
+  pushNotificationsEnabled: boolean('push_notifications_enabled')
+    .default(true)
+    .notNull(),
   // Roles and permissions
   roleId: varchar('role_id', { length: 50 })
     .default('user')
@@ -866,7 +872,7 @@ export const userSubscriptions = pgTable(
     id: serial('id').primaryKey(),
     userId: integer('user_id')
       .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
+      .references((): AnyPgColumn => users.id, { onDelete: 'cascade' }),
     planId: varchar('plan_id', { length: 50 })
       .notNull()
       .references(() => subscriptionPlans.id),

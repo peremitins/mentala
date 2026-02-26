@@ -16,6 +16,7 @@ import {
 import {
   notificationSlots,
   userDevices,
+  users,
 } from '@/server/infrastructure/db/schema';
 import type { NotificationPayload } from '@/shared/dto/notifications';
 import { enqueueAiTextPoolRefillForAllActivePreferences } from '@/server/application/notifications/schedulers/aiTextPool.scheduler';
@@ -524,6 +525,23 @@ export async function sendToUser(
   userId: number,
   payload: NotificationPayload
 ): Promise<SendToUserResult> {
+  const [userRow] = await db
+    .select({ pushNotificationsEnabled: users.pushNotificationsEnabled })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  if (userRow?.pushNotificationsEnabled === false) {
+    console.log(`[FCM] Push disabled for user ${userId}, skipping delivery`);
+    return {
+      deviceCount: 0,
+      sentCount: 0,
+      mockCount: 0,
+      failedCount: 0,
+      hasRealDelivery: false,
+    };
+  }
+
   const appEnv = resolveServerAppEnv();
   console.log(`[FCM] Looking for devices for user ${userId} (env=${appEnv})`);
   const devices = await db

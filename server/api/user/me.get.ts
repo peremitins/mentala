@@ -27,6 +27,9 @@ export default defineEventHandler(async (event) => {
         hasPassword: !!user.passwordHash,
         sceneSettings: (user as any)?.sceneSettings || {},
         marketingConsent: Boolean((user as any)?.marketingConsentAt),
+        pushNotificationsEnabled: Boolean(
+          (user as any)?.pushNotificationsEnabled ?? true
+        ),
         billing,
       },
     };
