@@ -4,64 +4,27 @@
       v-if="step === 'select'"
       class="flex min-h-full flex-col items-center justify-center space-y-4 py-2"
     >
-      <div class="space-y-1 text-center">
-        <h3 class="text-xl font-semibold text-foreground">
-          Выбери быстрый шаг
-        </h3>
-      </div>
-
       <div class="w-full space-y-2">
         <button
+          v-for="card in quickHelpCards"
+          :key="card.id"
           type="button"
-          class="glass-deep w-full rounded-xl p-4 text-left transition hover:border-white/30"
-          @click="setStep('panic-grounding')"
-        >
-          <p class="text-base font-semibold text-foreground">5-4-3-2-1</p>
-          <p class="mt-1 text-sm text-foreground/80">
-            Заземление через наблюдение и ощущения
-          </p>
-        </button>
-
-        <button
-          type="button"
-          class="glass-deep w-full rounded-xl p-4 text-left transition hover:border-white/30"
-          @click="setStep('panic-breathing')"
-        >
-          <p class="text-base font-semibold text-foreground">
-            Стабилизировать дыхание
-          </p>
-          <p class="mt-1 text-sm text-foreground/80">
-            Квадратное дыхание 4-4-4-4
-          </p>
-        </button>
-
-        <button
-          type="button"
-          class="glass-deep w-full rounded-xl p-4 text-left transition hover:border-white/30"
-          @click="setStep('tension-practice')"
-        >
-          <p class="text-base font-semibold text-foreground">
-            Сбросить сильное напряжение
-          </p>
-          <p class="mt-1 text-sm text-foreground/80">
-            Расслабить тело и сделать дыхание ровнее
-          </p>
-        </button>
-
-        <button
-          type="button"
-          class="glass-deep w-full rounded-xl p-4 text-left transition hover:border-white/30"
-          @click="goToChat('vent')"
+          class="glass-border w-full rounded-xl p-4 text-left transition hover:border-white/30"
+          @click="handleQuickHelpCardClick(card)"
         >
           <div class="flex items-start justify-between gap-3">
             <div>
               <p class="text-base font-semibold text-foreground">
-                Хочу выговориться
+                {{ card.title }}
               </p>
-              <p class="mt-1 text-sm text-foreground/80">Поговорить в чате</p>
+              <p class="mt-1 text-sm text-foreground/80">
+                {{ card.subtitle }}
+              </p>
             </div>
             <span
-              v-if="!chatHandoffAccess.available"
+              v-if="
+                card.action.type === 'go_chat' && !chatHandoffAccess.available
+              "
               class="inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-white/20 bg-black/45 text-sm leading-none"
             >
               {{ getPlanBadgeEmoji(chatHandoffAccess.requiredPlan) }}
@@ -410,6 +373,10 @@ import {
 import TimePicker from '@/app/components/TimePicker.vue';
 import { useSos, type SosEntry, type SosStep } from '@/app/composables/useSos';
 import { useChatStore } from '@/app/stores/chat';
+import {
+  QUICK_HELP_CARDS,
+  type QuickHelpCard,
+} from '@/app/lib/quickHelpCatalog';
 import { useNotificationsSettings } from '@/app/composables/useNotificationsSettings';
 import { useEntitlements } from '@/app/composables/useEntitlements';
 import { useToast } from '@/app/composables/useToast';
@@ -463,6 +430,7 @@ const addressing = ref<Addressing>('informal');
 const panicBreathingPractice = computed(() =>
   findBreathPractice('box-breathing')
 );
+const quickHelpCards = QUICK_HELP_CARDS;
 const finishEntry = computed<SosEntry>(() => finish.value?.entry ?? 'panic');
 const lastCompletedStep = ref<SosStep | null>(null);
 
@@ -946,6 +914,20 @@ function openPaywall(featureKey: string) {
 
 function getPlanBadgeEmoji(plan: string) {
   return plan === 'premium' ? '💎' : '⭐';
+}
+
+async function handleQuickHelpCardClick(card: QuickHelpCard) {
+  if (card.action.type === 'set_step') {
+    setStep(card.action.step);
+    return;
+  }
+
+  if (card.action.type === 'go_chat') {
+    await goToChat(card.action.entry);
+    return;
+  }
+
+  await navigateTo(card.action.to);
 }
 
 async function goToChat(entry: SosEntry, afterPractice = false) {

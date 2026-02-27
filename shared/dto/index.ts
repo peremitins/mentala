@@ -5,6 +5,8 @@ export * from './meditations';
 export * from './user';
 export * from './landing';
 
+const THOUGHT_DUMP_ENTRY_CONTEXT_MAX_CHARS = 2_500;
+
 export const UserDto = z.object({
   id: z.string().uuid().optional(),
   name: z.string().min(1).optional(),
@@ -20,9 +22,7 @@ export const HabitEntryContextDto = z.object({
   type: z.literal('habit'),
   habit_id: z.string(),
   habit_name: z.string().optional(),
-  habit_intent: z
-    .enum(['build', 'quit', 'custom'])
-    .optional(),
+  habit_intent: z.enum(['build', 'quit', 'custom']).optional(),
   habit_description: z.string().optional(),
 });
 
@@ -39,10 +39,24 @@ export const SosEntryContextDto = z.object({
   after_practice: z.boolean().optional(),
 });
 
+export const ThoughtDumpEntryContextDto = z.object({
+  type: z.literal('thought_dump'),
+  source: z.literal('quick_help_thought_dump'),
+  dump_text: z.preprocess((value) => {
+    if (typeof value !== 'string') {
+      return value;
+    }
+    // Обрезаем контекст до безопасного лимита до валидации.
+    return value.slice(0, THOUGHT_DUMP_ENTRY_CONTEXT_MAX_CHARS);
+  }, z.string().trim().min(1).max(THOUGHT_DUMP_ENTRY_CONTEXT_MAX_CHARS)),
+  input_mode: z.enum(['text', 'voice', 'mixed']).optional(),
+});
+
 export const ChatEntryContextDto = z.discriminatedUnion('type', [
   HabitEntryContextDto,
   TherapyTopicEntryContextDto,
   SosEntryContextDto,
+  ThoughtDumpEntryContextDto,
 ]);
 
 export const ChatRequestDto = z.object({

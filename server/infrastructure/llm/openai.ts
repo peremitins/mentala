@@ -1218,12 +1218,19 @@ export const openaiProvider: LlmProviderPort = {
         options?.user_gender === 'male' || options?.user_gender === 'female'
           ? options.user_gender
           : null;
+      const isThoughtDumpEntry = options?.entryContext?.type === 'thought_dump';
       const now = new Date();
       let canUseGreeting = false;
       let greetingName: string | null = null;
       let alternativeOpening: string | null = null;
 
-      if (numericUserId && !Number.isNaN(numericUserId)) {
+      // Для thought dump не подставляем готовые стартовые шаблоны:
+      // ответ должен начинаться сразу по содержанию выгрузки.
+      if (
+        !isThoughtDumpEntry &&
+        numericUserId &&
+        !Number.isNaN(numericUserId)
+      ) {
         canUseGreeting = await reserveDailyGreeting({
           userId: numericUserId,
           timezone,
@@ -1266,6 +1273,7 @@ export const openaiProvider: LlmProviderPort = {
         openingLine: alternativeOpening ?? undefined,
         welcomePromptContent: welcomePromptContent || undefined,
         entryContext: options?.entryContext,
+        disableOpeningTemplates: isThoughtDumpEntry,
       });
 
       // System промпт для старта

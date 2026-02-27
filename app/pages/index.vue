@@ -159,9 +159,9 @@ import {
   computed,
 } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { useSpeechEngine } from '@/app/composables/useSpeechEngine';
 import { useTTS } from '@/app/composables/useTTS';
 import { useMarkdown } from '@/app/composables/useMarkdown';
+import { useVoiceDictationInput } from '@/app/composables/useVoiceDictationInput';
 import { useChatStore } from '@/app/stores/chat';
 import { useSpeechStore } from '@/app/stores/speech';
 import { useChatSettingsStore } from '@/app/stores/chatSettings';
@@ -217,12 +217,8 @@ const showWelcomeScreen = computed(() => {
   return chat.messages.length === 0;
 });
 
-// База для наращивания текста во время голосового ввода
-const speechBase = ref('');
-const lastPartial = ref(''); // Последний partial для сохранения в базу
 const chat = useChatStore();
 const { getFeatureAccess } = useEntitlements();
-const { settings, start, stop, onPartial, onFinal } = useSpeechEngine();
 const speechStore = useSpeechStore();
 const chatSettings = useChatSettingsStore();
 const runtimeConfig = useRuntimeConfig();
@@ -247,67 +243,28 @@ const isUserTextOverLimit = computed(
 const { speak: speakTTS } = useTTS();
 const { renderMarkdown } = useMarkdown();
 
-// Отслеживаем ручные изменения текста для синхронизации speechBase
-// Очищаем speechBase если пользователь полностью удалил текст
-const isProcessingVoiceInput = ref(false);
 const isSending = ref(false); // Флаг отправки сообщения - блокирует обновление textarea из голосового ввода
 const lastSendPointerTs = ref(0); // Защита от двойного клика после pointer-события
 
-onPartial((t) => {
-  // Игнорируем partial, если микрофон не слушает (был остановлен) или идет отправка
-  if (!speechStore.isListening || isSending.value) return;
-
-  isProcessingVoiceInput.value = true;
-  lastPartial.value = t; // Сохраняем последний partial
-  const base = speechBase.value.trim();
-  console.log('[onPartial] base:', base, 'partial:', t);
-  // Показываем: база + текущий partial результат
-  chat.userText = (base ? base + ' ' : '') + t;
-  nextTick(() => {
-    isProcessingVoiceInput.value = false;
-  });
+const {
+  settings,
+  toggleListening: toggleMic,
+  stopListening: stopMic,
+  clearBaseText: clearVoiceBase,
+} = useVoiceDictationInput({
+  getValue: () => chat.userText,
+  setValue: (value) => {
+    chat.userText = value;
+  },
+  isBlocked: isSending,
+  onStartError: (error) => {
+    console.error('[Chat] Failed to start dictation:', error);
+  },
+  onFinalTranscription: ({ mergedText }) => {
+    if (!settings.value.autoSend || !mergedText.trim()) return;
+    emitSend();
+  },
 });
-
-onFinal((t) => {
-  // Игнорируем final, если идет отправка сообщения
-  if (isSending.value) return;
-
-  // Для Whisper API isListening может быть false к моменту вызова finalCb
-  // Проверяем только наличие текста
-  if (!t?.trim()) return;
-
-  // Для final результата используем speechBase как базу
-  isProcessingVoiceInput.value = true;
-  const base = speechBase.value.trim();
-  console.log('[onFinal] base:', base, 'final:', t);
-  // Объединяем базу с финальным результатом
-  const merged = ((base ? base + ' ' : '') + t).trim();
-  // Обновляем speechBase для следующей записи
-  speechBase.value = merged;
-  chat.userText = merged;
-
-  // stop() уже вызывается в engine.native.ts через событие 'end'
-  // Здесь просто обрабатываем текст и проверяем автоотправку
-
-  if (settings.value.autoSend && chat.userText?.trim()) emitSend();
-
-  nextTick(() => {
-    isProcessingVoiceInput.value = false;
-  });
-});
-
-watch(
-  () => chat.userText,
-  (newText) => {
-    // Пропускаем изменения из-за голосового ввода
-    if (isProcessingVoiceInput.value) return;
-
-    // Если текст стал пустым - очищаем speechBase
-    if (!newText?.trim()) {
-      speechBase.value = '';
-    }
-  }
-);
 
 // Функция для обновления URL с query параметрами
 function updateURL(screen: 'welcome' | 'chat') {
@@ -368,30 +325,6 @@ async function handleWelcomeSelect() {
   }
 }
 
-async function toggleMic() {
-  if (speechStore.isListening) {
-    // Принудительное отключение микрофона
-    await stop();
-    // Если после остановки текст пустой, очищаем speechBase
-    if (!chat.userText?.trim()) {
-      speechBase.value = '';
-    }
-    return;
-  }
-
-  // Запускаем запись - используем текущий текст как базу
-  speechBase.value = chat.userText?.trim() || '';
-
-  try {
-    await start();
-    // start() автоматически установит isListening = true
-  } catch (error) {
-    console.error('[toggleMic] Failed to start:', error);
-    speechStore.isListening = false;
-    speechBase.value = '';
-  }
-}
-
 function emitSend() {
   if (!ensureChatAccessOrPaywall()) return;
   if (!chat.userText?.trim()) return;
@@ -445,11 +378,11 @@ const sendText = async (rawText: string) => {
   // Останавливаем микрофон, если он активен
   if (speechStore.isListening) {
     // Останавливаем микрофон, но не ждём финального колбэка - отправляем сразу.
-    void stop();
+    void stopMic();
   }
 
   // Очищаем состояние голосового ввода
-  speechBase.value = '';
+  clearVoiceBase();
 
   // Очищаем ввод после захвата текста, чтобы отправка на мобильных срабатывала сразу.
   chat.userText = '';
@@ -734,7 +667,7 @@ onBeforeUnmount(() => {
     void chat.endTherapySession();
   }
   // Останавливаем голосовой ввод
-  stop();
+  void stopMic();
 
   // Сбрасываем кэш subscription store для обновления данных при следующем заходе
   const subscriptionStore = useSubscriptionStore();

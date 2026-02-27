@@ -28,7 +28,7 @@
       </div>
       <div class="mr-2 flex items-center gap-2">
         <button
-          v-if="route.path !== '/quick-help'"
+          v-if="!route.path.startsWith('/quick-help')"
           type="button"
           class="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-foreground/80 transition hover:border-white/20 hover:text-foreground"
           aria-label="Быстрая помощь"
