@@ -8,8 +8,21 @@ const DEFAULT_MEDITATION_TRACK_ID =
 const DEFAULT_BREATH_PRACTICE_SLUG =
   process.env.DEFAULT_BREATH_PRACTICE_SLUG?.trim() || 'box-breathing';
 
-const BREATH_478_PATTERN = /4\s*[-–—‑]?\s*7\s*[-–—‑]?\s*8/iu;
-const BREATH_4444_PATTERN = /4\s*[-–—‑]?\s*4\s*[-–—‑]?\s*4\s*[-–—‑]?\s*4/iu;
+// Паттерны техник в порядке проверки: более специфичные первыми.
+// AI генерирует тексты unpredictably — можем встретить 4-7-8, 4-4-4-4, 4-6 и др.
+const BREATH_TECHNIQUE_PATTERNS: ReadonlyArray<{
+  pattern: RegExp;
+  slug: string;
+}> = [
+  { pattern: /4\s*[-–—‑]?\s*7\s*[-–—‑]?\s*8/iu, slug: '4-7-8' },
+  { pattern: /4\s*[-–—‑]?\s*4\s*[-–—‑]?\s*4\s*[-–—‑]?\s*4/iu, slug: 'box-breathing' },
+  { pattern: /4\s*[-–—‑]?\s*6\b/iu, slug: 'long-exhale-4-6' },
+  { pattern: /5\s*[-–—‑]?\s*5\b/iu, slug: 'equal-5-5' },
+  { pattern: /6\s*[-–—‑]?\s*6\b/iu, slug: 'equal-6-6' },
+  { pattern: /4\s*[-–—‑]?\s*4\b/iu, slug: 'diaphragmatic' },
+  { pattern: /2\s*[-–—‑]?\s*4\b/iu, slug: 'pursed-lip' },
+];
+
 const BOX_BREATHING_TEXT_MARKERS = [
   /квадратн.*дых/iu,
   /коробочн/iu,
@@ -17,7 +30,11 @@ const BOX_BREATHING_TEXT_MARKERS = [
   /square\s*breath/iu,
 ];
 
-// Выбираем конкретную дыхательную практику по тексту уведомления.
+/**
+ * Определяет slug дыхательной практики по тексту уведомления.
+ * AI может упомянуть любую технику (4-7-8, 4-4-4-4, 4-6 и т.д.) — редирект на соответствующую.
+ * При отсутствии явного упоминания — null (fallback на DEFAULT_BREATH_PRACTICE_SLUG).
+ */
 export function resolveBreathPracticeSlugFromText(
   notificationText?: string | null
 ): string | null {
@@ -25,15 +42,10 @@ export function resolveBreathPracticeSlugFromText(
   const normalizedText = notificationText.trim();
   if (!normalizedText) return null;
 
-  // При конфликте маркеров приоритет у явного 4-7-8.
-  if (BREATH_478_PATTERN.test(normalizedText)) {
-    return '4-7-8';
+  for (const { pattern, slug } of BREATH_TECHNIQUE_PATTERNS) {
+    if (pattern.test(normalizedText)) return slug;
   }
-
-  const hasBoxPattern =
-    BREATH_4444_PATTERN.test(normalizedText) ||
-    BOX_BREATHING_TEXT_MARKERS.some((pattern) => pattern.test(normalizedText));
-  if (hasBoxPattern) {
+  if (BOX_BREATHING_TEXT_MARKERS.some((p) => p.test(normalizedText))) {
     return 'box-breathing';
   }
 

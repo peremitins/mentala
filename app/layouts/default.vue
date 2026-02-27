@@ -113,7 +113,7 @@ const SOS_TECHNIQUE_STEPS = [
 const { step: sosStep } = useSos();
 const isSosTechniqueActive = computed(
   () =>
-    route.path === '/sos' &&
+    route.path === '/quick-help' &&
     SOS_TECHNIQUE_STEPS.includes(
       sosStep.value as (typeof SOS_TECHNIQUE_STEPS)[number]
     )

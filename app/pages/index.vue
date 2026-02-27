@@ -551,12 +551,10 @@ const handleActionChip = async (chip: SuggestedChip) => {
   if (chip.action === 'open_sos') {
     const entry = chip.params?.sosEntry;
     const query =
-      entry === 'panic' ||
-      entry === 'tension' ||
-      entry === 'technique_picker'
+      entry === 'panic' || entry === 'tension' || entry === 'technique_picker'
         ? { entry }
         : {};
-    await router.push({ path: '/sos', query });
+    await router.push({ path: '/quick-help', query });
     return;
   }
 };

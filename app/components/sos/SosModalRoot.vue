@@ -32,14 +32,13 @@
               <h2
                 class="text-base font-semibold tracking-wide flex items-center gap-2 truncate"
               >
-                <IconHeartPulse class="h-4 w-4 flex-shrink-0" /> Быстрая
-                стабилизация
+                <IconHeartPulse class="h-4 w-4 flex-shrink-0" /> Быстрая помощь
               </h2>
             </div>
             <button
               type="button"
               class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border border-white/20 text-white/80 transition hover:border-white/40 hover:text-white"
-              aria-label="Закрыть SOS"
+              aria-label="Закрыть Быструю помощь"
               @click="handleClose"
             >
               <IconX class="h-4 w-4" />
@@ -52,18 +51,29 @@
               class="flex min-h-full flex-col items-center justify-center space-y-4 py-2"
             >
               <div class="space-y-1 text-center">
-                <h3 class="text-xl font-semibold">Что ты чувствуешь сейчас?</h3>
+                <h3 class="text-xl font-semibold">Выбери быстрый шаг</h3>
               </div>
 
               <div class="w-full max-w-md space-y-4">
                 <button
                   type="button"
                   class="glass-deep w-full rounded-xl p-4 text-left transition hover:border-white/30"
-                  @click="setStep('panic-techniques')"
+                  @click="setStep('panic-grounding')"
                 >
-                  <p class="text-base font-semibold">Тревога и паника</p>
+                  <p class="text-base font-semibold">5-4-3-2-1</p>
                   <p class="mt-1 text-sm text-white/75">
-                    Снизить тревогу и успокоиться
+                    Заземление через наблюдение и ощущения
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  class="glass-deep w-full rounded-xl p-4 text-left transition hover:border-white/30"
+                  @click="setStep('panic-breathing')"
+                >
+                  <p class="text-base font-semibold">Стабилизировать дыхание</p>
+                  <p class="mt-1 text-sm text-white/75">
+                    Квадратное дыхание 4-4-4-4
                   </p>
                 </button>
 
@@ -72,7 +82,9 @@
                   class="glass-deep w-full rounded-xl p-4 text-left transition hover:border-white/30"
                   @click="setStep('tension-practice')"
                 >
-                  <p class="text-base font-semibold">Сильное напряжение</p>
+                  <p class="text-base font-semibold">
+                    Сбросить сильное напряжение
+                  </p>
                   <p class="mt-1 text-sm text-white/75">
                     Расслабить тело и сделать дыхание ровнее
                   </p>
@@ -97,42 +109,6 @@
                       {{ getPlanBadgeEmoji(chatHandoffAccess.requiredPlan) }}
                     </span>
                   </div>
-                </button>
-              </div>
-            </section>
-
-            <section
-              v-else-if="step === 'panic-techniques'"
-              class="flex min-h-full flex-col items-center justify-center space-y-4 py-2"
-            >
-              <div class="space-y-1 text-center">
-                <p class="text-sm text-white/70">Тревога и паника</p>
-                <h3 class="text-xl font-semibold">Выбери короткую технику</h3>
-              </div>
-
-              <div class="w-full max-w-md space-y-4">
-                <button
-                  type="button"
-                  class="glass-deep w-full rounded-xl p-4 text-left transition hover:border-white/30"
-                  @click="setStep('panic-grounding')"
-                >
-                  <p class="text-base font-semibold">5-4-3-2-1</p>
-                  <p class="mt-1 text-sm text-white/75">
-                    Заземление через наблюдение и ощущения.
-                  </p>
-                </button>
-
-                <button
-                  type="button"
-                  class="glass-deep w-full rounded-xl p-4 text-left transition hover:border-white/30"
-                  @click="setStep('panic-breathing')"
-                >
-                  <p class="text-base font-semibold">
-                    Квадратное дыхание 4-4-4-4
-                  </p>
-                  <p class="mt-1 text-sm text-white/75">
-                    Дыши в ритме и возвращай контроль.
-                  </p>
                 </button>
               </div>
             </section>
@@ -909,12 +885,8 @@ function handleClose() {
 }
 
 function handleBack() {
-  if (step.value === 'panic-techniques') {
-    setStep('select');
-    return;
-  }
   if (step.value === 'panic-grounding' || step.value === 'panic-breathing') {
-    setStep('panic-techniques');
+    setStep('select');
     return;
   }
   if (step.value === 'tension-practice' || step.value === 'finish') {
@@ -946,7 +918,7 @@ function repeatLastPractice() {
     setStep('tension-practice');
     return;
   }
-  setStep('panic-techniques');
+  setStep('panic-grounding');
 }
 
 async function loadAddressing() {

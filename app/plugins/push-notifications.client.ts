@@ -13,7 +13,8 @@ import { useMeditationPlayer } from '@/app/composables/useMeditationPlayer';
 export default defineNuxtPlugin({
   name: 'push-notifications',
   dependsOn: ['pinia'],
-  setup(nuxtApp) {
+  setup() {
+    const nuxtApp = useNuxtApp();
     // Работаем только на мобильных платформах
     const platform = Capacitor.getPlatform();
     if (platform === 'web') return;
@@ -287,7 +288,7 @@ export default defineNuxtPlugin({
         case 'breath_practice':
           return `/breath-practices/${encodeURIComponent(
             navigation.slug
-          )}${navigation.slug === '4-7-8' ? '?group=popular' : ''}`;
+          )}${navigation.slug === 'box-breathing' ? '?group=popular' : ''}`;
         case 'breath_practices':
           return '/breath-practices';
         default:
@@ -938,7 +939,9 @@ export default defineNuxtPlugin({
         }
 
         if (permStatus.receive === 'prompt') {
-          const alreadyRequested = await readStoredValue(PERMISSION_REQUESTED_KEY);
+          const alreadyRequested = await readStoredValue(
+            PERMISSION_REQUESTED_KEY
+          );
           if (alreadyRequested === '1') {
             return;
           }

@@ -2,15 +2,17 @@
   <div
     class="flex flex-col space-y-2 h-dvh overflow-y-auto pb-[100px] rounded-lg"
   >
-    <PageHeader title="SOS" :show-back-button="true" @go-back="handleGoBack">
-    </PageHeader>
+    <PageHeader
+      title="Быстрая помощь"
+      :show-back-button="true"
+      @go-back="handleGoBack"
+    />
 
     <SosPageContent />
   </div>
 </template>
 
 <script setup lang="ts">
-import IconHeartPulse from '~icons/lucide/heart-pulse';
 import { useRoute, useRouter } from 'vue-router';
 import PageHeader from '@/app/components/PageHeader.vue';
 import SosPageContent from '@/app/components/sos/SosPageContent.vue';
@@ -26,12 +28,8 @@ function handleGoBack() {
     router.back();
     return;
   }
-  if (step.value === 'panic-techniques') {
-    setStep('select');
-    return;
-  }
   if (step.value === 'panic-grounding' || step.value === 'panic-breathing') {
-    setStep('panic-techniques');
+    setStep('select');
     return;
   }
   if (step.value === 'tension-practice' || step.value === 'finish') {
