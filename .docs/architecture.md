@@ -402,6 +402,8 @@ server/
 • `web/android` -> `confirmation.type=embedded`, `confirmation.locale=ru_RU`, ответ содержит `confirmationToken`, `paymentMode=widget`;
 • `ios` -> `confirmation.type=redirect`, `confirmation.locale=ru_RU`, ответ содержит `paymentUrl`, `paymentMode=redirect`;
 • `mobile web` может явно запрашивать `paymentMode=redirect` (fallback для стабильного 3DS UX на узких экранах).
+• Для пользователей с уже привязанной картой (`paymentMethodBound=true` + `paymentMethodId`) сервер сначала пробует direct charge через YooKassa recurring API (`payment_method_id`) без открытия checkout.
+• При `direct charge = succeeded` подписка активируется сразу (`checkoutAction=activated`, `paymentMode=none`), при `canceled/failed` — выполняется fallback в обычный checkout (widget/redirect).
 • Для подписочного checkout включено безусловное сохранение метода оплаты: `save_payment_method=true` + `merchant_customer_id=<userId>`.
 • `paymentUrl` и `confirmationToken` не считаются подтверждением оплаты; факт оплаты подтверждается только серверной верификацией.
 
@@ -463,7 +465,7 @@ server/
 • Контейнер виджета обёрнут в `rounded + overflow-hidden`, чтобы скругления верхних/нижних углов сохранялись в embed-режиме на всех viewport.
 • Кнопка закрытия диалога использует стандартный визуальный стиль без явной рамки у кнопки (с принудительно тёмным цветом иконки для читаемости на белом фоне виджета); контейнер виджета имеет дополнительный верхний внутренний отступ для корректной визуальной дистанции от верхней границы.
 • Для обычного web/android flow `return_url` у widget не используется; после оплаты статус синхронизируется через widget events (`success/fail`) + short polling.
-• `return_url` используется только в redirect flow; флаг `externalFlow=1` добавляется только для iOS external flow.
+• `return_url` в redirect-flow указывает сразу на `/subscription?paymentReturn=1&subscriptionId=...` (без отдельной промежуточной страницы); для external flow добавляется `externalFlow=1`.
 • iOS native: внутренний checkout отключён; показывается только переход в web flow.
 • Mobile web: используется redirect checkout (без in-page widget popup), чтобы избежать нестабильности 3DS-кнопок в iframe на узких экранах.
 • После старта оплаты включён short polling с прогрессивным профилем: 1 сек первые 5 секунд, затем 3 сек, окно до 30 секунд.
@@ -472,16 +474,17 @@ server/
 • `check-payment-status` выполняет self-heal reconcile: при `providerStatus=succeeded`/`canceled` и локальном `pending` endpoint идемпотентно синхронизирует локальную подписку с фактическим состоянием платежа.
 • Критичный инвариант polling: фронт подтверждает оплату только по целевой checkout-подписке (`subscriptionId` из `start-checkout`/`return_url`), а не по `currentSubscription`, чтобы старая `active` подписка не давала ложный success.
 • `GET /api/subscriptions/check-payment-status` поддерживает точечную проверку по `subscriptionId` вне зависимости от текущего `payment_status` записи; для non-pending статусов endpoint возвращает фактический локальный статус без выбора «последней pending» записи.
+• `GET /api/subscriptions/current` получил on-demand self-heal для trial-scheduled billing: если `nextChargeAt <= now`, статус `scheduled|past_due`, карта привязана и есть `paymentMethodId`, endpoint точечно запускает попытку списания для текущего пользователя (`runTrialBillingForUser`) и затем перечитывает billing state.
+• Это закрывает кейс «worker не успел/не запущен»: при открытии экрана подписки списание догоняется автоматически без ручного retry и без перезагрузки страницы.
 • `app/plugins/subscription-sync.client.ts`:
 • синхронизация подписки работает только по оплатным событиям (event-driven), без авто-refresh при `visibilitychange/appStateChange`;
 • обработка deep link возврата через `App.addListener('appUrlOpen', ...)`;
 • при `payment-success` всегда диспатчится событие `mentala:payment-return`;
 • если открыт `/subscription`, глобальный sync не запускается (страница сама выполняет polling);
 • для остальных маршрутов deep-link sync выполняется в single-flight режиме: refresh current -> pending polling (если нужен) -> refresh entitlements + `/api/user/me`.
-• `app/pages/payment/success.vue`:
-• web success-страница с кнопкой `Вернуться в приложение` (`mentala://payment-success?...`);
-• CTA deep-link показывается только для mobile external flow (`externalFlow=1`), в обычной web-версии показывается возврат на `/subscription`.
-• отображает состояние оплаты и запускает polling.
+• Основной возврат после оплаты выполняется напрямую на `/subscription` с query `paymentReturn=1` (+ `subscriptionId`), без пользовательского экрана `payment/success`.
+• `app/pages/payment/success.vue` сохранён только как backward-compatible redirect для уже созданных checkout-сессий со старым `return_url`.
+• polling и форс-обновление подписки запускаются на `/subscription` по флагу `paymentReturn=1`.
 • `GET /api/subscriptions/current` отключил HTTP-кэш (`Cache-Control: private, no-store`) для исключения stale-статуса после успешной оплаты.
 
 • iOS external auth bridge (as-is):

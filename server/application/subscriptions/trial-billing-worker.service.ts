@@ -157,7 +157,36 @@ async function processChargeBatch(params: {
   workerId: string;
   shopId: string;
   secretKey: string;
+  targetUserId?: number;
+  limit?: number;
 }) {
+  const dueUsersWhere = params.targetUserId
+    ? and(
+        eq(users.id, params.targetUserId),
+        isNotNull(users.billingPlanId),
+        isNotNull(users.billingPeriod),
+        isNotNull(users.nextChargeAt),
+        eq(users.paymentMethodBound, true),
+        isNotNull(users.paymentMethodId),
+        or(
+          eq(users.billingCollectionStatus, 'scheduled'),
+          eq(users.billingCollectionStatus, 'past_due')
+        ),
+        lte(users.nextChargeAt, params.now)
+      )
+    : and(
+        isNotNull(users.billingPlanId),
+        isNotNull(users.billingPeriod),
+        isNotNull(users.nextChargeAt),
+        eq(users.paymentMethodBound, true),
+        isNotNull(users.paymentMethodId),
+        or(
+          eq(users.billingCollectionStatus, 'scheduled'),
+          eq(users.billingCollectionStatus, 'past_due')
+        ),
+        lte(users.nextChargeAt, params.now)
+      );
+
   const dueUsers = await db
     .select({
       id: users.id,
@@ -170,21 +199,8 @@ async function processChargeBatch(params: {
       billingLockedAt: users.billingLockedAt,
     })
     .from(users)
-    .where(
-      and(
-        isNotNull(users.billingPlanId),
-        isNotNull(users.billingPeriod),
-        isNotNull(users.nextChargeAt),
-        eq(users.paymentMethodBound, true),
-        isNotNull(users.paymentMethodId),
-        or(
-          eq(users.billingCollectionStatus, 'scheduled'),
-          eq(users.billingCollectionStatus, 'past_due')
-        ),
-        lte(users.nextChargeAt, params.now)
-      )
-    )
-    .limit(200);
+    .where(dueUsersWhere)
+    .limit(params.limit ?? 200);
 
   for (const user of dueUsers) {
     if (
@@ -480,5 +496,28 @@ export async function runTrialBillingWorker(params: {
     workerId: params.workerId,
     shopId: params.shopId,
     secretKey: params.secretKey,
+  });
+}
+
+/**
+ * Точечный self-heal для одного пользователя:
+ * запускает только попытку списания (без полного batch по всем пользователям).
+ */
+export async function runTrialBillingForUser(params: {
+  userId: number;
+  workerId: string;
+  shopId: string;
+  secretKey: string;
+  now?: Date;
+}) {
+  const now = params.now ?? new Date();
+
+  await processChargeBatch({
+    now,
+    workerId: params.workerId,
+    shopId: params.shopId,
+    secretKey: params.secretKey,
+    targetUserId: params.userId,
+    limit: 1,
   });
 }

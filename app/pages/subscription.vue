@@ -812,6 +812,12 @@ function resolveBindReturnFlag(): boolean {
   return value === '1' || value === 'true';
 }
 
+function resolvePaymentReturnFlag(): boolean {
+  const raw = route.query.paymentReturn;
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  return value === '1' || value === 'true';
+}
+
 async function clearBindReturnQueryParams() {
   const nextQuery = { ...route.query };
   delete nextQuery.bindReturn;
@@ -825,6 +831,26 @@ async function clearBindReturnQueryParams() {
     });
   } catch (error) {
     console.warn('[Subscription] Failed to clear bindReturn params:', error);
+  }
+}
+
+async function clearPaymentReturnQueryParams() {
+  const nextQuery = { ...route.query };
+  delete nextQuery.paymentReturn;
+  delete nextQuery.subscriptionId;
+  delete nextQuery.externalFlow;
+
+  try {
+    await router.replace({
+      path: route.path,
+      query: nextQuery,
+      hash: route.hash,
+    });
+  } catch (error) {
+    console.warn(
+      '[Subscription] Failed to clear payment return params:',
+      error
+    );
   }
 }
 
@@ -1094,6 +1120,34 @@ async function runStatusPolling(targetSubscriptionId?: number | null) {
       );
       return;
     }
+
+    // Если polling завершился timeout/unknown, делаем форс-рефреш состояния,
+    // чтобы снять stale-данные после возврата из платежного провайдера.
+    const refreshed = await subscriptionStore
+      .fetchCurrentSubscription(true)
+      .catch(() => null);
+    const refreshedStatus = refreshed?.subscription?.paymentStatus || null;
+
+    if (refreshedStatus === 'active') {
+      await refreshBillingAccessSnapshot();
+      pendingCheckoutSubscriptionId.value = null;
+      isCheckoutWidgetDialogOpen.value = false;
+      await destroyWidget();
+      useToast('Подписка активирована', 'Оплата подтверждена.', 'success');
+      return;
+    }
+
+    if (refreshedStatus === 'canceled' || refreshedStatus === 'expired') {
+      pendingCheckoutSubscriptionId.value = null;
+      isCheckoutWidgetDialogOpen.value = false;
+      await destroyWidget();
+      useToast(
+        'Оплата не завершена',
+        'Платеж не был подтвержден. Попробуйте еще раз.',
+        'warning'
+      );
+      return;
+    }
   })().finally(() => {
     activePollingPromise = null;
   });
@@ -1336,7 +1390,7 @@ async function openYooKassaWidget(
   };
 
   if (useReturnUrl && typeof window !== 'undefined') {
-    widgetOptions.return_url = `${window.location.origin}/payment/success?subscriptionId=${subscriptionId}&externalFlow=1`;
+    widgetOptions.return_url = `${window.location.origin}/subscription?paymentReturn=1&subscriptionId=${subscriptionId}&externalFlow=1`;
   }
 
   try {
@@ -1535,10 +1589,12 @@ onMounted(async () => {
     });
   }
 
-  // Загружаем данные через store (с кэшированием)
+  const isPaymentReturnFlow = resolvePaymentReturnFlag();
+
+  // После возврата из оплаты сразу обходим кэш, чтобы не показывать stale plan/status.
   await Promise.all([
     subscriptionStore.fetchPlans(),
-    subscriptionStore.fetchCurrentSubscription(),
+    subscriptionStore.fetchCurrentSubscription(isPaymentReturnFlow),
   ]);
 
   // По умолчанию выделяем текущий активный тариф
@@ -1620,6 +1676,17 @@ onMounted(async () => {
   }
 
   pendingCheckoutSubscriptionId.value = resolveSubscriptionIdFromQuery();
+
+  if (isPaymentReturnFlow) {
+    if (pendingCheckoutSubscriptionId.value !== null) {
+      await runStatusPolling(pendingCheckoutSubscriptionId.value);
+    } else {
+      await subscriptionStore.fetchCurrentSubscription(true);
+      await refreshBillingAccessSnapshot();
+    }
+
+    await clearPaymentReturnQueryParams();
+  }
 
   if (typeof window !== 'undefined' && !paymentReturnListener) {
     paymentReturnListener = (event: Event) => {

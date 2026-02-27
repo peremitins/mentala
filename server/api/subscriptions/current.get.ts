@@ -11,12 +11,14 @@ import {
 } from '@/server/application/subscriptions/current-subscription.service';
 import {
   isTrialActiveAt,
+  canRunChargeAttemptNow,
   isTrialBillingPeriod,
   isTrialBillingPlanId,
   normalizeBillingCollectionStatus,
   resolveCurrentEntitlementsPlan,
 } from '@/server/application/subscriptions/trial-billing.service';
 import { syncPendingPaymentMethodBinding } from '@/server/application/subscriptions/payment-methods.service';
+import { runTrialBillingForUser } from '@/server/application/subscriptions/trial-billing-worker.service';
 
 interface ScheduledChangeResponse {
   planId: string;
@@ -181,6 +183,51 @@ export default defineEventHandler(async (event) => {
             error,
           },
           'Failed to sync pending payment method binding in /current'
+        );
+      }
+    }
+  }
+
+  const billingStatus = normalizeBillingCollectionStatus(
+    userRecord.billingCollectionStatus
+  );
+  const shouldTryOnDemandTrialCharge =
+    isTrialBillingPlanId(userRecord.billingPlanId) &&
+    isTrialBillingPeriod(userRecord.billingPeriod) &&
+    billingStatus !== 'none' &&
+    canRunChargeAttemptNow(userRecord.nextChargeAt, now) &&
+    Boolean(userRecord.paymentMethodBound && userRecord.paymentMethodId);
+
+  // Self-heal: если фоновой worker задержался/не запущен, пробуем точечно
+  // выполнить списание при запросе /api/subscriptions/current.
+  if (shouldTryOnDemandTrialCharge) {
+    const config = useRuntimeConfig(event);
+    const shopId = String(config.yookassaShopId || '').trim();
+    const secretKey = String(config.yookassaSecretKey || '').trim();
+
+    if (shopId && secretKey) {
+      try {
+        await runTrialBillingForUser({
+          userId: targetUserId,
+          workerId: `api-current-self-heal:${process.pid}`,
+          shopId,
+          secretKey,
+          now,
+        });
+
+        const refreshed = await readCurrentUserBillingRow(targetUserId);
+        if (refreshed) {
+          userRecord = refreshed;
+        }
+      } catch (error) {
+        event.context.logger?.warn(
+          {
+            userId: targetUserId,
+            nextChargeAt: userRecord.nextChargeAt,
+            billingStatus,
+            error,
+          },
+          'Failed to run on-demand trial charge in /current'
         );
       }
     }
