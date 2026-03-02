@@ -4,6 +4,9 @@
  */
 
 import { db } from '@/server/infrastructure/db/client';
+
+// Тип транзакции для передачи в функции (db и tx имеют общий query-интерфейс).
+type DbOrTx = Parameters<Parameters<typeof db.transaction>[0]>[0] | typeof db;
 import {
   users,
   userSubscriptions,
@@ -17,6 +20,7 @@ import {
   hashEmail,
 } from '@/server/application/auth/verification';
 import { getCurrentActiveSubscription } from './current-subscription.service';
+import { TRIAL_DURATION_HOURS } from '@/server/config/subscription';
 
 /**
  * Активировать Trial для нового пользователя
@@ -168,7 +172,8 @@ export async function activateTrialForUser(
       `[Trial] Found Basic plan: id=${basicPlan[0].id}, name=${basicPlan[0].name}`
     );
 
-    const trialEndDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const trialDurationMs = TRIAL_DURATION_HOURS * 60 * 60 * 1000;
+    const trialEndDate = new Date(now.getTime() + trialDurationMs);
     const subscriptionEndDate = new Date(
       now.getTime() + 30 * 24 * 60 * 60 * 1000
     );
@@ -223,6 +228,7 @@ export async function activateTrialForUser(
       metadata: {
         startDate: now.toISOString(),
         endDate: trialEndDate.toISOString(),
+        trialDurationHours: TRIAL_DURATION_HOURS,
         remainingDays,
         totalDaysUsed: record.totalDaysUsed,
       },
@@ -239,7 +245,7 @@ async function createBasicSubscription(
   userId: number,
   timezone: string,
   withTrial: boolean,
-  dbClient = db
+  dbClient: DbOrTx = db
 ) {
   console.log(
     `[Trial] createBasicSubscription called for user ${userId}, withTrial=${withTrial}`

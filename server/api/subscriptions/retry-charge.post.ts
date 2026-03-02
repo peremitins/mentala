@@ -186,7 +186,7 @@ export default defineEventHandler(async (event) => {
       secretKey,
       idempotenceKey: `${chargeAttemptKey}:manual:${attemptOrdinal}`,
       amount: chargeAmount,
-      description: `Mentala manual retry ${user.billingPlanId} (${user.billingPeriod})`,
+      description: `Ментала manual retry ${user.billingPlanId} (${user.billingPeriod})`,
       paymentMode: 'recurring',
       paymentMethodId: user.paymentMethodId,
       metadata: {

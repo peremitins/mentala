@@ -102,6 +102,25 @@
                   автоматически.
                 </p>
               </template>
+
+              <div v-if="isPaidActiveSubscription" class="mt-3">
+                <p
+                  v-if="isCurrentSubscriptionCancellationScheduled"
+                  class="text-xs text-foreground/80"
+                >
+                  Автопродление отключено. Подписка останется активной до
+                  {{ formatDate(currentSubscription.endDate) }}.
+                </p>
+                <button
+                  v-else
+                  type="button"
+                  :disabled="processing"
+                  class="inline-flex items-center justify-center rounded-md border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-primary-ui/10 disabled:opacity-60 disabled:cursor-not-allowed"
+                  @click="showCancelSubscriptionDialog = true"
+                >
+                  Отменить подписку
+                </button>
+              </div>
             </div>
             <div
               v-else-if="
@@ -112,7 +131,7 @@
                 <strong>Сейчас:</strong> нет активной подписки
               </p>
               <p class="text-sm text-foreground">
-                Чтобы продолжить пользоваться Mentala, выберите один из тарифов
+                Чтобы продолжить пользоваться Ментала, выберите один из тарифов
                 ниже.
               </p>
             </div>
@@ -244,7 +263,7 @@
         class="glass-deep rounded-lg border border-border p-4 space-y-3"
       >
         <p class="text-sm text-foreground">
-          На iOS управление тарифом доступно в веб-версии Mentala.
+          На iOS управление тарифом доступно в веб-версии Ментала.
         </p>
         <button
           type="button"
@@ -306,6 +325,33 @@
           </AlertDialogCancel>
           <AlertDialogAction @click="confirmPlanChange">
             Подтвердить
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
+    <!-- Модалка подтверждения отмены автопродления -->
+    <AlertDialog
+      :open="showCancelSubscriptionDialog"
+      @update:open="showCancelSubscriptionDialog = $event"
+    >
+      <AlertDialogContent class="glass-deep">
+        <AlertDialogHeader>
+          <AlertDialogTitle>Отменить подписку?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Мы отключим автопродление. Текущий период останется активным до
+            {{ formatDate(currentSubscription?.endDate || null) }}.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel @click="showCancelSubscriptionDialog = false">
+            Отмена
+          </AlertDialogCancel>
+          <AlertDialogAction
+            :disabled="processing"
+            @click="cancelActiveSubscription"
+          >
+            {{ processing ? 'Отменяем...' : 'Отменить подписку' }}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -539,11 +585,28 @@ const shouldShowCurrentStatusCard = computed(() => {
     !trialActive.value
   );
 });
+
+const isPaidActiveSubscription = computed(() => {
+  return Boolean(
+    currentSubscription.value &&
+      currentSubscription.value.paymentStatus === 'active' &&
+      currentSubscription.value.plan.name !== 'basic'
+  );
+});
+
+const isCurrentSubscriptionCancellationScheduled = computed(() => {
+  if (!isPaidActiveSubscription.value) {
+    return false;
+  }
+
+  return currentSubscription.value?.autoRenew === false;
+});
 // Храним период оплаты для каждого плана отдельно
 const planBillingPeriods = ref<Map<string, 'month' | 'year'>>(new Map());
 const selectedPlanId = ref<string | null>(null);
 const processing = ref(false);
 const showConfirmDialog = ref(false);
+const showCancelSubscriptionDialog = ref(false);
 const pendingPlanChange = ref<Plan | null>(null);
 const checkoutIdempotencyKey = ref<string | null>(null);
 const checkoutPayloadSignature = ref<string | null>(null);
@@ -812,6 +875,12 @@ function resolveBindReturnFlag(): boolean {
   return value === '1' || value === 'true';
 }
 
+function resolvePaymentReturnFlag(): boolean {
+  const raw = route.query.paymentReturn;
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  return value === '1' || value === 'true';
+}
+
 async function clearBindReturnQueryParams() {
   const nextQuery = { ...route.query };
   delete nextQuery.bindReturn;
@@ -825,6 +894,26 @@ async function clearBindReturnQueryParams() {
     });
   } catch (error) {
     console.warn('[Subscription] Failed to clear bindReturn params:', error);
+  }
+}
+
+async function clearPaymentReturnQueryParams() {
+  const nextQuery = { ...route.query };
+  delete nextQuery.paymentReturn;
+  delete nextQuery.subscriptionId;
+  delete nextQuery.externalFlow;
+
+  try {
+    await router.replace({
+      path: route.path,
+      query: nextQuery,
+      hash: route.hash,
+    });
+  } catch (error) {
+    console.warn(
+      '[Subscription] Failed to clear payment return params:',
+      error
+    );
   }
 }
 
@@ -1094,6 +1183,34 @@ async function runStatusPolling(targetSubscriptionId?: number | null) {
       );
       return;
     }
+
+    // Если polling завершился timeout/unknown, делаем форс-рефреш состояния,
+    // чтобы снять stale-данные после возврата из платежного провайдера.
+    const refreshed = await subscriptionStore
+      .fetchCurrentSubscription(true)
+      .catch(() => null);
+    const refreshedStatus = refreshed?.subscription?.paymentStatus || null;
+
+    if (refreshedStatus === 'active') {
+      await refreshBillingAccessSnapshot();
+      pendingCheckoutSubscriptionId.value = null;
+      isCheckoutWidgetDialogOpen.value = false;
+      await destroyWidget();
+      useToast('Подписка активирована', 'Оплата подтверждена.', 'success');
+      return;
+    }
+
+    if (refreshedStatus === 'canceled' || refreshedStatus === 'expired') {
+      pendingCheckoutSubscriptionId.value = null;
+      isCheckoutWidgetDialogOpen.value = false;
+      await destroyWidget();
+      useToast(
+        'Оплата не завершена',
+        'Платеж не был подтвержден. Попробуйте еще раз.',
+        'warning'
+      );
+      return;
+    }
   })().finally(() => {
     activePollingPromise = null;
   });
@@ -1110,6 +1227,42 @@ async function refreshBillingAccessSnapshot() {
   await authStore.me().catch((error) => {
     console.warn('[Subscription] Failed to refresh /api/user/me:', error);
   });
+}
+
+async function cancelActiveSubscription() {
+  if (processing.value) return;
+
+  showCancelSubscriptionDialog.value = false;
+  processing.value = true;
+
+  try {
+    const response = await useAPI<{
+      success: boolean;
+      message?: string;
+      endDate?: string;
+    }>('/api/subscriptions/cancel', {
+      method: 'POST',
+    });
+
+    await subscriptionStore.refreshSubscription();
+    await refreshBillingAccessSnapshot();
+
+    useToast(
+      'Автопродление отключено',
+      response?.message ||
+        'Подписка останется активной до конца оплаченного периода.',
+      'info'
+    );
+  } catch (error: any) {
+    console.error('Failed to cancel active subscription:', error);
+    useToast(
+      'Не удалось отменить подписку',
+      error?.message || 'Попробуйте еще раз.',
+      'error'
+    );
+  } finally {
+    processing.value = false;
+  }
 }
 
 async function cancelScheduledChange() {
@@ -1336,7 +1489,7 @@ async function openYooKassaWidget(
   };
 
   if (useReturnUrl && typeof window !== 'undefined') {
-    widgetOptions.return_url = `${window.location.origin}/payment/success?subscriptionId=${subscriptionId}&externalFlow=1`;
+    widgetOptions.return_url = `${window.location.origin}/payment-success?flow=payment&paymentReturn=1&subscriptionId=${subscriptionId}&externalFlow=1`;
   }
 
   try {
@@ -1535,10 +1688,14 @@ onMounted(async () => {
     });
   }
 
-  // Загружаем данные через store (с кэшированием)
+  const isPaymentReturnFlow = resolvePaymentReturnFlag();
+  const shouldForceSubscriptionRefresh =
+    isPaymentReturnFlow || Capacitor.isNativePlatform();
+
+  // После возврата из оплаты сразу обходим кэш, чтобы не показывать stale plan/status.
   await Promise.all([
     subscriptionStore.fetchPlans(),
-    subscriptionStore.fetchCurrentSubscription(),
+    subscriptionStore.fetchCurrentSubscription(shouldForceSubscriptionRefresh),
   ]);
 
   // По умолчанию выделяем текущий активный тариф
@@ -1620,6 +1777,17 @@ onMounted(async () => {
   }
 
   pendingCheckoutSubscriptionId.value = resolveSubscriptionIdFromQuery();
+
+  if (isPaymentReturnFlow) {
+    if (pendingCheckoutSubscriptionId.value !== null) {
+      await runStatusPolling(pendingCheckoutSubscriptionId.value);
+    } else {
+      await subscriptionStore.fetchCurrentSubscription(true);
+      await refreshBillingAccessSnapshot();
+    }
+
+    await clearPaymentReturnQueryParams();
+  }
 
   if (typeof window !== 'undefined' && !paymentReturnListener) {
     paymentReturnListener = (event: Event) => {

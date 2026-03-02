@@ -6,7 +6,7 @@ const isDevServer = process.env.CAPACITOR_SERVER_URL;
 
 const config: CapacitorConfig = {
   appId: 'com.mentala.app',
-  appName: 'Mentala',
+  appName: 'Ментала',
   webDir: '.output/public',
   server: isDevServer
     ? {

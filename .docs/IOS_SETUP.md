@@ -146,8 +146,10 @@ pnpm dev
 5. Установить dev‑URL для Capacitor и выполнить sync:
 
 ```bash
-CAPACITOR_SERVER_URL=http://<LAN_IP>:3000 npx cap sync ios
+pnpm cap:sync:device
 ```
+
+> Скрипт сам определит LAN-IP, выставит `CAPACITOR_SERVER_URL` и синхронизирует iOS/Android runtime-конфиги.
 
 6. Убедиться, что `DEV_ALLOWED_ORIGINS` в `.env.development` содержит `http://<LAN_IP>:3000`.
 
@@ -174,6 +176,14 @@ CAPACITOR_SERVER_URL=http://<LAN_IP>:3000 npx cap sync ios
   </dict>
 </dict>
 ```
+
+Для release-подготовки используйте только:
+
+```bash
+pnpm cap:sync:prod
+```
+
+Этот сценарий гарантирует отсутствие `server.url` (dev LAN/IP) в runtime-конфигах перед публикацией.
 
 ## 9. Push‑уведомления (подробный пошаговый сценарий)
 

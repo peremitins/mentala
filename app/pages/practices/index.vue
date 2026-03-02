@@ -4,6 +4,39 @@
 
     <div class="grid gap-2 grid-cols-1 xxs:grid-cols-2">
       <NuxtLink
+        to="/quick-help"
+        class="glass-deep p-5 group relative overflow-hidden transition hover:-translate-y-1 animate-slide-up"
+        style="animation-delay: 0.1s; animation-fill-mode: both"
+      >
+        <div
+          class="pointer-events-none absolute inset-0 transition group-hover:opacity-100"
+        >
+          <div
+            class="tile-orb absolute -right-14 -top-10 h-40 w-40 rounded-full bg-gradient-to-br from-rose-400/35 via-red-400/20 to-transparent blur-2xl"
+          />
+          <div
+            class="tile-orb tile-orb--delay absolute -left-12 bottom-0 h-32 w-32 rounded-full bg-gradient-to-br from-orange-500/25 via-rose-500/20 to-transparent blur-2xl"
+          />
+        </div>
+
+        <div class="relative z-10 space-y-3">
+          <div
+            class="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-white/10"
+          >
+            <IconHeartPulse class="h-5 w-5 text-foreground" />
+          </div>
+          <div class="space-y-1">
+            <h2 class="text-lg font-semibold text-foreground">
+              Быстрая помощь
+            </h2>
+            <p class="text-sm text-foreground/80">
+              Короткие техники для тревоги и напряжения
+            </p>
+          </div>
+        </div>
+      </NuxtLink>
+
+      <NuxtLink
         v-if="meditationsAccess.available"
         to="/meditations"
         class="glass-deep p-5 group relative overflow-hidden transition hover:-translate-y-1 animate-slide-up"
@@ -107,6 +140,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import IconHeartPulse from '~icons/lucide/heart-pulse';
 import PageHeader from '@/app/components/PageHeader.vue';
 import FeaturePaywallModal from '@/app/components/subscription/FeaturePaywallModal.vue';
 import { useEntitlements } from '@/app/composables/useEntitlements';

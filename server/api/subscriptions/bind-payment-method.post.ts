@@ -12,6 +12,8 @@ import {
 } from '@/server/application/idempotency/idempotency.service';
 import { createYooKassaPaymentMethodBinding } from '@/server/application/payments/yookassa.client';
 import { resolveExternalFlowAppUrl } from '@/server/application/auth/oauth-redirect';
+import { buildExternalSessionConsumeReturnUrl } from '@/server/application/auth/external-session-return-url';
+import { PAYMENT_RETURN_EXTERNAL_SESSION_TTL_SECONDS } from '@/server/config/subscription';
 
 type BindPaymentMethodResponse = {
   checkoutAction: 'bind_payment_method_required' | 'noop';
@@ -26,11 +28,29 @@ const bindPaymentMethodBodySchema = z.object({
   appUrl: z.string().trim().optional(),
 });
 
-function buildBindReturnUrl(params: {
-  appUrl: string;
+type SourcePlatform = 'web' | 'ios' | 'android';
+
+function resolveSourcePlatform(event: any): SourcePlatform {
+  const platformHeader = getHeader(event, 'x-platform')?.toLowerCase();
+  if (platformHeader === 'ios') return 'ios';
+  if (platformHeader === 'android') return 'android';
+  return 'web';
+}
+
+function buildBindReturnPath(params: {
   bindingSessionId: string;
+  sourcePlatform: SourcePlatform;
 }): string {
-  return `${params.appUrl}/subscription?bindReturn=1&bindingSessionId=${encodeURIComponent(params.bindingSessionId)}`;
+  const searchParams = new URLSearchParams({
+    flow: 'bind',
+    bindReturn: '1',
+    bindingSessionId: params.bindingSessionId,
+  });
+  if (params.sourcePlatform === 'ios' || params.sourcePlatform === 'android') {
+    searchParams.set('nativeApp', '1');
+  }
+
+  return `/payment-success?${searchParams.toString()}`;
 }
 
 /**
@@ -113,6 +133,7 @@ export default defineEventHandler(async (event) => {
 
   const idempotencyRecordId = idem.recordId;
   const now = new Date();
+  const sourcePlatform = resolveSourcePlatform(event);
 
   try {
     const userId = sessionResult.user.id;
@@ -168,7 +189,18 @@ export default defineEventHandler(async (event) => {
     }
 
     const bindingSessionId = crypto.randomUUID();
-    const returnUrl = buildBindReturnUrl({ appUrl, bindingSessionId });
+    const returnPath = buildBindReturnPath({
+      bindingSessionId,
+      sourcePlatform,
+    });
+    const returnUrl = await buildExternalSessionConsumeReturnUrl({
+      event,
+      userId,
+      appUrl,
+      redirectPath: returnPath,
+      ttlSeconds: PAYMENT_RETURN_EXTERNAL_SESSION_TTL_SECONDS,
+      purpose: 'payment_return',
+    });
     const yookassaIdempotenceKey = crypto
       .createHash('sha256')
       .update(`${userId}:${bindingSessionId}:${idempotencyKey}`, 'utf8')

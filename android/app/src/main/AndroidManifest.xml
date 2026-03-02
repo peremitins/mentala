@@ -39,6 +39,29 @@
                 <data android:scheme="@string/custom_url_scheme" />
             </intent-filter>
 
+            <!-- App Links для возврата после внешней оплаты YooKassa -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="my.mentala.app"
+                    android:pathPrefix="/payment-success" />
+                <data
+                    android:scheme="https"
+                    android:host="my.mentala.app"
+                    android:pathPrefix="/auth/external-session/consume" />
+                <data
+                    android:scheme="https"
+                    android:host="mentala.app"
+                    android:pathPrefix="/payment-success" />
+                <data
+                    android:scheme="https"
+                    android:host="mentala.app"
+                    android:pathPrefix="/auth/external-session/consume" />
+            </intent-filter>
+
         </activity>
 
         <!-- Отключаем сервис плагина, чтобы не было двух обработчиков FCM -->

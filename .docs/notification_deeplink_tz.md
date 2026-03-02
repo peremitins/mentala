@@ -19,7 +19,7 @@
 - приложение открывается на мобильных
 - по умолчанию открывается главная
 - если уведомление рекомендует медитацию — открывается конкретная медитация
-- если уведомление рекомендует дыхательную практику — открывается конкретная практика `4-7-8`
+- если уведомление рекомендует дыхательную практику — открывается квадратное дыхание `4-4-4-4` (box-breathing)
 
 ## 2. Проблема
 
@@ -61,7 +61,7 @@ export type NotificationNavigation =
 - `home` → `/`
 - `meditation_track` → `/meditations?trackId={trackId}`
 - `breath_practices` → `/breath-practices`
-- `breath_practice` → `/breath-practices/{slug}` (для дефолтной `4-7-8` добавляем `?group=popular`)
+- `breath_practice` → `/breath-practices/{slug}` (для дефолтной `box-breathing`/4-4-4-4 добавляем `?group=popular`)
 
 ### 5.2. Пример payload (в БД и на сервере)
 
@@ -122,7 +122,7 @@ export type NotificationActionHint = 'none' | 'meditation' | 'breathing';
 
 Примечание про будущее:
 
-- Сейчас `breathing` всегда ведёт на конкретную практику `4-7-8`.
+- Сейчас `breathing` всегда ведёт на квадратное дыхание `4-4-4-4` (box-breathing).
 - В дальнейшем возможно переключение на `breath_practices` (список) без изменения контракта.
 
 ## 7. Дефолтные цели
@@ -132,7 +132,7 @@ export type NotificationActionHint = 'none' | 'meditation' | 'breathing';
 Рекомендуемые значения из текущего каталога:
 
 - Медитация по умолчанию: `ultimate-relaxation` (есть в `server/infrastructure/db/seed-meditations.ts`).
-- Дыхательная практика по умолчанию: `4-7-8` (есть в `app/lib/breathPracticesCatalog.ts`).
+- Дыхательная практика по умолчанию: `box-breathing` (4-4-4-4, есть в `app/lib/breathPracticesCatalog.ts`).
 
 Хранение дефолтов:
 
@@ -192,7 +192,7 @@ export type NotificationActionHint = 'none' | 'meditation' | 'breathing';
 - iOS: тап по push открывает приложение и ведёт на нужный экран.
 - Android: тап по push открывает приложение и ведёт на нужный экран.
 - При `actionHint=meditation` открывается конкретная медитация.
-- При `actionHint=breathing` открывается конкретная дыхательная практика `4-7-8`.
+- При `actionHint=breathing` открывается квадратное дыхание `4-4-4-4` (box-breathing).
 - При отсутствии navigation/deepLink — всегда `/`.
 - Snooze/yes/no не должны делать навигацию.
 
@@ -214,7 +214,7 @@ export type NotificationActionHint = 'none' | 'meditation' | 'breathing';
 Решено:
 
 - Дефолтная медитация: `ultimate-relaxation`.
-- Дыхательные ведут на конкретную практику `4-7-8`.
+- Дыхательные ведут на квадратное дыхание `4-4-4-4` (box-breathing).
 - Web‑поддержка пока не нужна.
 - Action для «быстрых практик» пока не нужен.
 - Приложение открывается только по тапу на уведомление (без автозапуска при получении).
