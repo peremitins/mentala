@@ -20,11 +20,7 @@
         </div>
 
         <div class="relative z-10 space-y-3">
-          <div
-            class="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-white/10"
-          >
-            <IconHeartPulse class="h-5 w-5 text-foreground" />
-          </div>
+          <IconHeartPulse class="h-5 w-5 text-foreground" />
           <div class="space-y-1">
             <h2 class="text-lg font-semibold text-foreground">
               Быстрая помощь

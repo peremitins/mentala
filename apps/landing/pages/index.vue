@@ -816,8 +816,15 @@
               aria-hidden="true"
             />
 
-            <Button type="submit" class="w-full" :disabled="submittingLead">
-              {{ submittingLead ? 'Отправляем...' : 'Получить ранний доступ' }}
+            <Button
+              type="submit"
+              class="relative w-full"
+              :disabled="submittingLead"
+            >
+              <ButtonLoader v-if="submittingLead" />
+              <span :class="submittingLead ? 'invisible' : ''">
+                Получить ранний доступ
+              </span>
             </Button>
 
             <p
@@ -886,6 +893,7 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { useRuntimeConfig } from 'nuxt/app';
 import { Badge } from '../components/ui/shadcn/badge';
 import { Button } from '../components/ui/shadcn/button';
+import ButtonLoader from '../components/ui/ButtonLoader.vue';
 import { Input } from '../components/ui/shadcn/input';
 import { useLandingConfig } from '../composables/useLandingConfig';
 import { useLandingAnalytics } from '../composables/useLandingAnalytics';
