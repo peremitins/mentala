@@ -61,13 +61,13 @@
             :placeholder="currentPlaceholder"
           />
           <div
-            class="pointer-events-none absolute right-2 bottom-2 rounded-full border border-white/15 bg-black/30 px-2 py-0.5 text-[11px] font-medium text-foreground/70"
+            class="pointer-events-none absolute left-2 bottom-2 rounded-full border border-white/15 bg-black/30 px-2 py-0.5 text-[11px] font-medium text-foreground/70"
           >
             {{ textLength }}/{{ MAX_TEXT_LENGTH }}
           </div>
           <button
             type="button"
-            class="absolute left-2 bottom-2 flex h-6 w-6 items-center justify-center rounded-full border border-white/15 bg-white/5 text-foreground transition hover:border-white/25 hover:bg-white/10"
+            class="absolute right-2 bottom-2 flex h-6 w-6 items-center justify-center rounded-full border border-white/15 bg-white/5 text-foreground transition hover:border-white/25 hover:bg-white/10"
             :class="
               isListening
                 ? 'ring-2 ring-red-400/60 bg-red-500/15 text-red-300 shadow-[0_0_20px_rgba(239,68,68,0.35)]'

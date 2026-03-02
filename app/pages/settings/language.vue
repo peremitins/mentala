@@ -20,11 +20,12 @@
 
       <section class="glass-deep p-3">
         <Button
-          class="w-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+          class="relative w-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
           :disabled="!canSave"
           @click="saveLocale"
         >
-          {{ saving ? 'Сохранение...' : 'Сохранить' }}
+          <ButtonLoader v-if="saving" />
+          <span :class="saving ? 'invisible' : ''">Сохранить</span>
         </Button>
       </section>
     </section>
@@ -37,6 +38,7 @@ import { useI18n } from 'vue-i18n';
 import { useAuthStore } from '@/app/stores/auth';
 import { useToast } from '@/app/composables/useToast';
 import ToggleButtonGroup from '@/app/components/ui/ToggleButtonGroup.vue';
+import ButtonLoader from '@/app/components/ui/ButtonLoader.vue';
 import { Button } from '@/app/components/ui/button';
 
 type SupportedLocale = 'ru' | 'en';
