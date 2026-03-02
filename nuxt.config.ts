@@ -150,6 +150,8 @@ export default defineNuxtConfig({
       // Если не задано, будет пустая строка = относительные пути
       apiBase: process.env.NUXT_PUBLIC_API_SERVER_URL || '',
       appUrl: process.env.NUXT_PRIVATE_API_BASE || 'http://localhost:3000',
+      // Dev-only URL для внешнего браузера на реальных устройствах (LAN).
+      deviceAppUrl: process.env.NUXT_PUBLIC_DEVICE_APP_URL || '',
       mediaBaseUrl:
         process.env.NUXT_PUBLIC_MEDIA_BASE_URL || 'https://media.mentala.app',
       googleWebClientId: process.env.NUXT_OAUTH_GOOGLE_CLIENT_ID || '',
@@ -159,6 +161,10 @@ export default defineNuxtConfig({
       isDev: process.env.NUXT_PUBLIC_IS_DEV === 'true', // Режим разработки (для управления функционалом в UI)
       chatIdleTimeoutMs: 2 * 60 * 1000, // 2 минуты в миллисекундах
       featureTtsEnabled: process.env.NUXT_FEATURE_TTS_ENABLED === 'true',
+      featureNativeMeditationAudioEnabled:
+        // На mobile native-плеер должен быть включён по умолчанию для фонового воспроизведения.
+        // Явное отключение: NUXT_FEATURE_NATIVE_MEDITATION_AUDIO_ENABLED=false
+        process.env.NUXT_FEATURE_NATIVE_MEDITATION_AUDIO_ENABLED !== 'false',
     },
   },
   nitro: {

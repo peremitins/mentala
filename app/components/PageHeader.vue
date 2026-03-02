@@ -28,10 +28,11 @@
       </div>
       <div class="mr-2 flex items-center gap-2">
         <button
+          v-if="!route.path.startsWith('/quick-help')"
           type="button"
           class="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-foreground/80 transition hover:border-white/20 hover:text-foreground"
-          aria-label="SOS"
-          @click="openSos"
+          aria-label="Быстрая помощь"
+          @click="openQuickHelp"
         >
           <IconHeartPulse class="h-4 w-4" />
         </button>
@@ -53,11 +54,9 @@ import IconChevronLeft from '~icons/lucide/chevron-left';
 import IconHeartPulse from '~icons/lucide/heart-pulse';
 import IconSlidersHorizontal from '~icons/lucide/sliders-horizontal';
 import { useRoute, useRouter } from 'vue-router';
-import { useSos } from '@/app/composables/useSos';
 
 const route = useRoute();
 const router = useRouter();
-const sos = useSos();
 
 interface Props {
   title: string;
@@ -81,8 +80,8 @@ const openSceneSelection = async () => {
   await router.push('/scene-selection');
 };
 
-function openSos() {
-  sos.open();
+function openQuickHelp() {
+  void router.push('/quick-help');
 }
 
 const detailTrackId = computed(() => {

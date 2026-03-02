@@ -4,6 +4,7 @@ import { CSRF_COOKIE_NAME, getCookieName } from './cookie-names';
 
 const isProd = process.env.NODE_ENV === 'production';
 const SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60; // 7 дней
+export type SessionCookieSameSite = 'strict' | 'lax';
 
 /**
  * Генерирует CSRF токен (32 символа hex)
@@ -18,7 +19,11 @@ export function generateCSRFToken(): string {
 export function setCSRFCookie(
   event: any,
   csrfToken: string,
-  sessionExpiresAt?: Date
+  sessionExpiresAt?: Date,
+  options?: {
+    sameSite?: SessionCookieSameSite;
+    secure?: boolean;
+  }
 ): void {
   const csrfCookieName = getCookieName(CSRF_COOKIE_NAME, isProd);
 
@@ -27,12 +32,17 @@ export function setCSRFCookie(
     ? Math.floor((sessionExpiresAt.getTime() - Date.now()) / 1000)
     : SESSION_MAX_AGE_SECONDS; // fallback на константу
 
-  // Для сессии и CSRF: strict в prod, lax в dev (всегда, включая LAN)
-  const sameSitePolicy = isProd ? 'strict' : 'lax';
+  // Для сессии и CSRF: strict в prod, lax в dev.
+  // Для external payment return policy может быть ослаблена до lax
+  // через явный override в options.
+  const sameSitePolicy: SessionCookieSameSite =
+    options?.sameSite || (isProd ? 'strict' : 'lax');
+  const secureCookie =
+    typeof options?.secure === 'boolean' ? options.secure : isProd;
 
   setCookie(event, csrfCookieName, csrfToken, {
     httpOnly: false, // для CSRF (Double Submit Cookie паттерн)
-    secure: isProd,
+    secure: secureCookie,
     sameSite: sameSitePolicy,
     path: '/', // обязательно для __Host- префикса
     // Для __Host- префикса не указывать domain

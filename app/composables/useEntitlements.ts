@@ -22,7 +22,7 @@ function getErrorData(error: any): any {
 }
 
 /**
- * Пытаемся вытащить payload server-side paywall из ошибки API.
+ * Пытаемся вытащить payload seыrver-side paywall из ошибки API.
  */
 export function extractFeaturePlanRequiredError(
   error: any

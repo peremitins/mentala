@@ -482,8 +482,11 @@ ${responseTypeInfo.structure}`;
 
 export function buildSessionMemoryText(
   summaries: Array<any>,
-  lang: string = 'ru'
+  _lang: string = 'ru'
 ): string {
+  // Язык пока не влияет на формат summary-блока, но сохраняем параметр для совместимости вызовов.
+  void _lang;
+
   if (!Array.isArray(summaries) || summaries.length === 0) return '';
 
   const header = `Контекст прошлых сессий:`;
@@ -522,7 +525,6 @@ export function buildChatPreludeWithMemory(
     userMessage?: string;
   } = {}
 ): string {
-  const _responseNumber = ctx.responseNumber || 1;
   const isFirstSession = ctx.isFirstSession !== false;
   const sessionMemoryText = ctx.sessionMemoryText || '';
 
@@ -555,6 +557,21 @@ export function buildSummaryPrompt(vars: { lang: string }) {
 export function buildEntryContextDescription(
   context: ChatEntryContext
 ): string {
+  const normalizeSnippet = (rawValue: string, maxLength = 1400): string => {
+    const normalized = String(rawValue || '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!normalized) {
+      return '';
+    }
+
+    if (normalized.length <= maxLength) {
+      return normalized;
+    }
+
+    return `${normalized.slice(0, maxLength - 1)}…`;
+  };
+
   if (context.type === 'habit') {
     const name = context.habit_name || context.habit_id;
     const intent = context.habit_intent === 'quit' ? 'отказа' : 'формирования';
@@ -598,6 +615,22 @@ export function buildEntryContextDescription(
     return `Контекст: пользователь пришёл из SOS («${label}»).${afterPractice}`;
   }
 
+  if (context.type === 'thought_dump') {
+    const sourceLabel =
+      context.source === 'quick_help_thought_dump'
+        ? '«Выгрузка мыслей»'
+        : 'режима выгрузки';
+    const dumpSnippet = normalizeSnippet(context.dump_text);
+    const dumpBlock = dumpSnippet
+      ? `Текст выгрузки (контекст, не цитируй дословно без необходимости): «${dumpSnippet}».`
+      : 'Текст выгрузки отсутствует, мягко уточни с чего пользователю проще начать.';
+
+    return `Контекст: пользователь перешёл из раздела ${sourceLabel} и хочет обсудить свою выгрузку мыслей.
+${dumpBlock}
+Задача: подхвати разговор по содержанию выгрузки, отрази ключевую эмоцию или узел и помоги бережно продолжить диалог.
+Не начинай с общих шаблонных фраз вроде «Чем могу помочь прямо сейчас?».`;
+  }
+
   return '';
 }
 
@@ -614,6 +647,7 @@ export function buildWelcomePrompt(options: {
   openingLine?: string;
   welcomePromptContent?: string;
   entryContext?: ChatEntryContext;
+  disableOpeningTemplates?: boolean;
 }): string {
   const lang = options.lang || 'ru';
   const isFirst = options.isFirstSession;
@@ -621,15 +655,23 @@ export function buildWelcomePrompt(options: {
   const contextNote = options.entryContext
     ? buildEntryContextDescription(options.entryContext)
     : '';
+  const disableOpeningTemplates =
+    Boolean(options.disableOpeningTemplates) ||
+    options.entryContext?.type === 'thought_dump';
 
   const nameInstruction =
     options.includeNameValidationPrompt && options.greetingName
       ? `\n\nВАЖНО: В первом предложении приветствия используй обращение по имени «${options.greetingName}». Используй только это имя, без фамилии и без выдумок.`
       : '';
   const openingInstruction =
-    options.openingMode === 'alternative' && options.openingLine
+    !disableOpeningTemplates &&
+    options.openingMode === 'alternative' &&
+    options.openingLine
       ? `\n\nВАЖНО: Сегодня приветствие не нужно. Начни сообщение с фразы: «${options.openingLine}». Не используй слова приветствия (привет, здравствуй, доброе утро/день/вечер).`
       : '';
+  const noTemplateStartInstruction = disableOpeningTemplates
+    ? '\n\nВАЖНО: Не используй приветствие и шаблонные вводные фразы. Начни сразу с поддерживающего отклика по содержанию выгрузки.'
+    : '';
 
   if (options.welcomePromptContent) {
     let prompt = options.welcomePromptContent;
@@ -644,11 +686,15 @@ export function buildWelcomePrompt(options: {
       prompt = prompt + '\n\nКонтекст прошлых бесед:\n' + sessionMemoryText;
     }
 
+    const generatedStartInstruction = disableOpeningTemplates
+      ? 'Твое сообщение будет ПЕРВЫМ в диалоге. Сгенерируй: короткое отражение содержания выгрузки (1-2 предложения) + 1 конкретная опора (выбор/инсайт/рамка) + 1 открытый вопрос.'
+      : 'Твое сообщение будет ПЕРВЫМ в диалоге. Сгенерируй: приветствие (2-3 предложения) + 1 конкретная опора (выбор/инсайт/рамка) + 1 открытый вопрос.';
+
     prompt =
       prompt +
-      '\n\nВАЖНО: Не утверждай, что вы уже обсуждали конкретно эту тему; если контекст неочевиден - формулируй нейтрально. Твое сообщение будет ПЕРВЫМ в диалоге. Сгенерируй: приветствие (2-3 предложения) + 1 конкретная опора (выбор/инсайт/рамка) + 1 открытый вопрос.';
+      `\n\nВАЖНО: Не утверждай, что вы уже обсуждали конкретно эту тему; если контекст неочевиден - формулируй нейтрально. ${generatedStartInstruction}`;
 
-    const fullPrompt = `${prompt}${nameInstruction}${openingInstruction}`;
+    const fullPrompt = `${prompt}${nameInstruction}${openingInstruction}${noTemplateStartInstruction}`;
     return contextNote ? `${contextNote}\n\n${fullPrompt}` : fullPrompt;
   }
 
@@ -677,7 +723,7 @@ export function buildWelcomePrompt(options: {
   const template = isFirst ? templates.first : templates.repeat;
   let prompt = template;
 
-  if (options.openingMode === 'alternative') {
+  if (options.openingMode === 'alternative' || disableOpeningTemplates) {
     prompt = prompt.replace(
       'Сгенерируй приветствие (2-3 предложения):',
       'Сгенерируй стартовое сообщение без приветствия (2-3 предложения):'
@@ -685,6 +731,16 @@ export function buildWelcomePrompt(options: {
     prompt = prompt.replace(
       'Сгенерируй приветствие (2-3 предложения), которое:',
       'Сгенерируй стартовое сообщение без приветствия (2-3 предложения), которое:'
+    );
+  }
+  if (disableOpeningTemplates) {
+    prompt = prompt.replace(
+      ' Представься и объясни чем помогаешь',
+      ' Сразу отрази суть выгрузки пользователя'
+    );
+    prompt = prompt.replace(
+      ' Мягко предлагает вернуться к темам или перейти к новым',
+      ' Опирается на содержание выгрузки, без общих вводных формулировок'
     );
   }
 
@@ -703,7 +759,7 @@ export function buildWelcomePrompt(options: {
     );
   }
 
-  const fullPrompt = `${prompt}${nameInstruction}${openingInstruction}`;
+  const fullPrompt = `${prompt}${nameInstruction}${openingInstruction}${noTemplateStartInstruction}`;
   return contextNote ? `${contextNote}\n\n${fullPrompt}` : fullPrompt;
 }
 

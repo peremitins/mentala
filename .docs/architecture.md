@@ -7,6 +7,10 @@
 • Safe-area на mobile: для iOS в layout (`default/auth/blank`) применяется только верхний safe-area (`safe-area-inset-top`) через класс `ios-safe-layout`; нижняя часть интерфейса (BottomNav/контент) не получает дополнительных iOS-отступов, чтобы сохранять прежнюю высоту и визуальный ритм.
 • iOS‑гайд и паритет с Android: см. `.docs/IOS_SETUP.md` (dev/prod, push, Apple Developer Program, FCM/APNs особенности).
 • iOS bundle id: `com.mentala.app` (prod) и `com.mentala.app.dev` (dev), отдельные схемы в Xcode.
+• Совместимость CocoaPods/Xcode: в `ios/App/App.xcodeproj/project.pbxproj` должен быть `objectVersion = 77` (не `70`), иначе `pod install` падает на CocoaPods 1.16.2 с ошибкой `[Xcodeproj] Unable to find compatibility version string for object version 70`; скрипт `scripts/setup-capacitor-dev.sh` автоматически нормализует `70 -> 77` перед `cap sync`.
+• Sync-конвейер Capacitor централизован через скрипты: `pnpm cap:sync:device|emulator` включает `CAPACITOR_SERVER_URL` для dev, `pnpm cap:sync:prod` принудительно очищает `server.url` в runtime-конфигах Android/iOS (`scripts/fix-capacitor-config.js`) и валидирует prod-safe состояние (`scripts/verify-capacitor-config.js`), чтобы в релиз не попал локальный LAN-IP.
+• iOS Audio Session: в `ios/App/App/AppDelegate.swift` принудительно активируется `AVAudioSession` с категорией `.playback` (при launch и `applicationDidBecomeActive`) для стабильного звучания WebAudio loop-треков на реальных iPhone, включая сценарий с hardware silent switch.
+• iOS background audio: в `ios/App/App/Info.plist` для `UIBackgroundModes` включён `audio` (вместе с `remote-notification`), чтобы медитация продолжала воспроизведение при блокировке экрана/сворачивании приложения.
 • Визуальный стеклянный слой (`.glass-deep`, `.glass-deep-bottom`) использует progressive enhancement: базовый плотный fallback (без `color-mix`) для старых iOS/WebView, затем `-webkit-backdrop-filter`/`backdrop-filter`, и только при поддержке `color-mix(in oklab, ...)` применяются целевые стили.
 • API-клиент в `app/plugins/api.ts` использует единую кроссплатформенную стратегию `baseURL`: на web берётся `NUXT_PUBLIC_API_SERVER_URL`; на native в dev сохраняется поведение с `window.location.origin`, но для iOS есть защита от custom scheme (`capacitor://...`) и fallback на `NUXT_PUBLIC_API_SERVER_URL` (иначе запросы уходят не на backend).
 • Резолв медиа (`app/utils/media.ts`): в `dev` приоритет у `window.location.origin` (если это `http/https` и отличается от `apiBase`) — это выравнивает поведение с native `server.url` в Capacitor на iOS/Android; далее fallback на `apiBase` и `mediaBaseUrl`. В `production` приоритет остаётся у `NUXT_PUBLIC_MEDIA_BASE_URL`.
@@ -30,36 +34,46 @@
 • blank (fullscreen),
 • auth (центрирование форм; при входе на auth экран фоновые звуки и медитации принудительно выключаются).
 • Глобальная защита аудио: `app/plugins/audio-playback-guard.client.ts` отслеживает auth/роуты и через `setPlaybackAllowed` в `useSceneAudio` и `useMeditationPlayer` блокирует любой звук на публичных страницах и при разлогине.
+• Если `play()` вызывается раньше, чем guard перевёл `playbackAllowed` в `true` (типичный холодный старт после push), запуск не теряется: `useMeditationPlayer` и `useSceneAudio` сохраняют pending-start и автоматически повторяют его после `setPlaybackAllowed(true)`.
 • UI‑настройки: `useUiSettingsStore` хранит локальные параметры интерфейса (яркость фона) в `persistentStorage` (web: localStorage, mobile: Capacitor Preferences) с ключом, привязанным к `userId` (чтобы разные аккаунты не наследовали яркость). Яркость применяется к aurora‑слою и к затемнению фоновых изображений сцен (overlay). Дефолтная яркость — 85%.
 • Тема интерфейса: приложение использует только тёмную тему (dark theme) по умолчанию. Переключение между светлой и тёмной темой не поддерживается. Все CSS-переменные настроены на тёмную палитру в `:root`, класс `.dark` не используется. PWA manifest (`site.webmanifest`) и favicon настроены на тёмные цвета.
 • Страницы:
-index, onboarding, chat (layout blank), therapy, habits, practices, breath-practices, profile/\*, settings, privacy, subscription, billing.
+index, onboarding, chat (layout blank), therapy, habits, practices, breath-practices, sos, profile/\*, settings, privacy, subscription, billing.
 • Настройки (IA v2):
-• `/settings` — главный список (профиль, подписка, ассистент, приватность, приложение, служебное).
+• `/settings` — главный список (профиль, подписка, ассистент, уведомления, конфиденциальность, приложение, служебное).
 • `/settings/profile` — редактирование профиля и безопасности (имя, пол, email, пароль, подтверждение).
 • `/settings/assistant` — тон/обращение.
 • `/settings/language` — выбор языка/локали (RU/EN).
 • `/privacy` — память и данные, ссылка на политику.
+• Блок «Уведомления» (после «Настройки ассистента», перед «Конфиденциальность»): Push-уведомления (переключатель, только native) и «Маркетинговые сообщения» (переключатель); логика Push — `usePushSettings`, открытие системных настроек — `capacitor-native-settings`.
+• Блок «Конфиденциальность»: только «Память и данные»; «Маркетинговые сообщения» перенесён в «Уведомления».
 • Юридические документы: статические HTML в `public/legal/` (`terms-of-service.html`, `privacy-policy.html`), ссылки используются в auth/settings/privacy.
 • Согласия с документами: в `users` храним `termsAcceptedAt`, `privacyAcceptedAt`, версии и источник принятия; маркетинговое согласие хранится отдельно (`marketingConsentAt`).
-• В настройках: переключатель «Маркетинговые сообщения» пишет согласие через `PATCH /api/user/me`.
+• В блоке «Уведомления»: переключатель «Маркетинговые сообщения» пишет согласие через `PATCH /api/user/me`; Push-переключатель отражает системный статус разрешений, при выключении — unregister токена через `/api/notifications/unregister-token`, при системном запрете — модалка с «Открыть настройки» (`capacitor-native-settings`).
+• **Push: три уровня синхронизации** — (1) системное разрешение Android/iOS, (2) серверный флаг `pushNotificationsEnabled`, (3) локальный UI (переключатель). Формула: `effectivePushEnabled = (permission === 'granted') && (serverFlag === true) && (токен зарегистрирован)`. Переключатель = `effectivePushEnabled` (учёт токена обязателен).
+• **Запрос при первом запуске**: `prompt` + флаг `mentai.push.permissionRequestedOnce` не установлен → `requestPermissions()`. Если `denied` → PATCH false (не перехватываем клик, узнаём через результат). Если `granted` → PATCH true, register.
+• **При открытии настроек**: `refreshPermissionStatus()`, переключатель = эффективное состояние.
+• **После denied → пользователь включил в системных настройках вручную**: при возврате перечитать permission, если granted → PATCH true, register.
+• **Модалки**: `prompt` → сразу системная (без кастомной). `denied` → кастомная «Уведомления отключены в системных настройках» + «Открыть настройки». При выключении — лёгкое подтверждение.
+• Аналитика настроек: `useSettingsAnalytics` (Sentry breadcrumbs) — события `settings_notifications_push_toggle`, `settings_notifications_marketing_toggle`, `settings_notifications_open_system_settings`.
 • ID пользователя показывается внизу `/settings` с копированием (useClipboard/Capacitor Clipboard с fallback).
-• Чат: welcome‑ответ стартует при пустом `messages`, параметр `mode` удалён; `entryContext` приходит из разделов `/habits` и `/therapy` и учитывается в prompt.
+• Чат: welcome‑ответ стартует при пустом `messages`, параметр `mode` удалён; `entryContext` приходит из `/habits`, `/therapy` и `/quick-help` (включая `sos` и `thought_dump`) и учитывается в prompt.
 • Чат: приветствие используется только в welcome‑старте и не чаще 1 раза в день (локальная дата пользователя). Приветствие по имени — отдельный лимит; имя очищается до «только имя» без фамилии/никнеймов. Отметки хранятся в `chat_settings.last_greeting_at` и `chat_settings.last_name_greeting_at`. Инструкция про имя и выбор стартовой фразы добавляются только в первое сообщение дня, чтобы не раздувать токены.
-• Чат: альтернативная стартовая фраза в welcome‑режиме учитывает `entryContext` (`therapy_topic` / `habit` / `sos`) и `user_gender` (если есть) для естественных формулировок. Выбор фразы выполняется случайно, при этом для одного `userId + context` исключается повтор предыдущей фразы подряд (in-memory anti-repeat). Общий нейтральный шаблон используется только при входе с главной (`entryContext = null`), а при переходе из темы/привычки/SOS старт сразу формулируется по выбранному контексту.
+• Чат: альтернативная стартовая фраза в welcome‑режиме учитывает `entryContext` (`therapy_topic` / `habit` / `sos` / `thought_dump`) и `user_gender` (если есть) для естественных формулировок. Выбор фразы выполняется случайно, при этом для одного `userId + context` исключается повтор предыдущей фразы подряд (in-memory anti-repeat). Общий нейтральный шаблон используется только при входе с главной (`entryContext = null`), а при переходе из темы/привычки/SOS/выгрузки мыслей старт сразу формулируется по выбранному контексту.
 • Чат: suggested‑chips не сбрасываются при наборе текста, очищаются только при отправке/выборе.
 • Чат: микрофон в инпуте имеет индикацию записи через ::before/::after (пульсирующая точка), отправка на мобильных срабатывает на первый тап через pointerdown‑хэндлер даже во время записи.
 • Голосовой ввод: Whisper‑fallback временно отключён, используются только native/webspeech движки.
 • Чат: кнопки действий (микрофон/отправка) оформлены как отдельные «приподнятые» элементы с градиентом и мягкой тенью для лучшей читаемости.
 • Практики:
-• Хаб `/practices` объединяет дыхательные практики и медитации.
+• Хаб `/practices` объединяет медитации, дыхательные практики и плитку «Быстрая помощь».
 • Дыхательные практики: страницы `/breath-practices` и `/breath-practices/:slug`, каталог в `app/lib/breathPracticesCatalog.ts`. Плеер вынесен в переиспользуемые компоненты: `BreathPracticePlayer.vue` (полный плеер с управлением, настройками, overlays) и `BreathOrb.vue` (визуализация сферы дыхания). Компоненты можно использовать в модалке SOS и других местах.
 • В `BreathPracticePlayer` добавлена отдельная настройка `Голос` (независимо от `Звуковые сигналы`): голосовые подсказки фаз (`inhale/hold/exhale/pause`) загружаются из `public/breath/voice/{informal|formal}/*.mp3`, с preloading и fallback при ошибках.
-• SOS: глобальная полноэкранная модалка `app/components/sos/SosModalRoot.vue`, монтируется в `default` layout и открывается из `PageHeader` через состояние `useSos()`. Сценарии: выбор состояния, короткие практики (5-4-3-2-1, квадратное дыхание через `BreathPracticePlayer` в SOS-режиме, PMR), финиш с переходом в чат. При входе в любой тренажёр (panic-grounding, panic-breathing, tension-practice) фоновые звуки сцены приглушаются; при выходе — возобновляются (как в дыхательных практиках и медитации).
+• Быстрая помощь (бывший SOS): страница `/quick-help` (`app/pages/quick-help/index.vue`) с компонентом `app/components/sos/SosPageContent.vue`. Открывается из `PageHeader` (кнопка «Быстрая помощь»), из хаба `/practices` и из чата через suggested chips (`open_sos` + query `entry`). Верхний уровень показывает 5 карточек: `5-4-3-2-1`, `Стабилизировать дыхание`, `Сбросить сильное напряжение`, `Хочу выговориться`, `Выгрузка мыслей`; промежуточный шаг `panic-techniques` удалён. Для `entry=panic` выполняется прямой вход в `panic-grounding` (5-4-3-2-1), для `entry=tension` — в `tension-practice`, для `entry=technique_picker` — на верхний уровень карточек. При входе в любой тренажёр (`panic-grounding`, `panic-breathing`, `tension-practice`) фоновые звуки сцены приглушаются; при выходе — возобновляются.
+• Микропрактика «Выгрузка мыслей»: отдельная страница `/quick-help/thought-dump`, доступная пятой карточкой в каталоге quick-help. Экран содержит textarea с лимитом 10 000 символов, чипы для быстрого старта, кнопку голосового ввода и действия `Стереть`/`В чат`. В `PageHeader` заголовок рендерится через `#custom` slot: рядом с «Выгрузка мыслей» есть иконка `?` с tooltip (готовый `v-tooltip`, hover/focus/click) и поясняющим текстом о практике свободного письма. Логика диктовки переиспользуется из чата через общий composable/компонент без копирования реализации; отправка выполняется только по явному действию пользователя (кнопка `В чат`). При handoff текст не кладётся в `chat.userText`: передаётся `chat.entryContext` типа `thought_dump` (`source`, `dump_text`), затем запускается `chat.startConversation()` (авто‑запрос ассистенту). Для `thought_dump` отключена подстановка шаблонных стартовых фраз (`Чем могу помочь прямо сейчас?` и аналоги): ассистент начинает сразу с реакции на содержание выгрузки, без приветствия. Черновик не сохраняется локально: при уходе со страницы текст и выбранный чип очищаются автоматически.
 • SOS PMR Voice: для шага `tension-practice` добавлена локальная озвучка фаз (`clench`/`release`/`finish`) через файлы из `public/sos/tension/*`, с предзагрузкой, graceful fallback при ошибке аудио и отдельной локальной настройкой `voiceEnabled` (`app/utils/sosVoiceSettings.ts`).
 • SOS PMR UI стандартизирован под `BreathPracticePlayer`: такой же prep-overlay `3..2..1`, фиксированная нижняя панель (settings/stop/play-pause + прогресс). В хедере SOS при техниках отображается кнопка «Назад» (аналогично PageHeader). Модалка настроек в том же стиле + отдельные пункты `Голос` (voice prompts) и `Звуковые сигналы` (cue inhale/exhale), локальные настройки в `app/utils/sosTensionPracticeSettings.ts`.
-• Переход из SOS в чат: модалка закрывается, затем выполняется переход на `/` с `screen=chat`, контекст передается через `chat.entryContext` типа `sos` (`sos_entry`, `after_practice`).
-• Suggested chips: добавлен action `open_sos` (params: `sosEntry`, `source`) для переоткрытия SOS-модалки из чата на нужном шаге.
+• Переход из SOS в чат: выполняется переход на `/` с `screen=chat`, контекст передается через `chat.entryContext` типа `sos` (`sos_entry`, `after_practice`).
+• Suggested chips: action `open_sos` (params: `sosEntry`) осуществляет навигацию на `/quick-help?entry=...` для открытия страницы с нужным начальным шагом.
 • Контекст группы дыхательных практик передаётся через query `group` на `/breath-practices/:slug`; в плеере доступны кнопки «Назад/Вперёд» для перелистывания практик внутри выбранной группы (built-in: anxiety/sleep/focus/popular, custom: custom).
 • Кастомные практики и настройки хранятся в `app/stores/breathPractices.ts` через `app/utils/persistentStorage.ts` (web: localStorage, mobile: Capacitor Preferences).
 • Тренажёр использует `app/composables/useBreathPracticePlayer.ts` (тайминг фаз, отсчёт; при уходе в фон не ставим паузу).
@@ -146,14 +160,23 @@ server/
 • Медитации v1:
 • Таблицы: `meditation_tracks` (каталог), `meditation_favorites` (избранное).
 • Настройки пользователя: `user_preferences.meditation_timer_minutes`.
-• Плеер мини/детальной страницы: кнопки «Назад/Вперёд» для треков, при переключении активного трека во время воспроизведения автоплей не прерывается (следующий/предыдущий трек стартует сразу); для `isLoop` треков используется Web Audio API (AudioBufferSourceNode + loopStart/loopEnd) для бесшовного лупа без пауз, с fallback на HTMLAudio при недоступности/ошибке Web Audio. Фон детальной медитации подтягивается из `backgroundPath` на уровне layout `default.vue`, тянется на весь экран, выше aurora-слоя и без затемнения. Для одной медитации поддерживается несколько тем через массив `topicKeys`, поэтому трек может появляться в нескольких секциях, но в «Все» остаётся один раз. Контекст очереди (список треков текущей секции) сохраняется при открытии трека, поэтому перемотка вперёд/назад идёт по выбранной секции (например «Все» или конкретная тема).
+• Статус на 25 февраля 2026: в `useMeditationPlayer` native-путь (`@capgo/native-audio`) включён по умолчанию на mobile при доступности `NativeAudio` плагина; отключение только явным `NUXT_FEATURE_NATIVE_MEDITATION_AUDIO_ENABLED=false`. Это нужно для стабильного фонового воспроизведения медитаций на Android/iOS.
+• Реализованный native-слой: `app/services/audio/nativeAudio.service.ts` (адаптер `@capgo/native-audio`, нормализованные события, loop/replay/fade, lifecycle) + `app/services/audio/androidForegroundBridge.ts` (JS bridge) + Android app-level foreground service (`MentalaAudioForegroundService` / `MentalaAudioForegroundPlugin`) с регистрацией в `MainActivity` и manifest permissions (`FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_MEDIA_PLAYBACK`, `WAKE_LOCK`).
+• Обновление от 24 февраля 2026: для native non-loop треков длительность в UI берётся из `durationSeconds` как fallback (если metadata плагина запаздывает), seek-кнопки работают даже до прихода полной metadata; fade-in в native выполняется неблокирующе, поэтому индикатор буферизации скрывается синхронно со стартом звука.
+• Обновление от 24 февраля 2026 (iOS стабильность seek/progress): в `NativeAudioService` добавлен fallback-поллинг `currentTime` + локальные «часы позиции» для **non-loop** треков (если плагин на iOS отдаёт `0`/запаздывает); для seek на iOS используется усиленный путь через `play(time)` только для **remote** источников.
+• Обновление от 24 февраля 2026 (iOS loop seam fix): для loop-треков с HTTP(S) URL на iOS добавлен локальный кэш через `@capacitor/filesystem` (Directory.Cache) и preload из `file://` URI. Это переводит loop в `AudioAsset/AVAudioPlayer` внутри `@capgo/native-audio` и убирает разрыв, характерный для remote-loop (`AVPlayer seek(0)+play`). При ошибке кэша используется безопасный fallback на исходный remote URL.
+• Обновление от 24 февраля 2026 (iOS прогресс `1 -> 0`): в `NativeAudioService` добавлена нормализация входящего `currentTime` (игнор ложных сбросов к нулю вне реального loop-wrap/seek), а при дозагрузке native metadata позиция перед `playing` событием перечитывается из движка. На Android fallback-поллинг отключён, источник прогресса — нативные `currentTime` events плагина.
+• Обновление от 25 февраля 2026 (Android stop hard-reset): в `NativeAudioService.stop()` после `stop` добавлен `unload` + полный сброс `activeAssetId/activeTrack`, чтобы исключить самопроизвольный рестарт медитации по audio-focus при закрытии mini-player.
+• Обновление от 25 февраля 2026 (Android background + routing fix): в Android‑плагине `@capgo/native-audio` отключена смена `AudioManager` на `MODE_IN_COMMUNICATION` и добавлен флаг `allowBackgroundPlayback` — при `background=true` плагин больше не ставит паузу на `handleOnPause`, поэтому медитации продолжаются в фоне без ухода звука в разговорный динамик. `NativeAudioService.configureEngine()` снова передаёт `background: true`, а фон держит `MentalaAudioForeground` сервис.
+• Обновление от 24 февраля 2026 (UI каталога медитаций на iPhone): карточка `MeditationCard` переведена с невалидной схемы `button > button` на семантически корректный контейнер `article[role=button]` с клавиатурной доступностью; кнопка избранного остаётся отдельной и фиксируется справа сверху (`right-2 top-2`), заголовок карточки имеет fallback `Без названия`. Это устраняет iOS/Safari-артефакты позиционирования сердечек и пропажу заголовков в блоке «Все».
+• Плеер мини/детальной страницы: кнопки «Назад/Вперёд» для треков, при переключении активного трека во время воспроизведения автоплей не прерывается (следующий/предыдущий трек стартует сразу); для `isLoop` треков приоритетно используется Web Audio API (AudioBufferSourceNode + loopStart/loopEnd) на всех платформах, включая iOS, чтобы сохранить бесшовный цикл; HTMLAudio остаётся fallback для non-loop и аварийных кейсов. Для iOS в web-слое дополнительно выставляется `navigator.audioSession.type = 'playback'` (если API доступен), а при возврате из background/foreground выполняется мягкое восстановление WebAudio через `visibilitychange` + `Capacitor AppState`. Фон детальной медитации подтягивается из `backgroundPath` на уровне layout `default.vue`, тянется на весь экран, выше aurora-слоя и без затемнения. Для одной медитации поддерживается несколько тем через массив `topicKeys`, поэтому трек может появляться в нескольких секциях, но в «Все» остаётся один раз. Контекст очереди (список треков текущей секции) сохраняется при открытии трека, поэтому перемотка вперёд/назад идёт по выбранной секции (например «Все» или конкретная тема).
 • Контроль конкурентных запусков: `useMeditationPlayer` использует глобальный `playbackActionId`, чтобы отменять устаревшие `play/pause/stop` и гарантировать единственный активный трек.
 • При смене трека применяется короткий fade (~80 мс) даже без основного fade, чтобы избежать щелчков на мобильных динамиках.
 • Автоплей при быстром переключении треков учитывает `isBuffering`, чтобы серия нажатий «вперёд/назад» не оставляла плеер на паузе.
 • Детальная страница трека автозапускает воспроизведение при входе; повтор трека включён по умолчанию; для `isLoop` треков прогрессбар скрыт.
 • Автоплей на мобильных: если браузер блокирует `audio.play()` без жеста, плеер снимает лоадер и ставит запуск в очередь до первого пользовательского взаимодействия (gestures).
-• Для `isLoop` треков при заблокированном WebAudio плеер ждёт жест и не переключается на HTML‑луп, чтобы сохранить бесшовность.
-• Для `isLoop` треков fallback на HTML‑плеер отключён: если WebAudio недоступен/не готов, трек не стартует, чтобы не создавать слышимый шов.
+• Для `isLoop` треков блокировка WebAudio по autoplay не переводит плеер в HTML сразу: воспроизведение откладывается до пользовательского жеста (`scheduleGestureUnlock`), чтобы не терять бесшовность loop.
+• Старт HTMLAudio выполняется по минимальной готовности (`loadedmetadata/canplay`), без обязательного ожидания `canplaythrough`; это сокращает задержку начала воспроизведения на iOS.
 • Аудиофайлы медитаций версионируются по content‑hash в имени (`*.{hash}.m4a`), поэтому CDN кэшируется бессрочно; карта переименований хранится в `scripts/meditation-audio-map.json`, обновление БД выполняется через `server/infrastructure/db/update-meditation-audio-paths.ts`.
 • Картинки медитаций (covers/backgrounds) версионируются по content‑hash в имени (`*.{hash}.webp`), портретные варианты используют тот же hash (`*-portrait`/`portrait-*`), карта переименований хранится в `scripts/meditation-image-map.json`, обновление БД — `server/infrastructure/db/update-meditation-image-paths.ts`.
 • Проверка хэш‑имен медиа доступна через `pnpm media:check` и используется в CI, чтобы не пропускать нехэшированные `.m4a`/картинки.
@@ -171,17 +194,23 @@ server/
 • Страница `/scene-selection` позволяет выбрать фон и фоновый трек для всего приложения (кроме детальной медитации).
 • Список сцен фиксирован в `app/lib/sceneSelectionCatalog.ts` (на основе seed медитаций).
 • Дефолтная сцена — «Горный ручей» (обои включены сразу).
-• Дефолтная громкость фонового трека — 50%.
+• Дефолтная громкость фонового трека — 25%.
 • Настройки возвращаются в `/api/user/me` как `sceneSettings` и сохраняются через `/api/user/me` (PATCH).
 • Дополнительный флаг `sceneSettings.animateBackground` управляет анимацией обоев.
 • Pinia-store `useSceneSettingsStore` отвечает за локальное состояние и дебаунс‑сохранение.
 • Сохранение настроек сцены отменяет предыдущий `PATCH /api/user/me` через `AbortController`, чтобы не было откатов при быстром переключении.
 • Дополнительно фиксируется версия локальных изменений (changeVersion), чтобы устаревшие ответы не могли откатить выбранную сцену даже до старта следующего запроса.
-• `useSceneAudio` управляет воспроизведением, fade‑in/out и таймером выключения при уходе в фон; при уходе в фон звук продолжается только если задан `backgroundPlayMinutes` (иначе останавливается), при возвращении в foreground пытается восстановиться (visibilitychange/AppState). На мобильных WebAudio отключается в пользу HTMLAudio, а таймаут старта в HTML увеличен для медленных сетей.
+• `useSceneAudio` управляет воспроизведением и fade‑in/out: loop-сцены идут через WebAudio (бесшовный цикл), non-loop — через HTMLAudio fallback. Для native mobile добавлен bootstrap fallback для loop: если после cold-start первый запуск loop в WebAudio даёт тишину, сцена одноразово стартует через HTMLAudio (прайм аудио-выхода), после чего сервис автоматически делает повторный запуск и переключает её в WebAudio для бесшовного loop.
 • Для надёжности при быстрых переключениях сцен применяется защита от гонок: устаревшие play‑операции игнорируются по actionId, а ответы сохранения настроек не перезаписывают последние изменения.
+• В `useSceneAudio.stop/pause` добавлена жёсткая остановка обоих движков (`HTMLAudio` и `WebAudio`) независимо от текущего `playbackMode`. Это устраняет ghost-наложение звука при гонках (смена сцены, параллельный старт/стоп медитации, фон/foreground).
+• Обновление от 25 февраля 2026 (fix наложений): при переключении движка для одной и той же сцены (`HTML -> WebAudio` и `WebAudio -> HTML`) `useSceneAudio` теперь принудительно гасит предыдущий движок перед запуском нового и переносит текущую позицию. Это убирает двойное воспроизведение, «просадку» громкости и неснимаемые наложения.
+• Обновление от 25 февраля 2026 (приоритет практик): `useSceneAudio.suspend()` теперь останавливает сцену и в состоянии `isBuffering` (а не только `isPlaying`), а `play()` блокируется при `isSuspended=true`. Это исключает запуск сцены поверх медитации/практик в гонках старта.
 • В layout `default.vue` фон сцены отображается на всех страницах, кроме `/meditations?trackId=...`; при входе в медитацию фоновые звуки приложения приглушаются и возобновляются после выхода. Панорама фона упрощена до одного слоя с диагональным движением, увеличенной длительностью и меньшим масштабом для снижения нагрузки.
+• Глушение сцены в `default.vue` привязано к факту активного медитационного аудио (`isPlaying || isBuffering`), а не к самому открытому экрану медитации. Поэтому после `stop()` медитации фон сцены корректно возвращается.
+• Обновление от 25 февраля 2026 (layout race guard): `syncSceneAudioState` в `default.vue` использует `runId`, чтобы отменять устаревшие async-циклы `setScene/suspend/resume/play`; это убирает обратные автозапуски сцены при быстрых сменах состояния.
+• Обновление от 25 февраля 2026 (Android audio mixing fix): на Android исправлены баги смешивания треков: (1) при переходе с медитации на сцену добавлена задержка 280 мс перед resume/play сцены, чтобы ExoPlayer освободил audio focus; (2) при suspend сцены на Android используется полный `stop()` вместо `pause()`, чтобы полностью освободить WebAudio/HTML5 и избежать duck-ования; (3) в `useMeditationPlayer.play()` при native playback выставляется `isBuffering=true` до любого await, страхуя от гонки watcher при смене треков.
 • Во время выхода из аккаунта выставляется `auth.isLoggingOut`: layout `default.vue` не запускает `useSceneAudio`, а logout‑запрос отправляется в фоне, чтобы UI не зависал и фон не стартовал заново.
-• Автозапуск фоновой сцены учитывает autoplay‑политику браузеров: `useSceneAudio` заранее слушает пользовательский жест и делает `AudioContext.resume()` только после него, чтобы звук мог стартовать сразу после логина.
+• Автозапуск фоновой сцены учитывает autoplay‑политику браузеров: `useSceneAudio` заранее слушает пользовательский жест и делает `AudioContext.resume()` только после него; дополнительно на странице `/scene-selection` пользовательские действия (слайдер громкости, выбор сцены) вызывают `kickstart`, а в `default.vue` добавлен единый first-gesture kickstart (pointer/touch/click) для сценария холодного старта. Это убирает кейс «звук не поднялся после открытия приложения». При `volume = 0` сцена не запускается и принудительно останавливается; при уходе приложения в background поведение зависит от `backgroundPlayMinutes`: `0` — стоп сразу, `N > 0` — остановка через `N` минут.
 
 ⸻
 
@@ -228,6 +257,7 @@ server/
 • При изменении глобальных настроек (`tone`, `addressing`) через `/api/settings/preferences` ставится регенерация AI‑пулов для всех `ai` preferences пользователя (через ту же очередь).
 • Шаблонные тексты из `notificationTemplates` по умолчанию без изображений (`imageTag = null`), но могут иметь явный `imageTag`.
 • Контент каталога `notificationTemplates` поддерживается через регулярную чистку: спорные/неестественные шаблоны удаляются целыми блоками, а в оставшихся текстах нормализуется типографика (например `5 Минут` → `5 минут`). После правок выполняется синхронизация в БД через `scripts/migrate-templates-to-db.ts`.
+• Обновление от 25 февраля 2026 (cleanup удалённых therapy-тем): из шаблонного каталога окончательно убраны `mood`, `grief`, `loneliness`; удалены соответствующие notification image assets и записи в image hash maps. Для физической зачистки legacy-данных в БД добавлена data-миграция `0053_remove_deprecated_therapy_topics.sql` (чистит `notification_preferences`, `notification_slots`, `notification_image_rotation`, `notification_texts`, `notification_text_presets`, `ai_generated_notification_texts` и связанный `ai_notification_text_usage` для `kind='therapy'`).
 • В native (Capacitor) регистрация push‑токена всегда идёт через `$api` и использует ту же стратегию выбора `baseURL`, что и остальные API-запросы (`app/plugins/api.ts`), чтобы не было расхождений между auth и push.
 • Delivery scheduler для push работает по симметричному окну `now-lookahead .. now+lookahead` и ставит `notification-delivery` jobs с `delay = scheduledAt - now` (BullMQ delayed jobs). Это сохраняет точный тайминг внутри окна и исключает поздние «догоняющие» отправки спустя часы.
 • Перед выборкой due-слотов delivery-процесс массово помечает `planned -> skipped` только для действительно протухших записей старше `NOTIFICATION_MAX_SLOT_AGE_HOURS_BEFORE_SKIP`; записи моложе этого порога попадают в due-выборку как overdue и могут быть доставлены.
@@ -239,28 +269,38 @@ server/
 • Для custom-источников уведомлений (`habits/therapy`) доставка и генерация учитывают entitlement: при отсутствии доступа custom-слоты не генерируются и переводятся в `skipped` на этапах `planned` и `queued`, чтобы после окончания Trial/понижения плана уведомления по закрытым сущностям не отправлялись.
 • `POST /api/notifications/mark-delivered` поддерживает батч-пометку: принимает `slotId` или `slotIds[]`, и помимо явных ID помечает `sent -> skipped` для слотов того же пользователя с тем же `scheduledAt` (чтобы в группе уведомлений не оставались “хвосты” со статусом `sent`).
 • UI (habits и therapy) отражает вручную заданные слоты: под слайдером частоты отображается интерактивный список слотов с тайм-пикерами; компонент TimePicker использует Radix ScrollArea без `overflow-hidden`, поэтому свайпы/прокрутка работают нативно, а кнопки синхронно центрируют выбранное значение.
+• В карточке `NotificationsSummaryCard` на страницах темы терапии и привычки под статусом `Включены/Выключены` добавлена ссылка `Как напоминания усиливают прогресс`, открывающая модалку с кратким evidence-блоком; ссылка на PubMed (`https://pubmed.ncbi.nlm.nih.gov/29191800/`) открывается во внешнем браузере (native: `@capacitor/inappbrowser`, web fallback: `window.open`).
 • NotificationSettingsPage визуально сгруппирован в `glass-deep` карточки с внутренними подложками, чтобы текст читался на фоне обоев и сохранялась иерархия блоков.
 • NotificationTextsEditorPage использует общий `glass-deep` контейнер для списка текстов с внутренними карточками-подложками; кнопка сохранения закреплена липкой панелью над BottomNav.
 • NotificationSettingsPage показывает блок «Мои пожелания» для **шаблонных** тем (не для кастомных). Пожелания сохраняются в `custom_prompt_notification` и влияют на AI-генерацию.
-• Изображения уведомлений: подбираются по `kind/entityKey` из `public/notifications/*` **без гендерных подкаталогов** (только нейтральные наборы). Порядок: сущностные (`/notifications/habits/{entityKey}/{imageTag}/`), затем общие (`/notifications/common/{imageTag}/`). Для therapy допускаются сущностные папки (`/notifications/therapy/{entityKey}/{imageTag}/` и вложенные `/notifications/therapy/{entityKey}/**/{imageTag}/`); если есть верхний уровень и вложенные — они миксуются между собой и с common. Для кастомных сущностей (`entityKey = null`) разрешены только нейтральные теги (`activity/nature/meditation/daily_life/neutral_abstract`), `harm_*` запрещены. Legacy‑пулы (старый формат без `imageTag/subtype`) используют только safe‑only fallback `nature` → `neutral_abstract`, `harm_*` запрещены. `harm_*` допускаются в common только как универсальные медицинские визуалы без предметных контекстов, сущностные `harm_*` остаются в habits. Ротация изображений должна быть устойчивой и бесконечной: минимизировать повторы и сохранять позицию между перегенерациями текстов и изменениями настроек. URL строится от `NUXT_PUBLIC_MEDIA_BASE_URL` (fallback: `PUBLIC_APP_ORIGIN`/`NUXT_PUBLIC_APP_URL`). Нормализация файлов выполняется скриптом, который переносит `male/female` в нейтральные каталоги и затем синхронизирует Yandex Object Storage с `--delete`.
-• Для отдельных тем можно задавать специальные ограничения `imageTag` через `IMAGE_TAG_POLICY_OVERRIDES` (например `nutrition` → только `neutral_abstract`, `harm_appearance`, `harm_organs`).
-• Где находится: `server/application/notifications/ai-generation.service.ts`.
-• Как матчится: `entityKey` нормализуется через `trim().toLowerCase()` и сравнивается с `key/keys`; опционально учитывается `kind` (`habits`/`therapy`).
-• Поля override: `keys` (массив ключей), `kind` (опционально), `allowedTags` (строго разрешённые теги), `fallbackTag` (чем заменить запрещённый/неуместный тег), `disallowHarmForPositive` (если `true`, harm\_\* запрещён для нейтральных/позитивных текстов).
-• Порядок применения: сначала override, затем дефолтная политика (meditation-only, safe‑теги).
-• Важно: override применяется только к AI‑генерации; чтобы вступило в силу, нужен ре‑ген AI‑пула (смена `subtype/directness` или переключение `textSource`).
-• Для **шаблонов** картинки выключены по умолчанию (`imageTag = null`), но их можно включить точечно, задав `imageTag` в шаблоне.
-• Если для выбранного `imageTag` нет файлов ни в сущности, ни в common (AI‑источник), используется safe‑fallback в порядке `nature → daily_life → activity → meditation → neutral_abstract`. Для привычки `meditation` допускается только `meditation`. Для привычки `water` в промпте задано требование `imageTag = neutral_abstract`.
+• Изображения уведомлений (обновление от 26 февраля 2026): runtime-подбор в `notification-images.service.ts` переведён на модель `rules + score` с порогом `MATCH_SCORE_THRESHOLD` (default `0.65`), без глобального fallback-списка `nature -> ...`.
+• Семантика берётся гибридно: базовый `imageTag` от LLM + rule-based сигналы из текста (`text`), `actionHint`, `subtype`, `directness`, `habitIntent`; неизвестные/конфликтные теги отсекаются на этапе rule-gate/score.
+• Источники и приоритеты: `habits` — сначала `habits/{entity}/{tag}`, затем разрешённый `common/{tag}`; `therapy` — сначала `therapy/{entity}/{tag}`, затем `common/{tag}`; при нескольких валидных common-тегах в терапии включено round-robin чередование по смысловым группам.
+• Для `water` реализован отдельный микс-режим: при semantic match чередуются `habits/water/neutral_abstract` и `common/activity` в общей ротации (`water_mix`).
+• Для `habits` с `habitIntent='quit'` действует защитный инвариант: если в тексте нет harm-сигналов и текст имеет позитивный/benefit тон, сущностные (`habits/{entity}/*`) ассеты блокируются; при наличии semantic match допускается подбор из `common/*`.
+• Для `habits:sugar` введён частотный gate на сервере: изображение прикрепляется максимум в 50% релевантных уведомлений (чередование по персистентному rotation-индексу `sugar_frequency_gate`), при сохранении semantic-match требований.
+• Для custom/entityless источников разрешены только safe common-теги (`activity/nature/meditation/daily_life/neutral_abstract`), `harm_*` блокируются.
+• Для `textSource=templates` в `global-orchestration.service.ts` добавлен server-side тарифный gate: изображение прикрепляется только при активной платной подписке (`pro/premium`); на `basic` или без активной подписки push уходит без `payload.image`.
+• `notification-image-map.json` и `notification-image-size-map.json` остаются артефактами пайплайна ассетов (`scripts/hash-notification-images.mjs`), URL строится от `NUXT_PUBLIC_MEDIA_BASE_URL` (fallback: `PUBLIC_APP_ORIGIN`/`NUXT_PUBLIC_APP_URL`).
+• Для отдельных тем AI-генерации можно задавать ограничения `imageTag` через `IMAGE_TAG_POLICY_OVERRIDES` в `ai-generation.service.ts`; override влияет на генерацию тега, а итоговый runtime-выбор изображения проходит через серверный semantic gate.
+• Отдельное ТЗ по оптимизации релевантности картинок и fallback-логики: `.docs/notification_images_optimization_tz.md`.
 • Android push: канал `mentai_high` создаётся нативно в `MainApplication` и задан как `default_notification_channel_id` в манифесте; fallback канал `fcm_fallback_notification_channel` удаляется, чтобы все уведомления были в одном разделе. Для FCM используется `tag = slotId`, чтобы Android не перезаписывал уведомления внутри группы.
 • Android push (важно): для Android отправляются **data-only** сообщения. Нативный сервис `MentalaMessagingService` сам строит уведомление (title/body/image из `data`) и привязывает `contentIntent`, чтобы тап работал и в раскрытом виде. В фореграунде системное уведомление не показываем (только JS-обработка). В интент обязательно кладём `google.message_id`, чтобы `PushNotificationsPlugin` эмитил `pushNotificationActionPerformed` на холодном старте.
 • iOS push: сервер принимает **FCM registration token**. На iOS токен берём через `@capacitor-community/fcm`; APNs token хранится только для диагностики и не используется для отправки.
-• iOS rich‑image: сервер ставит `aps.mutableContent = true`, прокидывает картинку в `apns.fcmOptions.imageUrl` и дублирует URL в `data.image` для Notification Service Extension.
-• Разделение окружений push: клиент шлёт `X-App-Env` и `appEnv`, в `user_devices` хранится `app_env`; отправка фильтруется по текущему окружению (dev/prod).
+• Для iOS обязательно пробрасываются нативные callbacks регистрации remote notifications из `AppDelegate.swift` в Capacitor (`.capacitorDidRegisterForRemoteNotifications` / `.capacitorDidFailToRegisterForRemoteNotifications`), иначе JS-событие `registration` и привязка FCM токена не происходят.
+• iOS Firebase конфигурация унифицирована: используется только `ios/App/App/GoogleService-Info.plist` с bundle id `com.mentala.app`; отдельный dev bundle (`com.mentala.app.dev`) и `GoogleService-Info-Dev.plist` не используются.
+• В `sendFCMNotification` добавлена расширенная диагностика ошибок FCM (code/errorInfo/message). Токены с `invalid-registration-token`, `registration-token-not-registered` и `SenderId mismatch` автоматически удаляются из `user_devices`, чтобы не плодить постоянные ретраи на невалидных устройствах.
+• iOS rich‑image: добавлен отдельный iOS target `MentalaNotificationService` (`UNNotificationServiceExtension`). Сначала используется `Messaging.serviceExtension().populateNotificationContent(...)` (Firebase helper), затем fallback на ручную загрузку attachment из `data.imageUrl` (и legacy `data.image`) при отсутствии вложения.
+• Валидация rich-image на backend централизована в `notification-image-validation.ts`: разрешены только `https` + `jpg/png` + путь из `/notifications/*` с известным размером из `notification-image-size-map.json`. При размере `>1MB` (или любой невалидности) push отправляется как текстовый: без `notification.imageUrl`, без `apns.fcmOptions.imageUrl`, без `data.image/data.imageUrl`.
+• Разделение окружений push: в `user_devices.app_env` пишется серверное окружение (`MENTALA_DB_ENV`/`NODE_ENV`), а не клиентский `X-App-Env/appEnv`; это защищает от dev/prod рассинхрона между iOS/Android. Отправка по‑прежнему фильтруется по текущему окружению сервера.
 • Push‑навигация: payload слота содержит `deepLink`, `navigation`, а также `data.action` + параметры (`trackId`/`practiceId`) для fallback‑маршрута. Клиент выполняет переход только при системном тапе; snooze/yes/no не должны запускать навигацию. При отсутствии данных fallback на `/`.
 • Приоритет навигации: `deepLink` → `data.action` → `navigation/navType` → `/`.
 • Надёжность push‑переходов (client): целевая навигация кладётся в очередь (Preferences/localStorage) с TTL, дедуплицируется по `messageId` и «специфичности» пути (например `/meditations?trackId=...` сильнее `/meditations`). Переход выполняется после `router.isReady()` и попытки `auth.me()`; если маршрут свернулся до базового пути, выполняется одноразовый retry через `router.replace`.
+• При системном тапе по push клиент дополнительно вызывает `useMeditationPlayer.registerUserGesture()` до роутинга: это заранее пытается разблокировать WebAudio (`AudioContext.resume`) и повышает надёжность автозапуска звука на открытом по уведомлению треке.
+• Очередь pending push-навигации очищается только после подтверждённого перехода на целевой `fullPath`; при срыве из-за middleware/инициализации запись не теряется и ретраится до истечения TTL (через `app:mounted`, `router.afterEach`, `auth.isLoggedIn` и отложенный retry-таймер в клиенте).
+• Android/iOS cold+warm push fallback: `MainActivity` и `AppDelegate` сохраняют launch extras push-интента в storage-ключ `mentai.push.launchPayload`, совместимый с `@capacitor/preferences` (на iOS фактический ключ `CapacitorStorage.mentai.push.launchPayload`). JS-плагин потребляет payload не только на `app:mounted`, но и при `appStateChange(isActive=true)`, что закрывает кейсы пропуска `pushNotificationActionPerformed`.
 • `actionHint` хранится в `notification_texts` и `notification_text_presets` (а для AI — в `ai_generated_notification_texts.texts[]`) и используется на сервере для вычисления `navigation`.
-• Для `actionHint=breathing` сервер сначала пытается определить конкретную технику по тексту: `4-7-8` → slug `4-7-8`, `4-4-4-4`/«квадратное»/«коробочное» дыхание → slug `box-breathing`; если явной техники нет, используется fallback `DEFAULT_BREATH_PRACTICE_SLUG` (по умолчанию `box-breathing`).
+• Для `actionHint=breathing` сервер определяет технику по тексту: `4-7-8` → `4-7-8`, `4-4-4-4`/«квадратное»/«коробочное» → `box-breathing`, `4-6` → `long-exhale-4-6` и т.д.; при отсутствии явного упоминания используется fallback `DEFAULT_BREATH_PRACTICE_SLUG` (box-breathing). AI генерирует тексты unpredictably — любая упомянутая техника ведёт на соответствующий slug.
 • Если `actionHint` отсутствует или равен `none`, сервер применяет эвристику по тексту и `imageTag` (медитация/дыхание) как fallback, чтобы не терять навигацию.
 • Android clickAction: сейчас **не задаётся** (используем дефолтное поведение Android — открытие приложения по тапу). Если когда‑нибудь понадобится кастомный `clickAction`, он должен строго совпадать с `intent-filter` `MainActivity`, иначе тап по уведомлению не откроет приложение.
 • Дефолтные цели перехода (медитация/дыхание) задаются на сервере конфигом и могут меняться без релиза клиента.
@@ -314,6 +354,7 @@ server/
 • Trial:
 • Trial — это **состояние пользователя**, а не отдельный план: `users.has_used_trial`, `users.trial_started_at`, `users.trial_ended_at`.
 • При регистрации создаётся `Basic` подписка; если Trial активен — для Basic включается полный AI-доступ уровня Premium на 7 дней (с Premium fair-use guard).
+• Длительность trial конфигурируется через `TRIAL_DURATION_HOURS` (по умолчанию `168`, то есть 7 дней), что позволяет сокращать trial в тестовом окружении до часов.
 • Идентификатор Trial: сейчас **email обязателен**, без email регистрация не поддерживается.
 • Нормализация email: `normalizeEmail` (lowercase + Gmail aliases + Unicode NFKC) — единая для auth и trial tracking.
 • Идентификатор: `email_hash` (HMAC‑SHA256 + `EMAIL_HASH_PEPPER`) как ключ; `email_normalized` хранится для поддержки.
@@ -338,56 +379,160 @@ server/
 • В`NotificationSettingsPage` блоки «Способ создания / ИИ» и «Мои пожелания» используют entitlement-gate с lock-иконкой (`⭐`/`💎`) и paywall-модалкой; поле пожеланий остаётся read-only без доступа и не участвует в AI-генерации до открытия тарифа.
 
 • Checkout (as-is):
-• `POST /api/subscriptions/start-checkout` требует заголовок `Idempotency-Key`.
-• `idempotency_keys` работает с TTL (по умолчанию 24ч): повтор с тем же ключом возвращает тот же `response_json`, пока ключ не истёк.
-• To-be: повтор с тем же `Idempotency-Key`, но другим payload (`planId`/`billingPeriod`) должен возвращать `409`.
-• Создаёт `pending` подписку и сохраняет «ожидаемые» checkout-поля прямо в `user_subscriptions`:
-`checkout_amount`, `checkout_currency`, `billing_credit_applied`, `billing_credit_granted`, `yookassa_payment_id`.
-• Кредит `billingCredit` **резервируется** на старте checkout (уменьшаем `users.billing_credit`) и:
-• при `payment.succeeded` не списывается повторно,
-• при `payment.canceled` возвращается.
-• Если `toPay === 0` — финализация происходит сразу в `start-checkout` (без webhook).
-• Zero-pay путь: резерв кредита, активация и audit event выполняются в одной транзакции.
-• Если `toPay > 0`, сейчас возвращается mock `paymentUrl` (реальный create payment в YooKassa — в roadmap).
-• `paymentUrl` в текущем состоянии не является подтверждением оплаты и не используется как источник истины в бизнес-логике.
+• `POST /api/subscriptions/start-checkout` требует `Idempotency-Key` и сохраняет `request_hash` команды в `idempotency_keys`.
+• Повтор с тем же `Idempotency-Key`, но другим payload (`planId`/`billingPeriod`/`paymentMode`/`externalFlow`) возвращает `409`.
+• Введена единая policy смены: `upgrade now, downgrade later`.
+• Классификация команды:
+• `upgrade_now` и `month->year` применяются сразу;
+• `downgrade_later` и `year->month` не создают checkout, а планируются на конец текущего периода.
+• Контракт `start-checkout` расширен:
+• `checkoutAction = payment | activated | scheduled_downgrade | noop`;
+• `scheduledChange = { planId, billingPeriod, effectiveAt } | null`.
+• `billingCredit` больше не участвует в расчёте checkout (`creditApplied=0`, `creditGranted=0` в новых командах).
+• Формула `month->year`: `toPay = yearPrice - unusedCurrentValue`; при этом новый период начинается сейчас (`endDate = now + 365 дней`).
+• Для `downgrade_later`:
+• сохраняется schedule в `users.scheduled_*`;
+• у текущей активной подписки выставляется `autoRenew=false`;
+• при наступлении `effectiveAt` план применяется автоматически (фоновый worker + self-heal в `/api/subscriptions/current` как fallback);
+• для платного target-плана выполняется автосписание по сохранённой карте и создаётся новый период уже на целевом тарифе;
+• ответ возвращается без платежа (`paymentMode=none`, `toPay=0`).
+• Для `upgrade_now`:
+• schedule очищается;
+• trial-scheduled поля (`billing_plan_id`, `billing_period`, `next_charge_at`, `billing_collection_status`, `grace_ends_at`, `billing_reminder_sent_at`, `billing_locked_*`) также очищаются, чтобы после paid-активации не оставалось устаревшего блока «Списание запланировано»;
+• создаётся `pending` (если `toPay > 0`) или сразу `active` (если `toPay = 0`) подписка;
+• предыдущая активная подписка переводится в `expired` после активации новой.
+• Для перехода `Basic -> Pro/Premium` действует отдельное правило: платный период всегда начинается с момента активации (`startDate=now`, `endDate=now+period`), без привязки к `endDate` текущей `basic`-подписки.
+• Перед расчетом checkout сервер синхронно очищает просроченные `active` (`endDate <= now -> expired`).
+• Выбор "текущей" подписки унифицирован: `order by endDate desc, createdAt desc, id desc`.
+• Если `toPay > 0` — выполняется реальный `POST https://api.yookassa.ru/v3/payments`:
+• `web/android` -> `confirmation.type=embedded`, `confirmation.locale=ru_RU`, ответ содержит `confirmationToken`, `paymentMode=widget`;
+• `ios` -> `confirmation.type=redirect`, `confirmation.locale=ru_RU`, ответ содержит `paymentUrl`, `paymentMode=redirect`;
+• `mobile web` может явно запрашивать `paymentMode=redirect` (fallback для стабильного 3DS UX на узких экранах).
+• Для пользователей с уже привязанной картой (`paymentMethodBound=true` + `paymentMethodId`) сервер сначала пробует direct charge через YooKassa recurring API (`payment_method_id`) без открытия checkout.
+• При `direct charge = succeeded` подписка активируется сразу (`checkoutAction=activated`, `paymentMode=none`), при `canceled/failed` — выполняется fallback в обычный checkout (widget/redirect).
+• Для подписочного checkout включено безусловное сохранение метода оплаты: `save_payment_method=true` + `merchant_customer_id=<userId>`.
+• `paymentUrl` и `confirmationToken` не считаются подтверждением оплаты; факт оплаты подтверждается только серверной верификацией.
+
+• Trial-scheduled billing (оплата в конце trial):
+• В `users` добавлены поля планового биллинга trial: `billing_plan_id`, `billing_period`, `next_charge_at`, `billing_collection_status`, `grace_ends_at`, `billing_reminder_sent_at`, `payment_method_*`, `billing_locked_*`.
+• Для хранения истории карт добавлена таблица `user_payment_methods` (`active/archived`, `is_default`), а в `users` расширены поля карточных реквизитов (`payment_method_card_*`).
+• Для идемпотентности попыток создана таблица `billing_charge_attempts` (`charge_attempt_key` unique, `attempt_count`, `auto_attempt_count`, retry/lock поля).
+• `POST /api/subscriptions/start-checkout` получил новые action:
+• `bind_payment_method_required` — нужен шаг привязки метода оплаты;
+• `trial_scheduled` — выбранный платный план зафиксирован, списание пойдёт в `trialEndsAt`, немедленного платежа нет.
+• Пока `trialActive=true`, effective-access всегда `Premium` (даже если будущий план для списания выбран `PRO`); выбор `billingPlan` влияет только на пост-trial списание.
+• В Trial (при `trialActive=true`) выбор `Pro/Premium` больше не возвращает `scheduled_downgrade` и не создаёт `pending` checkout.
+• Добавлен endpoint `POST /api/subscriptions/bind-payment-method` для отдельного bind-flow через YooKassa `payment_methods` (без немедленного списания).
+• `POST /api/subscriptions/bind-payment-method` поддерживает `force=true` для замены текущей карты (новая становится default).
+• Добавлен endpoint `POST /api/subscriptions/payment-method/unbind` для отвязки карты (текущая карта уходит в `archived`) с обязательной очисткой trial-scheduled полей (`billing_plan_id`, `billing_period`, `next_charge_at`, `billing_collection_status`, `grace_ends_at`) — это отменяет будущее списание.
+• `GET /api/subscriptions/current` при `payment_method_binding_status='pending'` выполняет серверную sync-проверку binding в YooKassa и подтягивает карту в локальный профиль без повторного checkout.
+• Webhook `/api/payments/yookassa/webhook` расширен:
+• обработка `payment_method.*` (финализация привязки карты);
+• обработка `chargeType=trial_scheduled` для финализации рекуррентных списаний (success/fail) по `chargeAttemptKey`.
+• Добавлен `POST /api/subscriptions/retry-charge` для ручного повтора списания при `past_due` (идемпотентный flow по `chargeAttemptKey`).
+• Добавлен фоновый плагин `server/plugins/trial-billing-worker.ts`:
+• запуск плановых списаний в `next_charge_at` с early-window `TRIAL_BILLING_EARLY_CHARGE_MINUTES` (по умолчанию 5 минут до дедлайна), чтобы не было разрыва доступов на стыке trial и первого списания;
+• policy retry `0h/+6h/+24h` через `auto_attempt_count`;
+• перевод в `past_due` + `grace_ends_at=+48h` при неуспехе;
+• авто-откат trial-billing состояния в Basic после истечения grace.
+• этот же worker применяет due `scheduled_downgrade` для paid-периодов (`users.scheduled_*`) и запускает списание уже по целевому тарифу.
+• При раннем успешном списании trial не форсируется к `now`: фактическое окончание trial продолжает определяться `users.trial_ended_at`, что исключает преждевременный срез trial-доступов.
+• Reminder за 24 часа реализован в том же worker:
+• push обязателен (`sendToUser`);
+• email опционален (`sendBillingReminderEmail`) только при `email_verified_at` + `marketing_consent_at`;
+• антидублирование через `users.billing_reminder_sent_at`.
+
+• `/api/subscriptions/current`:
+• возвращает `scheduledChange`;
+• возвращает `trialEndsAt`, `currentEntitlementsPlan`, `billingPlan`, `billingPeriod`, `nextChargeAt`, `paymentMethodBound`, `billingCollectionStatus`, `graceEndsAt`;
+• при отсутствии активной подписки всегда отдает effective Basic-entitlements и `noActiveSubscription=true`;
+• не поднимает paid-entitlements из `pending/expired/canceled` записей.
+• Для `billingCollectionStatus=scheduled` и `past_due` (до `graceEndsAt`) effective plan сохраняется платным (`billingPlan`), чтобы не было временного падения доступа до Basic до завершения charging-flow.
+
+• `POST /api/subscriptions/scheduled-change/cancel` очищает `users.scheduled_*` и отменяет запланированную смену тарифа.
+• При отмене scheduled downgrade endpoint дополнительно восстанавливает `autoRenew=true` у активной исходной подписки (сначала по `scheduled_from_subscription_id`, затем fallback по текущей active подписке), чтобы после отмены будущего понижения текущий тариф продлевался штатно.
 
 • YooKassa webhook:
-• В `POST /api/payments/yookassa/webhook` подлинность уведомления подтверждается через API YooKassa:
-`GET https://api.yookassa.ru/v3/payments/{payment_id}` (Basic Auth `shopId:secretKey`).
-• IP allowlist используется как мягкая проверка (не блокирующая), источник истины — ответ API YooKassa.
-• Сумма/валюта сверяются с `user_subscriptions.checkout_*` перед активацией.
-• To-be: при real checkout в metadata платежа обязательно передаётся `subscriptionId/orderId`; финализация запрещена при неконсистентной привязке.
-• To-be: если в pending-подписке уже установлен `yookassa_payment_id`, webhook с другим `payment.id` не может её финализировать.
-• To-be: в рамках одного pending checkout `yookassa_payment_id` неизменяем; второй платеж для того же pending не создается.
-• To-be: при повторном `start-checkout` и уже существующем pending + `yookassa_payment_id` возвращается тот же `confirmation_url` (или требуется явная отмена pending перед новым процессом).
-• Все мутации — в транзакции; конкурентные повторы защищены `ON CONFLICT DO NOTHING` по `payments.id`.
+• Каноничный endpoint: `POST /api/payments/yookassa/webhook`.
+• Подлинность уведомления подтверждается через `GET /v3/payments/{payment_id}` (Basic Auth `shopId:secretKey`).
+• IP allowlist используется как мягкая проверка; источник истины — verify ответ API YooKassa.
+• `WEBHOOK_SIGNING_SECRET` в текущем контуре не используется.
+• Верифицируются сумма/валюта против `user_subscriptions.checkout_*`.
+• Идемпотентность webhook: PK `payments.id` + `ON CONFLICT DO NOTHING`.
 • Инварианты:
 • переход `pending -> active` только после валидного `payment.succeeded`;
 • дубль webhook не приводит к повторной активации;
-• один `payment.id` не может быть применен дважды (один платеж -> одна финализация);
-• повторный webhook не должен повторно начислять `billingCreditGranted`;
-• после активации старая активная подписка пользователя переводится в `expired`.
-• Текущее усиление от гонок: PK `payments.id` + `ON CONFLICT DO NOTHING` + conditional update `pending -> active`; дополнительная row-level блокировка в webhook — часть hardening roadmap.
-• Обязательный hardening: "не более одной active подписки на пользователя" (частичный unique index или row-level lock в критических транзакциях).
-• Обязательный hardening: reconciliation pending-подписок при потерянном/задержанном webhook через verify API YooKassa (порог конфигурируемый 15-30 минут, по умолчанию 15 минут) и только при наличии `yookassa_payment_id`.
-• Обязательный hardening: кейсы mismatch/несовпадений переводятся в `checkoutStatus=manual_review` (видимый в API/админке), а не остаются только в логах.
-• Для `manual_review` вводятся идемпотентные админ-операции approve/reject с обязательным audit event и переводом кейса в терминальный статус.
-• Операционные переходы `checkoutStatus`: `succeeded`/zero-pay/canceled финализируют checkout и переводят кейс в `closed`.
-• Для `pending` без `yookassa_payment_id` verify/reconciliation не запускается; такие "висяки" закрываются TTL-политикой.
-• Вводится `pending_ttl_hours` (default 24 часа): cron переводит просроченные `pending` в `canceled`, возвращает зарезервированный кредит и пишет audit event.
+• повторно не начисляется `billingCreditGranted`;
+• после активации новая подписка становится `active`, предыдущая `active` переводится в `expired`.
 
-• To-be roadmap (без ломки текущих контрактов):
-• Phase 1: реальный `POST /v3/payments` в `start-checkout`, запись `yookassa_payment_id`, возврат `confirmation.confirmation_url`, запрет бизнес-решений по `paymentUrl`.
-• Phase 1 UX: после возврата с оплаты клиент проверяет `/api/subscriptions/current`; до webhook UI показывает "Оплата обрабатывается".
-• Phase 1 reliability: внедряется reconciliation (job и/или защищенный endpoint "Я оплатил") для server-side проверки pending платежей через `GET /v3/payments/{id}`.
-• `checkoutStatus` не входит в scope базового Phase 1 и вводится на этапе hardening (Phase 1.5).
-• Phase 1.5 migration: `user_subscriptions.checkout_status` вводится через миграцию БД (`NOT NULL DEFAULT 'in_progress'`) с backfill существующих записей.
-• Phase 2: интеграция отмены автопродления у провайдера в `POST /api/subscriptions/cancel` + ретраи/мониторинг recurring.
-• Phase 3: server-side paywall config (регион/канал) поверх текущего entitlement-слоя, затем Stripe (global web) и IAP verify (iOS/Android).
-• Phase 4: унифицированный entitlement-слой и rollout через feature flags.
-• До Phase 2 endpoint `POST /api/subscriptions/cancel` трактуется как soft cancel (`autoRenew=false` в нашей модели), без гарантии провайдерной отмены.
-• Для UI to-be: в ответе `/api/subscriptions/current` добавить явный флаг `cancelAtPeriodEnd`.
-• Для быстрого рендера paywall/UI-гейтов источник первого экрана — `billing` в `/api/user/me`; `/api/subscriptions/entitlements` используется для детального рефреша.
+• UX/платформы (as-is):
+• `app/pages/subscription.vue`:
+• Trial countdown в UI показывается как `X дней Y часов осталось` (с fallback `меньше часа`), вычисляется от точного `trialEndsAt` и пересчитывается на клиенте каждую минуту (`@vueuse/core/useNow`).
+• Web/Android: интегрирован YooKassa Widget (`checkout-widget.js`) во встраиваемом режиме (`customization.modal=false`) с рендером в наш `Dialog`-контейнер (controlled modal на стороне приложения).
+• Checkout-диалог открыт в non-modal режиме (`Dialog modal=false`), чтобы 3DS-челлендж (который может монтироваться вне контейнера виджета) оставался интерактивным и не блокировался focus/pointer lock.
+• Загрузка скрипта виджета вынесена в клиентский Nuxt plugin `app/plugins/yookassa-widget.client.ts` (single-flight загрузка + DI через `$yooKassaWidget`), а страница подписки использует только API плагина.
+• Глобальные CSS-override внутренних классов `checkout-modal*` не используются; layout/overlay контролируются нашим `Dialog`, а виджет монтируется в выделенный DOM-контейнер.
+• Контейнер виджета обёрнут в `rounded + overflow-hidden`, чтобы скругления верхних/нижних углов сохранялись в embed-режиме на всех viewport.
+• Кнопка закрытия диалога использует стандартный визуальный стиль без явной рамки у кнопки (с принудительно тёмным цветом иконки для читаемости на белом фоне виджета); контейнер виджета имеет дополнительный верхний внутренний отступ для корректной визуальной дистанции от верхней границы.
+• Для обычного web/android flow `return_url` у widget не используется; после оплаты статус синхронизируется через widget events (`success/fail`) + short polling.
+• Канонический endpoint возврата после внешней оплаты: `/payment-success`.
+• `return_url` в redirect-flow и bind-flow указывает на `/auth/external-session/consume?token=...&redirect=/payment-success?...`: внешний браузер сначала получает web cookie-сессию через consume endpoint и только потом редиректится в единый return-flow.
+• iOS native: внутренний checkout отключён; показывается только переход в web flow.
+• Mobile web: используется redirect checkout (без in-page widget popup), чтобы избежать нестабильности 3DS-кнопок в iframe на узких экранах.
+• После старта оплаты включён short polling с прогрессивным профилем: 1 сек первые 5 секунд, затем 3 сек, окно до 30 секунд.
+• Ручная кнопка проверки статуса не используется; синхронизация статуса выполняется автоматически через widget/deeplink события и short polling.
+• Добавлен серверный verify endpoint для polling: `GET /api/subscriptions/check-payment-status`.
+• `check-payment-status` выполняет self-heal reconcile: при `providerStatus=succeeded`/`canceled` и локальном `pending` endpoint идемпотентно синхронизирует локальную подписку с фактическим состоянием платежа.
+• Критичный инвариант polling: фронт подтверждает оплату только по целевой checkout-подписке (`subscriptionId` из `start-checkout`/`return_url`), а не по `currentSubscription`, чтобы старая `active` подписка не давала ложный success.
+• `GET /api/subscriptions/check-payment-status` поддерживает точечную проверку по `subscriptionId` вне зависимости от текущего `payment_status` записи; для non-pending статусов endpoint возвращает фактический локальный статус без выбора «последней pending» записи.
+• `GET /api/subscriptions/current` получил on-demand self-heal для trial-scheduled billing: если `nextChargeAt <= now`, статус `scheduled|past_due`, карта привязана и есть `paymentMethodId`, endpoint точечно запускает попытку списания для текущего пользователя (`runTrialBillingForUser`) и затем перечитывает billing state.
+• `GET /api/subscriptions/current` завершает deferred trial-schedule после bind-flow только для незавершённого trial-window: карта привязана, есть `billingPlanId/billingPeriod/nextChargeAt`, `billingCollectionStatus='none'` и `nextChargeAt <= trialEndedAt`.
+• `GET /api/subscriptions/current` дополнительно очищает stale trial-billing состояние, если уже есть активная paid-подписка и trial-поля указывают на post-trial период (`nextChargeAt > trialEndedAt`).
+• Это закрывает кейс «worker не успел/не запущен»: при открытии экрана подписки списание догоняется автоматически без ручного retry и без перезагрузки страницы.
+• `app/plugins/subscription-sync.client.ts`:
+• синхронизация подписки работает только по оплатным событиям (event-driven), без авто-refresh при `visibilitychange/appStateChange`;
+• deep link обработчик (`App.addListener('appUrlOpen', ...)`) понимает и прямой `/payment-success`, и `/auth/external-session/consume?redirect=...`;
+• deep link нормализуется в SPA-маршрут `/payment-success?...`, после чего страница return-flow переводит пользователя на `/subscription`.
+• `app/pages/payment-success.vue`:
+• единая точка завершения внешнего checkout/bind;
+• нормализует query-флаги в контракт `/subscription` (`paymentReturn`, `bindReturn`, `subscriptionId`, `bindingSessionId`, ...);
+• в mobile web делает fallback-открытие `mentala://payment-success?...`, если Universal/App Links не сработали.
+• Поддерживается только один return-route: `/payment-success` (legacy-пути и алиасы удалены, чтобы не дублировать роутинг и логику возврата).
+• polling и форс-обновление подписки запускаются на `/subscription` по флагу `paymentReturn=1`.
+• `GET /api/subscriptions/current` отключил HTTP-кэш (`Cache-Control: private, no-store`) для исключения stale-статуса после успешной оплаты.
+
+• iOS external auth bridge (as-is):
+• `POST /api/auth/external-session/create` выдаёт одноразовый transfer-token.
+• Для dev на реальных устройствах добавлен клиентский override `appUrl` (вычисляется через `useExternalFlowAppUrl`): приоритет `NUXT_PUBLIC_DEVICE_APP_URL` на native/dev, затем `window.location.origin`.
+• Серверные endpoint’ы redirect-flow (`external-session/create`, `start-checkout`, `bind-payment-method`) используют `resolveExternalFlowAppUrl`: в dev принимают `appUrl` override, в production игнорируют несовпадающий override и остаются на серверном `appUrl`.
+• Для возврата из YooKassa используется отдельный профиль TTL одноразового токена (`PAYMENT_RETURN_EXTERNAL_SESSION_TTL_SECONDS`, default 2 часа): это предотвращает истечение токена во время заполнения платежной формы.
+• Для iOS speech-to-text в `ios/App/App/Info.plist` обязательны privacy-ключи `NSSpeechRecognitionUsageDescription` и `NSMicrophoneUsageDescription`; без них приложение падает при `SpeechRecognition.requestPermissions()`.
+• `GET /auth/external-session/consume?token=...`:
+• валидирует токен;
+• атомарно помечает его consumed;
+• создаёт web cookie-сессию (`mentala.sid` + CSRF);
+• редиректит на целевой внутренний path (`/subscription` по умолчанию, для billing return — `/payment-success?...`).
+• Для `payment_return` consume работает с replay-tolerance: повторный запрос тем же токеном в коротком окне (до 15 минут) допускается при отсутствии high-risk mismatch, чтобы исключить 401 из-за дублирующих GET во внешнем мобильном браузере.
+• Для `payment_return` cookie-политика в consume-flow принудительно `SameSite=Lax`; secure-флаг выставляется по фактическому протоколу входящего запроса (`https` -> `secure=true`, `http` -> `secure=false`), чтобы LAN/dev возврат через внешний браузер не терял cookie.
+• Сервер отдаёт `.well-known` ассоциации для deeplink:
+• `GET /.well-known/apple-app-site-association` (iOS Universal Links),
+• `GET /.well-known/assetlinks.json` (Android App Links; требует корректные SHA256 fingerprints сертификата).
+• Для bridge добавлена таблица `external_auth_tokens` (хранится только `token_hash`, TTL, consumed-аудит).
+• Fingerprint-check риск-ориентированный:
+• одиночный UA mismatch не блокирует flow;
+• hard reject только на high-risk комбинациях (например, критичный UA+IP mismatch) + security audit.
+
+• Hardening roadmap (дальше без ломки контрактов):
+• `checkoutStatus` (`in_progress/manual_review/closed`) и операционные админ-операции approve/reject.
+• Reconciliation pending-подписок по verify API YooKassa (cron/job).
+• `pending_ttl_hours` и авто-закрытие зависших pending с возвратом резерва.
+• Усиление гарантии "не более одной active подписки на пользователя" (индекс/блокировки в критических транзакциях).
+• `POST /api/subscriptions/cancel` переведён в hard-cancel семантику:
+• выключает `autoRenew` у активных подписок пользователя;
+• очищает `users.scheduled_*` и trial billing-поля (`billing_plan_id`, `billing_period`, `next_charge_at`, `billing_collection_status`, `grace_ends_at`, `billing_reminder_sent_at`, `billing_locked_*`);
+• пытается отменить `pending` checkout-платежи в YooKassa (`POST /v3/payments/{id}/cancel`) и закрывает локальные `pending` подписки в `canceled` там, где отмена подтверждена;
+• отвязывает текущий `paymentMethodId` (через `detachUserPaymentMethod`), чтобы backend не мог инициировать новые recurring-списания без явной повторной привязки карты;
+• возвращает список unresolved `pending` платежей, если provider не подтвердил отмену (операционный сигнал для ручной проверки).
 
 • Вне текущего scope (не считать реализованным):
 • runtime-маршрутизация `apple_iap / google_play / ios_external`;
@@ -414,7 +559,7 @@ server/
 
 • Миграции (Drizzle):
 • Меняем `server/infrastructure/db/schema.ts` → запускаем `pnpm db:generate` → `pnpm db:migrate`.
-• Миграции для подписок/биллинга сейчас: `0005_*` (база), `0006_*` (payments/idempotency/billing*period/last_activity_at), `0007*\*` (checkout-поля + response_json).
+• Миграции для подписок/биллинга: `0005_*` (база), `0006_*` (payments/idempotency/billing*period/last_activity_at), `0007_*` (checkout-поля + response_json), `0049_*` (external auth tokens + `idempotency_keys.request_hash`), `0050_*` (`users.scheduled_*` для downgrade scheduling), `0051_*` (trial-scheduled billing: `users.billing_*` + `billing_charge_attempts`).
 
 ⸻
 
@@ -529,3 +674,13 @@ server/
 Для ассинхронных операций использовать async/await.
 
 ✅ Теперь этот architecture.md содержит и UI-правила, и описание фронтенда, и бэкенда, и секцию по безопасности, и дорожку на Laravel.
+
+⸻
+
+🎧 Аудио-платформы (обновлено, 24 февраля 2026)
+• Для `NativeAudioService` зафиксировано платформенное разделение через профиль `app/services/audio/nativeAudio.platform.ts`.
+• iOS стратегия loop: `play -> short prime -> loop`, чтобы сохранить отображение и управление в `MPNowPlaying`/Control Center при loop-треках.
+• Android стратегия loop: прямой `loop()` без промежуточного `play()`, чтобы не ломать `seek` и прогресс из-за двойного старта.
+• После `seek` используется окно стабилизации позиции (`pending seek settle window`): UI получает целевую позицию сразу, а запаздывающие регрессивные значения (`0`/старое время) временно игнорируются до подтверждения новой позиции.
+• iOS fallback `seekWithPlayFallback` оставлен только для remote-источников iOS; на Android позиция после seek подтверждается событиями плагина, а не мгновенным `getCurrentTime()`.
+• Для iOS loop-кеша приоритетно используется нативная загрузка `Filesystem.downloadFile` в `Directory.Cache` (без web CORS-ограничений); `fetch` оставлен только как резервный fallback. Задержка prime между `play` и `loop` на iOS обнулена, чтобы убрать слышимый стык на старте loop.

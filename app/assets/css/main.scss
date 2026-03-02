@@ -9,7 +9,7 @@ body,
 }
 
 body {
-  max-width: 960px;
+  max-width: 768px;
   margin: 0 auto;
 }
 
@@ -47,6 +47,14 @@ textarea::placeholder {
 .glass {
   border-radius: var(--radius-lg);
   @apply border border-border/15 bg-background/10 shadow-lg backdrop-blur-md;
+}
+
+.glass-border {
+  box-shadow:
+    inset 1px 1px 0.12px rgba(255, 255, 255, 0.4),
+    1px 1px 3px rgba(0, 0, 0, 0.1);
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(255, 255, 255, 0.18);
 }
 
 /* Deeper glass for panels */
@@ -151,37 +159,55 @@ textarea::placeholder {
   );
 }
 
-/* Глобальный стиль tooltip: без прозрачности и с безопасными отступами от краёв экрана. */
+/* Глобальный стиль tooltip (как в landing): светлый фон и безопасные отступы от краёв экрана. */
 .v-popper--theme-tooltip,
-.plan-feature-tooltip {
+.plan-feature-tooltip,
+.landing-tooltip-theme {
   max-width: calc(100vw - 32px);
 }
 
 .v-popper--theme-tooltip .v-popper__inner,
-.plan-feature-tooltip .v-popper__inner {
+.plan-feature-tooltip .v-popper__inner,
+.landing-tooltip-theme .v-popper__inner {
+  max-width: min(300px, calc(100vw - 32px)) !important;
+  white-space: normal !important;
+  word-break: break-word !important;
+  padding: 10px 12px !important;
+  font-size: 13px !important;
+  line-height: 1.4 !important;
+  border-radius: 12px !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  background-color: #3d4a5c !important;
+  background: #3d4a5c !important;
+  color: #f1f5f9 !important;
   box-shadow:
-    inset 1px 1px 0.12px rgba(255, 255, 255, 0.38),
-    0 10px 24px rgba(0, 0, 0, 0.45);
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background-color: rgba(7, 9, 15, 0.98) !important;
-  color: hsl(var(--foreground));
-  padding: 10px 12px;
-  font-size: 13px;
-  line-height: 1.4;
-  max-width: min(320px, calc(100vw - 32px));
-  white-space: normal;
-  word-break: break-word;
+    inset 1px 1px 0 rgba(255, 255, 255, 0.08),
+    0 10px 24px rgba(0, 0, 0, 0.35) !important;
 }
 
 .v-popper--theme-tooltip .v-popper__arrow-inner,
-.plan-feature-tooltip .v-popper__arrow-inner {
-  border-color: rgba(7, 9, 15, 0.98);
+.plan-feature-tooltip .v-popper__arrow-inner,
+.landing-tooltip-theme .v-popper__arrow-inner {
+  border-color: #3d4a5c !important;
 }
 
 .v-popper--theme-tooltip .v-popper__arrow-outer,
-.plan-feature-tooltip .v-popper__arrow-outer {
-  border-color: rgba(255, 255, 255, 0.2);
+.plan-feature-tooltip .v-popper__arrow-outer,
+.landing-tooltip-theme .v-popper__arrow-outer {
+  border-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+/* Стрелки тултипов отключаем глобально: без них блок выглядит чище и стабильнее по центровке. */
+.v-popper--theme-tooltip .v-popper__arrow-container,
+.v-popper--theme-tooltip .v-popper__arrow-inner,
+.v-popper--theme-tooltip .v-popper__arrow-outer,
+.plan-feature-tooltip .v-popper__arrow-container,
+.plan-feature-tooltip .v-popper__arrow-inner,
+.plan-feature-tooltip .v-popper__arrow-outer,
+.landing-tooltip-theme .v-popper__arrow-container,
+.landing-tooltip-theme .v-popper__arrow-inner,
+.landing-tooltip-theme .v-popper__arrow-outer {
+  display: none !important;
 }
 
 /* Fade transitions */
@@ -255,6 +281,15 @@ textarea::placeholder {
   width: 44px;
   height: 44px;
   transition: all 0.3s ease;
+}
+
+/* Нижняя навигация: неактивные — opacity 0.6, активные — opacity 1 */
+.icon-disc-wrapper .icon-disc {
+  opacity: 0.7;
+  transition: opacity 0.25s ease;
+}
+.icon-disc-wrapper .icon-disc.icon-disc-active {
+  opacity: 1;
 }
 
 /* Кнопки действий чата — более выразительные, с мягкой глубиной */

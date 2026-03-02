@@ -67,12 +67,13 @@
             <IconVolumeX class="h-4 w-4" />
           </button>
           <input
-            v-model.number="volume"
+            :value="volume"
             type="range"
             min="0"
             max="100"
             step="1"
             class="w-full accent-cyan-300"
+            @input="onVolumeInput"
           />
           <button
             type="button"
@@ -205,16 +206,17 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { navigateTo } from '#app';
 import PageHeader from '@/app/components/PageHeader.vue';
 import TimePicker from '@/app/components/TimePicker.vue';
 import { Switch } from '@/app/components/ui/shadcn/switch';
 import { useSceneSettingsStore } from '@/app/stores/sceneSettings';
 import { useUiSettingsStore } from '@/app/stores/uiSettings';
 import { useAuthStore } from '@/app/stores/auth';
+import { useSceneAudio } from '@/app/composables/useSceneAudio';
 import {
   DEFAULT_SCENE_ID,
   SCENE_TRACKS,
+  findSceneTrack,
 } from '@/app/lib/sceneSelectionCatalog';
 import { resolveMediaUrl } from '@/app/utils/media';
 import IconVolume2 from '~icons/lucide/volume-2';
@@ -228,6 +230,7 @@ import IconSunDim from '~icons/lucide/sun-dim';
 const sceneSettings = useSceneSettingsStore();
 const uiSettings = useUiSettingsStore();
 const auth = useAuthStore();
+const sceneAudio = useSceneAudio();
 
 const router = useRouter();
 
@@ -235,6 +238,12 @@ const volume = computed({
   get: () => sceneSettings.volume,
   set: (value: number) => {
     sceneSettings.updateSettings({ volume: value });
+    // Применяем громкость сразу локально, не дожидаясь watcher-цепочки layout.
+    sceneAudio.setVolume(value / 100);
+    if (value > 0) {
+      // Пользователь уже сделал gesture, поэтому можно безопасно попробовать старт.
+      void kickstartSceneAudio();
+    }
   },
 });
 
@@ -299,8 +308,23 @@ function isPlaceholderScene(id: string) {
   return id === 'default';
 }
 
+async function kickstartSceneAudio(sceneId?: string) {
+  const targetSceneId = sceneId ?? sceneSettings.sceneId ?? DEFAULT_SCENE_ID;
+  const scene = findSceneTrack(targetSceneId);
+  if (!scene?.audioPath) return;
+  if (sceneSettings.volume <= 0) return;
+
+  try {
+    await sceneAudio.kickstart(scene);
+  } catch (error) {
+    console.error('[SceneSelection] Не удалось запустить сцену:', error);
+  }
+}
+
 function selectScene(id: string) {
   sceneSettings.updateSettings({ sceneId: id });
+  // Для мобильных важно запускать сразу по пользовательскому клику.
+  void kickstartSceneAudio(id);
 }
 
 function backgroundPlayLabel(formattedTime: string) {
@@ -327,6 +351,14 @@ function setVolumeMin() {
 
 function setVolumeMax() {
   volume.value = 100;
+}
+
+function onVolumeInput(event: Event) {
+  const target = event.target as HTMLInputElement | null;
+  if (!target) return;
+  const nextVolume = Number(target.value);
+  if (!Number.isFinite(nextVolume)) return;
+  volume.value = nextVolume;
 }
 
 function goBack() {

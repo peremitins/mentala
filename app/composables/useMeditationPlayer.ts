@@ -1,6 +1,12 @@
 import { computed, ref } from 'vue';
+import { Capacitor } from '@capacitor/core';
 import { isDocumentAvailable } from '@/app/utils/document';
 import { resolveMediaUrl } from '@/app/utils/media';
+import { NativeAudioService } from '@/app/services/audio/nativeAudio.service';
+import type {
+  AudioServiceEvent,
+  AudioServiceTrack,
+} from '@/app/services/audio/audio.types';
 import type { MeditationTrackDto } from '@/shared/dto/meditations';
 
 const FADE_IN_MS = 1500;
@@ -10,6 +16,7 @@ const QUICK_STOP_FADE_MS = 80;
 const TICK_MS = 500;
 const LOOP_THRESHOLD_SEC = 0.12; // небольшой зазор перед концом для мгновенного рестарта
 const LOOP_REARM_SEC = 0.3; // окно, в котором разрешаем снова сработать триггер
+const AUDIO_SESSION_PLAYBACK = 'playback';
 // Максимальный размер файла для WebAudio на мобильных (50MB)
 const MAX_WEB_AUDIO_SIZE_MB = 50;
 
@@ -24,13 +31,24 @@ function isMobileUserAgent() {
   return /iphone|ipad|ipod|android/i.test(ua);
 }
 
+function isIosUserAgent() {
+  const ua = getUserAgent();
+  if (!ua) return false;
+  return /iphone|ipad|ipod/i.test(ua);
+}
+
 // Таймаут загрузки аудио файла (30 секунд для мобильных, 15 для десктопа)
 function getAudioLoadTimeout() {
   return isMobileUserAgent() ? 30000 : 15000;
 }
 
-type PlaybackMode = 'html' | 'webaudio';
+type PlaybackMode = 'html' | 'webaudio' | 'native';
 type PendingGesturePlay = {
+  track: MeditationTrackDto;
+  timerMinutes?: number | null;
+};
+
+type PendingBlockedPlay = {
   track: MeditationTrackDto;
   timerMinutes?: number | null;
 };
@@ -67,6 +85,7 @@ const globalState = {
   isPlaying: ref(false),
   isBuffering: ref(false),
   pendingGesturePlay: null as PendingGesturePlay | null,
+  pendingBlockedPlay: null as PendingBlockedPlay | null,
   gestureUnlockCleanup: null as (() => void) | null,
   globalUnlockCleanup: null as (() => void) | null,
   // По умолчанию повтор трека включён.
@@ -89,7 +108,183 @@ const globalState = {
   audioUnlocked: false,
   playbackActionId: 0,
   loopResetTriggered: false,
+  visibilityBound: false,
+  appStateBound: false,
+  audioContextPrimed: false,
+  audioContextRecoveryInProgress: false,
+  nativeModeChecked: false,
+  nativeModeEnabled: false,
+  nativeService: null as NativeAudioService | null,
+  nativeServiceUnsubscribe: null as (() => void) | null,
 };
+
+function isNativeMeditationAudioEnabled() {
+  if (typeof window === 'undefined') return false;
+
+  try {
+    const config = useRuntimeConfig();
+    const featureEnabled =
+      config.public.featureNativeMeditationAudioEnabled !== false;
+    if (!featureEnabled) return false;
+
+    if (!Capacitor.isNativePlatform()) return false;
+    return Capacitor.isPluginAvailable('NativeAudio');
+  } catch {
+    return false;
+  }
+}
+
+function ensureNativeModeResolved() {
+  if (globalState.nativeModeChecked) return;
+  globalState.nativeModeEnabled = isNativeMeditationAudioEnabled();
+  globalState.nativeModeChecked = true;
+}
+
+function mapTrackToNativeAudio(
+  track: MeditationTrackDto
+): AudioServiceTrack | null {
+  const url = resolveMediaUrl(track.audioPath);
+  if (!url) return null;
+  return {
+    id: track.id,
+    url,
+    title: track.title,
+    category: 'meditation',
+    artworkUrl: track.coverPath ? resolveMediaUrl(track.coverPath) : null,
+    durationMs: track.durationSeconds ? track.durationSeconds * 1000 : null,
+    isLoop: Boolean(track.isLoop),
+  };
+}
+
+function shouldUseNativePlayback() {
+  ensureNativeModeResolved();
+  return globalState.nativeModeEnabled;
+}
+
+function getTrackDurationSeconds(track?: MeditationTrackDto | null) {
+  if (!track) return 0;
+  if (
+    typeof track.durationSeconds !== 'number' ||
+    !Number.isFinite(track.durationSeconds)
+  ) {
+    return 0;
+  }
+  return Math.max(0, track.durationSeconds);
+}
+
+function syncNativeDuration(durationMs: number) {
+  const durationSeconds =
+    typeof durationMs === 'number' && Number.isFinite(durationMs)
+      ? Math.max(0, durationMs / 1000)
+      : 0;
+
+  if (durationSeconds > 0) {
+    globalState.duration.value = durationSeconds;
+    return;
+  }
+
+  // Не затираем уже известную длительность нулевым событием от native-плагина.
+  if (globalState.duration.value > 0) {
+    return;
+  }
+
+  const fallbackDurationSeconds = getTrackDurationSeconds(
+    globalState.currentTrack.value
+  );
+  if (fallbackDurationSeconds > 0) {
+    globalState.duration.value = fallbackDurationSeconds;
+  }
+}
+
+function handleNativeAudioEvent(event: AudioServiceEvent) {
+  const currentTrackId = globalState.currentTrack.value?.id;
+  if (currentTrackId && event.trackId !== currentTrackId) {
+    // Игнорируем события неактуального трека после быстрого переключения.
+    return;
+  }
+
+  switch (event.type) {
+    case 'ready': {
+      syncNativeDuration(event.durationMs);
+      break;
+    }
+    case 'playing': {
+      globalState.isPlaying.value = true;
+      globalState.isBuffering.value = false;
+      globalState.currentTime.value = event.positionMs / 1000;
+      syncNativeDuration(event.durationMs);
+      break;
+    }
+    case 'paused': {
+      globalState.isPlaying.value = false;
+      globalState.currentTime.value = event.positionMs / 1000;
+      break;
+    }
+    case 'stopped': {
+      globalState.isPlaying.value = false;
+      globalState.currentTime.value = 0;
+      break;
+    }
+    case 'ended': {
+      globalState.isPlaying.value = false;
+      globalState.currentTime.value = 0;
+      clearTimer();
+      break;
+    }
+    case 'buffering': {
+      globalState.isBuffering.value = event.isBuffering;
+      break;
+    }
+    case 'error': {
+      console.error('[MeditationPlayer][NativeAudio] Playback error:', {
+        trackId: event.trackId,
+        message: event.message,
+        code: event.code,
+      });
+      globalState.isBuffering.value = false;
+      break;
+    }
+  }
+}
+
+async function destroyNativeService() {
+  if (globalState.nativeServiceUnsubscribe) {
+    globalState.nativeServiceUnsubscribe();
+    globalState.nativeServiceUnsubscribe = null;
+  }
+  if (globalState.nativeService) {
+    await globalState.nativeService.destroy();
+    globalState.nativeService = null;
+  }
+}
+
+async function ensureNativeService() {
+  if (!shouldUseNativePlayback()) return null;
+  if (globalState.nativeService) return globalState.nativeService;
+
+  try {
+    const service = new NativeAudioService();
+    await service.init();
+    globalState.nativeService = service;
+    globalState.nativeServiceUnsubscribe = service.subscribe((event) => {
+      handleNativeAudioEvent(event);
+    });
+    return service;
+  } catch (error) {
+    console.error(
+      '[MeditationPlayer] Failed to initialize NativeAudio:',
+      error
+    );
+    globalState.nativeModeEnabled = false;
+    await destroyNativeService();
+    // Fail-soft: если native-слой недоступен, переключаемся на legacy-пайплайн.
+    ensureGlobalGestureUnlock();
+    ensureVisibilityListener();
+    ensureAppStateListener();
+    ensurePlaybackAudioSessionType();
+    return null;
+  }
+}
 
 function getAudioContextCtor(): typeof AudioContext | null {
   if (typeof window === 'undefined') return null;
@@ -113,33 +308,81 @@ function clearGestureUnlock() {
   globalState.pendingGesturePlay = null;
 }
 
+type ExtendedAudioContextState = AudioContextState | 'interrupted';
+type NavigatorWithAudioSession = Navigator & {
+  audioSession?: {
+    type?: string;
+  };
+};
+
+function getAudioContextState(
+  context: AudioContext
+): ExtendedAudioContextState {
+  return context.state as ExtendedAudioContextState;
+}
+
+function ensurePlaybackAudioSessionType() {
+  if (typeof navigator === 'undefined') return;
+  const session = (navigator as NavigatorWithAudioSession).audioSession;
+  if (!session) return;
+  try {
+    if (session.type !== AUDIO_SESSION_PLAYBACK) {
+      session.type = AUDIO_SESSION_PLAYBACK;
+    }
+  } catch {
+    // В старых WebView API может отсутствовать или быть read-only.
+  }
+}
+
+async function ensureAudioContextRunning(context: AudioContext) {
+  if (getAudioContextState(context) === 'running') return true;
+  try {
+    await context.resume();
+  } catch {
+    return false;
+  }
+  return getAudioContextState(context) === 'running';
+}
+
+async function primeAudioContext(context: AudioContext) {
+  if (!isIosUserAgent()) return;
+  if (globalState.audioContextPrimed) return;
+  // Тихий короткий старт прогревает аудиопайплайн на первом запуске.
+  const buffer = context.createBuffer(1, 1, 22050);
+  const source = context.createBufferSource();
+  source.buffer = buffer;
+  source.connect(context.destination);
+  source.start(0);
+  source.stop(context.currentTime + 0.001);
+  globalState.audioContextPrimed = true;
+}
+
 async function setPlaybackAllowed(allowed: boolean) {
   globalState.playbackAllowed.value = allowed;
-  if (allowed) return;
-  // На публичных экранах полностью блокируем запуск звука и очищаем очередь.
-  clearGestureUnlock();
-  await stop(false);
+  if (!allowed) {
+    // На публичных экранах полностью блокируем запуск звука и очищаем очередь.
+    clearGestureUnlock();
+    globalState.pendingBlockedPlay = null;
+    await stop(false);
+    return;
+  }
+
+  // Если play пришёл до готовности auth/guard, доигрываем отложенный запуск.
+  const pending = globalState.pendingBlockedPlay;
+  if (!pending) return;
+  globalState.pendingBlockedPlay = null;
+  await play(pending.track, pending.timerMinutes ?? null);
 }
 
 async function unlockAudioContext(): Promise<boolean> {
   if (!isDocumentAvailable() || typeof window === 'undefined') return false;
   const context = ensureAudioContext();
   if (!context) return false;
+  ensurePlaybackAudioSessionType();
 
-  const state = context.state as AudioContextState;
-  // Явно приводим тип состояния, чтобы не терять значение 'running'.
-  if (state === 'running') {
-    globalState.audioUnlocked = true;
-    return true;
-  }
-
-  try {
-    await context.resume();
-  } catch {
-    return false;
-  }
-
-  if (context.state === 'running') {
+  const running = await ensureAudioContextRunning(context);
+  if (running) {
+    await primeAudioContext(context);
     globalState.audioUnlocked = true;
     return true;
   }
@@ -152,6 +395,7 @@ function ensureGlobalGestureUnlock() {
   if (globalState.globalUnlockCleanup) return;
 
   const handler = () => {
+    ensurePlaybackAudioSessionType();
     void (async () => {
       // WebAudio можно резюмить только после пользовательского жеста.
       const unlocked = await unlockAudioContext();
@@ -172,11 +416,15 @@ function ensureGlobalGestureUnlock() {
 
   const options: AddEventListenerOptions = { passive: true };
   window.addEventListener('pointerdown', handler, options);
+  window.addEventListener('touchend', handler, options);
+  window.addEventListener('click', handler, options);
   window.addEventListener('touchstart', handler, options);
   window.addEventListener('keydown', handler);
 
   globalState.globalUnlockCleanup = () => {
     window.removeEventListener('pointerdown', handler, options);
+    window.removeEventListener('touchend', handler, options);
+    window.removeEventListener('click', handler, options);
     window.removeEventListener('touchstart', handler, options);
     window.removeEventListener('keydown', handler);
   };
@@ -194,6 +442,7 @@ function scheduleGestureUnlock(
   globalState.pendingGesturePlay = { track, timerMinutes };
 
   const handler = () => {
+    ensurePlaybackAudioSessionType();
     void (async () => {
       const pending = globalState.pendingGesturePlay;
       clearGestureUnlock();
@@ -206,11 +455,15 @@ function scheduleGestureUnlock(
 
   const options: AddEventListenerOptions = { passive: true };
   window.addEventListener('pointerdown', handler, options);
+  window.addEventListener('touchend', handler, options);
+  window.addEventListener('click', handler, options);
   window.addEventListener('touchstart', handler, options);
   window.addEventListener('keydown', handler);
 
   globalState.gestureUnlockCleanup = () => {
     window.removeEventListener('pointerdown', handler, options);
+    window.removeEventListener('touchend', handler, options);
+    window.removeEventListener('click', handler, options);
     window.removeEventListener('touchstart', handler, options);
     window.removeEventListener('keydown', handler);
   };
@@ -280,9 +533,66 @@ function ensureAudioContext(): AudioContext | null {
   const ctor = getAudioContextCtor();
   if (!ctor) return null;
   if (!globalState.audioContext) {
-    globalState.audioContext = new ctor();
+    const context = new ctor();
+    context.onstatechange = () => {
+      if (globalState.audioContext !== context) return;
+      if (globalState.playbackMode !== 'webaudio') return;
+      if (!globalState.isPlaying.value) return;
+      if (getAudioContextState(context) === 'running') return;
+      void maybeRecoverWebAudioPlayback();
+    };
+    globalState.audioContext = context;
+    globalState.audioContextPrimed = false;
   }
   return globalState.audioContext;
+}
+
+async function maybeRecoverWebAudioPlayback() {
+  if (globalState.playbackMode !== 'webaudio') return;
+  if (!globalState.isPlaying.value) return;
+  if (globalState.audioContextRecoveryInProgress) return;
+  const context = globalState.audioContext;
+  if (!context) return;
+
+  globalState.audioContextRecoveryInProgress = true;
+  try {
+    ensurePlaybackAudioSessionType();
+    const running = await ensureAudioContextRunning(context);
+    if (!running) return;
+    if (!globalState.audioSource && globalState.audioBuffer) {
+      createWebAudioSource(globalState.webAudioOffset);
+    }
+  } finally {
+    globalState.audioContextRecoveryInProgress = false;
+  }
+}
+
+function handleVisibilityChange() {
+  if (!isDocumentAvailable() || typeof document === 'undefined') return;
+  if (document.visibilityState !== 'visible') return;
+  void maybeRecoverWebAudioPlayback();
+}
+
+function ensureVisibilityListener() {
+  if (!isDocumentAvailable() || typeof document === 'undefined') return;
+  if (globalState.visibilityBound) return;
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+  globalState.visibilityBound = true;
+}
+
+function ensureAppStateListener() {
+  if (globalState.appStateBound) return;
+  globalState.appStateBound = true;
+  import('@capacitor/app')
+    .then(({ App }) => {
+      App.addListener('appStateChange', ({ isActive }) => {
+        if (!isActive) return;
+        void maybeRecoverWebAudioPlayback();
+      });
+    })
+    .catch(() => {
+      // На Web fallback уже закрыт visibilitychange.
+    });
 }
 
 function ensureAudioGain(context: AudioContext): GainNode {
@@ -356,18 +666,13 @@ async function prepareWebAudioTrack(
 
   const context = ensureAudioContext();
   if (!context) return null;
+  ensurePlaybackAudioSessionType();
 
-  if (context.state === 'suspended') {
-    try {
-      await context.resume();
-    } catch {
-      // Без пользовательского жеста WebAudio может не стартовать.
-      return null;
-    }
-  }
-  if (context.state !== 'running') {
+  const running = await ensureAudioContextRunning(context);
+  if (!running) {
     return null;
   }
+  await primeAudioContext(context);
 
   const url = resolveMediaUrl(track.audioPath);
   if (!url) return null;
@@ -471,6 +776,17 @@ function createWebAudioSource(
   source.connect(gain);
   source.onended = () => {
     if (globalState.audioSource !== source) return;
+    const isLooping =
+      Boolean(globalState.currentTrack.value?.isLoop) ||
+      globalState.isRepeating.value;
+    if (isLooping) {
+      // Если loop-источник неожиданно завершился (часто после iOS interruption),
+      // сохраняем позицию и пытаемся восстановить звук.
+      updateWebAudioOffset();
+      globalState.audioSource = null;
+      void maybeRecoverWebAudioPlayback();
+      return;
+    }
     globalState.isPlaying.value = false;
     clearTimer();
     globalState.currentTime.value = 0;
@@ -517,6 +833,12 @@ function isPlaybackActionActive(actionId: number) {
 }
 
 function getPlaybackSnapshot() {
+  if (globalState.playbackMode === 'native') {
+    return {
+      current: globalState.currentTime.value,
+      duration: globalState.duration.value,
+    };
+  }
   if (globalState.playbackMode === 'webaudio') {
     const duration = globalState.audioBuffer?.duration ?? 0;
     const current = globalState.isPlaying.value
@@ -675,15 +997,204 @@ function resumeTimer() {
   startTimerCountdown();
 }
 
+async function playNative(
+  track: MeditationTrackDto,
+  timerMinutes?: number | null
+): Promise<boolean> {
+  const service = await ensureNativeService();
+  if (!service) return false;
+
+  const nativeTrack = mapTrackToNativeAudio(track);
+  if (!nativeTrack) {
+    console.error('[MeditationPlayer] Missing audio URL for native playback:', {
+      trackId: track.id,
+      audioPath: track.audioPath,
+    });
+    globalState.isBuffering.value = false;
+    return true;
+  }
+
+  const actionId = bumpPlaybackActionId();
+  const isActionActive = () => isPlaybackActionActive(actionId);
+  const sameTrack =
+    globalState.currentTrack.value?.id === track.id &&
+    globalState.playbackMode === 'native';
+
+  globalState.sessionEnded.value = false;
+  globalState.isBuffering.value = true;
+
+  try {
+    if (!sameTrack) {
+      await stop(false, {
+        keepActionId: true,
+        quickFadeMs: QUICK_STOP_FADE_MS,
+        preserveBuffering: true,
+      });
+      if (!isActionActive()) return true;
+      // Native stop эмитит buffering=false; возвращаем buffering сразу,
+      // чтобы сцена не успела включиться между треками.
+      globalState.isBuffering.value = true;
+    }
+
+    globalState.currentTrack.value = track;
+    globalState.playbackMode = 'native';
+    const fallbackDurationSeconds = getTrackDurationSeconds(track);
+    if (fallbackDurationSeconds > 0) {
+      // Для non-loop треков используем server-side duration, если native metadata пришла позже.
+      globalState.duration.value = fallbackDurationSeconds;
+    }
+
+    const shouldLoop = Boolean(track.isLoop) || globalState.isRepeating.value;
+    const snapshot = service.getSnapshot();
+
+    if (
+      sameTrack &&
+      globalState.isPlaying.value &&
+      snapshot.trackId === track.id
+    ) {
+      globalState.isBuffering.value = false;
+      return true;
+    }
+
+    if (
+      sameTrack &&
+      !globalState.isPlaying.value &&
+      snapshot.trackId === track.id
+    ) {
+      await service.resume({ fadeInMs: FADE_IN_MS });
+    } else {
+      await service.play(nativeTrack, {
+        loop: shouldLoop,
+        volume: 1,
+        fadeInMs: FADE_IN_MS,
+      });
+    }
+
+    if (!isActionActive()) return true;
+
+    const nextSnapshot = service.getSnapshot();
+    globalState.currentTime.value = nextSnapshot.positionMs / 1000;
+    syncNativeDuration(nextSnapshot.durationMs);
+    globalState.isPlaying.value = true;
+    globalState.isBuffering.value = false;
+
+    if (timerMinutes !== undefined) {
+      setTimer(timerMinutes);
+    } else if (globalState.timerMinutes.value) {
+      resumeTimer();
+    } else if (globalState.preferredTimerMinutes.value) {
+      setTimer(globalState.preferredTimerMinutes.value);
+    }
+  } catch (error) {
+    if (isActionActive()) {
+      globalState.isPlaying.value = false;
+      globalState.isBuffering.value = false;
+    }
+    console.error('[MeditationPlayer] Native playback failed:', error);
+    globalState.nativeModeEnabled = false;
+    await destroyNativeService();
+    return false;
+  }
+
+  return true;
+}
+
+async function pauseNative() {
+  const service = await ensureNativeService();
+  if (!service) {
+    globalState.isPlaying.value = false;
+    pauseTimer();
+    return false;
+  }
+
+  await service.pause({ fadeOutMs: PAUSE_FADE_MS });
+  globalState.isPlaying.value = false;
+  pauseTimer();
+  return true;
+}
+
+async function stopNative(
+  withFade = true,
+  options: { quickFadeMs?: number; preserveBuffering?: boolean } = {}
+) {
+  const service = await ensureNativeService();
+  const preserveBuffering = options.preserveBuffering === true;
+  if (!service) {
+    if (!preserveBuffering) {
+      globalState.isBuffering.value = false;
+    }
+    globalState.isPlaying.value = false;
+    globalState.currentTrack.value = null;
+    globalState.playbackMode = null;
+    stopIntervals();
+    clearTimer();
+    resetProgress();
+    return false;
+  }
+
+  const fadeOutMs = withFade ? FADE_OUT_MS : (options.quickFadeMs ?? 0);
+  let stopSucceeded = true;
+  try {
+    await service.stop({ fadeOutMs });
+  } catch (error) {
+    stopSucceeded = false;
+    console.error('[MeditationPlayer] Native stop failed:', error);
+  }
+
+  if (!preserveBuffering) {
+    globalState.isBuffering.value = false;
+  }
+  globalState.isPlaying.value = false;
+  globalState.currentTrack.value = null;
+  globalState.playbackMode = null;
+  stopIntervals();
+  clearTimer();
+  resetProgress();
+  return stopSucceeded;
+}
+
+async function seekNative(positionSeconds: number) {
+  const service = await ensureNativeService();
+  if (!service) return;
+  await service.seek(Math.floor(positionSeconds * 1000));
+}
+
+async function syncNativeLoopState() {
+  const service = await ensureNativeService();
+  if (!service) return;
+  const shouldLoop =
+    Boolean(globalState.currentTrack.value?.isLoop) ||
+    globalState.isRepeating.value;
+  await service.setLoop(shouldLoop);
+}
+
 async function stop(
   withFade = true,
-  options: { keepActionId?: boolean; quickFadeMs?: number } = {}
+  options: {
+    keepActionId?: boolean;
+    quickFadeMs?: number;
+    preserveBuffering?: boolean;
+  } = {}
 ) {
+  const preserveBuffering = options.preserveBuffering === true;
   if (!options.keepActionId) {
     bumpPlaybackActionId();
   }
   clearGestureUnlock();
-  globalState.isBuffering.value = false;
+  // Явная остановка должна отменять любой отложенный автозапуск.
+  globalState.pendingBlockedPlay = null;
+
+  if (globalState.playbackMode === 'native') {
+    await stopNative(withFade, {
+      quickFadeMs: options.quickFadeMs,
+      preserveBuffering,
+    });
+    return;
+  }
+
+  if (!preserveBuffering) {
+    globalState.isBuffering.value = false;
+  }
   if (globalState.playbackMode === 'webaudio') {
     if (withFade) {
       await fadeTo(0, FADE_OUT_MS);
@@ -732,6 +1243,12 @@ async function pause() {
   bumpPlaybackActionId();
   clearGestureUnlock();
   globalState.isBuffering.value = false;
+
+  if (globalState.playbackMode === 'native') {
+    await pauseNative();
+    return;
+  }
+
   if (globalState.playbackMode === 'webaudio') {
     if (!globalState.audioSource) return;
     await fadeTo(0, PAUSE_FADE_MS);
@@ -753,16 +1270,33 @@ async function pause() {
 async function play(track: MeditationTrackDto, timerMinutes?: number | null) {
   if (!isDocumentAvailable()) return;
   if (!globalState.playbackAllowed.value) {
-    // Защита от автозапуска на публичных маршрутах.
+    // Если guard временно не готов (например, холодный старт из push),
+    // откладываем запуск и повторяем после setPlaybackAllowed(true).
+    globalState.pendingBlockedPlay = {
+      track,
+      timerMinutes: timerMinutes ?? null,
+    };
     clearGestureUnlock();
     globalState.isBuffering.value = false;
     return;
+  }
+  globalState.pendingBlockedPlay = null;
+
+  // Страховка от гонки: watcher видит isBuffering=true до любого await,
+  // и не успевает включить scene между stop и play при переключении треков.
+  if (shouldUseNativePlayback()) {
+    globalState.isBuffering.value = true;
+    const handledByNative = await playNative(track, timerMinutes);
+    if (handledByNative) return;
   }
 
   const actionId = bumpPlaybackActionId();
   const isActionActive = () => isPlaybackActionActive(actionId);
   clearGestureUnlock();
   ensureGlobalGestureUnlock();
+  ensureVisibilityListener();
+  ensureAppStateListener();
+  ensurePlaybackAudioSessionType();
 
   resetLoopGuard();
 
@@ -801,14 +1335,21 @@ async function play(track: MeditationTrackDto, timerMinutes?: number | null) {
     }
   }
 
+  globalState.sessionEnded.value = false;
+  // Во время смены трека удерживаем buffering=true,
+  // чтобы сцена не включалась между stop старого и play нового.
+  globalState.isBuffering.value = true;
+
   if (!sameTrack || globalState.playbackMode !== mode) {
     // Останавливаем предыдущий трек перед запуском нового
-    await stop(false, { keepActionId: true, quickFadeMs: QUICK_STOP_FADE_MS });
+    await stop(false, {
+      keepActionId: true,
+      quickFadeMs: QUICK_STOP_FADE_MS,
+      preserveBuffering: true,
+    });
     if (!isActionActive()) return;
   }
 
-  globalState.sessionEnded.value = false;
-  globalState.isBuffering.value = true;
   startProgressTracking();
 
   let started = false;
@@ -930,41 +1471,48 @@ async function play(track: MeditationTrackDto, timerMinutes?: number | null) {
       if (abortIfStale()) return;
       if (!globalState.audio) return;
 
-      // Ждём готовности файла перед воспроизведением (критично для мобильных)
+      // Ждём минимальной готовности файла перед воспроизведением.
       const audio = globalState.audio;
-      if (audio.readyState < HTMLMediaElement.HAVE_ENOUGH_DATA) {
-        // Ждём загрузки достаточного количества данных
+      if (audio.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
         await new Promise<void>((resolve, reject) => {
           const timeoutMs = getAudioLoadTimeout();
           const timeoutId = setTimeout(() => {
-            audio.removeEventListener('canplaythrough', onCanPlay);
+            audio.removeEventListener('loadedmetadata', onReady);
+            audio.removeEventListener('canplay', onReady);
+            audio.removeEventListener('canplaythrough', onReady);
             audio.removeEventListener('error', onError);
             reject(new Error(`Audio load timeout after ${timeoutMs}ms`));
           }, timeoutMs);
 
-          const onCanPlay = () => {
+          const onReady = () => {
             clearTimeout(timeoutId);
-            audio.removeEventListener('canplaythrough', onCanPlay);
+            audio.removeEventListener('loadedmetadata', onReady);
+            audio.removeEventListener('canplay', onReady);
+            audio.removeEventListener('canplaythrough', onReady);
             audio.removeEventListener('error', onError);
             resolve();
           };
 
           const onError = () => {
             clearTimeout(timeoutId);
-            audio.removeEventListener('canplaythrough', onCanPlay);
+            audio.removeEventListener('loadedmetadata', onReady);
+            audio.removeEventListener('canplay', onReady);
+            audio.removeEventListener('canplaythrough', onReady);
             audio.removeEventListener('error', onError);
             reject(
               new Error(`Audio load error: ${audio.error?.code || 'unknown'}`)
             );
           };
 
-          if (audio.readyState >= HTMLMediaElement.HAVE_ENOUGH_DATA) {
+          if (audio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
             clearTimeout(timeoutId);
             resolve();
             return;
           }
 
-          audio.addEventListener('canplaythrough', onCanPlay, { once: true });
+          audio.addEventListener('loadedmetadata', onReady, { once: true });
+          audio.addEventListener('canplay', onReady, { once: true });
+          audio.addEventListener('canplaythrough', onReady, { once: true });
           audio.addEventListener('error', onError, { once: true });
         }).catch((error) => {
           console.error('[MeditationPlayer] Audio ready check failed:', error);
@@ -1055,6 +1603,10 @@ async function toggle(track: MeditationTrackDto, timerMinutes?: number | null) {
 
 function setRepeat(enabled: boolean) {
   globalState.isRepeating.value = enabled;
+  if (globalState.playbackMode === 'native') {
+    void syncNativeLoopState();
+    return;
+  }
   if (globalState.playbackMode === 'webaudio' && globalState.audioSource) {
     globalState.audioSource.loop =
       Boolean(globalState.currentTrack.value?.isLoop) || enabled;
@@ -1069,6 +1621,17 @@ function toggleRepeat() {
 }
 
 function seekBy(deltaSeconds: number) {
+  if (globalState.playbackMode === 'native') {
+    const hasDuration = globalState.duration.value > 0;
+    const tentative = Math.max(0, globalState.currentTime.value + deltaSeconds);
+    const next = hasDuration
+      ? Math.min(tentative, globalState.duration.value)
+      : tentative;
+    globalState.currentTime.value = next;
+    void seekNative(next);
+    return;
+  }
+
   if (globalState.playbackMode === 'webaudio') {
     const duration = globalState.audioBuffer?.duration;
     if (!duration) return;
@@ -1091,6 +1654,17 @@ function seekBy(deltaSeconds: number) {
 }
 
 function seekTo(positionSeconds: number) {
+  if (globalState.playbackMode === 'native') {
+    const hasDuration = globalState.duration.value > 0;
+    const tentative = Math.max(0, positionSeconds);
+    const next = hasDuration
+      ? Math.min(tentative, globalState.duration.value)
+      : tentative;
+    globalState.currentTime.value = next;
+    void seekNative(next);
+    return;
+  }
+
   if (globalState.playbackMode === 'webaudio') {
     const duration = globalState.audioBuffer?.duration;
     if (!duration) return;
@@ -1118,6 +1692,14 @@ function acknowledgeSession() {
   globalState.sessionEnded.value = false;
 }
 
+async function registerUserGesture() {
+  // Тап по системному push считается намерением пользователя на запуск медитации.
+  ensureNativeModeResolved();
+  if (globalState.nativeModeEnabled) return;
+  ensurePlaybackAudioSessionType();
+  await unlockAudioContext();
+}
+
 function setQueue(ids: string[], key?: string | null) {
   globalState.queueIds.value = Array.from(new Set(ids));
   globalState.queueKey.value = key ?? null;
@@ -1129,8 +1711,18 @@ function clearQueue() {
 }
 
 export function useMeditationPlayer() {
-  // Регистрируем слушатель жестов заранее, чтобы автозапуск был стабильнее.
-  ensureGlobalGestureUnlock();
+  ensureNativeModeResolved();
+
+  if (globalState.nativeModeEnabled) {
+    void ensureNativeService();
+  } else {
+    // Регистрируем слушатель жестов заранее, чтобы автозапуск был стабильнее.
+    ensureGlobalGestureUnlock();
+    ensureVisibilityListener();
+    ensureAppStateListener();
+    ensurePlaybackAudioSessionType();
+  }
+
   return {
     currentTrack: computed(() => globalState.currentTrack.value),
     isPlaying: computed(() => globalState.isPlaying.value),
@@ -1158,6 +1750,7 @@ export function useMeditationPlayer() {
     setRepeat,
     toggleRepeat,
     acknowledgeSession,
+    registerUserGesture,
     setQueue,
     clearQueue,
     setPlaybackAllowed,

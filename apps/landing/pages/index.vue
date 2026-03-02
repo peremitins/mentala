@@ -389,7 +389,7 @@
                         triggers: ['hover', 'focus', 'click'],
                         placement: 'top',
                       }"
-                      class="ml-1 inline-flex h-4 w-4 shrink-0 align-middle items-center justify-center rounded-full border border-white/25 bg-white/5 text-[10px] font-semibold text-white/70 hover:bg-white/10 hover:text-white cursor-help"
+                      class="ml-1 inline-flex h-4 w-4 shrink-0 align-middle items-center justify-center rounded-full border border-white/25 bg-white/5 text-[10px] font-semibold text-white/70 hover:bg-white/10 hover:text-white !cursor-default"
                       :aria-label="`Подробнее: ${point.text}`"
                     >
                       ?
@@ -757,7 +757,9 @@
                   @click="goalDropdownOpen = !goalDropdownOpen"
                   @keydown.esc.stop.prevent="goalDropdownOpen = false"
                 >
-                  <span class="block truncate pr-7">{{ selectedGoalsText }}</span>
+                  <span class="block truncate pr-7">{{
+                    selectedGoalsText
+                  }}</span>
                   <span
                     class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-white/70"
                     aria-hidden="true"
@@ -866,10 +868,7 @@
           >
             Спасибо, вы в списке раннего доступа.
           </p>
-          <Button
-            class="w-full"
-            @click="successModalOpen = false"
-          >
+          <Button class="w-full" @click="successModalOpen = false">
             Отлично
           </Button>
         </div>
@@ -972,7 +971,9 @@ const selectedGoalsText = computed(() => {
     .filter((option) => leadForm.goalKeys.includes(option.value))
     .map((option) => option.label);
 
-  return selected.length ? selected.join(', ') : 'Выберите цели (необязательно)';
+  return selected.length
+    ? selected.join(', ')
+    : 'Выберите цели (необязательно)';
 });
 
 onClickOutside(goalDropdownRef, () => {

@@ -1,13 +1,16 @@
 <template>
-  <button
-    type="button"
-    class="group relative flex w-[78vw] min-w-[210px] max-w-[240px] sm:w-52 flex-col overflow-hidden rounded-xl text-left transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-primary-ui/60"
+  <article
+    role="button"
+    tabindex="0"
+    :aria-label="`Открыть медитацию ${displayTitle}`"
+    class="group relative flex w-[78vw] min-w-[210px] max-w-[240px] sm:w-52 cursor-pointer flex-col overflow-hidden rounded-xl text-left transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-ui/60"
     @click="emit('open', track.id)"
+    @keydown="handleCardKeydown"
   >
     <img
       v-if="track.coverPath"
       :src="coverUrl"
-      :alt="track.title"
+      :alt="displayTitle"
       class="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
       loading="lazy"
       decoding="async"
@@ -23,7 +26,7 @@
 
     <div class="relative z-10 flex h-full flex-col p-3 min-h-[120px]">
       <div class="flex items-start justify-between">
-        <div class="space-y-1">
+        <div class="min-w-0 flex-1 space-y-1 pr-10">
           <p
             class="text-[11px] uppercase tracking-[0.08em] text-foreground/80 drop-shadow"
           >
@@ -32,7 +35,7 @@
           <h4
             class="line-clamp-2 text-md font-semibold text-white leading-snug drop-shadow-md"
           >
-            {{ track.title }}
+            {{ displayTitle }}
           </h4>
           <!-- <p class="line-clamp-2 text-sm text-foreground/80 drop-shadow mb-2">
             {{ track.description || 'Мягкий фон для короткой паузы' }}
@@ -40,7 +43,8 @@
         </div>
         <button
           type="button"
-          class="absolute top-1 right-1 z-20 rounded-full bg-black/55 p-2 text-white transition hover:bg-black/70"
+          class="absolute right-2 top-2 z-20 rounded-full bg-black/55 p-2 text-white transition hover:bg-black/70"
+          :aria-label="`Добавить ${displayTitle} в избранное`"
           @click.stop="emit('favorite', track.id)"
         >
           <IconHeart
@@ -72,7 +76,7 @@
         />
       </div>
     </div>
-  </button>
+  </article>
 </template>
 
 <script setup lang="ts">
@@ -98,6 +102,18 @@ const emit = defineEmits<{
 const coverUrl = computed(() => {
   return resolveMediaUrl(props.track.coverPath || '');
 });
+
+const displayTitle = computed(() => {
+  const normalizedTitle = props.track.title?.trim();
+  return normalizedTitle || 'Без названия';
+});
+
+function handleCardKeydown(event: KeyboardEvent) {
+  // Поддерживаем доступность карточки при управлении с клавиатуры.
+  if (event.key !== 'Enter' && event.key !== ' ') return;
+  event.preventDefault();
+  emit('open', props.track.id);
+}
 
 function formatDuration(durationSeconds?: number | null) {
   if (!durationSeconds) return '∞';

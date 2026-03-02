@@ -1,15 +1,11 @@
 import { getSessionUser } from '@/server/application/auth/session';
 import { createError } from 'h3';
-import { db } from '@/server/infrastructure/db/client';
-import {
-  userSubscriptions,
-  subscriptionEvents,
-} from '@/server/infrastructure/db/schema';
-import { eq, and, gt } from 'drizzle-orm';
+import { hardCancelSubscription } from '@/server/application/subscriptions/hard-cancel.service';
 
 /**
  * POST /api/subscriptions/cancel
- * Отменить автопродление подписки
+ * Hard-cancel подписки: отключает future-billing в локальной модели
+ * и пытается отменить pending платежи у провайдера.
  */
 export default defineEventHandler(async (event) => {
   const sessionResult = await getSessionUser(event);
@@ -20,53 +16,20 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // Находим активную подписку (не истекшую)
-  const now = new Date();
-  const activeSubscription = await db
-    .select()
-    .from(userSubscriptions)
-    .where(
-      and(
-        eq(userSubscriptions.userId, sessionResult.user.id),
-        eq(userSubscriptions.paymentStatus, 'active'),
-        gt(userSubscriptions.endDate, now) // подписка не истекла
-      )
-    )
-    .limit(1);
-
-  if (!activeSubscription.length) {
-    throw createError({
-      statusCode: 404,
-      statusMessage: 'No active subscription found',
-    });
-  }
-
-  const subscription = activeSubscription[0];
-
-  // Отключаем автопродление
-  await db
-    .update(userSubscriptions)
-    .set({ autoRenew: false })
-    .where(eq(userSubscriptions.id, subscription.id));
-
-  // TODO: Отключить автопродление в YooKassa через их API
-  // await cancelYooKassaRecurringPayment(subscription.id);
-
-  // Логируем событие
-  await db.insert(subscriptionEvents).values({
+  const config = useRuntimeConfig(event);
+  const result = await hardCancelSubscription({
     userId: sessionResult.user.id,
-    eventType: 'subscription_canceled',
-    planId: subscription.planId,
-    metadata: {
-      subscriptionId: subscription.id,
-      endDate: subscription.endDate.toISOString(),
-    },
+    shopId: String(config.yookassaShopId || '').trim(),
+    secretKey: String(config.yookassaSecretKey || '').trim(),
   });
 
   return {
-    success: true,
-    message:
-      'Автопродление отменено. Подписка останется активной до конца оплаченного периода.',
-    endDate: subscription.endDate,
+    success: result.success,
+    message: result.message,
+    endDate: result.endDate,
+    activeSubscriptionId: result.activeSubscriptionId,
+    canceledPendingSubscriptions: result.canceledPendingSubscriptions,
+    unresolvedPendingPayments: result.unresolvedPendingPayments,
+    paymentMethodDetached: result.paymentMethodDetached,
   };
 });
