@@ -15,6 +15,7 @@ import {
 } from './cookie-names';
 import {
   generateCSRFToken,
+  type SessionCookieSameSite,
   setCSRFCookie,
   getCSRFToken as getCSRFTokenFromCookie,
 } from './csrf';
@@ -35,7 +36,11 @@ export type AuthChannel = 'cookie' | 'header' | null;
 export async function createSession(
   event: any,
   userId: number,
-  locale?: string
+  locale?: string,
+  options?: {
+    sameSite?: SessionCookieSameSite;
+    secure?: boolean;
+  }
 ): Promise<string> {
   const id = randomUUID();
   const ua = event.node?.req?.headers['user-agent'] || null;
@@ -54,11 +59,14 @@ export async function createSession(
   });
 
   const sessionCookieName = getCookieName(SESSION_COOKIE_NAME, isProd);
-  const sameSitePolicy = isProd ? 'strict' : 'lax';
+  const sameSitePolicy: SessionCookieSameSite =
+    options?.sameSite || (isProd ? 'strict' : 'lax');
+  const secureCookie =
+    typeof options?.secure === 'boolean' ? options.secure : isProd;
 
   setCookie(event, sessionCookieName, id, {
     httpOnly: true,
-    secure: isProd,
+    secure: secureCookie,
     sameSite: sameSitePolicy,
     path: '/', // обязательно для __Host- префикса
     ...(isProd ? {} : { domain: undefined }), // для __Host- префикса не указывать domain
@@ -67,13 +75,16 @@ export async function createSession(
 
   // Генерируем и устанавливаем CSRF токен
   const csrfToken = generateCSRFToken();
-  setCSRFCookie(event, csrfToken, expires);
+  setCSRFCookie(event, csrfToken, expires, {
+    sameSite: sameSitePolicy,
+    secure: secureCookie,
+  });
 
   if (locale) {
     const langCookieName = getCookieName(LANG_COOKIE_NAME, isProd);
     setCookie(event, langCookieName, locale, {
       httpOnly: false,
-      secure: isProd,
+      secure: secureCookie,
       sameSite: sameSitePolicy,
       path: '/',
       maxAge: 365 * 24 * 60 * 60,

@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { TRIAL_BILLING_EARLY_CHARGE_MS } from '@/server/config/subscription';
 
 export type TrialBillingPlanId = 'pro' | 'premium';
 export type TrialBillingPeriod = 'month' | 'year';
@@ -73,6 +74,9 @@ export function resolveCurrentEntitlementsPlan(params: {
   const status = normalizeBillingCollectionStatus(
     params.billingCollectionStatus
   );
+  const billingPlanId = isTrialBillingPlanId(params.billingPlanId)
+    ? params.billingPlanId
+    : null;
   const graceExpired =
     params.graceEndsAt && params.now.getTime() >= params.graceEndsAt.getTime();
 
@@ -91,6 +95,14 @@ export function resolveCurrentEntitlementsPlan(params: {
     params.activePaidPlanId === 'premium'
   ) {
     return params.activePaidPlanId;
+  }
+
+  // Пока scheduled/past_due не завершились откатом в basic, держим доступы платными.
+  if (
+    billingPlanId &&
+    (status === 'scheduled' || (status === 'past_due' && !graceExpired))
+  ) {
+    return billingPlanId;
   }
 
   return 'basic';
@@ -132,7 +144,34 @@ export function resolveNextAutoRetryAt(params: {
  */
 export function canRunChargeAttemptNow(
   nextChargeAt: Date | null | undefined,
-  now: Date = new Date()
+  now: Date = new Date(),
+  earlyChargeWindowMs = 0
 ): boolean {
-  return Boolean(nextChargeAt && nextChargeAt.getTime() <= now.getTime());
+  if (!nextChargeAt) {
+    return false;
+  }
+
+  const dueAt = nextChargeAt.getTime() - Math.max(0, earlyChargeWindowMs);
+  return dueAt <= now.getTime();
+}
+
+/**
+ * Для scheduled-списаний допускаем ранний запуск, чтобы не было gap в доступах.
+ */
+export function canRunTrialBillingAttemptNow(params: {
+  nextChargeAt: Date | null | undefined;
+  billingCollectionStatus?: string | null;
+  now?: Date;
+}): boolean {
+  const status = normalizeBillingCollectionStatus(
+    params.billingCollectionStatus
+  );
+  const earlyWindowMs =
+    status === 'scheduled' ? TRIAL_BILLING_EARLY_CHARGE_MS : 0;
+
+  return canRunChargeAttemptNow(
+    params.nextChargeAt,
+    params.now ?? new Date(),
+    earlyWindowMs
+  );
 }

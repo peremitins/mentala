@@ -45,6 +45,7 @@ export default defineEventHandler(async (event) => {
     ipAddress,
     userAgent,
     ttlSeconds: payload.ttlSeconds,
+    purpose: 'browser_handoff',
   });
 
   const config = useRuntimeConfig(event);

@@ -141,6 +141,27 @@ export async function getYooKassaPayment(params: {
   );
 }
 
+export async function cancelYooKassaPayment(params: {
+  shopId: string;
+  secretKey: string;
+  paymentId: string;
+  idempotenceKey: string;
+}): Promise<YooKassaPaymentResponse> {
+  return await $fetch<YooKassaPaymentResponse>(
+    `https://api.yookassa.ru/v3/payments/${params.paymentId}/cancel`,
+    {
+      method: 'POST',
+      timeout: 10_000,
+      headers: {
+        Authorization: getAuthHeader(params.shopId, params.secretKey),
+        'Idempotence-Key': params.idempotenceKey,
+        'Content-Type': 'application/json',
+      },
+      body: {},
+    }
+  );
+}
+
 export async function createYooKassaPaymentMethodBinding(params: {
   shopId: string;
   secretKey: string;

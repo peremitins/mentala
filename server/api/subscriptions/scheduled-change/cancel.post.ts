@@ -1,8 +1,12 @@
 import { createError } from 'h3';
-import { eq } from 'drizzle-orm';
+import { and, desc, eq, gt } from 'drizzle-orm';
 import { getSessionUser } from '@/server/application/auth/session';
 import { db } from '@/server/infrastructure/db/client';
-import { subscriptionEvents, users } from '@/server/infrastructure/db/schema';
+import {
+  subscriptionEvents,
+  userSubscriptions,
+  users,
+} from '@/server/infrastructure/db/schema';
 
 /**
  * POST /api/subscriptions/scheduled-change/cancel
@@ -44,6 +48,70 @@ export default defineEventHandler(async (event) => {
     });
   }
 
+  let restoredAutoRenewForSubscriptionId: number | null = null;
+  const hasScheduledPaidChange = Boolean(
+    existing.scheduledPlanId && existing.scheduledChangeAt
+  );
+
+  if (hasScheduledPaidChange) {
+    const explicitSourceId = Number(existing.scheduledFromSubscriptionId || 0);
+    if (Number.isFinite(explicitSourceId) && explicitSourceId > 0) {
+      const restoredBySource = await db
+        .update(userSubscriptions)
+        .set({
+          autoRenew: true,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(userSubscriptions.id, explicitSourceId),
+            eq(userSubscriptions.userId, userId),
+            eq(userSubscriptions.paymentStatus, 'active'),
+            gt(userSubscriptions.endDate, now)
+          )
+        )
+        .returning({ id: userSubscriptions.id });
+
+      restoredAutoRenewForSubscriptionId = restoredBySource[0]?.id || null;
+    }
+
+    // Фолбэк для legacy/рассинхронных данных, когда source id не сохранен.
+    if (!restoredAutoRenewForSubscriptionId) {
+      const activeRows = await db
+        .select({
+          id: userSubscriptions.id,
+        })
+        .from(userSubscriptions)
+        .where(
+          and(
+            eq(userSubscriptions.userId, userId),
+            eq(userSubscriptions.paymentStatus, 'active'),
+            gt(userSubscriptions.endDate, now)
+          )
+        )
+        .orderBy(
+          desc(userSubscriptions.endDate),
+          desc(userSubscriptions.createdAt),
+          desc(userSubscriptions.id)
+        )
+        .limit(1);
+
+      const active = activeRows[0];
+      if (active) {
+        const restoredFallback = await db
+          .update(userSubscriptions)
+          .set({
+            autoRenew: true,
+            updatedAt: now,
+          })
+          .where(eq(userSubscriptions.id, active.id))
+          .returning({ id: userSubscriptions.id });
+
+        restoredAutoRenewForSubscriptionId = restoredFallback[0]?.id || null;
+      }
+    }
+  }
+
   await db
     .update(users)
     .set({
@@ -82,6 +150,7 @@ export default defineEventHandler(async (event) => {
         nextChargeAt: existing.nextChargeAt?.toISOString() || null,
         billingCollectionStatus: existing.billingCollectionStatus,
         graceEndsAt: existing.graceEndsAt?.toISOString() || null,
+        restoredAutoRenewForSubscriptionId,
       },
     });
   }

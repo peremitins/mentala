@@ -97,7 +97,6 @@ export async function markTrialChargeSuccess(params: {
         billingReminderSentAt: null,
         billingLockedAt: null,
         billingLockedBy: null,
-        trialEndedAt: sql`CASE WHEN ${users.trialEndedAt} > ${now} THEN ${now} ELSE ${users.trialEndedAt} END`,
         paymentMethodBound: true,
         paymentMethodId: params.paymentMethodId || undefined,
         paymentMethodType: params.paymentMethodType || undefined,

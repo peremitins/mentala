@@ -14,6 +14,7 @@ interface Subscription {
   planId: string;
   endDate: string;
   paymentStatus: string;
+  autoRenew?: boolean;
   billingPeriod?: 'month' | 'year';
   plan: {
     id: string;
