@@ -115,9 +115,10 @@
             type="submit"
             variant="default"
             :disabled="isSubmitDisabled"
-            class="w-full"
+            class="relative w-full"
           >
-            {{ loading ? 'Создаём...' : submitLabel }}
+            <ButtonLoader v-if="loading" />
+            <span :class="loading ? 'invisible' : ''">{{ submitLabel }}</span>
           </Button>
           <Button
             type="button"
@@ -142,6 +143,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/app/components/ui/dialog';
+import ButtonLoader from '@/app/components/ui/ButtonLoader.vue';
 import { Input } from '@/app/components/ui/shadcn/input';
 import TextareaResize from '@/app/components/ui/TextareaResize.vue';
 import { Button } from '@/app/components/ui/button';

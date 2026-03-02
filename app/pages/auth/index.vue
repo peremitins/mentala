@@ -9,7 +9,10 @@
           <div
             class="flex w-[150px] h-auto items-center justify-center mb-6 mx-auto"
           >
-            <BrandLogo class="signin__form-brand-logo-img" />
+            <component
+              :is="brandLogoComponent"
+              class="signin__form-brand-logo-img"
+            />
           </div>
           <div class="text-center mb-6">
             <!-- <div class="text-2xl font-semibold text-foreground">Mentala</div> -->
@@ -90,10 +93,11 @@
               <button
                 type="button"
                 :disabled="loading"
-                class="w-full py-2.5 rounded-xl bg-primary text-primary-foreground hover:opacity-90 active:opacity-80 transition font-medium disabled:opacity-60 disabled:cursor-not-allowed"
+                class="relative w-full py-2.5 rounded-xl bg-primary text-primary-foreground hover:opacity-90 active:opacity-80 transition font-medium disabled:opacity-60 disabled:cursor-not-allowed"
                 @click="confirmCode"
               >
-                {{ loading ? '...' : 'Подтвердить' }}
+                <ButtonLoader v-if="loading" />
+                <span :class="loading ? 'invisible' : ''">Подтвердить</span>
               </button>
 
               <div class="grid grid-cols-2 gap-2">
@@ -217,15 +221,12 @@
                 <button
                   type="submit"
                   :disabled="loading || (mode === 'signup' && !agree)"
-                  class="w-full py-2.5 rounded-xl bg-primary text-primary-foreground hover:opacity-90 active:opacity-80 transition font-medium disabled:opacity-60 disabled:cursor-not-allowed"
+                  class="relative w-full py-2.5 rounded-xl bg-primary text-primary-foreground hover:opacity-90 active:opacity-80 transition font-medium disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  {{
-                    loading
-                      ? '...'
-                      : mode === 'signin'
-                        ? 'Войти'
-                        : 'Создать аккаунт'
-                  }}
+                  <ButtonLoader v-if="loading" />
+                  <span :class="loading ? 'invisible' : ''">
+                    {{ mode === 'signin' ? 'Войти' : 'Создать аккаунт' }}
+                  </span>
                 </button>
               </form>
 
@@ -242,10 +243,16 @@
               <div class="grid grid-cols-1 gap-2">
                 <!-- 1️⃣ Google -->
                 <button
+                  type="button"
+                  :disabled="loading || oauthLoading"
                   @click="loginWithGoogle"
-                  class="h-10 rounded-xl bg-white/80 hover:bg-white text-black flex items-center justify-center"
+                  class="relative h-10 rounded-xl bg-white/80 hover:bg-white text-black flex items-center justify-center disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  <GoogleIcon class="w-full h-5" />
+                  <ButtonLoader v-if="oauthLoading" />
+                  <GoogleIcon
+                    class="w-full h-5"
+                    :class="oauthLoading ? 'invisible' : ''"
+                  />
                 </button>
 
                 <!-- 7️⃣ VK -->
@@ -319,7 +326,9 @@ import { useCountdown } from '@vueuse/core';
 import { useAuthStore } from '@/app/stores/auth';
 import GoogleIcon from '~icons/logos/google-icon';
 import NeuralBg from '@/app/components/ui/bg-neural/NeuralBg.vue';
-import BrandLogo from '@/app/assets/images/logo.svg';
+import BrandLogoEn from '@/app/assets/images/logo_en.svg';
+import BrandLogoRu from '@/app/assets/images/logo_ru.svg';
+import ButtonLoader from '@/app/components/ui/ButtonLoader.vue';
 import { Input } from '@/app/components/ui/shadcn/input';
 import { Checkbox } from '@/app/components/ui/shadcn/checkbox';
 import { Tabs, TabsList, TabsTrigger } from '@/app/components/ui/shadcn/tabs';
@@ -341,6 +350,7 @@ const name = ref('');
 const agree = ref(false);
 const marketingConsent = ref(false);
 const loading = ref(false);
+const oauthLoading = ref(false);
 
 const verificationEmail = ref('');
 const verificationCode = ref('');
@@ -359,6 +369,11 @@ const langCookie = useCookie<string | null>('mentai.lang', {
   path: '/',
 });
 const locale = computed(() => langCookie.value || 'ru');
+const brandLogoComponent = computed(() => {
+  // Логотип выбирается по текущей локали интерфейса.
+  const normalizedLocale = String(locale.value || 'ru').toLowerCase();
+  return normalizedLocale.startsWith('ru') ? BrandLogoRu : BrandLogoEn;
+});
 
 function startResendTimer(seconds = 60) {
   reset(seconds);
@@ -566,6 +581,7 @@ async function resendCode() {
 
 async function loginWithGoogle() {
   try {
+    oauthLoading.value = true;
     await auth.loginWithGoogle(locale.value);
   } catch (e: any) {
     const message =
@@ -574,6 +590,8 @@ async function loginWithGoogle() {
         : 'Не удалось войти через Google';
     useToast('Ошибка входа через Google', message, 'error');
     console.error('[Auth] Google login error:', getErrorDiagnosticsLog(e));
+  } finally {
+    oauthLoading.value = false;
   }
 }
 

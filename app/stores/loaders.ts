@@ -6,6 +6,8 @@ export const useLoadersStore = defineStore('loaders', {
     isPageLoading: false,
     // Скелетоны (для списков данных)
     isSkeletonLoading: false,
+    // Лоадер кнопок для локальных async-действий (например, confirm в модалках)
+    isButtonLoading: false,
   }),
   actions: {
     showLoader() {
@@ -20,9 +22,16 @@ export const useLoadersStore = defineStore('loaders', {
     hideSkeleton() {
       this.isSkeletonLoading = false;
     },
+    showButtonLoader() {
+      this.isButtonLoading = true;
+    },
+    hideButtonLoader() {
+      this.isButtonLoading = false;
+    },
     hideAllLoaders() {
       this.isPageLoading = false;
       this.isSkeletonLoading = false;
+      this.isButtonLoading = false;
     },
   },
 });

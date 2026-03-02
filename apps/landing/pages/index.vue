@@ -14,9 +14,9 @@
             @click="scrollToSection('hero')"
           >
             <img
-              src="/logo.svg"
+              :src="brandLogoSrc"
               loading="lazy"
-              alt="Mentai"
+              :alt="brandLogoAlt"
               class="w-[130px] h-10"
             />
           </button>
@@ -816,8 +816,15 @@
               aria-hidden="true"
             />
 
-            <Button type="submit" class="w-full" :disabled="submittingLead">
-              {{ submittingLead ? 'Отправляем...' : 'Получить ранний доступ' }}
+            <Button
+              type="submit"
+              class="relative w-full"
+              :disabled="submittingLead"
+            >
+              <ButtonLoader v-if="submittingLead" />
+              <span :class="submittingLead ? 'invisible' : ''">
+                Получить ранний доступ
+              </span>
             </Button>
 
             <p
@@ -886,6 +893,7 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { useRuntimeConfig } from 'nuxt/app';
 import { Badge } from '../components/ui/shadcn/badge';
 import { Button } from '../components/ui/shadcn/button';
+import ButtonLoader from '../components/ui/ButtonLoader.vue';
 import { Input } from '../components/ui/shadcn/input';
 import { useLandingConfig } from '../composables/useLandingConfig';
 import { useLandingAnalytics } from '../composables/useLandingAnalytics';
@@ -924,10 +932,14 @@ type PrivacyCard = {
   title: string;
   text: string;
 };
+type SupportedLogoLocale = 'ru' | 'en';
 
 const runtimeConfig = useRuntimeConfig();
 const route = useRoute();
 const reducedMotion = usePreferredReducedMotion();
+const langCookie = useCookie<string | null>('mentai.lang', {
+  path: '/',
+});
 
 const { data: landingConfig } = await useLandingConfig();
 const { reachGoal, trackScrollDepth } = useLandingAnalytics();
@@ -1243,6 +1255,52 @@ function toSingleQueryValue(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
+function resolveLogoLocale(value: unknown): SupportedLogoLocale | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalizedValue = value.trim().toLowerCase();
+  if (normalizedValue.startsWith('ru')) {
+    return 'ru';
+  }
+  if (normalizedValue.startsWith('en')) {
+    return 'en';
+  }
+  return null;
+}
+
+const selectedLogoLocale = computed<SupportedLogoLocale>(() => {
+  const queryLocale =
+    resolveLogoLocale(toSingleQueryValue(route.query.lang)) ||
+    resolveLogoLocale(toSingleQueryValue(route.query.locale));
+  if (queryLocale) {
+    return queryLocale;
+  }
+
+  const cookieLocale = resolveLogoLocale(langCookie.value);
+  if (cookieLocale) {
+    return cookieLocale;
+  }
+
+  // Для лендинга используем язык браузера как fallback.
+  if (typeof navigator !== 'undefined') {
+    const browserLocale = resolveLogoLocale(navigator.language);
+    if (browserLocale) {
+      return browserLocale;
+    }
+  }
+
+  return 'ru';
+});
+
+const brandLogoSrc = computed(() =>
+  selectedLogoLocale.value === 'ru' ? '/logo_ru.svg' : '/logo_en.svg'
+);
+const brandLogoAlt = computed(() =>
+  selectedLogoLocale.value === 'ru' ? 'Ментала' : 'Mentala'
+);
+
 function setFeatureRef(index: number, element: Element | null) {
   featureRefs.value[index] = element instanceof HTMLElement ? element : null;
 }
@@ -1479,7 +1537,7 @@ useHead({
         '@type': 'Organization',
         name: 'Ментала',
         url: canonicalUrl.value,
-        logo: new URL('/logo.svg', canonicalUrl.value).href,
+        logo: new URL(brandLogoSrc.value, canonicalUrl.value).href,
         contactPoint: [
           {
             '@type': 'ContactPoint',

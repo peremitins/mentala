@@ -20,7 +20,7 @@
       <!-- Фильтры -->
       <section class="space-y-3">
         <!-- Фокус уведомлений -->
-        <div class="glass-deep p-3 space-y-2">
+        <div v-if="hasSubtypeOptions" class="glass-deep p-3 space-y-2">
           <label class="text-sm font-semibold text-foreground">
             Фокус уведомлений
           </label>
@@ -75,7 +75,7 @@
       <div v-else class="glass-deep p-3">
         <TransitionGroup name="list" tag="div" class="space-y-3">
           <div
-            v-for="(text, index) in localTexts"
+            v-for="text in localTexts"
             :key="text.id || text.tempId"
             :data-text-id="text.id || text.tempId"
             class="rounded-2xl border border-white/10 bg-background/20 p-3 transition-all shadow-sm relative overflow-hidden list-item hover:border-white/30 hover:-translate-y-0.5"
@@ -199,7 +199,7 @@
       </section>
 
       <!-- Восстановление дефолтных -->
-      <section class="glass-deep p-3 space-y-3">
+      <section v-if="showDefaultsResetBlock" class="glass-deep p-3 space-y-3">
         <div class="rounded-2xl border border-white/10 bg-background/20 p-3">
           <div class="flex items-center gap-2">
             <Checkbox id="keepUserTexts" v-model:checked="keepUserTexts" />
@@ -238,43 +238,33 @@
     </section>
 
     <!-- Липкая панель сохранения -->
-    <div class="sticky bottom-[88px] z-40">
+    <div class="sticky bottom-[98px] z-40">
       <div class="glass-deep p-2">
         <button
-          class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors w-full hover:bg-primary/90 disabled:opacity-70 disabled:cursor-not-allowed"
+          class="relative inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors w-full hover:bg-primary/90 disabled:opacity-70 disabled:cursor-not-allowed"
           :disabled="!hasChanges || saving"
           @click="handleSave"
         >
-          <svg
-            v-if="saving"
-            class="h-4 w-4 animate-spin"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+          <ButtonLoader v-if="saving" />
+          <span
+            class="inline-flex items-center justify-center gap-2"
+            :class="saving ? 'invisible' : ''"
           >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-            />
-          </svg>
-          <svg
-            v-else
-            class="h-4 w-4"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M5 13l4 4L19 7"
-            />
-          </svg>
-          <span v-if="saving">Сохранение...</span>
-          <span v-else>Сохранить изменения ({{ changesCount }})</span>
+            <svg
+              class="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M5 13l4 4L19 7"
+              />
+            </svg>
+            <span>Сохранить изменения ({{ changesCount }})</span>
+          </span>
         </button>
       </div>
     </div>
@@ -306,6 +296,7 @@ import { useNotificationTexts } from '@/app/composables/useNotificationTexts';
 import PageHeader from '@/app/components/PageHeader.vue';
 import TextareaResize from '@/app/components/ui/TextareaResize.vue';
 import ConfirmModal from '@/app/components/ui/ConfirmModal.vue';
+import ButtonLoader from '@/app/components/ui/ButtonLoader.vue';
 import Skeleton from '@/app/components/ui/Skeleton.vue';
 import { Checkbox } from '@/app/components/ui/shadcn/checkbox';
 import { useToast } from '@/app/composables/useToast';
@@ -314,7 +305,6 @@ import { THERAPY_TOPICS } from '@/app/lib/therapyCatalog';
 import ToggleGroup from '@/app/components/ui/toggle-group/ToggleGroup.vue';
 import ToggleGroupItem from '@/app/components/ui/toggle-group/ToggleGroupItem.vue';
 import {
-  SUBTYPE_OPTIONS,
   SUBTYPE_OPTIONS_BUILD_WITHOUT_MIXED,
   SUBTYPE_OPTIONS_QUIT_WITHOUT_MIXED,
   SUBTYPE_OPTIONS_WITHOUT_MIXED,
@@ -360,10 +350,18 @@ const subtypeOptions = computed(() => {
     : SUBTYPE_OPTIONS_BUILD_WITHOUT_MIXED;
 });
 
-// Количество отфильтрованных текстов
-const filteredTextsCount = computed(() => {
-  return localTexts.value.length;
+// Для кастомных сущностей скрываем блок восстановления дефолтных текстов
+const isCustomEntity = computed(() => {
+  if (props.kind === 'habits') {
+    return !findHabitByKey(props.entityKey);
+  }
+
+  return !THERAPY_TOPICS.some((topic) => topic.key === props.entityKey);
 });
+
+// Блок с вариантами фокуса показываем только если есть хотя бы один вариант
+const hasSubtypeOptions = computed(() => subtypeOptions.value.length > 0);
+const showDefaultsResetBlock = computed(() => !isCustomEntity.value);
 
 // Локальная модель с флагами изменений
 interface LocalText extends NotificationText {
@@ -606,7 +604,7 @@ function finishEdit() {
 }
 
 // Click outside для закрытия редактирования
-watch(editingId, (newId, oldId) => {
+watch(editingId, (newId) => {
   // Останавливаем предыдущий обработчик
   if (clickOutsideStop) {
     clickOutsideStop();

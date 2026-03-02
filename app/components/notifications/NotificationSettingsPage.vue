@@ -487,11 +487,12 @@
       <section class="glass-deep p-3">
         <button
           type="button"
-          class="rounded-lg px-4 py-3 text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 w-full"
+          class="relative rounded-lg px-4 py-3 text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 w-full"
           :disabled="isSaveDisabled"
           @click="saveSettings"
         >
-          {{ loading ? 'Сохранение...' : 'Сохранить' }}
+          <ButtonLoader v-if="loading" />
+          <span :class="loading ? 'invisible' : ''">Сохранить</span>
         </button>
       </section>
 
@@ -528,6 +529,7 @@ import ToggleGroupItem from '@/app/components/ui/toggle-group/ToggleGroupItem.vu
 import { Input } from '@/app/components/ui/shadcn/input';
 import InputComponent from '@/app/components/ui/shadcn/input/Input.vue';
 import TextareaResize from '@/app/components/ui/TextareaResize.vue';
+import ButtonLoader from '@/app/components/ui/ButtonLoader.vue';
 import { Switch } from '@/app/components/ui/shadcn/switch';
 import { useNotificationsStore } from '@/app/stores/notifications';
 import { useUserHabitsStore } from '@/app/stores/userHabits';
