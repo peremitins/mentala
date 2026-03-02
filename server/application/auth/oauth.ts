@@ -294,6 +294,7 @@ export async function upsertUserWithOAuth(
         name: profile.name ?? null,
         avatarUrl: profile.avatarUrl ?? null,
         locale: profile.locale ?? null,
+        sceneSettings: { volume: 25 },
         ...buildLegalConsent(event),
       })
       .returning();

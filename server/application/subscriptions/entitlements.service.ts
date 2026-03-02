@@ -7,7 +7,12 @@ import {
   userSubscriptions,
   users,
 } from '@/server/infrastructure/db/schema';
-import { getFeatures, isTrialActive, type AiChatMode } from './access.service';
+import { getFeatures, type AiChatMode } from './access.service';
+import {
+  isTrialActiveAt,
+  resolveCurrentEntitlementsPlan,
+  normalizeBillingCollectionStatus,
+} from './trial-billing.service';
 
 export type PlanId = 'basic' | 'pro' | 'premium';
 export type LockIcon = 'pro' | 'premium';
@@ -30,7 +35,7 @@ export type BillingFeatureAccess = {
 export type BillingSnapshot = {
   planId: PlanId;
   trialActive: boolean;
-  trialExpiresAt: string | null;
+  trialEndsAt: string | null;
   aiChatMode: AiChatMode;
   weeklyMinutesLimit: number | null;
   fairUseGuardMinutesPerWeek: number | null;
@@ -185,8 +190,8 @@ function normalizeLockIcon(lockIcon?: string | null): LockIcon {
 }
 
 function normalizeTargetPlan(
-  targetPlan?: string | null,
-  requiredPlan: PlanId
+  requiredPlan: PlanId,
+  targetPlan?: string | null
 ): PaywallTargetPlan {
   if (targetPlan === 'pro' || targetPlan === 'premium') {
     return targetPlan;
@@ -247,8 +252,8 @@ async function loadFeaturePolicies(): Promise<FeatureAccessPolicy[]> {
         paywallDescription: row.paywallDescription,
         paywallCtaText: row.paywallCtaText,
         paywallTargetPlan: normalizeTargetPlan(
-          row.paywallTargetPlan,
-          requiredPlan
+          requiredPlan,
+          row.paywallTargetPlan
         ),
       };
       merged.set(policy.featureKey, policy);
@@ -273,7 +278,9 @@ function canAccessByPlan(
 ): boolean {
   if (serviceRole) return true;
   if (PLAN_RANK[planId] >= PLAN_RANK[requiredPlan]) return true;
-  if (trialActive && trialUnlocked) return true;
+  // Trial-override работает только для базового плана.
+  // Основной план в trial вычисляется отдельно (через resolveCurrentEntitlementsPlan).
+  if (trialActive && trialUnlocked && planId === 'basic') return true;
   return false;
 }
 
@@ -323,6 +330,9 @@ export async function getBillingSnapshot(
       id: users.id,
       roleId: users.roleId,
       trialEndedAt: users.trialEndedAt,
+      billingPlanId: users.billingPlanId,
+      billingCollectionStatus: users.billingCollectionStatus,
+      graceEndsAt: users.graceEndsAt,
     })
     .from(users)
     .where(eq(users.id, userId))
@@ -332,9 +342,9 @@ export async function getBillingSnapshot(
     throw new Error(`User ${userId} not found`);
   }
 
-  const user = userRows[0];
+  const user = userRows[0]!;
   const effectiveUserRole = userRole || user.roleId || 'user';
-  const trialActive = isTrialActive({ trialEndedAt: user.trialEndedAt });
+  const trialActive = isTrialActiveAt(user.trialEndedAt, now);
 
   const activeSubscription = await db
     .select({
@@ -357,7 +367,18 @@ export async function getBillingSnapshot(
     .limit(1);
 
   const active = activeSubscription[0];
-  const planId = normalizePlanId(active?.subscription?.planId || 'basic');
+  const planId = normalizePlanId(
+    resolveCurrentEntitlementsPlan({
+      now,
+      trialActive,
+      billingPlanId: user.billingPlanId,
+      billingCollectionStatus: normalizeBillingCollectionStatus(
+        user.billingCollectionStatus
+      ),
+      graceEndsAt: user.graceEndsAt,
+      activePaidPlanId: active?.subscription?.planId || null,
+    })
+  );
 
   const features = await getFeatures(
     {
@@ -365,7 +386,7 @@ export async function getBillingSnapshot(
       trialEndedAt: user.trialEndedAt,
     },
     { planId },
-    active?.plan ?? null,
+    active?.plan?.id === planId ? active.plan : null,
     effectiveUserRole
   );
 
@@ -376,7 +397,7 @@ export async function getBillingSnapshot(
   return {
     planId,
     trialActive,
-    trialExpiresAt:
+    trialEndsAt:
       trialActive && user.trialEndedAt ? user.trialEndedAt.toISOString() : null,
     aiChatMode: features.aiChatMode,
     weeklyMinutesLimit: features.weeklyMinutesLimit,

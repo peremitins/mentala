@@ -4,7 +4,13 @@ import { useSubscriptionStore } from '@/app/stores/subscription';
 
 export default defineNuxtRouteMiddleware(async (to) => {
   // Публичные маршруты, не требующие авторизации
-  const publicRoutes = ['/auth', '/error', '/forgot', '/reset-password'];
+  const publicRoutes = [
+    '/auth',
+    '/error',
+    '/forgot',
+    '/reset-password',
+    '/payment-success',
+  ];
 
   // Явная проверка для /auth/link (может быть с query параметрами)
   if (to.path === '/auth/link' || to.path.startsWith('/auth/link')) {

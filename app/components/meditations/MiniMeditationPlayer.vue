@@ -2,15 +2,15 @@
   <Transition name="fade">
     <div
       v-if="track"
-      class="fixed inset-x-0 bottom-25 z-40 px-2"
+      class="absolute w-full bottom-25 z-40"
       role="button"
       tabindex="0"
       @click="emit('open')"
       @keydown.enter.prevent="emit('open')"
     >
       <div class="glass-deep overflow-hidden">
-        <div class="flex items-center gap-3 px-4 py-3">
-          <div class="relative h-12 w-12 overflow-hidden rounded-2xl">
+        <div class="flex min-w-0 items-center gap-3 px-4 py-3">
+          <div class="relative h-12 w-12 shrink-0 overflow-hidden rounded-2xl">
             <div
               v-if="!track.coverPath"
               class="absolute inset-0 bg-gradient-to-br"
@@ -26,14 +26,16 @@
             />
           </div>
 
-          <div class="min-w-0 flex-1">
-            <p class="text-xs text-white/60">{{ topicLabel(track.topicKey) }}</p>
+          <div class="min-w-0 flex-1 overflow-hidden">
+            <p class="truncate text-xs text-white/60">
+              {{ topicLabel(track.topicKey) }}
+            </p>
             <p class="truncate text-sm font-semibold text-white">
               {{ track.title }}
             </p>
           </div>
 
-          <div class="flex items-center gap-2">
+          <div class="flex shrink-0 items-center gap-2">
             <button
               type="button"
               class="rounded-full bg-primary/80 p-3 text-primary-foreground transition hover:bg-primary disabled:cursor-not-allowed disabled:opacity-70"
@@ -91,7 +93,7 @@ import type {
   MeditationTrackDto,
 } from '@/shared/dto/meditations';
 
-const props = defineProps<{
+defineProps<{
   track: MeditationTrackDto | null;
   progress: number;
   isPlaying: boolean;
@@ -114,7 +116,6 @@ function topicGradient(key: MeditationTopicKey) {
     'from-slate-500 via-indigo-500 to-blue-600'
   );
 }
-
 </script>
 
 <style scoped>

@@ -24,7 +24,7 @@ function getSmtpConfig(): SmtpConfig {
   const user = cfg.smtpUser || process.env.SMTP_USER;
   const pass = cfg.smtpPassword || process.env.SMTP_PASSWORD;
   const from = cfg.smtpFrom || process.env.SMTP_FROM;
-  const fromName = cfg.smtpFromName || process.env.SMTP_FROM_NAME || 'Mentala';
+  const fromName = cfg.smtpFromName || process.env.SMTP_FROM_NAME || 'Ментала';
 
   if (!host || !user || !pass || !from) {
     throw new Error('SMTP config is incomplete');
@@ -86,7 +86,7 @@ export async function sendVerificationEmail(
     smtp = getSmtpConfig();
     const transporter = getTransporter();
 
-    const subject = 'Подтвердите ваш email — Mentala';
+    const subject = 'Подтвердите ваш email — Ментала';
     const text = `Ваш код подтверждения: ${code}. Код действителен 15 минут.`;
     const html = `
       <div style="font-family: Inter, Arial, sans-serif; line-height: 1.6; color: #0f172a;">
@@ -142,13 +142,13 @@ export async function sendPasswordResetEmail(
   const smtp = getSmtpConfig();
   const transporter = getTransporter();
 
-  const subject = 'Восстановление пароля — Mentala';
+  const subject = 'Восстановление пароля — Ментала';
   const text = `Перейдите по ссылке для восстановления пароля: ${resetUrl}. Ссылка действительна 1 час.`;
   const html = `
     <div style="font-family: Inter, Arial, sans-serif; line-height: 1.6; color: #0f172a;">
       <h2 style="margin: 0 0 12px;">Восстановление пароля</h2>
       <p style="margin: 0 0 16px;">
-        Вы запросили восстановление пароля для вашего аккаунта Mentala.
+        Вы запросили восстановление пароля для вашего аккаунта Ментала.
       </p>
       <p style="margin: 0 0 24px;">
         <a
@@ -174,6 +174,47 @@ export async function sendPasswordResetEmail(
   await transporter.sendMail({
     from: `${smtp.fromName} <${smtp.from}>`,
     to,
+    subject,
+    text,
+    html,
+  });
+}
+
+/**
+ * Отправка напоминания о ближайшем списании после trial.
+ */
+export async function sendBillingReminderEmail(params: {
+  to: string;
+  planName: string;
+  chargeAt: Date;
+}): Promise<void> {
+  const smtp = getSmtpConfig();
+  const transporter = getTransporter();
+  const localizedChargeAt = params.chargeAt.toLocaleString('ru-RU', {
+    day: 'numeric',
+    month: 'long',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  const subject = 'Напоминание о списании — Ментала';
+  const text = `Напоминаем: ${localizedChargeAt} будет выполнено списание за тариф ${params.planName}. До этой даты вы можете отменить автосписание в настройках подписки.`;
+
+  const html = `
+    <div style="font-family: Inter, Arial, sans-serif; line-height: 1.6; color: #0f172a;">
+      <h2 style="margin: 0 0 12px;">Напоминание о списании</h2>
+      <p style="margin: 0 0 12px;">
+        Списание за тариф <strong>${params.planName}</strong> запланировано на
+        <strong>${localizedChargeAt}</strong>.
+      </p>
+      <p style="margin: 0; color: #64748b;">
+        Вы можете отменить будущий платеж в настройках подписки до этой даты.
+      </p>
+    </div>
+  `;
+
+  await transporter.sendMail({
+    from: `${smtp.fromName} <${smtp.from}>`,
+    to: params.to,
     subject,
     text,
     html,

@@ -17,7 +17,7 @@ export const BillingFeatureAccessDto = z.object({
 export const UserBillingDto = z.object({
   planId: z.enum(['basic', 'pro', 'premium']),
   trialActive: z.boolean(),
-  trialExpiresAt: z.string().nullable(),
+  trialEndsAt: z.string().nullable(),
   aiChatMode: z.enum(['disabled', 'limited', 'unlimited_fair_use']),
   weeklyMinutesLimit: z.number().nullable(),
   fairUseGuardMinutesPerWeek: z.number().nullable(),
@@ -45,12 +45,14 @@ export const UserMeDto = z.object({
       hasPassword: z.boolean().optional(),
       sceneSettings: z.record(z.any()).optional(),
       marketingConsent: z.boolean().optional(),
+      pushNotificationsEnabled: z.boolean().optional(),
       billing: UserBillingDto.optional(),
     })
     .nullable(),
 });
 
 export const UserMePatchDto = z.object({
+  pushNotificationsEnabled: z.boolean().optional(),
   sceneSettings: z
     .object({
       sceneId: z.string().nullable().optional(),

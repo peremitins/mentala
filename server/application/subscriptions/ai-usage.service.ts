@@ -6,9 +6,14 @@ import {
   userSubscriptions,
   users,
 } from '@/server/infrastructure/db/schema';
-import { getFeatures, isTrialActive, type AiChatMode } from './access.service';
+import { getFeatures, type AiChatMode } from './access.service';
 import { getUsageForCurrentWeek } from './session-time.service';
 import { WEEKLY_OVERDRAFT_MINUTES } from '@/server/config/subscription';
+import {
+  isTrialActiveAt,
+  normalizeBillingCollectionStatus,
+  resolveCurrentEntitlementsPlan,
+} from './trial-billing.service';
 
 export type AiUsageGateStatus = 'ok' | 'no_ai_access' | 'weekly_limit_reached';
 
@@ -92,6 +97,9 @@ export async function getAiUsageGate(
     .select({
       timezone: users.timezone,
       trialEndedAt: users.trialEndedAt,
+      billingPlanId: users.billingPlanId,
+      billingCollectionStatus: users.billingCollectionStatus,
+      graceEndsAt: users.graceEndsAt,
     })
     .from(users)
     .where(eq(users.id, userId))
@@ -99,7 +107,7 @@ export async function getAiUsageGate(
 
   const user = userRows[0];
   const timezone = user?.timezone || 'Europe/Moscow';
-  const trialActive = user ? isTrialActive(user) : false;
+  const trialActive = user ? isTrialActiveAt(user.trialEndedAt, now) : false;
 
   // Берём только реально активную и не истёкшую подписку (endDate > now),
   // чтобы доступ/лимиты не подтягивались из просроченных записей.
@@ -124,14 +132,32 @@ export async function getAiUsageGate(
     .limit(1);
 
   const sub = activeSubscription[0]?.subscription;
-  const plan = activeSubscription[0]?.plan;
-  const subscriptionForFeatures = sub ? { planId: sub.planId } : null;
+  const entitlementsPlanId = user
+    ? resolveCurrentEntitlementsPlan({
+        now,
+        trialActive,
+        billingPlanId: user.billingPlanId,
+        billingCollectionStatus: normalizeBillingCollectionStatus(
+          user.billingCollectionStatus
+        ),
+        graceEndsAt: user.graceEndsAt,
+        activePaidPlanId: sub?.planId || null,
+      })
+    : 'basic';
+  const entitlementsPlanRows = await db
+    .select({
+      id: subscriptionPlans.id,
+      weeklyMinutesLimit: subscriptionPlans.weeklyMinutesLimit,
+    })
+    .from(subscriptionPlans)
+    .where(eq(subscriptionPlans.id, entitlementsPlanId))
+    .limit(1);
 
   const features = user
     ? await getFeatures(
         { id: userId, trialEndedAt: user.trialEndedAt },
-        subscriptionForFeatures,
-        plan,
+        { planId: entitlementsPlanId },
+        entitlementsPlanRows[0] ?? null,
         userRole
       )
     : {

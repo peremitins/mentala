@@ -123,6 +123,7 @@ export const useAuthStore = defineStore('auth', {
       emailVerifiedAt?: string | null;
       hasPassword?: boolean;
       marketingConsent?: boolean;
+      pushNotificationsEnabled?: boolean;
       // Настройки фоновой сцены приложения (страница Scene Selection).
       sceneSettings?: {
         sceneId?: string | null;

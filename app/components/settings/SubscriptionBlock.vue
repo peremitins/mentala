@@ -23,16 +23,15 @@
         <!-- Информация о пробном периоде -->
         <div
           v-if="
-            subscriptionData?.trialActive && subscription.plan.name === 'basic'
+            subscriptionData?.trialActive &&
+            subscriptionData?.currentEntitlementsPlan === 'premium' &&
+            subscription?.plan?.id === 'basic'
           "
           class="mt-2 space-y-1"
         >
           <p class="text-xs text-foreground">
-            В пробном периоде доступен полный Premium-доступ
-          </p>
-          <p class="text-xs text-foreground">
-            Пробный период действует до:
-            {{ formatTrialDate(subscriptionData.trialExpiresAt) }}
+            Действует до:
+            {{ formatTrialDate(subscriptionData.trialEndsAt) }}
           </p>
         </div>
 
@@ -111,31 +110,49 @@
         </p>
       </div>
 
-      <NuxtLink
-        to="/subscription"
+      <button
+        type="button"
+        :disabled="openingExternalFlow"
         class="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 transition-opacity"
+        @click="handleManageSubscription"
       >
-        Управлять подпиской
-      </NuxtLink>
+        {{ actionButtonLabel }}
+      </button>
     </div>
 
     <div v-else class="space-y-2">
       <p class="text-sm text-foreground">Текущий план: нет активной подписки</p>
-      <NuxtLink
-        to="/subscription"
+      <button
+        type="button"
+        :disabled="openingExternalFlow"
         class="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 transition-opacity"
+        @click="handleManageSubscription"
       >
-        Оформить подписку
-      </NuxtLink>
+        {{ actionButtonLabel }}
+      </button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue';
+import { Capacitor } from '@capacitor/core';
+import { useNow } from '@vueuse/core';
+import { computed, onMounted, ref } from 'vue';
+import { useAPI } from '@/app/composables/useAPI';
+import { useExternalFlowAppUrl } from '@/app/composables/useExternalFlowAppUrl';
+import { usePlatform } from '@/app/composables/usePlatform';
 import { useSubscriptionStore } from '@/app/stores/subscription';
+import { useToast } from '@/app/composables/useToast';
+import {
+  formatTrialCountdown,
+  getTrialCountdown,
+} from '@/app/utils/trialCountdown';
 
 const subscriptionStore = useSubscriptionStore();
+const { platform } = usePlatform();
+const externalFlowAppUrl = useExternalFlowAppUrl();
+const openingExternalFlow = ref(false);
+const now = useNow({ interval: 60_000 });
 
 // Computed для удобства доступа
 const subscription = computed(() => subscriptionStore.currentSubscription);
@@ -145,57 +162,54 @@ const loading = computed(
   () =>
     subscriptionStore.loading.subscription || subscriptionStore.loading.usage
 );
+const isNativeIos = computed(
+  () => platform.value === 'ios' && Capacitor.isNativePlatform()
+);
+const actionButtonLabel = computed(() => {
+  return isNativeIos.value ? 'Управление подпиской' : 'Управлять подпиской';
+});
 
-// Вычисляем количество дней до окончания Trial
-const trialDaysLeft = computed(() => {
+// Реактивный countdown trial (дни + часы) с пересчетом каждую минуту.
+const trialTimeLeftLabel = computed(() => {
   if (
     !subscriptionData.value?.trialActive ||
-    !subscriptionData.value?.trialExpiresAt
+    !subscriptionData.value?.trialEndsAt
   ) {
     return null;
   }
-  const now = new Date();
-  const expiresAt = new Date(subscriptionData.value.trialExpiresAt);
-  const diffTime = expiresAt.getTime() - now.getTime();
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  return diffDays > 0 ? diffDays : 0;
+
+  const countdown = getTrialCountdown(
+    subscriptionData.value.trialEndsAt,
+    now.value
+  );
+  if (!countdown) {
+    return null;
+  }
+
+  return formatTrialCountdown(countdown);
 });
 
 const planName = computed(() => {
   if (!subscription.value) return '—';
-  const name = subscription.value.plan.name;
-  if (name === 'basic') {
-    // Если Trial активен, показываем как "Пробный период Premium"
-    if (subscriptionData.value?.trialActive) {
-      const days = trialDaysLeft.value;
-      if (days !== null && days > 0) {
-        return `Пробный период Premium · ${days} ${getDaysWord(days)} осталось`;
-      }
-      return 'Пробный период Premium';
+  // В trial показываем явный статус пробного Premium, пока базовая подписка еще активна.
+  if (
+    subscriptionData.value?.trialActive &&
+    subscription.value.planId === 'basic'
+  ) {
+    if (trialTimeLeftLabel.value) {
+      return `Пробный период · ${trialTimeLeftLabel.value} осталось`;
     }
-    return 'Basic';
+    return 'Пробный период';
   }
-  if (name === 'pro') return 'PRO';
-  if (name === 'premium') return 'Premium';
-  return name;
+
+  const effectivePlanId =
+    subscriptionData.value?.currentEntitlementsPlan ||
+    subscription.value.planId;
+  if (effectivePlanId === 'basic') return 'Basic';
+  if (effectivePlanId === 'pro') return 'PRO';
+  if (effectivePlanId === 'premium') return 'Premium';
+  return effectivePlanId;
 });
-
-// Функция для правильного склонения слова "день"
-function getDaysWord(days: number): string {
-  const lastDigit = days % 10;
-  const lastTwoDigits = days % 100;
-
-  if (lastTwoDigits >= 11 && lastTwoDigits <= 14) {
-    return 'дней';
-  }
-  if (lastDigit === 1) {
-    return 'день';
-  }
-  if (lastDigit >= 2 && lastDigit <= 4) {
-    return 'дня';
-  }
-  return 'дней';
-}
 
 // Получаем лимит минут из features (учитывает Trial)
 const aiChatMode = computed(() => subscriptionStore.aiChatMode);
@@ -262,6 +276,71 @@ function getPaymentStatusText(status: string) {
     canceled: 'Отменена',
   };
   return statusMap[status] || status;
+}
+
+async function openExternalBrowser(url: string) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    const { InAppBrowser } = await import('@capacitor/inappbrowser');
+    await InAppBrowser.openInExternalBrowser({ url });
+  } catch (error) {
+    // Fallback для окружений без нативного плагина.
+    console.warn(
+      '[SubscriptionBlock] openInExternalBrowser unavailable, using window.open fallback:',
+      error
+    );
+    window.open(url, '_blank');
+  }
+}
+
+async function handleManageSubscription() {
+  if (!isNativeIos.value) {
+    await navigateTo('/subscription');
+    return;
+  }
+
+  if (openingExternalFlow.value) {
+    return;
+  }
+
+  openingExternalFlow.value = true;
+  try {
+    const response = await useAPI<{
+      consumeUrl: string;
+      expiresAt: string;
+      ttlSeconds: number;
+    }>('/api/auth/external-session/create', {
+      method: 'POST',
+      body: {
+        redirectPath: '/subscription',
+        appUrl: externalFlowAppUrl.value || undefined,
+      },
+    });
+
+    const consumeUrl = String(response?.consumeUrl || '').trim();
+    if (!consumeUrl) {
+      throw new Error('Missing consumeUrl');
+    }
+
+    await openExternalBrowser(consumeUrl);
+    useToast(
+      'Открываем веб-версию',
+      'Управление подпиской продолжится во внешнем браузере.',
+      'info'
+    );
+  } catch (error: any) {
+    console.error('Failed to open external subscription flow:', error);
+    useToast(
+      'Не удалось открыть браузер',
+      error?.message || 'Попробуйте еще раз.',
+      'error'
+    );
+  } finally {
+    openingExternalFlow.value = false;
+  }
 }
 
 onMounted(async () => {

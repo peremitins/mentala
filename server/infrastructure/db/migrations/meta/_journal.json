@@ -316,6 +316,48 @@
       "when": 1771300000000,
       "tag": "0048_migrate_training_to_steps",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1771500858756,
+      "tag": "0049_furry_hitman",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1771528375983,
+      "tag": "0050_steady_maria_hill",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1771584797756,
+      "tag": "0051_wooden_norrin_radd",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1771592486577,
+      "tag": "0052_kind_rattler",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1772010625000,
+      "tag": "0053_remove_deprecated_therapy_topics",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1772094757453,
+      "tag": "0054_mushy_triathlon",
+      "breakpoints": true
     }
   ]
 }

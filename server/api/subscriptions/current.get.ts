@@ -1,46 +1,133 @@
 import { getSessionUser } from '@/server/application/auth/session';
-import { setHeader, getQuery } from 'h3';
+import { setHeader, getQuery, createError } from 'h3';
 import { db } from '@/server/infrastructure/db/client';
 import {
-  userSubscriptions,
+  subscriptionEvents,
   subscriptionPlans,
   users,
 } from '@/server/infrastructure/db/schema';
-import { eq, and, desc, gt } from 'drizzle-orm';
-import {
-  isTrialActive,
-  getFeatures,
-} from '@/server/application/subscriptions/access.service';
+import { eq } from 'drizzle-orm';
+import { getFeatures } from '@/server/application/subscriptions/access.service';
 import { getSessionUserWithRole } from '@/server/utils/require-role';
-import { createError } from 'h3';
+import {
+  expireOutdatedActiveSubscriptions,
+  getCurrentActiveSubscriptionWithPlan,
+} from '@/server/application/subscriptions/current-subscription.service';
+import {
+  isTrialActiveAt,
+  canRunTrialBillingAttemptNow,
+  isTrialBillingPeriod,
+  isTrialBillingPlanId,
+  normalizeBillingCollectionStatus,
+  resolveCurrentEntitlementsPlan,
+} from '@/server/application/subscriptions/trial-billing.service';
+import { syncPendingPaymentMethodBinding } from '@/server/application/subscriptions/payment-methods.service';
+import { runTrialBillingForUser } from '@/server/application/subscriptions/trial-billing-worker.service';
+import { runScheduledPlanChangeForUser } from '@/server/application/subscriptions/scheduled-plan-change.service';
+
+interface ScheduledChangeResponse {
+  planId: string;
+  billingPeriod: 'month' | 'year';
+  effectiveAt: string;
+}
+
+async function readCurrentUserBillingRow(userId: number) {
+  const rows = await db
+    .select({
+      id: users.id,
+      billingCredit: users.billingCredit,
+      hasUsedTrial: users.hasUsedTrial,
+      timezone: users.timezone,
+      trialEndedAt: users.trialEndedAt,
+      roleId: users.roleId,
+      updatedAt: users.updatedAt,
+      scheduledPlanId: users.scheduledPlanId,
+      scheduledBillingPeriod: users.scheduledBillingPeriod,
+      scheduledChangeAt: users.scheduledChangeAt,
+      billingPlanId: users.billingPlanId,
+      billingPeriod: users.billingPeriod,
+      nextChargeAt: users.nextChargeAt,
+      paymentMethodBound: users.paymentMethodBound,
+      paymentMethodId: users.paymentMethodId,
+      paymentMethodType: users.paymentMethodType,
+      paymentMethodTitle: users.paymentMethodTitle,
+      paymentMethodCardBrand: users.paymentMethodCardBrand,
+      paymentMethodCardLast4: users.paymentMethodCardLast4,
+      paymentMethodCardExpiryMonth: users.paymentMethodCardExpiryMonth,
+      paymentMethodCardExpiryYear: users.paymentMethodCardExpiryYear,
+      paymentMethodBindingId: users.paymentMethodBindingId,
+      paymentMethodBindingStatus: users.paymentMethodBindingStatus,
+      billingCollectionStatus: users.billingCollectionStatus,
+      graceEndsAt: users.graceEndsAt,
+    })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  return rows[0];
+}
+
+function buildScheduledChange(params: {
+  planId?: string | null;
+  billingPeriod?: string | null;
+  effectiveAt?: Date | null;
+}): ScheduledChangeResponse | null {
+  const planId = String(params.planId || '').trim();
+  const billingPeriodRaw = String(params.billingPeriod || '').trim();
+  if (!planId) return null;
+  if (billingPeriodRaw !== 'month' && billingPeriodRaw !== 'year') return null;
+  if (!params.effectiveAt) return null;
+
+  return {
+    planId,
+    billingPeriod: billingPeriodRaw,
+    effectiveAt: params.effectiveAt.toISOString(),
+  };
+}
 
 /**
  * GET /api/subscriptions/current
- * Получить текущую подписку пользователя
- * Поддерживает query параметр ?userId=123 для admin/support
+ * Текущее состояние подписки/триала/billing для UI.
+ * Поддерживает query-параметр ?userId=123 только для admin/support.
  */
 export default defineEventHandler(async (event) => {
   const sessionResult = await getSessionUser(event);
   if (!sessionResult?.user?.id) {
-    // HTTP-кэширование для неавторизованных пользователей (меньше времени)
-    setHeader(event, 'Cache-Control', 'private, max-age=60'); // 1 минута
+    setHeader(event, 'Cache-Control', 'private, no-store');
     return {
+      plan: 'basic',
+      trialActive: false,
+      trialEndsAt: null,
+      currentEntitlementsPlan: 'basic',
+      billingPlan: null,
+      billingPeriod: null,
+      nextChargeAt: null,
+      paymentMethodBound: false,
+      paymentMethod: null,
+      billingCollectionStatus: 'none',
+      graceEndsAt: null,
+      features: {
+        ai: false,
+        avatar: false,
+        aiChatMode: 'disabled' as const,
+        weeklyMinutesLimit: 0,
+        fairUseGuardMinutesPerWeek: null,
+      },
       subscription: null,
       noActiveSubscription: true,
+      scheduledChange: null,
     };
   }
 
   const query = getQuery(event);
   let targetUserId = sessionResult.user.id;
 
-  // Если запрашивается другой пользователь - проверяем права (только admin/support)
   if (query.userId) {
     const requestedUserId = Number(query.userId);
     if (
       Number.isFinite(requestedUserId) &&
       requestedUserId !== sessionResult.user.id
     ) {
-      // Проверяем, что смотрящий - admin или support (не moderator)
       const viewer = await getSessionUserWithRole(event);
       if (!viewer || !['admin', 'support'].includes(viewer.role)) {
         throw createError({
@@ -53,232 +140,386 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  // Получаем активную подписку (не истекшую)
   const now = new Date();
-  const activeSubscription = await db
-    .select({
-      subscription: userSubscriptions,
-      plan: subscriptionPlans,
-    })
-    .from(userSubscriptions)
-    .innerJoin(
-      subscriptionPlans,
-      eq(userSubscriptions.planId, subscriptionPlans.id)
-    )
-    .where(
-      and(
-        eq(userSubscriptions.userId, targetUserId),
-        eq(userSubscriptions.paymentStatus, 'active'),
-        gt(userSubscriptions.endDate, now) // подписка не истекла
-      )
-    )
-    .orderBy(desc(userSubscriptions.createdAt))
-    .limit(1);
+  await expireOutdatedActiveSubscriptions({
+    userId: targetUserId,
+    now,
+  });
 
-  if (!activeSubscription.length) {
-    // Проверяем, есть ли подписка со статусом pending, expired или canceled
-    const anySubscription = await db
-      .select({
-        subscription: userSubscriptions,
-        plan: subscriptionPlans,
-      })
-      .from(userSubscriptions)
-      .innerJoin(
-        subscriptionPlans,
-        eq(userSubscriptions.planId, subscriptionPlans.id)
-      )
-      .where(eq(userSubscriptions.userId, targetUserId))
-      .orderBy(desc(userSubscriptions.createdAt))
-      .limit(1);
-
-    if (anySubscription.length) {
-      const { subscription, plan } = anySubscription[0];
-
-      // Получаем данные пользователя для billingCredit и Trial
-      const userData = await db
-        .select({
-          billingCredit: users.billingCredit,
-          hasUsedTrial: users.hasUsedTrial,
-          timezone: users.timezone,
-          trialEndedAt: users.trialEndedAt,
-        })
-        .from(users)
-        .where(eq(users.id, targetUserId))
-        .limit(1);
-
-      const userRecord = userData[0];
-      const trialActive = userRecord ? isTrialActive(userRecord) : false;
-
-      const subscriptionForFeatures = {
-        planId: subscription.planId,
-      };
-
-      // Получаем роль целевого пользователя для premium доступа (не смотрящего!)
-      const targetUserData = await db
-        .select({ roleId: users.roleId })
-        .from(users)
-        .where(eq(users.id, targetUserId))
-        .limit(1);
-      const targetUserRole = targetUserData[0]?.roleId || 'user';
-
-      const features = userRecord
-        ? await getFeatures(
-            { id: targetUserId, trialEndedAt: userRecord.trialEndedAt },
-            subscriptionForFeatures,
-            plan,
-            targetUserRole
-          )
-        : {
-            ai: false,
-            avatar: false,
-            aiChatMode: 'disabled' as const,
-            weeklyMinutesLimit: 0,
-            fairUseGuardMinutesPerWeek: null,
-          };
-
-      // Не отдаём внутренние поля checkout/billing, только публичные данные подписки
-      const subscriptionDto = {
-        id: subscription.id,
-        planId: subscription.planId,
-        startDate: subscription.startDate,
-        endDate: subscription.endDate,
-        paymentStatus: subscription.paymentStatus,
-        autoRenew: subscription.autoRenew,
-        sourcePlatform: subscription.sourcePlatform,
-        billingPeriod: subscription.billingPeriod,
-        createdAt: subscription.createdAt,
-        updatedAt: subscription.updatedAt,
-        plan: {
-          id: plan.id,
-          name: plan.name,
-          basePrice: Number(plan.basePrice),
-          weeklyMinutesLimit: plan.weeklyMinutesLimit,
-          avatarEnabled: false,
-        },
-      };
-
-      const response = {
-        plan: subscription.planId,
-        trialActive,
-        trialExpiresAt: userRecord?.trialEndedAt?.toISOString() || null,
-        features,
-        subscription: subscriptionDto,
-        user: userRecord
-          ? {
-              billingCredit: Number(userRecord.billingCredit),
-              hasUsedTrial: userRecord.hasUsedTrial,
-              timezone: userRecord.timezone,
-            }
-          : null,
-        noActiveSubscription: false,
-        paymentStatus: subscription.paymentStatus,
-      };
-
-      // HTTP-кэширование для подписок со статусом pending/expired (меньше времени)
-      setHeader(event, 'Cache-Control', 'private, max-age=60'); // 1 минута для pending
-      if (subscription.updatedAt) {
-        const etag = `"${subscription.id}-${subscription.updatedAt.getTime()}"`;
-        setHeader(event, 'ETag', etag);
-      }
-
-      return response;
-    }
-
-    // HTTP-кэширование для пользователей без подписки
-    setHeader(event, 'Cache-Control', 'private, max-age=300'); // 5 минут
-    return {
-      subscription: null,
-      noActiveSubscription: true,
-    };
+  let userRecord = await readCurrentUserBillingRow(targetUserId);
+  if (!userRecord) {
+    throw createError({
+      statusCode: 404,
+      statusMessage: 'User not found',
+    });
   }
 
-  const { subscription, plan } = activeSubscription[0];
+  const shouldSyncPendingBinding =
+    !userRecord.paymentMethodBound &&
+    !userRecord.paymentMethodId &&
+    userRecord.paymentMethodBindingId &&
+    userRecord.paymentMethodBindingStatus === 'pending';
 
-  // Получаем данные пользователя для billingCredit и Trial
-  const userData = await db
+  if (shouldSyncPendingBinding) {
+    const config = useRuntimeConfig(event);
+    const shopId = String(config.yookassaShopId || '').trim();
+    const secretKey = String(config.yookassaSecretKey || '').trim();
+
+    if (shopId && secretKey) {
+      try {
+        const syncResult = await syncPendingPaymentMethodBinding({
+          userId: targetUserId,
+          shopId,
+          secretKey,
+          now,
+        });
+
+        if (syncResult.synced) {
+          const refreshed = await readCurrentUserBillingRow(targetUserId);
+          if (refreshed) {
+            userRecord = refreshed;
+          }
+        }
+      } catch (error) {
+        event.context.logger?.warn(
+          {
+            userId: targetUserId,
+            paymentMethodBindingId: userRecord.paymentMethodBindingId,
+            error,
+          },
+          'Failed to sync pending payment method binding in /current'
+        );
+      }
+    }
+  }
+
+  const billingStatusAfterBindingSync = normalizeBillingCollectionStatus(
+    userRecord.billingCollectionStatus
+  );
+  // Deferred finalize нужен только для незавершенного trial-case:
+  // nextChargeAt должен оставаться в окне исходного trial (не позже trialEndedAt).
+  const hasDeferredTrialChargeWindow = Boolean(
+    userRecord.nextChargeAt &&
+      userRecord.trialEndedAt &&
+      userRecord.nextChargeAt.getTime() <= userRecord.trialEndedAt.getTime()
+  );
+  const shouldFinalizeDeferredTrialScheduling =
+    Boolean(userRecord.paymentMethodBound && userRecord.paymentMethodId) &&
+    isTrialBillingPlanId(userRecord.billingPlanId) &&
+    isTrialBillingPeriod(userRecord.billingPeriod) &&
+    billingStatusAfterBindingSync === 'none' &&
+    hasDeferredTrialChargeWindow;
+
+  // Self-heal: если пользователь выбрал план в trial, прошел bind-flow,
+  // но не вернулся в ожидаемом фронтовом сценарии (повторный start-checkout),
+  // финализируем scheduled-состояние автоматически на чтении /current.
+  if (shouldFinalizeDeferredTrialScheduling) {
+    await db.transaction(async (tx) => {
+      await tx
+        .update(users)
+        .set({
+          billingCollectionStatus: 'scheduled',
+          graceEndsAt: null,
+          billingReminderSentAt: null,
+          billingLockedAt: null,
+          billingLockedBy: null,
+          updatedAt: now,
+        })
+        .where(eq(users.id, targetUserId));
+
+      await tx.insert(subscriptionEvents).values({
+        userId: targetUserId,
+        eventType: 'trial_billing_scheduled',
+        planId: userRecord.billingPlanId,
+        metadata: {
+          billingPlanId: userRecord.billingPlanId,
+          billingPeriod: userRecord.billingPeriod,
+          nextChargeAt: userRecord.nextChargeAt?.toISOString() || null,
+          paymentMethodId: userRecord.paymentMethodId,
+          source: 'current_self_heal_after_binding',
+        },
+      });
+    });
+
+    const refreshed = await readCurrentUserBillingRow(targetUserId);
+    if (refreshed) {
+      userRecord = refreshed;
+    }
+  }
+
+  const billingStatus = normalizeBillingCollectionStatus(
+    userRecord.billingCollectionStatus
+  );
+  const shouldTryOnDemandTrialCharge =
+    isTrialBillingPlanId(userRecord.billingPlanId) &&
+    isTrialBillingPeriod(userRecord.billingPeriod) &&
+    billingStatus !== 'none' &&
+    canRunTrialBillingAttemptNow({
+      nextChargeAt: userRecord.nextChargeAt,
+      billingCollectionStatus: billingStatus,
+      now,
+    }) &&
+    Boolean(userRecord.paymentMethodBound && userRecord.paymentMethodId);
+
+  // Self-heal: если фоновой worker задержался/не запущен, пробуем точечно
+  // выполнить списание при запросе /api/subscriptions/current.
+  if (shouldTryOnDemandTrialCharge) {
+    const config = useRuntimeConfig(event);
+    const shopId = String(config.yookassaShopId || '').trim();
+    const secretKey = String(config.yookassaSecretKey || '').trim();
+
+    if (shopId && secretKey) {
+      try {
+        await runTrialBillingForUser({
+          userId: targetUserId,
+          workerId: `api-current-self-heal:${process.pid}`,
+          shopId,
+          secretKey,
+          now,
+        });
+
+        const refreshed = await readCurrentUserBillingRow(targetUserId);
+        if (refreshed) {
+          userRecord = refreshed;
+        }
+      } catch (error) {
+        event.context.logger?.warn(
+          {
+            userId: targetUserId,
+            nextChargeAt: userRecord.nextChargeAt,
+            billingStatus,
+            error,
+          },
+          'Failed to run on-demand trial charge in /current'
+        );
+      }
+    }
+  }
+
+  let activeSubscription = await getCurrentActiveSubscriptionWithPlan({
+    userId: targetUserId,
+    now,
+  });
+
+  // Self-heal stale состояния:
+  // если уже есть активная paid-подписка и trial billing-поля указывают на post-trial
+  // период, значит это "хвост" старого trial-scheduled состояния — очищаем.
+  const shouldClearStaleTrialBillingState = Boolean(
+    activeSubscription &&
+      activeSubscription.subscription.planId !== 'basic' &&
+      isTrialBillingPlanId(userRecord.billingPlanId) &&
+      isTrialBillingPeriod(userRecord.billingPeriod) &&
+      userRecord.trialEndedAt &&
+      userRecord.nextChargeAt &&
+      userRecord.nextChargeAt.getTime() > userRecord.trialEndedAt.getTime()
+  );
+
+  if (shouldClearStaleTrialBillingState) {
+    await db
+      .update(users)
+      .set({
+        billingPlanId: null,
+        billingPeriod: null,
+        nextChargeAt: null,
+        billingCollectionStatus: 'none',
+        graceEndsAt: null,
+        billingReminderSentAt: null,
+        billingLockedAt: null,
+        billingLockedBy: null,
+        updatedAt: now,
+      })
+      .where(eq(users.id, targetUserId));
+
+    const refreshed = await readCurrentUserBillingRow(targetUserId);
+    if (refreshed) {
+      userRecord = refreshed;
+    }
+  }
+
+  const scheduledPeriodRaw = String(
+    userRecord.scheduledBillingPeriod || ''
+  ).trim();
+  const scheduledPeriod =
+    scheduledPeriodRaw === 'month' || scheduledPeriodRaw === 'year'
+      ? scheduledPeriodRaw
+      : null;
+  const shouldTryOnDemandScheduledPlanChange = Boolean(
+    !activeSubscription &&
+      userRecord.scheduledPlanId &&
+      scheduledPeriod &&
+      userRecord.scheduledChangeAt &&
+      userRecord.scheduledChangeAt.getTime() <= now.getTime()
+  );
+
+  // Self-heal: если фоновый worker задержался, применяем due scheduled_downgrade
+  // точечно при чтении /api/subscriptions/current.
+  if (shouldTryOnDemandScheduledPlanChange) {
+    const config = useRuntimeConfig(event);
+    const shopId = String(config.yookassaShopId || '').trim();
+    const secretKey = String(config.yookassaSecretKey || '').trim();
+
+    if (shopId && secretKey) {
+      try {
+        await runScheduledPlanChangeForUser({
+          userId: targetUserId,
+          workerId: `api-current-scheduled-change-self-heal:${process.pid}`,
+          shopId,
+          secretKey,
+          now,
+        });
+
+        const refreshed = await readCurrentUserBillingRow(targetUserId);
+        if (refreshed) {
+          userRecord = refreshed;
+        }
+
+        activeSubscription = await getCurrentActiveSubscriptionWithPlan({
+          userId: targetUserId,
+          now,
+        });
+      } catch (error) {
+        event.context.logger?.warn(
+          {
+            userId: targetUserId,
+            scheduledPlanId: userRecord.scheduledPlanId,
+            scheduledBillingPeriod: userRecord.scheduledBillingPeriod,
+            scheduledChangeAt: userRecord.scheduledChangeAt,
+            error,
+          },
+          'Failed to run on-demand scheduled plan change in /current'
+        );
+      }
+    }
+  }
+
+  let scheduledChange = buildScheduledChange({
+    planId: userRecord.scheduledPlanId,
+    billingPeriod: userRecord.scheduledBillingPeriod,
+    effectiveAt: userRecord.scheduledChangeAt,
+  });
+
+  const shouldClearStaleScheduledChange =
+    scheduledChange &&
+    Boolean(
+      activeSubscription &&
+        userRecord.scheduledChangeAt &&
+        userRecord.scheduledChangeAt.getTime() <= now.getTime()
+    );
+
+  if (shouldClearStaleScheduledChange) {
+    await db
+      .update(users)
+      .set({
+        scheduledPlanId: null,
+        scheduledBillingPeriod: null,
+        scheduledChangeAt: null,
+        scheduledFromSubscriptionId: null,
+        scheduledChangeUpdatedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(users.id, targetUserId));
+    scheduledChange = null;
+  }
+
+  const trialActive = isTrialActiveAt(userRecord.trialEndedAt, now);
+  const billingCollectionStatus = normalizeBillingCollectionStatus(
+    userRecord.billingCollectionStatus
+  );
+  const currentEntitlementsPlan = resolveCurrentEntitlementsPlan({
+    now,
+    trialActive,
+    billingPlanId: userRecord.billingPlanId,
+    billingCollectionStatus,
+    graceEndsAt: userRecord.graceEndsAt,
+    activePaidPlanId: activeSubscription?.subscription.planId ?? null,
+  });
+
+  // Для корректного расчета лимитов берем конфиг эффективного плана доступа.
+  const effectivePlanRows = await db
     .select({
-      billingCredit: users.billingCredit,
-      hasUsedTrial: users.hasUsedTrial,
-      timezone: users.timezone,
-      trialEndedAt: users.trialEndedAt,
+      id: subscriptionPlans.id,
+      weeklyMinutesLimit: subscriptionPlans.weeklyMinutesLimit,
     })
-    .from(users)
-    .where(eq(users.id, targetUserId))
+    .from(subscriptionPlans)
+    .where(eq(subscriptionPlans.id, currentEntitlementsPlan))
     .limit(1);
 
-  const userRecord = userData[0];
-  const trialActive = userRecord ? isTrialActive(userRecord) : false;
+  const features = await getFeatures(
+    { id: targetUserId, trialEndedAt: userRecord.trialEndedAt },
+    { planId: currentEntitlementsPlan },
+    effectivePlanRows[0] ?? null,
+    userRecord.roleId || 'user'
+  );
 
-  const subscriptionForFeatures = {
-    planId: subscription.planId,
-  };
-
-  // Получаем роль целевого пользователя для premium доступа (не смотрящего!)
-  const targetUserData = await db
-    .select({ roleId: users.roleId })
-    .from(users)
-    .where(eq(users.id, targetUserId))
-    .limit(1);
-  const targetUserRole = targetUserData[0]?.roleId || 'user';
-
-  const features = userRecord
-    ? await getFeatures(
-        { id: targetUserId, trialEndedAt: userRecord.trialEndedAt },
-        subscriptionForFeatures,
-        plan,
-        targetUserRole
-      )
-    : {
-        ai: false,
-        avatar: false,
-        aiChatMode: 'disabled' as const,
-        weeklyMinutesLimit: 0,
-        fairUseGuardMinutesPerWeek: null,
-      };
-
-  // Не отдаём внутренние поля checkout/billing, только публичные данные подписки
-  const subscriptionDto = {
-    id: subscription.id,
-    planId: subscription.planId,
-    startDate: subscription.startDate,
-    endDate: subscription.endDate,
-    paymentStatus: subscription.paymentStatus,
-    autoRenew: subscription.autoRenew,
-    sourcePlatform: subscription.sourcePlatform,
-    billingPeriod: subscription.billingPeriod,
-    createdAt: subscription.createdAt,
-    updatedAt: subscription.updatedAt,
-    plan: {
-      id: plan.id,
-      name: plan.name,
-      basePrice: Number(plan.basePrice),
-      weeklyMinutesLimit: plan.weeklyMinutesLimit,
-      avatarEnabled: false,
-    },
-  };
+  const subscriptionDto = activeSubscription
+    ? {
+        id: activeSubscription.subscription.id,
+        planId: activeSubscription.subscription.planId,
+        startDate: activeSubscription.subscription.startDate,
+        endDate: activeSubscription.subscription.endDate,
+        paymentStatus: activeSubscription.subscription.paymentStatus,
+        autoRenew: activeSubscription.subscription.autoRenew,
+        sourcePlatform: activeSubscription.subscription.sourcePlatform,
+        billingPeriod: activeSubscription.subscription.billingPeriod,
+        createdAt: activeSubscription.subscription.createdAt,
+        updatedAt: activeSubscription.subscription.updatedAt,
+        plan: {
+          id: activeSubscription.plan.id,
+          name: activeSubscription.plan.name,
+          basePrice: Number(activeSubscription.plan.basePrice),
+          weeklyMinutesLimit: activeSubscription.plan.weeklyMinutesLimit,
+          avatarEnabled: false,
+        },
+      }
+    : null;
 
   const response = {
-    plan: subscription.planId,
+    plan: currentEntitlementsPlan,
     trialActive,
-    trialExpiresAt: userRecord?.trialEndedAt?.toISOString() || null,
+    trialEndsAt: userRecord.trialEndedAt?.toISOString() || null,
+    currentEntitlementsPlan,
+    billingPlan: isTrialBillingPlanId(userRecord.billingPlanId)
+      ? userRecord.billingPlanId
+      : null,
+    billingPeriod: isTrialBillingPeriod(userRecord.billingPeriod)
+      ? userRecord.billingPeriod
+      : null,
+    nextChargeAt: userRecord.nextChargeAt?.toISOString() || null,
+    paymentMethodBound: Boolean(
+      userRecord.paymentMethodBound && userRecord.paymentMethodId
+    ),
+    paymentMethod:
+      userRecord.paymentMethodBound && userRecord.paymentMethodId
+        ? {
+            id: userRecord.paymentMethodId,
+            type: userRecord.paymentMethodType || null,
+            title: userRecord.paymentMethodTitle || null,
+            cardBrand: userRecord.paymentMethodCardBrand || null,
+            last4: userRecord.paymentMethodCardLast4 || null,
+            expiryMonth: userRecord.paymentMethodCardExpiryMonth || null,
+            expiryYear: userRecord.paymentMethodCardExpiryYear || null,
+          }
+        : null,
+    billingCollectionStatus,
+    graceEndsAt: userRecord.graceEndsAt?.toISOString() || null,
     features,
     subscription: subscriptionDto,
-    user: userRecord
-      ? {
-          billingCredit: Number(userRecord.billingCredit),
-          hasUsedTrial: userRecord.hasUsedTrial,
-          timezone: userRecord.timezone,
-        }
-      : null,
-    noActiveSubscription: false,
+    user: {
+      billingCredit: Number(userRecord.billingCredit),
+      hasUsedTrial: userRecord.hasUsedTrial,
+      timezone: userRecord.timezone,
+    },
+    noActiveSubscription: !activeSubscription,
+    scheduledChange,
   };
 
-  // HTTP-кэширование: 5 минут (соответствует кэшу на клиенте)
-  setHeader(event, 'Cache-Control', 'private, max-age=300');
-  // ETag для оптимизации (на основе ID подписки и времени обновления)
-  if (subscription.updatedAt) {
-    const etag = `"${subscription.id}-${subscription.updatedAt.getTime()}"`;
-    setHeader(event, 'ETag', etag);
+  setHeader(event, 'Cache-Control', 'private, no-store');
+  if (userRecord.updatedAt) {
+    setHeader(
+      event,
+      'ETag',
+      `"${targetUserId}-${currentEntitlementsPlan}-${userRecord.updatedAt.getTime()}"`
+    );
   }
 
   return response;

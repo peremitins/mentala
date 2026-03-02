@@ -93,6 +93,7 @@ import {
   MAX_NOTIFICATION_TIMES_PER_DAY,
   normalizeCustomSlotTimesByLimit,
 } from './preferences-limits.utils';
+import { getCurrentActiveSubscriptionWithPlan } from '@/server/application/subscriptions/current-subscription.service';
 
 /**
  * Детерминированный джиттер для равномерного распределения слотов
@@ -165,6 +166,11 @@ function buildActionFromNavigation(navigation: NotificationNavigation): {
     default:
       return { action: 'open_home' };
   }
+}
+
+function hasPaidPlanForImages(planId: string | null | undefined): boolean {
+  const normalized = planId?.trim().toLowerCase() ?? '';
+  return normalized === 'pro' || normalized === 'premium';
 }
 
 /**
@@ -1288,6 +1294,17 @@ export async function orchestrateAllSlotsForUser(
       userRecord?.gender === 'male' || userRecord?.gender === 'female'
         ? userRecord.gender
         : null;
+    const activeSubscriptionWithPlan =
+      await getCurrentActiveSubscriptionWithPlan({
+        userId,
+        now: nowUTC,
+      });
+    const activePlanId =
+      activeSubscriptionWithPlan?.plan?.id ??
+      activeSubscriptionWithPlan?.subscription?.planId ??
+      null;
+    const hasPaidSubscriptionForTemplateImages =
+      hasPaidPlanForImages(activePlanId);
 
     // Создаём слоты
     // Группируем слоты по источникам для эффективной загрузки данных
@@ -1640,19 +1657,27 @@ export async function orchestrateAllSlotsForUser(
           source.preference.subtype === 'mixed'
             ? (subtype ?? actualSubtype)
             : actualSubtype;
-        const imageUrl = await pickNotificationImage({
-          userId,
-          kind: source.kind,
-          entityKey: source.normalizedEntityKey,
-          imageTag,
-          directness: source.preference.directness as
-            | 'soft'
-            | 'moderate'
-            | 'hard',
-          subtype: effectiveSubtypeForImage,
-          isMixedMode: source.preference.subtype === 'mixed',
-          habitIntent: source.kind === 'habits' ? intent : null,
-        });
+        const shouldAttachImage =
+          effectiveTextSource !== 'templates' ||
+          hasPaidSubscriptionForTemplateImages;
+        const imageUrl = shouldAttachImage
+          ? await pickNotificationImage({
+              userId,
+              kind: source.kind,
+              entityKey: source.normalizedEntityKey,
+              imageTag,
+              directness: source.preference.directness as
+                | 'soft'
+                | 'moderate'
+                | 'hard',
+              subtype: effectiveSubtypeForImage,
+              isMixedMode: source.preference.subtype === 'mixed',
+              habitIntent: source.kind === 'habits' ? intent : null,
+              text,
+              actionHint,
+              textSource: effectiveTextSource,
+            })
+          : null;
 
         const navigation = resolveNavigationFromActionHint(actionHint, text);
         const deepLink = buildDeepLinkFromNavigation(navigation);

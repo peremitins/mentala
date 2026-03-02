@@ -6,6 +6,20 @@
 #   ./scripts/setup-capacitor-dev.sh            - без dev-сервера (production build)
 
 DEVICE_TYPE=${1:-none}
+IOS_PROJECT_FILE="ios/App/App.xcodeproj/project.pbxproj"
+
+ensure_ios_project_object_version_compatible() {
+  if [ ! -f "$IOS_PROJECT_FILE" ]; then
+    return
+  fi
+
+  # CocoaPods 1.16.2 (xcodeproj 1.27.0) не умеет objectVersion = 70.
+  # Для стабильного pod install держим совместимую версию проекта.
+  if grep -q "objectVersion = 70;" "$IOS_PROJECT_FILE"; then
+    echo "🔧 Исправление iOS project format для CocoaPods: 70 -> 77"
+    perl -0pi -e 's/objectVersion = 70;/objectVersion = 77;/' "$IOS_PROJECT_FILE"
+  fi
+}
 
 if [ "$DEVICE_TYPE" = "emulator" ]; then
   # Для эмулятора используем специальный IP
@@ -35,6 +49,9 @@ fi
 # Экспортируем переменную для cap sync
 export CAPACITOR_SERVER_URL="$SERVER_URL"
 
+# Поддерживаем совместимый формат iOS-проекта перед запуском cap sync.
+ensure_ios_project_object_version_compatible
+
 # Выполняем синхронизацию
 if [ -n "$SERVER_URL" ]; then
   echo "📦 Синхронизация с dev-сервером..."
@@ -43,6 +60,7 @@ else
   echo "📦 Синхронизация со статическими файлами..."
   pnpm run generate
   npx cap sync && CAPACITOR_SERVER_URL="" node scripts/fix-capacitor-config.js
+  node scripts/verify-capacitor-config.js
 fi
 
 echo "✅ Готово! Теперь можно запускать приложение."

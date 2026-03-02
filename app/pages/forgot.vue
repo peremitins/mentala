@@ -7,7 +7,7 @@
       <div class="w-full max-w-md">
         <div class="glass-deep p-6">
           <div class="text-center mb-6">
-            <div class="text-2xl font-semibold text-foreground">Mentala</div>
+            <div class="text-2xl font-semibold text-foreground">Ментала</div>
             <div class="text-sm text-foreground">Восстановление пароля</div>
           </div>
 

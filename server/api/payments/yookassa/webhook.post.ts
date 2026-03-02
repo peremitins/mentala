@@ -1,4 +1,5 @@
 import { createError, getHeader } from 'h3';
+import { and, eq, gt, ne, or, sql } from 'drizzle-orm';
 import { db } from '@/server/infrastructure/db/client';
 import {
   payments,
@@ -6,17 +7,25 @@ import {
   userSubscriptions,
   users,
 } from '@/server/infrastructure/db/schema';
-import { and, eq, gt, ne, sql } from 'drizzle-orm';
+import {
+  extractPaymentMethodPresentation,
+  getYooKassaPayment,
+  getYooKassaPaymentMethod,
+} from '@/server/application/payments/yookassa.client';
+import {
+  isTrialBillingPeriod,
+  isTrialBillingPlanId,
+} from '@/server/application/subscriptions/trial-billing.service';
+import {
+  markTrialChargeFailure,
+  markTrialChargeSuccess,
+} from '@/server/application/subscriptions/trial-charge-reconcile.service';
+import { activateUserPaymentMethod } from '@/server/application/subscriptions/payment-methods.service';
 
 /**
  * ВАЖНО: По официальной документации YooKassa входящие уведомления НЕ подписываются HMAC.
  * Рекомендация YooKassa — проверять подлинность уведомления по статусу объекта (API) и/или по IP.
- *
- * Документация:
- * - Webhooks: https://yookassa.ru/developers/using-api/webhooks?lang=ru
- * - Payments API (GET payment): https://yookassa.ru/developers/api
  */
-
 const YOOKASSA_WEBHOOK_IP_ALLOWLIST = [
   '185.71.76.0/27',
   '185.71.77.0/27',
@@ -53,8 +62,17 @@ function ipv4ToInt(ip: string): number | null {
   if (parts.length !== 4) return null;
   const nums = parts.map((p) => Number(p));
   if (nums.some((n) => Number.isNaN(n) || n < 0 || n > 255)) return null;
+  const [a, b, c, d] = nums;
+  if (
+    typeof a !== 'number' ||
+    typeof b !== 'number' ||
+    typeof c !== 'number' ||
+    typeof d !== 'number'
+  ) {
+    return null;
+  }
   // eslint-disable-next-line no-bitwise
-  return ((nums[0] << 24) | (nums[1] << 16) | (nums[2] << 8) | nums[3]) >>> 0;
+  return ((a << 24) | (b << 16) | (c << 8) | d) >>> 0;
 }
 
 function parseCidr(cidr: string): { base: string; prefix: number } | null {
@@ -63,7 +81,12 @@ function parseCidr(cidr: string): { base: string; prefix: number } | null {
   if (!trimmed.includes('/')) {
     return { base: trimmed, prefix: trimmed.includes(':') ? 128 : 32 };
   }
-  const [base, prefixStr] = trimmed.split('/');
+  const cidrParts = trimmed.split('/');
+  if (cidrParts.length !== 2) return null;
+
+  const [base, prefixStr] = cidrParts;
+  if (!base || !prefixStr) return null;
+
   const prefix = Number(prefixStr);
   if (Number.isNaN(prefix)) return null;
   return { base, prefix };
@@ -120,7 +143,7 @@ function ipv6InCidr(ip: string, cidr: string): boolean {
   const prefix = parsed.prefix;
   if (prefix < 0 || prefix > 128) return false;
   const shift = 128 - prefix;
-  return (ipBig >> BigInt(shift)) === (baseBig >> BigInt(shift));
+  return ipBig >> BigInt(shift) === baseBig >> BigInt(shift);
 }
 
 function isAllowedYooKassaIp(ip: string): boolean {
@@ -129,34 +152,53 @@ function isAllowedYooKassaIp(ip: string): boolean {
       cidr.includes(':') ? ipv6InCidr(ip, cidr) : false
     );
   }
+
   return YOOKASSA_WEBHOOK_IP_ALLOWLIST.some((cidr) =>
     cidr.includes(':') ? false : ipv4InCidr(ip, cidr)
   );
-}
-
-async function fetchYooKassaPayment(
-  paymentId: string,
-  shopId: string,
-  secretKey: string
-): Promise<any> {
-  const auth = Buffer.from(`${shopId}:${secretKey}`).toString('base64');
-  return await $fetch(`https://api.yookassa.ru/v3/payments/${paymentId}`, {
-    method: 'GET',
-    timeout: 10_000,
-    headers: {
-      Authorization: `Basic ${auth}`,
-    },
-  });
 }
 
 function toCents(value: number): number {
   return Math.round(value * 100);
 }
 
+async function upsertPaymentRecord(params: {
+  paymentId: string;
+  subscriptionId: number | null;
+  userId: number;
+  amount: number;
+  currency: string;
+  status: 'succeeded' | 'canceled' | 'pending';
+  metadata: Record<string, any>;
+}) {
+  await db
+    .insert(payments)
+    .values({
+      id: params.paymentId,
+      subscriptionId: params.subscriptionId,
+      userId: params.userId,
+      amount: String(params.amount),
+      currency: params.currency,
+      status: params.status,
+      metadata: params.metadata as any,
+    })
+    .onConflictDoUpdate({
+      target: payments.id,
+      set: {
+        subscriptionId: params.subscriptionId,
+        amount: String(params.amount),
+        currency: params.currency,
+        status: params.status,
+        metadata: params.metadata as any,
+        updatedAt: new Date(),
+      },
+    });
+}
+
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig(event);
-  const shopId = config.yookassaShopId;
-  const secretKey = config.yookassaSecretKey;
+  const shopId = String(config.yookassaShopId || '').trim();
+  const secretKey = String(config.yookassaSecretKey || '').trim();
 
   if (!shopId || !secretKey) {
     event.context.logger?.error(
@@ -183,80 +225,166 @@ export default defineEventHandler(async (event) => {
     return { received: true };
   }
 
-  const webhookPayment = body.object || body;
-  const paymentId = webhookPayment?.id ? String(webhookPayment.id) : null;
-  if (!paymentId) {
-    event.context.logger?.warn({ body }, 'YooKassa webhook missing payment.id');
+  const webhookObject = body.object || body;
+  const objectId = webhookObject?.id ? String(webhookObject.id) : '';
+  if (!objectId) {
+    event.context.logger?.warn({ body }, 'YooKassa webhook missing object.id');
     return { received: true };
   }
 
-  // Мягкая проверка IP: это НЕ блокирующая проверка.
-  // Даже если IP не из allowlist (прокси/балансер), подлинность webhook подтверждаем через API YooKassa.
   const clientIp = getClientIp(event);
   if (clientIp && !isAllowedYooKassaIp(clientIp)) {
     event.context.logger?.warn(
-      { clientIp, paymentId },
+      { clientIp, objectId },
       'YooKassa webhook IP outside allowlist (will verify via API)'
     );
   }
 
-  // Истина — в API YooKassa (проверка статуса объекта)
-  let payment: any;
-  try {
-    payment = await fetchYooKassaPayment(
-      paymentId,
-      String(shopId),
-      String(secretKey)
-    );
-  } catch (err: any) {
-    const status = err?.response?.status || err?.status;
+  const eventType = String(body?.event || '').trim();
+  const now = new Date();
 
-    // 401/403/404: либо платеж не наш, либо не существует — игнорируем
-    if (status === 401 || status === 403 || status === 404) {
+  if (eventType.startsWith('payment_method.')) {
+    let paymentMethod: any;
+    try {
+      paymentMethod = await getYooKassaPaymentMethod({
+        shopId,
+        secretKey,
+        paymentMethodId: objectId,
+      });
+    } catch (error: any) {
+      const status = error?.response?.status || error?.status;
+      if (status === 401 || status === 403 || status === 404) {
+        return { received: true };
+      }
+      throw createError({
+        statusCode: 502,
+        statusMessage: 'Failed to verify payment method status',
+      });
+    }
+
+    const usersByMethod = await db
+      .select({
+        id: users.id,
+        paymentMethodBindingSessionId: users.paymentMethodBindingSessionId,
+      })
+      .from(users)
+      .where(
+        or(
+          eq(users.paymentMethodBindingId, paymentMethod.id),
+          eq(users.paymentMethodId, paymentMethod.id)
+        )
+      )
+      .limit(1);
+
+    const targetUser = usersByMethod[0];
+    if (!targetUser) {
       event.context.logger?.warn(
-        { paymentId, status },
-        'YooKassa webhook payment not accessible via API (ignoring)'
+        { paymentMethodId: paymentMethod.id },
+        'Payment method webhook cannot map method to user'
       );
       return { received: true };
     }
 
-    event.context.logger?.error(
-      { paymentId, status, err },
-      'Failed to verify YooKassa payment via API'
-    );
-    // Для временных/сетевых ошибок лучше дать YooKassa ретраить
+    const presentation = extractPaymentMethodPresentation(paymentMethod);
+
+    if (paymentMethod.status === 'active') {
+      await db.transaction(async (tx) => {
+        await activateUserPaymentMethod({
+          userId: targetUser.id,
+          paymentMethodId: paymentMethod.id,
+          paymentMethodType: presentation.paymentMethodType,
+          paymentMethodTitle: presentation.paymentMethodTitle,
+          cardBrand: presentation.cardBrand,
+          cardLast4: presentation.cardLast4,
+          cardExpiryMonth: presentation.cardExpiryMonth,
+          cardExpiryYear: presentation.cardExpiryYear,
+          now,
+          tx,
+        });
+
+        await tx.insert(subscriptionEvents).values({
+          userId: targetUser.id,
+          eventType: 'payment_method_bound',
+          metadata: {
+            paymentMethodId: paymentMethod.id,
+            paymentMethodBindingSessionId:
+              targetUser.paymentMethodBindingSessionId,
+            source: 'yookassa_webhook',
+          },
+        });
+      });
+    } else {
+      await db
+        .update(users)
+        .set({
+          paymentMethodBindingStatus: 'failed',
+          paymentMethodBindingUpdatedAt: now,
+          updatedAt: now,
+        })
+        .where(eq(users.id, targetUser.id));
+    }
+
+    return { received: true };
+  }
+
+  let payment: any;
+  try {
+    payment = await getYooKassaPayment({
+      shopId,
+      secretKey,
+      paymentId: objectId,
+    });
+  } catch (error: any) {
+    const status = error?.response?.status || error?.status;
+    if (status === 401 || status === 403 || status === 404) {
+      return { received: true };
+    }
+
     throw createError({
       statusCode: 502,
       statusMessage: 'Failed to verify payment status',
     });
   }
 
-  // Идемпотентность: если уже сохранили paymentId — значит обработали
-  const existing = await db
-    .select({ id: payments.id })
-    .from(payments)
-    .where(eq(payments.id, String(paymentId)))
-    .limit(1);
+  const paymentId = String(payment.id || '').trim();
+  const paidAmount = Number(payment?.amount?.value || 0);
+  const paidCurrency = String(payment?.amount?.currency || 'RUB');
 
-  if (existing.length) {
+  const paymentRecordRows = await db
+    .select({
+      id: payments.id,
+      status: payments.status,
+    })
+    .from(payments)
+    .where(eq(payments.id, paymentId))
+    .limit(1);
+  const existingPayment = paymentRecordRows[0];
+
+  if (
+    existingPayment?.status === 'succeeded' ||
+    existingPayment?.status === 'canceled'
+  ) {
     return { received: true, status: 'already_processed' };
   }
 
-  // Ищем подписку: сначала по yookassaPaymentId (на будущее), затем по metadata.subscriptionId
+  const metadata = payment?.metadata || {};
+  const metadataUserId = Number(metadata.userId || metadata.user_id);
+  const chargeAttemptKey = String(metadata.chargeAttemptKey || '').trim();
+  const chargeType = String(metadata.chargeType || '').trim();
+
+  // Пытаемся сматчить стандартный checkout-платеж к pending подписке.
   let sub:
     | (typeof userSubscriptions.$inferSelect & Record<string, any>)
     | null = null;
-
   const byPaymentId = await db
     .select()
     .from(userSubscriptions)
-    .where(eq(userSubscriptions.yookassaPaymentId, String(paymentId)))
+    .where(eq(userSubscriptions.yookassaPaymentId, paymentId))
     .limit(1);
 
   if (byPaymentId.length) {
     sub = byPaymentId[0] as any;
   } else {
-    const metadata = payment?.metadata || {};
     const subscriptionId = metadata.subscriptionId || metadata.subscription_id;
     if (subscriptionId) {
       const rows = await db
@@ -264,29 +392,98 @@ export default defineEventHandler(async (event) => {
         .from(userSubscriptions)
         .where(eq(userSubscriptions.id, Number(subscriptionId)))
         .limit(1);
-      if (rows.length) sub = rows[0] as any;
+      if (rows.length) {
+        sub = rows[0] as any;
+      }
+    }
+  }
+
+  if (
+    !sub &&
+    chargeType === 'trial_scheduled' &&
+    Number.isFinite(metadataUserId)
+  ) {
+    const billingPlanId = String(metadata.billingPlanId || '').trim();
+    const billingPeriod = String(metadata.billingPeriod || '').trim();
+    const nextChargeAtRaw = String(metadata.nextChargeAt || '').trim();
+    const nextChargeAt = nextChargeAtRaw ? new Date(nextChargeAtRaw) : null;
+    const trigger = String(metadata.trigger || '').trim();
+    const attemptMode = trigger === 'manual_retry' ? 'manual' : 'automatic';
+
+    if (
+      isTrialBillingPlanId(billingPlanId) &&
+      isTrialBillingPeriod(billingPeriod) &&
+      chargeAttemptKey &&
+      nextChargeAt &&
+      !Number.isNaN(nextChargeAt.getTime())
+    ) {
+      await upsertPaymentRecord({
+        paymentId,
+        subscriptionId: null,
+        userId: metadataUserId,
+        amount: paidAmount,
+        currency: paidCurrency,
+        status:
+          payment.status === 'succeeded'
+            ? 'succeeded'
+            : payment.status === 'canceled'
+              ? 'canceled'
+              : 'pending',
+        metadata: payment as any,
+      });
+
+      if (payment.status === 'succeeded' && payment.paid === true) {
+        const presentation = extractPaymentMethodPresentation(
+          payment.payment_method
+        );
+        await markTrialChargeSuccess({
+          userId: metadataUserId,
+          paymentId,
+          amount: paidAmount,
+          currency: paidCurrency,
+          billingPlanId,
+          billingPeriod,
+          chargeAttemptKey,
+          attemptMode,
+          now,
+          paymentMethodId: payment.payment_method?.id || null,
+          paymentMethodType: presentation.paymentMethodType,
+          paymentMethodTitle: presentation.paymentMethodTitle,
+          paymentMethodCardBrand: presentation.cardBrand,
+          paymentMethodCardLast4: presentation.cardLast4,
+          paymentMethodCardExpiryMonth: presentation.cardExpiryMonth,
+          paymentMethodCardExpiryYear: presentation.cardExpiryYear,
+        });
+      } else if (payment.status === 'canceled') {
+        await markTrialChargeFailure({
+          userId: metadataUserId,
+          paymentId,
+          billingPlanId,
+          billingPeriod,
+          chargeAttemptKey,
+          attemptMode,
+          failureReason: 'provider_canceled_webhook',
+          scheduledChargeAt: nextChargeAt,
+          now,
+        });
+      }
+
+      return { received: true };
     }
   }
 
   if (!sub) {
     event.context.logger?.warn(
-      { paymentId, metadata: payment?.metadata },
+      { paymentId, metadata },
       'YooKassa webhook cannot map payment to subscription (ignoring)'
     );
     return { received: true };
   }
 
-  const now = new Date();
-
-  const paidCurrency = payment?.amount?.currency || 'RUB';
-  const paidAmount = Number(payment?.amount?.value || 0);
-
-  // Обрабатываем только конечные статусы
   if (payment.status === 'succeeded' && payment.paid === true) {
     const expectedCurrency = sub.checkoutCurrency || 'RUB';
     const expectedAmount = Number(sub.checkoutAmount || 0);
 
-    // Валидация валюты/суммы: если mismatch — не активируем подписку (и не ретраим)
     if (paidCurrency !== expectedCurrency) {
       event.context.logger?.error(
         {
@@ -300,7 +497,10 @@ export default defineEventHandler(async (event) => {
       return { received: true };
     }
 
-    if (toCents(paidAmount) !== toCents(expectedAmount) || expectedAmount <= 0) {
+    if (
+      toCents(paidAmount) !== toCents(expectedAmount) ||
+      expectedAmount <= 0
+    ) {
       event.context.logger?.error(
         {
           paymentId,
@@ -322,11 +522,10 @@ export default defineEventHandler(async (event) => {
     }
 
     await db.transaction(async (tx) => {
-      // Сохраняем платеж (фиксируем идемпотентность)
-      const inserted = await tx
+      await tx
         .insert(payments)
         .values({
-          id: String(paymentId),
+          id: paymentId,
           subscriptionId: sub.id,
           userId: sub.userId,
           amount: String(paidAmount),
@@ -334,22 +533,25 @@ export default defineEventHandler(async (event) => {
           status: 'succeeded',
           metadata: payment as any,
         })
-        .onConflictDoNothing({ target: payments.id })
-        .returning({ id: payments.id });
+        .onConflictDoUpdate({
+          target: payments.id,
+          set: {
+            subscriptionId: sub.id,
+            amount: String(paidAmount),
+            currency: paidCurrency,
+            status: 'succeeded',
+            metadata: payment as any,
+            updatedAt: now,
+          },
+        });
 
-      // Если конкурентный webhook уже успел обработать paymentId — ничего не делаем
-      if (!inserted.length) {
-        return;
-      }
-
-      // Активируем pending подписку и привязываем paymentId (на будущее).
-      // Доп. защита от гонок: делаем переход только если статус всё ещё pending.
       const activated = await tx
         .update(userSubscriptions)
         .set({
           paymentStatus: 'active',
           autoRenew: true,
-          yookassaPaymentId: String(paymentId),
+          yookassaPaymentId: paymentId,
+          updatedAt: now,
         })
         .where(
           and(
@@ -360,17 +562,12 @@ export default defineEventHandler(async (event) => {
         .returning({ id: userSubscriptions.id });
 
       if (!activated.length) {
-        event.context.logger?.warn(
-          { paymentId, subscriptionId: sub.id },
-          'YooKassa payment succeeded, but subscription was not pending at activation time'
-        );
         return;
       }
 
-      // Истекаем другие активные подписки пользователя
-      const otherActive = await tx
-        .select()
-        .from(userSubscriptions)
+      await tx
+        .update(userSubscriptions)
+        .set({ paymentStatus: 'expired', updatedAt: now })
         .where(
           and(
             eq(userSubscriptions.userId, sub.userId),
@@ -380,18 +577,7 @@ export default defineEventHandler(async (event) => {
           )
         );
 
-      for (const oldSub of otherActive) {
-        await tx
-          .update(userSubscriptions)
-          .set({ paymentStatus: 'expired' })
-          .where(eq(userSubscriptions.id, oldSub.id));
-      }
-
-      // Кредит:
-      // - billingCreditApplied уже "зарезервирован" в start-checkout (мы НЕ списываем его тут)
-      // - billingCreditGranted начисляем здесь при успешной финализации через webhook (когда toPay > 0)
       const creditGranted = Math.max(0, Number(sub.billingCreditGranted || 0));
-      // Начисляем только если подписка была pending (защита от повторной финализации/дублей)
       if (creditGranted > 0 && sub.paymentStatus === 'pending') {
         await tx
           .update(users)
@@ -402,15 +588,50 @@ export default defineEventHandler(async (event) => {
           .where(eq(users.id, sub.userId));
       }
 
-      // Завершаем Trial при покупке платного плана (не Basic)
+      const paymentMethodPresentation = extractPaymentMethodPresentation(
+        payment.payment_method
+      );
+      if (
+        payment.payment_method?.saved === true &&
+        payment.payment_method?.id
+      ) {
+        await activateUserPaymentMethod({
+          userId: sub.userId,
+          paymentMethodId: payment.payment_method.id,
+          paymentMethodType: paymentMethodPresentation.paymentMethodType,
+          paymentMethodTitle: paymentMethodPresentation.paymentMethodTitle,
+          cardBrand: paymentMethodPresentation.cardBrand,
+          cardLast4: paymentMethodPresentation.cardLast4,
+          cardExpiryMonth: paymentMethodPresentation.cardExpiryMonth,
+          cardExpiryYear: paymentMethodPresentation.cardExpiryYear,
+          now,
+          tx,
+        });
+      }
+
       if (sub.planId !== 'basic') {
         await tx
           .update(users)
           .set({ trialEndedAt: now, updatedAt: now })
-          .where(
-            and(eq(users.id, sub.userId), gt(users.trialEndedAt, now))
-          );
+          .where(and(eq(users.id, sub.userId), gt(users.trialEndedAt, now)));
       }
+
+      // Успешная non-trial активация подписки должна сбрасывать trial-scheduled
+      // состояние, чтобы в UI не оставалось устаревшее "Списание запланировано".
+      await tx
+        .update(users)
+        .set({
+          billingPlanId: null,
+          billingPeriod: null,
+          nextChargeAt: null,
+          billingCollectionStatus: 'none',
+          graceEndsAt: null,
+          billingReminderSentAt: null,
+          billingLockedAt: null,
+          billingLockedBy: null,
+          updatedAt: now,
+        })
+        .where(eq(users.id, sub.userId));
 
       await tx.insert(subscriptionEvents).values({
         userId: sub.userId,
@@ -418,27 +639,22 @@ export default defineEventHandler(async (event) => {
         planId: sub.planId,
         metadata: {
           subscriptionId: sub.id,
-          paymentId: String(paymentId),
+          paymentId,
           amount: paidAmount,
           currency: paidCurrency,
         },
       });
     });
 
-    event.context.logger?.info(
-      { paymentId, subscriptionId: sub.id, userId: sub.userId },
-      'YooKassa webhook payment succeeded, subscription activated'
-    );
-
     return { received: true };
   }
 
   if (payment.status === 'canceled') {
     await db.transaction(async (tx) => {
-      const inserted = await tx
+      await tx
         .insert(payments)
         .values({
-          id: String(paymentId),
+          id: paymentId,
           subscriptionId: sub.id,
           userId: sub.userId,
           amount: String(paidAmount),
@@ -446,17 +662,21 @@ export default defineEventHandler(async (event) => {
           status: 'canceled',
           metadata: payment as any,
         })
-        .onConflictDoNothing({ target: payments.id })
-        .returning({ id: payments.id });
-
-      // Если конкурентный webhook уже успел обработать paymentId — ничего не делаем
-      if (!inserted.length) {
-        return;
-      }
+        .onConflictDoUpdate({
+          target: payments.id,
+          set: {
+            subscriptionId: sub.id,
+            amount: String(paidAmount),
+            currency: paidCurrency,
+            status: 'canceled',
+            metadata: payment as any,
+            updatedAt: now,
+          },
+        });
 
       const canceled = await tx
         .update(userSubscriptions)
-        .set({ paymentStatus: 'canceled' })
+        .set({ paymentStatus: 'canceled', updatedAt: now })
         .where(
           and(
             eq(userSubscriptions.id, sub.id),
@@ -466,18 +686,9 @@ export default defineEventHandler(async (event) => {
         .returning({ id: userSubscriptions.id });
 
       if (!canceled.length) {
-        event.context.logger?.warn(
-          {
-            paymentId,
-            subscriptionId: sub.id,
-            subscriptionStatusAtRead: sub.paymentStatus,
-          },
-          'YooKassa payment canceled, but subscription was not pending at cancel time'
-        );
         return;
       }
 
-      // Возвращаем зарезервированный кредит, если оплата отменена
       const creditApplied = Math.max(0, Number(sub.billingCreditApplied || 0));
       if (creditApplied > 0) {
         await tx
@@ -495,20 +706,14 @@ export default defineEventHandler(async (event) => {
         planId: sub.planId,
         metadata: {
           subscriptionId: sub.id,
-          paymentId: String(paymentId),
+          paymentId,
           reason: 'canceled',
         },
       });
     });
 
-    event.context.logger?.info(
-      { paymentId, subscriptionId: sub.id, userId: sub.userId },
-      'YooKassa webhook payment canceled'
-    );
-
     return { received: true };
   }
 
-  // Другие статусы/события нам пока не важны (waiting_for_capture, pending и т.п.)
   return { received: true };
 });

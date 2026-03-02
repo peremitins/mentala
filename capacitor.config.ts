@@ -6,7 +6,7 @@ const isDevServer = process.env.CAPACITOR_SERVER_URL;
 
 const config: CapacitorConfig = {
   appId: 'com.mentala.app',
-  appName: 'Mentala',
+  appName: 'Ментала',
   webDir: '.output/public',
   server: isDevServer
     ? {
@@ -48,6 +48,10 @@ const config: CapacitorConfig = {
     LocalNotifications: {
       smallIcon: 'ic_stat_mentala',
       iconColor: '#488AFF',
+    },
+    NativeAudio: {
+      // HLS не используем для текущих медитаций, чтобы не увеличивать APK лишними зависимостями.
+      hls: false,
     },
   },
 };
