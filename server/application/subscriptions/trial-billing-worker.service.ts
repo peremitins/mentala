@@ -45,8 +45,6 @@ async function processReminderBatch(now: Date) {
     .select({
       id: users.id,
       email: users.email,
-      emailVerifiedAt: users.emailVerifiedAt,
-      marketingConsentAt: users.marketingConsentAt,
       billingPlanId: users.billingPlanId,
       nextChargeAt: users.nextChargeAt,
       billingReminderSentAt: users.billingReminderSentAt,
@@ -79,6 +77,8 @@ async function processReminderBatch(now: Date) {
       minute: '2-digit',
     });
 
+    let hasProcessedAtLeastOneChannel = false;
+
     try {
       await sendToUser(user.id, {
         title: 'Напоминание о списании',
@@ -90,22 +90,43 @@ async function processReminderBatch(now: Date) {
           chargeAt: chargeAt.toISOString(),
         },
       });
+      hasProcessedAtLeastOneChannel = true;
+    } catch (error) {
+      console.warn('[TrialBillingWorker] reminder push failed', {
+        userId: user.id,
+        error,
+      });
+    }
 
-      if (user.email && user.emailVerifiedAt && user.marketingConsentAt) {
-        try {
-          await sendBillingReminderEmail({
-            to: user.email,
-            planName: planLabel,
-            chargeAt,
-          });
-        } catch (error) {
-          console.warn('[TrialBillingWorker] reminder email failed', {
-            userId: user.id,
-            error,
-          });
-        }
+    // Биллинговое письмо — транзакционное уведомление: отправляем по email
+    // независимо от статуса авторизации пользователя и marketing consent.
+    if (user.email) {
+      try {
+        await sendBillingReminderEmail({
+          to: user.email,
+          planName: planLabel,
+          chargeAt,
+        });
+        hasProcessedAtLeastOneChannel = true;
+      } catch (error) {
+        console.warn('[TrialBillingWorker] reminder email failed', {
+          userId: user.id,
+          error,
+        });
       }
+    }
 
+    if (!hasProcessedAtLeastOneChannel) {
+      console.error(
+        '[TrialBillingWorker] reminder delivery failed for all channels',
+        {
+          userId: user.id,
+        }
+      );
+      continue;
+    }
+
+    try {
       await db
         .update(users)
         .set({
@@ -114,7 +135,7 @@ async function processReminderBatch(now: Date) {
         })
         .where(eq(users.id, user.id));
     } catch (error) {
-      console.error('[TrialBillingWorker] reminder failed', {
+      console.error('[TrialBillingWorker] reminder mark-sent failed', {
         userId: user.id,
         error,
       });

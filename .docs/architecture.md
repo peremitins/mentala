@@ -445,7 +445,7 @@ server/
 • При раннем успешном списании trial не форсируется к `now`: фактическое окончание trial продолжает определяться `users.trial_ended_at`, что исключает преждевременный срез trial-доступов.
 • Reminder за 24 часа реализован в том же worker:
 • push обязателен (`sendToUser`);
-• email опционален (`sendBillingReminderEmail`) только при `email_verified_at` + `marketing_consent_at`;
+• email отправляется при наличии `users.email` как транзакционное billing-уведомление (независимо от текущей авторизации пользователя и marketing consent);
 • антидублирование через `users.billing_reminder_sent_at`.
 
 • `/api/subscriptions/current`:
