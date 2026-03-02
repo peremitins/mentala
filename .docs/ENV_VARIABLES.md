@@ -6,6 +6,46 @@
 
 ---
 
+## 🔗 Deep Links / App Links (опционально, но важно для mobile checkout return)
+
+### `IOS_APP_LINK_TEAM_ID`
+
+**Описание:** Apple Team ID для генерации `/.well-known/apple-app-site-association`.
+
+**Дефолт:** `8QMGJ847K5`
+
+### `IOS_APP_LINK_BUNDLE_IDS`
+
+**Описание:** Список iOS bundle id через запятую для Universal Links.
+
+**Дефолт:** `com.mentala.app`
+
+**Пример:**
+
+```bash
+IOS_APP_LINK_BUNDLE_IDS=com.mentala.app,com.mentala.app.dev
+```
+
+### `ANDROID_APP_LINK_PACKAGE_NAME`
+
+**Описание:** Android package name для `/.well-known/assetlinks.json`.
+
+**Дефолт:** `com.mentala.app`
+
+### `ANDROID_APP_LINK_SHA256_FINGERPRINTS`
+
+**Описание:** SHA-256 fingerprints сертификатов подписи Android-приложения (через запятую/пробел/`;`).
+
+**Важно:** Для production обязательно указать релизный fingerprint (и при необходимости debug).
+
+**Пример:**
+
+```bash
+ANDROID_APP_LINK_SHA256_FINGERPRINTS=12:34:...:AB,CD:EF:...:90
+```
+
+---
+
 ## 🔐 Production (обязательно)
 
 ### `PUBLIC_APP_ORIGIN` (приоритет 1)
@@ -306,6 +346,50 @@ SMTP_FROM_NAME=Mentala
 
 - `true` (по умолчанию)
 - `false` — отключить очистку
+
+---
+
+### `TRIAL_DURATION_HOURS` (опционально)
+
+**Описание:** Длительность trial в часах. Используется сервером при первичной активации trial.
+
+**Значение по умолчанию:**
+
+- `168` (7 дней)
+
+**Примеры для тестов:**
+
+- `TRIAL_DURATION_HOURS=1` — trial на 1 час
+- `TRIAL_DURATION_HOURS=24` — trial на 1 день
+
+---
+
+### `TRIAL_BILLING_EARLY_CHARGE_MINUTES` (опционально)
+
+**Описание:** За сколько минут до `nextChargeAt` запускать первую auto-попытку списания для `billingCollectionStatus=scheduled`.
+
+**Значение по умолчанию:**
+
+- `5`
+
+**Зачем нужно:**
+
+- Убирает окно, когда trial уже закончился, а первое списание еще не стартовало из-за интервала воркера.
+
+---
+
+### `PAYMENT_RETURN_EXTERNAL_SESSION_TTL_SECONDS` (опционально)
+
+**Описание:** TTL (в секундах) одноразового external-session токена для возврата из YooKassa redirect/bind flow во внешний браузер.
+
+**Значение по умолчанию:**
+
+- `7200` (2 часа)
+
+**Зачем нужно:**
+
+- Токен не должен истекать, пока пользователь находится в платежной форме YooKassa.
+- После возврата браузер сначала получает web cookie-сессию через `/auth/external-session/consume`, затем открывает `/subscription`.
 
 ---
 

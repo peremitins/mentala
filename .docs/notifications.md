@@ -258,7 +258,7 @@ psql -d mentai -f server/infrastructure/db/migrations/0027_add_ai_notification_t
 
 ### Типы для Therapy
 
-- `breath_cue` — дыхание 4-7-8, box-breathing
+- `breath_cue` — квадратное дыхание 4-4-4-4 (box-breathing, основная техника)
 - `grounding` — 5-4-3-2-1, тактильный якорь
 - `body_scan` — плечи, челюсть, живот
 - `reframe` — рефрейминг мыслей

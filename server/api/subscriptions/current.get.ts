@@ -1,7 +1,11 @@
 import { getSessionUser } from '@/server/application/auth/session';
 import { setHeader, getQuery, createError } from 'h3';
 import { db } from '@/server/infrastructure/db/client';
-import { subscriptionPlans, users } from '@/server/infrastructure/db/schema';
+import {
+  subscriptionEvents,
+  subscriptionPlans,
+  users,
+} from '@/server/infrastructure/db/schema';
 import { eq } from 'drizzle-orm';
 import { getFeatures } from '@/server/application/subscriptions/access.service';
 import { getSessionUserWithRole } from '@/server/utils/require-role';
@@ -11,12 +15,15 @@ import {
 } from '@/server/application/subscriptions/current-subscription.service';
 import {
   isTrialActiveAt,
+  canRunTrialBillingAttemptNow,
   isTrialBillingPeriod,
   isTrialBillingPlanId,
   normalizeBillingCollectionStatus,
   resolveCurrentEntitlementsPlan,
 } from '@/server/application/subscriptions/trial-billing.service';
 import { syncPendingPaymentMethodBinding } from '@/server/application/subscriptions/payment-methods.service';
+import { runTrialBillingForUser } from '@/server/application/subscriptions/trial-billing-worker.service';
+import { runScheduledPlanChangeForUser } from '@/server/application/subscriptions/scheduled-plan-change.service';
 
 interface ScheduledChangeResponse {
   planId: string;
@@ -186,10 +193,204 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  const activeSubscription = await getCurrentActiveSubscriptionWithPlan({
+  const billingStatusAfterBindingSync = normalizeBillingCollectionStatus(
+    userRecord.billingCollectionStatus
+  );
+  // Deferred finalize нужен только для незавершенного trial-case:
+  // nextChargeAt должен оставаться в окне исходного trial (не позже trialEndedAt).
+  const hasDeferredTrialChargeWindow = Boolean(
+    userRecord.nextChargeAt &&
+      userRecord.trialEndedAt &&
+      userRecord.nextChargeAt.getTime() <= userRecord.trialEndedAt.getTime()
+  );
+  const shouldFinalizeDeferredTrialScheduling =
+    Boolean(userRecord.paymentMethodBound && userRecord.paymentMethodId) &&
+    isTrialBillingPlanId(userRecord.billingPlanId) &&
+    isTrialBillingPeriod(userRecord.billingPeriod) &&
+    billingStatusAfterBindingSync === 'none' &&
+    hasDeferredTrialChargeWindow;
+
+  // Self-heal: если пользователь выбрал план в trial, прошел bind-flow,
+  // но не вернулся в ожидаемом фронтовом сценарии (повторный start-checkout),
+  // финализируем scheduled-состояние автоматически на чтении /current.
+  if (shouldFinalizeDeferredTrialScheduling) {
+    await db.transaction(async (tx) => {
+      await tx
+        .update(users)
+        .set({
+          billingCollectionStatus: 'scheduled',
+          graceEndsAt: null,
+          billingReminderSentAt: null,
+          billingLockedAt: null,
+          billingLockedBy: null,
+          updatedAt: now,
+        })
+        .where(eq(users.id, targetUserId));
+
+      await tx.insert(subscriptionEvents).values({
+        userId: targetUserId,
+        eventType: 'trial_billing_scheduled',
+        planId: userRecord.billingPlanId,
+        metadata: {
+          billingPlanId: userRecord.billingPlanId,
+          billingPeriod: userRecord.billingPeriod,
+          nextChargeAt: userRecord.nextChargeAt?.toISOString() || null,
+          paymentMethodId: userRecord.paymentMethodId,
+          source: 'current_self_heal_after_binding',
+        },
+      });
+    });
+
+    const refreshed = await readCurrentUserBillingRow(targetUserId);
+    if (refreshed) {
+      userRecord = refreshed;
+    }
+  }
+
+  const billingStatus = normalizeBillingCollectionStatus(
+    userRecord.billingCollectionStatus
+  );
+  const shouldTryOnDemandTrialCharge =
+    isTrialBillingPlanId(userRecord.billingPlanId) &&
+    isTrialBillingPeriod(userRecord.billingPeriod) &&
+    billingStatus !== 'none' &&
+    canRunTrialBillingAttemptNow({
+      nextChargeAt: userRecord.nextChargeAt,
+      billingCollectionStatus: billingStatus,
+      now,
+    }) &&
+    Boolean(userRecord.paymentMethodBound && userRecord.paymentMethodId);
+
+  // Self-heal: если фоновой worker задержался/не запущен, пробуем точечно
+  // выполнить списание при запросе /api/subscriptions/current.
+  if (shouldTryOnDemandTrialCharge) {
+    const config = useRuntimeConfig(event);
+    const shopId = String(config.yookassaShopId || '').trim();
+    const secretKey = String(config.yookassaSecretKey || '').trim();
+
+    if (shopId && secretKey) {
+      try {
+        await runTrialBillingForUser({
+          userId: targetUserId,
+          workerId: `api-current-self-heal:${process.pid}`,
+          shopId,
+          secretKey,
+          now,
+        });
+
+        const refreshed = await readCurrentUserBillingRow(targetUserId);
+        if (refreshed) {
+          userRecord = refreshed;
+        }
+      } catch (error) {
+        event.context.logger?.warn(
+          {
+            userId: targetUserId,
+            nextChargeAt: userRecord.nextChargeAt,
+            billingStatus,
+            error,
+          },
+          'Failed to run on-demand trial charge in /current'
+        );
+      }
+    }
+  }
+
+  let activeSubscription = await getCurrentActiveSubscriptionWithPlan({
     userId: targetUserId,
     now,
   });
+
+  // Self-heal stale состояния:
+  // если уже есть активная paid-подписка и trial billing-поля указывают на post-trial
+  // период, значит это "хвост" старого trial-scheduled состояния — очищаем.
+  const shouldClearStaleTrialBillingState = Boolean(
+    activeSubscription &&
+      activeSubscription.subscription.planId !== 'basic' &&
+      isTrialBillingPlanId(userRecord.billingPlanId) &&
+      isTrialBillingPeriod(userRecord.billingPeriod) &&
+      userRecord.trialEndedAt &&
+      userRecord.nextChargeAt &&
+      userRecord.nextChargeAt.getTime() > userRecord.trialEndedAt.getTime()
+  );
+
+  if (shouldClearStaleTrialBillingState) {
+    await db
+      .update(users)
+      .set({
+        billingPlanId: null,
+        billingPeriod: null,
+        nextChargeAt: null,
+        billingCollectionStatus: 'none',
+        graceEndsAt: null,
+        billingReminderSentAt: null,
+        billingLockedAt: null,
+        billingLockedBy: null,
+        updatedAt: now,
+      })
+      .where(eq(users.id, targetUserId));
+
+    const refreshed = await readCurrentUserBillingRow(targetUserId);
+    if (refreshed) {
+      userRecord = refreshed;
+    }
+  }
+
+  const scheduledPeriodRaw = String(
+    userRecord.scheduledBillingPeriod || ''
+  ).trim();
+  const scheduledPeriod =
+    scheduledPeriodRaw === 'month' || scheduledPeriodRaw === 'year'
+      ? scheduledPeriodRaw
+      : null;
+  const shouldTryOnDemandScheduledPlanChange = Boolean(
+    !activeSubscription &&
+      userRecord.scheduledPlanId &&
+      scheduledPeriod &&
+      userRecord.scheduledChangeAt &&
+      userRecord.scheduledChangeAt.getTime() <= now.getTime()
+  );
+
+  // Self-heal: если фоновый worker задержался, применяем due scheduled_downgrade
+  // точечно при чтении /api/subscriptions/current.
+  if (shouldTryOnDemandScheduledPlanChange) {
+    const config = useRuntimeConfig(event);
+    const shopId = String(config.yookassaShopId || '').trim();
+    const secretKey = String(config.yookassaSecretKey || '').trim();
+
+    if (shopId && secretKey) {
+      try {
+        await runScheduledPlanChangeForUser({
+          userId: targetUserId,
+          workerId: `api-current-scheduled-change-self-heal:${process.pid}`,
+          shopId,
+          secretKey,
+          now,
+        });
+
+        const refreshed = await readCurrentUserBillingRow(targetUserId);
+        if (refreshed) {
+          userRecord = refreshed;
+        }
+
+        activeSubscription = await getCurrentActiveSubscriptionWithPlan({
+          userId: targetUserId,
+          now,
+        });
+      } catch (error) {
+        event.context.logger?.warn(
+          {
+            userId: targetUserId,
+            scheduledPlanId: userRecord.scheduledPlanId,
+            scheduledBillingPeriod: userRecord.scheduledBillingPeriod,
+            scheduledChangeAt: userRecord.scheduledChangeAt,
+            error,
+          },
+          'Failed to run on-demand scheduled plan change in /current'
+        );
+      }
+    }
+  }
 
   let scheduledChange = buildScheduledChange({
     planId: userRecord.scheduledPlanId,
@@ -199,10 +400,11 @@ export default defineEventHandler(async (event) => {
 
   const shouldClearStaleScheduledChange =
     scheduledChange &&
-    (!activeSubscription ||
-      (userRecord.scheduledChangeAt
-        ? userRecord.scheduledChangeAt.getTime() <= now.getTime()
-        : true));
+    Boolean(
+      activeSubscription &&
+        userRecord.scheduledChangeAt &&
+        userRecord.scheduledChangeAt.getTime() <= now.getTime()
+    );
 
   if (shouldClearStaleScheduledChange) {
     await db

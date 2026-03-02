@@ -1877,7 +1877,7 @@ ${subtypeInstructions}
 - imageTag (строка из списка: ${imageTagList} или null)
 - actionHint (строка: none | meditation | breathing)
 - actionHint = meditation, если текст упоминает медитацию/медитативную практику (даже без прямого призыва)
-- actionHint = breathing, если текст упоминает дыхательные практики или дыхательные техники (например: дыхание, 4-7-8, 4-4-4-4, квадратное/коробочное дыхание)
+- actionHint = breathing, если текст упоминает дыхательные практики (например: дыхание, 4-7-8, 4-4-4-4, 4-6, квадратное/коробочное — редирект идёт на упомянутую технику)
 - Если imageTag = meditation, actionHint ОБЯЗАТЕЛЬНО = meditation
 - actionHint = none во всех остальных случаях (не используй none, если есть упоминание медитации или дыхания)
 ${imageTagRules}
@@ -1898,7 +1898,7 @@ ${
         ? ', "subtype": "motivational"'
         : ', "subtype": null'
     }, "actionHint": "meditation"},
-    {"text": "Сделай 3 цикла дыхания 4-7-8, чтобы быстро успокоиться.", "imageTag": "activity"${
+    {"text": "Сделай 3 цикла квадратного дыхания 4-4-4-4, чтобы быстро успокоиться.", "imageTag": "activity"${
       params.subtype === 'mixed'
         ? ', "subtype": "reminder"'
         : ', "subtype": null'

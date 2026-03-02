@@ -5,6 +5,7 @@ import { and, eq, gt, ne } from 'drizzle-orm';
 import { getSessionUser } from '@/server/application/auth/session';
 import { db } from '@/server/infrastructure/db/client';
 import {
+  payments,
   subscriptionEvents,
   subscriptionPlans,
   userSubscriptions,
@@ -27,6 +28,7 @@ import {
 import {
   createYooKassaPayment,
   createYooKassaPaymentMethodBinding,
+  extractPaymentMethodPresentation,
 } from '@/server/application/payments/yookassa.client';
 import {
   isTrialActiveAt,
@@ -35,8 +37,13 @@ import {
   isTrialBillingPeriod,
   normalizeBillingCollectionStatus,
 } from '@/server/application/subscriptions/trial-billing.service';
-import { syncPendingPaymentMethodBinding } from '@/server/application/subscriptions/payment-methods.service';
+import {
+  activateUserPaymentMethod,
+  syncPendingPaymentMethodBinding,
+} from '@/server/application/subscriptions/payment-methods.service';
 import { resolveExternalFlowAppUrl } from '@/server/application/auth/oauth-redirect';
+import { buildExternalSessionConsumeReturnUrl } from '@/server/application/auth/external-session-return-url';
+import { PAYMENT_RETURN_EXTERNAL_SESSION_TTL_SECONDS } from '@/server/config/subscription';
 
 type SourcePlatform = 'web' | 'ios' | 'android';
 type CheckoutStatus = 'pending' | 'active';
@@ -103,6 +110,10 @@ function getPeriodDays(period: BillingPeriod): number {
   return period === 'year' ? 365 : 30;
 }
 
+function toCents(value: number): number {
+  return Math.round(value * 100);
+}
+
 function buildScheduledChange(params: {
   planId?: string | null;
   billingPeriod?: string | null;
@@ -121,13 +132,15 @@ function buildScheduledChange(params: {
   };
 }
 
-function buildBindReturnUrl(params: {
-  appUrl: string;
+function buildBindReturnPath(params: {
   bindingSessionId: string;
   planId?: string;
   billingPeriod?: BillingPeriod;
+  externalFlow?: boolean;
+  sourcePlatform?: SourcePlatform;
 }): string {
   const searchParams = new URLSearchParams({
+    flow: 'bind',
     bindReturn: '1',
     bindingSessionId: params.bindingSessionId,
   });
@@ -138,8 +151,14 @@ function buildBindReturnUrl(params: {
   if (params.billingPeriod) {
     searchParams.set('billingPeriod', params.billingPeriod);
   }
+  if (params.externalFlow === true) {
+    searchParams.set('externalFlow', '1');
+  }
+  if (params.sourcePlatform === 'ios' || params.sourcePlatform === 'android') {
+    searchParams.set('nativeApp', '1');
+  }
 
-  return `${params.appUrl}/subscription?${searchParams.toString()}`;
+  return `/payment-success?${searchParams.toString()}`;
 }
 
 function resolveSourcePlatform(event: any): SourcePlatform {
@@ -409,11 +428,20 @@ export default defineEventHandler(async (event) => {
         }
 
         const bindingSessionId = crypto.randomUUID();
-        const returnUrl = buildBindReturnUrl({
-          appUrl,
+        const bindReturnPath = buildBindReturnPath({
           bindingSessionId,
           planId,
           billingPeriod: billingPeriodTyped,
+          externalFlow,
+          sourcePlatform,
+        });
+        const returnUrl = await buildExternalSessionConsumeReturnUrl({
+          event,
+          userId,
+          appUrl,
+          redirectPath: bindReturnPath,
+          ttlSeconds: PAYMENT_RETURN_EXTERNAL_SESSION_TTL_SECONDS,
+          purpose: 'payment_return',
         });
         const yookassaIdempotenceKey = crypto
           .createHash('sha256')
@@ -442,6 +470,17 @@ export default defineEventHandler(async (event) => {
           await tx
             .update(users)
             .set({
+              // Сохраняем выбранный платный план сразу при запуске bind-flow:
+              // после успешной привязки /current сможет автоматически
+              // завершить trial-scheduling без повторного клика пользователя.
+              billingPlanId: planId,
+              billingPeriod: billingPeriodTyped,
+              nextChargeAt: userRow.trialEndedAt,
+              billingCollectionStatus: 'none',
+              graceEndsAt: null,
+              billingReminderSentAt: null,
+              billingLockedAt: null,
+              billingLockedBy: null,
               paymentMethodBindingId: bindingResponse.id,
               paymentMethodBindingSessionId: bindingSessionId,
               paymentMethodBindingStatus: 'pending',
@@ -750,6 +789,15 @@ export default defineEventHandler(async (event) => {
             scheduledChangeAt: null,
             scheduledFromSubscriptionId: null,
             scheduledChangeUpdatedAt: now,
+            // Любая non-trial активация должна очищать trial-scheduled "хвосты".
+            billingPlanId: null,
+            billingPeriod: null,
+            nextChargeAt: null,
+            billingCollectionStatus: 'none',
+            graceEndsAt: null,
+            billingReminderSentAt: null,
+            billingLockedAt: null,
+            billingLockedBy: null,
             updatedAt: now,
           })
           .where(eq(users.id, userId));
@@ -854,6 +902,270 @@ export default defineEventHandler(async (event) => {
       return response;
     }
 
+    const shopId = String(config.yookassaShopId || '').trim();
+    const secretKey = String(config.yookassaSecretKey || '').trim();
+    if (!shopId || !secretKey) {
+      throw createError({
+        statusCode: 500,
+        statusMessage: 'YooKassa credentials not configured',
+      });
+    }
+
+    // Если у пользователя уже есть привязанная карта, сначала пробуем списать
+    // напрямую без редиректа в YooKassa checkout.
+    const savedPaymentMethodId = String(userRow?.paymentMethodId || '').trim();
+    const canChargeSavedMethod = Boolean(
+      userRow?.paymentMethodBound && savedPaymentMethodId
+    );
+
+    if (canChargeSavedMethod) {
+      const savedMethodIdempotenceKey = crypto
+        .createHash('sha256')
+        .update(
+          `${userId}:${planId}:${billingPeriodTyped}:${idempotencyKey}:saved-method`,
+          'utf8'
+        )
+        .digest('hex');
+
+      const savedMethodPayment = await createYooKassaPayment({
+        shopId,
+        secretKey,
+        idempotenceKey: savedMethodIdempotenceKey,
+        amount: decision.toPay,
+        description: `Ментала subscription ${planId} (${billingPeriodTyped})`,
+        metadata: {
+          userId: String(userId),
+          planId,
+          billingPeriod: billingPeriodTyped,
+          flow: 'saved_method_checkout',
+        },
+        paymentMode: 'recurring',
+        paymentMethodId: savedPaymentMethodId,
+      });
+
+      const savedMethodPaymentId = String(savedMethodPayment.id || '').trim();
+      const savedMethodStatus = String(savedMethodPayment.status || '')
+        .trim()
+        .toLowerCase();
+      const savedMethodPaid = savedMethodPayment.paid === true;
+      const savedMethodAmount = Number(savedMethodPayment.amount?.value || 0);
+      const savedMethodCurrency = String(
+        savedMethodPayment.amount?.currency || 'RUB'
+      )
+        .trim()
+        .toUpperCase();
+
+      if (!savedMethodPaymentId) {
+        throw createError({
+          statusCode: 502,
+          statusMessage:
+            'YooKassa saved-method payment response missing payment id',
+        });
+      }
+
+      if (savedMethodStatus === 'succeeded' && savedMethodPaid) {
+        const amountMatches =
+          savedMethodCurrency === 'RUB' &&
+          toCents(savedMethodAmount) === toCents(decision.toPay);
+        if (!amountMatches) {
+          throw createError({
+            statusCode: 409,
+            statusMessage:
+              'Saved payment method charge amount/currency mismatch',
+          });
+        }
+
+        const response = await db.transaction(async (tx) => {
+          // Для успешного direct-charge тоже очищаем запланированную смену.
+          await tx
+            .update(users)
+            .set({
+              scheduledPlanId: null,
+              scheduledBillingPeriod: null,
+              scheduledChangeAt: null,
+              scheduledFromSubscriptionId: null,
+              scheduledChangeUpdatedAt: now,
+              // Любая non-trial активация должна очищать trial-scheduled "хвосты".
+              billingPlanId: null,
+              billingPeriod: null,
+              nextChargeAt: null,
+              billingCollectionStatus: 'none',
+              graceEndsAt: null,
+              billingReminderSentAt: null,
+              billingLockedAt: null,
+              billingLockedBy: null,
+              updatedAt: now,
+            })
+            .where(eq(users.id, userId));
+
+          const [newSubscription] = await tx
+            .insert(userSubscriptions)
+            .values({
+              userId,
+              planId,
+              billingPeriod: billingPeriodTyped,
+              checkoutAmount: String(decision.toPay),
+              checkoutCurrency: 'RUB',
+              billingCreditApplied: '0',
+              billingCreditGranted: '0',
+              yookassaPaymentId: savedMethodPaymentId,
+              startDate: now,
+              endDate: nextEndDate,
+              paymentStatus: 'active',
+              autoRenew: true,
+              sourcePlatform,
+            })
+            .returning();
+
+          await tx
+            .update(userSubscriptions)
+            .set({ paymentStatus: 'expired', updatedAt: now })
+            .where(
+              and(
+                eq(userSubscriptions.userId, userId),
+                eq(userSubscriptions.paymentStatus, 'active'),
+                gt(userSubscriptions.endDate, now),
+                ne(userSubscriptions.id, newSubscription.id)
+              )
+            );
+
+          if (
+            planId !== 'basic' &&
+            userRow?.trialEndedAt &&
+            userRow.trialEndedAt > now
+          ) {
+            await tx
+              .update(users)
+              .set({
+                trialEndedAt: now,
+                updatedAt: now,
+              })
+              .where(eq(users.id, userId));
+          }
+
+          await tx
+            .insert(payments)
+            .values({
+              id: savedMethodPaymentId,
+              subscriptionId: newSubscription.id,
+              userId,
+              amount: String(savedMethodAmount),
+              currency: savedMethodCurrency,
+              status: 'succeeded',
+              metadata: savedMethodPayment as any,
+            })
+            .onConflictDoUpdate({
+              target: payments.id,
+              set: {
+                subscriptionId: newSubscription.id,
+                amount: String(savedMethodAmount),
+                currency: savedMethodCurrency,
+                status: 'succeeded',
+                metadata: savedMethodPayment as any,
+                updatedAt: now,
+              },
+            });
+
+          const paymentMethodPresentation = extractPaymentMethodPresentation(
+            savedMethodPayment.payment_method
+          );
+          const resolvedPaymentMethodId = String(
+            savedMethodPayment.payment_method?.id || savedPaymentMethodId
+          ).trim();
+          if (resolvedPaymentMethodId) {
+            await activateUserPaymentMethod({
+              userId,
+              paymentMethodId: resolvedPaymentMethodId,
+              paymentMethodType: paymentMethodPresentation.paymentMethodType,
+              paymentMethodTitle: paymentMethodPresentation.paymentMethodTitle,
+              cardBrand: paymentMethodPresentation.cardBrand,
+              cardLast4: paymentMethodPresentation.cardLast4,
+              cardExpiryMonth: paymentMethodPresentation.cardExpiryMonth,
+              cardExpiryYear: paymentMethodPresentation.cardExpiryYear,
+              now,
+              tx,
+            });
+          }
+
+          await tx.insert(subscriptionEvents).values({
+            userId,
+            eventType: 'checkout_started',
+            planId,
+            metadata: {
+              subscriptionId: newSubscription.id,
+              billingPeriod: billingPeriodTyped,
+              policyAction: decision.policyAction,
+              targetChargeValue: decision.targetChargeValue,
+              unusedCurrentValue: decision.unusedCurrentValue,
+              toPay: decision.toPay,
+              sourcePlatform,
+              hadCurrentActive: hasCurrentActive,
+              paymentMode: 'saved_method',
+            },
+          });
+
+          await tx.insert(subscriptionEvents).values({
+            userId,
+            eventType: 'purchase_success',
+            planId,
+            metadata: {
+              subscriptionId: newSubscription.id,
+              paymentId: savedMethodPaymentId,
+              amountPaid: savedMethodAmount,
+              currency: savedMethodCurrency,
+              method: 'saved_payment_method',
+            },
+          });
+
+          const activatedResponse: StartCheckoutResponse = {
+            subscriptionId: newSubscription.id,
+            amount: decision.amount,
+            toPay: decision.toPay,
+            creditApplied: 0,
+            creditGranted: 0,
+            status: 'active',
+            paymentProvider: 'yookassa',
+            paymentId: savedMethodPaymentId,
+            paymentMode: 'none',
+            confirmationToken: null,
+            paymentUrl: null,
+            checkoutAction: 'activated',
+            scheduledChange: null,
+          };
+
+          await finishIdempotentRequest({
+            recordId: idempotencyRecordId,
+            response: activatedResponse,
+            tx,
+          });
+
+          return activatedResponse;
+        });
+
+        return response;
+      }
+
+      if (savedMethodStatus !== 'canceled' && savedMethodStatus !== 'failed') {
+        // Нетерминальный статус direct-charge небезопасно дублировать fallback checkout'ом.
+        throw createError({
+          statusCode: 409,
+          statusMessage:
+            'Saved payment charge is not finalized yet. Please retry shortly.',
+        });
+      }
+
+      event.context.logger?.warn(
+        {
+          userId,
+          planId,
+          billingPeriod: billingPeriodTyped,
+          paymentId: savedMethodPaymentId,
+          status: savedMethodStatus,
+        },
+        'Saved payment method charge failed, falling back to checkout flow'
+      );
+    }
+
     const [pendingSubscription] = await db
       .insert(userSubscriptions)
       .values({
@@ -884,6 +1196,16 @@ export default defineEventHandler(async (event) => {
           scheduledChangeAt: null,
           scheduledFromSubscriptionId: null,
           scheduledChangeUpdatedAt: now,
+          // Начало non-trial checkout также очищает trial-scheduled поля,
+          // чтобы UI не показывал устаревшее "Списание запланировано".
+          billingPlanId: null,
+          billingPeriod: null,
+          nextChargeAt: null,
+          billingCollectionStatus: 'none',
+          graceEndsAt: null,
+          billingReminderSentAt: null,
+          billingLockedAt: null,
+          billingLockedBy: null,
           updatedAt: now,
         })
         .where(eq(users.id, userId));
@@ -905,29 +1227,40 @@ export default defineEventHandler(async (event) => {
       });
     });
 
-    const shopId = String(config.yookassaShopId || '').trim();
-    const secretKey = String(config.yookassaSecretKey || '').trim();
-    if (!shopId || !secretKey) {
-      throw createError({
-        statusCode: 500,
-        statusMessage: 'YooKassa credentials not configured',
-      });
-    }
-
     const yookassaIdempotenceKey = crypto
       .createHash('sha256')
       .update(`${userId}:${pendingSubscription.id}:${idempotencyKey}`, 'utf8')
       .digest('hex');
-    const externalFlowQuery =
-      paymentMode === 'redirect' && externalFlow ? '&externalFlow=1' : '';
-    const returnUrl = `${appUrl}/payment/success?subscriptionId=${pendingSubscription.id}${externalFlowQuery}`;
+    const returnParams = new URLSearchParams({
+      flow: 'payment',
+      paymentReturn: '1',
+      subscriptionId: String(pendingSubscription.id),
+    });
+    if (sourcePlatform === 'ios' || sourcePlatform === 'android') {
+      returnParams.set('nativeApp', '1');
+    }
+    if (paymentMode === 'redirect' && externalFlow) {
+      returnParams.set('externalFlow', '1');
+    }
+    let returnUrl: string | undefined;
+    if (paymentMode === 'redirect') {
+      const returnPath = `/payment-success?${returnParams.toString()}`;
+      returnUrl = await buildExternalSessionConsumeReturnUrl({
+        event,
+        userId,
+        appUrl,
+        redirectPath: returnPath,
+        ttlSeconds: PAYMENT_RETURN_EXTERNAL_SESSION_TTL_SECONDS,
+        purpose: 'payment_return',
+      });
+    }
 
     const yookassaPayment = await createYooKassaPayment({
       shopId,
       secretKey,
       idempotenceKey: yookassaIdempotenceKey,
       amount: decision.toPay,
-      description: `Mentala subscription ${planId} (${billingPeriodTyped})`,
+      description: `Ментала subscription ${planId} (${billingPeriodTyped})`,
       metadata: {
         userId: String(userId),
         subscriptionId: String(pendingSubscription.id),

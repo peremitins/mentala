@@ -178,7 +178,16 @@ function resolveContextSeedKey(entryContext?: ChatEntryContext | null): string {
     return `therapy_topic:${entryContext.topic_id}:${name}`;
   }
 
-  return `sos:${entryContext.sos_entry}:${entryContext.after_practice ? '1' : '0'}`;
+  if (entryContext.type === 'thought_dump') {
+    const dumpSeed = normalizeContextLabel(entryContext.dump_text) || '';
+    return `thought_dump:${entryContext.source}:${dumpSeed}`;
+  }
+
+  if (entryContext.type === 'sos') {
+    return `sos:${entryContext.sos_entry}:${entryContext.after_practice ? '1' : '0'}`;
+  }
+
+  return 'home';
 }
 
 function pickRandomIndexExcludingPrevious(
@@ -277,6 +286,14 @@ function buildSosOpenings(
   return SOS_OPENINGS.vent.map((text) => pickGenderedText(text, userGender));
 }
 
+function buildThoughtDumpOpenings(
+  _context: Extract<ChatEntryContext, { type: 'thought_dump' }>
+): string[] {
+  // Для входа после «Выгрузки мыслей» не используем фиксированные стартовые фразы.
+  // Считаем, что достаточно переданного контекста, а первую реплику сформирует LLM.
+  return [];
+}
+
 function resolveAlternativeOpenings(
   entryContext: ChatEntryContext | null | undefined,
   userGender: Gender | null
@@ -294,7 +311,15 @@ function resolveAlternativeOpenings(
     return buildHabitOpenings(entryContext);
   }
 
-  return buildSosOpenings(entryContext, userGender);
+  if (entryContext.type === 'thought_dump') {
+    return buildThoughtDumpOpenings(entryContext);
+  }
+
+  if (entryContext.type === 'sos') {
+    return buildSosOpenings(entryContext, userGender);
+  }
+
+  return HOME_ALTERNATIVE_OPENINGS;
 }
 
 function looksLikeSurname(token: string): boolean {

@@ -108,7 +108,7 @@
               <div class="">
                 <p class="text-sm font-medium">Push-уведомления</p>
                 <p class="text-xs text-muted-foreground">
-                  Напоминания и сообщения от Mentala
+                  Напоминания и сообщения от Ментала
                 </p>
               </div>
               <Switch
@@ -126,7 +126,7 @@
               <div class="">
                 <p class="text-sm font-medium">Маркетинговые сообщения</p>
                 <p class="text-xs text-muted-foreground">
-                  Новости, обновления и предложения Mentala
+                  Новости, обновления и предложения Ментала
                 </p>
               </div>
               <Switch

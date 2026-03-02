@@ -5,7 +5,6 @@ export type SosOpenEntry = SosEntry | 'technique_picker';
 
 export type SosStep =
   | 'select'
-  | 'panic-techniques'
   | 'panic-grounding'
   | 'panic-breathing'
   | 'tension-practice'
@@ -23,8 +22,8 @@ interface SosState {
 
 function resolveInitialStep(entry?: SosOpenEntry): SosStep {
   if (!entry) return 'select';
-  if (entry === 'panic') return 'panic-techniques';
-  if (entry === 'technique_picker') return 'panic-techniques';
+  if (entry === 'panic') return 'panic-grounding';
+  if (entry === 'technique_picker') return 'select';
   if (entry === 'tension') return 'tension-practice';
   return 'select';
 }

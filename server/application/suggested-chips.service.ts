@@ -80,7 +80,9 @@ function normalizeKind(value: string | undefined): SuggestedChipKind {
   return parsed.success ? parsed.data : 'text';
 }
 
-function normalizeAction(value: string | undefined): SuggestedChipAction | null {
+function normalizeAction(
+  value: string | undefined
+): SuggestedChipAction | null {
   if (!value) return null;
   const parsed = SuggestedChipActionEnum.safeParse(value);
   return parsed.success ? parsed.data : null;
@@ -89,7 +91,14 @@ function normalizeAction(value: string | undefined): SuggestedChipAction | null 
 function normalizeActionParams(
   action: SuggestedChipAction,
   params: unknown
-): { trackId?: string; collectionId?: string; sosEntry?: 'panic' | 'tension' | 'technique_picker'; source?: 'chat' } | undefined {
+):
+  | {
+      trackId?: string;
+      collectionId?: string;
+      sosEntry?: 'panic' | 'tension' | 'technique_picker';
+      source?: 'chat';
+    }
+  | undefined {
   if (!params || typeof params !== 'object') return undefined;
   const raw = params as Record<string, unknown>;
   const normalized = {
@@ -105,10 +114,7 @@ function normalizeActionParams(
   if (action === 'open_meditation_track' && !parsed.data.trackId) {
     return undefined;
   }
-  if (
-    action === 'open_meditations_collection' &&
-    !parsed.data.collectionId
-  ) {
+  if (action === 'open_meditations_collection' && !parsed.data.collectionId) {
     return undefined;
   }
   if (action === 'open_sos' && !parsed.data.sosEntry) {
@@ -367,6 +373,52 @@ function resolvePrimaryTopic(entryContext?: ChatEntryContext | null): string {
       vent: 'выговориться',
     };
     return labelMap[entryContext.sos_entry] || 'sos';
+  }
+
+  if (entryContext.type === 'thought_dump') {
+    const normalizedDump = normalizeText(entryContext.dump_text);
+    if (!normalizedDump) return 'мысли';
+
+    const keywordMap: Array<{ pattern: RegExp; label: string }> = [
+      { pattern: /(тревог|паник)/, label: 'тревога' },
+      { pattern: /(злост|злюс|раздраж)/, label: 'злость' },
+      { pattern: /(страх|страш)/, label: 'страх' },
+      { pattern: /(напряж|стресс)/, label: 'напряжение' },
+      { pattern: /(устал|выгор|сил нет)/, label: 'усталость' },
+      { pattern: /(вина|виноват)/, label: 'вина' },
+      { pattern: /(стыд|стыдно)/, label: 'стыд' },
+      { pattern: /(обид)/, label: 'обида' },
+      { pattern: /(одиноч|одиноко)/, label: 'одиночество' },
+      { pattern: /(контрол)/, label: 'контроль' },
+    ];
+
+    const matched = keywordMap.find((item) =>
+      item.pattern.test(normalizedDump)
+    );
+    if (matched) {
+      return matched.label;
+    }
+
+    const stopWords = new Set([
+      'я',
+      'мне',
+      'меня',
+      'что',
+      'это',
+      'как',
+      'потому',
+      'сейчас',
+      'очень',
+      'просто',
+      'совсем',
+      'когда',
+      'только',
+    ]);
+    const fallbackToken = normalizedDump
+      .split(' ')
+      .find((token) => token.length >= 4 && !stopWords.has(token));
+
+    return fallbackToken || 'мысли';
   }
 
   return '';

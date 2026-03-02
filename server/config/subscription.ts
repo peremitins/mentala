@@ -2,6 +2,19 @@
  * Константы для системы подписок
  */
 
+function readPositiveIntFromEnv(
+  value: string | undefined,
+  fallback: number
+): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+
+  const normalized = Math.floor(parsed);
+  return normalized > 0 ? normalized : fallback;
+}
+
 // PRO лимит ИИ-чата в минутах на неделю.
 export const PRO_WEEKLY_MINUTES_LIMIT =
   Number(process.env.PRO_WEEKLY_MINUTES_LIMIT) || 100;
@@ -22,3 +35,26 @@ export const DEFAULT_WEEKLY_MINUTES_LIMIT = PRO_WEEKLY_MINUTES_LIMIT;
 // Используется для автоматического завершения сессий при отсутствии активности
 // 2 минуты = 120000 мс
 export const CHAT_IDLE_TIMEOUT_MS = 2 * 60 * 1000;
+
+// Длительность trial в часах (дефолт: 7 дней).
+export const TRIAL_DURATION_HOURS = readPositiveIntFromEnv(
+  process.env.TRIAL_DURATION_HOURS,
+  7 * 24
+);
+
+// За сколько минут до nextChargeAt запускать первую авто-попытку списания.
+export const TRIAL_BILLING_EARLY_CHARGE_MINUTES = readPositiveIntFromEnv(
+  process.env.TRIAL_BILLING_EARLY_CHARGE_MINUTES,
+  5
+);
+export const TRIAL_BILLING_EARLY_CHARGE_MS =
+  TRIAL_BILLING_EARLY_CHARGE_MINUTES * 60 * 1000;
+
+// TTL одноразового external-session токена для возврата из YooKassa во внешний браузер.
+// Нужен длиннее обычного browser handoff, потому что пользователь может провести
+// в платежной форме несколько минут.
+export const PAYMENT_RETURN_EXTERNAL_SESSION_TTL_SECONDS =
+  readPositiveIntFromEnv(
+    process.env.PAYMENT_RETURN_EXTERNAL_SESSION_TTL_SECONDS,
+    2 * 60 * 60
+  );

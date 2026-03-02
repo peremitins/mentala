@@ -60,6 +60,7 @@ else
   echo "📦 Синхронизация со статическими файлами..."
   pnpm run generate
   npx cap sync && CAPACITOR_SERVER_URL="" node scripts/fix-capacitor-config.js
+  node scripts/verify-capacitor-config.js
 fi
 
 echo "✅ Готово! Теперь можно запускать приложение."

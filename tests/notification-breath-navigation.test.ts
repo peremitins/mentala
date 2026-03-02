@@ -29,6 +29,18 @@ describe('notification breath navigation', () => {
     });
   });
 
+  it('маппит 4-6 на long-exhale-4-6', () => {
+    const navigation = resolveNavigationFromActionHint(
+      'breathing',
+      'Техника 4-6 снимает тревогу.'
+    );
+
+    expect(navigation).toEqual({
+      type: 'breath_practice',
+      slug: 'long-exhale-4-6',
+    });
+  });
+
   it('маппит квадратное/коробочное дыхание на box-breathing', () => {
     const navigation = resolveNavigationFromActionHint(
       'breathing',
@@ -76,10 +88,10 @@ describe('notification breath navigation', () => {
     expect(deepLink).toBe('/breath-practices/box-breathing?group=popular');
   });
 
-  it('при конфликте маркеров отдаёт приоритет явному 4-7-8', () => {
+  it('при конфликте маркеров приоритет у первого совпадения (4-7-8 проверяется раньше)', () => {
     const navigation = resolveNavigationFromActionHint(
       'breathing',
-      'Сравни 4-7-8 и 4-4-4-4 и выбери 4-7-8.'
+      'Сравни 4-7-8 и 4-4-4-4 и выбери технику.'
     );
 
     expect(navigation).toEqual({

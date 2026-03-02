@@ -616,6 +616,23 @@ export default defineEventHandler(async (event) => {
           .where(and(eq(users.id, sub.userId), gt(users.trialEndedAt, now)));
       }
 
+      // Успешная non-trial активация подписки должна сбрасывать trial-scheduled
+      // состояние, чтобы в UI не оставалось устаревшее "Списание запланировано".
+      await tx
+        .update(users)
+        .set({
+          billingPlanId: null,
+          billingPeriod: null,
+          nextChargeAt: null,
+          billingCollectionStatus: 'none',
+          graceEndsAt: null,
+          billingReminderSentAt: null,
+          billingLockedAt: null,
+          billingLockedBy: null,
+          updatedAt: now,
+        })
+        .where(eq(users.id, sub.userId));
+
       await tx.insert(subscriptionEvents).values({
         userId: sub.userId,
         eventType: 'purchase_success',

@@ -90,7 +90,7 @@
           <span
             v-if="feature.tooltip"
             v-tooltip="feature.tooltip"
-            class="mt-[1px] inline-flex h-4 w-4 flex-shrink-0 cursor-help select-none items-center justify-center rounded-full border border-white/25 bg-black/30 text-[10px] font-semibold leading-none text-foreground/90"
+            class="mt-[1px] inline-flex h-4 w-4 flex-shrink-0 select-none items-center justify-center rounded-full border border-white/25 bg-black/30 text-[10px] font-semibold leading-none text-foreground/90"
             aria-label="Подробнее о пользе изображений"
             role="button"
             tabindex="0"
