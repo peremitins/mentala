@@ -11,7 +11,6 @@ import {
   getYooKassaPayment,
 } from '@/server/application/payments/yookassa.client';
 import { getCurrentActiveSubscription } from './current-subscription.service';
-import { detachUserPaymentMethod } from './payment-methods.service';
 import {
   resolvePendingForHardCancel,
   type HardCancelUnresolvedPayment,
@@ -122,8 +121,6 @@ export async function hardCancelSubscription(params: {
       nextChargeAt: users.nextChargeAt,
       billingCollectionStatus: users.billingCollectionStatus,
       graceEndsAt: users.graceEndsAt,
-      paymentMethodBound: users.paymentMethodBound,
-      paymentMethodId: users.paymentMethodId,
     })
     .from(users)
     .where(eq(users.id, params.userId))
@@ -164,9 +161,9 @@ export async function hardCancelSubscription(params: {
     cancelProviderPayment,
   });
 
-  const paymentMethodDetached = Boolean(
-    user.paymentMethodBound && user.paymentMethodId
-  );
+  // При cancel подписки карту не отвязываем:
+  // пользователь может позже снова включить автопродление без повторной привязки.
+  const paymentMethodDetached = false;
   const canceledPendingSubscriptionIds =
     pendingResolution.cancelableSubscriptionIds;
   let canceledPendingRows: Array<{
@@ -190,16 +187,6 @@ export async function hardCancelSubscription(params: {
           gt(userSubscriptions.endDate, now)
         )
       );
-
-    if (paymentMethodDetached) {
-      // В hard-cancel отвязываем карту, чтобы наш backend не мог запускать recurring.
-      await detachUserPaymentMethod({
-        userId: params.userId,
-        cancelScheduledTrialBilling: true,
-        now,
-        tx,
-      });
-    }
 
     await tx
       .update(users)
@@ -306,8 +293,8 @@ export async function hardCancelSubscription(params: {
     success: !requiresManualReview,
     endDate: activeSubscription?.endDate || null,
     message: requiresManualReview
-      ? 'Автопродление отключено и локальные будущие списания отменены. Часть платежей у провайдера требует ручной проверки.'
-      : 'Автопродление отключено. Подписка останется активной до конца оплаченного периода.',
+      ? 'Локальные будущие списания отменены. Часть платежей у провайдера требует ручной проверки.'
+      : 'Подписка останется активной до конца оплаченного периода.',
     activeSubscriptionId: activeSubscription?.id || null,
     canceledPendingSubscriptions: canceledPendingRows.length,
     unresolvedPendingPayments: pendingResolution.unresolvedPendingPayments,

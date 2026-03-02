@@ -202,10 +202,11 @@
         <button
           type="button"
           :disabled="processing"
-          class="inline-flex items-center justify-center rounded-md border border-yellow-400/70 px-3 py-1.5 text-xs font-medium transition-colors hover:bg-yellow-500/10 disabled:opacity-60 disabled:cursor-not-allowed"
+          class="relative inline-flex items-center justify-center rounded-md border border-yellow-400/70 px-3 py-1.5 text-xs font-medium transition-colors hover:bg-yellow-500/10 disabled:opacity-60 disabled:cursor-not-allowed"
           @click="retryChargeNow"
         >
-          {{ processing ? 'Пробуем оплатить...' : 'Повторить оплату' }}
+          <ButtonLoader v-if="processing" />
+          <span :class="processing ? 'invisible' : ''">Повторить оплату</span>
         </button>
       </div>
 
@@ -268,10 +269,13 @@
         <button
           type="button"
           :disabled="processing"
-          class="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed"
+          class="relative inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed"
           @click="openIosManagementFromPage"
         >
-          {{ processing ? 'Открываем...' : 'Управление подпиской' }}
+          <ButtonLoader v-if="processing" />
+          <span :class="processing ? 'invisible' : ''">
+            Управление подпиской
+          </span>
         </button>
       </div>
       <div
@@ -305,27 +309,33 @@
     <!-- Модалка подтверждения смены тарифа -->
     <AlertDialog
       :open="showConfirmDialog"
-      @update:open="showConfirmDialog = $event"
+      @update:open="handleConfirmDialogOpenChange"
     >
       <AlertDialogContent class="glass-deep">
         <AlertDialogHeader>
           <AlertDialogTitle>Подтвердите смену тарифа</AlertDialogTitle>
           <AlertDialogDescription>
-            Вы хотите перейти на тариф
-            <strong>{{
-              getPlanDisplayName(pendingPlanChange?.name || '')
-            }}</strong
-            >?
             {{ getConfirmDialogDescription() }}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel @click="showConfirmDialog = false">
+          <AlertDialogCancel
+            :disabled="loadersStore.isButtonLoading"
+            @click="handleConfirmDialogOpenChange(false)"
+          >
             Отменить
           </AlertDialogCancel>
-          <AlertDialogAction @click="confirmPlanChange">
-            Подтвердить
-          </AlertDialogAction>
+          <Button
+            type="button"
+            class="relative"
+            :disabled="processing || loadersStore.isButtonLoading"
+            @click="confirmPlanChange"
+          >
+            <ButtonLoader v-if="loadersStore.isButtonLoading" />
+            <span :class="loadersStore.isButtonLoading ? 'invisible' : ''">
+              Подтвердить
+            </span>
+          </Button>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
@@ -348,10 +358,14 @@
             Отмена
           </AlertDialogCancel>
           <AlertDialogAction
+            class="relative"
             :disabled="processing"
             @click="cancelActiveSubscription"
           >
-            {{ processing ? 'Отменяем...' : 'Отменить подписку' }}
+            <ButtonLoader v-if="processing" />
+            <span :class="processing ? 'invisible' : ''">
+              Отменить подписку
+            </span>
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -395,13 +409,16 @@ import { usePlatform } from '@/app/composables/usePlatform';
 import { useToast } from '@/app/composables/useToast';
 import { runSubscriptionShortPolling } from '@/app/lib/subscriptionPolling';
 import { useAuthStore } from '@/app/stores/auth';
+import { useLoadersStore } from '@/app/stores/loaders';
 import { useSubscriptionStore } from '@/app/stores/subscription';
 import {
   formatTrialCountdown,
   getTrialCountdown,
 } from '@/app/utils/trialCountdown';
 import PlanCard from '@/app/components/subscription/PlanCard.vue';
+import ButtonLoader from '@/app/components/ui/ButtonLoader.vue';
 import Skeleton from '@/app/components/ui/Skeleton.vue';
+import { Button } from '@/app/components/ui/button';
 import type {
   YooKassaWidgetInstance,
   YooKassaWidgetOptions,
@@ -484,6 +501,7 @@ interface BindPaymentMethodResponse {
 
 const subscriptionStore = useSubscriptionStore();
 const authStore = useAuthStore();
+const loadersStore = useLoadersStore();
 const { refreshEntitlements } = useEntitlements();
 const route = useRoute();
 const router = useRouter();
@@ -810,16 +828,39 @@ function getConfirmDialogDescription(): string {
 }
 
 async function confirmPlanChange() {
-  if (!pendingPlanChange.value) return;
+  if (!pendingPlanChange.value || loadersStore.isButtonLoading) return;
 
-  showConfirmDialog.value = false;
+  loadersStore.showButtonLoader();
 
-  // Устанавливаем выбранный план только после подтверждения
-  selectedPlanId.value = pendingPlanChange.value.id;
+  try {
+    // Устанавливаем выбранный план только после подтверждения в модалке.
+    selectedPlanId.value = pendingPlanChange.value.id;
 
-  // Автоматически запускаем checkout
-  // fetchCurrentSubscription уже вызывается внутри startCheckout
-  await startCheckout();
+    // Автоматически запускаем checkout.
+    // fetchCurrentSubscription уже вызывается внутри startCheckout.
+    const isCheckoutStarted = await startCheckout();
+
+    // Закрываем модалку только при успешном ответе/старте checkout.
+    if (isCheckoutStarted) {
+      showConfirmDialog.value = false;
+      pendingPlanChange.value = null;
+    }
+  } finally {
+    // Лоадер кнопки скрываем всегда: и при success, и при ошибке.
+    loadersStore.hideButtonLoader();
+  }
+}
+
+function handleConfirmDialogOpenChange(nextOpen: boolean) {
+  // Во время подтверждения запрещаем закрытие по overlay/ESC/Cancel.
+  if (!nextOpen && loadersStore.isButtonLoading) {
+    return;
+  }
+
+  showConfirmDialog.value = nextOpen;
+  if (!nextOpen) {
+    pendingPlanChange.value = null;
+  }
 }
 
 function goBack() {
@@ -1530,13 +1571,13 @@ async function openYooKassaWidget(
   }
 }
 
-async function startCheckout() {
-  if (!selectedPlanId.value) return;
+async function startCheckout(): Promise<boolean> {
+  if (!selectedPlanId.value) return false;
   processing.value = true;
 
   try {
     const plan = selectedPlan.value;
-    if (!plan) return;
+    if (!plan) return false;
 
     const billingPeriod = planBillingPeriods.value.get(plan.id) || 'month';
     const checkoutMode = resolveCheckoutModeForCurrentContext();
@@ -1551,7 +1592,7 @@ async function startCheckout() {
 
     if (isNativeIos.value) {
       await openExternalSubscriptionFlow(plan.id, billingPeriod);
-      return;
+      return true;
     }
 
     ensureCheckoutIdempotencyKey(
@@ -1587,7 +1628,7 @@ async function startCheckout() {
       await subscriptionStore.refreshSubscription();
       await refreshBillingAccessSnapshot();
       useToast('Этот план уже активен', 'Изменения не требуются.', 'info');
-      return;
+      return true;
     }
 
     if (checkoutAction === 'scheduled_downgrade') {
@@ -1598,7 +1639,7 @@ async function startCheckout() {
         'Новый тариф будет применён в конце текущего периода.',
         'info'
       );
-      return;
+      return true;
     }
 
     if (checkoutAction === 'activated') {
@@ -1610,7 +1651,7 @@ async function startCheckout() {
         `К оплате: ${response.toPay} ₽`,
         'success'
       );
-      return;
+      return true;
     }
 
     if (checkoutAction === 'trial_scheduled') {
@@ -1624,7 +1665,7 @@ async function startCheckout() {
           : 'Списание будет выполнено в конце пробного периода.',
         'success'
       );
-      return;
+      return true;
     }
 
     if (checkoutAction === 'bind_payment_method_required') {
@@ -1636,7 +1677,7 @@ async function startCheckout() {
           'Завершите привязку и вернитесь в приложение.',
           'info'
         );
-        return;
+        return true;
       }
 
       throw new Error(
@@ -1656,13 +1697,13 @@ async function startCheckout() {
         response.subscriptionId,
         useReturnUrl
       );
-      return;
+      return true;
     }
 
     if (response.paymentMode === 'redirect' && response.paymentUrl) {
       pendingCheckoutSubscriptionId.value = response.subscriptionId;
       await openExternalBrowser(response.paymentUrl);
-      return;
+      return true;
     }
 
     throw new Error(
@@ -1675,6 +1716,7 @@ async function startCheckout() {
       error?.message || 'Неизвестная ошибка',
       'error'
     );
+    return false;
   } finally {
     processing.value = false;
   }

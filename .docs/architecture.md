@@ -5,6 +5,10 @@
 • Бэкенд: Nitro (Node.js runtime) + Postgres + Drizzle ORM.
 • Мобильность: Capacitor + Ionic (iOS/Android).
 • Бренд-логотип локализован по языку интерфейса: для `ru` используется `logo_ru.svg`, для `en` — `logo_en.svg` (в web-приложении и лендинге).
+• Единый паттерн лоадера в кнопках: в основном приложении используется `app/components/ui/ButtonLoader.vue`, в лендинге — `apps/landing/components/ui/ButtonLoader.vue`; текстовые состояния вида `...` в submit/action кнопках заменены на спиннер, при этом основной контент кнопки остаётся в DOM как `invisible`, чтобы высота не менялась.
+• Редактор текстов уведомлений (`app/components/notifications/NotificationTextsEditorPage.vue`): блок восстановления дефолтных текстов скрыт для кастомных привычек/терапий; блок выбора «Фокус уведомлений» отображается только при наличии хотя бы одного доступного варианта.
+• Tooltip в приложении приведён к glass-паттерну: стили для `.v-popper--theme-tooltip`/`.plan-feature-tooltip`/`.landing-tooltip-theme` в `app/assets/css/main.scss` повторяют визуал `.glass-deep` и используют progressive enhancement с `@supports` для `-webkit-backdrop-filter/backdrop-filter` (fallback без blur для старых WebView/Safari).
+• Landing static-build совместимость: `apps/landing/components/ui/ButtonLoader.vue` использует встроенный SVG-спиннер (без `~icons/*`, чтобы Rollup не падал на unresolved import). `v-tooltip` в лендинге сохранён; падение компиляции Vue (`Symbol(ProxyTarget)`) устранено pin-override зависимостью `on-change@6.0.2` через `package.json > pnpm.overrides` (Nuxt `4.1.2` по умолчанию тянет `on-change@^5.0.1`).
 • Safe-area на mobile: для iOS в layout (`default/auth/blank`) применяется только верхний safe-area (`safe-area-inset-top`) через класс `ios-safe-layout`; нижняя часть интерфейса (BottomNav/контент) не получает дополнительных iOS-отступов, чтобы сохранять прежнюю высоту и визуальный ритм.
 • iOS‑гайд и паритет с Android: см. `.docs/IOS_SETUP.md` (dev/prod, push, Apple Developer Program, FCM/APNs особенности).
 • iOS bundle id: `com.mentala.app` (prod) и `com.mentala.app.dev` (dev), отдельные схемы в Xcode.
@@ -88,6 +92,7 @@ index, onboarding, chat (layout blank), therapy, habits, practices, breath-pract
 • Заголовок детального плеера использует контекст секции (`queueKey` или query `topic`), чтобы для мульти-треков показывать правильную тему.
 • Состояния: компонент StateBlock отображает idle/loading/empty/error.
 • Скелетоны: в `Skeleton.vue` есть общий тип `practice-page` для медитаций и дыхательных практик.
+• Лоадеры интерфейса: `useLoadersStore` хранит `isPageLoading`, `isSkeletonLoading`, `isButtonLoading`; для кнопок используется переиспользуемый `app/components/ui/ButtonLoader.vue` (только спиннер, абсолютное центрирование внутри `relative`-кнопки + скрытие основного контента через `invisible` во время loading для сохранения размеров).
 • Сторы Pinia:
 • ui
 • user
@@ -532,7 +537,7 @@ server/
 • выключает `autoRenew` у активных подписок пользователя;
 • очищает `users.scheduled_*` и trial billing-поля (`billing_plan_id`, `billing_period`, `next_charge_at`, `billing_collection_status`, `grace_ends_at`, `billing_reminder_sent_at`, `billing_locked_*`);
 • пытается отменить `pending` checkout-платежи в YooKassa (`POST /v3/payments/{id}/cancel`) и закрывает локальные `pending` подписки в `canceled` там, где отмена подтверждена;
-• отвязывает текущий `paymentMethodId` (через `detachUserPaymentMethod`), чтобы backend не мог инициировать новые recurring-списания без явной повторной привязки карты;
+• сохраняет текущий `paymentMethodId` (карту не отвязываем при cancel), чтобы пользователь мог позже снова включить автопродление без повторной привязки;
 • возвращает список unresolved `pending` платежей, если provider не подтвердил отмену (операционный сигнал для ручной проверки).
 
 • Вне текущего scope (не считать реализованным):

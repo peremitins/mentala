@@ -172,6 +172,11 @@
       "prettier --write"
     ]
   },
+  "pnpm": {
+    "overrides": {
+      "on-change": "6.0.2"
+    }
+  },
   "config": {
     "commitizen": {
       "path": "cz-git"
