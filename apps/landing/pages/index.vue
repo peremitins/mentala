@@ -136,7 +136,7 @@
             >
               <img
                 src="/landing/features/hero_bg.jpg"
-                alt="Пользователи Mentala в повседневных сценариях"
+                alt="Пользователи Ментала в повседневных сценариях"
                 class="hero-media-image"
                 loading="lazy"
                 fetchpriority="high"
@@ -160,7 +160,7 @@
         <div class="landing-container">
           <div class="max-w-2xl space-y-4 mb-5">
             <h2 class="font-display text-3xl sm:text-4xl font-bold reveal-item">
-              Возможности Mentala
+              Возможности Ментала
             </h2>
             <p class="text-white/75 reveal-item">
               От быстрой помощи при тревоге до устойчивых изменений в привычках.
@@ -206,7 +206,7 @@
             <div
               class="reveal-item glass-panel rounded-xl px-5 py-4 text-xs sm:text-sm text-white/80 border-white/25 max-w-3xl mx-auto !mt-[10px] text-center"
             >
-              Mentala создана для психологической поддержки и самопомощи. Это не
+              Ментала создана для психологической поддержки и самопомощи. Это не
               медицинская услуга и не замена врачу или психотерапевту. Если вы
               чувствуете, что вам нужна профессиональная помощь, пожалуйста, не
               откладывайте визит к квалифицированному специалисту.
@@ -274,7 +274,7 @@
               Сценарии
             </h2>
             <p class="text-white/75 reveal-item">
-              Как Mentala помогает в повседневной жизни.
+              Как Ментала помогает в повседневной жизни.
             </p>
           </div>
 
@@ -353,10 +353,10 @@
               Дополняет, не заменяет
             </Badge>
             <h2 class="font-display text-3xl sm:text-4xl font-bold reveal-item">
-              Чем Mentala удобна в реальной жизни
+              Чем Ментала удобна в реальной жизни
             </h2>
             <p class="text-white/75 reveal-item">
-              Mentala не заменяет специалиста. Она делает поддержку доступной в
+              Ментала не заменяет специалиста. Она делает поддержку доступной в
               моменты, когда она нужна.
             </p>
           </div>
@@ -368,7 +368,7 @@
               class="reveal-item glass-panel min-w-0 rounded-2xl p-5 sm:p-6 flex flex-col"
             >
               <h3 class="font-display text-xl sm:text-2xl font-bold mb-4">
-                Mentala
+                Ментала
               </h3>
               <ul
                 class="space-y-3 text-sm text-white/80 leading-relaxed flex-1"
@@ -545,7 +545,7 @@
       <section
         class="reveal-item glass-panel rounded-xl px-5 py-4 text-xs sm:text-sm text-white/80 border-white/25 max-w-3xl mx-auto mt-20 sm:mt-28 text-center"
       >
-        Mentala создана для психологической поддержки и самопомощи. Это не
+        Ментала создана для психологической поддержки и самопомощи. Это не
         медицинская услуга и не замена врачу или психотерапевту. Если вы
         чувствуете, что вам нужна профессиональная помощь, пожалуйста, не
         откладывайте визит к квалифицированному специалисту.
@@ -642,7 +642,7 @@
               class="flex px-3 py-2 gap-3 items-center justify-center text-sm text-white/75"
             >
               <p class="flex text-xs text-white/55 leading-0">
-                © {{ new Date().getFullYear() }} Mentala
+                © {{ new Date().getFullYear() }} Ментала
               </p>
               <a
                 href="mailto:hello@mentala.app"
@@ -710,7 +710,7 @@
           </button>
 
           <h3 class="font-display text-2xl font-bold mb-2">
-            Ранний доступ к Mentala
+            Ранний доступ к Ментала
           </h3>
           <p class="text-sm text-white/72 mb-6">
             Оставьте контакт — сообщим о запуске и пришлём доступ.
@@ -1082,12 +1082,12 @@ const comparisonMentalaPoints: ComparisonPoint[] = [
   {
     text: 'Экономия времени и ресурсов',
     tooltip:
-      'Курс годовой поддержки в Mentala стоит дешевле, чем одна консультация у квалифицированного специалиста. Вы получаете ежедневную опору без необходимости тратить время на дорогу и поиск «своего» терапевта.',
+      'Курс годовой поддержки в Ментала стоит дешевле, чем одна консультация у квалифицированного специалиста. Вы получаете ежедневную опору без необходимости тратить время на дорогу и поиск «своего» терапевта.',
   },
   {
     text: 'Анонимность и отсутствие суждений',
     tooltip:
-      'Многим сложно начать терапию из-за страха осуждения или неловкости. В Mentala вы можете быть максимально честны: ИИ не оценивает, не критикует и гарантирует конфиденциальность ваших мыслей.',
+      'Многим сложно начать терапию из-за страха осуждения или неловкости. В Ментала вы можете быть максимально честны: ИИ не оценивает, не критикует и гарантирует конфиденциальность ваших мыслей.',
   },
   {
     text: 'Комплексный подход в одном месте',
@@ -1168,9 +1168,9 @@ const pricingPlans: PricingPlan[] = [
 
 const faq: FaqItem[] = [
   {
-    question: 'Может ли Mentala заменить психолога или психотерапевта?',
+    question: 'Может ли Ментала заменить психолога или психотерапевта?',
     answer:
-      'Нет. Mentala, это приложение для самопомощи и психологической поддержки, но оно не заменяет врача или психотерапевта. Mentala не ставит диагнозы и не назначает лечение. Если состояние ухудшается или нужна помощь специалиста, обратитесь к квалифицированному врачу или психотерапевту.',
+      'Нет. Ментала, это приложение для самопомощи и психологической поддержки, но оно не заменяет врача или психотерапевта. Ментала не ставит диагнозы и не назначает лечение. Если состояние ухудшается или нужна помощь специалиста, обратитесь к квалифицированному врачу или психотерапевту.',
   },
   {
     question: 'Как работает приватность?',
@@ -1448,22 +1448,22 @@ onBeforeUnmount(() => {
 });
 
 useSeoMeta({
-  title: 'Mentala — психологическая поддержка 24/7',
+  title: 'Ментала — психологическая поддержка 24/7',
   description:
     'ИИ‑чат поддержки, дыхательные практики, медитации и привычки — в одном приложении. Начните бесплатно (Basic) или попробуйте Premium на 7 дней.',
   robots:
     'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1',
-  ogTitle: 'Mentala — психологическая поддержка 24/7',
+  ogTitle: 'Ментала — психологическая поддержка 24/7',
   ogDescription:
     'ИИ‑чат, медитации, дыхание, SOS‑практики и персональные напоминания. Начните бесплатно или попробуйте Premium на 7 дней.',
   ogType: 'website',
   ogUrl: canonicalUrl.value,
-  ogSiteName: 'Mentala',
+  ogSiteName: 'Ментала',
   ogLocale: 'ru_RU',
   ogImage: ogImageUrl.value,
-  ogImageAlt: 'Mentala — психологическая поддержка 24/7',
+  ogImageAlt: 'Ментала — психологическая поддержка 24/7',
   twitterCard: 'summary_large_image',
-  twitterTitle: 'Mentala — психологическая поддержка 24/7',
+  twitterTitle: 'Ментала — психологическая поддержка 24/7',
   twitterDescription:
     'ИИ‑чат, медитации, дыхательные практики и привычки. Начните бесплатно или попробуйте Premium на 7 дней.',
   twitterImage: ogImageUrl.value,
@@ -1477,7 +1477,7 @@ useHead({
       textContent: JSON.stringify({
         '@context': 'https://schema.org',
         '@type': 'Organization',
-        name: 'Mentala',
+        name: 'Ментала',
         url: canonicalUrl.value,
         logo: new URL('/logo.svg', canonicalUrl.value).href,
         contactPoint: [
@@ -1495,7 +1495,7 @@ useHead({
       textContent: JSON.stringify({
         '@context': 'https://schema.org',
         '@type': 'WebSite',
-        name: 'Mentala',
+        name: 'Ментала',
         url: canonicalUrl.value,
         inLanguage: 'ru',
       }),
@@ -1505,7 +1505,7 @@ useHead({
       textContent: JSON.stringify({
         '@context': 'https://schema.org',
         '@type': 'WebPage',
-        name: 'Mentala — психологическая поддержка 24/7',
+        name: 'Ментала — психологическая поддержка 24/7',
         url: canonicalUrl.value,
         inLanguage: 'ru',
         primaryImageOfPage: ogImageUrl.value,

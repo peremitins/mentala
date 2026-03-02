@@ -56,7 +56,7 @@
             <div v-if="currentStep === 'welcome'" class="space-y-4">
               <div class="space-y-2">
                 <h1 class="text-2xl font-semibold text-foreground sm:text-3xl">
-                  Добро пожаловать в Mentala
+                  Добро пожаловать в Ментала
                 </h1>
                 <p class="text-sm text-foreground">
                   Давай быстро настроим приложение под тебя. Это займёт меньше
@@ -209,7 +209,7 @@
                   Готово, {{ finalName }}
                 </h2>
                 <p class="text-sm text-foreground">
-                  Mentala настроена под вас. Можно начинать.
+                  Ментала настроена под вас. Можно начинать.
                 </p>
               </div>
               <Button

@@ -301,7 +301,7 @@ async function applyScheduledPlanChangeForUser(params: {
       secretKey,
       idempotenceKey: yookassaIdempotenceKey,
       amount: checkoutAmount,
-      description: `Mentala scheduled plan change ${scheduledPlanId} (${scheduledBillingPeriod})`,
+      description: `Ментала scheduled plan change ${scheduledPlanId} (${scheduledBillingPeriod})`,
       metadata: {
         userId: String(userId),
         subscriptionId: String(pendingSubscription.id),

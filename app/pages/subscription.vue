@@ -131,7 +131,7 @@
                 <strong>Сейчас:</strong> нет активной подписки
               </p>
               <p class="text-sm text-foreground">
-                Чтобы продолжить пользоваться Mentala, выберите один из тарифов
+                Чтобы продолжить пользоваться Ментала, выберите один из тарифов
                 ниже.
               </p>
             </div>
@@ -263,7 +263,7 @@
         class="glass-deep rounded-lg border border-border p-4 space-y-3"
       >
         <p class="text-sm text-foreground">
-          На iOS управление тарифом доступно в веб-версии Mentala.
+          На iOS управление тарифом доступно в веб-версии Ментала.
         </p>
         <button
           type="button"
