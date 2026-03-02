@@ -655,8 +655,8 @@ export default defineNuxtPlugin({
       try {
         await LocalNotifications.createChannel?.({
           id: 'mentai_high',
-          name: 'Mentala High Priority',
-          description: 'Важные уведомления Mentala',
+          name: 'Ментала High Priority',
+          description: 'Важные уведомления Ментала',
           importance: 5, // IMPORTANCE_HIGH
           visibility: 1, // VISIBILITY_PUBLIC
           sound: 'default',

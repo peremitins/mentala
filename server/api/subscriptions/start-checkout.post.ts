@@ -932,7 +932,7 @@ export default defineEventHandler(async (event) => {
         secretKey,
         idempotenceKey: savedMethodIdempotenceKey,
         amount: decision.toPay,
-        description: `Mentala subscription ${planId} (${billingPeriodTyped})`,
+        description: `Ментала subscription ${planId} (${billingPeriodTyped})`,
         metadata: {
           userId: String(userId),
           planId,
@@ -1260,7 +1260,7 @@ export default defineEventHandler(async (event) => {
       secretKey,
       idempotenceKey: yookassaIdempotenceKey,
       amount: decision.toPay,
-      description: `Mentala subscription ${planId} (${billingPeriodTyped})`,
+      description: `Ментала subscription ${planId} (${billingPeriodTyped})`,
       metadata: {
         userId: String(userId),
         subscriptionId: String(pendingSubscription.id),

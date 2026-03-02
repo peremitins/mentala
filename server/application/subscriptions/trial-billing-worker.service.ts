@@ -386,7 +386,7 @@ async function processChargeBatch(params: {
         secretKey: params.secretKey,
         idempotenceKey: chargeAttemptKey,
         amount: chargeAmount,
-        description: `Mentala trial charge ${user.billingPlanId} (${user.billingPeriod})`,
+        description: `Ментала trial charge ${user.billingPlanId} (${user.billingPeriod})`,
         paymentMode: 'recurring',
         paymentMethodId: user.paymentMethodId,
         metadata: {

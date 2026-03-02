@@ -76,10 +76,10 @@ public class MainApplication extends Application {
             if (existing == null) {
                 NotificationChannel channel = new NotificationChannel(
                     DEFAULT_CHANNEL_ID,
-                    "Mentala High Priority",
+                    "Ментала High Priority",
                     NotificationManager.IMPORTANCE_HIGH
                 );
-                channel.setDescription("Важные уведомления Mentala");
+                channel.setDescription("Важные уведомления Ментала");
                 channel.enableLights(true);
                 channel.enableVibration(true);
                 channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
