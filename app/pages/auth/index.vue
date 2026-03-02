@@ -9,7 +9,10 @@
           <div
             class="flex w-[150px] h-auto items-center justify-center mb-6 mx-auto"
           >
-            <BrandLogo class="signin__form-brand-logo-img" />
+            <component
+              :is="brandLogoComponent"
+              class="signin__form-brand-logo-img"
+            />
           </div>
           <div class="text-center mb-6">
             <!-- <div class="text-2xl font-semibold text-foreground">Mentala</div> -->
@@ -319,7 +322,8 @@ import { useCountdown } from '@vueuse/core';
 import { useAuthStore } from '@/app/stores/auth';
 import GoogleIcon from '~icons/logos/google-icon';
 import NeuralBg from '@/app/components/ui/bg-neural/NeuralBg.vue';
-import BrandLogo from '@/app/assets/images/logo.svg';
+import BrandLogoEn from '@/app/assets/images/logo_en.svg';
+import BrandLogoRu from '@/app/assets/images/logo_ru.svg';
 import { Input } from '@/app/components/ui/shadcn/input';
 import { Checkbox } from '@/app/components/ui/shadcn/checkbox';
 import { Tabs, TabsList, TabsTrigger } from '@/app/components/ui/shadcn/tabs';
@@ -359,6 +363,11 @@ const langCookie = useCookie<string | null>('mentai.lang', {
   path: '/',
 });
 const locale = computed(() => langCookie.value || 'ru');
+const brandLogoComponent = computed(() => {
+  // Логотип выбирается по текущей локали интерфейса.
+  const normalizedLocale = String(locale.value || 'ru').toLowerCase();
+  return normalizedLocale.startsWith('ru') ? BrandLogoRu : BrandLogoEn;
+});
 
 function startResendTimer(seconds = 60) {
   reset(seconds);
