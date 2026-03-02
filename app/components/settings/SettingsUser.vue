@@ -45,11 +45,12 @@
           </div>
 
           <Button
-            class="w-fit bg-primary text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+            class="relative w-fit bg-primary text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
             :disabled="!canSaveProfile"
             @click="saveProfile"
           >
-            {{ savingProfile ? 'Сохранение...' : 'Сохранить' }}
+            <ButtonLoader v-if="savingProfile" />
+            <span :class="savingProfile ? 'invisible' : ''">Сохранить</span>
           </Button>
         </section>
       </div>
@@ -112,10 +113,14 @@
           Осталось попыток: {{ emailAttemptsLeft }}
         </div>
         <Button
+          class="relative"
           :disabled="emailVerificationLoading"
           @click="confirmVerificationCode"
         >
-          {{ emailVerificationLoading ? 'Проверка...' : 'Подтвердить email' }}
+          <ButtonLoader v-if="emailVerificationLoading" />
+          <span :class="emailVerificationLoading ? 'invisible' : ''">
+            Подтвердить email
+          </span>
         </Button>
       </div>
     </section>
@@ -157,8 +162,15 @@
             :show-clear-button="false"
           />
         </div>
-        <Button :disabled="passwordLoading" @click="handleSetPassword">
-          {{ passwordLoading ? 'Сохранение...' : 'Установить пароль' }}
+        <Button
+          class="relative"
+          :disabled="passwordLoading"
+          @click="handleSetPassword"
+        >
+          <ButtonLoader v-if="passwordLoading" />
+          <span :class="passwordLoading ? 'invisible' : ''">
+            Установить пароль
+          </span>
         </Button>
       </div>
 
@@ -193,8 +205,15 @@
             :show-clear-button="false"
           />
         </div>
-        <Button :disabled="passwordLoading" @click="handleChangePassword">
-          {{ passwordLoading ? 'Сохранение...' : 'Изменить пароль' }}
+        <Button
+          class="relative"
+          :disabled="passwordLoading"
+          @click="handleChangePassword"
+        >
+          <ButtonLoader v-if="passwordLoading" />
+          <span :class="passwordLoading ? 'invisible' : ''">
+            Изменить пароль
+          </span>
         </Button>
       </div>
     </section>
@@ -205,6 +224,7 @@
 import { ref, onMounted, computed } from 'vue';
 import { useCountdown } from '@vueuse/core';
 import { useAuthStore } from '@/app/stores/auth';
+import ButtonLoader from '@/app/components/ui/ButtonLoader.vue';
 import { Input } from '@/app/components/ui/shadcn/input';
 import { Button } from '@/app/components/ui/button';
 import ToggleButtonGroup from '@/app/components/ui/ToggleButtonGroup.vue';

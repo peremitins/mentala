@@ -33,11 +33,12 @@
       <section class="glass-deep p-3">
         <Button
           type="button"
-          class="w-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+          class="relative w-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
           :disabled="!canSave"
           @click="saveGlobalPreferences"
         >
-          {{ savingGlobal ? 'Сохранение...' : 'Сохранить' }}
+          <ButtonLoader v-if="savingGlobal" />
+          <span :class="savingGlobal ? 'invisible' : ''">Сохранить</span>
         </Button>
       </section>
     </div>
@@ -47,6 +48,7 @@
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue';
 import ToggleButtonGroup from '@/app/components/ui/ToggleButtonGroup.vue';
+import ButtonLoader from '@/app/components/ui/ButtonLoader.vue';
 import { Button } from '@/app/components/ui/button';
 import { useNotificationsSettings } from '@/app/composables/useNotificationsSettings';
 import { useToast } from '@/app/composables/useToast';

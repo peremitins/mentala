@@ -214,11 +214,14 @@
               </div>
               <Button
                 size="lg"
-                class="w-full"
+                class="relative w-full"
                 :disabled="completing"
                 @click="completeOnboarding"
               >
-                {{ completing ? 'Сохраняем...' : 'Перейти в приложение' }}
+                <ButtonLoader v-if="completing" />
+                <span :class="completing ? 'invisible' : ''">
+                  Перейти в приложение
+                </span>
               </Button>
             </div>
           </div>
@@ -232,9 +235,9 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useStepper } from '@vueuse/core';
 import { Button } from '@/app/components/ui/button';
+import ButtonLoader from '@/app/components/ui/ButtonLoader.vue';
 import { Input } from '@/app/components/ui/shadcn/input';
 import ToggleButtonGroup from '@/app/components/ui/ToggleButtonGroup.vue';
-import PageLoader from '@/app/components/ui/PageLoader.vue';
 import { useAuthStore } from '@/app/stores/auth';
 import { useToast } from '@/app/composables/useToast';
 import type { AgeRange, Gender, OnboardingTone } from '@/shared/dto/onboarding';

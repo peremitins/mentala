@@ -86,9 +86,12 @@
                   <button
                     type="submit"
                     :disabled="loading"
-                    class="w-full py-2.5 rounded-xl bg-primary text-primary-foreground hover:opacity-90 active:opacity-80 transition font-medium disabled:opacity-60 disabled:cursor-not-allowed"
+                    class="relative w-full py-2.5 rounded-xl bg-primary text-primary-foreground hover:opacity-90 active:opacity-80 transition font-medium disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    {{ loading ? '...' : 'Изменить пароль' }}
+                    <ButtonLoader v-if="loading" />
+                    <span :class="loading ? 'invisible' : ''">
+                      Изменить пароль
+                    </span>
                   </button>
                 </div>
               </form>
@@ -105,6 +108,7 @@ import { ref, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { useAuthStore } from '@/app/stores/auth';
 import NeuralBg from '@/app/components/ui/bg-neural/NeuralBg.vue';
+import ButtonLoader from '@/app/components/ui/ButtonLoader.vue';
 import { Input } from '@/app/components/ui/shadcn/input';
 import { useToast } from '@/app/composables/useToast';
 

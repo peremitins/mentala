@@ -293,11 +293,17 @@
                     Отмена
                   </AlertDialogCancel>
                   <AlertDialogAction
-                    :class="buttonVariants({ variant: 'destructive' })"
+                    :class="[
+                      buttonVariants({ variant: 'destructive' }),
+                      'relative',
+                    ]"
                     :disabled="isDeleting"
                     @click="handleDeleteAccount"
                   >
-                    {{ isDeleting ? 'Удаление...' : 'Да, удалить аккаунт' }}
+                    <ButtonLoader v-if="isDeleting" />
+                    <span :class="isDeleting ? 'invisible' : ''">
+                      Да, удалить аккаунт
+                    </span>
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
@@ -328,6 +334,7 @@ import { usePushSettings } from '@/app/composables/usePushSettings';
 import { useSettingsAnalytics } from '@/app/composables/useSettingsAnalytics';
 import SubscriptionBlock from '@/app/components/settings/SubscriptionBlock.vue';
 import Skeleton from '@/app/components/ui/Skeleton.vue';
+import ButtonLoader from '@/app/components/ui/ButtonLoader.vue';
 import { Switch } from '@/app/components/ui/shadcn/switch';
 import {
   Dialog,
