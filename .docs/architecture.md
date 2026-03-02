@@ -672,6 +672,7 @@ server/
 • Источник истины по тарифным описаниям: `app/components/subscription/PlanCard.vue` + серверные сиды тарифов/доступов (`seed-subscription-plans.ts`, `seed-feature-access-policies.ts`).
 • Адаптивность лендинга обязательна с ширины `320px`; кроссбраузерная поддержка — популярные desktop/mobile браузеры по матрице из `.docs/landing.md`.
 • **CI/CD и деплой лендинга**: при пуше в `main`/`dev` workflow (`deploy-prod.yml`, `deploy-dev.yml`) выполняют **статический экспорт** лендинга (`pnpm landing:generate`) и деплой статики на сервер: rsync в `/var/www/landing/releases/<id>/`, атомарное переключение symlink `current`, хранение последних 5 релизов. Лендинг отдаётся Nginx (на хосте или в контейнере), Traefik маршрутизирует `mentala.app` на статику. Подробности — `.docs/landing_static_deploy_tz.md`.
+• **CI/CD и деплой приложения (обновлено 2 марта 2026)**: после `docker compose up -d --remove-orphans web` в обоих workflow (`deploy-prod.yml`, `deploy-dev.yml`) обязательно выполняются post-deploy шаги очистки Docker: `docker container prune -f`, `docker image prune -a -f --filter "until=168h"`, затем `docker system df` для контроля диска. Это предотвращает накопление `<none>` образов и удержание старых слоёв остановленными контейнерами на серверах с маленьким диском.
 
 ⸻
 
