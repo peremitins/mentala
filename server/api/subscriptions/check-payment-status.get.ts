@@ -302,6 +302,22 @@ export default defineEventHandler(
                 );
             }
 
+            // Успешная non-trial активация должна очищать trial-scheduled поля.
+            await tx
+              .update(users)
+              .set({
+                billingPlanId: null,
+                billingPeriod: null,
+                nextChargeAt: null,
+                billingCollectionStatus: 'none',
+                graceEndsAt: null,
+                billingReminderSentAt: null,
+                billingLockedAt: null,
+                billingLockedBy: null,
+                updatedAt: now,
+              })
+              .where(eq(users.id, targetSubscription!.userId));
+
             const paymentMethodPresentation = extractPaymentMethodPresentation(
               payment.payment_method
             );

@@ -8,6 +8,7 @@
 • iOS‑гайд и паритет с Android: см. `.docs/IOS_SETUP.md` (dev/prod, push, Apple Developer Program, FCM/APNs особенности).
 • iOS bundle id: `com.mentala.app` (prod) и `com.mentala.app.dev` (dev), отдельные схемы в Xcode.
 • Совместимость CocoaPods/Xcode: в `ios/App/App.xcodeproj/project.pbxproj` должен быть `objectVersion = 77` (не `70`), иначе `pod install` падает на CocoaPods 1.16.2 с ошибкой `[Xcodeproj] Unable to find compatibility version string for object version 70`; скрипт `scripts/setup-capacitor-dev.sh` автоматически нормализует `70 -> 77` перед `cap sync`.
+• Sync-конвейер Capacitor централизован через скрипты: `pnpm cap:sync:device|emulator` включает `CAPACITOR_SERVER_URL` для dev, `pnpm cap:sync:prod` принудительно очищает `server.url` в runtime-конфигах Android/iOS (`scripts/fix-capacitor-config.js`) и валидирует prod-safe состояние (`scripts/verify-capacitor-config.js`), чтобы в релиз не попал локальный LAN-IP.
 • iOS Audio Session: в `ios/App/App/AppDelegate.swift` принудительно активируется `AVAudioSession` с категорией `.playback` (при launch и `applicationDidBecomeActive`) для стабильного звучания WebAudio loop-треков на реальных iPhone, включая сценарий с hardware silent switch.
 • iOS background audio: в `ios/App/App/Info.plist` для `UIBackgroundModes` включён `audio` (вместе с `remote-notification`), чтобы медитация продолжала воспроизведение при блокировке экрана/сворачивании приложения.
 • Визуальный стеклянный слой (`.glass-deep`, `.glass-deep-bottom`) использует progressive enhancement: базовый плотный fallback (без `color-mix`) для старых iOS/WebView, затем `-webkit-backdrop-filter`/`backdrop-filter`, и только при поддержке `color-mix(in oklab, ...)` применяются целевые стили.
@@ -353,6 +354,7 @@ server/
 • Trial:
 • Trial — это **состояние пользователя**, а не отдельный план: `users.has_used_trial`, `users.trial_started_at`, `users.trial_ended_at`.
 • При регистрации создаётся `Basic` подписка; если Trial активен — для Basic включается полный AI-доступ уровня Premium на 7 дней (с Premium fair-use guard).
+• Длительность trial конфигурируется через `TRIAL_DURATION_HOURS` (по умолчанию `168`, то есть 7 дней), что позволяет сокращать trial в тестовом окружении до часов.
 • Идентификатор Trial: сейчас **email обязателен**, без email регистрация не поддерживается.
 • Нормализация email: `normalizeEmail` (lowercase + Gmail aliases + Unicode NFKC) — единая для auth и trial tracking.
 • Идентификатор: `email_hash` (HMAC‑SHA256 + `EMAIL_HASH_PEPPER`) как ключ; `email_normalized` хранится для поддержки.
@@ -391,11 +393,15 @@ server/
 • Для `downgrade_later`:
 • сохраняется schedule в `users.scheduled_*`;
 • у текущей активной подписки выставляется `autoRenew=false`;
+• при наступлении `effectiveAt` план применяется автоматически (фоновый worker + self-heal в `/api/subscriptions/current` как fallback);
+• для платного target-плана выполняется автосписание по сохранённой карте и создаётся новый период уже на целевом тарифе;
 • ответ возвращается без платежа (`paymentMode=none`, `toPay=0`).
 • Для `upgrade_now`:
 • schedule очищается;
+• trial-scheduled поля (`billing_plan_id`, `billing_period`, `next_charge_at`, `billing_collection_status`, `grace_ends_at`, `billing_reminder_sent_at`, `billing_locked_*`) также очищаются, чтобы после paid-активации не оставалось устаревшего блока «Списание запланировано»;
 • создаётся `pending` (если `toPay > 0`) или сразу `active` (если `toPay = 0`) подписка;
 • предыдущая активная подписка переводится в `expired` после активации новой.
+• Для перехода `Basic -> Pro/Premium` действует отдельное правило: платный период всегда начинается с момента активации (`startDate=now`, `endDate=now+period`), без привязки к `endDate` текущей `basic`-подписки.
 • Перед расчетом checkout сервер синхронно очищает просроченные `active` (`endDate <= now -> expired`).
 • Выбор "текущей" подписки унифицирован: `order by endDate desc, createdAt desc, id desc`.
 • Если `toPay > 0` — выполняется реальный `POST https://api.yookassa.ru/v3/payments`:
@@ -425,10 +431,12 @@ server/
 • обработка `chargeType=trial_scheduled` для финализации рекуррентных списаний (success/fail) по `chargeAttemptKey`.
 • Добавлен `POST /api/subscriptions/retry-charge` для ручного повтора списания при `past_due` (идемпотентный flow по `chargeAttemptKey`).
 • Добавлен фоновый плагин `server/plugins/trial-billing-worker.ts`:
-• запуск плановых списаний в `next_charge_at`;
+• запуск плановых списаний в `next_charge_at` с early-window `TRIAL_BILLING_EARLY_CHARGE_MINUTES` (по умолчанию 5 минут до дедлайна), чтобы не было разрыва доступов на стыке trial и первого списания;
 • policy retry `0h/+6h/+24h` через `auto_attempt_count`;
 • перевод в `past_due` + `grace_ends_at=+48h` при неуспехе;
 • авто-откат trial-billing состояния в Basic после истечения grace.
+• этот же worker применяет due `scheduled_downgrade` для paid-периодов (`users.scheduled_*`) и запускает списание уже по целевому тарифу.
+• При раннем успешном списании trial не форсируется к `now`: фактическое окончание trial продолжает определяться `users.trial_ended_at`, что исключает преждевременный срез trial-доступов.
 • Reminder за 24 часа реализован в том же worker:
 • push обязателен (`sendToUser`);
 • email опционален (`sendBillingReminderEmail`) только при `email_verified_at` + `marketing_consent_at`;
@@ -439,8 +447,10 @@ server/
 • возвращает `trialEndsAt`, `currentEntitlementsPlan`, `billingPlan`, `billingPeriod`, `nextChargeAt`, `paymentMethodBound`, `billingCollectionStatus`, `graceEndsAt`;
 • при отсутствии активной подписки всегда отдает effective Basic-entitlements и `noActiveSubscription=true`;
 • не поднимает paid-entitlements из `pending/expired/canceled` записей.
+• Для `billingCollectionStatus=scheduled` и `past_due` (до `graceEndsAt`) effective plan сохраняется платным (`billingPlan`), чтобы не было временного падения доступа до Basic до завершения charging-flow.
 
 • `POST /api/subscriptions/scheduled-change/cancel` очищает `users.scheduled_*` и отменяет запланированную смену тарифа.
+• При отмене scheduled downgrade endpoint дополнительно восстанавливает `autoRenew=true` у активной исходной подписки (сначала по `scheduled_from_subscription_id`, затем fallback по текущей active подписке), чтобы после отмены будущего понижения текущий тариф продлевался штатно.
 
 • YooKassa webhook:
 • Каноничный endpoint: `POST /api/payments/yookassa/webhook`.
@@ -465,7 +475,8 @@ server/
 • Контейнер виджета обёрнут в `rounded + overflow-hidden`, чтобы скругления верхних/нижних углов сохранялись в embed-режиме на всех viewport.
 • Кнопка закрытия диалога использует стандартный визуальный стиль без явной рамки у кнопки (с принудительно тёмным цветом иконки для читаемости на белом фоне виджета); контейнер виджета имеет дополнительный верхний внутренний отступ для корректной визуальной дистанции от верхней границы.
 • Для обычного web/android flow `return_url` у widget не используется; после оплаты статус синхронизируется через widget events (`success/fail`) + short polling.
-• `return_url` в redirect-flow указывает сразу на `/subscription?paymentReturn=1&subscriptionId=...` (без отдельной промежуточной страницы); для external flow добавляется `externalFlow=1`.
+• Канонический endpoint возврата после внешней оплаты: `/payment-success`.
+• `return_url` в redirect-flow и bind-flow указывает на `/auth/external-session/consume?token=...&redirect=/payment-success?...`: внешний браузер сначала получает web cookie-сессию через consume endpoint и только потом редиректится в единый return-flow.
 • iOS native: внутренний checkout отключён; показывается только переход в web flow.
 • Mobile web: используется redirect checkout (без in-page widget popup), чтобы избежать нестабильности 3DS-кнопок в iframe на узких экранах.
 • После старта оплаты включён short polling с прогрессивным профилем: 1 сек первые 5 секунд, затем 3 сек, окно до 30 секунд.
@@ -475,15 +486,18 @@ server/
 • Критичный инвариант polling: фронт подтверждает оплату только по целевой checkout-подписке (`subscriptionId` из `start-checkout`/`return_url`), а не по `currentSubscription`, чтобы старая `active` подписка не давала ложный success.
 • `GET /api/subscriptions/check-payment-status` поддерживает точечную проверку по `subscriptionId` вне зависимости от текущего `payment_status` записи; для non-pending статусов endpoint возвращает фактический локальный статус без выбора «последней pending» записи.
 • `GET /api/subscriptions/current` получил on-demand self-heal для trial-scheduled billing: если `nextChargeAt <= now`, статус `scheduled|past_due`, карта привязана и есть `paymentMethodId`, endpoint точечно запускает попытку списания для текущего пользователя (`runTrialBillingForUser`) и затем перечитывает billing state.
+• `GET /api/subscriptions/current` завершает deferred trial-schedule после bind-flow только для незавершённого trial-window: карта привязана, есть `billingPlanId/billingPeriod/nextChargeAt`, `billingCollectionStatus='none'` и `nextChargeAt <= trialEndedAt`.
+• `GET /api/subscriptions/current` дополнительно очищает stale trial-billing состояние, если уже есть активная paid-подписка и trial-поля указывают на post-trial период (`nextChargeAt > trialEndedAt`).
 • Это закрывает кейс «worker не успел/не запущен»: при открытии экрана подписки списание догоняется автоматически без ручного retry и без перезагрузки страницы.
 • `app/plugins/subscription-sync.client.ts`:
 • синхронизация подписки работает только по оплатным событиям (event-driven), без авто-refresh при `visibilitychange/appStateChange`;
-• обработка deep link возврата через `App.addListener('appUrlOpen', ...)`;
-• при `payment-success` всегда диспатчится событие `mentala:payment-return`;
-• если открыт `/subscription`, глобальный sync не запускается (страница сама выполняет polling);
-• для остальных маршрутов deep-link sync выполняется в single-flight режиме: refresh current -> pending polling (если нужен) -> refresh entitlements + `/api/user/me`.
-• Основной возврат после оплаты выполняется напрямую на `/subscription` с query `paymentReturn=1` (+ `subscriptionId`), без пользовательского экрана `payment/success`.
-• `app/pages/payment/success.vue` сохранён только как backward-compatible redirect для уже созданных checkout-сессий со старым `return_url`.
+• deep link обработчик (`App.addListener('appUrlOpen', ...)`) понимает и прямой `/payment-success`, и `/auth/external-session/consume?redirect=...`;
+• deep link нормализуется в SPA-маршрут `/payment-success?...`, после чего страница return-flow переводит пользователя на `/subscription`.
+• `app/pages/payment-success.vue`:
+• единая точка завершения внешнего checkout/bind;
+• нормализует query-флаги в контракт `/subscription` (`paymentReturn`, `bindReturn`, `subscriptionId`, `bindingSessionId`, ...);
+• в mobile web делает fallback-открытие `mentala://payment-success?...`, если Universal/App Links не сработали.
+• Поддерживается только один return-route: `/payment-success` (legacy-пути и алиасы удалены, чтобы не дублировать роутинг и логику возврата).
 • polling и форс-обновление подписки запускаются на `/subscription` по флагу `paymentReturn=1`.
 • `GET /api/subscriptions/current` отключил HTTP-кэш (`Cache-Control: private, no-store`) для исключения stale-статуса после успешной оплаты.
 
@@ -491,12 +505,18 @@ server/
 • `POST /api/auth/external-session/create` выдаёт одноразовый transfer-token.
 • Для dev на реальных устройствах добавлен клиентский override `appUrl` (вычисляется через `useExternalFlowAppUrl`): приоритет `NUXT_PUBLIC_DEVICE_APP_URL` на native/dev, затем `window.location.origin`.
 • Серверные endpoint’ы redirect-flow (`external-session/create`, `start-checkout`, `bind-payment-method`) используют `resolveExternalFlowAppUrl`: в dev принимают `appUrl` override, в production игнорируют несовпадающий override и остаются на серверном `appUrl`.
+• Для возврата из YooKassa используется отдельный профиль TTL одноразового токена (`PAYMENT_RETURN_EXTERNAL_SESSION_TTL_SECONDS`, default 2 часа): это предотвращает истечение токена во время заполнения платежной формы.
 • Для iOS speech-to-text в `ios/App/App/Info.plist` обязательны privacy-ключи `NSSpeechRecognitionUsageDescription` и `NSMicrophoneUsageDescription`; без них приложение падает при `SpeechRecognition.requestPermissions()`.
 • `GET /auth/external-session/consume?token=...`:
 • валидирует токен;
 • атомарно помечает его consumed;
 • создаёт web cookie-сессию (`mentala.sid` + CSRF);
-• редиректит на целевую страницу (`/subscription` по умолчанию).
+• редиректит на целевой внутренний path (`/subscription` по умолчанию, для billing return — `/payment-success?...`).
+• Для `payment_return` consume работает с replay-tolerance: повторный запрос тем же токеном в коротком окне (до 15 минут) допускается при отсутствии high-risk mismatch, чтобы исключить 401 из-за дублирующих GET во внешнем мобильном браузере.
+• Для `payment_return` cookie-политика в consume-flow принудительно `SameSite=Lax`; secure-флаг выставляется по фактическому протоколу входящего запроса (`https` -> `secure=true`, `http` -> `secure=false`), чтобы LAN/dev возврат через внешний браузер не терял cookie.
+• Сервер отдаёт `.well-known` ассоциации для deeplink:
+• `GET /.well-known/apple-app-site-association` (iOS Universal Links),
+• `GET /.well-known/assetlinks.json` (Android App Links; требует корректные SHA256 fingerprints сертификата).
 • Для bridge добавлена таблица `external_auth_tokens` (хранится только `token_hash`, TTL, consumed-аудит).
 • Fingerprint-check риск-ориентированный:
 • одиночный UA mismatch не блокирует flow;
@@ -507,7 +527,12 @@ server/
 • Reconciliation pending-подписок по verify API YooKassa (cron/job).
 • `pending_ttl_hours` и авто-закрытие зависших pending с возвратом резерва.
 • Усиление гарантии "не более одной active подписки на пользователя" (индекс/блокировки в критических транзакциях).
-• До интеграции recurring provider-cancel `POST /api/subscriptions/cancel` остаётся soft cancel (`autoRenew=false` в нашей модели).
+• `POST /api/subscriptions/cancel` переведён в hard-cancel семантику:
+• выключает `autoRenew` у активных подписок пользователя;
+• очищает `users.scheduled_*` и trial billing-поля (`billing_plan_id`, `billing_period`, `next_charge_at`, `billing_collection_status`, `grace_ends_at`, `billing_reminder_sent_at`, `billing_locked_*`);
+• пытается отменить `pending` checkout-платежи в YooKassa (`POST /v3/payments/{id}/cancel`) и закрывает локальные `pending` подписки в `canceled` там, где отмена подтверждена;
+• отвязывает текущий `paymentMethodId` (через `detachUserPaymentMethod`), чтобы backend не мог инициировать новые recurring-списания без явной повторной привязки карты;
+• возвращает список unresolved `pending` платежей, если provider не подтвердил отмену (операционный сигнал для ручной проверки).
 
 • Вне текущего scope (не считать реализованным):
 • runtime-маршрутизация `apple_iap / google_play / ios_external`;

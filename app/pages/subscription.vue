@@ -102,6 +102,25 @@
                   автоматически.
                 </p>
               </template>
+
+              <div v-if="isPaidActiveSubscription" class="mt-3">
+                <p
+                  v-if="isCurrentSubscriptionCancellationScheduled"
+                  class="text-xs text-foreground/80"
+                >
+                  Автопродление отключено. Подписка останется активной до
+                  {{ formatDate(currentSubscription.endDate) }}.
+                </p>
+                <button
+                  v-else
+                  type="button"
+                  :disabled="processing"
+                  class="inline-flex items-center justify-center rounded-md border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-primary-ui/10 disabled:opacity-60 disabled:cursor-not-allowed"
+                  @click="showCancelSubscriptionDialog = true"
+                >
+                  Отменить подписку
+                </button>
+              </div>
             </div>
             <div
               v-else-if="
@@ -306,6 +325,33 @@
           </AlertDialogCancel>
           <AlertDialogAction @click="confirmPlanChange">
             Подтвердить
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
+    <!-- Модалка подтверждения отмены автопродления -->
+    <AlertDialog
+      :open="showCancelSubscriptionDialog"
+      @update:open="showCancelSubscriptionDialog = $event"
+    >
+      <AlertDialogContent class="glass-deep">
+        <AlertDialogHeader>
+          <AlertDialogTitle>Отменить подписку?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Мы отключим автопродление. Текущий период останется активным до
+            {{ formatDate(currentSubscription?.endDate || null) }}.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel @click="showCancelSubscriptionDialog = false">
+            Отмена
+          </AlertDialogCancel>
+          <AlertDialogAction
+            :disabled="processing"
+            @click="cancelActiveSubscription"
+          >
+            {{ processing ? 'Отменяем...' : 'Отменить подписку' }}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -539,11 +585,28 @@ const shouldShowCurrentStatusCard = computed(() => {
     !trialActive.value
   );
 });
+
+const isPaidActiveSubscription = computed(() => {
+  return Boolean(
+    currentSubscription.value &&
+      currentSubscription.value.paymentStatus === 'active' &&
+      currentSubscription.value.plan.name !== 'basic'
+  );
+});
+
+const isCurrentSubscriptionCancellationScheduled = computed(() => {
+  if (!isPaidActiveSubscription.value) {
+    return false;
+  }
+
+  return currentSubscription.value?.autoRenew === false;
+});
 // Храним период оплаты для каждого плана отдельно
 const planBillingPeriods = ref<Map<string, 'month' | 'year'>>(new Map());
 const selectedPlanId = ref<string | null>(null);
 const processing = ref(false);
 const showConfirmDialog = ref(false);
+const showCancelSubscriptionDialog = ref(false);
 const pendingPlanChange = ref<Plan | null>(null);
 const checkoutIdempotencyKey = ref<string | null>(null);
 const checkoutPayloadSignature = ref<string | null>(null);
@@ -1166,6 +1229,42 @@ async function refreshBillingAccessSnapshot() {
   });
 }
 
+async function cancelActiveSubscription() {
+  if (processing.value) return;
+
+  showCancelSubscriptionDialog.value = false;
+  processing.value = true;
+
+  try {
+    const response = await useAPI<{
+      success: boolean;
+      message?: string;
+      endDate?: string;
+    }>('/api/subscriptions/cancel', {
+      method: 'POST',
+    });
+
+    await subscriptionStore.refreshSubscription();
+    await refreshBillingAccessSnapshot();
+
+    useToast(
+      'Автопродление отключено',
+      response?.message ||
+        'Подписка останется активной до конца оплаченного периода.',
+      'info'
+    );
+  } catch (error: any) {
+    console.error('Failed to cancel active subscription:', error);
+    useToast(
+      'Не удалось отменить подписку',
+      error?.message || 'Попробуйте еще раз.',
+      'error'
+    );
+  } finally {
+    processing.value = false;
+  }
+}
+
 async function cancelScheduledChange() {
   if (processing.value) return;
 
@@ -1390,7 +1489,7 @@ async function openYooKassaWidget(
   };
 
   if (useReturnUrl && typeof window !== 'undefined') {
-    widgetOptions.return_url = `${window.location.origin}/subscription?paymentReturn=1&subscriptionId=${subscriptionId}&externalFlow=1`;
+    widgetOptions.return_url = `${window.location.origin}/payment-success?flow=payment&paymentReturn=1&subscriptionId=${subscriptionId}&externalFlow=1`;
   }
 
   try {
@@ -1590,11 +1689,13 @@ onMounted(async () => {
   }
 
   const isPaymentReturnFlow = resolvePaymentReturnFlag();
+  const shouldForceSubscriptionRefresh =
+    isPaymentReturnFlow || Capacitor.isNativePlatform();
 
   // После возврата из оплаты сразу обходим кэш, чтобы не показывать stale plan/status.
   await Promise.all([
     subscriptionStore.fetchPlans(),
-    subscriptionStore.fetchCurrentSubscription(isPaymentReturnFlow),
+    subscriptionStore.fetchCurrentSubscription(shouldForceSubscriptionRefresh),
   ]);
 
   // По умолчанию выделяем текущий активный тариф

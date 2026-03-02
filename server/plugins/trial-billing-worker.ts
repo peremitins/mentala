@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { runTrialBillingWorker } from '@/server/application/subscriptions/trial-billing-worker.service';
+import { runScheduledPlanChangeWorker } from '@/server/application/subscriptions/scheduled-plan-change.service';
 import {
   isDbConnectionError,
   resetDbPool,
@@ -40,6 +41,11 @@ export default defineNitroPlugin(() => {
 
     try {
       await runTrialBillingWorker({
+        workerId,
+        shopId,
+        secretKey,
+      });
+      await runScheduledPlanChangeWorker({
         workerId,
         shopId,
         secretKey,

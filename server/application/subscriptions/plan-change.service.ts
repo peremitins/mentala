@@ -168,6 +168,20 @@ export function calculatePlanChangeDecision(params: {
     };
   }
 
+  // Переход с Basic на платный тариф всегда запускает новый полный период
+  // с момента активации платного тарифа, не "доедая" остаток условного окна Basic.
+  if (current.planId === 'basic' && target.planId !== 'basic') {
+    const targetDays = getPeriodDays(target.billingPeriod);
+    return {
+      policyAction,
+      amount: targetTotalPrice,
+      toPay: targetTotalPrice,
+      unusedCurrentValue: 0,
+      targetChargeValue: targetTotalPrice,
+      nextEndDate: new Date(now.getTime() + targetDays * DAY_MS),
+    };
+  }
+
   const unusedCurrentValue = computeUnusedCurrentValue(current, now);
   const isMonthToYearUpgrade =
     current.billingPeriod === 'month' && target.billingPeriod === 'year';

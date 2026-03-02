@@ -23,6 +23,7 @@ import {
   createYooKassaPayment,
   extractPaymentMethodPresentation,
 } from '@/server/application/payments/yookassa.client';
+import { TRIAL_BILLING_EARLY_CHARGE_MS } from '@/server/config/subscription';
 
 const LOCK_TTL_MS = 10 * 60 * 1000;
 const REMINDER_LOOKAHEAD_MS = 24 * 60 * 60 * 1000;
@@ -160,6 +161,9 @@ async function processChargeBatch(params: {
   targetUserId?: number;
   limit?: number;
 }) {
+  const scheduledDueAt = new Date(
+    params.now.getTime() + TRIAL_BILLING_EARLY_CHARGE_MS
+  );
   const dueUsersWhere = params.targetUserId
     ? and(
         eq(users.id, params.targetUserId),
@@ -169,10 +173,15 @@ async function processChargeBatch(params: {
         eq(users.paymentMethodBound, true),
         isNotNull(users.paymentMethodId),
         or(
-          eq(users.billingCollectionStatus, 'scheduled'),
-          eq(users.billingCollectionStatus, 'past_due')
-        ),
-        lte(users.nextChargeAt, params.now)
+          and(
+            eq(users.billingCollectionStatus, 'scheduled'),
+            lte(users.nextChargeAt, scheduledDueAt)
+          ),
+          and(
+            eq(users.billingCollectionStatus, 'past_due'),
+            lte(users.nextChargeAt, params.now)
+          )
+        )
       )
     : and(
         isNotNull(users.billingPlanId),
@@ -181,10 +190,15 @@ async function processChargeBatch(params: {
         eq(users.paymentMethodBound, true),
         isNotNull(users.paymentMethodId),
         or(
-          eq(users.billingCollectionStatus, 'scheduled'),
-          eq(users.billingCollectionStatus, 'past_due')
-        ),
-        lte(users.nextChargeAt, params.now)
+          and(
+            eq(users.billingCollectionStatus, 'scheduled'),
+            lte(users.nextChargeAt, scheduledDueAt)
+          ),
+          and(
+            eq(users.billingCollectionStatus, 'past_due'),
+            lte(users.nextChargeAt, params.now)
+          )
+        )
       );
 
   const dueUsers = await db
@@ -213,6 +227,12 @@ async function processChargeBatch(params: {
     }
 
     const lockExpiredAt = new Date(params.now.getTime() - LOCK_TTL_MS);
+    const dueAtForLock =
+      user.billingCollectionStatus === 'scheduled'
+        ? scheduledDueAt
+        : params.now;
+    const lockBillingStatus =
+      user.billingCollectionStatus === 'past_due' ? 'past_due' : 'scheduled';
 
     const lockResult = await db
       .update(users)
@@ -225,11 +245,8 @@ async function processChargeBatch(params: {
         and(
           eq(users.id, user.id),
           isNotNull(users.nextChargeAt),
-          lte(users.nextChargeAt, params.now),
-          or(
-            eq(users.billingCollectionStatus, 'scheduled'),
-            eq(users.billingCollectionStatus, 'past_due')
-          ),
+          lte(users.nextChargeAt, dueAtForLock),
+          eq(users.billingCollectionStatus, lockBillingStatus),
           or(
             isNull(users.billingLockedAt),
             lt(users.billingLockedAt, lockExpiredAt)

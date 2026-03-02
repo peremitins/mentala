@@ -6,9 +6,16 @@ import {
   securityEvents,
 } from '@/server/infrastructure/db/schema';
 
-const MIN_EXTERNAL_SESSION_TTL_SECONDS = 60;
-const MAX_EXTERNAL_SESSION_TTL_SECONDS = 120;
-const DEFAULT_EXTERNAL_SESSION_TTL_SECONDS = 90;
+export type ExternalSessionPurpose = 'browser_handoff' | 'payment_return';
+
+const BROWSER_HANDOFF_MIN_TTL_SECONDS = 60;
+const BROWSER_HANDOFF_MAX_TTL_SECONDS = 120;
+const BROWSER_HANDOFF_DEFAULT_TTL_SECONDS = 90;
+
+const PAYMENT_RETURN_MIN_TTL_SECONDS = 5 * 60;
+const PAYMENT_RETURN_MAX_TTL_SECONDS = 24 * 60 * 60;
+const PAYMENT_RETURN_DEFAULT_TTL_SECONDS = 2 * 60 * 60;
+const PAYMENT_RETURN_REUSE_WINDOW_SECONDS = 15 * 60;
 
 type UaClass = 'ios' | 'android' | 'desktop' | 'unknown';
 
@@ -33,15 +40,32 @@ export class ExternalSessionConsumeError extends Error {
   }
 }
 
-function clampTtlSeconds(value?: number): number {
-  if (!Number.isFinite(value)) return DEFAULT_EXTERNAL_SESSION_TTL_SECONDS;
+function resolveTtlPolicy(purpose: ExternalSessionPurpose) {
+  if (purpose === 'payment_return') {
+    return {
+      min: PAYMENT_RETURN_MIN_TTL_SECONDS,
+      max: PAYMENT_RETURN_MAX_TTL_SECONDS,
+      fallback: PAYMENT_RETURN_DEFAULT_TTL_SECONDS,
+    };
+  }
+
+  return {
+    min: BROWSER_HANDOFF_MIN_TTL_SECONDS,
+    max: BROWSER_HANDOFF_MAX_TTL_SECONDS,
+    fallback: BROWSER_HANDOFF_DEFAULT_TTL_SECONDS,
+  };
+}
+
+function clampTtlSeconds(
+  value: number | undefined,
+  purpose: ExternalSessionPurpose
+): number {
+  const policy = resolveTtlPolicy(purpose);
+  if (!Number.isFinite(value)) return policy.fallback;
+
   const rounded = Math.round(Number(value));
-  if (rounded < MIN_EXTERNAL_SESSION_TTL_SECONDS) {
-    return MIN_EXTERNAL_SESSION_TTL_SECONDS;
-  }
-  if (rounded > MAX_EXTERNAL_SESSION_TTL_SECONDS) {
-    return MAX_EXTERNAL_SESSION_TTL_SECONDS;
-  }
+  if (rounded < policy.min) return policy.min;
+  if (rounded > policy.max) return policy.max;
   return rounded;
 }
 
@@ -109,8 +133,10 @@ export async function createExternalSessionTransferToken(params: {
   ipAddress: string | null;
   userAgent: string | null;
   ttlSeconds?: number;
+  purpose?: ExternalSessionPurpose;
 }) {
-  const ttlSeconds = clampTtlSeconds(params.ttlSeconds);
+  const purpose = params.purpose || 'browser_handoff';
+  const ttlSeconds = clampTtlSeconds(params.ttlSeconds, purpose);
   const now = new Date();
   const expiresAt = new Date(now.getTime() + ttlSeconds * 1000);
   const token = randomBytes(32).toString('base64url');
@@ -135,9 +161,11 @@ export async function consumeExternalSessionTransferToken(params: {
   token: string;
   ipAddress: string | null;
   userAgent: string | null;
+  purpose?: ExternalSessionPurpose;
 }): Promise<{ userId: number }> {
   const tokenHash = hashToken(params.token);
   const now = new Date();
+  const purpose = params.purpose || 'browser_handoff';
 
   const consumeResult = await db.transaction(async (tx) => {
     const existing = await tx
@@ -148,6 +176,8 @@ export async function consumeExternalSessionTransferToken(params: {
         consumedAt: externalAuthTokens.consumedAt,
         createdIp: externalAuthTokens.createdIp,
         createdUserAgent: externalAuthTokens.createdUserAgent,
+        consumedIp: externalAuthTokens.consumedIp,
+        consumedUserAgent: externalAuthTokens.consumedUserAgent,
       })
       .from(externalAuthTokens)
       .where(eq(externalAuthTokens.tokenHash, tokenHash))
@@ -173,6 +203,41 @@ export async function consumeExternalSessionTransferToken(params: {
     }
 
     if (row.consumedAt) {
+      if (purpose === 'payment_return') {
+        const replayAgeMs = now.getTime() - row.consumedAt.getTime();
+        const replayAllowedByAge =
+          replayAgeMs >= 0 &&
+          replayAgeMs <= PAYMENT_RETURN_REUSE_WINDOW_SECONDS * 1000;
+        const replayRisk = evaluateFingerprintRisk({
+          issuedIp: row.consumedIp || row.createdIp,
+          issuedUserAgent: row.consumedUserAgent || row.createdUserAgent,
+          currentIp: params.ipAddress,
+          currentUserAgent: params.userAgent,
+        });
+
+        // Для payment-return допускаем повторный consume в коротком окне:
+        // это защищает от дублей GET во внешнем браузере после редиректа YooKassa.
+        if (replayAllowedByAge && !replayRisk.highRiskMismatch) {
+          await logSecurityEvent({
+            userId: row.userId,
+            eventType: 'external_auth_reused_allowed',
+            ipAddress: params.ipAddress,
+            userAgent: params.userAgent,
+            metadata: {
+              tokenId: row.id,
+              purpose,
+              consumedAt: row.consumedAt.toISOString(),
+              replayAgeMs,
+              replayIssuedUaClass: replayRisk.issuedUaClass,
+              replayCurrentUaClass: replayRisk.currentUaClass,
+            },
+            tx,
+          });
+
+          return { kind: 'ok' as const, userId: row.userId };
+        }
+      }
+
       await logSecurityEvent({
         userId: row.userId,
         eventType: 'external_auth_reused',
@@ -210,21 +275,39 @@ export async function consumeExternalSessionTransferToken(params: {
     });
 
     if (risk.highRiskMismatch) {
-      await logSecurityEvent({
-        userId: row.userId,
-        eventType: 'external_auth_high_risk',
-        ipAddress: params.ipAddress,
-        userAgent: params.userAgent,
-        metadata: {
-          tokenId: row.id,
-          issuedUaClass: risk.issuedUaClass,
-          currentUaClass: risk.currentUaClass,
-          ipMismatch: risk.ipMismatch,
-          uaMismatch: risk.uaMismatch,
-        },
-        tx,
-      });
-      return { kind: 'high_risk_mismatch' as const, userId: row.userId };
+      if (purpose === 'payment_return') {
+        await logSecurityEvent({
+          userId: row.userId,
+          eventType: 'external_auth_high_risk_allowed',
+          ipAddress: params.ipAddress,
+          userAgent: params.userAgent,
+          metadata: {
+            tokenId: row.id,
+            purpose,
+            issuedUaClass: risk.issuedUaClass,
+            currentUaClass: risk.currentUaClass,
+            ipMismatch: risk.ipMismatch,
+            uaMismatch: risk.uaMismatch,
+          },
+          tx,
+        });
+      } else {
+        await logSecurityEvent({
+          userId: row.userId,
+          eventType: 'external_auth_high_risk',
+          ipAddress: params.ipAddress,
+          userAgent: params.userAgent,
+          metadata: {
+            tokenId: row.id,
+            issuedUaClass: risk.issuedUaClass,
+            currentUaClass: risk.currentUaClass,
+            ipMismatch: risk.ipMismatch,
+            uaMismatch: risk.uaMismatch,
+          },
+          tx,
+        });
+        return { kind: 'high_risk_mismatch' as const, userId: row.userId };
+      }
     }
 
     const consumed = await tx

@@ -42,6 +42,8 @@ import {
   syncPendingPaymentMethodBinding,
 } from '@/server/application/subscriptions/payment-methods.service';
 import { resolveExternalFlowAppUrl } from '@/server/application/auth/oauth-redirect';
+import { buildExternalSessionConsumeReturnUrl } from '@/server/application/auth/external-session-return-url';
+import { PAYMENT_RETURN_EXTERNAL_SESSION_TTL_SECONDS } from '@/server/config/subscription';
 
 type SourcePlatform = 'web' | 'ios' | 'android';
 type CheckoutStatus = 'pending' | 'active';
@@ -130,13 +132,15 @@ function buildScheduledChange(params: {
   };
 }
 
-function buildBindReturnUrl(params: {
-  appUrl: string;
+function buildBindReturnPath(params: {
   bindingSessionId: string;
   planId?: string;
   billingPeriod?: BillingPeriod;
+  externalFlow?: boolean;
+  sourcePlatform?: SourcePlatform;
 }): string {
   const searchParams = new URLSearchParams({
+    flow: 'bind',
     bindReturn: '1',
     bindingSessionId: params.bindingSessionId,
   });
@@ -147,8 +151,14 @@ function buildBindReturnUrl(params: {
   if (params.billingPeriod) {
     searchParams.set('billingPeriod', params.billingPeriod);
   }
+  if (params.externalFlow === true) {
+    searchParams.set('externalFlow', '1');
+  }
+  if (params.sourcePlatform === 'ios' || params.sourcePlatform === 'android') {
+    searchParams.set('nativeApp', '1');
+  }
 
-  return `${params.appUrl}/subscription?${searchParams.toString()}`;
+  return `/payment-success?${searchParams.toString()}`;
 }
 
 function resolveSourcePlatform(event: any): SourcePlatform {
@@ -418,11 +428,20 @@ export default defineEventHandler(async (event) => {
         }
 
         const bindingSessionId = crypto.randomUUID();
-        const returnUrl = buildBindReturnUrl({
-          appUrl,
+        const bindReturnPath = buildBindReturnPath({
           bindingSessionId,
           planId,
           billingPeriod: billingPeriodTyped,
+          externalFlow,
+          sourcePlatform,
+        });
+        const returnUrl = await buildExternalSessionConsumeReturnUrl({
+          event,
+          userId,
+          appUrl,
+          redirectPath: bindReturnPath,
+          ttlSeconds: PAYMENT_RETURN_EXTERNAL_SESSION_TTL_SECONDS,
+          purpose: 'payment_return',
         });
         const yookassaIdempotenceKey = crypto
           .createHash('sha256')
@@ -451,6 +470,17 @@ export default defineEventHandler(async (event) => {
           await tx
             .update(users)
             .set({
+              // Сохраняем выбранный платный план сразу при запуске bind-flow:
+              // после успешной привязки /current сможет автоматически
+              // завершить trial-scheduling без повторного клика пользователя.
+              billingPlanId: planId,
+              billingPeriod: billingPeriodTyped,
+              nextChargeAt: userRow.trialEndedAt,
+              billingCollectionStatus: 'none',
+              graceEndsAt: null,
+              billingReminderSentAt: null,
+              billingLockedAt: null,
+              billingLockedBy: null,
               paymentMethodBindingId: bindingResponse.id,
               paymentMethodBindingSessionId: bindingSessionId,
               paymentMethodBindingStatus: 'pending',
@@ -759,6 +789,15 @@ export default defineEventHandler(async (event) => {
             scheduledChangeAt: null,
             scheduledFromSubscriptionId: null,
             scheduledChangeUpdatedAt: now,
+            // Любая non-trial активация должна очищать trial-scheduled "хвосты".
+            billingPlanId: null,
+            billingPeriod: null,
+            nextChargeAt: null,
+            billingCollectionStatus: 'none',
+            graceEndsAt: null,
+            billingReminderSentAt: null,
+            billingLockedAt: null,
+            billingLockedBy: null,
             updatedAt: now,
           })
           .where(eq(users.id, userId));
@@ -946,6 +985,15 @@ export default defineEventHandler(async (event) => {
               scheduledChangeAt: null,
               scheduledFromSubscriptionId: null,
               scheduledChangeUpdatedAt: now,
+              // Любая non-trial активация должна очищать trial-scheduled "хвосты".
+              billingPlanId: null,
+              billingPeriod: null,
+              nextChargeAt: null,
+              billingCollectionStatus: 'none',
+              graceEndsAt: null,
+              billingReminderSentAt: null,
+              billingLockedAt: null,
+              billingLockedBy: null,
               updatedAt: now,
             })
             .where(eq(users.id, userId));
@@ -1148,6 +1196,16 @@ export default defineEventHandler(async (event) => {
           scheduledChangeAt: null,
           scheduledFromSubscriptionId: null,
           scheduledChangeUpdatedAt: now,
+          // Начало non-trial checkout также очищает trial-scheduled поля,
+          // чтобы UI не показывал устаревшее "Списание запланировано".
+          billingPlanId: null,
+          billingPeriod: null,
+          nextChargeAt: null,
+          billingCollectionStatus: 'none',
+          graceEndsAt: null,
+          billingReminderSentAt: null,
+          billingLockedAt: null,
+          billingLockedBy: null,
           updatedAt: now,
         })
         .where(eq(users.id, userId));
@@ -1174,13 +1232,28 @@ export default defineEventHandler(async (event) => {
       .update(`${userId}:${pendingSubscription.id}:${idempotencyKey}`, 'utf8')
       .digest('hex');
     const returnParams = new URLSearchParams({
+      flow: 'payment',
       paymentReturn: '1',
       subscriptionId: String(pendingSubscription.id),
     });
+    if (sourcePlatform === 'ios' || sourcePlatform === 'android') {
+      returnParams.set('nativeApp', '1');
+    }
     if (paymentMode === 'redirect' && externalFlow) {
       returnParams.set('externalFlow', '1');
     }
-    const returnUrl = `${appUrl}/subscription?${returnParams.toString()}`;
+    let returnUrl: string | undefined;
+    if (paymentMode === 'redirect') {
+      const returnPath = `/payment-success?${returnParams.toString()}`;
+      returnUrl = await buildExternalSessionConsumeReturnUrl({
+        event,
+        userId,
+        appUrl,
+        redirectPath: returnPath,
+        ttlSeconds: PAYMENT_RETURN_EXTERNAL_SESSION_TTL_SECONDS,
+        purpose: 'payment_return',
+      });
+    }
 
     const yookassaPayment = await createYooKassaPayment({
       shopId,
