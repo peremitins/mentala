@@ -4,6 +4,7 @@
 • Фронтенд: Nuxt 4 + TypeScript + Pinia + TailwindCSS + shadcn-vue + vue-query.
 • Бэкенд: Nitro (Node.js runtime) + Postgres + Drizzle ORM.
 • Мобильность: Capacitor + Ionic (iOS/Android).
+• Бренд-логотип локализован по языку интерфейса: для `ru` используется `logo_ru.svg`, для `en` — `logo_en.svg` (в web-приложении и лендинге).
 • Safe-area на mobile: для iOS в layout (`default/auth/blank`) применяется только верхний safe-area (`safe-area-inset-top`) через класс `ios-safe-layout`; нижняя часть интерфейса (BottomNav/контент) не получает дополнительных iOS-отступов, чтобы сохранять прежнюю высоту и визуальный ритм.
 • iOS‑гайд и паритет с Android: см. `.docs/IOS_SETUP.md` (dev/prod, push, Apple Developer Program, FCM/APNs особенности).
 • iOS bundle id: `com.mentala.app` (prod) и `com.mentala.app.dev` (dev), отдельные схемы в Xcode.

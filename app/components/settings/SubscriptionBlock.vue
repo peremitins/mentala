@@ -100,13 +100,9 @@
         v-if="shouldShowNoAccessInfo"
         class="rounded-md bg-muted/50 border border-border p-3 space-y-2"
       >
-        <p class="text-sm font-medium text-foreground">
-          Функционал ИИ недоступен
-        </p>
         <p class="text-xs text-muted-foreground">
-          На тарифе Basic без пробного периода доступны только уведомления с
-          шаблонами. Выберите тариф PRO или Premium, чтобы получить доступ к
-          ИИ-чату.
+          На тарифе Basic функционал ограничен. Выберите тариф PRO или Premium,
+          чтобы открыть расширенные возможности приложения.
         </p>
       </div>
 
