@@ -80,7 +80,7 @@ For subscriptions purchased through our website, refund requests can be submitte
 
 - текущая локаль i18n;
 - fallback на `ru`, если локаль не определена.
-5. Для ключей `support.refundPolicy` и `support.sla` обязательны версии в `ru` и `en`.
+5. Для группировки ключей использовать верхний регистр (например, `SUPPORT.REFUND`, `SUPPORT.SLA`); версии `ru` и `en` обязательны.
 
 ### 5.2 Routing И Доступность
 
