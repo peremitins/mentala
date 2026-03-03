@@ -1,7 +1,7 @@
 <template>
   <div class="h-dvh overflow-y-auto pb-[100px] space-y-2 rounded-lg">
     <PageHeader
-      :title="t('support.badge')"
+      :title="t('SUPPORT.BADGE')"
       :show-back-button="true"
       @go-back="goBack"
     />
@@ -9,71 +9,71 @@
     <section class="space-y-2">
       <article class="glass-deep rounded-lg p-4 space-y-2">
         <h1 class="text-xl font-semibold text-foreground">
-          {{ t('support.title') }}
+          {{ t('SUPPORT.TITLE') }}
         </h1>
         <p class="text-sm text-muted-foreground">
-          {{ t('support.subtitle') }}
+          {{ t('SUPPORT.SUBTITLE') }}
         </p>
       </article>
 
       <div class="grid grid-cols-1 gap-2 lg:grid-cols-2">
         <article class="glass-deep rounded-lg p-4 space-y-3">
           <h2 class="text-base font-semibold text-foreground">
-            {{ t('support.contact.title') }}
+            {{ t('SUPPORT.CONTACT.TITLE') }}
           </h2>
           <p class="text-sm text-muted-foreground">
-            {{ t('support.contact.description') }}
+            {{ t('SUPPORT.CONTACT.DESCRIPTION') }}
           </p>
           <a :href="supportMailto" class="support-action-link">
-            {{ t('support.contact.cta') }}
+            {{ t('SUPPORT.CONTACT.CTA') }}
           </a>
         </article>
 
         <article class="glass-deep rounded-lg p-4 space-y-3">
           <h2 class="text-base font-semibold text-foreground">
-            {{ t('support.sla.title') }}
+            {{ t('SUPPORT.SLA.TITLE') }}
           </h2>
           <p class="text-sm text-muted-foreground">
-            {{ t('support.sla.value') }}
+            {{ t('SUPPORT.SLA.VALUE') }}
           </p>
         </article>
 
         <article class="glass-deep rounded-lg p-4 space-y-3">
           <h2 class="text-base font-semibold text-foreground">
-            {{ t('support.cancel.title') }}
+            {{ t('SUPPORT.CANCEL.TITLE') }}
           </h2>
           <ul class="list-disc space-y-3 pl-4 text-sm text-muted-foreground">
             <li>
-              <p>{{ t('support.cancel.apple') }}</p>
+              <p>{{ t('SUPPORT.CANCEL.APPLE') }}</p>
               <a
                 :href="appleCancelHelpUrl"
                 target="_blank"
                 rel="noopener noreferrer"
                 class="support-text-link"
               >
-                {{ t('support.cancel.appleLink') }}
+                {{ t('SUPPORT.CANCEL.APPLE_LINK') }}
               </a>
             </li>
             <li>
-              <p>{{ t('support.cancel.google') }}</p>
+              <p>{{ t('SUPPORT.CANCEL.GOOGLE') }}</p>
               <a
                 :href="googleCancelHelpUrl"
                 target="_blank"
                 rel="noopener noreferrer"
                 class="support-text-link"
               >
-                {{ t('support.cancel.googleLink') }}
+                {{ t('SUPPORT.CANCEL.GOOGLE_LINK') }}
               </a>
             </li>
             <li>
-              <p>{{ t('support.cancel.web', { webUrl: webAppUrl }) }}</p>
+              <p>{{ t('SUPPORT.CANCEL.WEB', { webUrl: webAppUrl }) }}</p>
               <a
                 :href="webAppUrl"
                 target="_blank"
                 rel="noopener noreferrer"
                 class="support-text-link"
               >
-                {{ t('support.cancel.webLink') }}
+                {{ t('SUPPORT.CANCEL.WEB_LINK') }}
               </a>
             </li>
           </ul>
@@ -81,18 +81,18 @@
 
         <article class="glass-deep rounded-lg p-4 space-y-3">
           <h2 class="text-base font-semibold text-foreground">
-            {{ t('support.refund.title') }}
+            {{ t('SUPPORT.REFUND.TITLE') }}
           </h2>
           <p class="text-sm text-muted-foreground">
-            {{ t('support.refund.platform') }}
+            {{ t('SUPPORT.REFUND.PLATFORM') }}
           </p>
           <p class="text-sm text-muted-foreground">
-            {{ t('support.refund.webPrefix') }}
+            {{ t('SUPPORT.REFUND.WEB_PREFIX') }}
             <a :href="supportMailto" class="support-text-link">
               {{ supportEmail }}
             </a>
             {{
-              t('support.refund.webSuffix', {
+              t('SUPPORT.REFUND.WEB_SUFFIX', {
                 reviewDays: refundReviewDays,
               })
             }}
@@ -102,7 +102,7 @@
 
       <article class="glass-deep rounded-lg p-4 space-y-3">
         <h2 class="text-base font-semibold text-foreground">
-          {{ t('support.legal.title') }}
+          {{ t('SUPPORT.LEGAL.TITLE') }}
         </h2>
         <div class="flex flex-wrap gap-2">
           <a
@@ -111,7 +111,7 @@
             rel="noopener noreferrer"
             class="support-secondary-link"
           >
-            {{ t('support.legal.privacy') }}
+            {{ t('SUPPORT.LEGAL.PRIVACY') }}
           </a>
           <a
             :href="termsOfServiceUrl"
@@ -119,7 +119,7 @@
             rel="noopener noreferrer"
             class="support-secondary-link"
           >
-            {{ t('support.legal.terms') }}
+            {{ t('SUPPORT.LEGAL.TERMS') }}
           </a>
         </div>
       </article>
