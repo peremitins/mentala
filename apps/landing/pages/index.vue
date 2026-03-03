@@ -645,17 +645,20 @@
                 © {{ new Date().getFullYear() }} Ментала
               </p>
               <a
-                href="mailto:hello@mentala.app"
+                href="mailto:support@mentala.app"
                 class="hover:text-white/95 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent rounded"
-                aria-label="Написать на hello@mentala.app"
+                aria-label="Написать на support@mentala.app"
               >
-                hello@mentala.app
+                support@mentala.app
               </a>
             </div>
 
             <div
               class="flex flex-wrap items-center justify-center gap-1 lg:gap-3 text-sm"
             >
+              <a class="rounded-lg px-3 py-2 hover:bg-white/10" href="/support">
+                Поддержка
+              </a>
               <a
                 class="rounded-lg px-3 py-2 hover:bg-white/10"
                 href="https://my.mentala.app/legal/privacy-policy.html"
@@ -1542,8 +1545,8 @@ useHead({
           {
             '@type': 'ContactPoint',
             contactType: 'customer support',
-            email: 'hello@mentala.app',
-            availableLanguage: ['ru'],
+            email: 'support@mentala.app',
+            availableLanguage: ['ru', 'en'],
           },
         ],
       }),

@@ -40,12 +40,13 @@ export default defineNuxtConfig({
     // В dev не кэшируем HTML, чтобы после правок не было hydration mismatch (старый HTML с сервера vs новый клиентский бандл).
     // В production (при nuxt build) — гибридный SSR + SWR. При nuxt generate эти правила не меняют статический экспорт.
     '/': { swr: process.env.NODE_ENV === 'development' ? 0 : 120 },
+    '/support': { swr: process.env.NODE_ENV === 'development' ? 0 : 120 },
   },
   // Статический экспорт (nuxt generate): предрендер только маршрута / и статичных файлов из public/
   nitro: {
     prerender: {
       crawlLinks: false,
-      routes: ['/'],
+      routes: ['/', '/support'],
     },
   },
   app: {

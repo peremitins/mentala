@@ -163,6 +163,25 @@
           <p
             class="text-xs font-semibold text-muted-foreground tracking-wide pt-4 pb-1 px-4"
           >
+            ПОДДЕРЖКА
+          </p>
+          <div class="">
+            <NuxtLink to="/support" class="px-4 py-3" :class="rowClass()">
+              <div class="">
+                <p class="text-sm font-medium">Поддержка</p>
+                <p class="text-xs text-muted-foreground">
+                  Вопросы, отмена подписки и возвраты
+                </p>
+              </div>
+              <IconChevronRight class="h-4 w-4 text-muted-foreground" />
+            </NuxtLink>
+          </div>
+        </div>
+
+        <div class="glass-deep">
+          <p
+            class="text-xs font-semibold text-muted-foreground tracking-wide pt-4 pb-1 px-4"
+          >
             ДОКУМЕНТЫ
           </p>
           <div class="">
