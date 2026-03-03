@@ -18,6 +18,7 @@ export default defineNuxtConfig({
     'vue-sonner/nuxt',
     'floating-vue/nuxt',
   ],
+  plugins: ['~/i18n/plugin'],
   shadcn: {
     prefix: 'shadcn',
     componentDir: '@/app/components/ui/shadcn/',

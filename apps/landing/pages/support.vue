@@ -21,7 +21,7 @@
 
           <div class="flex items-center gap-2">
             <span class="hidden sm:inline text-xs text-white/65">
-              {{ t('support.language.label') }}
+              {{ t('SUPPORT.LANGUAGE.LABEL') }}
             </span>
             <button
               type="button"
@@ -29,7 +29,7 @@
               :class="{ 'lang-toggle-btn-active': locale === 'ru' }"
               @click="switchLocale('ru')"
             >
-              {{ t('support.language.ru') }}
+              {{ t('SUPPORT.LANGUAGE.RU') }}
             </button>
             <button
               type="button"
@@ -37,10 +37,10 @@
               :class="{ 'lang-toggle-btn-active': locale === 'en' }"
               @click="switchLocale('en')"
             >
-              {{ t('support.language.en') }}
+              {{ t('SUPPORT.LANGUAGE.EN') }}
             </button>
             <a :href="homeUrl" class="home-link-btn">
-              {{ t('support.homeLink') }}
+              {{ t('SUPPORT.HOME_LINK') }}
             </a>
           </div>
         </div>
@@ -51,73 +51,73 @@
       <section class="landing-container">
         <div class="w-full space-y-5">
           <div class="support-intro text-center">
-            <p class="support-badge">{{ t('support.badge') }}</p>
+            <p class="support-badge">{{ t('SUPPORT.BADGE') }}</p>
             <h1
               class="font-display text-3xl sm:text-4xl font-bold tracking-tight"
             >
-              {{ t('support.title') }}
+              {{ t('SUPPORT.TITLE') }}
             </h1>
             <p class="text-white/80 text-base sm:text-lg mt-3">
-              {{ t('support.subtitle') }}
+              {{ t('SUPPORT.SUBTITLE') }}
             </p>
           </div>
 
           <div class="support-grid">
             <article class="support-card">
               <h2 class="support-card-title">
-                {{ t('support.contact.title') }}
+                {{ t('SUPPORT.CONTACT.TITLE') }}
               </h2>
               <p class="support-card-text">
-                {{ t('support.contact.description') }}
+                {{ t('SUPPORT.CONTACT.DESCRIPTION') }}
               </p>
               <a :href="supportMailto" class="support-email-btn">
-                {{ t('support.contact.cta') }}
+                {{ t('SUPPORT.CONTACT.CTA') }}
               </a>
             </article>
 
             <article class="support-card">
-              <h2 class="support-card-title">{{ t('support.sla.title') }}</h2>
+              <h2 class="support-card-title">{{ t('SUPPORT.SLA.TITLE') }}</h2>
               <p class="support-card-text">
-                {{ t('support.sla.value') }}
+                {{ t('SUPPORT.SLA.VALUE') }}
               </p>
             </article>
 
             <article class="support-card">
               <h2 class="support-card-title">
-                {{ t('support.cancel.title') }}
+                {{ t('SUPPORT.CANCEL.TITLE') }}
               </h2>
               <ul class="support-list">
                 <li>
-                  <p>{{ t('support.cancel.apple') }}</p>
+                  <p>{{ t('SUPPORT.CANCEL.APPLE') }}</p>
                   <a
                     :href="appleCancelHelpUrl"
                     target="_blank"
                     rel="noopener noreferrer"
                     class="support-list-link"
                   >
-                    {{ t('support.cancel.appleLink') }}
+                    {{ t('SUPPORT.CANCEL.APPLE_LINK') }}
                   </a>
                 </li>
                 <li>
-                  <p>{{ t('support.cancel.google') }}</p>
+                  <p>{{ t('SUPPORT.CANCEL.GOOGLE') }}</p>
                   <a
                     :href="googleCancelHelpUrl"
                     target="_blank"
                     rel="noopener noreferrer"
                     class="support-list-link"
                   >
-                    {{ t('support.cancel.googleLink') }}
+                    {{ t('SUPPORT.CANCEL.GOOGLE_LINK') }}
                   </a>
                 </li>
                 <li>
-                  <p>{{ t('support.cancel.web', { webUrl: webAppUrl }) }}</p>
+                  <p>{{ t('SUPPORT.CANCEL.WEB', { webUrl: webAppUrl }) }}</p>
                   <a
                     :href="webAppUrl"
                     target="_blank"
                     rel="noopener noreferrer"
                     class="support-list-link"
                   >
-                    {{ t('support.cancel.webLink') }}
+                    {{ t('SUPPORT.CANCEL.WEB_LINK') }}
                   </a>
                 </li>
               </ul>
@@ -125,18 +125,18 @@
 
             <article class="support-card">
               <h2 class="support-card-title">
-                {{ t('support.refund.title') }}
+                {{ t('SUPPORT.REFUND.TITLE') }}
               </h2>
               <p class="support-card-text">
-                {{ t('support.refund.platform') }}
+                {{ t('SUPPORT.REFUND.PLATFORM') }}
               </p>
               <p class="support-card-text mt-3">
-                {{ t('support.refund.webPrefix') }}
+                {{ t('SUPPORT.REFUND.WEB_PREFIX') }}
                 <a :href="supportMailto" class="support-list-link">
                   {{ supportEmail }}
                 </a>
                 {{
-                  t('support.refund.webSuffix', {
+                  t('SUPPORT.REFUND.WEB_SUFFIX', {
                     reviewDays: refundReviewDays,
                   })
                 }}
@@ -145,27 +145,27 @@
           </div>
 
           <article class="support-card">
-            <h2 class="support-card-title">{{ t('support.legal.title') }}</h2>
+            <h2 class="support-card-title">{{ t('SUPPORT.LEGAL.TITLE') }}</h2>
             <div class="support-links">
               <a
                 :href="privacyPolicyUrl"
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                {{ t('support.legal.privacy') }}
+                {{ t('SUPPORT.LEGAL.PRIVACY') }}
               </a>
               <a
                 :href="termsOfServiceUrl"
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                {{ t('support.legal.terms') }}
+                {{ t('SUPPORT.LEGAL.TERMS') }}
               </a>
             </div>
           </article>
 
           <p class="text-xs sm:text-sm text-white/62 text-center">
-            {{ t('support.disclaimer') }}
+            {{ t('SUPPORT.DISCLAIMER') }}
           </p>
         </div>
       </section>
@@ -279,10 +279,10 @@ const brandLogoAlt = computed(() =>
 );
 
 useSeoMeta({
-  title: () => String(t('support.meta.title')),
-  description: () => String(t('support.meta.description')),
-  ogTitle: () => String(t('support.meta.title')),
-  ogDescription: () => String(t('support.meta.description')),
+  title: () => String(t('SUPPORT.META.TITLE')),
+  description: () => String(t('SUPPORT.META.DESCRIPTION')),
+  ogTitle: () => String(t('SUPPORT.META.TITLE')),
+  ogDescription: () => String(t('SUPPORT.META.DESCRIPTION')),
   ogType: 'website',
   ogUrl: () => supportUrl.value,
 });
