@@ -1,15 +1,18 @@
 import {
   type AnyPgColumn,
   pgTable,
+  bigserial,
   serial,
   text,
   timestamp,
   boolean,
   integer,
+  smallint,
   varchar,
   uuid,
   jsonb,
   numeric,
+  check,
   unique,
   index,
   uniqueIndex,
@@ -957,6 +960,73 @@ export const therapySessions = pgTable(
     userStartedIdx: index('idx_therapy_sessions_user_started').on(
       table.userId,
       table.startedAt
+    ),
+  })
+);
+
+// Оценки ответов ассистента (MVP feedback).
+export const chatResponseFeedback = pgTable(
+  'chat_response_feedback',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    therapySessionId: integer('therapy_session_id')
+      .notNull()
+      .references(() => therapySessions.id, { onDelete: 'cascade' }),
+    sessionId: text('session_id'),
+    // Клиентский id ассистент-сообщения (nanoid(21), оставляем запас).
+    assistantMessageClientId: varchar('assistant_message_client_id', {
+      length: 64,
+    }).notNull(),
+    rating: smallint('rating').notNull(), // -1 | 1
+    topicCode: varchar('topic_code', { length: 40 }),
+    comment: text('comment'),
+    // Текст ответа ИИ, на который пользователь оставил оценку.
+    assistantMessageText: text('assistant_message_text'),
+    platform: varchar('platform', { length: 20 }).notNull().default('web'),
+    timezone: varchar('timezone', { length: 100 }),
+    locale: varchar('locale', { length: 8 }),
+    requestId: text('request_id'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    // Одна оценка на сообщение ассистента в рамках одной therapy-сессии.
+    uniqueUserSessionMessage: unique(
+      'uk_chat_response_feedback_user_therapy_message'
+    ).on(table.userId, table.therapySessionId, table.assistantMessageClientId),
+    therapySessionCreatedIdx: index(
+      'idx_chat_response_feedback_session_created'
+    ).on(table.therapySessionId, table.createdAt),
+    ratingCreatedIdx: index('idx_chat_response_feedback_rating_created').on(
+      table.rating,
+      table.createdAt
+    ),
+    topicCreatedIdx: index('idx_chat_response_feedback_topic_created').on(
+      table.topicCode,
+      table.createdAt
+    ),
+    ratingCheck: check(
+      'chk_chat_response_feedback_rating',
+      sql`${table.rating} in (-1, 1)`
+    ),
+    commentLengthCheck: check(
+      'chk_chat_response_feedback_comment_length',
+      sql`${table.comment} is null or length(${table.comment}) <= 1000`
+    ),
+    assistantMessageTextLengthCheck: check(
+      'chk_chat_response_feedback_assistant_text_length',
+      sql`${table.assistantMessageText} is null or length(${table.assistantMessageText}) <= 8000`
+    ),
+    topicByRatingCheck: check(
+      'chk_chat_response_feedback_topic_by_rating',
+      sql`(${table.rating} = 1 and ${table.topicCode} is null) or (${table.rating} = -1)`
     ),
   })
 );

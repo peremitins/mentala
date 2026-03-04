@@ -7,6 +7,7 @@ import {
   ChatResponseDto,
   ChatStreamChunkDto,
   type ChatEntryContext,
+  type ChatFeedbackTopicCode,
   type SuggestedChip,
 } from '@/shared/dto';
 import { CHAT_STREAM_MODE } from '@/app/constants/chat';
@@ -30,13 +31,35 @@ function extractApiErrorMessage(error: any): string | null {
   return null;
 }
 
+export type ChatStoreMessage = {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  // Терапевтическая сессия, в рамках которой сгенерировано сообщение.
+  therapySessionId: number | null;
+};
+
+export type ChatMessageFeedbackState = {
+  rating: 1 | -1;
+  topicCode: ChatFeedbackTopicCode | null;
+  comment: string | null;
+  updatedAt: string;
+};
+
+type ChatApiMessage = {
+  role: 'user' | 'assistant';
+  content: string;
+};
+
 export const useChatStore = defineStore('chat', {
   state: () => ({
-    messages: [] as Array<{ role: 'user' | 'assistant'; content: string }>,
+    messages: [] as ChatStoreMessage[],
     userText: '' as string,
     provider: 'openai' as 'openai' | 'deepseek' | 'yandex',
     sessionId: '' as string,
     therapySessionId: null as number | null, // ID therapy сессии для биллинга
+    feedbackByMessageId: {} as Record<string, ChatMessageFeedbackState>,
+    feedbackSubmittingByMessageId: {} as Record<string, boolean>,
     suggestedChips: [] as SuggestedChip[],
     currentChatAbortController: null as AbortController | null,
     lastActivityAt: null as Date | null, // Время последней активности для idle timeout
@@ -215,6 +238,8 @@ export const useChatStore = defineStore('chat', {
       this.messages = [];
       this.userText = '';
       this.suggestedChips = [];
+      this.feedbackByMessageId = {};
+      this.feedbackSubmittingByMessageId = {};
       this.stopChatStream();
       // Завершаем therapy сессию перед очисткой (асинхронно, не блокируем)
       if (this.therapySessionId && !this.isEndingSession) {
@@ -224,6 +249,46 @@ export const useChatStore = defineStore('chat', {
     },
     clearSuggestedChips() {
       this.suggestedChips = [];
+    },
+    setFeedbackState(
+      messageId: string,
+      state: ChatMessageFeedbackState | null
+    ) {
+      if (!state) {
+        const next = { ...this.feedbackByMessageId };
+        delete next[messageId];
+        this.feedbackByMessageId = next;
+        return;
+      }
+
+      this.feedbackByMessageId = {
+        ...this.feedbackByMessageId,
+        [messageId]: state,
+      };
+    },
+    setFeedbackSubmitting(messageId: string, isSubmitting: boolean) {
+      if (isSubmitting) {
+        this.feedbackSubmittingByMessageId = {
+          ...this.feedbackSubmittingByMessageId,
+          [messageId]: true,
+        };
+        return;
+      }
+
+      const next = { ...this.feedbackSubmittingByMessageId };
+      delete next[messageId];
+      this.feedbackSubmittingByMessageId = next;
+    },
+    _createMessage(
+      role: ChatStoreMessage['role'],
+      content: string
+    ): ChatStoreMessage {
+      return {
+        id: nanoid(),
+        role,
+        content,
+        therapySessionId: this.therapySessionId ?? null,
+      };
     },
     /**
      * Подготавливает параметры для API запроса
@@ -235,6 +300,42 @@ export const useChatStore = defineStore('chat', {
         lang: 'ru' as const,
         entryContext: this.entryContext,
       };
+    },
+    /**
+     * Нормализует сообщения в сторе: гарантирует наличие client-id.
+     * Нужно для случаев HMR/legacy состояния без id.
+     */
+    ensureMessageIds() {
+      this.messages = this.messages.map((message) => {
+        const nextId =
+          typeof message?.id === 'string' && message.id.trim().length > 0
+            ? message.id
+            : nanoid();
+        const nextTherapySessionId =
+          typeof message?.therapySessionId === 'number' &&
+          Number.isInteger(message.therapySessionId) &&
+          message.therapySessionId > 0
+            ? message.therapySessionId
+            : null;
+
+        return {
+          id: nextId,
+          role: message.role,
+          content: message.content,
+          therapySessionId: nextTherapySessionId,
+        } satisfies ChatStoreMessage;
+      });
+    },
+    /**
+     * Преобразует сообщения стора в API-пейлоад без client-id.
+     */
+    _toApiMessages(
+      messages: ChatStoreMessage[] = this.messages
+    ): ChatApiMessage[] {
+      return messages.map((message) => ({
+        role: message.role,
+        content: message.content,
+      }));
     },
     /**
      * Останавливает текущий chat stream запрос
@@ -449,6 +550,7 @@ export const useChatStore = defineStore('chat', {
      */
     async startConversation() {
       if (!this.sessionId) this.startSession();
+      this.ensureMessageIds();
 
       const loaders = useLoadersStore();
 
@@ -460,12 +562,13 @@ export const useChatStore = defineStore('chat', {
       // Начинаем therapy сессию для подсчета времени
       await this.startTherapySession();
       if (!this.therapySessionId) {
-        this.messages.push({
-          role: 'assistant',
-          content:
+        this.messages.push(
+          this._createMessage(
+            'assistant',
             this.lastStartSessionError ||
-            'Не удалось начать сессию (возможно нет доступа к ИИ или исчерпан лимит минут).',
-        });
+              'Не удалось начать сессию (возможно нет доступа к ИИ или исчерпан лимит минут).'
+          )
+        );
         return { ok: false } as any;
       }
 
@@ -505,7 +608,7 @@ export const useChatStore = defineStore('chat', {
           } as any);
 
           // Создаем пустое assistant-сообщение только после успешного старта запроса
-          idx = this.messages.push({ role: 'assistant', content: '' }) - 1;
+          idx = this.messages.push(this._createMessage('assistant', '')) - 1;
 
           await this._processStreamResponse(resp, idx);
         } else {
@@ -524,7 +627,7 @@ export const useChatStore = defineStore('chat', {
           } as any);
 
           // Создаем пустое assistant-сообщение только после успешного старта запроса
-          idx = this.messages.push({ role: 'assistant', content: '' }) - 1;
+          idx = this.messages.push(this._createMessage('assistant', '')) - 1;
 
           await this._processNonStreamResponse(resp, idx);
         }
@@ -578,16 +681,10 @@ export const useChatStore = defineStore('chat', {
           if (errorMsg) {
             errorMsg.content = errorMessage;
           } else {
-            this.messages.push({
-              role: 'assistant',
-              content: errorMessage,
-            });
+            this.messages.push(this._createMessage('assistant', errorMessage));
           }
         } else {
-          this.messages.push({
-            role: 'assistant',
-            content: errorMessage,
-          });
+          this.messages.push(this._createMessage('assistant', errorMessage));
         }
 
         return { ok: false } as any;
@@ -599,20 +696,22 @@ export const useChatStore = defineStore('chat', {
     },
     async sendMessage(text: string) {
       if (!this.sessionId) this.startSession();
+      this.ensureMessageIds();
       this.userText = '';
       this.clearSuggestedChips();
-      this.messages.push({ role: 'user', content: text });
+      this.messages.push(this._createMessage('user', text));
 
       // Начинаем therapy сессию при отправке первого сообщения
       if (!this.therapySessionId) {
         await this.startTherapySession();
         if (!this.therapySessionId) {
-          this.messages.push({
-            role: 'assistant',
-            content:
+          this.messages.push(
+            this._createMessage(
+              'assistant',
               this.lastStartSessionError ||
-              'Не удалось начать сессию (возможно нет доступа к ИИ или исчерпан лимит минут).',
-          });
+                'Не удалось начать сессию (возможно нет доступа к ИИ или исчерпан лимит минут).'
+            )
+          );
           return { ok: false } as any;
         }
       } else {
@@ -643,7 +742,7 @@ export const useChatStore = defineStore('chat', {
             method: 'POST',
             body: {
               provider: 'openai',
-              messages: this.messages,
+              messages: this._toApiMessages(),
               sessionId: this.sessionId,
               therapySessionId: this.therapySessionId,
               userPrompt: apiParams.userPrompt,
@@ -658,7 +757,7 @@ export const useChatStore = defineStore('chat', {
           loaders.hideLoader();
 
           // Создаем пустое assistant-сообщение только после успешного старта запроса
-          idx = this.messages.push({ role: 'assistant', content: '' }) - 1;
+          idx = this.messages.push(this._createMessage('assistant', '')) - 1;
 
           await this._processStreamResponse(resp, idx);
         } else {
@@ -666,7 +765,7 @@ export const useChatStore = defineStore('chat', {
             method: 'POST',
             body: {
               provider: 'openai',
-              messages: this.messages,
+              messages: this._toApiMessages(),
               sessionId: this.sessionId,
               therapySessionId: this.therapySessionId,
               userPrompt: apiParams.userPrompt,
@@ -680,7 +779,7 @@ export const useChatStore = defineStore('chat', {
           loaders.hideLoader();
 
           // Создаем пустое assistant-сообщение только после успешного старта запроса
-          idx = this.messages.push({ role: 'assistant', content: '' }) - 1;
+          idx = this.messages.push(this._createMessage('assistant', '')) - 1;
 
           await this._processNonStreamResponse(resp, idx);
         }
@@ -734,7 +833,7 @@ export const useChatStore = defineStore('chat', {
             msg.content = errorMessage;
           }
         } else {
-          this.messages.push({ role: 'assistant', content: errorMessage });
+          this.messages.push(this._createMessage('assistant', errorMessage));
         }
 
         return { ok: false } as any;
@@ -754,7 +853,11 @@ export const useChatStore = defineStore('chat', {
       try {
         await $api('/api/session/finish', {
           method: 'POST',
-          body: { sessionId: this.sessionId, messages: this.messages, model },
+          body: {
+            sessionId: this.sessionId,
+            messages: this._toApiMessages(),
+            model,
+          },
         });
       } catch (error) {
         console.error(
