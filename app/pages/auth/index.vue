@@ -190,14 +190,14 @@
                         >Я принимаю
                         <!-- Ссылки на каноничные HTML-документы из public/legal -->
                         <a
-                          href="/legal/terms-of-service.html"
+                          :href="termsOfServiceUrl"
                           class="underline text-primary-ui hover:text-primary-ui/80"
                         >
                           Условия использования
                         </a>
                         и
                         <a
-                          href="/legal/privacy-policy.html"
+                          :href="privacyPolicyUrl"
                           class="underline text-primary-ui hover:text-primary-ui/80"
                         >
                           Политику конфиденциальности
@@ -289,14 +289,14 @@
           <template v-if="mode === 'signin'">
             Входя в аккаунт, вы подтверждаете согласие с
             <a
-              href="/legal/terms-of-service.html"
+              :href="termsOfServiceUrl"
               class="underline text-primary-ui hover:text-primary-ui/80"
             >
               Условиями использования
             </a>
             и
             <a
-              href="/legal/privacy-policy.html"
+              :href="privacyPolicyUrl"
               class="underline text-primary-ui hover:text-primary-ui/80"
             >
               Политикой конфиденциальности
@@ -307,7 +307,7 @@
             Защита данных: end-to-end для приватных чатов, ключи разделены
             (zero-trust). Подробнее в
             <a
-              href="/legal/privacy-policy.html"
+              :href="privacyPolicyUrl"
               class="underline text-primary-ui hover:text-primary-ui/80"
             >
               политике
@@ -369,6 +369,18 @@ const langCookie = useCookie<string | null>('mentai.lang', {
   path: '/',
 });
 const locale = computed(() => langCookie.value || 'ru');
+const legalLocale = computed(() => {
+  const normalizedLocale = String(locale.value || 'ru').toLowerCase();
+  return normalizedLocale.startsWith('en') ? 'en' : 'ru';
+});
+
+const termsOfServiceUrl = computed(
+  () => `/legal/terms-of-service-${legalLocale.value}.html`
+);
+const privacyPolicyUrl = computed(
+  () => `/legal/privacy-policy-${legalLocale.value}.html`
+);
+
 const brandLogoComponent = computed(() => {
   // Логотип выбирается по текущей локали интерфейса.
   const normalizedLocale = String(locale.value || 'ru').toLowerCase();

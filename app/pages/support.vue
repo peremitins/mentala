@@ -135,8 +135,6 @@ const { t, locale } = useI18n();
 
 const supportEmail = 'support@mentala.app';
 const supportMailto = `mailto:${supportEmail}`;
-const privacyPolicyUrl = '/legal/privacy-policy.html';
-const termsOfServiceUrl = '/legal/terms-of-service.html';
 const webAppUrl = 'https://my.mentala.app';
 const refundReviewDays = '5';
 
@@ -144,6 +142,13 @@ const supportLocale = computed(() => {
   const normalizedLocale = String(locale.value || 'ru').toLowerCase();
   return normalizedLocale.startsWith('en') ? 'en' : 'ru';
 });
+
+const privacyPolicyUrl = computed(
+  () => `/legal/privacy-policy-${supportLocale.value}.html`
+);
+const termsOfServiceUrl = computed(
+  () => `/legal/terms-of-service-${supportLocale.value}.html`
+);
 
 const appleCancelHelpUrl = computed(() =>
   supportLocale.value === 'en'
