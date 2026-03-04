@@ -1,0 +1,4 @@
+ALTER TABLE "chat_response_feedback" DROP CONSTRAINT "chk_chat_response_feedback_topic_by_rating";--> statement-breakpoint
+ALTER TABLE "chat_response_feedback" ADD COLUMN "assistant_message_text" text;--> statement-breakpoint
+ALTER TABLE "chat_response_feedback" ADD CONSTRAINT "chk_chat_response_feedback_assistant_text_length" CHECK ("chat_response_feedback"."assistant_message_text" is null or length("chat_response_feedback"."assistant_message_text") <= 8000);--> statement-breakpoint
+ALTER TABLE "chat_response_feedback" ADD CONSTRAINT "chk_chat_response_feedback_topic_by_rating" CHECK (("chat_response_feedback"."rating" = 1 and "chat_response_feedback"."topic_code" is null) or ("chat_response_feedback"."rating" = -1));

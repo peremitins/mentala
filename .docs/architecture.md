@@ -25,6 +25,7 @@
 • Google OAuth на native: `@capgo/capacitor-social-login` использует `google.webClientId` (env `NUXT_OAUTH_GOOGLE_CLIENT_ID`) на Android/Web и `google.iOSClientId` (env `NUXT_PUBLIC_GOOGLE_IOS_CLIENT_ID`) на iOS. Без iOS client id initialize на iOS возвращает `No provider was initialized`. В `AppDelegate` обязательно обрабатываем callback через `GIDSignIn.sharedInstance.handle(url)`. Backend `/api/auth/google/native` валидирует `idToken` по аудиториям `web + iOS`.
 • Для `nuxt generate` фоновые notification/BullMQ воркеры не запускаются (guards в `server/plugins/notifications-worker.ts` и `server/plugins/bullmq-workers.ts`), чтобы static-сборка не зависала на Redis и `cap sync` всегда получал свежие web assets.
 • Дополнительно для static-сборки отключены фоновые cleanup-плагины (`server/plugins/auth-cleanup.ts`, `server/plugins/trial-usage-cleanup.ts`), а Redis-клиент BullMQ работает в `lazyConnect` режиме, чтобы `generate` не блокировался фоновыми коннектами.
+• AI Response Feedback (MVP): реализованы `POST/GET /api/chat/feedback`, таблица `chat_response_feedback` (composite unique `user_id + therapy_session_id + assistant_message_client_id`, `bigserial`, check-ограничения, индексы), UI кнопок `like/dislike` внутри assistant-bubble в `app/pages/index.vue`, dislike-модалка с optional `topicCode` и optional `comment`, в payload/БД сохраняется `assistantMessageText` (текст конкретного ответа ИИ), optimistic update + rollback, toast-подтверждение на like/dislike, и daily cleanup `comment` старше 60 дней через плагин `server/plugins/chat-feedback-cleanup.ts`.
 • Валидация и схемы: Zod (в связке с @vee-validate/zod).
 • Логи и мониторинг: Pino + Sentry.
 • Миграции БД: Drizzle Kit (SQL файлы хранятся для совместимости с будущими системами).
@@ -565,6 +566,10 @@ server/
 • Контракт ответа `/api/subscriptions/current`: `features.aiChatMode = disabled|limited|unlimited_fair_use`; `features.weeklyMinutesLimit = number|null` (`null` для unlimited); `features.fairUseGuardMinutesPerWeek` задан только для `unlimited_fair_use`.
 • Контракт ошибки лимита унифицирован: `HTTP 402`, `code=premium_fair_use_limit_reached`, `message`, `nextResetAt` (включая SSE-ветку `/api/chat/stream`).
 • Suggested replies (чипы): возвращаются отдельным финальным SSE‑чанком в `/api/chat/stream` перед `[DONE]`, формат и поля описываются в Zod‑DTO.
+• Подсистема оценки ответов ассистента (см. `.docs/ai_response_feedback_system.md`) спроектирована через `POST /api/chat/feedback` и привязывается к `therapySessionId` + клиентскому `assistantMessageClientId`, так как в текущем chat-store сообщения изначально не имеют серверного `assistantMessageId`; таблица feedback использует `id bigserial` и `unique (user_id, therapy_session_id, assistant_message_client_id)`.
+• Feedback-состояние хранится в Pinia (`useChatStore`) и привязано к конкретному assistant-сообщению (`assistantMessageClientId`) + его `therapySessionId`: это сохраняет лайк/дизлайк при client-side переходах между страницами, даже если активная `therapySessionId` уже завершена.
+• После полной перезагрузки вкладки feedback не восстанавливается: в текущем UX история чата очищается на reload, поэтому runtime-state начинается заново.
+• Для feedback-комментариев установлен retention 60 дней: cleanup-job очищает только текст `comment`, запись оценки и метаданные сохраняются.
 • Клиентский SSE‑парсер буферизует чанки и разбивает по пустой строке, чтобы не терять события при разрезании данных по сети.
 • Relay‑клиентский SSE‑парсер использует TextDecoder для корректной UTF‑8‑декодировки через границы чанков (иначе возможны пропуски дельт на кириллице).
 • Suggested replies: при разборе ответа нормализуем `null` в полях `action/params`, чтобы Zod‑валидация не отбрасывала валидные чипы.
