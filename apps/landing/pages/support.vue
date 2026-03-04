@@ -20,25 +20,6 @@
           </a>
 
           <div class="flex items-center gap-2">
-            <span class="hidden sm:inline text-xs text-white/65">
-              {{ t('SUPPORT.LANGUAGE.LABEL') }}
-            </span>
-            <button
-              type="button"
-              class="lang-toggle-btn"
-              :class="{ 'lang-toggle-btn-active': locale === 'ru' }"
-              @click="switchLocale('ru')"
-            >
-              {{ t('SUPPORT.LANGUAGE.RU') }}
-            </button>
-            <button
-              type="button"
-              class="lang-toggle-btn"
-              :class="{ 'lang-toggle-btn-active': locale === 'en' }"
-              @click="switchLocale('en')"
-            >
-              {{ t('SUPPORT.LANGUAGE.EN') }}
-            </button>
             <a :href="homeUrl" class="home-link-btn">
               {{ t('SUPPORT.HOME_LINK') }}
             </a>
@@ -170,97 +151,52 @@
         </div>
       </section>
     </main>
+
+    <div
+      class="fixed right-3 z-[85] w-[74px] sm:right-4"
+      style="bottom: max(0.75rem, env(safe-area-inset-bottom))"
+    >
+      <LanguageSelect
+        :label="t('SUPPORT.LANGUAGE.LABEL')"
+        :ru-label="t('SUPPORT.LANGUAGE.RU')"
+        :en-label="t('SUPPORT.LANGUAGE.EN')"
+        :model-value="selectedLocale"
+        @update:model-value="onLocaleChange"
+      />
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, watch } from 'vue';
+import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRuntimeConfig } from 'nuxt/app';
+import { useLandingLocale } from '../composables/useLandingLocale';
+import type { SupportedLocale } from '../composables/useLandingLocale';
+import LanguageSelect from '../components/ui/LanguageSelect.vue';
 
-type SupportedLocale = 'ru' | 'en';
-
-const route = useRoute();
 const runtimeConfig = useRuntimeConfig();
-const langCookie = useCookie<string | null>('mentai.lang', {
-  maxAge: 365 * 24 * 3600,
-  path: '/',
-});
-
-const { t, locale } = useI18n();
+const { t } = useI18n();
+const { locale, selectedLocale, switchLocale, brandLogoSrc, brandLogoAlt } =
+  useLandingLocale();
 
 const supportEmail = 'support@mentala.app';
 const supportMailto = `mailto:${supportEmail}`;
-const privacyPolicyUrl = 'https://my.mentala.app/legal/privacy-policy.html';
-const termsOfServiceUrl = 'https://my.mentala.app/legal/terms-of-service.html';
 const webAppUrl = 'https://my.mentala.app';
 const appleCancelHelpUrl = 'https://support.apple.com/en-us/118428';
 const googleCancelHelpUrl =
   'https://support.google.com/googleplay/answer/7018481?hl=en';
 const refundReviewDays = '5';
 
-function toSingleQueryValue(value: unknown): string | undefined {
-  if (Array.isArray(value)) {
-    return typeof value[0] === 'string' ? value[0] : undefined;
-  }
-  return typeof value === 'string' ? value : undefined;
-}
-
-function resolveLocale(value: unknown): SupportedLocale | null {
-  if (typeof value !== 'string') return null;
-  const normalizedValue = value.trim().toLowerCase();
-  if (normalizedValue.startsWith('ru')) return 'ru';
-  if (normalizedValue.startsWith('en')) return 'en';
-  return null;
-}
-
-const selectedLocale = computed<SupportedLocale>(() => {
-  const queryLocale =
-    resolveLocale(toSingleQueryValue(route.query.lang)) ||
-    resolveLocale(toSingleQueryValue(route.query.locale));
-  if (queryLocale) return queryLocale;
-
-  const cookieLocale = resolveLocale(langCookie.value);
-  if (cookieLocale) return cookieLocale;
-
-  if (typeof navigator !== 'undefined') {
-    const browserLocale = resolveLocale(navigator.language);
-    if (browserLocale) return browserLocale;
-  }
-
-  return 'ru';
-});
-
-watch(
-  () => selectedLocale.value,
-  (value) => {
-    if (locale.value !== value) {
-      locale.value = value;
-    }
-    if (langCookie.value !== value) {
-      langCookie.value = value;
-    }
-  },
-  { immediate: true }
+const privacyPolicyUrl = computed(
+  () => `${webAppUrl}/legal/privacy-policy-${selectedLocale.value}.html`
+);
+const termsOfServiceUrl = computed(
+  () => `${webAppUrl}/legal/terms-of-service-${selectedLocale.value}.html`
 );
 
-function switchLocale(nextLocale: SupportedLocale) {
-  if (locale.value === nextLocale && selectedLocale.value === nextLocale)
-    return;
-
-  langCookie.value = nextLocale;
-  locale.value = nextLocale;
-
-  void navigateTo(
-    {
-      path: route.path,
-      query: {
-        ...route.query,
-        lang: nextLocale,
-      },
-    },
-    { replace: true }
-  );
+async function onLocaleChange(nextLocale: SupportedLocale) {
+  await switchLocale(nextLocale);
 }
 
 const siteUrl = computed(() =>
@@ -271,12 +207,6 @@ const siteUrl = computed(() =>
 );
 const homeUrl = computed(() => `${siteUrl.value}/`);
 const supportUrl = computed(() => `${siteUrl.value}/support`);
-const brandLogoSrc = computed(() =>
-  locale.value === 'ru' ? '/logo_ru.svg' : '/logo_en.svg'
-);
-const brandLogoAlt = computed(() =>
-  locale.value === 'ru' ? 'Ментала' : 'Mentala'
-);
 
 useSeoMeta({
   title: () => String(t('SUPPORT.META.TITLE')),
@@ -464,36 +394,6 @@ useHead(() => ({
   background: rgba(255, 255, 255, 0.08);
   border-color: rgba(103, 232, 249, 0.5);
   color: #ffffff;
-}
-
-.lang-toggle-btn {
-  min-width: 2.2rem;
-  height: 2rem;
-  border-radius: 0.55rem;
-  border: 1px solid rgba(214, 228, 255, 0.24);
-  background: rgba(255, 255, 255, 0.04);
-  color: rgba(233, 240, 255, 0.84);
-  font-size: 0.78rem;
-  font-weight: 700;
-  transition:
-    color 160ms ease,
-    border-color 160ms ease,
-    background-color 160ms ease;
-}
-
-.lang-toggle-btn:hover {
-  border-color: rgba(103, 232, 249, 0.54);
-  color: #ffffff;
-}
-
-.lang-toggle-btn-active {
-  background: linear-gradient(
-    120deg,
-    rgba(103, 232, 249, 0.26),
-    rgba(52, 211, 153, 0.2)
-  );
-  border-color: rgba(103, 232, 249, 0.58);
-  color: #f8ffff;
 }
 
 .home-link-btn {
