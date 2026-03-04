@@ -25,6 +25,7 @@
 • Google OAuth на native: `@capgo/capacitor-social-login` использует `google.webClientId` (env `NUXT_OAUTH_GOOGLE_CLIENT_ID`) на Android/Web и `google.iOSClientId` (env `NUXT_PUBLIC_GOOGLE_IOS_CLIENT_ID`) на iOS. Без iOS client id initialize на iOS возвращает `No provider was initialized`. В `AppDelegate` обязательно обрабатываем callback через `GIDSignIn.sharedInstance.handle(url)`. Backend `/api/auth/google/native` валидирует `idToken` по аудиториям `web + iOS`.
 • Для `nuxt generate` фоновые notification/BullMQ воркеры не запускаются (guards в `server/plugins/notifications-worker.ts` и `server/plugins/bullmq-workers.ts`), чтобы static-сборка не зависала на Redis и `cap sync` всегда получал свежие web assets.
 • Дополнительно для static-сборки отключены фоновые cleanup-плагины (`server/plugins/auth-cleanup.ts`, `server/plugins/trial-usage-cleanup.ts`), а Redis-клиент BullMQ работает в `lazyConnect` режиме, чтобы `generate` не блокировался фоновыми коннектами.
+• AI Response Feedback (MVP): реализованы `POST/GET /api/chat/feedback`, таблица `chat_response_feedback` (composite unique `user_id + therapy_session_id + assistant_message_client_id`, `bigserial`, check-ограничения, индексы), UI кнопок `like/dislike` внутри assistant-bubble в `app/pages/index.vue`, dislike-модалка с optional `topicCode` и optional `comment`, в payload/БД сохраняется `assistantMessageText` (текст конкретного ответа ИИ), optimistic update + rollback, toast-подтверждение на like/dislike, и daily cleanup `comment` старше 60 дней через плагин `server/plugins/chat-feedback-cleanup.ts`.
 • Валидация и схемы: Zod (в связке с @vee-validate/zod).
 • Логи и мониторинг: Pino + Sentry.
 • Миграции БД: Drizzle Kit (SQL файлы хранятся для совместимости с будущими системами).
@@ -72,6 +73,7 @@ index, onboarding, chat (layout blank), therapy, habits, practices, breath-pract
 • Аналитика настроек: `useSettingsAnalytics` (Sentry breadcrumbs) — события `settings_notifications_push_toggle`, `settings_notifications_marketing_toggle`, `settings_notifications_open_system_settings`.
 • ID пользователя показывается внизу `/settings` с копированием (useClipboard/Capacitor Clipboard с fallback).
 • Чат: welcome‑ответ стартует при пустом `messages`, параметр `mode` удалён; `entryContext` приходит из `/habits`, `/therapy` и `/quick-help` (включая `sos` и `thought_dump`) и учитывается в prompt.
+• Кризисный контур (обновлено 2026-03-04): в `/api/chat` и `/api/chat/stream` внедрён server-side детектор (`server/application/chat/crisis-protocol.service.ts`), который анализирует последние user-сообщения и подмешивает safety developer-prompt (`CRISIS_HIGH`/`CRISIS_WATCH`) в `options.userPrompt`; LLM отвечает всегда (без short-circuit шаблона), при неизвестной стране допускается только вопрос о стране («В какой стране ты сейчас находишься?») и запрещены уточнения точного адреса/геолокации; при известной стране из `user_locale` подставляется соответствующий номер экстренных служб. MVP quick-help/SOS остаётся стабилизационным флоу и не считается полноценной кризисной помощью (см. `.docs/sos.md`).
 • Чат: приветствие используется только в welcome‑старте и не чаще 1 раза в день (локальная дата пользователя). Приветствие по имени — отдельный лимит; имя очищается до «только имя» без фамилии/никнеймов. Отметки хранятся в `chat_settings.last_greeting_at` и `chat_settings.last_name_greeting_at`. Инструкция про имя и выбор стартовой фразы добавляются только в первое сообщение дня, чтобы не раздувать токены.
 • Чат: альтернативная стартовая фраза в welcome‑режиме учитывает `entryContext` (`therapy_topic` / `habit` / `sos` / `thought_dump`) и `user_gender` (если есть) для естественных формулировок. Выбор фразы выполняется случайно, при этом для одного `userId + context` исключается повтор предыдущей фразы подряд (in-memory anti-repeat). Общий нейтральный шаблон используется только при входе с главной (`entryContext = null`), а при переходе из темы/привычки/SOS/выгрузки мыслей старт сразу формулируется по выбранному контексту.
 • Чат: suggested‑chips не сбрасываются при наборе текста, очищаются только при отправке/выборе.
@@ -483,17 +485,18 @@ server/
 • UX/платформы (as-is):
 • `app/pages/subscription.vue`:
 • Trial countdown в UI показывается как `X дней Y часов осталось` (с fallback `меньше часа`), вычисляется от точного `trialEndsAt` и пересчитывается на клиенте каждую минуту (`@vueuse/core/useNow`).
-• Web/Android: интегрирован YooKassa Widget (`checkout-widget.js`) во встраиваемом режиме (`customization.modal=false`) с рендером в наш `Dialog`-контейнер (controlled modal на стороне приложения).
+• Web (desktop и non-compact viewport): интегрирован YooKassa Widget (`checkout-widget.js`) во встраиваемом режиме (`customization.modal=false`) с рендером в наш `Dialog`-контейнер (controlled modal на стороне приложения).
 • Checkout-диалог открыт в non-modal режиме (`Dialog modal=false`), чтобы 3DS-челлендж (который может монтироваться вне контейнера виджета) оставался интерактивным и не блокировался focus/pointer lock.
 • Загрузка скрипта виджета вынесена в клиентский Nuxt plugin `app/plugins/yookassa-widget.client.ts` (single-flight загрузка + DI через `$yooKassaWidget`), а страница подписки использует только API плагина.
 • Глобальные CSS-override внутренних классов `checkout-modal*` не используются; layout/overlay контролируются нашим `Dialog`, а виджет монтируется в выделенный DOM-контейнер.
 • Контейнер виджета обёрнут в `rounded + overflow-hidden`, чтобы скругления верхних/нижних углов сохранялись в embed-режиме на всех viewport.
 • Кнопка закрытия диалога использует стандартный визуальный стиль без явной рамки у кнопки (с принудительно тёмным цветом иконки для читаемости на белом фоне виджета); контейнер виджета имеет дополнительный верхний внутренний отступ для корректной визуальной дистанции от верхней границы.
-• Для обычного web/android flow `return_url` у widget не используется; после оплаты статус синхронизируется через widget events (`success/fail`) + short polling.
+• Native iOS/Android: checkout всегда выполняется через `redirect` во внешний браузер (без embedded widget), с возвратом в приложение через `/payment-success` и deeplink/app-link обработчик.
+• Mobile web (compact viewport): используется redirect checkout (без in-page widget popup), чтобы избежать нестабильности 3DS-кнопок в iframe на узких экранах.
+• Для widget-flow (`web` non-compact) `return_url` не используется; после оплаты статус синхронизируется через widget events (`success/fail`) + short polling.
 • Канонический endpoint возврата после внешней оплаты: `/payment-success`.
 • `return_url` в redirect-flow и bind-flow указывает на `/auth/external-session/consume?token=...&redirect=/payment-success?...`: внешний браузер сначала получает web cookie-сессию через consume endpoint и только потом редиректится в единый return-flow.
-• iOS native: внутренний checkout отключён; показывается только переход в web flow.
-• Mobile web: используется redirect checkout (без in-page widget popup), чтобы избежать нестабильности 3DS-кнопок в iframe на узких экранах.
+• Серверный safeguard в `start-checkout`: для `X-Platform: ios|android` принудительно выбирается `paymentMode=redirect`, даже если клиент запросил `widget`.
 • После старта оплаты включён short polling с прогрессивным профилем: 1 сек первые 5 секунд, затем 3 сек, окно до 30 секунд.
 • Ручная кнопка проверки статуса не используется; синхронизация статуса выполняется автоматически через widget/deeplink события и short polling.
 • Добавлен серверный verify endpoint для polling: `GET /api/subscriptions/check-payment-status`.
@@ -565,6 +568,10 @@ server/
 • Контракт ответа `/api/subscriptions/current`: `features.aiChatMode = disabled|limited|unlimited_fair_use`; `features.weeklyMinutesLimit = number|null` (`null` для unlimited); `features.fairUseGuardMinutesPerWeek` задан только для `unlimited_fair_use`.
 • Контракт ошибки лимита унифицирован: `HTTP 402`, `code=premium_fair_use_limit_reached`, `message`, `nextResetAt` (включая SSE-ветку `/api/chat/stream`).
 • Suggested replies (чипы): возвращаются отдельным финальным SSE‑чанком в `/api/chat/stream` перед `[DONE]`, формат и поля описываются в Zod‑DTO.
+• Подсистема оценки ответов ассистента (см. `.docs/ai_response_feedback_system.md`) спроектирована через `POST /api/chat/feedback` и привязывается к `therapySessionId` + клиентскому `assistantMessageClientId`, так как в текущем chat-store сообщения изначально не имеют серверного `assistantMessageId`; таблица feedback использует `id bigserial` и `unique (user_id, therapy_session_id, assistant_message_client_id)`.
+• Feedback-состояние хранится в Pinia (`useChatStore`) и привязано к конкретному assistant-сообщению (`assistantMessageClientId`) + его `therapySessionId`: это сохраняет лайк/дизлайк при client-side переходах между страницами, даже если активная `therapySessionId` уже завершена.
+• После полной перезагрузки вкладки feedback не восстанавливается: в текущем UX история чата очищается на reload, поэтому runtime-state начинается заново.
+• Для feedback-комментариев установлен retention 60 дней: cleanup-job очищает только текст `comment`, запись оценки и метаданные сохраняются.
 • Клиентский SSE‑парсер буферизует чанки и разбивает по пустой строке, чтобы не терять события при разрезании данных по сети.
 • Relay‑клиентский SSE‑парсер использует TextDecoder для корректной UTF‑8‑декодировки через границы чанков (иначе возможны пропуски дельт на кириллице).
 • Suggested replies: при разборе ответа нормализуем `null` в полях `action/params`, чтобы Zod‑валидация не отбрасывала валидные чипы.

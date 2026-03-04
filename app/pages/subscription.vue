@@ -381,6 +381,11 @@
         overlay-class="z-[190] bg-black/70 backdrop-blur-sm"
         class="z-[200] !w-[min(96vw,560px)] !max-w-[560px] !bg-transparent !border-0 !shadow-none !p-0 !max-h-[92dvh] !overflow-y-auto [&>button]:z-[220] [&>button]:opacity-100 [&>button]:text-slate-700 [&>button]:right-2.5 [&>button]:top-2.5 [&>button]:focus:ring-0 [&>button]:focus:ring-offset-0"
       >
+        <DialogTitle class="sr-only">Оплата подписки</DialogTitle>
+        <DialogDescription class="sr-only">
+          Форма оплаты YooKassa. После завершения статус подписки обновится
+          автоматически.
+        </DialogDescription>
         <!-- Добавляем внутренний верхний отступ, чтобы верхняя строка виджета не прилипала к краю. -->
         <div
           class="overflow-hidden rounded-[22px] bg-white pt-2 shadow-2xl sm:pt-3"
@@ -433,7 +438,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/app/components/ui/alert-dialog';
-import { Dialog, DialogContent } from '@/app/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from '@/app/components/ui/dialog';
 
 interface Plan {
   id: string;
@@ -633,6 +643,9 @@ const isCheckoutWidgetDialogOpen = ref(false);
 const checkoutWidgetContainerRef = ref<HTMLElement | null>(null);
 const isNativeIos = computed(
   () => platform.value === 'ios' && Capacitor.isNativePlatform()
+);
+const isNativeAndroid = computed(
+  () => platform.value === 'android' && Capacitor.isNativePlatform()
 );
 
 let widgetInstance: YooKassaWidgetInstance | null = null;
@@ -1003,6 +1016,10 @@ function isCompactMobileWeb(): boolean {
 }
 
 function resolveCheckoutModeForCurrentContext(): 'widget' | 'redirect' {
+  // На native Android не используем embedded widget в WebView:
+  // redirect-flow стабильнее для 3DS и не закрывается сразу в системных WebView.
+  if (isNativeAndroid.value) return 'redirect';
+
   // На мобильном web используем redirect flow:
   // это надежнее для 3DS, чем iframe в popup-виджете.
   return isCompactMobileWeb() ? 'redirect' : 'widget';
@@ -1723,7 +1740,7 @@ async function startCheckout(): Promise<boolean> {
 }
 
 onMounted(async () => {
-  if (!isNativeIos.value && !isCompactMobileWeb()) {
+  if (!isNativeIos.value && !isNativeAndroid.value && !isCompactMobileWeb()) {
     // Предзагрузка скрипта ускоряет первый показ виджета.
     void $yooKassaWidget.ensureLoaded().catch((error) => {
       console.warn('[Subscription] YooKassa widget preload failed:', error);

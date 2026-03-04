@@ -301,14 +301,6 @@ textarea::placeholder {
   animation: slide-up 0.5s ease-out;
 }
 
-/* Chat bubble style */
-.bubble {
-  border-radius: calc(var(--radius-md) + 2px);
-  @apply border border-border/15 backdrop-blur-xl px-4 py-2;
-  background: hsl(var(--background) / 0.07);
-  box-shadow: var(--shadow-sm);
-}
-
 /* Input container */
 
 .icon-disc {
