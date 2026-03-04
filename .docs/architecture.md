@@ -485,17 +485,18 @@ server/
 • UX/платформы (as-is):
 • `app/pages/subscription.vue`:
 • Trial countdown в UI показывается как `X дней Y часов осталось` (с fallback `меньше часа`), вычисляется от точного `trialEndsAt` и пересчитывается на клиенте каждую минуту (`@vueuse/core/useNow`).
-• Web/Android: интегрирован YooKassa Widget (`checkout-widget.js`) во встраиваемом режиме (`customization.modal=false`) с рендером в наш `Dialog`-контейнер (controlled modal на стороне приложения).
+• Web (desktop и non-compact viewport): интегрирован YooKassa Widget (`checkout-widget.js`) во встраиваемом режиме (`customization.modal=false`) с рендером в наш `Dialog`-контейнер (controlled modal на стороне приложения).
 • Checkout-диалог открыт в non-modal режиме (`Dialog modal=false`), чтобы 3DS-челлендж (который может монтироваться вне контейнера виджета) оставался интерактивным и не блокировался focus/pointer lock.
 • Загрузка скрипта виджета вынесена в клиентский Nuxt plugin `app/plugins/yookassa-widget.client.ts` (single-flight загрузка + DI через `$yooKassaWidget`), а страница подписки использует только API плагина.
 • Глобальные CSS-override внутренних классов `checkout-modal*` не используются; layout/overlay контролируются нашим `Dialog`, а виджет монтируется в выделенный DOM-контейнер.
 • Контейнер виджета обёрнут в `rounded + overflow-hidden`, чтобы скругления верхних/нижних углов сохранялись в embed-режиме на всех viewport.
 • Кнопка закрытия диалога использует стандартный визуальный стиль без явной рамки у кнопки (с принудительно тёмным цветом иконки для читаемости на белом фоне виджета); контейнер виджета имеет дополнительный верхний внутренний отступ для корректной визуальной дистанции от верхней границы.
-• Для обычного web/android flow `return_url` у widget не используется; после оплаты статус синхронизируется через widget events (`success/fail`) + short polling.
+• Native iOS/Android: checkout всегда выполняется через `redirect` во внешний браузер (без embedded widget), с возвратом в приложение через `/payment-success` и deeplink/app-link обработчик.
+• Mobile web (compact viewport): используется redirect checkout (без in-page widget popup), чтобы избежать нестабильности 3DS-кнопок в iframe на узких экранах.
+• Для widget-flow (`web` non-compact) `return_url` не используется; после оплаты статус синхронизируется через widget events (`success/fail`) + short polling.
 • Канонический endpoint возврата после внешней оплаты: `/payment-success`.
 • `return_url` в redirect-flow и bind-flow указывает на `/auth/external-session/consume?token=...&redirect=/payment-success?...`: внешний браузер сначала получает web cookie-сессию через consume endpoint и только потом редиректится в единый return-flow.
-• iOS native: внутренний checkout отключён; показывается только переход в web flow.
-• Mobile web: используется redirect checkout (без in-page widget popup), чтобы избежать нестабильности 3DS-кнопок в iframe на узких экранах.
+• Серверный safeguard в `start-checkout`: для `X-Platform: ios|android` принудительно выбирается `paymentMode=redirect`, даже если клиент запросил `widget`.
 • После старта оплаты включён short polling с прогрессивным профилем: 1 сек первые 5 секунд, затем 3 сек, окно до 30 секунд.
 • Ручная кнопка проверки статуса не используется; синхронизация статуса выполняется автоматически через widget/deeplink события и short polling.
 • Добавлен серверный verify endpoint для polling: `GET /api/subscriptions/check-payment-status`.

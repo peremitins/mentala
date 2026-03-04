@@ -212,8 +212,10 @@ export default defineEventHandler(async (event) => {
   const billingPeriodTyped = billingPeriod as BillingPeriod;
   const externalFlow = requestedExternalFlow === true;
   const sourcePlatform = resolveSourcePlatform(event);
+  // На native iOS/Android проводим checkout только через redirect-flow:
+  // embedded widget в мобильных WebView нестабилен для 3DS и может закрываться.
   const paymentMode: 'widget' | 'redirect' =
-    sourcePlatform === 'ios'
+    sourcePlatform === 'ios' || sourcePlatform === 'android'
       ? 'redirect'
       : requestedPaymentMode === 'redirect'
         ? 'redirect'
