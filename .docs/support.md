@@ -30,8 +30,10 @@
 3. В приложении пункт «Поддержка» ведёт на этот URL.
 4. Страница не заменяет юридические документы, а ссылается на них:
 
-- `https://my.mentala.app/legal/privacy-policy.html`
-- `https://my.mentala.app/legal/terms-of-service.html`
+- RU: `https://my.mentala.app/legal/privacy-policy-ru.html`
+- EN: `https://my.mentala.app/legal/privacy-policy-en.html`
+- RU: `https://my.mentala.app/legal/terms-of-service-ru.html`
+- EN: `https://my.mentala.app/legal/terms-of-service-en.html`
 
 ## 4. Контент Страницы Поддержки
 
