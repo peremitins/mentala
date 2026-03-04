@@ -5,6 +5,12 @@ import Capacitor
 import GoogleSignIn
 #endif
 
+// Some Capacitor versions do not expose a typed Notification.Name for remote notifications.
+// Define it locally to keep the integration compiling and consistent.
+extension Notification.Name {
+    static let capacitorDidReceiveRemoteNotification = Notification.Name("CapacitorDidReceiveRemoteNotification")
+}
+
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
 
@@ -221,9 +227,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
                      didReceiveRemoteNotification userInfo: [AnyHashable: Any],
                      fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
         persistPushLaunchPayload(userInfo, reason: "didReceiveRemoteNotification")
-        _ = ApplicationDelegateProxy.shared.application(application,
-                                                        didReceiveRemoteNotification: userInfo,
-                                                        fetchCompletionHandler: completionHandler)
+
+        // Forward to Capacitor. This proxy method does not accept a fetchCompletionHandler.
+        NotificationCenter.default.post(name: .capacitorDidReceiveRemoteNotification, object: userInfo)
+
+        // Always finish the background fetch callback.
+        completionHandler(.newData)
     }
 
 }

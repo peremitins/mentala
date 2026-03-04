@@ -37,12 +37,19 @@ export function resolveMediaUrl(path?: string | null): string {
     typeof window !== 'undefined' && isHttpUrl(window.location.origin)
       ? window.location.origin
       : '';
+  const isNativeRuntime =
+    typeof window !== 'undefined' &&
+    typeof (window as any).Capacitor?.isNativePlatform === 'function' &&
+    Boolean((window as any).Capacitor.isNativePlatform());
 
-  // В native dev (Android/iOS) origin часто указывает на LAN URL из capacitor server.url.
-  // Если он http(s) и отличается от apiBase, берём origin как источник медиа —
-  // так картинки/аудио идут с того же хоста, откуда уже грузится веб-приложение.
+  // В native dev (Android/iOS) приоритетно используем origin (server.url),
+  // чтобы медиа шли с того же хоста, что и само приложение.
+  // Это критично для сценариев, когда CDN недоступен в эмуляторе/девайсе,
+  // но dev-server доступен по LAN.
   const shouldUseOriginInDev =
-    isDev && Boolean(origin) && Boolean(apiBaseUrl) && apiBaseUrl !== origin;
+    isDev &&
+    Boolean(origin) &&
+    (isNativeRuntime || (Boolean(apiBaseUrl) && apiBaseUrl !== origin));
 
   // Приоритеты:
   // dev: origin (если отличается от apiBase) -> apiBase -> mediaBaseUrl
