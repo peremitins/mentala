@@ -43,8 +43,10 @@
 
 - Обязательный явный medical disclaimer (видимый на странице).
 - Ссылки на действующие юридические документы:
-  - `https://my.mentala.app/legal/privacy-policy.html`
-  - `https://my.mentala.app/legal/terms-of-service.html`
+  - RU: `https://my.mentala.app/legal/privacy-policy-ru.html`
+  - EN: `https://my.mentala.app/legal/privacy-policy-en.html`
+  - RU: `https://my.mentala.app/legal/terms-of-service-ru.html`
+  - EN: `https://my.mentala.app/legal/terms-of-service-en.html`
 
 ## 3. Архитектура лендинга (to-be)
 
@@ -317,8 +319,10 @@ Sticky phone layout:
 
 - Email поддержки и privacy email.
 - Ссылки:
-- `https://my.mentala.app/legal/privacy-policy.html`
-- `https://my.mentala.app/legal/terms-of-service.html`
+- RU: `https://my.mentala.app/legal/privacy-policy-ru.html`
+- EN: `https://my.mentala.app/legal/privacy-policy-en.html`
+- RU: `https://my.mentala.app/legal/terms-of-service-ru.html`
+- EN: `https://my.mentala.app/legal/terms-of-service-en.html`
 - Короткая юридическая подпись и копирайт.
 
 ### 5.10 Блок «Тарифы»

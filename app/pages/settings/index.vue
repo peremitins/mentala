@@ -163,15 +163,30 @@
           <p
             class="text-xs font-semibold text-muted-foreground tracking-wide pt-4 pb-1 px-4"
           >
+            ПОДДЕРЖКА
+          </p>
+          <div class="">
+            <NuxtLink to="/support" class="px-4 py-3" :class="rowClass()">
+              <div class="">
+                <p class="text-sm font-medium">Поддержка</p>
+                <p class="text-xs text-muted-foreground">
+                  Вопросы, отмена подписки и возвраты
+                </p>
+              </div>
+              <IconChevronRight class="h-4 w-4 text-muted-foreground" />
+            </NuxtLink>
+          </div>
+        </div>
+
+        <div class="glass-deep">
+          <p
+            class="text-xs font-semibold text-muted-foreground tracking-wide pt-4 pb-1 px-4"
+          >
             ДОКУМЕНТЫ
           </p>
           <div class="">
             <!-- Ссылки на каноничные HTML-документы из public/legal -->
-            <a
-              href="/legal/terms-of-service.html"
-              class="px-4 py-3"
-              :class="rowClass()"
-            >
+            <a :href="termsOfServiceUrl" class="px-4 py-3" :class="rowClass()">
               <div class="">
                 <p class="text-sm font-medium">Условия использования</p>
               </div>
@@ -180,11 +195,7 @@
 
             <Separator class="w-auto mx-4" />
 
-            <a
-              href="/legal/privacy-policy.html"
-              class="px-4 py-3"
-              :class="rowClass()"
-            >
+            <a :href="privacyPolicyUrl" class="px-4 py-3" :class="rowClass()">
               <div class="">
                 <p class="text-sm font-medium">Политика конфиденциальности</p>
               </div>
@@ -436,6 +447,18 @@ const localeLabel = computed(() => {
   if (value === 'en') return 'English';
   return value.toUpperCase();
 });
+
+const legalLocale = computed(() => {
+  const value = (auth.user?.locale || locale.value || 'ru').toString();
+  return value.toLowerCase().startsWith('en') ? 'en' : 'ru';
+});
+
+const termsOfServiceUrl = computed(
+  () => `/legal/terms-of-service-${legalLocale.value}.html`
+);
+const privacyPolicyUrl = computed(
+  () => `/legal/privacy-policy-${legalLocale.value}.html`
+);
 
 const rowBaseClass =
   'group flex w-full items-center justify-between gap-3  text-left text-sm text-foreground transition-all duration-200 hover:bg-white/10 scroll-mt-24';

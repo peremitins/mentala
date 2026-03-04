@@ -27,7 +27,7 @@ export const SCENE_TRACKS: SceneTrack[] = [
     title: 'Ночной дождь',
     description: 'Убаюкивающий шум дождя для глубокого сна',
     audioPath: '/meditations/audio/nature/rain-night.cf201c33.m4a',
-    coverPath: '/meditations/covers/rain-night.e9a5fa50.webp',
+    coverPath: '/meditations/covers/rain-night.9468982c.webp',
     backgroundPath: '/meditations/backgrounds/rain-night.00d147c2.webp',
     isLoop: true,
     durationSeconds: null,
