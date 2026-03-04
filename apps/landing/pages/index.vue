@@ -971,12 +971,19 @@ const { data: landingConfig } = await useLandingConfig();
 const { reachGoal, trackScrollDepth } = useLandingAnalytics();
 
 const supportEmail = 'support@mentala.app';
-const webAppUrl = 'https://my.mentala.app';
+const webAppUrl = computed(() =>
+  String(runtimeConfig.public.appAuthUrl || 'https://my.mentala.app/auth')
+    .replace(/\/auth\/?$/, '')
+    .replace(/\/$/, '')
+);
+const legalLocale = computed(() =>
+  String(locale.value).toLowerCase().startsWith('en') ? 'en' : 'ru'
+);
 const privacyPolicyUrl = computed(
-  () => `${webAppUrl}/legal/privacy-policy-${selectedLocale.value}.html`
+  () => `${webAppUrl.value}/legal/privacy-policy-${legalLocale.value}.html`
 );
 const termsOfServiceUrl = computed(
-  () => `${webAppUrl}/legal/terms-of-service-${selectedLocale.value}.html`
+  () => `${webAppUrl.value}/legal/terms-of-service-${legalLocale.value}.html`
 );
 const billingPeriod = ref<'month' | 'year'>('month');
 const waitlistOpen = ref(false);

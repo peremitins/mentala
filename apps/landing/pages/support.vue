@@ -182,17 +182,24 @@ const { locale, selectedLocale, switchLocale, brandLogoSrc, brandLogoAlt } =
 
 const supportEmail = 'support@mentala.app';
 const supportMailto = `mailto:${supportEmail}`;
-const webAppUrl = 'https://my.mentala.app';
+const webAppUrl = computed(() =>
+  String(runtimeConfig.public.appAuthUrl || 'https://my.mentala.app/auth')
+    .replace(/\/auth\/?$/, '')
+    .replace(/\/$/, '')
+);
 const appleCancelHelpUrl = 'https://support.apple.com/en-us/118428';
 const googleCancelHelpUrl =
   'https://support.google.com/googleplay/answer/7018481?hl=en';
 const refundReviewDays = '5';
 
+const legalLocale = computed(() =>
+  String(locale.value).toLowerCase().startsWith('en') ? 'en' : 'ru'
+);
 const privacyPolicyUrl = computed(
-  () => `${webAppUrl}/legal/privacy-policy-${selectedLocale.value}.html`
+  () => `${webAppUrl.value}/legal/privacy-policy-${legalLocale.value}.html`
 );
 const termsOfServiceUrl = computed(
-  () => `${webAppUrl}/legal/terms-of-service-${selectedLocale.value}.html`
+  () => `${webAppUrl.value}/legal/terms-of-service-${legalLocale.value}.html`
 );
 
 async function onLocaleChange(nextLocale: SupportedLocale) {
