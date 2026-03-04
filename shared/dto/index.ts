@@ -156,10 +156,122 @@ export const ChatResponseDto = z.object({
   chips: z.array(SuggestedChipDto).max(5).optional(),
 });
 
+export const ChatFeedbackRatingEnum = z.union([z.literal(1), z.literal(-1)]);
+
+export const ChatFeedbackTopicCodeEnum = z.enum([
+  'FACTUAL_ERROR',
+  'OFF_TOPIC',
+  'NOT_HELPFUL',
+  'TONE_ISSUE',
+  'UNSAFE_ADVICE',
+  'PRIVACY_CONCERN',
+  'MISSED_CONTEXT',
+  'OTHER',
+]);
+
+export const ChatFeedbackAssistantMessageClientIdDto = z
+  .string()
+  .trim()
+  .min(1)
+  .max(64);
+
+const ChatFeedbackSessionIdDto = z.preprocess((value) => {
+  if (typeof value !== 'string') {
+    return value;
+  }
+
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : undefined;
+}, z.string().max(120).optional());
+
+const ChatFeedbackCommentDto = z.preprocess((value) => {
+  if (typeof value !== 'string') {
+    return value;
+  }
+
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : undefined;
+}, z.string().max(1000).optional());
+
+const ChatFeedbackAssistantMessageTextDto = z.preprocess((value) => {
+  if (typeof value !== 'string') {
+    return value;
+  }
+
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : undefined;
+}, z.string().max(8000).optional());
+
+export const ChatFeedbackUpsertRequestDto = z
+  .object({
+    therapySessionId: z.number().int().positive(),
+    assistantMessageClientId: ChatFeedbackAssistantMessageClientIdDto,
+    sessionId: ChatFeedbackSessionIdDto,
+    rating: ChatFeedbackRatingEnum,
+    topicCode: ChatFeedbackTopicCodeEnum.optional(),
+    comment: ChatFeedbackCommentDto,
+    assistantMessageText: ChatFeedbackAssistantMessageTextDto,
+  })
+  .superRefine((value, ctx) => {
+    if (value.rating === 1 && value.topicCode) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['topicCode'],
+        message: 'topicCode must be omitted when rating = 1',
+      });
+    }
+  });
+
+export const ChatFeedbackUpsertItemDto = z.object({
+  id: z.number(),
+  rating: ChatFeedbackRatingEnum,
+  topicCode: ChatFeedbackTopicCodeEnum.nullable(),
+  comment: z.string().max(1000).nullable(),
+  assistantMessageText: z.string().max(8000).nullable(),
+  updatedAt: z.string(),
+});
+
+export const ChatFeedbackUpsertResponseDto = z.object({
+  ok: z.literal(true),
+  item: ChatFeedbackUpsertItemDto,
+});
+
+export const ChatFeedbackListQueryDto = z.object({
+  therapySessionId: z.coerce.number().int().positive(),
+});
+
+export const ChatFeedbackListItemDto = z.object({
+  assistantMessageClientId: ChatFeedbackAssistantMessageClientIdDto,
+  rating: ChatFeedbackRatingEnum,
+  topicCode: ChatFeedbackTopicCodeEnum.nullable(),
+  assistantMessageText: z.string().max(8000).nullable(),
+  updatedAt: z.string(),
+});
+
+export const ChatFeedbackListResponseDto = z.object({
+  items: z.array(ChatFeedbackListItemDto),
+});
+
 export type UserDto = z.infer<typeof UserDto>;
 export type ChatMessageDto = z.infer<typeof ChatMessageDto>;
 export type ChatRequestDto = z.infer<typeof ChatRequestDto>;
 export type ChatResponseDto = z.infer<typeof ChatResponseDto>;
+export type ChatFeedbackRating = z.infer<typeof ChatFeedbackRatingEnum>;
+export type ChatFeedbackTopicCode = z.infer<typeof ChatFeedbackTopicCodeEnum>;
+export type ChatFeedbackUpsertRequestDto = z.infer<
+  typeof ChatFeedbackUpsertRequestDto
+>;
+export type ChatFeedbackUpsertItemDto = z.infer<
+  typeof ChatFeedbackUpsertItemDto
+>;
+export type ChatFeedbackUpsertResponseDto = z.infer<
+  typeof ChatFeedbackUpsertResponseDto
+>;
+export type ChatFeedbackListQueryDto = z.infer<typeof ChatFeedbackListQueryDto>;
+export type ChatFeedbackListItemDto = z.infer<typeof ChatFeedbackListItemDto>;
+export type ChatFeedbackListResponseDto = z.infer<
+  typeof ChatFeedbackListResponseDto
+>;
 export type ChatEntryContext = z.infer<typeof ChatEntryContextDto>;
 export type SuggestedChipIntent = z.infer<typeof SuggestedChipIntentEnum>;
 export type SuggestedChipKind = z.infer<typeof SuggestedChipKindEnum>;

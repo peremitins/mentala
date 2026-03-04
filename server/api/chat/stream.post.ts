@@ -19,6 +19,10 @@ import {
   isChatRequestOverBudget,
   resolveAllowedChatModel,
 } from '@/server/application/chat/chat-guard.service';
+import {
+  buildCrisisGuidance,
+  mergeDeveloperPrompts,
+} from '@/server/application/chat/crisis-protocol.service';
 
 export default defineEventHandler(async (event) => {
   // Не логируем ключи API (чувствительные данные)
@@ -165,6 +169,23 @@ export default defineEventHandler(async (event) => {
       return;
     }
 
+    const crisisGuidance = buildCrisisGuidance({
+      messages: body?.messages || [],
+      userLocale: body?.user_locale,
+    });
+    const effectiveUserPrompt = mergeDeveloperPrompts(
+      body?.userPrompt,
+      crisisGuidance.guidance
+    );
+
+    if (crisisGuidance.level !== 'none') {
+      console.warn('[Stream API] Crisis guidance injected', {
+        userId: uid,
+        level: crisisGuidance.level,
+        countryCode: crisisGuidance.countryCode || 'unknown',
+      });
+    }
+
     // Определяем isFirstSession только по previous_response_id.
     // Summary отключена на уровне продукта — не используем её ни для контекста, ни для расчёта.
     let serverIsFirst = true;
@@ -216,7 +237,7 @@ export default defineEventHandler(async (event) => {
           user_timezone: userTimezone,
           userId: uid,
           isFirstSession: serverIsFirst,
-          userPrompt: body?.userPrompt,
+          userPrompt: effectiveUserPrompt,
           entryContext: body?.entryContext,
         },
       });
