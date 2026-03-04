@@ -26,6 +26,10 @@ import {
   isChatRequestOverBudget,
   resolveAllowedChatModel,
 } from '@/server/application/chat/chat-guard.service';
+import {
+  buildCrisisGuidance,
+  mergeDeveloperPrompts,
+} from '@/server/application/chat/crisis-protocol.service';
 
 export default defineEventHandler(async (event) => {
   try {
@@ -155,6 +159,23 @@ export default defineEventHandler(async (event) => {
       } as const;
     }
 
+    const crisisGuidance = buildCrisisGuidance({
+      messages: parsed.messages,
+      userLocale: parsed.user_locale,
+    });
+    const effectiveUserPrompt = mergeDeveloperPrompts(
+      parsed.userPrompt,
+      crisisGuidance.guidance
+    );
+
+    if (crisisGuidance.level !== 'none') {
+      console.warn('[Chat API] Crisis guidance injected', {
+        userId: uid,
+        level: crisisGuidance.level,
+        countryCode: crisisGuidance.countryCode || 'unknown',
+      });
+    }
+
     const commonOptions = {
       sessionId: parsed.sessionId,
       lang: parsed.lang,
@@ -164,7 +185,7 @@ export default defineEventHandler(async (event) => {
       user_timezone: userTimezone,
       userId: uid, // серверный стабильный uid
       isFirstSession: undefined, // рассчитывается в других местах при стриминге
-      userPrompt: parsed.userPrompt,
+      userPrompt: effectiveUserPrompt,
       entryContext: parsed.entryContext ?? undefined, // Преобразуем null в undefined
     };
 
