@@ -372,6 +372,20 @@
       "when": 1772628588773,
       "tag": "0056_quiet_wonder_man",
       "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1772699948714,
+      "tag": "0057_lovely_the_fallen",
+      "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1772700790388,
+      "tag": "0058_bored_punisher",
+      "breakpoints": true
     }
   ]
 }

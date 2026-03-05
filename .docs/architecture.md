@@ -458,6 +458,10 @@ server/
 • push обязателен (`sendToUser`);
 • email отправляется при наличии `users.email` как транзакционное billing-уведомление (независимо от текущей авторизации пользователя и marketing consent);
 • антидублирование через `users.billing_reminder_sent_at`.
+• claim пользователей на reminder делается атомарно батчами через `CTE + FOR UPDATE SKIP LOCKED + UPDATE ... RETURNING`, чтобы параллельные инстансы/тики не брали одного и того же пользователя одновременно;
+• для reminder-claim используется lock в `users.billing_locked_*` с отдельным TTL (`TRIAL_BILLING_REMINDER_LOCK_TTL_MINUTES`) и обязательным release при неуспешной доставке по всем каналам;
+• за один tick worker обрабатывает несколько батчей (`TRIAL_BILLING_REMINDER_MAX_BATCHES_PER_TICK`) с контролируемым параллелизмом отправки (`TRIAL_BILLING_REMINDER_CONCURRENCY`), чтобы не упираться в фиксированный `limit` и не терять окно 24ч±1ч под нагрузкой.
+• под reminder-query добавлен partial-index `idx_users_trial_billing_reminder_due` на `(next_charge_at, id)` с предикатом `billing_collection_status='scheduled' and billing_reminder_sent_at is null and next_charge_at is not null`; запрос claim в worker повторяет эти условия и сортировку `order by next_charge_at, id`.
 
 • `/api/subscriptions/current`:
 • возвращает `scheduledChange`;

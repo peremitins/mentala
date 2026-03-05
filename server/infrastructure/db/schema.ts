@@ -33,116 +33,138 @@ export const roles = pgTable('roles', {
     .notNull(),
 });
 
-export const users = pgTable('users', {
-  id: serial('id').primaryKey(),
-  name: varchar('name', { length: 120 }),
-  gender: varchar('gender', { length: 10 }),
-  ageRange: varchar('age_range', { length: 20 }),
-  onboarding: jsonb('onboarding').notNull().default({}),
-  // Настройки фоновой сцены (обои, звук, анимация).
-  sceneSettings: jsonb('scene_settings').notNull().default({}),
-  email: varchar('email', { length: 255 }).unique().notNull(),
-  emailVerifiedAt: timestamp('email_verified_at'),
-  passwordHash: text('password_hash'),
-  avatarUrl: text('avatar_url'),
-  country: varchar('country', { length: 100 }),
-  locale: varchar('locale', { length: 8 }),
-  lastLoginAt: timestamp('last_login_at'),
-  lastLoginIp: text('last_login_ip'),
-  // Subscription fields
-  hasUsedTrial: boolean('has_used_trial').default(false).notNull(),
-  trialStartedAt: timestamp('trial_started_at', { withTimezone: true }),
-  trialEndedAt: timestamp('trial_ended_at', { withTimezone: true }),
-  billingCredit: numeric('billing_credit', { precision: 10, scale: 2 })
-    .default('0')
-    .notNull(), // внутренний кредит в рублях
-  timezone: varchar('timezone', { length: 100 }), // IANA timezone для расчета недель
-  // Trial-scheduled биллинг (оплата в конце пробного периода).
-  billingPlanId: varchar('billing_plan_id', { length: 50 }).references(
-    () => subscriptionPlans.id,
-    { onDelete: 'set null' }
-  ),
-  billingPeriod: varchar('billing_period', { length: 10 }), // 'month' | 'year'
-  nextChargeAt: timestamp('next_charge_at', { withTimezone: true }),
-  paymentMethodBound: boolean('payment_method_bound').default(false).notNull(),
-  paymentMethodId: text('payment_method_id'),
-  paymentMethodType: varchar('payment_method_type', { length: 50 }),
-  paymentMethodTitle: text('payment_method_title'),
-  paymentMethodCardBrand: varchar('payment_method_card_brand', { length: 50 }),
-  paymentMethodCardLast4: varchar('payment_method_card_last4', { length: 4 }),
-  paymentMethodCardExpiryMonth: varchar('payment_method_card_expiry_month', {
-    length: 2,
-  }),
-  paymentMethodCardExpiryYear: varchar('payment_method_card_expiry_year', {
-    length: 4,
-  }),
-  paymentMethodBindingId: text('payment_method_binding_id'),
-  paymentMethodBindingSessionId: text('payment_method_binding_session_id'),
-  paymentMethodBindingStatus: varchar('payment_method_binding_status', {
-    length: 20,
-  })
-    .default('none')
-    .notNull(), // 'none' | 'pending' | 'active' | 'failed'
-  paymentMethodBindingUpdatedAt: timestamp(
-    'payment_method_binding_updated_at',
-    {
+export const users = pgTable(
+  'users',
+  {
+    id: serial('id').primaryKey(),
+    name: varchar('name', { length: 120 }),
+    gender: varchar('gender', { length: 10 }),
+    ageRange: varchar('age_range', { length: 20 }),
+    onboarding: jsonb('onboarding').notNull().default({}),
+    // Настройки фоновой сцены (обои, звук, анимация).
+    sceneSettings: jsonb('scene_settings').notNull().default({}),
+    email: varchar('email', { length: 255 }).unique().notNull(),
+    emailVerifiedAt: timestamp('email_verified_at'),
+    passwordHash: text('password_hash'),
+    avatarUrl: text('avatar_url'),
+    country: varchar('country', { length: 100 }),
+    locale: varchar('locale', { length: 8 }),
+    lastLoginAt: timestamp('last_login_at'),
+    lastLoginIp: text('last_login_ip'),
+    // Subscription fields
+    hasUsedTrial: boolean('has_used_trial').default(false).notNull(),
+    trialStartedAt: timestamp('trial_started_at', { withTimezone: true }),
+    trialEndedAt: timestamp('trial_ended_at', { withTimezone: true }),
+    billingCredit: numeric('billing_credit', { precision: 10, scale: 2 })
+      .default('0')
+      .notNull(), // внутренний кредит в рублях
+    timezone: varchar('timezone', { length: 100 }), // IANA timezone для расчета недель
+    // Trial-scheduled биллинг (оплата в конце пробного периода).
+    billingPlanId: varchar('billing_plan_id', { length: 50 }).references(
+      () => subscriptionPlans.id,
+      { onDelete: 'set null' }
+    ),
+    billingPeriod: varchar('billing_period', { length: 10 }), // 'month' | 'year'
+    nextChargeAt: timestamp('next_charge_at', { withTimezone: true }),
+    paymentMethodBound: boolean('payment_method_bound')
+      .default(false)
+      .notNull(),
+    paymentMethodId: text('payment_method_id'),
+    paymentMethodType: varchar('payment_method_type', { length: 50 }),
+    paymentMethodTitle: text('payment_method_title'),
+    paymentMethodCardBrand: varchar('payment_method_card_brand', {
+      length: 50,
+    }),
+    paymentMethodCardLast4: varchar('payment_method_card_last4', { length: 4 }),
+    paymentMethodCardExpiryMonth: varchar('payment_method_card_expiry_month', {
+      length: 2,
+    }),
+    paymentMethodCardExpiryYear: varchar('payment_method_card_expiry_year', {
+      length: 4,
+    }),
+    paymentMethodBindingId: text('payment_method_binding_id'),
+    paymentMethodBindingSessionId: text('payment_method_binding_session_id'),
+    paymentMethodBindingStatus: varchar('payment_method_binding_status', {
+      length: 20,
+    })
+      .default('none')
+      .notNull(), // 'none' | 'pending' | 'active' | 'failed'
+    paymentMethodBindingUpdatedAt: timestamp(
+      'payment_method_binding_updated_at',
+      {
+        withTimezone: true,
+      }
+    ),
+    billingCollectionStatus: varchar('billing_collection_status', {
+      length: 20,
+    })
+      .default('none')
+      .notNull(), // 'none' | 'scheduled' | 'past_due'
+    graceEndsAt: timestamp('grace_ends_at', { withTimezone: true }),
+    billingReminderSentAt: timestamp('billing_reminder_sent_at', {
       withTimezone: true,
-    }
-  ),
-  billingCollectionStatus: varchar('billing_collection_status', { length: 20 })
-    .default('none')
-    .notNull(), // 'none' | 'scheduled' | 'past_due'
-  graceEndsAt: timestamp('grace_ends_at', { withTimezone: true }),
-  billingReminderSentAt: timestamp('billing_reminder_sent_at', {
-    withTimezone: true,
-  }),
-  billingLockedAt: timestamp('billing_locked_at', { withTimezone: true }),
-  billingLockedBy: varchar('billing_locked_by', { length: 100 }),
-  // Запланированная смена тарифа (last-write-wins).
-  scheduledPlanId: varchar('scheduled_plan_id', { length: 50 }).references(
-    () => subscriptionPlans.id,
-    { onDelete: 'set null' }
-  ),
-  scheduledBillingPeriod: varchar('scheduled_billing_period', { length: 10 }), // 'month' | 'year'
-  scheduledChangeAt: timestamp('scheduled_change_at', { withTimezone: true }),
-  scheduledFromSubscriptionId: integer(
-    'scheduled_from_subscription_id'
-  ).references((): AnyPgColumn => userSubscriptions.id, {
-    onDelete: 'set null',
-  }),
-  scheduledChangeUpdatedAt: timestamp('scheduled_change_updated_at', {
-    withTimezone: true,
-  }),
-  // Юридические согласия и версии документов
-  termsAcceptedAt: timestamp('terms_accepted_at', { withTimezone: true }),
-  privacyAcceptedAt: timestamp('privacy_accepted_at', { withTimezone: true }),
-  termsVersion: varchar('terms_version', { length: 32 }),
-  privacyVersion: varchar('privacy_version', { length: 32 }),
-  acceptanceSource: varchar('acceptance_source', { length: 16 }),
-  acceptanceIp: text('acceptance_ip'),
-  acceptanceUserAgent: text('acceptance_user_agent'),
-  marketingConsentAt: timestamp('marketing_consent_at', { withTimezone: true }),
-  marketingConsentSource: varchar('marketing_consent_source', { length: 16 }),
-  pushNotificationsEnabled: boolean('push_notifications_enabled')
-    .default(true)
-    .notNull(),
-  // Roles and permissions
-  roleId: varchar('role_id', { length: 50 })
-    .default('user')
-    .notNull()
-    .references(() => roles.id),
-  isBlocked: boolean('is_blocked').default(false).notNull(),
-  deletionRequestedAt: timestamp('deletion_requested_at', {
-    withTimezone: true,
-  }),
-  deletedAt: timestamp('deleted_at', { withTimezone: true }),
-  createdAt: timestamp('created_at', { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-});
+    }),
+    billingLockedAt: timestamp('billing_locked_at', { withTimezone: true }),
+    billingLockedBy: varchar('billing_locked_by', { length: 100 }),
+    // Запланированная смена тарифа (last-write-wins).
+    scheduledPlanId: varchar('scheduled_plan_id', { length: 50 }).references(
+      () => subscriptionPlans.id,
+      { onDelete: 'set null' }
+    ),
+    scheduledBillingPeriod: varchar('scheduled_billing_period', {
+      length: 10,
+    }), // 'month' | 'year'
+    scheduledChangeAt: timestamp('scheduled_change_at', { withTimezone: true }),
+    scheduledFromSubscriptionId: integer(
+      'scheduled_from_subscription_id'
+    ).references((): AnyPgColumn => userSubscriptions.id, {
+      onDelete: 'set null',
+    }),
+    scheduledChangeUpdatedAt: timestamp('scheduled_change_updated_at', {
+      withTimezone: true,
+    }),
+    // Юридические согласия и версии документов
+    termsAcceptedAt: timestamp('terms_accepted_at', { withTimezone: true }),
+    privacyAcceptedAt: timestamp('privacy_accepted_at', { withTimezone: true }),
+    termsVersion: varchar('terms_version', { length: 32 }),
+    privacyVersion: varchar('privacy_version', { length: 32 }),
+    acceptanceSource: varchar('acceptance_source', { length: 16 }),
+    acceptanceIp: text('acceptance_ip'),
+    acceptanceUserAgent: text('acceptance_user_agent'),
+    marketingConsentAt: timestamp('marketing_consent_at', {
+      withTimezone: true,
+    }),
+    marketingConsentSource: varchar('marketing_consent_source', { length: 16 }),
+    pushNotificationsEnabled: boolean('push_notifications_enabled')
+      .default(true)
+      .notNull(),
+    // Roles and permissions
+    roleId: varchar('role_id', { length: 50 })
+      .default('user')
+      .notNull()
+      .references(() => roles.id),
+    isBlocked: boolean('is_blocked').default(false).notNull(),
+    deletionRequestedAt: timestamp('deletion_requested_at', {
+      withTimezone: true,
+    }),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    // Индекс ускоряет выборку кандидатов на billing reminder (24ч окно).
+    // Partial условие держит индекс компактным и релевантным только для due-кейса.
+    trialBillingReminderDueIdx: index('idx_users_trial_billing_reminder_due')
+      .on(table.nextChargeAt, table.id)
+      .where(
+        sql`${table.billingCollectionStatus} = 'scheduled' and ${table.billingReminderSentAt} is null and ${table.nextChargeAt} is not null`
+      ),
+  })
+);
 
 // История способов оплаты пользователя (active/archived).
 export const userPaymentMethods = pgTable(
