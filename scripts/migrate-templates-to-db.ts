@@ -3,6 +3,10 @@
  * Заполняет notification_text_presets и notification_texts
  *
  * ВАЖНО: Скрипт очищает таблицы перед миграцией, чтобы избежать дублирования
+ *
+ * Вызов:
+ *   pnpm db:sync-notification-templates              # dev (.env.development)
+ *   pnpm db:sync-notification-templates -- --env=production  # prod (.env.production)
  */
 
 // Загрузка переменных окружения ДО всех импортов
@@ -10,22 +14,29 @@ import { config } from 'dotenv';
 import { resolve } from 'path';
 import { existsSync } from 'node:fs';
 
-// Пробуем загрузить .env из корня проекта
+// Поддержка --env=production|development (как в seed-required)
+const envArg = process.argv.find((a) => a.startsWith('--env='));
+const envName = envArg?.split('=')[1]?.toLowerCase() ?? 'development';
+const envTargetPath = resolve(
+  process.cwd(),
+  envName === 'production' ? '.env.production' : '.env.development'
+);
+
 const envPath = resolve(process.cwd(), '.env');
-const envDevPath = resolve(process.cwd(), '.env.development');
 const envLocalPath = resolve(process.cwd(), '.env.local');
 
 let envLoaded = false;
+// Сначала целевой env (production или development)
+if (existsSync(envTargetPath)) {
+  const result = config({ path: envTargetPath, override: false });
+  if (!result.error) envLoaded = true;
+}
 if (existsSync(envPath)) {
-  const result = config({ path: envPath });
+  const result = config({ path: envPath, override: false });
   if (!result.error) envLoaded = true;
 }
-if (!envLoaded && existsSync(envDevPath)) {
-  const result = config({ path: envDevPath });
-  if (!result.error) envLoaded = true;
-}
-if (!envLoaded && existsSync(envLocalPath)) {
-  const result = config({ path: envLocalPath });
+if (existsSync(envLocalPath)) {
+  const result = config({ path: envLocalPath, override: false });
   if (!result.error) envLoaded = true;
 }
 
@@ -38,7 +49,9 @@ if (!envLoaded) {
 // Проверяем наличие обязательной переменной
 if (!process.env.NUXT_PRIVATE_DB_URL) {
   console.error('❌ NUXT_PRIVATE_DB_URL не установлена!');
-  console.error('   Проверьте файлы .env, .env.development или .env.local');
+  console.error(
+    '   Проверьте .env.development или .env.production. Для prod: pnpm db:sync-notification-templates -- --env=production'
+  );
   process.exit(1);
 }
 

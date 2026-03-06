@@ -6,6 +6,14 @@
  * для переноса в БД (таблицы notification_text_presets и notification_texts).
  *
  * В продакшене используются тексты из БД, а не этот файл напрямую.
+ *
+ * После правок в этом файле нужно синхронизировать шаблоны в БД:
+ *
+ *   # Dev
+ *   pnpm db:sync-notification-templates
+ *
+ *   # Prod
+ *   pnpm db:sync-notification-templates -- --env=production
  */
 
 // Импортируем общие типы из shared DTO
