@@ -15,6 +15,7 @@ import {
 } from '@/server/application/auth/oauth-linking';
 import { normalizeEmail } from '@/server/application/auth/verification';
 import { getClientIp } from '@/server/utils/ip';
+import { getDefaultUserSceneSettings } from '@/server/utils/sceneSettings';
 import {
   OAUTH_STATE_COOKIE_NAME,
   OAUTH_REDIRECT_COOKIE_NAME,
@@ -294,7 +295,7 @@ export async function upsertUserWithOAuth(
         name: profile.name ?? null,
         avatarUrl: profile.avatarUrl ?? null,
         locale: profile.locale ?? null,
-        sceneSettings: { volume: 25 },
+        sceneSettings: getDefaultUserSceneSettings(),
         ...buildLegalConsent(event),
       })
       .returning();

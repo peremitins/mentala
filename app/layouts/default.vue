@@ -61,7 +61,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, watch } from 'vue';
+import { computed, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useMediaQuery, useWindowSize } from '@vueuse/core';
 import BottomNav from '@/app/components/BottomNav.vue';
@@ -119,8 +119,15 @@ const isSosTechniqueActive = computed(
     )
 );
 const canPlaySceneAudio = computed(() => {
-  // Во время logout фон не должен стартовать заново.
-  return auth.isLoggedIn && !auth.isLoggingOut;
+  const onboardingCompleted = auth.user?.onboarding?.welcome === true;
+  // Фоновые сцены доступны только внутри основного приложения:
+  // не во время logout/login-перехода и не до завершения welcome-онбординга.
+  return (
+    auth.isLoggedIn &&
+    !auth.isLoggingOut &&
+    !auth.loading &&
+    onboardingCompleted
+  );
 });
 
 const detailTrackId = computed(() => {
@@ -253,64 +260,13 @@ function openDetail() {
   void navigateTo({ path: '/meditations', query: nextQuery });
 }
 
-let sceneKickstartCleanup: (() => void) | null = null;
-
-function bindFirstGestureSceneKickstart() {
-  if (typeof window === 'undefined') return;
-  if (sceneKickstartCleanup) return;
-
-  const handler = () => {
-    void (async () => {
-      if (!canPlaySceneAudio.value) return;
-      if (shouldMuteSceneAudio.value) return;
-      if (sceneSettings.volume <= 0) return;
-      const scene = currentScene.value;
-      if (!scene?.audioPath) return;
-      try {
-        await sceneAudio.kickstart(scene);
-      } catch (error) {
-        console.warn(
-          '[SceneAudio] Не удалось выполнить first-gesture kickstart:',
-          error
-        );
-      } finally {
-        // Снимаем listener только после первой реальной попытки старта сцены.
-        sceneKickstartCleanup?.();
-      }
-    })();
-  };
-
-  // Регистрируем типичные mobile/desktop жесты и держим их,
-  // пока сцена не получит первую попытку старта.
-  window.addEventListener('pointerdown', handler, {
-    passive: true,
-  });
-  window.addEventListener('touchstart', handler, { passive: true });
-  window.addEventListener('click', handler, { passive: true });
-
-  sceneKickstartCleanup = () => {
-    window.removeEventListener('pointerdown', handler);
-    window.removeEventListener('touchstart', handler);
-    window.removeEventListener('click', handler);
-    sceneKickstartCleanup = null;
-  };
-}
-
-onMounted(async () => {
-  await sceneSettings.ensureLoaded();
-  sceneAudio.setVolume(sceneSettings.volume / 100);
-  sceneAudio.setBackgroundPlayMinutes(sceneSettings.backgroundPlayMinutes);
-  bindFirstGestureSceneKickstart();
-  await syncSceneAudioState();
-});
-
-onBeforeUnmount(() => {
-  sceneKickstartCleanup?.();
-});
+let sceneAudioHydrationRunId = 0;
+let sceneAudioHydrated = false;
 
 watch(
   () => sceneSettings.volume,
   (value) => {
+    if (!sceneSettings.loaded) return;
     sceneAudio.setVolume(value / 100);
   }
 );
@@ -318,11 +274,25 @@ watch(
 watch(
   () => sceneSettings.backgroundPlayMinutes,
   (value) => {
+    if (!sceneSettings.loaded) return;
     sceneAudio.setBackgroundPlayMinutes(value);
   }
 );
 
 let syncSceneAudioRunId = 0;
+
+async function hydrateSceneAudioFromSettings() {
+  const runId = ++sceneAudioHydrationRunId;
+  await sceneSettings.ensureLoaded();
+  if (runId !== sceneAudioHydrationRunId) return;
+  await sceneAudio.hydrateFromSettings({
+    scene: currentScene.value,
+    volume: sceneSettings.volume / 100,
+    backgroundPlayMinutes: sceneSettings.backgroundPlayMinutes,
+  });
+  if (runId !== sceneAudioHydrationRunId) return;
+  sceneAudioHydrated = true;
+}
 
 /** Флаг: переход с mute на unmute (остановка медитации). Нужен для задержки на Android. */
 async function syncSceneAudioState(options?: {
@@ -336,7 +306,9 @@ async function syncSceneAudioState(options?: {
     await sceneAudio.stop(false);
     return;
   }
-  await sceneSettings.ensureLoaded();
+  if (!sceneAudioHydrated) {
+    await hydrateSceneAudioFromSettings();
+  }
   if (runId !== syncSceneAudioRunId) return;
   if (!currentScene.value) return;
   // Обновляем текущую сцену, чтобы не было рассинхрона при смене.
