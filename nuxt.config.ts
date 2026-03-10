@@ -2,6 +2,11 @@ import { fileURLToPath } from 'node:url';
 import Icons from 'unplugin-icons/vite';
 import tailwindcss from '@tailwindcss/vite';
 import svgLoader from 'vite-svg-loader';
+import { resolveSceneDefaultVolumePercent } from './shared/utils/sceneSettings';
+
+const sceneDefaultVolumePercent = resolveSceneDefaultVolumePercent(
+  process.env.NUXT_PUBLIC_SCENE_DEFAULT_VOLUME_PERCENT
+);
 
 export default defineNuxtConfig({
   ssr: false,
@@ -166,6 +171,8 @@ export default defineNuxtConfig({
         // На mobile native-плеер должен быть включён по умолчанию для фонового воспроизведения.
         // Явное отключение: NUXT_FEATURE_NATIVE_MEDITATION_AUDIO_ENABLED=false
         process.env.NUXT_FEATURE_NATIVE_MEDITATION_AUDIO_ENABLED !== 'false',
+      // Дефолтная громкость фоновой сцены для новых пользователей задаётся через env.
+      sceneDefaultVolumePercent,
     },
   },
   nitro: {

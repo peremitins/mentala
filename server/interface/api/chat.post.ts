@@ -30,6 +30,15 @@ import {
   buildCrisisGuidance,
   mergeDeveloperPrompts,
 } from '@/server/application/chat/crisis-protocol.service';
+import {
+  buildPhobiasDeveloperPrompt,
+  isPhobiasEntryContext,
+  resolveLastTherapyFocusUpdate,
+  resolvePhobiasConversationState,
+  type PhobiasConversationState,
+} from '@/server/application/chat/phobias-entry.service';
+import { trackPhobiasEvent } from '@/server/application/chat/phobias-analytics.service';
+import { readChatSettings, writeChatSettings } from '@/server/utils/storage';
 
 export default defineEventHandler(async (event) => {
   try {
@@ -163,8 +172,23 @@ export default defineEventHandler(async (event) => {
       messages: parsed.messages,
       userLocale: parsed.user_locale,
     });
-    const effectiveUserPrompt = mergeDeveloperPrompts(
+    let phobiasState: PhobiasConversationState | null = null;
+    if (isPhobiasEntryContext(parsed.entryContext)) {
+      const settings = await readChatSettings(String(uid));
+      phobiasState = resolvePhobiasConversationState({
+        entryContext: parsed.entryContext,
+        messages: parsed.messages,
+        lastTherapyFocus: settings.lastTherapyFocus,
+      });
+    }
+
+    const phobiasPrompt = buildPhobiasDeveloperPrompt(phobiasState);
+    const promptWithPhobias = mergeDeveloperPrompts(
       parsed.userPrompt,
+      phobiasPrompt
+    );
+    const effectiveUserPrompt = mergeDeveloperPrompts(
+      promptWithPhobias,
       crisisGuidance.guidance
     );
 
@@ -173,6 +197,16 @@ export default defineEventHandler(async (event) => {
         userId: uid,
         level: crisisGuidance.level,
         countryCode: crisisGuidance.countryCode || 'unknown',
+      });
+    }
+
+    if (
+      phobiasState?.mode === 'welcome_selector' ||
+      phobiasState?.mode === 'welcome_resume_selector'
+    ) {
+      trackPhobiasEvent('phobias_selector_shown', {
+        mode: phobiasState.mode,
+        hasLastFocus: Boolean(phobiasState.validLastTherapyFocus),
       });
     }
 
@@ -254,6 +288,44 @@ export default defineEventHandler(async (event) => {
         return [] as SuggestedChip[];
       }
     })();
+
+    const phobiasFocusUpdate = resolveLastTherapyFocusUpdate({
+      state: phobiasState,
+    });
+    if (phobiasFocusUpdate) {
+      try {
+        await writeChatSettings(String(uid), {
+          lastTherapyFocus: phobiasFocusUpdate.nextFocus,
+        });
+
+        if (phobiasFocusUpdate.action === 'resumed') {
+          trackPhobiasEvent('phobias_focus_resumed', {
+            subtopicKey: phobiasFocusUpdate.nextFocus.subtopicKey,
+            subtopicLabel: phobiasFocusUpdate.nextFocus.subtopicLabel,
+          });
+        } else {
+          trackPhobiasEvent('phobias_focus_selected', {
+            subtopicKey: phobiasFocusUpdate.nextFocus.subtopicKey,
+            subtopicLabel: phobiasFocusUpdate.nextFocus.subtopicLabel,
+          });
+
+          if (phobiasFocusUpdate.changed) {
+            trackPhobiasEvent('phobias_focus_changed', {
+              subtopicKey: phobiasFocusUpdate.nextFocus.subtopicKey,
+              subtopicLabel: phobiasFocusUpdate.nextFocus.subtopicLabel,
+            });
+          }
+        }
+
+        trackPhobiasEvent('phobias_session_started', {
+          subtopicKey: phobiasFocusUpdate.nextFocus.subtopicKey,
+          subtopicLabel: phobiasFocusUpdate.nextFocus.subtopicLabel,
+          action: phobiasFocusUpdate.action,
+        });
+      } catch (error) {
+        console.error('[Chat API] Failed to persist phobias focus:', error);
+      }
+    }
 
     const response = ChatResponseDto.parse({
       message: { role: 'assistant', content: result.content },

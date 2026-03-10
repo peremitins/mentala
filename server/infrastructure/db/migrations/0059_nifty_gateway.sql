@@ -1,0 +1,1 @@
+ALTER TABLE "chat_settings" ADD COLUMN "last_therapy_focus" jsonb;

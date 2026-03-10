@@ -1,6 +1,9 @@
 import { readBody } from 'h3';
 import { getSessionUser } from '@@/server/application/auth/session';
-import { writeChatSettings } from '@/server/utils/storage';
+import {
+  getPublicChatSettings,
+  writeChatSettings,
+} from '@/server/utils/storage';
 import { responseIdStore } from '@/server/utils/responseIdStore';
 import { FEATURE_TTS_ENABLED } from '@/server/config/features';
 type Payload = Partial<{
@@ -46,7 +49,7 @@ export default defineEventHandler(async (event) => {
 
   return {
     settings: {
-      ...next,
+      ...getPublicChatSettings(next),
       isFirstSession,
     },
   };

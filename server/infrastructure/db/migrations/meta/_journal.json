@@ -386,6 +386,13 @@
       "when": 1772700790388,
       "tag": "0058_bored_punisher",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1773063586115,
+      "tag": "0059_nifty_gateway",
+      "breakpoints": true
     }
   ]
 }
