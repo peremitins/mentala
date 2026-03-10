@@ -21,6 +21,7 @@ import {
 import { checkRateLimit } from '@/server/application/auth/rate-limit';
 import { AuthRegisterDto } from '@/shared/dto/auth';
 import { issueVerificationCode } from '@/server/application/auth/email-verification.service';
+import { getDefaultUserSceneSettings } from '@/server/utils/sceneSettings';
 
 function detectAcceptanceSource(event: any): 'web' | 'ios' | 'android' {
   const userAgent = getHeader(event, 'user-agent') || '';
@@ -166,6 +167,7 @@ export default defineEventHandler(async (event) => {
       acceptanceUserAgent: userAgent,
       marketingConsentAt: marketingConsentAt,
       marketingConsentSource: marketingConsentAt ? acceptanceSource : null,
+      sceneSettings: getDefaultUserSceneSettings(),
     })
     .returning({ id: users.id, email: users.email });
 

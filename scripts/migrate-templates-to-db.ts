@@ -1,8 +1,14 @@
 /**
- * Скрипт конвертации TS-шаблонов уведомлений в БД
- * Заполняет notification_text_presets и notification_texts
+ * Скрипт синхронизации TS-шаблонов уведомлений в БД
+ * Обновляет ТОЛЬКО notification_text_presets (эталон дефолтных текстов).
  *
- * ВАЖНО: Скрипт очищает таблицы перед миграцией, чтобы избежать дублирования
+ * ВАЖНО: notification_texts НЕ трогаем — пользовательские правки, кастомные
+ * тексты и удаления сохраняются. Обновлённые presets подтянутся при нажатии
+ * «Восстановить» в UI (с опцией keepUserTexts для сохранения своих текстов).
+ *
+ * Вызов:
+ *   pnpm db:sync-notification-templates              # dev (.env.development)
+ *   pnpm db:sync-notification-templates -- --env=production  # prod (.env.production)
  */
 
 // Загрузка переменных окружения ДО всех импортов
@@ -10,22 +16,29 @@ import { config } from 'dotenv';
 import { resolve } from 'path';
 import { existsSync } from 'node:fs';
 
-// Пробуем загрузить .env из корня проекта
+// Поддержка --env=production|development (как в seed-required)
+const envArg = process.argv.find((a) => a.startsWith('--env='));
+const envName = envArg?.split('=')[1]?.toLowerCase() ?? 'development';
+const envTargetPath = resolve(
+  process.cwd(),
+  envName === 'production' ? '.env.production' : '.env.development'
+);
+
 const envPath = resolve(process.cwd(), '.env');
-const envDevPath = resolve(process.cwd(), '.env.development');
 const envLocalPath = resolve(process.cwd(), '.env.local');
 
 let envLoaded = false;
+// Сначала целевой env (production или development)
+if (existsSync(envTargetPath)) {
+  const result = config({ path: envTargetPath, override: false });
+  if (!result.error) envLoaded = true;
+}
 if (existsSync(envPath)) {
-  const result = config({ path: envPath });
+  const result = config({ path: envPath, override: false });
   if (!result.error) envLoaded = true;
 }
-if (!envLoaded && existsSync(envDevPath)) {
-  const result = config({ path: envDevPath });
-  if (!result.error) envLoaded = true;
-}
-if (!envLoaded && existsSync(envLocalPath)) {
-  const result = config({ path: envLocalPath });
+if (existsSync(envLocalPath)) {
+  const result = config({ path: envLocalPath, override: false });
   if (!result.error) envLoaded = true;
 }
 
@@ -38,16 +51,15 @@ if (!envLoaded) {
 // Проверяем наличие обязательной переменной
 if (!process.env.NUXT_PRIVATE_DB_URL) {
   console.error('❌ NUXT_PRIVATE_DB_URL не установлена!');
-  console.error('   Проверьте файлы .env, .env.development или .env.local');
+  console.error(
+    '   Проверьте .env.development или .env.production. Для prod: pnpm db:sync-notification-templates -- --env=production'
+  );
   process.exit(1);
 }
 
 import { nanoid } from 'nanoid';
 import { sql } from 'drizzle-orm';
-import {
-  notificationTexts,
-  notificationTextPresets,
-} from '../server/infrastructure/db/schema';
+import { notificationTextPresets } from '../server/infrastructure/db/schema';
 import {
   notificationTemplates,
   type NotificationTemplate,
@@ -165,64 +177,12 @@ function validateTemplate(template: NotificationTemplate): void {
 }
 
 /**
- * Создаёт записи в presets и texts для одной комбинации
- */
-async function createPresetAndText(
-  template: NotificationTemplate,
-  addressing: Addressing,
-  directness: Directness,
-  text: string,
-  sortOrder: number
-): Promise<void> {
-  const presetId = nanoid();
-  const textId = nanoid();
-  const now = new Date();
-
-  // Создаём preset (эталон)
-  await db.insert(notificationTextPresets).values({
-    id: presetId,
-    kind: template.kind,
-    entityKey: template.entityKey,
-    intent: template.intent ?? null,
-    subtype: template.subtype ?? null,
-    imageTag: template.imageTag ?? null,
-    actionHint: template.actionHint ?? null,
-    directness,
-    addressing,
-    locale: 'ru',
-    text,
-    sortOrder,
-  });
-
-  // Создаём text (рабочая запись)
-  await db.insert(notificationTexts).values({
-    id: textId,
-    kind: template.kind,
-    entityKey: template.entityKey,
-    userId: null, // системный дефолт
-    source: 'default',
-    intent: template.intent ?? null,
-    subtype: template.subtype ?? null,
-    imageTag: template.imageTag ?? null,
-    actionHint: template.actionHint ?? null,
-    directness,
-    addressing,
-    locale: 'ru',
-    text,
-    sortOrder,
-    isDeleted: false,
-    createdAt: now,
-    updatedAt: now,
-  });
-}
-
-/**
- * Главная функция миграции
+ * Главная функция синхронизации presets
  */
 async function migrateTemplates(): Promise<void> {
   const startTime = Date.now();
-  console.log('🚀 Начинаем миграцию шаблонов в БД...');
-  console.log(`📦 Всего шаблонов: ${notificationTemplates.length}`);
+  console.log('🚀 Синхронизация notification_text_presets...');
+  console.log(`📦 Шаблонов: ${notificationTemplates.length}`);
 
   // Валидация всех шаблонов перед началом
   console.log('🔍 Валидация шаблонов...');
@@ -231,17 +191,7 @@ async function migrateTemplates(): Promise<void> {
   }
   console.log('✅ Все шаблоны валидны');
 
-  // Очистка таблиц перед миграцией
-  console.log('🧹 Очищаем таблицы presets и texts...');
-  await db.execute(
-    sql`TRUNCATE TABLE notification_texts RESTART IDENTITY CASCADE`
-  );
-  await db.execute(
-    sql`TRUNCATE TABLE notification_text_presets RESTART IDENTITY CASCADE`
-  );
-  console.log('✅ Таблицы очищены');
-
-  // Подготовка данных для батч-вставки
+  // Собираем presets из TS-шаблонов
   const presetsToInsert: Array<{
     id: string;
     kind: string;
@@ -257,32 +207,6 @@ async function migrateTemplates(): Promise<void> {
     sortOrder: number;
   }> = [];
 
-  const textsToInsert: Array<{
-    id: string;
-    kind: string;
-    entityKey: string;
-    userId: number | null;
-    preferenceId: string | null;
-    source: string;
-    intent: string | null;
-    subtype: string | null;
-    imageTag: string | null;
-    actionHint: string | null;
-    directness: string;
-    addressing: string;
-    locale: string;
-    text: string;
-    sortOrder: number;
-    isDeleted: boolean;
-    createdAt: Date;
-    updatedAt: Date;
-  }> = [];
-
-  let totalPresets = 0;
-  let totalTexts = 0;
-  const now = new Date();
-
-  // Собираем все данные
   for (const template of notificationTemplates) {
     const expanded = expandTemplate(template);
     console.log(
@@ -291,11 +215,8 @@ async function migrateTemplates(): Promise<void> {
 
     let sortOrder = 0;
     for (const { addressing, directness, text } of expanded) {
-      const presetId = nanoid();
-      const textId = nanoid();
-
       presetsToInsert.push({
-        id: presetId,
+        id: nanoid(),
         kind: template.kind,
         entityKey: template.entityKey,
         intent: template.intent || null,
@@ -308,59 +229,32 @@ async function migrateTemplates(): Promise<void> {
         text,
         sortOrder,
       });
-
-      textsToInsert.push({
-        id: textId,
-        kind: template.kind,
-        entityKey: template.entityKey,
-        userId: null,
-        preferenceId: null,
-        source: 'default',
-        intent: template.intent || null,
-        subtype: template.subtype || null,
-        imageTag: template.imageTag ?? null,
-        actionHint: template.actionHint ?? null,
-        directness,
-        addressing,
-        locale: 'ru',
-        text,
-        sortOrder,
-        isDeleted: false,
-        createdAt: now,
-        updatedAt: now,
-      });
-
       sortOrder++;
-      totalPresets++;
-      totalTexts++;
     }
   }
 
-  // Батч-вставка presets
-  console.log(`💾 Вставляем ${presetsToInsert.length} presets...`);
-  const BATCH_SIZE = 500;
-  for (let i = 0; i < presetsToInsert.length; i += BATCH_SIZE) {
-    const batch = presetsToInsert.slice(i, i + BATCH_SIZE);
-    await db.insert(notificationTextPresets).values(batch);
-    console.log(
-      `  ✅ Вставлено presets: ${Math.min(i + BATCH_SIZE, presetsToInsert.length)}/${presetsToInsert.length}`
+  // Атомарно: очищаем presets и вставляем новые (notification_texts не трогаем)
+  await db.transaction(async (tx) => {
+    console.log('🧹 Очищаем notification_text_presets...');
+    await tx.execute(
+      sql`TRUNCATE TABLE notification_text_presets RESTART IDENTITY CASCADE`
     );
-  }
+    console.log('✅ Presets очищены');
 
-  // Батч-вставка texts
-  console.log(`💾 Вставляем ${textsToInsert.length} texts...`);
-  for (let i = 0; i < textsToInsert.length; i += BATCH_SIZE) {
-    const batch = textsToInsert.slice(i, i + BATCH_SIZE);
-    await db.insert(notificationTexts).values(batch);
-    console.log(
-      `  ✅ Вставлено texts: ${Math.min(i + BATCH_SIZE, textsToInsert.length)}/${textsToInsert.length}`
-    );
-  }
+    console.log(`💾 Вставляем ${presetsToInsert.length} presets...`);
+    const BATCH_SIZE = 500;
+    for (let i = 0; i < presetsToInsert.length; i += BATCH_SIZE) {
+      const batch = presetsToInsert.slice(i, i + BATCH_SIZE);
+      await tx.insert(notificationTextPresets).values(batch);
+      console.log(
+        `  ✅ Вставлено: ${Math.min(i + BATCH_SIZE, presetsToInsert.length)}/${presetsToInsert.length}`
+      );
+    }
+  });
 
   const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-  console.log(`✅ Миграция завершена за ${duration}с!`);
-  console.log(`   Создано presets: ${totalPresets}`);
-  console.log(`   Создано texts: ${totalTexts}`);
+  console.log(`✅ Синхронизация завершена за ${duration}с`);
+  console.log(`   Presets: ${presetsToInsert.length}`);
 }
 
 // Запуск

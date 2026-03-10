@@ -621,8 +621,8 @@ export const useAuthStore = defineStore('auth', {
 
         // 4. Гарантированно выключаем фон и медитации перед logout.
         const { stop: stopMeditation } = useMeditationPlayer();
-        const { stop: stopSceneAudio } = useSceneAudio();
-        await stopSceneAudio(false);
+        const { resetRuntimeState: resetSceneAudioRuntime } = useSceneAudio();
+        await resetSceneAudioRuntime();
         await stopMeditation(false);
       } catch (err) {
         console.error('[Auth Store] Ошибка остановки активных запросов:', err);

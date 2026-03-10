@@ -33,6 +33,12 @@ function isMobileUserAgent() {
   return /iphone|ipad|ipod|android/i.test(ua);
 }
 
+function isIosUserAgent() {
+  const ua = getUserAgent();
+  if (!ua) return false;
+  return /iphone|ipad|ipod/i.test(ua);
+}
+
 function shouldPreferWebAudio(scene: SceneTrack | null) {
   if (!isWebAudioAvailable()) return false;
   // Для loop обязательно WebAudio, чтобы сохранить бесшовный цикл.
@@ -43,15 +49,16 @@ function shouldPreferWebAudio(scene: SceneTrack | null) {
 }
 
 function shouldAllowLoopHtmlBootstrapFallback() {
-  // На native-мобилках после cold-start WebAudio может быть заблокирован autoplay-политикой
-  // до первого жеста. Разрешаем временный старт loop через HTMLAudio, чтобы не было тишины.
-  return Capacitor.isNativePlatform() && isMobileUserAgent();
+  // Для loop-сцен полностью отключаем HTML fallback:
+  // он может давать слышимый шов на границе повторов.
+  // Если WebAudio ещё не готов, безопаснее отложить старт до unlock/gesture.
+  return false;
 }
 
 function canFallbackToHtml(scene: SceneTrack) {
   if (!scene.isLoop) return true;
-  // Для loop сохраняем WebAudio как основной режим, но разрешаем
-  // bootstrap fallback на native mobile (после первого жеста вернемся в WebAudio).
+  // Для loop-сцен fallback на HTMLAudio запрещён,
+  // чтобы сохранить бесшовный цикл без шва.
   return shouldAllowLoopHtmlBootstrapFallback();
 }
 
@@ -74,8 +81,9 @@ const globalState = {
   currentScene: ref<SceneTrack | null>(null),
   isPlaying: ref(false),
   isBuffering: ref(false),
-  // Стартовая громкость фонового трека — 25%.
-  volume: ref(0.1),
+  // До гидрации пользовательских настроек держим сцену в mute,
+  // чтобы исключить всплеск громкости на старте/после re-login.
+  volume: ref(0),
   fadeInterval: null as ReturnType<typeof setInterval> | null,
   pendingPlay: null as PendingPlay | null,
   pendingBlockedPlay: null as PendingBlockedPlay | null,
@@ -91,6 +99,7 @@ const globalState = {
   isSuspended: ref(false),
   wasPlayingBeforeSuspend: false,
   playbackAllowed: ref(true),
+  settingsHydrated: false,
   audioUnlocked: false,
   playbackActionId: 0,
   mediaElementPrimed: false,
@@ -113,6 +122,9 @@ async function setPlaybackAllowed(allowed: boolean) {
   }
 
   const pending = globalState.pendingBlockedPlay;
+  if (!globalState.settingsHydrated) {
+    return;
+  }
   if (pending) {
     globalState.pendingBlockedPlay = null;
     await play(pending.scene);
@@ -792,10 +804,76 @@ async function stop(withFade = true, options: { keepActionId?: boolean } = {}) {
   }
 }
 
+function resetDetachedAudioState() {
+  const audio = globalState.audio;
+  if (audio) {
+    try {
+      audio.removeAttribute('src');
+      audio.load();
+    } catch {
+      // На некоторых WebView load() после stop может бросать ошибку.
+    }
+  }
+  globalState.audio = null;
+  globalState.audioBuffer = null;
+  globalState.audioBufferUrl = '';
+  globalState.webAudioStartTime = 0;
+  globalState.webAudioOffset = 0;
+  globalState.playbackMode = null;
+  globalState.currentScene.value = null;
+  globalState.isPlaying.value = false;
+  globalState.isBuffering.value = false;
+  globalState.pendingBlockedPlay = null;
+  globalState.backgroundStoppedByTimer = false;
+  globalState.isBackgrounded = false;
+  globalState.wasPlayingBeforeBackground = false;
+  globalState.isSuspended.value = false;
+  globalState.wasPlayingBeforeSuspend = false;
+  globalState.mediaElementPrimed = false;
+  globalState.loopUpgradeAttemptedSceneId = null;
+  if (globalState.audioGain) {
+    globalState.audioGain.gain.value = 0;
+  }
+}
+
+async function resetRuntimeState() {
+  globalState.settingsHydrated = false;
+  clearGestureUnlock();
+  clearBackgroundTimeout();
+  await stop(false);
+  resetDetachedAudioState();
+  globalState.volume.value = 0;
+  globalState.backgroundPlayMinutes.value = 0;
+}
+
+async function hydrateFromSettings(options: {
+  scene: SceneTrack | null;
+  volume: number;
+  backgroundPlayMinutes: number;
+}) {
+  globalState.settingsHydrated = false;
+  clearGestureUnlock();
+  globalState.pendingBlockedPlay = null;
+  // При гидрации новой сессии сначала гарантированно глушим и очищаем
+  // старый runtime-state, чтобы не словить краткий всплеск громкости
+  // от предыдущей сцены/двойного старта.
+  await stop(false);
+  resetDetachedAudioState();
+  globalState.currentScene.value = options.scene;
+  setBackgroundPlayMinutes(options.backgroundPlayMinutes);
+  setVolume(options.volume);
+  globalState.settingsHydrated = true;
+}
+
 async function play(scene: SceneTrack) {
   const actionId = bumpPlaybackActionId();
   if (!isDocumentAvailable()) return;
   if (typeof Audio === 'undefined') return;
+  if (!globalState.settingsHydrated) {
+    globalState.pendingBlockedPlay = { scene };
+    globalState.isBuffering.value = false;
+    return;
+  }
   if (globalState.isSuspended.value) {
     // Пока сцена в suspended-режиме (медитация/практика активна), запуск запрещён.
     globalState.isBuffering.value = false;
@@ -1108,15 +1186,10 @@ async function play(scene: SceneTrack) {
       shouldAllowLoopHtmlBootstrapFallback() &&
       globalState.loopUpgradeAttemptedSceneId !== scene.id
     ) {
+      // Помечаем bootstrap выполненным, а апгрейд в WebAudio делаем
+      // только на следующем пользовательском жесте через global unlock handler,
+      // чтобы не допускать краткого наложения двух источников.
       globalState.loopUpgradeAttemptedSceneId = scene.id;
-      // После успешного bootstrap один раз пробуем апгрейд на WebAudio
-      // для бесшовного loop.
-      setTimeout(() => {
-        if (globalState.currentScene.value?.id !== scene.id) return;
-        if (globalState.playbackMode !== 'html') return;
-        if (!globalState.isPlaying.value) return;
-        void play(scene);
-      }, 0);
     }
   }
 }
@@ -1204,6 +1277,7 @@ async function resume() {
 
 async function kickstart(scene?: SceneTrack | null) {
   if (!globalState.playbackAllowed.value) return;
+  if (!globalState.settingsHydrated) return;
   if (globalState.isSuspended.value) return;
   if (globalState.isBuffering.value) return;
   if (globalState.volume.value <= 0) return;
@@ -1236,6 +1310,8 @@ export function useSceneAudio() {
     suspend,
     resume,
     kickstart,
+    hydrateFromSettings,
+    resetRuntimeState,
     setPlaybackAllowed,
   };
 }

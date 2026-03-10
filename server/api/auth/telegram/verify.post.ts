@@ -11,6 +11,7 @@ import {
 } from '@/server/application/auth/cookie-names';
 import { normalizeEmail } from '@/server/application/auth/verification';
 import { scheduleNotificationSlotsAfterLogin } from '@/server/application/notifications/login-slots.service';
+import { getDefaultUserSceneSettings } from '@/server/utils/sceneSettings';
 
 function verifyTelegram(initData: Record<string, string>, botToken: string) {
   const { hash, ...data } = initData;
@@ -126,6 +127,7 @@ export default defineEventHandler(async (event) => {
         locale: locale ?? null,
         emailVerifiedAt: null,
         passwordHash: null,
+        sceneSettings: getDefaultUserSceneSettings(),
       })
       .returning();
     userId = u.id;

@@ -47,7 +47,7 @@ async function runSeed() {
       description: 'Убаюкивающий шум дождя для глубокого сна',
       topicKey: 'sleep',
       audioPath: '/meditations/audio/nature/rain-night.cf201c33.m4a',
-      coverPath: '/meditations/covers/rain-night.e9a5fa50.webp',
+      coverPath: '/meditations/covers/rain-night.9468982c.webp',
       backgroundPath: '/meditations/backgrounds/rain-night.00d147c2.webp',
       isLoop: true,
       durationSeconds: null,
@@ -254,7 +254,8 @@ async function runSeed() {
       topicKeys: ['anxiety', 'stress'],
       audioPath: '/meditations/audio/music/ultimate-relaxation.4173679d.m4a',
       coverPath: '/meditations/covers/ultimate-relaxation.ccf3edac.webp',
-      backgroundPath: '/meditations/backgrounds/ultimate-relaxation.6d6d9607.webp',
+      backgroundPath:
+        '/meditations/backgrounds/ultimate-relaxation.6d6d9607.webp',
       isLoop: false,
       durationSeconds: 830,
     },

@@ -645,6 +645,7 @@ export function buildWelcomePrompt(options: {
   includeNameValidationPrompt?: boolean;
   openingMode?: 'greeting' | 'alternative';
   openingLine?: string;
+  useGreeting?: boolean;
   welcomePromptContent?: string;
   entryContext?: ChatEntryContext;
   disableOpeningTemplates?: boolean;
@@ -655,9 +656,14 @@ export function buildWelcomePrompt(options: {
   const contextNote = options.entryContext
     ? buildEntryContextDescription(options.entryContext)
     : '';
+  const useGreeting = Boolean(options.useGreeting);
+  const isPhobiasEntry =
+    options.entryContext?.type === 'therapy_topic' &&
+    options.entryContext.topic_id === 'phobias';
   const disableOpeningTemplates =
     Boolean(options.disableOpeningTemplates) ||
-    options.entryContext?.type === 'thought_dump';
+    options.entryContext?.type === 'thought_dump' ||
+    isPhobiasEntry;
 
   const nameInstruction =
     options.includeNameValidationPrompt && options.greetingName
@@ -669,9 +675,14 @@ export function buildWelcomePrompt(options: {
     options.openingLine
       ? `\n\nВАЖНО: Сегодня приветствие не нужно. Начни сообщение с фразы: «${options.openingLine}». Не используй слова приветствия (привет, здравствуй, доброе утро/день/вечер).`
       : '';
-  const noTemplateStartInstruction = disableOpeningTemplates
-    ? '\n\nВАЖНО: Не используй приветствие и шаблонные вводные фразы. Начни сразу с поддерживающего отклика по содержанию выгрузки.'
-    : '';
+  const noTemplateStartInstruction =
+    options.entryContext?.type === 'thought_dump'
+      ? '\n\nВАЖНО: Не используй приветствие и шаблонные вводные фразы. Начни сразу с поддерживающего отклика по содержанию выгрузки.'
+      : isPhobiasEntry
+        ? useGreeting
+          ? '\n\nВАЖНО: Это первое приветствие дня. Допустимо одно короткое приветствие в начале сообщения, затем сразу перейди к структурированному старту по теме страхов.'
+          : '\n\nВАЖНО: Сегодня приветствие уже использовано. Не используй приветствие и шаблонные вводные фразы. Начни сразу со структурированного старта по теме страхов.'
+        : '';
 
   if (options.welcomePromptContent) {
     let prompt = options.welcomePromptContent;
@@ -687,7 +698,13 @@ export function buildWelcomePrompt(options: {
     }
 
     const generatedStartInstruction = disableOpeningTemplates
-      ? 'Твое сообщение будет ПЕРВЫМ в диалоге. Сгенерируй: короткое отражение содержания выгрузки (1-2 предложения) + 1 конкретная опора (выбор/инсайт/рамка) + 1 открытый вопрос.'
+      ? options.entryContext?.type === 'thought_dump'
+        ? 'Твое сообщение будет ПЕРВЫМ в диалоге. Сгенерируй: короткое отражение содержания выгрузки (1-2 предложения) + 1 конкретная опора (выбор/инсайт/рамка) + 1 открытый вопрос.'
+        : isPhobiasEntry
+          ? useGreeting
+            ? 'Твое сообщение будет ПЕРВЫМ в диалоге. Сгенерируй: одно короткое приветствие + структурированный старт по теме страхов. Держи всё сообщение в пределах 2-4 предложений.'
+            : 'Твое сообщение будет ПЕРВЫМ в диалоге. Сгенерируй: короткий структурированный старт по теме страхов (2-4 предложения) без приветствия и без шаблонной вводной.'
+          : 'Твое сообщение будет ПЕРВЫМ в диалоге. Сгенерируй: стартовое сообщение без приветствия (2-3 предложения) + 1 конкретная опора (выбор/инсайт/рамка) + 1 открытый вопрос.'
       : 'Твое сообщение будет ПЕРВЫМ в диалоге. Сгенерируй: приветствие (2-3 предложения) + 1 конкретная опора (выбор/инсайт/рамка) + 1 открытый вопрос.';
 
     prompt =
@@ -723,7 +740,11 @@ export function buildWelcomePrompt(options: {
   const template = isFirst ? templates.first : templates.repeat;
   let prompt = template;
 
-  if (options.openingMode === 'alternative' || disableOpeningTemplates) {
+  const shouldForceGreetinglessStart =
+    options.openingMode === 'alternative' ||
+    (disableOpeningTemplates && !(isPhobiasEntry && useGreeting));
+
+  if (shouldForceGreetinglessStart) {
     prompt = prompt.replace(
       'Сгенерируй приветствие (2-3 предложения):',
       'Сгенерируй стартовое сообщение без приветствия (2-3 предложения):'
@@ -734,14 +755,29 @@ export function buildWelcomePrompt(options: {
     );
   }
   if (disableOpeningTemplates) {
-    prompt = prompt.replace(
-      ' Представься и объясни чем помогаешь',
-      ' Сразу отрази суть выгрузки пользователя'
-    );
-    prompt = prompt.replace(
-      ' Мягко предлагает вернуться к темам или перейти к новым',
-      ' Опирается на содержание выгрузки, без общих вводных формулировок'
-    );
+    if (options.entryContext?.type === 'thought_dump') {
+      prompt = prompt.replace(
+        ' Представься и объясни чем помогаешь',
+        ' Сразу отрази суть выгрузки пользователя'
+      );
+      prompt = prompt.replace(
+        ' Мягко предлагает вернуться к темам или перейти к новым',
+        ' Опирается на содержание выгрузки, без общих вводных формулировок'
+      );
+    } else if (isPhobiasEntry) {
+      prompt = prompt.replace(
+        ' Представься и объясни чем помогаешь',
+        useGreeting
+          ? ' Начни с одного короткого приветствия, затем сразу перейди к структурированному старту по теме страхов'
+          : ' Сразу перейди к короткому структурированному старту по теме страхов'
+      );
+      prompt = prompt.replace(
+        ' Мягко предлагает вернуться к темам или перейти к новым',
+        useGreeting
+          ? ' Сначала коротко приветствует, затем помогает выбрать прошлую или новую подтему страха'
+          : ' Сначала помогает выбрать прошлую или новую подтему страха без общего приветствия'
+      );
+    }
   }
 
   prompt = prompt.replace(/{{user_name}}/g, options.user_name || '');
