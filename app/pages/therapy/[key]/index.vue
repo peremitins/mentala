@@ -183,6 +183,7 @@ import {
   extractFeaturePlanRequiredError,
   useEntitlements,
 } from '@/app/composables/useEntitlements';
+import { useTherapyAnalytics } from '@/app/composables/useTherapyAnalytics';
 
 const route = useRoute();
 const chat = useChatStore();
@@ -190,6 +191,7 @@ const { startEntryChat } = useEntryChat();
 const loaders = useLoadersStore();
 const therapyTopicsStore = useTherapyTopicsStore();
 const { getFeatureAccess, refreshEntitlements } = useEntitlements();
+const { trackTopicOpen } = useTherapyAnalytics();
 const { fetchNotificationPreferences, updateNotificationPreferences } =
   useNotificationsSettings();
 const { $api } = useNuxtApp();
@@ -507,4 +509,13 @@ const refresh = async () => {
 
 onMounted(refresh);
 watch(() => route.params.key, refresh);
+watch(
+  entityKey,
+  (nextKey, previousKey) => {
+    if (nextKey === 'phobias' && nextKey !== previousKey) {
+      trackTopicOpen(nextKey);
+    }
+  },
+  { immediate: true }
+);
 </script>

@@ -4,6 +4,7 @@ import {
   DEFAULT_SCENE_ID,
   findSceneTrack,
 } from '@/app/lib/sceneSelectionCatalog';
+import { buildSceneSettingsDefaults } from '@/shared/utils/sceneSettings';
 
 const SAVE_DEBOUNCE_MS = 600;
 let saveTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -38,16 +39,19 @@ function normalizeSceneId(value?: string | null) {
 }
 
 export const useSceneSettingsStore = defineStore('sceneSettings', {
-  state: (): SceneSettingsState => ({
-    sceneId: DEFAULT_SCENE_ID,
-    // По умолчанию держим фон на 25%.
-    volume: 10,
-    backgroundPlayMinutes: 0,
-    // По умолчанию анимация обоев выключена.
-    animateBackground: false,
-    loaded: false,
-    saving: false,
-  }),
+  state: (): SceneSettingsState => {
+    // До гидрации пользователя держим звук в mute,
+    // чтобы фон не стартовал на случайном runtime-volume.
+    const safeBootDefaults = buildSceneSettingsDefaults(0);
+    return {
+      sceneId: DEFAULT_SCENE_ID,
+      volume: safeBootDefaults.volume,
+      backgroundPlayMinutes: safeBootDefaults.backgroundPlayMinutes,
+      animateBackground: safeBootDefaults.animateBackground,
+      loaded: false,
+      saving: false,
+    };
+  },
   actions: {
     applySettings(payload: SceneSettingsPayload) {
       if (payload.sceneId !== undefined) {
@@ -70,16 +74,20 @@ export const useSceneSettingsStore = defineStore('sceneSettings', {
     async loadFromUser() {
       const auth = useAuthStore();
       const settings = (auth.user as any)?.sceneSettings ?? null;
+      const runtimeConfig = useRuntimeConfig();
+      const defaults = buildSceneSettingsDefaults(
+        runtimeConfig.public.sceneDefaultVolumePercent
+      );
       if (settings) {
-        this.applySettings(settings);
+        this.applySettings({
+          sceneId: DEFAULT_SCENE_ID,
+          ...defaults,
+          ...settings,
+        });
       } else {
         this.applySettings({
           sceneId: DEFAULT_SCENE_ID,
-          // По умолчанию держим фон на 25%.
-          volume: 10,
-          backgroundPlayMinutes: 0,
-          // По умолчанию анимация обоев выключена.
-          animateBackground: false,
+          ...defaults,
         });
       }
       this.loaded = true;

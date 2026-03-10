@@ -5,12 +5,18 @@ import { useAuthStore } from '@/app/stores/auth';
 import { useMeditationPlayer } from '@/app/composables/useMeditationPlayer';
 import { useSceneAudio } from '@/app/composables/useSceneAudio';
 
-const PUBLIC_ROUTES = ['/auth', '/error', '/forgot', '/reset-password'];
+const AUDIO_BLOCKED_ROUTES = [
+  '/auth',
+  '/error',
+  '/forgot',
+  '/reset-password',
+  '/onboarding',
+];
 
-function isPublicAuthRoute(path: string) {
+function isAudioBlockedRoute(path: string) {
   if (!path) return false;
   if (path === '/auth/link' || path.startsWith('/auth/link')) return true;
-  return PUBLIC_ROUTES.includes(path);
+  return AUDIO_BLOCKED_ROUTES.includes(path);
 }
 
 export default defineNuxtPlugin({
@@ -26,13 +32,17 @@ export default defineNuxtPlugin({
 
     const isPlaybackAllowed = computed(() => {
       const path = route.path || '';
-      if (!auth.isLoggedIn || auth.isLoggingOut) return false;
-      if (isPublicAuthRoute(path)) return false;
+      const onboardingCompleted = auth.user?.onboarding?.welcome === true;
+      // Пока логин/redirect ещё не завершён или welcome-онбординг не пройден,
+      // фоновый звук и медитации запускать нельзя.
+      if (!auth.isLoggedIn || auth.isLoggingOut || auth.loading) return false;
+      if (!onboardingCompleted) return false;
+      if (isAudioBlockedRoute(path)) return false;
       return true;
     });
 
     const applyPlaybackPolicy = async (allowed: boolean) => {
-      // Глобально блокируем любой звук на публичных маршрутах и при logout.
+      // Глобально блокируем любой звук вне основного приложения.
       await Promise.all([
         meditationPlayer.setPlaybackAllowed(allowed),
         sceneAudio.setPlaybackAllowed(allowed),

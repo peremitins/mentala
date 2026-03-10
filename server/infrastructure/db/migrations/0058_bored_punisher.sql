@@ -1,0 +1,2 @@
+DROP INDEX "idx_users_trial_billing_reminder_due";--> statement-breakpoint
+CREATE INDEX "idx_users_trial_billing_reminder_due" ON "users" USING btree ("next_charge_at","id") WHERE "users"."billing_collection_status" = 'scheduled' and "users"."billing_reminder_sent_at" is null and "users"."next_charge_at" is not null;

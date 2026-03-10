@@ -22,6 +22,11 @@ import {
   addRecentChips,
   getRecentChips,
 } from '@/server/utils/suggestedChipsStore';
+import { readChatSettings } from '@/server/utils/storage';
+import {
+  buildStaticPhobiasSuggestedChips,
+  resolvePhobiasConversationState,
+} from '@/server/application/chat/phobias-entry.service';
 
 const MAX_CHIPS = 4;
 const MIN_CHIPS = 3;
@@ -478,6 +483,26 @@ export async function generateSuggestedChips(params: {
       },
     ];
     return sosChips;
+  }
+
+  if (params.userId != null) {
+    try {
+      const settings = await readChatSettings(String(params.userId));
+      const phobiasState = resolvePhobiasConversationState({
+        entryContext: params.entryContext,
+        messages: params.messages,
+        lastTherapyFocus: settings.lastTherapyFocus,
+      });
+      const staticPhobiasChips = buildStaticPhobiasSuggestedChips(phobiasState);
+      if (staticPhobiasChips) {
+        return staticPhobiasChips;
+      }
+    } catch (error) {
+      console.error(
+        '[SuggestedChips] Failed to resolve phobias static chips:',
+        error
+      );
+    }
   }
 
   const answer = String(params.assistantAnswer || '').trim();
