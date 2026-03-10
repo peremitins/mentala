@@ -530,6 +530,19 @@ export const chatSettings = pgTable('chat_settings', {
   lastNameGreetingAt: timestamp('last_name_greeting_at', {
     withTimezone: true,
   }),
+  // Последний подтвержденный фокус внутри темы "Страхи".
+  lastTherapyFocus: jsonb('last_therapy_focus').$type<{
+    topicId: 'phobias';
+    subtopicKey:
+      | 'public_speaking'
+      | 'heights'
+      | 'confined_spaces'
+      | 'social_fear'
+      | 'other_specific';
+    subtopicLabel: string;
+    confirmedByUser: true;
+    updatedAt: string;
+  } | null>(),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull(),

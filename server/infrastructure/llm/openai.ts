@@ -21,6 +21,7 @@ import {
   reserveDailyGreeting,
   resolveUserTimezone,
 } from '@/server/application/chat/name-greeting.service';
+import { isPhobiasEntryContext } from '@/server/application/chat/phobias-entry.service';
 import {
   buildSummaryPrompt,
   buildDeveloperContext,
@@ -1219,6 +1220,9 @@ export const openaiProvider: LlmProviderPort = {
           ? options.user_gender
           : null;
       const isThoughtDumpEntry = options?.entryContext?.type === 'thought_dump';
+      const isPhobiasWelcomeEntry = isPhobiasEntryContext(
+        options?.entryContext
+      );
       const now = new Date();
       let canUseGreeting = false;
       let greetingName: string | null = null;
@@ -1244,7 +1248,7 @@ export const openaiProvider: LlmProviderPort = {
             timezone,
             now,
           });
-        } else {
+        } else if (!isPhobiasWelcomeEntry) {
           alternativeOpening = pickAlternativeOpening({
             userId: numericUserId,
             timezone,
@@ -1271,9 +1275,10 @@ export const openaiProvider: LlmProviderPort = {
         includeNameValidationPrompt: Boolean(greetingName),
         openingMode,
         openingLine: alternativeOpening ?? undefined,
+        useGreeting: canUseGreeting,
         welcomePromptContent: welcomePromptContent || undefined,
         entryContext: options?.entryContext,
-        disableOpeningTemplates: isThoughtDumpEntry,
+        disableOpeningTemplates: isThoughtDumpEntry || isPhobiasWelcomeEntry,
       });
 
       // System промпт для старта
@@ -1303,6 +1308,19 @@ export const openaiProvider: LlmProviderPort = {
           role: 'developer',
           content: [{ type: 'input_text' as const, text: welcomePrompt }],
         },
+        ...(options?.userPrompt
+          ? [
+              {
+                role: 'developer' as const,
+                content: [
+                  {
+                    type: 'input_text' as const,
+                    text: options.userPrompt,
+                  },
+                ],
+              },
+            ]
+          : []),
         // НЕ добавляем messages - они пустые для welcome-старта!
       ];
 

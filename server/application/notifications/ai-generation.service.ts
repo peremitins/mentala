@@ -25,11 +25,14 @@ import type {
   Tone,
   Addressing,
   Directness,
-  HabitSubtype,
   NotificationSubtype,
   NotificationActionHint,
 } from '@/shared/dto/notifications';
 import { MAX_NOTIFICATION_TEXT_LENGTH } from '@/shared/dto/notifications';
+import {
+  buildTherapyNotificationSubtypeInstructions,
+  resolveTemplateTherapyTopic,
+} from './notification-prompt-helpers';
 
 // Константы для генерации текстов уведомлений
 const DEFAULT_TEXT_COUNT =
@@ -188,7 +191,7 @@ interface GenerateNotificationTextsParams {
   kind: 'habits' | 'therapy';
   entityKey: string; // ID для кастомных сущностей, ключ шаблона для шаблонных
   directness: Directness;
-  subtype?: HabitSubtype | null;
+  subtype?: NotificationSubtype | null;
   textSource: 'ai'; // Только для AI-генерации (не может быть 'templates')
   count?: number; // количество текстов для генерации (по умолчанию 50)
   provider?: 'openai' | 'deepseek' | 'yandex';
@@ -1268,14 +1271,21 @@ export async function generateNotificationTexts(
         `[AI Generation] Found custom therapy topic: id=${topic.id}, name=${topic.name}, entityKey param=${params.entityKey}`
       );
     } else {
-      // Тема не найдена в БД - предполагаем, что это готовый шаблон
-      // (для терапии нет каталога, как для привычек, поэтому просто используем entityKey)
+      // Для системных тем терапии используем каталог, чтобы промпт видел
+      // читаемое название и описание вместо сырого entityKey.
+      const templateTopic = resolveTemplateTherapyTopic(params.entityKey);
       isCustomTherapy = false;
-      entityName = params.entityKey;
-      entityDescription = null;
-      console.log(
-        `[AI Generation] Template therapy topic: entityKey=${params.entityKey} (using as name)`
-      );
+      entityName = templateTopic.entityName;
+      entityDescription = templateTopic.entityDescription;
+      if (templateTopic.foundInCatalog) {
+        console.log(
+          `[AI Generation] Template therapy topic found in catalog: entityKey=${params.entityKey}, name=${templateTopic.entityName}`
+        );
+      } else {
+        console.log(
+          `[AI Generation] Template therapy topic not found in catalog: entityKey=${params.entityKey} (using key as name)`
+        );
+      }
     }
   }
 
@@ -1623,7 +1633,7 @@ function buildNotificationSystemPrompt(params: {
   addressing: Addressing;
   userGender?: 'male' | 'female' | null;
   directness: Directness;
-  subtype?: HabitSubtype | null;
+  subtype?: NotificationSubtype | null;
   kind: 'habits' | 'therapy';
   habitIntent?: 'quit' | 'build' | null; // Intent привычки: отказ (quit) или приобретение (build)
   imageTagPolicy: ImageTagPolicy;
@@ -1654,7 +1664,7 @@ function buildNotificationSystemPrompt(params: {
     hard: 'Жесткий',
   };
 
-  const subtypeMap: Record<HabitSubtype, string> = {
+  const subtypeMap: Record<NotificationSubtype, string> = {
     reminder: 'Напоминание о действии',
     informational: 'Полезные факты',
     motivational: 'Поддержка и мотивация',
@@ -1819,14 +1829,11 @@ ${params.description ? '- Используй описание как основ�
         break;
     }
   } else if (params.kind === 'therapy') {
-    const therapyContext = params.description
-      ? `- Все тексты должны быть релевантны теме из описания выше. Используй описание как основу.`
-      : `- Все тексты должны быть релевантны этой теме поддержки.`;
-
-    subtypeInstructions =
-      params.subtype === 'motivational'
-        ? `${therapyContext}\n- Поддержка и мотивация в контексте этой темы`
-        : therapyContext;
+    subtypeInstructions = buildTherapyNotificationSubtypeInstructions({
+      entityKey: params.entityKey,
+      description: params.description,
+      subtype: params.subtype,
+    });
   }
 
   return `Ты помощник для генерации текстов уведомлений для мобильного приложения Mentala.
@@ -1856,7 +1863,7 @@ ${
     ? `- Все тексты должны быть релевантны сути привычки. Название "${params.entityName}" используй только как внутренний контекст.
 - НЕ пиши фразы вида «привычка "${params.entityName}"», «делать "${params.entityName}"» и не ставь название в кавычки.
 - Если название звучит естественно как действие или состояние (например, "пить воду"), можно использовать его в тексте, но без кавычек и без слова "привычка".`
-    : `- Для терапии: фокус на поддержке и рефлексии. Название темы "${params.entityName}" используй только как контекст, избегай странных фраз с названием в кавычках.
+    : `- Для терапии: фокус на поддержке, рефлексии и мягких практических шагах, если это соответствует subtype. Название темы "${params.entityName}" используй только как контекст, избегай странных фраз с названием в кавычках.
 - Если название звучит как нормальное состояние ("тревога", "усталость"), можно использовать его естественно.`
 }
 ${subtypeInstructions}
@@ -2066,7 +2073,7 @@ export async function refillTextPool(
   entityKey: string,
   configHash: string,
   directness: Directness,
-  subtype: HabitSubtype | null,
+  subtype: NotificationSubtype | null,
   textSource: 'ai',
   habitIntent?: 'quit' | 'build' | null, // Intent привычки, переданный явно
   customPromptNotification?: string | null
@@ -2196,7 +2203,9 @@ export async function refillTextPool(
         entityName = topic.name;
         entityDescription = topic.description;
       } else {
-        entityName = entityKey;
+        const templateTopic = resolveTemplateTherapyTopic(entityKey);
+        entityName = templateTopic.entityName;
+        entityDescription = templateTopic.entityDescription;
       }
     }
 
