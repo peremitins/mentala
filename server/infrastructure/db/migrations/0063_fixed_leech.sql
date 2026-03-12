@@ -1,0 +1,1 @@
+ALTER TABLE "gratitude_diary_entries" ADD COLUMN "prompt_text" text;

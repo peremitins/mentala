@@ -41,3 +41,6 @@ redis-data/
 certs/
 Caddyfile
 scripts/.notification-cache/
+
+# Локальные загрузки пользователей (legacy — перенесены в Object Storage)
+public/uploads/
