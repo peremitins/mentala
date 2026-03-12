@@ -378,6 +378,126 @@ export const userPrompts = pgTable('user_prompts', {
     .notNull(),
 });
 
+// === Gratitude Diary ===
+export const gratitudeDiaryEntries = pgTable(
+  'gratitude_diary_entries',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    userId: integer('user_id').notNull(),
+    text: text('text').notNull(),
+    mood: varchar('mood', { length: 20 }),
+    tags: text('tags')
+      .array()
+      .notNull()
+      .default(sql`ARRAY[]::text[]`),
+    photoUrl: text('photo_url'),
+    // Ключ объекта в Object Storage: user-uploads/gratitude-diary/{userId}/{ts}-{uuid}.webp
+    // Публичный URL строится динамически: ${CDN_BASE}/${photoStorageKey}.
+    // Поле null для legacy-записей с локальными URL (/uploads/...).
+    photoStorageKey: text('photo_storage_key'),
+    // Текст вопроса-подсказки, который был активен при создании записи
+    promptText: text('prompt_text'),
+    inputMethod: varchar('input_method', { length: 12 })
+      .notNull()
+      .default('text'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    userCreatedIdx: index('idx_gratitude_diary_entries_user_created').on(
+      table.userId,
+      table.createdAt
+    ),
+  })
+);
+
+export const gratitudeDiaryWorksheetTemplates = pgTable(
+  'gratitude_diary_worksheet_templates',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    userId: integer('user_id').notNull(),
+    // Храним персональный шаблон целиком, чтобы поддержать произвольные формулировки и эмодзи.
+    items: jsonb('items')
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    userUniqueIdx: uniqueIndex(
+      'uk_gratitude_diary_worksheet_templates_user'
+    ).on(table.userId),
+    userUpdatedIdx: index('idx_gratitude_diary_worksheet_templates_user').on(
+      table.userId,
+      table.updatedAt
+    ),
+  })
+);
+
+// Избранные промпты пользователя в дневнике благодарности.
+// Два типа: 'catalog' — ссылка на системный промпт, 'custom' — пользовательский текст.
+export const gratitudeDiaryFavoritePrompts = pgTable(
+  'gratitude_diary_favorite_prompts',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    userId: integer('user_id').notNull(),
+    // 'catalog' — ссылка на системный промпт из catalog.ts, 'custom' — пользовательский текст
+    promptType: varchar('prompt_type', { length: 10 }).notNull(),
+    // Для catalog: id промпта из каталога (например 'self-1', 'health-3')
+    catalogPromptId: varchar('catalog_prompt_id', { length: 64 }),
+    // Для custom: текст промпта (ограничен 220 символами на уровне БД)
+    customText: varchar('custom_text', { length: 220 }),
+    // Порядок отображения (для будущего ручного перетаскивания, сейчас сортируем по created_at)
+    sortOrder: integer('sort_order').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    // Индекс для быстрой выборки избранных пользователя, сортировка по created_at DESC
+    userCreatedIdx: index('idx_gratitude_favorite_user_created').on(
+      table.userId,
+      table.createdAt
+    ),
+    // Partial unique index: один каталожный промпт в избранном одного пользователя
+    userCatalogUniqueIdx: uniqueIndex('uk_gratitude_favorite_user_catalog')
+      .on(table.userId, table.catalogPromptId)
+      .where(sql`${table.catalogPromptId} IS NOT NULL`),
+    // Partial unique index: дедупликация кастомных промптов по тексту
+    // Защищает от двойной миграции (если пользователь открыл 2 вкладки одновременно)
+    userCustomTextUniqueIdx: uniqueIndex(
+      'uk_gratitude_favorite_user_custom_text'
+    )
+      .on(table.userId, table.customText)
+      .where(sql`${table.customText} IS NOT NULL`),
+    // Тип промпта ограничен допустимыми значениями
+    promptTypeCheck: check(
+      'chk_gratitude_favorite_prompt_type',
+      sql`${table.promptType} IN ('catalog', 'custom')`
+    ),
+    // Консистентность полиморфных записей:
+    // catalog → catalog_prompt_id NOT NULL, custom_text IS NULL
+    // custom → custom_text NOT NULL, catalog_prompt_id IS NULL
+    typeConsistencyCheck: check(
+      'chk_gratitude_favorite_type_consistency',
+      sql`(${table.promptType} = 'catalog' AND ${table.catalogPromptId} IS NOT NULL AND ${table.customText} IS NULL)
+          OR
+          (${table.promptType} = 'custom' AND ${table.customText} IS NOT NULL AND ${table.catalogPromptId} IS NULL)`
+    ),
+  })
+);
+
 // === Welcome Prompts ===
 // Стартовые промпты для приветствия ассистента на welcome-экране
 export const welcomePrompts = pgTable('welcome_prompts', {
