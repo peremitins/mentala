@@ -393,6 +393,41 @@
       "when": 1773063586115,
       "tag": "0059_nifty_gateway",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1773139094539,
+      "tag": "0060_even_terrax",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1773154248312,
+      "tag": "0061_awesome_pandemic",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1773236351738,
+      "tag": "0062_glossy_squirrel_girl",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1773238703734,
+      "tag": "0063_fixed_leech",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1773243872703,
+      "tag": "0064_misty_eddie_brock",
+      "breakpoints": true
     }
   ]
 }

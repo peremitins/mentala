@@ -1,0 +1,1 @@
+ALTER TABLE "gratitude_diary_entries" ADD COLUMN "photo_storage_key" text;

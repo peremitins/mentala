@@ -21,11 +21,12 @@
 • Резолв медиа (`app/utils/media.ts`): в `dev` для native runtime (iOS/Android) приоритет у `window.location.origin` (Capacitor `server.url`) даже при пустом `apiBase`, чтобы изображения/аудио грузились с того же dev-хоста и не зависели от доступности CDN в эмуляторе/девайсе; далее fallback на `apiBase` и `mediaBaseUrl`. В `production` приоритет остаётся у `NUXT_PUBLIC_MEDIA_BASE_URL`.
 • Ошибки API на native логируются в `app/plugins/api.ts` с контекстом (`url`, `status`, `statusText`, `message`, `responseData`) для диагностики проблем сети/доступности backend.
 • Глобальный auth middleware (`app/middleware/auth.global.ts`) держит fail-fast стратегию в компактном виде: helper для public routes, gate по native session token (`mentai.session.token`) и единый `auth.me()` с timeout (`AUTH_ME_TIMEOUT_MS`) для избежания зависаний на мобильных сетевых сбоях.
-• Глобальный feature-access middleware (`app/middleware/feature-access.global.ts`) выполняет тарифный gate на уровне роутера: закрывает прямой доступ к `meditations`, lock-маршрутам `breath-practices/:slug` (кроме free slugs), а также к custom-маршрутам `habits/:id` и `therapy/:key` (если ключ не из каталога и нет premium entitlement). При отсутствии доступа делает `navigateTo('/', { replace: true })`.
+• Глобальный feature-access middleware (`app/middleware/feature-access.global.ts`) выполняет тарифный gate на уровне роутера: закрывает прямой доступ к `meditations`, `practices/gratitude-diary` (включая editor), lock-маршрутам `breath-practices/:slug` (кроме free slugs), а также к custom-маршрутам `habits/:id` и `therapy/:key` (если ключ не из каталога и нет premium entitlement). При отсутствии доступа делает `navigateTo('/', { replace: true })`.
 • Google OAuth на native: `@capgo/capacitor-social-login` использует `google.webClientId` (env `NUXT_OAUTH_GOOGLE_CLIENT_ID`) на Android/Web и `google.iOSClientId` (env `NUXT_PUBLIC_GOOGLE_IOS_CLIENT_ID`) на iOS. Без iOS client id initialize на iOS возвращает `No provider was initialized`. В `AppDelegate` обязательно обрабатываем callback через `GIDSignIn.sharedInstance.handle(url)`. Backend `/api/auth/google/native` валидирует `idToken` по аудиториям `web + iOS`.
 • Для `nuxt generate` фоновые notification/BullMQ воркеры не запускаются (guards в `server/plugins/notifications-worker.ts` и `server/plugins/bullmq-workers.ts`), чтобы static-сборка не зависала на Redis и `cap sync` всегда получал свежие web assets.
 • Дополнительно для static-сборки отключены фоновые cleanup-плагины (`server/plugins/auth-cleanup.ts`, `server/plugins/trial-usage-cleanup.ts`), а Redis-клиент BullMQ работает в `lazyConnect` режиме, чтобы `generate` не блокировался фоновыми коннектами.
 • AI Response Feedback (MVP): реализованы `POST/GET /api/chat/feedback`, таблица `chat_response_feedback` (composite unique `user_id + therapy_session_id + assistant_message_client_id`, `bigserial`, check-ограничения, индексы), UI кнопок `like/dislike` внутри assistant-bubble в `app/pages/index.vue`, dislike-модалка с optional `topicCode` и optional `comment`, в payload/БД сохраняется `assistantMessageText` (текст конкретного ответа ИИ), optimistic update + rollback, toast-подтверждение на like/dislike, и daily cleanup `comment` старше 60 дней через плагин `server/plugins/chat-feedback-cleanup.ts`.
+• Telegram alerts v1 (зафиксировано в `.docs/telegram_bots.md`): для внутреннего alerting используется отдельный server-side bot token (`TELEGRAM_ALERTS_*`, не reuse `NUXT_TELEGRAM_BOT_TOKEN`), но на текущем rollout все environments (`local/dev/prod`) шлют в один общий чат с обязательной env-меткой в тексте сообщения; логические каналы `devops` / `billing` / `users` / `errors` при этом остаются отдельными на уровне маршрутизации, форматирования и дедупликации; пользовательское событие считается как `user.registered` с семантикой «аккаунт реально активирован» (email — после verify, OAuth/Telegram — сразу после создания); в логический Billing-канал идут только реальные денежные события и критические billing-ошибки (исключая `purchase_success` без `paymentId`, `trial_billing_scheduled` и внутренние non-money change-события); в логический users-канал по удалению уходит `user.deletion_requested`; daily summary обязан использовать строгий DAU через отдельный lightweight activity-source, запускаться single-run с dedupKey на дату/timezone и не опираться на login-proxy по `lastLoginAt`; при недоступности Redis app-level alerts могут временно теряться, fallback на sync-send не входит в scope v1.
 • Валидация и схемы: Zod (в связке с @vee-validate/zod).
 • Логи и мониторинг: Pino + Sentry.
 • Миграции БД: Drizzle Kit (SQL файлы хранятся для совместимости с будущими системами).
@@ -722,3 +723,71 @@ server/
 • Зафиксировано отдельное ТЗ на полную локализацию лендинга с переносом всего контента в `vue-i18n` при жёстком ограничении: русский текст переносится 1:1 без редакции.
 • Документ: `.docs/landing_i18n_localization_tz.md`.
 • Scope плана: полное покрытие `apps/landing/pages/index.vue`, унификация механизма выбора локали (`/` и `/support`), локализация SEO/OG/JSON-LD и контроль отсутствия регрессий RU-контента.
+
+⸻
+
+📔 Дневник благодарности (обновлено, 12 марта 2026)
+• Канонический экран дневника: `app/pages/practices/gratitude-diary.vue`, маршрут `/practices/gratitude-diary`.
+• UX-структура разделена на две страницы:
+  - `app/pages/practices/gratitude-diary.vue` — overview (streak + история + фиксированная кнопка добавления),
+  - `app/pages/practices/gratitude-diary/editor.vue` — создание/редактирование записи (вопрос, worksheet, composer, save).
+• Точка входа №1: карточка на `Практики` (`app/pages/practices/index.vue`).
+• Карточка дневника в `Практиках` всегда видима: при отсутствии доступа по feature-key `gratitude.diary.full` рендерится lock-state с бейджем тарифа (`⭐` для PRO, `💎` для Premium) и открывает `FeaturePaywallModal` по клику, без скрытия самого элемента.
+• Точка входа №2: системная привычка `gratitude` в `Привычках` ведёт на тот же канонический экран (без отдельной реализации дневника в `habits`).
+• Настройки уведомлений остаются в контуре привычек и открываются из дневника через `/habits/gratitude/notifications`.
+• Все `server/api/gratitude-diary/*` дополнительно проверяют entitlement `gratitude.diary.full` на сервере; частичные premium-ограничения (`gratitude.worksheet.customize`, `gratitude.photo.upload`) применяются только после успешного входа в сам дневник.
+• Backend API дневника:
+  - `GET /api/gratitude-diary` — состояние экрана (streak, текущий промпт, история, поиск),
+  - `POST /api/gratitude-diary/entries` — создание записи,
+  - `GET /api/gratitude-diary/entries/:id` — получить запись для режима редактирования,
+  - `PATCH /api/gratitude-diary/entries/:id` — обновить существующую запись,
+  - `GET /api/gratitude-diary/prompts` — каталог промптов, worksheet и избранные промпты пользователя (для Premium — персональный шаблон пользователя, для остальных — дефолт),
+  - `PUT /api/gratitude-diary/worksheet` — обновление персонального worksheet-шаблона (только Premium),
+  - `POST /api/gratitude-diary/upload-photo` — upload-контур фото, вызывается только в момент `save` после локального выбора файла,
+  - `POST /api/gratitude-diary/delete-photo` — compensating cleanup для только что загруженного объекта, если после upload сохранение записи не завершилось успешно,
+  - `POST /api/gratitude-diary/favorites` — добавить промпт в избранное (catalog или custom, возвращает полный список),
+  - `PATCH /api/gratitude-diary/favorites/:id` — редактировать кастомный промпт (WHERE id AND user_id AND prompt_type='custom'),
+  - `DELETE /api/gratitude-diary/favorites/:id` — удалить из избранного (возвращает `{ removedId }`),
+  - `POST /api/gratitude-diary/favorites/migrate` — батч-миграция из localStorage (идемпотентно, ON CONFLICT DO NOTHING).
+• Данные worksheet-шаблона пользователя хранятся в `gratitude_diary_worksheet_templates` (JSON-массив пунктов с `id/emoji/text`).
+• Данные дневника хранятся в таблице `gratitude_diary_entries` (см. `server/infrastructure/db/schema.ts`): `text`, `mood`, `tags`, `photo_url`, `input_method`, timestamps.
+• Избранные промпты пользователя хранятся в таблице `gratitude_diary_favorite_prompts` (миграция 0062):
+  - полиморфная таблица: `prompt_type IN ('catalog', 'custom')`,
+  - `catalog` → хранит ссылку `catalog_prompt_id` на статический каталог,
+  - `custom` → хранит `custom_text` (VARCHAR 220),
+  - CHECK constraint гарантирует консистентность: catalog без catalogPromptId или custom без customText невозможны,
+  - partial unique index на `(user_id, catalog_prompt_id)` и `(user_id, custom_text)` для идемпотентности,
+  - "мёртвые" ссылки (catalog_prompt_id не из актуального каталога) фильтруются на уровне API GET /prompts,
+  - лимит: не более 50 кастомных промптов на пользователя (проверяется в POST /favorites).
+• Логика избранных промптов вынесена в composable `app/composables/useGratitudeDiaryFavorites.ts`:
+  - `catalogFavoriteMap` computed (O(1) lookup вместо O(n) find),
+  - оптимистичные обновления с rollback-паттерном (snapshot → update → rollback + toast при ошибке),
+  - методы: `toggleCatalogFavorite`, `addCatalogFavorite`, `removeFavorite`, `createCustomFavorite`, `updateCustomFavorite`.
+• Однократная миграция из localStorage в БД: при первом открытии editor.vue после деплоя — данные из ключа `gratitude-diary.favorite-prompts.v1` отправляются в `/favorites/migrate`, флаг `gratitude-diary.favorites-migrated.v1` ставится в localStorage. Двойная миграция не создаёт дубликатов.
+• В GratitudePromptItem (display-модель) id кастомных промптов = String(dbId), id каталожных = оригинальный catalog ID (e.g., 'self-1').
+• `Color` и `Help me write` не используются в первой волне дневника; composer ограничен mood/photo/voice/list/tag.
+• Тексты UI дневника подключены через `vue-i18n` (ключи `GRATITUDE_DIARY.*` в `app/i18n/locales/ru.ts` и `app/i18n/locales/en.ts`) — RU как основной язык, EN как готовая структура для расширения локализации.
+• Дата записи в `editor.vue` выбирается через компактный `shadcn-vue`-calendar в `PageHeader`:
+  - календарь локализуется по `user.locale` из `/api/user/me` (fallback на текущий `vue-i18n locale`),
+  - на клиенте доступны только сегодняшняя и прошедшие даты (`max-value = today()`),
+  - popover календаря стилизован под проектный glass-паттерн (`glass-deep`), а не под дефолтный shadcn background,
+  - выбранная дата отправляется в `POST/PATCH /api/gratitude-diary/entries` как `entryDate` (`YYYY-MM-DD`).
+• Серверный контур даты записи timezone-aware:
+  - timezone берётся из `X-Timezone`, который уже отправляет общий API-плагин,
+  - `createdAt` записи перестраивается из выбранного `entryDate` + локального времени пользователя, поэтому редактирование даты не ломает часы/минуты карточки,
+  - группировка истории и расчёт streak в `GET /api/gratitude-diary` теперь тоже считаются по локальному дню пользователя, а не по сырому UTC-срезу.
+• В модалке каталога промптов (`editor.vue`) используется горизонтальная лента тем с переключением свайпом влево/вправо; активная тема отображается как одиночный список промптов.
+• Вкладка `Избранное` в каталоге промптов объединяет:
+  - сохранённые промпты из системных категорий (добавление/удаление по сердечку),
+  - пользовательские промпты (ручное создание, редактирование, удаление).
+• Фото в `editor.vue` работают по staged-flow:
+  - при выборе файла фронт делает только локальный preview и держит `File` в состоянии страницы,
+  - до нажатия `Сохранить` объект в Object Storage не создаётся,
+  - при редактировании существующей записи старые `photoUrl/photoStorageKey` сохраняются в состоянии до успешного `PATCH`,
+  - удаление фото в UI лишь помечает отложенное удаление; фактическое удаление объекта выполняется сервером после успешного сохранения записи,
+  - если upload нового фото прошёл, а `POST/PATCH` записи завершился ошибкой, фронт вызывает `delete-photo` для cleanup только что загруженного объекта.
+• Список записей в `app/pages/practices/gratitude-diary/index.vue` при возврате из редактора делает повторный `refreshDiary()` на `onActivated`, а загрузка карточечных фото имеет retry с cache-buster для сценария холодного CDN-404 сразу после сохранения новой картинки.
+• UX каталога вопросов в `editor.vue` построен в схеме `header + controls + scroll-list + sticky action`:
+  - список вопросов прокручивается внутри модалки,
+  - primary-кнопка для вкладки `Избранное` всегда закреплена внизу и открывает отдельный попап добавления/редактирования вопроса (`textarea + "Готово"`),
+  - внутри `Избранного` у элементов используются действия `редактировать` и `удалить` (без иконки сердца).
