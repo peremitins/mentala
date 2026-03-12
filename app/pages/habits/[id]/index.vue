@@ -91,13 +91,19 @@
           </Button>
           <Button
             v-if="isGratitudeHabit"
-            class="flex-1 flex-none justify-center !py-3 text-base font-semibold"
+            class="relative flex-1 flex-none justify-center !py-3 text-base font-semibold"
             variant="outline"
             size="lg"
             @click="goToGratitudeDiary"
           >
             <IconSquarePen class="mr-2 h-5 w-5" />
             Дневник
+            <span
+              v-if="!gratitudeDiaryAccess.available"
+              class="absolute right-3 inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/20 bg-black/35 text-[10px] leading-none"
+            >
+              {{ getPlanBadgeEmoji(gratitudeDiaryAccess.requiredPlan) }}
+            </span>
           </Button>
         </div>
 
@@ -246,6 +252,9 @@ const meditationsAccess = computed(() =>
 const breathCatalogAccess = computed(() =>
   getFeatureAccess('breath.catalog.full')
 );
+const gratitudeDiaryAccess = computed(() =>
+  getFeatureAccess('gratitude.diary.full')
+);
 const chatAssistantAccess = computed(() => getFeatureAccess('chat.assistant'));
 const customHabitsAccess = computed(() =>
   getFeatureAccess('habits.custom.create')
@@ -331,6 +340,11 @@ async function goToMeditations() {
 }
 
 function goToGratitudeDiary() {
+  if (!gratitudeDiaryAccess.value.available) {
+    openPaywall('gratitude.diary.full');
+    return;
+  }
+
   void navigateTo('/practices/gratitude-diary');
 }
 

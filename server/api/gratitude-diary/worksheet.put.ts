@@ -13,6 +13,7 @@ import {
   getFeatureAccessOrDefault,
   toFeaturePlanRequiredPayload,
 } from '@/server/application/subscriptions/entitlements.service';
+import { assertGratitudeDiaryAccess } from '@/server/application/gratitude-diary/access';
 import {
   GratitudeDiaryWorksheetUpdateDto,
   type GratitudeDiaryWorksheetItemDto,
@@ -48,7 +49,15 @@ export default defineEventHandler(async (event) => {
   }
 
   const featureKey = 'gratitude.worksheet.customize';
-  const billing = await getBillingSnapshot(sessionUser.id, sessionUser.role);
+  const billingSnapshot = await getBillingSnapshot(
+    sessionUser.id,
+    sessionUser.role
+  );
+  const billing = await assertGratitudeDiaryAccess({
+    userId: sessionUser.id,
+    roleId: sessionUser.role,
+    billing: billingSnapshot,
+  });
   const access = getFeatureAccessOrDefault(billing, featureKey);
   if (!access.available) {
     throw createError({

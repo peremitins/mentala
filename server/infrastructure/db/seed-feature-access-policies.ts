@@ -94,6 +94,17 @@ const policies = [
     paywallTargetPlan: 'premium',
   },
   {
+    featureKey: 'gratitude.diary.full',
+    requiredPlan: 'pro',
+    trialUnlocked: true,
+    lockIcon: 'pro',
+    paywallTitle: 'Дневник благодарности в PRO и Premium',
+    paywallDescription:
+      'Открой дневник благодарности на тарифе PRO или Premium, чтобы вести записи, сохранять streak и возвращаться к своим опорам.',
+    paywallCtaText: 'Выбрать тариф',
+    paywallTargetPlan: 'pro',
+  },
+  {
     featureKey: 'gratitude.worksheet.customize',
     requiredPlan: 'premium',
     trialUnlocked: true,

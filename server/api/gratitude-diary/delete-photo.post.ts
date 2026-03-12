@@ -2,6 +2,7 @@
 // Используется когда пользователь загрузил фото, но удалил его до сохранения записи.
 import { defineEventHandler, readBody, setResponseStatus } from 'h3';
 import { getSessionUser } from '@@/server/application/auth/session';
+import { assertGratitudeDiaryAccess } from '@/server/application/gratitude-diary/access';
 import { deleteFromStorage } from '@/server/infrastructure/storage/upload';
 import { GratitudeDiaryDeletePhotoDto } from '@/shared/dto';
 
@@ -13,6 +14,10 @@ export default defineEventHandler(async (event) => {
   }
 
   const userId = Number(sessionResult.user.id);
+  await assertGratitudeDiaryAccess({
+    userId,
+    roleId: sessionResult.user.roleId,
+  });
 
   const body = await readBody(event);
   const parsed = GratitudeDiaryDeletePhotoDto.safeParse(body);

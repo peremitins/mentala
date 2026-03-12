@@ -10,6 +10,7 @@ import {
   getBillingSnapshot,
   getFeatureAccessOrDefault,
 } from '@/server/application/subscriptions/entitlements.service';
+import { assertGratitudeDiaryAccess } from '@/server/application/gratitude-diary/access';
 import {
   GRATITUDE_PROMPT_CATEGORIES,
   GRATITUDE_WORKSHEET_TEMPLATE,
@@ -29,7 +30,15 @@ export default defineEventHandler(async (event) => {
   }
 
   const userId = Number(sessionResult.user.id);
-  const billing = await getBillingSnapshot(userId, sessionResult.user.roleId);
+  const billingSnapshot = await getBillingSnapshot(
+    userId,
+    sessionResult.user.roleId
+  );
+  const billing = await assertGratitudeDiaryAccess({
+    userId,
+    roleId: sessionResult.user.roleId,
+    billing: billingSnapshot,
+  });
   const worksheetFeatureKey = 'gratitude.worksheet.customize';
   const worksheetAccess = getFeatureAccessOrDefault(
     billing,
@@ -76,7 +85,10 @@ export default defineEventHandler(async (event) => {
   const favoritePrompts = favoriteRows
     .filter((row) => {
       if (row.promptType === 'catalog') {
-        return row.catalogPromptId !== null && CATALOG_PROMPT_IDS.has(row.catalogPromptId);
+        return (
+          row.catalogPromptId !== null &&
+          CATALOG_PROMPT_IDS.has(row.catalogPromptId)
+        );
       }
       return true;
     })

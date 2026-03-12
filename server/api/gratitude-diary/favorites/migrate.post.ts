@@ -3,6 +3,7 @@ import { desc, eq } from 'drizzle-orm';
 import { db } from '@@/server/infrastructure/db/client';
 import { gratitudeDiaryFavoritePrompts } from '@@/server/infrastructure/db/schema';
 import { getSessionUser } from '@@/server/application/auth/session';
+import { assertGratitudeDiaryAccess } from '@/server/application/gratitude-diary/access';
 import { GratitudeDiaryFavoriteMigrateDto } from '@/shared/dto';
 import { GRATITUDE_PROMPT_CATEGORIES } from '@/shared/gratitude-diary/catalog';
 
@@ -18,6 +19,10 @@ export default defineEventHandler(async (event) => {
   }
 
   const userId = Number(sessionResult.user.id);
+  await assertGratitudeDiaryAccess({
+    userId,
+    roleId: sessionResult.user.roleId,
+  });
   const body = await readBody(event);
   const parsed = GratitudeDiaryFavoriteMigrateDto.safeParse(body);
 

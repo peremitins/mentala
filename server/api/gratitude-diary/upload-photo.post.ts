@@ -1,13 +1,25 @@
 import { randomUUID } from 'node:crypto';
-import { createError, defineEventHandler, readBody, setResponseStatus } from 'h3';
+import {
+  createError,
+  defineEventHandler,
+  readBody,
+  setResponseStatus,
+} from 'h3';
 import { getSessionUser } from '@@/server/application/auth/session';
 import {
   getBillingSnapshot,
   getFeatureAccessOrDefault,
   toFeaturePlanRequiredPayload,
 } from '@/server/application/subscriptions/entitlements.service';
-import { detectMimeType, processImage } from '@/server/infrastructure/storage/image-processor';
-import { buildPublicUrl, uploadToStorage } from '@/server/infrastructure/storage/upload';
+import { assertGratitudeDiaryAccess } from '@/server/application/gratitude-diary/access';
+import {
+  detectMimeType,
+  processImage,
+} from '@/server/infrastructure/storage/image-processor';
+import {
+  buildPublicUrl,
+  uploadToStorage,
+} from '@/server/infrastructure/storage/upload';
 import { GratitudeDiaryPhotoUploadDto } from '@/shared/dto';
 
 const PHOTO_FEATURE_KEY = 'gratitude.photo.upload';
@@ -21,13 +33,24 @@ export default defineEventHandler(async (event) => {
 
   const userId = Number(sessionResult.user.id);
 
-  const billing = await getBillingSnapshot(userId, sessionResult.user.roleId);
+  const billingSnapshot = await getBillingSnapshot(
+    userId,
+    sessionResult.user.roleId
+  );
+  const billing = await assertGratitudeDiaryAccess({
+    userId,
+    roleId: sessionResult.user.roleId,
+    billing: billingSnapshot,
+  });
   const access = getFeatureAccessOrDefault(billing, PHOTO_FEATURE_KEY);
   if (!access.available) {
     throw createError({
       statusCode: 402,
       statusMessage: 'Feature requires higher plan',
-      data: toFeaturePlanRequiredPayload({ featureKey: PHOTO_FEATURE_KEY, access }),
+      data: toFeaturePlanRequiredPayload({
+        featureKey: PHOTO_FEATURE_KEY,
+        access,
+      }),
     });
   }
 
@@ -56,7 +79,10 @@ export default defineEventHandler(async (event) => {
   const MAX_PHOTO_BYTES = 3 * 1024 * 1024;
   if (rawBuffer.length > MAX_PHOTO_BYTES) {
     setResponseStatus(event, 413);
-    return { error: true, message: 'Файл слишком большой (максимум 3 МБ)' } as const;
+    return {
+      error: true,
+      message: 'Файл слишком большой (максимум 3 МБ)',
+    } as const;
   }
 
   // Определяем MIME-тип по сигнатуре файла — Content-Type от клиента игнорируется.
@@ -74,9 +100,15 @@ export default defineEventHandler(async (event) => {
   try {
     processed = await processImage(rawBuffer);
   } catch (err) {
-    console.error('[upload-photo] Ошибка обработки изображения', { userId, err });
+    console.error('[upload-photo] Ошибка обработки изображения', {
+      userId,
+      err,
+    });
     setResponseStatus(event, 422);
-    return { error: true, message: 'Не удалось обработать изображение' } as const;
+    return {
+      error: true,
+      message: 'Не удалось обработать изображение',
+    } as const;
   }
 
   // Ключ содержит только безопасные ASCII-символы.

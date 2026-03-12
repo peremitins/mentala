@@ -209,6 +209,9 @@ const breathCatalogAccess = computed(() =>
   getFeatureAccess('breath.catalog.full')
 );
 const chatAssistantAccess = computed(() => getFeatureAccess('chat.assistant'));
+const gratitudeDiaryAccess = computed(() =>
+  getFeatureAccess('gratitude.diary.full')
+);
 const customHabitsAccess = computed(() =>
   getFeatureAccess('habits.custom.create')
 );
@@ -435,6 +438,11 @@ async function handleHabitQuickBreath(item: NotificationIndexItem) {
 }
 
 function handleHabitQuickDiary() {
+  if (!gratitudeDiaryAccess.value.available) {
+    openPaywall('gratitude.diary.full');
+    return;
+  }
+
   void safeNavigate('/practices/gratitude-diary');
 }
 

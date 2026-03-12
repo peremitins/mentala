@@ -1,12 +1,9 @@
-import {
-  defineEventHandler,
-  getRouterParam,
-  setResponseStatus,
-} from 'h3';
+import { defineEventHandler, getRouterParam, setResponseStatus } from 'h3';
 import { and, eq } from 'drizzle-orm';
 import { db } from '@@/server/infrastructure/db/client';
 import { gratitudeDiaryFavoritePrompts } from '@@/server/infrastructure/db/schema';
 import { getSessionUser } from '@@/server/application/auth/session';
+import { assertGratitudeDiaryAccess } from '@/server/application/gratitude-diary/access';
 
 export default defineEventHandler(async (event) => {
   const sessionResult = await getSessionUser(event);
@@ -23,6 +20,10 @@ export default defineEventHandler(async (event) => {
   }
 
   const userId = Number(sessionResult.user.id);
+  await assertGratitudeDiaryAccess({
+    userId,
+    roleId: sessionResult.user.roleId,
+  });
 
   // Безопасное удаление: WHERE id AND user_id — чужие записи не затрагиваются.
   // Ошибку при отсутствии записи не кидаем — операция идемпотентна.

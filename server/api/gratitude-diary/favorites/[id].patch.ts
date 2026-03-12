@@ -8,6 +8,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@@/server/infrastructure/db/client';
 import { gratitudeDiaryFavoritePrompts } from '@@/server/infrastructure/db/schema';
 import { getSessionUser } from '@@/server/application/auth/session';
+import { assertGratitudeDiaryAccess } from '@/server/application/gratitude-diary/access';
 import { GratitudeDiaryFavoriteUpdateDto } from '@/shared/dto';
 
 export default defineEventHandler(async (event) => {
@@ -36,6 +37,10 @@ export default defineEventHandler(async (event) => {
   }
 
   const userId = Number(sessionResult.user.id);
+  await assertGratitudeDiaryAccess({
+    userId,
+    roleId: sessionResult.user.roleId,
+  });
 
   // WHERE id = :id AND user_id = :userId AND prompt_type = 'custom'
   // Явная проверка prompt_type = 'custom' в SQL защищает от редактирования
@@ -57,7 +62,10 @@ export default defineEventHandler(async (event) => {
 
   if (!item) {
     setResponseStatus(event, 404);
-    return { error: true, message: 'Favorite not found or not editable' } as const;
+    return {
+      error: true,
+      message: 'Favorite not found or not editable',
+    } as const;
   }
 
   return {

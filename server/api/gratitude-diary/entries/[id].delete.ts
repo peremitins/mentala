@@ -3,6 +3,7 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '@@/server/infrastructure/db/client';
 import { gratitudeDiaryEntries } from '@@/server/infrastructure/db/schema';
 import { getSessionUser } from '@@/server/application/auth/session';
+import { assertGratitudeDiaryAccess } from '@/server/application/gratitude-diary/access';
 import { deleteFromStorage } from '@/server/infrastructure/storage/upload';
 
 export default defineEventHandler(async (event) => {
@@ -20,6 +21,10 @@ export default defineEventHandler(async (event) => {
   }
 
   const userId = Number(sessionResult.user.id);
+  await assertGratitudeDiaryAccess({
+    userId,
+    roleId: sessionResult.user.roleId,
+  });
 
   // Удаляем запись из БД, возвращая photoStorageKey для последующей очистки хранилища.
   const [deleted] = await db
@@ -27,8 +32,8 @@ export default defineEventHandler(async (event) => {
     .where(
       and(
         eq(gratitudeDiaryEntries.id, entryId),
-        eq(gratitudeDiaryEntries.userId, userId),
-      ),
+        eq(gratitudeDiaryEntries.userId, userId)
+      )
     )
     .returning({
       id: gratitudeDiaryEntries.id,
