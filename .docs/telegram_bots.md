@@ -9,9 +9,10 @@
 - В проекте уже есть `BullMQ + Redis` и общий клиент очередей: `server/infrastructure/redis/bullmqClient.ts`.
 - Воркеры запускаются через Nitro plugins: `server/plugins/bullmq-workers.ts`, `server/plugins/notifications-worker.ts`, `server/plugins/trial-billing-worker.ts`.
 - В проекте уже есть прямой вызов Telegram API для заявок с лендинга: `server/application/landing/lead-notifications.service.ts`.
-- В проекте уже используется `runtimeConfig.TELEGRAM_BOT_TOKEN` / env `NUXT_TELEGRAM_BOT_TOKEN` для Telegram auth и lead-notifications.
+- В проекте уже используется `runtimeConfig.TELEGRAM_BOT_TOKEN` / env `NUXT_TELEGRAM_BOT_TOKEN` для Telegram auth и lead-notifications, поэтому для внутреннего alerting нужен отдельный бот и отдельный server-side token.
 - Источник истины по биллингу сейчас лежит в таблицах `subscription_events`, `payments`, `user_subscriptions`, `users`.
 - Удаление пользователя уже реализовано как 2-фазный процесс через `POST /api/user/delete` и `userDeletionQueue`. Поэтому событие «пользователь удалён» и событие «запрошено удаление аккаунта» в текущем коде не одно и то же.
+- Для строгого DAU в кодовой базе пока нет отдельного источника активности, поэтому первая итерация Telegram summary должна сразу добавить lightweight activity-source, а не использовать `lastLoginAt` как прокси.
 - Изменения схемы БД в проекте вносятся в `server/infrastructure/db/schema.ts`. Отдельные SQL-миграции руками для этой задачи заранее не описываются.
 
 ## 2. Цель первой итерации
@@ -30,11 +31,37 @@
 
 Разрешённый путь:
 
-1. В приложении фиксируется внутреннее событие.
-2. Событие превращается в короткий alert-payload.
-3. Alert-payload ставится в отдельную BullMQ-очередь.
-4. Отдельный воркер в фоне формирует текст и отправляет сообщение в Telegram.
-5. Результат доставки логируется.
+1. В приложении фиксируется доменное или прикладное событие, либо читается релевантное состояние из БД.
+2. На сервере строится нормализованное internal alert event для Telegram alerts.
+3. Из него формируется короткий alert-payload.
+4. Alert-payload ставится в отдельную BullMQ-очередь.
+5. Отдельный воркер в фоне формирует текст и отправляет сообщение в Telegram.
+6. Результат доставки логируется.
+
+### 3.1. Internal Event vs Alert Payload
+
+В первой итерации нужно различать два уровня:
+
+- доменное / прикладное событие:
+  например `user.registered`, `subscription_events.purchase_success`, `user.deletion_requested`;
+- normalised internal alert event:
+  единый server-side event именно для подсистемы Telegram alerts.
+
+Internal alert event может быть построен на основе:
+
+- одного доменного события;
+- нескольких записей БД;
+- результата серверного use-case;
+- технического сигнала мониторинга.
+
+Но для Telegram alerts он всегда должен иметь единый envelope:
+
+- `type`;
+- `dedupKey`;
+- `payload`;
+- `createdAt`;
+- `source`;
+- `environment`.
 
 Запрещено:
 
@@ -45,6 +72,8 @@
 ## 4. Каналы первой итерации
 
 Используются 4 логических канала.
+
+Важно: в первой итерации это именно логические каналы. Физически все сообщения уходят в один и тот же Telegram чат. Логический канал нужен для маршрутизации, форматирования, дедупликации и будущего разделения по разным чатам.
 
 ### 4.1. DevOps
 
@@ -65,27 +94,47 @@
 
 - успешная оплата;
 - неуспешная оплата;
+- возврат;
 - отмена подписки / отключение автопродления;
 - ошибка создания платежа;
 - ошибка обработки webhook;
-- ошибка применения запланированной смены тарифа.
+- критическая billing-ошибка.
 
-Из первой итерации исключаются:
+Правило первой итерации: логический Billing-канал = реальные денежные события + критические billing-ошибки.
 
-- refund-уведомления;
+Не отправляем сюда:
+
+- `purchase_success` с `paymentId = null`;
+- `trial_billing_scheduled`;
+- `subscription_change_applied`, если там нет движения денег;
+- любые подготовительные, плановые и внутренние billing-события без списания или возврата денег;
 - отдельные уведомления по `payment_method_bound/unbound`, если не будет отдельного запроса от бизнеса.
 
-Причина: в текущей кодовой базе нет готового refund-pipeline и нет стабильного источника refund-событий.
+Примечание: refund входит в scope продукта, но в текущей кодовой базе ещё нет готового refund-source. Для реализации первой итерации его нужно добавить отдельно.
 
 ### 4.3. Users
 
 Для ключевых пользовательских событий:
 
-- новый пользователь;
+- зарегистрированный пользователь;
 - запрос на удаление аккаунта;
 - milestone по общему количеству пользователей.
 
-Важно: в первой итерации для users-чата фиксируем именно `запрос на удаление аккаунта`, а не факт физического hard-delete после grace period.
+Правило регистрации:
+
+- email-flow: событие отправляется только после успешного verify / активации;
+- OAuth: событие отправляется сразу после успешного создания аккаунта;
+- Telegram auth: событие отправляется сразу после успешного создания аккаунта.
+
+Milestone thresholds задаются конфигом.
+
+Стартовый набор:
+
+- `100`;
+- `500`;
+- `1000`.
+
+Важно: в первой итерации для логического users-канала фиксируем именно `запрос на удаление аккаунта`, а не факт физического hard-delete после grace period.
 
 ### 4.4. Errors
 
@@ -103,7 +152,7 @@
 
 ## 5. Daily summary
 
-Отдельный чат под summary в первой итерации не нужен. Сводка уходит в `Users` чат одним сообщением.
+Отдельный чат под summary в первой итерации не нужен. Сводка уходит в логический канал `users` одним сообщением.
 
 ### 5.1. Время
 
@@ -120,29 +169,59 @@ Timezone и время должны быть отдельными server-side н
 
 Пример: 13 марта 2026 в `10:00 Europe/Moscow` уходит сводка за 12 марта 2026.
 
-### 5.3. Что реально можно включить в первой итерации
+### 5.3. Scheduler и single-run гарантия
+
+Daily summary должен отправляться только один раз за день.
+
+Обязательные правила:
+
+- при multi-instance deployment summary запускается только одним лидером;
+- нужен distributed lock или эквивалентная гарантия единственного исполнения;
+- повторная отправка одного и того же summary за один и тот же день запрещена по `dedupKey`.
+
+Формат `dedupKey` для summary:
+
+- `report:daily_summary:2026-03-12:Europe/Moscow`
+
+### 5.4. Что реально можно включить в первой итерации
 
 Обязательный минимум:
 
-- новые пользователи: по `users.createdAt`;
+- новые регистрации: по доменному событию `user.registered`, а не по сырому `users.createdAt`;
 - запросы на удаление аккаунта: по `users.deletionRequestedAt`;
-- успешные оплаты: по `payments.status = 'succeeded'`;
+- строгий DAU: по отдельному activity-source;
+- успешные реальные оплаты: по `payments.status = 'succeeded'`;
 - сумма успешных оплат: по `payments.amount`;
-- неуспешные оплаты: по `subscription_events.eventType = 'purchase_failed'`;
+- неуспешные реальные оплаты: по `subscription_events.eventType = 'purchase_failed'`;
+- возвраты: по отдельному refund-source, если он реализован в первой поставке;
 - отмены подписки: по `subscription_events.eventType = 'subscription_canceled'`;
-- успешные активации / продления: по `subscription_events.eventType = 'purchase_success'`;
 - registration milestones за день, если были.
 
-Опционально, только после отдельного подтверждения источника данных:
+Строгий DAU обязателен. Login-прокси использовать нельзя.
 
-- DAU / активные пользователи за день;
-- количество критических прикладных ошибок;
-- количество DevOps-инцидентов;
-- refund-метрики.
+Минимальная модель activity-source:
 
-Важно: сейчас в проекте нет надёжного единого источника для точного DAU за день. `lastLoginAt` обновляется не во всех auth-flow, поэтому использовать его как «точный активный пользователь за день» нельзя.
+- `userId`;
+- `activityDate`;
+- `source`;
+- `createdAt`.
 
-### 5.4. Формат
+Правило:
+
+- `DAU = количество уникальных пользователей, у которых за день было хотя бы одно валидное продуктовое действие`.
+
+Минимально допустимые `source` для первой итерации:
+
+- `open_app`;
+- `open_home`;
+- `send_message`;
+- `complete_exercise`;
+- `create_entry`;
+- `session_started`.
+
+Необязательно реализовывать весь список сразу, но нужен хотя бы один единый lightweight-механизм, который даёт корректный DAU и не опирается на login-flow.
+
+### 5.5. Формат
 
 Сообщение должно быть компактным. Пример:
 
@@ -152,12 +231,13 @@ Timezone и время должны быть отдельными server-side н
 Пользователи
 - Новые: 14
 - Запросы на удаление: 1
+- DAU: 97
 - Milestones: 1
 
 Биллинг
 - Успешные оплаты: 5
 - Неуспешные оплаты: 2
-- Успешные активации: 4
+- Возвраты: 0
 - Отмены подписки: 1
 - Сумма успешных оплат: 2 495 RUB
 ```
@@ -178,14 +258,15 @@ Timezone и время должны быть отдельными server-side н
 
 - `billing.purchase_success`
 - `billing.purchase_failed`
+- `billing.refund_created`
 - `billing.subscription_canceled`
 - `billing.checkout_error`
 - `billing.webhook_error`
-- `billing.subscription_change_failed`
+- `billing.critical_error`
 
 ### 6.3. Users
 
-- `user.created`
+- `user.registered`
 - `user.deletion_requested`
 - `user.registration_milestone_reached`
 
@@ -199,34 +280,59 @@ Timezone и время должны быть отдельными server-side н
 
 - `report.daily_summary`
 
+### 6.6. Формальные определения для DevOps-сигналов
+
+`devops.http_500_spike` в первой итерации считается по global-level правилу:
+
+- не меньше `20` ответов `500-599` за `5` минут по приложению в целом.
+
+Стартовые значения должны задаваться конфигом.
+
+`devops.push_delivery_unavailable` в первой итерации считается по одному из правил:
+
+- доля ошибок push-отправки выше `50%` за окно `5` минут при не менее чем `20` попытках;
+- push queue stalled;
+- провайдер push недоступен полностью.
+
+Стартовые значения также задаются конфигом.
+
 ## 7. Маппинг с текущей кодовой базой
 
 ### 7.1. Users
 
-- `user.created`:
-  источник по умолчанию — создание новой записи в `users`;
-  финальную семантику нужно утвердить отдельно для email-flow.
+- `user.registered`:
+  доменное событие полноценной регистрации, а не факт сырой вставки в `users`;
+  email-flow публикует событие после успешного verify;
+  OAuth и Telegram публикуют событие сразу после создания аккаунта.
 - `user.deletion_requested`:
   источник — успешный `POST /api/user/delete`.
 - `user.registration_milestone_reached`:
-  вычисляется по общему числу пользователей.
+  вычисляется по общему числу зарегистрированных аккаунтов в терминах `user.registered`, а не по простому `count(users)`.
 
 ### 7.2. Billing
 
 - `billing.purchase_success`:
-  источник — `subscription_events.eventType = 'purchase_success'`.
+  источник — `subscription_events.eventType = 'purchase_success'`, но только для реальных денежных событий с ненулевым `paymentId`.
 - `billing.purchase_failed`:
-  источник — `subscription_events.eventType = 'purchase_failed'`.
+  источник — `subscription_events.eventType = 'purchase_failed'`, если событие относится к реальному платежу.
+- `billing.refund_created`:
+  требует отдельного refund-source; в текущей кодовой базе его ещё нет.
 - `billing.subscription_canceled`:
   источник — `subscription_events.eventType = 'subscription_canceled'`.
-- `billing.subscription_change_failed`:
-  источник — `subscription_events.eventType = 'subscription_change_failed'`.
 - `billing.checkout_error`:
   источник — ошибки внутри `POST /api/subscriptions/start-checkout`.
 - `billing.webhook_error`:
   источник — ошибки внутри `POST /api/payments/yookassa/webhook`.
+- `billing.critical_error`:
+  источник — критические ошибки биллинга, включая кейсы вроде `subscription_change_failed`, если они ломают реальный денежный сценарий.
 
-Важно: `purchase_success` и `purchase_failed` могут фиксироваться из нескольких code-path. Для Telegram-уведомлений обязательна дедупликация по бизнес-ключу (`paymentId`, либо `subscriptionId + eventType`), иначе одно и то же событие улетит в чат дважды.
+Важно:
+
+- `purchase_success` с `paymentId = null` не уходит в логический Billing-канал;
+- `trial_billing_scheduled` не уходит в логический Billing-канал;
+- `subscription_change_applied` без движения денег не уходит в логический Billing-канал;
+- `purchase_success` и `purchase_failed` могут фиксироваться из нескольких code-path, поэтому для Telegram-уведомлений обязательна дедупликация по бизнес-ключу (`paymentId`, либо `subscriptionId + eventType`).
+- если refund-source не реализован к первой поставке, `billing.refund_created` исключается из Definition of Done первой поставки и оформляется отдельной follow-up задачей.
 
 ## 8. Требования к payload
 
@@ -238,11 +344,12 @@ Payload должен быть самодостаточным и коротким
 {
   type: 'billing.purchase_success',
   dedupKey: 'billing:purchase_success:payment:2b7c...',
+  environment: 'prod',
   payload: {
     userId: 42,
     subscriptionId: 123,
     paymentId: '2b7c...',
-    amount: 499,
+    amountMinor: 49900,
     currency: 'RUB',
     planId: 'premium',
     createdAt: '2026-03-12T09:20:00.000Z'
@@ -257,8 +364,54 @@ Payload должен быть самодостаточным и коротким
 - `payload`;
 - `createdAt`;
 - `source`;
+- `environment`.
+
+### 8.1. Денежный формат
+
+Для всех Telegram billing alerts вводится единый стандарт:
+
+- в payload денежные суммы передаются в minor units;
+- formatter отвечает за преобразование в читаемый денежный формат;
+- базовая валюта первой итерации — `RUB`;
+- при появлении другой валюты formatter не должен ломаться.
+
+Если исходные данные в БД лежат в рублях, mapper в Telegram alerts обязан нормализовать их в `amountMinor` до постановки задачи в очередь.
+
+### 8.2. Ограничения по данным
+
+В Telegram alerts запрещено отправлять:
+
+- содержимое AI-чатов;
+- тексты дневниковых записей;
+- терапевтические ответы и чувствительные health-данные;
+- email пользователя по умолчанию;
+- phone number;
+- полные реквизиты карты или payment method details;
+- токены, секреты, webhook signatures и служебные auth headers.
+
+Допустимы только:
+
+- технические идентификаторы;
+- безопасный минимум billing-данных;
+- агрегаты;
+- короткий операционный контекст.
 
 Запрещено делать так, чтобы formatter для обычного сообщения выполнял цепочку тяжёлых догрузок из нескольких таблиц.
+
+### 8.3. Environment tag в сообщениях
+
+На текущем этапе используется один общий alerts-bot и один общий чат для `local`, `dev` и `prod`.
+
+Поэтому:
+
+- `environment` обязательно входит в payload;
+- formatter обязан добавлять env-метку в заголовок каждого сообщения;
+- формат метки: в скобках, например `(dev)` или `(prod)`.
+
+Примеры:
+
+- `🚨 Redis недоступен (prod)`
+- `💸 Успешный платеж (dev)`
 
 ## 9. Маршрутизация по чатам
 
@@ -276,12 +429,13 @@ const TELEGRAM_ROUTING = {
 
   'billing.purchase_success': 'billing',
   'billing.purchase_failed': 'billing',
+  'billing.refund_created': 'billing',
   'billing.subscription_canceled': 'billing',
   'billing.checkout_error': 'billing',
   'billing.webhook_error': 'billing',
-  'billing.subscription_change_failed': 'billing',
+  'billing.critical_error': 'billing',
 
-  'user.created': 'users',
+  'user.registered': 'users',
   'user.deletion_requested': 'users',
   'user.registration_milestone_reached': 'users',
   'report.daily_summary': 'users',
@@ -291,6 +445,12 @@ const TELEGRAM_ROUTING = {
   'error.business_flow_critical': 'errors',
 } as const;
 ```
+
+Физическая доставка в первой итерации:
+
+- любой логический канал резолвится в один `TELEGRAM_ALERTS_CHAT_ID`;
+- при необходимости используется один общий `message_thread_id`;
+- разделение по разным чатам откладывается на следующую итерацию.
 
 Бизнес-логика не знает `chat_id` и `message_thread_id`.
 
@@ -304,6 +464,8 @@ const TELEGRAM_ROUTING = {
 - фоновая обработка;
 - retry ограничен;
 - backoff обязателен;
+- timeout для Telegram API обязателен;
+- ограничение скорости отправки обязательно;
 - сбой Telegram не ломает приложение;
 - результат доставки логируется.
 
@@ -312,7 +474,16 @@ const TELEGRAM_ROUTING = {
 - `attempts: 3`;
 - `backoff: exponential`;
 - `delay: 10_000`;
+- `timeoutMs: 5000`;
+- `workerConcurrency: 1` на первой итерации, так как все события идут в один чат;
+- последовательная обработка `429 Too Many Requests` с уважением `retry_after`;
 - `removeOnComplete` и `removeOnFail` по образцу существующих очередей проекта.
+
+Воркер обязан:
+
+- обрабатывать `429` и `Retry-After`;
+- не разгонять бесконтрольный параллелизм;
+- логировать код ответа провайдера.
 
 ## 11. Дедупликация
 
@@ -334,15 +505,20 @@ const TELEGRAM_ROUTING = {
 
 ### 11.2. Users
 
-- `user.created` не дедуплицируется;
+- `user.registered` не дедуплицируется;
 - `user.registration_milestone_reached` должен иметь жёсткий idempotency key;
 - `user.deletion_requested` дедуплицируется по `userId`, если запрос повторён технически.
 
 ### 11.3. Billing
 
 - успех и неуспех оплаты дедуплицируются по `paymentId`;
+- refund дедуплицируется по `refundId` или provider refund key;
 - отмена подписки дедуплицируется по `subscriptionId + eventType`;
-- ошибки checkout/webhook дедуплицируются по fingerprint ошибки и временному окну.
+- ошибки checkout / webhook / critical billing error дедуплицируются по fingerprint ошибки и временному окну.
+
+### 11.4. Reports
+
+- `report.daily_summary` дедуплицируется по `report:daily_summary:{date}:{timezone}`.
 
 ## 12. Логирование доставок
 
@@ -357,6 +533,8 @@ const TELEGRAM_ROUTING = {
 - `status`;
 - `attempt`;
 - `error_message`;
+- `provider_response_code`;
+- `provider_retry_after_seconds`;
 - `telegram_message_id`;
 - `created_at`;
 - `sent_at`.
@@ -373,22 +551,28 @@ const TELEGRAM_ROUTING = {
 
 Базовый вариант:
 
-- `NUXT_TELEGRAM_BOT_TOKEN`
-- `NUXT_TELEGRAM_ALERTS_CHAT_DEVOPS_ID`
-- `NUXT_TELEGRAM_ALERTS_CHAT_BILLING_ID`
-- `NUXT_TELEGRAM_ALERTS_CHAT_USERS_ID`
-- `NUXT_TELEGRAM_ALERTS_CHAT_ERRORS_ID`
+- `TELEGRAM_ALERTS_BOT_TOKEN`
+- `TELEGRAM_ALERTS_CHAT_ID`
+- `TELEGRAM_ALERTS_MESSAGE_THREAD_ID`
 - `TELEGRAM_REPORTS_TIMEZONE`
 - `TELEGRAM_DAILY_REPORT_HOUR`
+- `TELEGRAM_REGISTRATION_MILESTONES`
+- `TELEGRAM_ALERTS_ENV_LABEL`
+- `TELEGRAM_API_TIMEOUT_MS`
+- `TELEGRAM_HTTP_5XX_SPIKE_THRESHOLD`
+- `TELEGRAM_HTTP_5XX_SPIKE_WINDOW_MINUTES`
+- `TELEGRAM_PUSH_DEGRADATION_ERROR_RATE_PERCENT`
+- `TELEGRAM_PUSH_DEGRADATION_MIN_ATTEMPTS`
+- `TELEGRAM_PUSH_DEGRADATION_WINDOW_MINUTES`
 
-Если нужны threads:
+Правила текущего rollout:
 
-- `NUXT_TELEGRAM_ALERTS_THREAD_DEVOPS_ID`
-- `NUXT_TELEGRAM_ALERTS_THREAD_BILLING_ID`
-- `NUXT_TELEGRAM_ALERTS_THREAD_USERS_ID`
-- `NUXT_TELEGRAM_ALERTS_THREAD_ERRORS_ID`
-
-Важно: до реализации нужно отдельно решить, alerting использует текущий `NUXT_TELEGRAM_BOT_TOKEN` или отдельный токен для внутреннего бота.
+- используется один и тот же bot token и один и тот же чат для всех окружений;
+- окружение определяется server-side и обязательно попадает в сообщение как `(dev)` / `(prod)` / `(local)`;
+- разнос по разным чатам для prod/dev откладывается на следующую итерацию;
+- alerts-bot всё равно остаётся отдельным от Telegram auth / landing-бота;
+- для internal alerting не используем `NUXT_PUBLIC_*`;
+- env для alerts должны быть только server-side.
 
 ## 14. Предлагаемая структура кода
 
@@ -436,7 +620,10 @@ server/
 - есть retry;
 - есть delivery log;
 - есть дедупликация;
-- есть idempotency на уровне бизнес-ключей.
+- есть idempotency на уровне бизнес-ключей;
+- DAU считается по отдельному activity-source, а не по login-прокси;
+- при недоступности Redis app-level Telegram alerts могут временно не ставиться в очередь;
+- fallback на прямую синхронную отправку без Redis в первую итерацию не входит.
 
 ### 15.3. Масштабируемость
 
@@ -447,11 +634,11 @@ server/
 ## 16. Что не входит в первую итерацию
 
 - отдельный security chat;
-- refund-уведомления;
-- DAU и сложная продуктовая аналитика без отдельной событийной схемы;
+- сложная продуктовая аналитика сверх строгого DAU;
 - тонкая настройка правил из админки;
 - пользовательские Telegram-интеграции;
-- отдельный UI для управления Telegram alerts.
+- отдельный UI для управления Telegram alerts;
+- fallback-механизм прямой отправки при недоступности Redis.
 
 ## 17. Этапы реализации
 
@@ -466,15 +653,20 @@ server/
 
 ### Этап 2. Users и Billing
 
-- `user.created`;
+- `user.registered`;
 - `user.deletion_requested`;
 - milestones;
 - `billing.purchase_success`;
 - `billing.purchase_failed`;
 - `billing.subscription_canceled`;
-- `billing.subscription_change_failed`;
 - `billing.checkout_error`;
-- `billing.webhook_error`.
+- `billing.webhook_error`;
+- `billing.critical_error`.
+
+### Этап 2b. Refunds
+
+- `billing.refund_created`, если refund-source готов к моменту первой поставки;
+- если refund-source не готов, подэтап переносится в follow-up без блокировки первой поставки.
 
 ### Этап 3. Errors и DevOps
 
@@ -486,17 +678,22 @@ server/
 ### Этап 4. Daily summary
 
 - scheduler;
+- activity-source для строгого DAU;
 - агрегаты за предыдущий день;
-- отправка summary в users-чат.
+- отправка summary в логический users-канал.
 
 ## 18. Критерии готовности
 
 Фича считается готовой, когда:
 
-- уведомления уходят в правильные чаты;
+- уведомления уходят в общий alerts chat с корректной env-меткой и корректным логическим каналом;
 - пользовательские запросы не ждут Telegram;
-- purchase success / failed не дублируются при webhook + polling;
-- удаление аккаунта в users-чате трактуется однозначно;
+- `user.registered` трактуется одинаково во всех auth-flow;
+- billing alerts не дублируются при повторной обработке одного и того же provider-события;
+- `purchase_success` без `paymentId` не попадает в логический Billing-канал;
+- в логический users-канал уходит именно `user.deletion_requested`, а не hard-delete;
+- daily summary использует строгий DAU, а не login-прокси;
+- daily summary отправляется ровно один раз за дату и timezone;
 - summary приходит в одно и то же время в одной timezone;
 - ошибки доставки логируются;
 - шум по DevOps/Error событиям подавляется.
