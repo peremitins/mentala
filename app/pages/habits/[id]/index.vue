@@ -72,22 +72,34 @@
           </p>
         </div>
 
-        <Button
-          class="relative mt-3 w-full justify-center !py-3 text-base font-semibold"
-          variant="outline"
-          size="lg"
-          :loading="loaders.isPageLoading"
-          @click="startConversation"
-        >
-          <IconMessageCircle class="mr-2 h-5 w-5" />
-          Поговорить об этом
-          <span
-            v-if="!chatAssistantAccess.available"
-            class="absolute right-3 inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/20 bg-black/35 text-[10px] leading-none"
+        <div class="mt-3 flex flex-col gap-2">
+          <Button
+            class="relative flex-1 flex-none justify-center !py-3 text-base font-semibold"
+            variant="outline"
+            size="lg"
+            :loading="loaders.isPageLoading"
+            @click="startConversation"
           >
-            {{ getPlanBadgeEmoji(chatAssistantAccess.requiredPlan) }}
-          </span>
-        </Button>
+            <IconMessageCircle class="mr-2 h-5 w-5" />
+            Поговорить об этом
+            <span
+              v-if="!chatAssistantAccess.available"
+              class="absolute right-3 inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/20 bg-black/35 text-[10px] leading-none"
+            >
+              {{ getPlanBadgeEmoji(chatAssistantAccess.requiredPlan) }}
+            </span>
+          </Button>
+          <Button
+            v-if="isGratitudeHabit"
+            class="flex-1 flex-none justify-center !py-3 text-base font-semibold"
+            variant="outline"
+            size="lg"
+            @click="goToGratitudeDiary"
+          >
+            <IconSquarePen class="mr-2 h-5 w-5" />
+            Дневник
+          </Button>
+        </div>
 
         <Button
           v-if="meditationTopicKey"
@@ -158,6 +170,7 @@ import InputComponent from '@/app/components/ui/shadcn/input/Input.vue';
 import IconMessageCircle from '~icons/lucide/message-circle';
 import IconLeaf from '~icons/lucide/leaf';
 import IconWind from '~icons/lucide/wind';
+import IconSquarePen from '~icons/lucide/square-pen';
 import { useNotificationsSettings } from '@/app/composables/useNotificationsSettings';
 import { useChatStore } from '@/app/stores/chat';
 import { useToast } from '@/app/composables/useToast';
@@ -224,6 +237,9 @@ const breathGroupKey = computed<BreathPracticeTag | null>(() => {
   if (!habitKey) return null;
   return mapHabitToBreathGroup(habitKey);
 });
+const isGratitudeHabit = computed(
+  () => catalogHabit.value?.habitKey === 'gratitude'
+);
 const meditationsAccess = computed(() =>
   getFeatureAccess('meditations.library.full')
 );
@@ -312,6 +328,10 @@ async function goToMeditations() {
     path: '/meditations',
     query: { topic: meditationTopicKey.value },
   });
+}
+
+function goToGratitudeDiary() {
+  void navigateTo('/practices/gratitude-diary');
 }
 
 async function goToBreathPractices() {

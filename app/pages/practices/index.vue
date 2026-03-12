@@ -123,6 +123,35 @@
           </div>
         </div>
       </NuxtLink>
+
+      <NuxtLink
+        to="/practices/gratitude-diary"
+        class="glass-deep p-5 group relative overflow-hidden transition hover:-translate-y-1 animate-slide-up"
+        style="animation-delay: 0.15s; animation-fill-mode: both"
+      >
+        <div
+          class="pointer-events-none absolute inset-0 transition group-hover:opacity-100"
+        >
+          <div
+            class="tile-orb absolute -right-14 -top-10 h-40 w-40 rounded-full bg-gradient-to-br from-fuchsia-400/35 via-pink-400/20 to-transparent blur-2xl"
+          />
+          <div
+            class="tile-orb tile-orb--delay absolute -left-10 bottom-0 h-32 w-32 rounded-full bg-gradient-to-br from-violet-500/30 via-rose-500/20 to-transparent blur-2xl"
+          />
+        </div>
+
+        <div class="relative z-10 space-y-3">
+          <span class="text-3xl">📔</span>
+          <div class="space-y-1">
+            <h2 class="text-lg font-semibold text-foreground">
+              Дневник благодарности
+            </h2>
+            <p class="text-sm text-foreground/80">
+              Короткие записи, промпты и streak для ежедневной опоры
+            </p>
+          </div>
+        </div>
+      </NuxtLink>
     </div>
 
     <FeaturePaywallModal

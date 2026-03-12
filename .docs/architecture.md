@@ -722,3 +722,69 @@ server/
 • Зафиксировано отдельное ТЗ на полную локализацию лендинга с переносом всего контента в `vue-i18n` при жёстком ограничении: русский текст переносится 1:1 без редакции.
 • Документ: `.docs/landing_i18n_localization_tz.md`.
 • Scope плана: полное покрытие `apps/landing/pages/index.vue`, унификация механизма выбора локали (`/` и `/support`), локализация SEO/OG/JSON-LD и контроль отсутствия регрессий RU-контента.
+
+⸻
+
+📔 Дневник благодарности (обновлено, 12 марта 2026)
+• Канонический экран дневника: `app/pages/practices/gratitude-diary.vue`, маршрут `/practices/gratitude-diary`.
+• UX-структура разделена на две страницы:
+  - `app/pages/practices/gratitude-diary.vue` — overview (streak + история + фиксированная кнопка добавления),
+  - `app/pages/practices/gratitude-diary/editor.vue` — создание/редактирование записи (вопрос, worksheet, composer, save).
+• Точка входа №1: карточка на `Практики` (`app/pages/practices/index.vue`).
+• Точка входа №2: системная привычка `gratitude` в `Привычках` ведёт на тот же канонический экран (без отдельной реализации дневника в `habits`).
+• Настройки уведомлений остаются в контуре привычек и открываются из дневника через `/habits/gratitude/notifications`.
+• Backend API дневника:
+  - `GET /api/gratitude-diary` — состояние экрана (streak, текущий промпт, история, поиск),
+  - `POST /api/gratitude-diary/entries` — создание записи,
+  - `GET /api/gratitude-diary/entries/:id` — получить запись для режима редактирования,
+  - `PATCH /api/gratitude-diary/entries/:id` — обновить существующую запись,
+  - `GET /api/gratitude-diary/prompts` — каталог промптов, worksheet и избранные промпты пользователя (для Premium — персональный шаблон пользователя, для остальных — дефолт),
+  - `PUT /api/gratitude-diary/worksheet` — обновление персонального worksheet-шаблона (только Premium),
+  - `POST /api/gratitude-diary/upload-photo` — upload-контур фото, вызывается только в момент `save` после локального выбора файла,
+  - `POST /api/gratitude-diary/delete-photo` — compensating cleanup для только что загруженного объекта, если после upload сохранение записи не завершилось успешно,
+  - `POST /api/gratitude-diary/favorites` — добавить промпт в избранное (catalog или custom, возвращает полный список),
+  - `PATCH /api/gratitude-diary/favorites/:id` — редактировать кастомный промпт (WHERE id AND user_id AND prompt_type='custom'),
+  - `DELETE /api/gratitude-diary/favorites/:id` — удалить из избранного (возвращает `{ removedId }`),
+  - `POST /api/gratitude-diary/favorites/migrate` — батч-миграция из localStorage (идемпотентно, ON CONFLICT DO NOTHING).
+• Данные worksheet-шаблона пользователя хранятся в `gratitude_diary_worksheet_templates` (JSON-массив пунктов с `id/emoji/text`).
+• Данные дневника хранятся в таблице `gratitude_diary_entries` (см. `server/infrastructure/db/schema.ts`): `text`, `mood`, `tags`, `photo_url`, `input_method`, timestamps.
+• Избранные промпты пользователя хранятся в таблице `gratitude_diary_favorite_prompts` (миграция 0062):
+  - полиморфная таблица: `prompt_type IN ('catalog', 'custom')`,
+  - `catalog` → хранит ссылку `catalog_prompt_id` на статический каталог,
+  - `custom` → хранит `custom_text` (VARCHAR 220),
+  - CHECK constraint гарантирует консистентность: catalog без catalogPromptId или custom без customText невозможны,
+  - partial unique index на `(user_id, catalog_prompt_id)` и `(user_id, custom_text)` для идемпотентности,
+  - "мёртвые" ссылки (catalog_prompt_id не из актуального каталога) фильтруются на уровне API GET /prompts,
+  - лимит: не более 50 кастомных промптов на пользователя (проверяется в POST /favorites).
+• Логика избранных промптов вынесена в composable `app/composables/useGratitudeDiaryFavorites.ts`:
+  - `catalogFavoriteMap` computed (O(1) lookup вместо O(n) find),
+  - оптимистичные обновления с rollback-паттерном (snapshot → update → rollback + toast при ошибке),
+  - методы: `toggleCatalogFavorite`, `addCatalogFavorite`, `removeFavorite`, `createCustomFavorite`, `updateCustomFavorite`.
+• Однократная миграция из localStorage в БД: при первом открытии editor.vue после деплоя — данные из ключа `gratitude-diary.favorite-prompts.v1` отправляются в `/favorites/migrate`, флаг `gratitude-diary.favorites-migrated.v1` ставится в localStorage. Двойная миграция не создаёт дубликатов.
+• В GratitudePromptItem (display-модель) id кастомных промптов = String(dbId), id каталожных = оригинальный catalog ID (e.g., 'self-1').
+• `Color` и `Help me write` не используются в первой волне дневника; composer ограничен mood/photo/voice/list/tag.
+• Тексты UI дневника подключены через `vue-i18n` (ключи `GRATITUDE_DIARY.*` в `app/i18n/locales/ru.ts` и `app/i18n/locales/en.ts`) — RU как основной язык, EN как готовая структура для расширения локализации.
+• Дата записи в `editor.vue` выбирается через компактный `shadcn-vue`-calendar в `PageHeader`:
+  - календарь локализуется по `user.locale` из `/api/user/me` (fallback на текущий `vue-i18n locale`),
+  - на клиенте доступны только сегодняшняя и прошедшие даты (`max-value = today()`),
+  - popover календаря стилизован под проектный glass-паттерн (`glass-deep`), а не под дефолтный shadcn background,
+  - выбранная дата отправляется в `POST/PATCH /api/gratitude-diary/entries` как `entryDate` (`YYYY-MM-DD`).
+• Серверный контур даты записи timezone-aware:
+  - timezone берётся из `X-Timezone`, который уже отправляет общий API-плагин,
+  - `createdAt` записи перестраивается из выбранного `entryDate` + локального времени пользователя, поэтому редактирование даты не ломает часы/минуты карточки,
+  - группировка истории и расчёт streak в `GET /api/gratitude-diary` теперь тоже считаются по локальному дню пользователя, а не по сырому UTC-срезу.
+• В модалке каталога промптов (`editor.vue`) используется горизонтальная лента тем с переключением свайпом влево/вправо; активная тема отображается как одиночный список промптов.
+• Вкладка `Избранное` в каталоге промптов объединяет:
+  - сохранённые промпты из системных категорий (добавление/удаление по сердечку),
+  - пользовательские промпты (ручное создание, редактирование, удаление).
+• Фото в `editor.vue` работают по staged-flow:
+  - при выборе файла фронт делает только локальный preview и держит `File` в состоянии страницы,
+  - до нажатия `Сохранить` объект в Object Storage не создаётся,
+  - при редактировании существующей записи старые `photoUrl/photoStorageKey` сохраняются в состоянии до успешного `PATCH`,
+  - удаление фото в UI лишь помечает отложенное удаление; фактическое удаление объекта выполняется сервером после успешного сохранения записи,
+  - если upload нового фото прошёл, а `POST/PATCH` записи завершился ошибкой, фронт вызывает `delete-photo` для cleanup только что загруженного объекта.
+• Список записей в `app/pages/practices/gratitude-diary/index.vue` при возврате из редактора делает повторный `refreshDiary()` на `onActivated`, а загрузка карточечных фото имеет retry с cache-buster для сценария холодного CDN-404 сразу после сохранения новой картинки.
+• UX каталога вопросов в `editor.vue` построен в схеме `header + controls + scroll-list + sticky action`:
+  - список вопросов прокручивается внутри модалки,
+  - primary-кнопка для вкладки `Избранное` всегда закреплена внизу и открывает отдельный попап добавления/редактирования вопроса (`textarea + "Готово"`),
+  - внутри `Избранного` у элементов используются действия `редактировать` и `удалить` (без иконки сердца).

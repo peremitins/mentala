@@ -12,6 +12,7 @@
       @quick-chat="handleHabitQuickChat"
       @quick-meditation="handleHabitQuickMeditation"
       @quick-breath="handleHabitQuickBreath"
+      @quick-diary="handleHabitQuickDiary"
     />
 
     <CustomEntityModal
@@ -102,13 +103,17 @@ function buildHabitQuickActions(habitKey: string, isCustom: boolean) {
   }
 
   if (isHabitPracticeHidden(habitKey)) {
-    return { chat: true };
+    return {
+      chat: true,
+      diary: habitKey === 'gratitude',
+    };
   }
 
   return {
     chat: true,
     meditation: Boolean(mapHabitToMeditationTopic(habitKey)),
     breath: Boolean(mapHabitToBreathGroup(habitKey)),
+    diary: habitKey === 'gratitude',
   };
 }
 
@@ -427,6 +432,10 @@ async function handleHabitQuickBreath(item: NotificationIndexItem) {
     path: `/breath-practices/${firstPractice.slug}`,
     query: { group: groupKey },
   });
+}
+
+function handleHabitQuickDiary() {
+  void safeNavigate('/practices/gratitude-diary');
 }
 
 function openPaywall(featureKey: string) {

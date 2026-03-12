@@ -94,6 +94,28 @@ const policies = [
     paywallTargetPlan: 'premium',
   },
   {
+    featureKey: 'gratitude.worksheet.customize',
+    requiredPlan: 'premium',
+    trialUnlocked: true,
+    lockIcon: 'premium',
+    paywallTitle: 'Кастомный шаблон дневника в Premium',
+    paywallDescription:
+      'Редактирование личного шаблона записи в дневнике благодарности доступно на тарифе Premium.',
+    paywallCtaText: 'Открыть Premium',
+    paywallTargetPlan: 'premium',
+  },
+  {
+    featureKey: 'gratitude.photo.upload',
+    requiredPlan: 'premium',
+    trialUnlocked: true,
+    lockIcon: 'premium',
+    paywallTitle: 'Фото в записях дневника в Premium',
+    paywallDescription:
+      'Добавление фото к записям в дневнике благодарности доступно на тарифе Premium.',
+    paywallCtaText: 'Открыть Premium',
+    paywallTargetPlan: 'premium',
+  },
+  {
     featureKey: 'sos.chat_handoff',
     requiredPlan: 'pro',
     trialUnlocked: true,
