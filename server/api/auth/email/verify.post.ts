@@ -17,6 +17,7 @@ import { getClientIp } from '@/server/utils/ip';
 import { getTimezoneFromRequest } from '@/server/application/notifications/timezone.utils';
 import { scheduleNotificationSlotsAfterLogin } from '@/server/application/notifications/login-slots.service';
 import { toIsoString } from '@/server/utils/serialize';
+import { dispatchUserRegisteredEvent } from '@/server/application/events/app-events.dispatchers';
 
 export default defineEventHandler(async (event) => {
   const body = EmailVerifyDto.parse(await readBody(event as any));
@@ -89,9 +90,17 @@ export default defineEventHandler(async (event) => {
     console.error(`[Auth] Error details:`, error?.message, error?.stack);
   }
 
-  const sessionId = await createSession(event, user.id, user.locale ?? undefined);
+  const sessionId = await createSession(
+    event,
+    user.id,
+    user.locale ?? undefined
+  );
   // Проверяем слоты уведомлений в фоне после создания сессии
   scheduleNotificationSlotsAfterLogin(user.id);
+  dispatchUserRegisteredEvent({
+    userId: user.id,
+    method: 'email',
+  });
   const platform = String(getHeader(event, 'x-platform') || '').toLowerCase();
   const isNative = platform === 'ios' || platform === 'android';
 

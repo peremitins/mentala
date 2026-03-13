@@ -1200,6 +1200,46 @@ export const subscriptionEvents = pgTable('subscription_events', {
     .notNull(),
 });
 
+// Лог доставок внутренних Telegram alerts.
+export const telegramAlertDeliveries = pgTable(
+  'telegram_alert_deliveries',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    eventType: varchar('event_type', { length: 80 }).notNull(),
+    dedupKey: varchar('dedup_key', { length: 255 }).notNull(),
+    targetChannel: varchar('target_channel', { length: 20 }).notNull(),
+    environment: varchar('environment', { length: 20 }).notNull(),
+    status: varchar('status', { length: 20 }).notNull().default('queued'),
+    source: varchar('source', { length: 100 }),
+    payload: jsonb('payload'),
+    eventCreatedAt: timestamp('event_created_at', { withTimezone: true }),
+    attempt: integer('attempt').default(0).notNull(),
+    errorMessage: text('error_message'),
+    providerResponseCode: integer('provider_response_code'),
+    providerRetryAfterSeconds: integer('provider_retry_after_seconds'),
+    telegramMessageId: text('telegram_message_id'),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    dedupKeyUnique: unique('uk_telegram_alert_deliveries_dedup_key').on(
+      table.dedupKey
+    ),
+    createdAtIdx: index('idx_telegram_alert_deliveries_created_at').on(
+      table.createdAt
+    ),
+    channelStatusIdx: index('idx_telegram_alert_deliveries_channel_status').on(
+      table.targetChannel,
+      table.status
+    ),
+  })
+);
+
 // Платежи от YooKassa (для проверки уникальности и идемпотентности)
 export const payments = pgTable(
   'payments',

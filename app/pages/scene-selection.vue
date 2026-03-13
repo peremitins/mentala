@@ -133,7 +133,7 @@
       </section>
 
       <section class="space-y-3 mt-6">
-        <div class="px-1">
+        <div class="glass-deep p-4">
           <p class="text-xs uppercase tracking-[0.08em] text-foreground/60">
             Сцены
           </p>

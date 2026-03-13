@@ -16,6 +16,10 @@ import {
   type HardCancelUnresolvedPayment,
   type ProviderPaymentSnapshot,
 } from './hard-cancel-pending-resolver';
+import {
+  dispatchBillingPurchaseFailedEvent,
+  dispatchBillingSubscriptionCanceledEvent,
+} from '@/server/application/events/app-events.dispatchers';
 
 function normalizeProviderPaymentStatus(
   rawStatus: string
@@ -288,6 +292,24 @@ export async function hardCancelSubscription(params: {
 
   const requiresManualReview =
     pendingResolution.unresolvedPendingPayments.length > 0;
+
+  for (const canceledPending of canceledPendingRows) {
+    dispatchBillingPurchaseFailedEvent({
+      userId: params.userId,
+      subscriptionId: canceledPending.id,
+      paymentId: canceledPending.yookassaPaymentId,
+      planId: canceledPending.planId,
+      source: 'subscriptions.hard-cancel',
+      reason: 'canceled_by_hard_cancel',
+    });
+  }
+
+  dispatchBillingSubscriptionCanceledEvent({
+    userId: params.userId,
+    subscriptionId: activeSubscription?.id || null,
+    planId: activeSubscription?.planId || null,
+    endDate: activeSubscription?.endDate || null,
+  });
 
   return {
     success: !requiresManualReview,
