@@ -11,6 +11,7 @@
 
 import { and, asc, eq, gt, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
+import { dispatchBusinessFlowCriticalEvent } from '@/server/application/events/app-events.dispatchers';
 import { db } from '@/server/infrastructure/db/client';
 import {
   notificationPreferences,
@@ -551,6 +552,18 @@ async function schedulerTick(): Promise<void> {
     await enqueueSlotGenerationForAllActiveUsers();
   } catch (error) {
     console.error('[Notification Slots Scheduler] ❌ Tick failed:', error);
+    dispatchBusinessFlowCriticalEvent({
+      flow: 'notifications.slot_generation',
+      source: 'notification-slots.scheduler',
+      operation: 'scheduler_tick',
+      error,
+      context: {
+        mode: schedulerRuntime.mode,
+        effectiveBatchSize: schedulerRuntime.effectiveBatchSize,
+        effectiveIntervalMs: schedulerRuntime.effectiveIntervalMs,
+        onlyUsersBelowHorizon: schedulerRuntime.onlyUsersBelowHorizon,
+      },
+    });
   }
 
   if (!schedulerStarted) return;

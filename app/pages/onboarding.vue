@@ -59,8 +59,8 @@
                   Добро пожаловать в Ментала
                 </h1>
                 <p class="text-sm text-foreground">
-                  Давай быстро настроим приложение под тебя. Это займёт меньше
-                  минуты.
+                  Место, где можно спокойно разобраться в себе и получить
+                  поддержку в любой момент.
                 </p>
               </div>
               <Button size="lg" class="w-full" @click="goNext"> Начать </Button>
@@ -71,9 +71,6 @@
                 <h2 class="text-2xl font-semibold text-foreground">
                   Как к вам обращаться?
                 </h2>
-                <p class="text-sm text-foreground">
-                  Можно имя или никнейм. Как вам комфортно.
-                </p>
               </div>
               <Input
                 v-model="name"
@@ -105,9 +102,6 @@
                 <h2 class="text-2xl font-semibold text-foreground">
                   Укажите ваш пол
                 </h2>
-                <p class="text-sm text-foreground">
-                  Это нужно для корректных обращений в текстах.
-                </p>
               </div>
               <ToggleButtonGroup
                 v-model="gender"
@@ -132,9 +126,6 @@
                 <h2 class="text-2xl font-semibold text-foreground">
                   Сколько вам лет?
                 </h2>
-                <p class="text-sm text-foreground">
-                  Это поможет тоньше настроить рекомендации.
-                </p>
               </div>
               <ToggleButtonGroup
                 v-model="ageRange"
@@ -168,11 +159,8 @@
             <div v-else-if="currentStep === 'tone'" class="space-y-4">
               <div class="space-y-2">
                 <h2 class="text-2xl font-semibold text-foreground">
-                  Какой тон общения вам ближе?
+                  Какой стиль поддержки вам ближе?
                 </h2>
-                <p class="text-sm text-foreground">
-                  Этот тон применяется к ассистенту и уведомлениям.
-                </p>
               </div>
               <ToggleButtonGroup
                 v-model="tone"
@@ -209,7 +197,8 @@
                   Готово, {{ finalName }}
                 </h2>
                 <p class="text-sm text-foreground">
-                  Ментала настроена под вас. Можно начинать.
+                  Теперь можно перейти в приложение и начать с того, что важно
+                  именно вам.
                 </p>
               </div>
               <Button

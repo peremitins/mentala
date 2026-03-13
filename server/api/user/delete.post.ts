@@ -43,6 +43,7 @@ import {
   hashEmail,
   normalizeEmail,
 } from '@@/server/application/auth/verification';
+import { dispatchUserDeletionRequestedEvent } from '@/server/application/events/app-events.dispatchers';
 
 /**
  * 2-фазное удаление пользователя
@@ -75,6 +76,7 @@ export default defineEventHandler(async (event) => {
     .from(users)
     .where(eq(users.id, userId))
     .limit(1);
+  const userEmail = trialSnapshot[0]?.email ?? null;
 
   if (trialSnapshot.length && trialSnapshot[0].email) {
     const trialStartedAt = trialSnapshot[0].trialStartedAt;
@@ -192,6 +194,12 @@ export default defineEventHandler(async (event) => {
         console.error('[UserDeletion] Failed to delete user files:', error);
       }
 
+      dispatchUserDeletionRequestedEvent({
+        userId,
+        mode: 'immediate',
+        email: userEmail,
+      });
+
       setResponseStatus(event, 200);
       return {
         ok: true,
@@ -257,6 +265,12 @@ export default defineEventHandler(async (event) => {
     } catch (error) {
       console.error('[UserDeletion] Failed to delete user files:', error);
     }
+
+    dispatchUserDeletionRequestedEvent({
+      userId,
+      mode: 'grace_period',
+      email: userEmail,
+    });
 
     // 6. Вернуть ответ
     setResponseStatus(event, 202);
