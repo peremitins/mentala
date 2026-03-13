@@ -377,12 +377,32 @@ function resolveGenderLabel(value?: string | null): string | null {
   return null;
 }
 
+function buildToneContext(vars: {
+  toneKey?: string;
+  toneLabel?: string;
+  toneDescription?: string;
+}): string {
+  if (!vars.toneKey || !vars.toneLabel || !vars.toneDescription) {
+    return '';
+  }
+
+  return `Предпочитаемый стиль поддержки пользователя:
+ Ключ tone: ${vars.toneKey}
+ Название tone: ${vars.toneLabel}
+ Описание tone: ${vars.toneDescription}
+ Следуй этому стилю во всех формулировках, сохраняя правила безопасности и кризисные ограничения.`;
+}
+
 function buildUserContext(vars: {
   user_name?: string;
   user_gender?: string;
+  toneKey?: string;
+  toneLabel?: string;
+  toneDescription?: string;
 }): string {
   const name = vars.user_name?.trim();
   const genderLabel = resolveGenderLabel(vars.user_gender);
+  const toneContext = buildToneContext(vars);
 
   const nameLine = name
     ? `Имя пользователя: ${name}`
@@ -398,6 +418,7 @@ function buildUserContext(vars: {
  ${nameLine}
  ${genderLine}
  ${genderInstruction}
+ ${toneContext}
  Запрещены формы с альтернативами в скобках (например, "сделал / сделала").`;
 }
 
@@ -462,6 +483,9 @@ export function buildDeveloperContext(
   vars: {
     user_name?: string;
     user_gender?: string;
+    toneKey?: string;
+    toneLabel?: string;
+    toneDescription?: string;
   },
   ctx: {
     responseNumber?: number;
@@ -649,6 +673,9 @@ export function buildWelcomePrompt(options: {
   welcomePromptContent?: string;
   entryContext?: ChatEntryContext;
   disableOpeningTemplates?: boolean;
+  toneKey?: string;
+  toneLabel?: string;
+  toneDescription?: string;
 }): string {
   const lang = options.lang || 'ru';
   const isFirst = options.isFirstSession;
@@ -664,6 +691,11 @@ export function buildWelcomePrompt(options: {
     Boolean(options.disableOpeningTemplates) ||
     options.entryContext?.type === 'thought_dump' ||
     isPhobiasEntry;
+  const toneContext = buildToneContext({
+    toneKey: options.toneKey,
+    toneLabel: options.toneLabel,
+    toneDescription: options.toneDescription,
+  });
 
   const nameInstruction =
     options.includeNameValidationPrompt && options.greetingName
@@ -711,7 +743,7 @@ export function buildWelcomePrompt(options: {
       prompt +
       `\n\nВАЖНО: Не утверждай, что вы уже обсуждали конкретно эту тему; если контекст неочевиден - формулируй нейтрально. ${generatedStartInstruction}`;
 
-    const fullPrompt = `${prompt}${nameInstruction}${openingInstruction}${noTemplateStartInstruction}`;
+    const fullPrompt = `${toneContext ? `${toneContext}\n\n` : ''}${prompt}${nameInstruction}${openingInstruction}${noTemplateStartInstruction}`;
     return contextNote ? `${contextNote}\n\n${fullPrompt}` : fullPrompt;
   }
 
@@ -795,7 +827,7 @@ export function buildWelcomePrompt(options: {
     );
   }
 
-  const fullPrompt = `${prompt}${nameInstruction}${openingInstruction}${noTemplateStartInstruction}`;
+  const fullPrompt = `${toneContext ? `${toneContext}\n\n` : ''}${prompt}${nameInstruction}${openingInstruction}${noTemplateStartInstruction}`;
   return contextNote ? `${contextNote}\n\n${fullPrompt}` : fullPrompt;
 }
 

@@ -625,7 +625,7 @@ export const userPreferences = pgTable('user_preferences', {
   addressing: varchar('addressing', { length: 20 })
     .notNull()
     .default('informal'), // 'informal' | 'formal'
-  tone: varchar('tone', { length: 20 }).notNull().default('neutral'), // 'delicate' | 'neutral' | 'uplifting' | 'resolute' | 'demanding'
+  tone: varchar('tone', { length: 20 }).notNull().default('balanced'), // 'gentle' | 'balanced' | 'uplifting' | 'direct' | 'unknown'
   meditationTimerMinutes: integer('meditation_timer_minutes'),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()

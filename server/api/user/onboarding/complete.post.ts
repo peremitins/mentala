@@ -6,6 +6,7 @@ import { users, userPreferences } from '@/server/infrastructure/db/schema';
 import { getSessionUser } from '@/server/application/auth/session';
 import { OnboardingCompleteRequestDto } from '@/shared/dto/onboarding';
 import { enqueueAiRegenerationForUser } from '@/server/application/notifications/ai-text-regeneration.service';
+import { DEFAULT_ASSISTANT_TONE } from '@/shared/constants/assistantTone';
 
 export default defineEventHandler(async (event) => {
   const sessionResult = await getSessionUser(event);
@@ -95,7 +96,7 @@ export default defineEventHandler(async (event) => {
         id: nanoid(),
         userId,
         addressing: 'informal',
-        tone,
+        tone: tone === 'unknown' ? DEFAULT_ASSISTANT_TONE : tone,
       });
     }
   });

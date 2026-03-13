@@ -8,6 +8,10 @@ import type {
 } from '@/shared/dto/notifications';
 import { getSessionUser } from '@/server/application/auth/session';
 import { enqueueAiRegenerationForUser } from '@/server/application/notifications/ai-text-regeneration.service';
+import {
+  DEFAULT_ASSISTANT_TONE,
+  isAssistantToneWithUnknown,
+} from '@/shared/constants/assistantTone';
 
 /**
  * PUT /api/settings/preferences
@@ -34,17 +38,7 @@ export default defineEventHandler(
       });
     }
 
-    if (
-      body.tone &&
-      ![
-        'delicate',
-        'neutral',
-        'uplifting',
-        'resolute',
-        'demanding',
-        'unknown',
-      ].includes(body.tone)
-    ) {
+    if (body.tone && !isAssistantToneWithUnknown(body.tone)) {
       throw createError({
         statusCode: 400,
         message: 'Invalid tone value',
@@ -70,16 +64,23 @@ export default defineEventHandler(
       .limit(1);
 
     if (existing) {
+      const currentTone = isAssistantToneWithUnknown(existing.tone)
+        ? existing.tone
+        : DEFAULT_ASSISTANT_TONE;
       const nextMeditationTimer =
         body.meditationTimerMinutes !== undefined
           ? body.meditationTimerMinutes
-          : existing.meditationTimerMinutes ?? null;
+          : (existing.meditationTimerMinutes ?? null);
       // Обновляем существующие
       const nextAddressing = body.addressing ?? existing.addressing;
-      const nextTone = body.tone ?? existing.tone;
+      const nextTone = body.tone ?? currentTone;
       const addressingChanged =
-        body.addressing !== undefined && body.addressing !== existing.addressing;
-      const toneChanged = body.tone !== undefined && body.tone !== existing.tone;
+        body.addressing !== undefined &&
+        body.addressing !== existing.addressing;
+      const toneChanged =
+        body.tone !== undefined
+          ? body.tone !== existing.tone
+          : currentTone !== existing.tone;
 
       const [updated] = await db
         .update(userPreferences)
@@ -108,19 +109,15 @@ export default defineEventHandler(
 
       return {
         addressing: updated.addressing as 'informal' | 'formal',
-        tone: updated.tone as
-          | 'delicate'
-          | 'neutral'
-          | 'uplifting'
-          | 'resolute'
-          | 'demanding'
-          | 'unknown',
+        tone: isAssistantToneWithUnknown(updated.tone)
+          ? updated.tone
+          : DEFAULT_ASSISTANT_TONE,
         meditationTimerMinutes: updated.meditationTimerMinutes ?? null,
       };
     } else {
       // Создаём новые
       const createdAddressing = body.addressing ?? 'informal';
-      const createdTone = body.tone ?? 'neutral';
+      const createdTone = body.tone ?? DEFAULT_ASSISTANT_TONE;
       const shouldRegenerateAiOnCreate =
         body.addressing !== undefined || body.tone !== undefined;
 
@@ -151,13 +148,9 @@ export default defineEventHandler(
 
       return {
         addressing: created.addressing as 'informal' | 'formal',
-        tone: created.tone as
-          | 'delicate'
-          | 'neutral'
-          | 'uplifting'
-          | 'resolute'
-          | 'demanding'
-          | 'unknown',
+        tone: isAssistantToneWithUnknown(created.tone)
+          ? created.tone
+          : DEFAULT_ASSISTANT_TONE,
         meditationTimerMinutes: created.meditationTimerMinutes ?? null,
       };
     }

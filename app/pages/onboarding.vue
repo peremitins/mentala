@@ -9,7 +9,10 @@
       leave-from-class="opacity-100 translate-y-0"
       leave-to-class="opacity-0 -translate-y-2"
     >
-      <div class="mx-auto flex w-full max-w-2xl flex-col gap-4">
+      <div
+        v-if="currentStep"
+        class="mx-auto flex w-full max-w-2xl flex-col gap-4"
+      >
         <div
           class="glass-deep rounded-2xl px-4 py-3 text-sm text-foreground transition-all duration-300 ease-out"
           :class="
@@ -55,7 +58,7 @@
 
             <div v-if="currentStep === 'welcome'" class="space-y-4">
               <div class="space-y-2">
-                <h1 class="text-2xl font-semibold text-foreground sm:text-3xl">
+                <h1 class="text-xl font-semibold text-foreground sm:text-3xl">
                   Добро пожаловать в Ментала
                 </h1>
                 <p class="text-sm text-foreground">
@@ -68,7 +71,7 @@
 
             <div v-else-if="currentStep === 'name'" class="space-y-4">
               <div class="space-y-2">
-                <h2 class="text-2xl font-semibold text-foreground">
+                <h2 class="text-xl font-semibold text-foreground">
                   Как к вам обращаться?
                 </h2>
               </div>
@@ -99,7 +102,7 @@
 
             <div v-else-if="currentStep === 'gender'" class="space-y-4">
               <div class="space-y-2">
-                <h2 class="text-2xl font-semibold text-foreground">
+                <h2 class="text-xl font-semibold text-foreground">
                   Укажите ваш пол
                 </h2>
               </div>
@@ -109,7 +112,7 @@
                 layout="flex"
                 size="lg"
                 variant="outline"
-                item-max-width="200px"
+                item-max-width="auto"
               />
               <Button
                 size="lg"
@@ -123,77 +126,52 @@
 
             <div v-else-if="currentStep === 'age'" class="space-y-4">
               <div class="space-y-2">
-                <h2 class="text-2xl font-semibold text-foreground">
+                <h2 class="text-xl font-semibold text-foreground">
                   Сколько вам лет?
                 </h2>
               </div>
               <ToggleButtonGroup
                 v-model="ageRange"
                 :options="ageOptions"
-                layout="grid"
-                :grid-cols="3"
-                size="md"
+                layout="flex"
+                size="lg"
                 variant="outline"
-                full-width
+                item-max-width="auto"
               />
-              <div class="flex flex-col gap-2 sm:flex-row">
+              <div class="flex flex-col w-full gap-2 sm:flex-row">
                 <Button
                   size="lg"
-                  class="w-full sm:w-[50%]"
+                  class="w-full"
                   :disabled="ageRange === 'unknown'"
                   @click="goNext"
                 >
                   Далее
-                </Button>
-                <Button
-                  size="lg"
-                  variant="ghost"
-                  class="w-full sm:w-[50%]"
-                  @click="skipAge"
-                >
-                  Пропустить
                 </Button>
               </div>
             </div>
 
             <div v-else-if="currentStep === 'tone'" class="space-y-4">
               <div class="space-y-2">
-                <h2 class="text-2xl font-semibold text-foreground">
+                <h2 class="text-xl font-semibold text-foreground">
                   Какой стиль поддержки вам ближе?
                 </h2>
               </div>
-              <ToggleButtonGroup
-                v-model="tone"
-                :options="toneOptions"
-                layout="grid"
-                :grid-cols="2"
-                size="md"
-                variant="outline"
-                full-width
-              />
-              <div class="flex flex-col gap-2 sm:flex-row">
+              <AssistantToneGrid v-model="tone" label="" />
+              <div class="flex flex-col w-full gap-2 sm:flex-row">
                 <Button
                   size="lg"
-                  class="w-full sm:w-[50%]"
+                  class="w-full"
                   :disabled="tone === 'unknown'"
                   @click="goNext"
                 >
                   Далее
-                </Button>
-                <Button
-                  size="lg"
-                  variant="ghost"
-                  class="w-full sm:w-[50%]"
-                  @click="skipTone"
-                >
-                  Пропустить
                 </Button>
               </div>
             </div>
 
             <div v-else class="space-y-4">
               <div class="space-y-2">
-                <h2 class="text-2xl font-semibold text-foreground">
+                <h2 class="text-xl font-semibold text-foreground">
                   Готово, {{ finalName }}
                 </h2>
                 <p class="text-sm text-foreground">
@@ -227,6 +205,7 @@ import { Button } from '@/app/components/ui/button';
 import ButtonLoader from '@/app/components/ui/ButtonLoader.vue';
 import { Input } from '@/app/components/ui/shadcn/input';
 import ToggleButtonGroup from '@/app/components/ui/ToggleButtonGroup.vue';
+import AssistantToneGrid from '@/app/components/settings/AssistantToneGrid.vue';
 import { useAuthStore } from '@/app/stores/auth';
 import { useToast } from '@/app/composables/useToast';
 import type { AgeRange, Gender, OnboardingTone } from '@/shared/dto/onboarding';
@@ -270,14 +249,6 @@ const ageOptions = [
   { value: 'under_30' as AgeRange, label: 'До 30' },
   { value: '30_45' as AgeRange, label: '30–45' },
   { value: '45_plus' as AgeRange, label: '45+' },
-];
-
-const toneOptions = [
-  { value: 'delicate' as OnboardingTone, label: 'Деликатный' },
-  { value: 'neutral' as OnboardingTone, label: 'Нейтральный' },
-  { value: 'uplifting' as OnboardingTone, label: 'Воодушевляющий' },
-  { value: 'resolute' as OnboardingTone, label: 'Решительный' },
-  { value: 'demanding' as OnboardingTone, label: 'Требовательный' },
 ];
 
 const nameError = computed(() => {

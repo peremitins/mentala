@@ -249,6 +249,7 @@ server/
 • Имя из онбординга всегда перезаписывает OAuth имя в `users.name`.
 • В `users`: `gender`, `age_range`, `onboarding` (jsonb с флагами, сейчас `welcome`).
 • `GET /api/user/me` возвращает `onboarding.welcome`; `POST /api/user/onboarding/complete` сохраняет профиль и `userPreferences.tone`.
+• Глобальный `tone` унифицирован в shared-справочнике: `gentle`, `balanced`, `uplifting`, `direct` (+ `unknown` только как skip-сентинел). Для каждого тона хранятся `label` и `description`.
 
 ⸻
 
@@ -276,6 +277,7 @@ server/
 • Префикс AI‑текстов: для шаблонных тем используется `✨`, для кастомных — `✏️` (префикс учитывается в лимите длины).
 • AI‑промпты запрещают ложные утверждения о достижениях пользователя: формулировки только нейтральные/поддерживающие без фиксации «успеха».
 • При изменении глобальных настроек (`tone`, `addressing`) через `/api/settings/preferences` ставится регенерация AI‑пулов для всех `ai` preferences пользователя (через ту же очередь).
+• `tone` теперь влияет и на чат: в LLM-пайплайн передаются `toneKey`, `toneLabel`, `toneDescription`, а welcome- и обычные chat-prompts используют этот контекст как явный стиль ответа.
 • Шаблонные тексты из `notificationTemplates` по умолчанию без изображений (`imageTag = null`), но могут иметь явный `imageTag`.
 • Контент каталога `notificationTemplates` поддерживается через регулярную чистку: спорные/неестественные шаблоны удаляются целыми блоками, а в оставшихся текстах нормализуется типографика (например `5 Минут` → `5 минут`). После правок выполняется синхронизация в БД через `scripts/migrate-templates-to-db.ts`.
 • Обновление от 25 февраля 2026 (cleanup удалённых therapy-тем): из шаблонного каталога окончательно убраны `mood`, `grief`, `loneliness`; удалены соответствующие notification image assets и записи в image hash maps. Для физической зачистки legacy-данных в БД добавлена data-миграция `0053_remove_deprecated_therapy_topics.sql` (чистит `notification_preferences`, `notification_slots`, `notification_image_rotation`, `notification_texts`, `notification_text_presets`, `ai_generated_notification_texts` и связанный `ai_notification_text_usage` для `kind='therapy'`).

@@ -12,7 +12,10 @@ import {
 } from '@/shared/dto';
 import { getSessionUserWithRole } from '@/server/utils/require-role';
 import { db } from '@/server/infrastructure/db/client';
-import { therapySessions } from '@/server/infrastructure/db/schema';
+import {
+  therapySessions,
+  userPreferences,
+} from '@/server/infrastructure/db/schema';
 import { eq, and, isNull } from 'drizzle-orm';
 import {
   getAiUsageGate,
@@ -39,6 +42,7 @@ import {
 } from '@/server/application/chat/phobias-entry.service';
 import { trackPhobiasEvent } from '@/server/application/chat/phobias-analytics.service';
 import { readChatSettings, writeChatSettings } from '@/server/utils/storage';
+import { getAssistantToneMeta } from '@/shared/constants/assistantTone';
 
 export default defineEventHandler(async (event) => {
   try {
@@ -59,6 +63,12 @@ export default defineEventHandler(async (event) => {
       typeof (sessionResult as any)?.timezone === 'string'
         ? String((sessionResult as any).timezone)
         : undefined;
+    const [prefs] = await db
+      .select({ tone: userPreferences.tone })
+      .from(userPreferences)
+      .where(eq(userPreferences.userId, uid))
+      .limit(1);
+    const toneMeta = getAssistantToneMeta(prefs?.tone);
 
     // Требуем валидный therapySessionId, чтобы нельзя было обойти биллинг прямыми вызовами /api/chat
     const therapySessionId =
@@ -217,6 +227,9 @@ export default defineEventHandler(async (event) => {
       user_name: userName,
       user_gender: userGender,
       user_timezone: userTimezone,
+      toneKey: toneMeta.value,
+      toneLabel: toneMeta.label,
+      toneDescription: toneMeta.description,
       userId: uid, // серверный стабильный uid
       isFirstSession: undefined, // рассчитывается в других местах при стриминге
       userPrompt: effectiveUserPrompt,

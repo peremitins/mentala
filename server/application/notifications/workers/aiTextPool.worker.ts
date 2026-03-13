@@ -22,25 +22,12 @@ import {
 import { eq, and } from 'drizzle-orm';
 import { computeGenerationConfigHash } from '@@/server/utils/notification-ai-config-hash';
 import type {
-  Tone,
   Addressing,
   Directness,
   HabitSubtype,
 } from '@/shared/dto/notifications';
 import { ensureAiNotificationAccessConsistency } from '@/server/application/notifications/notification-source-access.service';
-
-function resolveTone(value?: string | null): Tone {
-  if (
-    value === 'delicate' ||
-    value === 'neutral' ||
-    value === 'uplifting' ||
-    value === 'resolute' ||
-    value === 'demanding'
-  ) {
-    return value;
-  }
-  return 'neutral';
-}
+import { resolveAssistantTone } from '@/shared/constants/assistantTone';
 
 /**
  * Запускает воркер для обработки задач догенерации AI-текстов
@@ -108,7 +95,9 @@ export function startAiTextPoolWorker() {
           .where(eq(userPreferences.userId, userId))
           .limit(1);
 
-        const tone = resolveTone(userPrefs?.tone as string | null | undefined);
+        const tone = resolveAssistantTone(
+          userPrefs?.tone as string | null | undefined
+        );
         const addressing: Addressing =
           (userPrefs?.addressing as Addressing) || 'informal';
         const directness = (pref.directness as Directness) || 'moderate';

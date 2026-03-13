@@ -1,15 +1,9 @@
 import { z } from 'zod';
+import { AssistantToneWithUnknownEnum } from '../constants/assistantTone';
 
 export const GenderEnum = z.enum(['male', 'female']);
 export const AgeRangeEnum = z.enum(['under_30', '30_45', '45_plus', 'unknown']);
-export const OnboardingToneEnum = z.enum([
-  'delicate',
-  'neutral',
-  'uplifting',
-  'resolute',
-  'demanding',
-  'unknown',
-]);
+export const OnboardingToneEnum = AssistantToneWithUnknownEnum;
 export const OnboardingFlowEnum = z.enum(['welcome_setup']);
 
 export const WelcomeSetupDataDto = z.object({

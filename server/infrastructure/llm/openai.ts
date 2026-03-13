@@ -780,6 +780,9 @@ export const openaiProvider: LlmProviderPort = {
           {
             user_name: options?.user_name,
             user_gender: options?.user_gender,
+            toneKey: options?.toneKey,
+            toneLabel: options?.toneLabel,
+            toneDescription: options?.toneDescription,
           },
           { responseNumber }
         );
@@ -1271,6 +1274,9 @@ export const openaiProvider: LlmProviderPort = {
         user_locale: options?.user_locale,
         user_name: options?.user_name,
         user_gender: options?.user_gender,
+        toneKey: options?.toneKey,
+        toneLabel: options?.toneLabel,
+        toneDescription: options?.toneDescription,
         greetingName,
         includeNameValidationPrompt: Boolean(greetingName),
         openingMode,
@@ -1483,6 +1489,9 @@ export const openaiProvider: LlmProviderPort = {
       {
         user_name: options?.user_name,
         user_gender: options?.user_gender,
+        toneKey: options?.toneKey,
+        toneLabel: options?.toneLabel,
+        toneDescription: options?.toneDescription,
       },
       { responseNumber }
     );

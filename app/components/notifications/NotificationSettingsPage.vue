@@ -543,7 +543,6 @@ import type {
   Directness,
   NotificationSubtype,
   NotificationPreferencesDto,
-  Tone,
   UpdateNotificationPreferencesDto,
   UserPreferencesDto,
 } from '@/shared/dto/notifications';
@@ -723,7 +722,6 @@ const timeRange = ref({ start: 540, end: 1350 });
 const customSlotTimes = ref<(number | null)[]>([]);
 const loading = ref(false);
 const addressing = ref<Addressing>('informal');
-const tone = ref<Tone>('neutral');
 const textSource = ref<'templates' | 'ai'>('templates');
 const customPromptNotification = ref('');
 const customPromptNotificationLength = computed(
@@ -1182,8 +1180,6 @@ onMounted(async () => {
     }
     if (globalPrefs) {
       addressing.value = globalPrefs.addressing;
-      tone.value =
-        globalPrefs.tone === 'unknown' ? 'neutral' : globalPrefs.tone;
     }
 
     const prefsUrl = isHabits.value
