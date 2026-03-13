@@ -7,6 +7,10 @@ import {
   users,
 } from '@/server/infrastructure/db/schema';
 import { resolveNextAutoRetryAt } from './trial-billing.service';
+import {
+  dispatchBillingPurchaseFailedEvent,
+  dispatchBillingPurchaseSuccessEvent,
+} from '@/server/application/events/app-events.dispatchers';
 import type {
   TrialBillingPeriod,
   TrialBillingPlanId,
@@ -150,6 +154,18 @@ export async function markTrialChargeSuccess(params: {
       },
     });
   });
+
+  dispatchBillingPurchaseSuccessEvent({
+    userId: params.userId,
+    subscriptionId: null,
+    paymentId: params.paymentId,
+    planId: params.billingPlanId,
+    billingPeriod: params.billingPeriod,
+    amount: params.amount,
+    currency: params.currency,
+    source: 'subscriptions.trial-charge-reconcile',
+    reason: 'trial_charge_success',
+  });
 }
 
 /**
@@ -248,6 +264,18 @@ export async function markTrialChargeFailure(params: {
       },
     });
   });
+
+  if (params.paymentId) {
+    dispatchBillingPurchaseFailedEvent({
+      userId: params.userId,
+      subscriptionId: null,
+      paymentId: params.paymentId,
+      planId: params.billingPlanId,
+      billingPeriod: params.billingPeriod,
+      source: 'subscriptions.trial-charge-reconcile',
+      reason: params.failureReason,
+    });
+  }
 }
 
 /**

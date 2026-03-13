@@ -3,6 +3,7 @@
  * Запускается автоматически при старте Nitro сервера
  * @version BullMQ 5.x (без QueueScheduler)
  */
+import { dispatchAppCriticalEvent } from '@/server/application/events/app-events.dispatchers';
 
 export default defineNitroPlugin(async () => {
   // В static generate воркеры не должны стартовать:
@@ -58,6 +59,9 @@ export default defineNitroPlugin(async () => {
     const { startNotificationDeliveryWorker } = await import(
       '@/server/application/notifications/workers/notificationDelivery.worker'
     );
+    const { startTelegramAlertsWorker } = await import(
+      '@/server/application/telegram/workers/telegramAlerts.worker'
+    );
 
     // 1. AI Text Pool Worker
     startAiTextPoolWorker();
@@ -71,9 +75,16 @@ export default defineNitroPlugin(async () => {
     // 4. Notification Delivery Worker
     startNotificationDeliveryWorker();
 
+    // 5. Telegram Alerts Worker
+    startTelegramAlertsWorker();
+
     console.log('[BullMQ] ✅ All workers started successfully');
   } catch (error) {
     console.error('[BullMQ] ❌ Failed to start workers:', error);
+    dispatchAppCriticalEvent({
+      source: 'bullmq-workers.startup',
+      error,
+    });
     // Не прерываем запуск сервера, но логируем ошибку
   }
 });

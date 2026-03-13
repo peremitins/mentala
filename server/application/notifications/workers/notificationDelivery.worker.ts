@@ -13,6 +13,7 @@ import {
   type NotificationDeliveryJobData,
 } from '../queues/notificationDelivery.queue';
 import { sendToUser } from '@/server/application/notifications/delivery.service';
+import { dispatchPushDeliveryUnavailableEvent } from '@/server/application/events/app-events.dispatchers';
 import { resolveEntityKeyForSlots } from '@/server/application/notifications/entity-key.service';
 import { getCustomNotificationSourceAccessByKind } from '@/server/application/notifications/notification-source-access.service';
 import { db } from '@/server/infrastructure/db/client';
@@ -195,6 +196,14 @@ export function startNotificationDeliveryWorker() {
 
   // Регистрируем воркер для graceful shutdown
   registerWorker(worker);
+
+  worker.on('stalled', (jobId) => {
+    dispatchPushDeliveryUnavailableEvent({
+      source: 'notification-delivery.worker',
+      reason: 'queue_stalled',
+      jobId: jobId ? String(jobId) : null,
+    });
+  });
 
   console.log(
     `[Notification Delivery Worker] ✅ Worker started for queue: ${NOTIFICATION_DELIVERY_QUEUE}`

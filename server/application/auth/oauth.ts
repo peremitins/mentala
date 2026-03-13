@@ -22,6 +22,7 @@ import {
   LANG_COOKIE_NAME,
   getCookieName,
 } from './cookie-names';
+import { dispatchUserRegisteredEvent } from '@/server/application/events/app-events.dispatchers';
 
 const isProd = process.env.NODE_ENV === 'production';
 
@@ -336,6 +337,14 @@ export async function upsertUserWithOAuth(
   }
 
   await createSession(event, userId!, profile.locale ?? undefined);
+
+  if (isNewUser) {
+    dispatchUserRegisteredEvent({
+      userId: userId!,
+      method: provider,
+    });
+  }
+
   return { status: 'linked', userId: userId!, isNewUser };
 }
 

@@ -5,6 +5,7 @@ import {
   extractPaymentMethodPresentation,
   getYooKassaPaymentMethod,
 } from '@/server/application/payments/yookassa.client';
+import { dispatchBillingPaymentMethodBoundEvent } from '@/server/application/events/app-events.dispatchers';
 
 function normalizeCardMonth(value: string | null | undefined): string | null {
   if (!value) return null;
@@ -209,6 +210,7 @@ export async function syncPendingPaymentMethodBinding(params: {
       paymentMethodBound: users.paymentMethodBound,
       paymentMethodId: users.paymentMethodId,
       paymentMethodBindingId: users.paymentMethodBindingId,
+      paymentMethodBindingSessionId: users.paymentMethodBindingSessionId,
       paymentMethodBindingStatus: users.paymentMethodBindingStatus,
     })
     .from(users)
@@ -259,6 +261,15 @@ export async function syncPendingPaymentMethodBinding(params: {
       cardExpiryMonth: presentation.cardExpiryMonth,
       cardExpiryYear: presentation.cardExpiryYear,
       now,
+    });
+
+    dispatchBillingPaymentMethodBoundEvent({
+      userId: params.userId,
+      source: 'subscriptions.sync-pending-payment-method',
+      provider: 'yookassa',
+      paymentMethodId: paymentMethod.id,
+      bindingSessionId: user.paymentMethodBindingSessionId || null,
+      occurredAt: now,
     });
 
     return {
