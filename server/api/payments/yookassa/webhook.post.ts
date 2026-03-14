@@ -21,6 +21,15 @@ import {
   markTrialChargeSuccess,
 } from '@/server/application/subscriptions/trial-charge-reconcile.service';
 import { activateUserPaymentMethod } from '@/server/application/subscriptions/payment-methods.service';
+import {
+  dispatchBillingCriticalEvent,
+  dispatchBillingPaymentMethodBoundEvent,
+  dispatchBillingPurchaseFailedEvent,
+  dispatchBillingPurchaseSuccessEvent,
+  dispatchBillingWebhookErrorEvent,
+} from '@/server/application/events/app-events.dispatchers';
+import { dispatchBillingPlanChangedIfNeeded } from '@/server/application/events/billing-events.helpers';
+import { getCurrentActiveSubscription } from '@/server/application/subscriptions/current-subscription.service';
 
 /**
  * ВАЖНО: По официальной документации YooKassa входящие уведомления НЕ подписываются HMAC.
@@ -256,6 +265,14 @@ export default defineEventHandler(async (event) => {
       if (status === 401 || status === 403 || status === 404) {
         return { received: true };
       }
+
+      dispatchBillingWebhookErrorEvent({
+        paymentId: objectId,
+        statusCode: status ? Number(status) : 502,
+        errorMessage:
+          error?.message || 'Failed to verify payment method status',
+      });
+
       throw createError({
         statusCode: 502,
         statusMessage: 'Failed to verify payment method status',
@@ -313,6 +330,15 @@ export default defineEventHandler(async (event) => {
           },
         });
       });
+
+      dispatchBillingPaymentMethodBoundEvent({
+        userId: targetUser.id,
+        source: 'payments.yookassa.webhook',
+        provider: 'yookassa',
+        paymentMethodId: paymentMethod.id,
+        bindingSessionId: targetUser.paymentMethodBindingSessionId || null,
+        occurredAt: now,
+      });
     } else {
       await db
         .update(users)
@@ -339,6 +365,12 @@ export default defineEventHandler(async (event) => {
     if (status === 401 || status === 403 || status === 404) {
       return { received: true };
     }
+
+    dispatchBillingWebhookErrorEvent({
+      paymentId: objectId,
+      statusCode: status ? Number(status) : 502,
+      errorMessage: error?.message || 'Failed to verify payment status',
+    });
 
     throw createError({
       statusCode: 502,
@@ -481,6 +513,11 @@ export default defineEventHandler(async (event) => {
   }
 
   if (payment.status === 'succeeded' && payment.paid === true) {
+    const previousActiveSubscription = await getCurrentActiveSubscription({
+      userId: sub.userId,
+      now,
+    });
+
     const expectedCurrency = sub.checkoutCurrency || 'RUB';
     const expectedAmount = Number(sub.checkoutAmount || 0);
 
@@ -494,6 +531,23 @@ export default defineEventHandler(async (event) => {
         },
         'YooKassa webhook currency mismatch (refusing to activate)'
       );
+      dispatchBillingCriticalEvent({
+        source: 'payments.yookassa.webhook',
+        operation: 'activate_paid_subscription',
+        reason: 'currency_mismatch',
+        userId: sub.userId,
+        subscriptionId: sub.id,
+        paymentId,
+        planId: sub.planId,
+        billingPeriod: sub.billingPeriod,
+        error: new Error(
+          `YooKassa webhook currency mismatch: expected ${expectedCurrency}, got ${paidCurrency}`
+        ),
+        context: {
+          expectedCurrency,
+          actualCurrency: paidCurrency,
+        },
+      });
       return { received: true };
     }
 
@@ -510,6 +564,26 @@ export default defineEventHandler(async (event) => {
         },
         'YooKassa webhook amount mismatch (refusing to activate)'
       );
+      dispatchBillingCriticalEvent({
+        source: 'payments.yookassa.webhook',
+        operation: 'activate_paid_subscription',
+        reason: 'amount_mismatch',
+        userId: sub.userId,
+        subscriptionId: sub.id,
+        paymentId,
+        planId: sub.planId,
+        billingPeriod: sub.billingPeriod,
+        error: new Error(
+          `YooKassa webhook amount mismatch: expected ${expectedAmount}, got ${paidAmount}`
+        ),
+        context: {
+          expectedAmount,
+          actualAmount: paidAmount,
+          expectedAmountMinor: toCents(expectedAmount),
+          actualAmountMinor: toCents(paidAmount),
+          currency: paidCurrency,
+        },
+      });
       return { received: true };
     }
 
@@ -521,6 +595,7 @@ export default defineEventHandler(async (event) => {
       return { received: true };
     }
 
+    let shouldEnqueuePurchaseSuccess = false;
     await db.transaction(async (tx) => {
       await tx
         .insert(payments)
@@ -644,12 +719,48 @@ export default defineEventHandler(async (event) => {
           currency: paidCurrency,
         },
       });
+
+      shouldEnqueuePurchaseSuccess = true;
     });
+
+    if (shouldEnqueuePurchaseSuccess) {
+      dispatchBillingPurchaseSuccessEvent({
+        userId: sub.userId,
+        subscriptionId: sub.id,
+        paymentId,
+        planId: sub.planId,
+        billingPeriod: sub.billingPeriod,
+        amount: paidAmount,
+        currency: paidCurrency,
+        source: 'payments.yookassa.webhook',
+      });
+
+      dispatchBillingPlanChangedIfNeeded({
+        userId: sub.userId,
+        source: 'payments.yookassa.webhook',
+        previous: previousActiveSubscription
+          ? {
+              subscriptionId: previousActiveSubscription.id,
+              planId: previousActiveSubscription.planId,
+              billingPeriod: previousActiveSubscription.billingPeriod,
+            }
+          : null,
+        next: {
+          subscriptionId: sub.id,
+          planId: sub.planId,
+          billingPeriod: sub.billingPeriod,
+        },
+        paymentId,
+        effectiveAt: now,
+        occurredAt: now,
+      });
+    }
 
     return { received: true };
   }
 
   if (payment.status === 'canceled') {
+    let shouldEnqueuePurchaseFailed = false;
     await db.transaction(async (tx) => {
       await tx
         .insert(payments)
@@ -710,7 +821,23 @@ export default defineEventHandler(async (event) => {
           reason: 'canceled',
         },
       });
+
+      shouldEnqueuePurchaseFailed = true;
     });
+
+    if (shouldEnqueuePurchaseFailed) {
+      dispatchBillingPurchaseFailedEvent({
+        userId: sub.userId,
+        subscriptionId: sub.id,
+        paymentId,
+        planId: sub.planId,
+        billingPeriod: sub.billingPeriod,
+        amount: paidAmount,
+        currency: paidCurrency,
+        source: 'payments.yookassa.webhook',
+        reason: 'canceled',
+      });
+    }
 
     return { received: true };
   }

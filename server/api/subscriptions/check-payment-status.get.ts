@@ -10,6 +10,12 @@ import {
 } from '@/server/infrastructure/db/schema';
 import { extractPaymentMethodPresentation } from '@/server/application/payments/yookassa.client';
 import { activateUserPaymentMethod } from '@/server/application/subscriptions/payment-methods.service';
+import {
+  dispatchBillingPurchaseFailedEvent,
+  dispatchBillingPurchaseSuccessEvent,
+} from '@/server/application/events/app-events.dispatchers';
+import { dispatchBillingPlanChangedIfNeeded } from '@/server/application/events/billing-events.helpers';
+import { getCurrentActiveSubscription } from '@/server/application/subscriptions/current-subscription.service';
 
 interface YooKassaPaymentResponse {
   id?: string;
@@ -200,6 +206,11 @@ export default defineEventHandler(
       const now = new Date();
 
       if (providerStatus === 'succeeded' && isPaid) {
+        const previousActiveSubscription = await getCurrentActiveSubscription({
+          userId: targetSubscription.userId,
+          now,
+        });
+
         const expectedCurrency = targetSubscription.checkoutCurrency || 'RUB';
         const expectedAmount = Number(targetSubscription.checkoutAmount || 0);
 
@@ -222,6 +233,7 @@ export default defineEventHandler(
             'check-payment-status reconcile refused: amount/currency mismatch'
           );
         } else {
+          let shouldEnqueuePurchaseSuccess = false;
           await db.transaction(async (tx) => {
             const inserted = await tx
               .insert(payments)
@@ -355,9 +367,45 @@ export default defineEventHandler(
                 source: 'check-payment-status',
               },
             });
+
+            shouldEnqueuePurchaseSuccess = true;
           });
+
+          if (shouldEnqueuePurchaseSuccess) {
+            dispatchBillingPurchaseSuccessEvent({
+              userId: targetSubscription!.userId,
+              subscriptionId: targetSubscription!.id,
+              paymentId: String(targetSubscription!.yookassaPaymentId),
+              planId: targetSubscription!.planId,
+              billingPeriod: targetSubscription!.billingPeriod,
+              amount: paidAmount,
+              currency: paidCurrency,
+              source: 'subscriptions.check-payment-status',
+            });
+
+            dispatchBillingPlanChangedIfNeeded({
+              userId: targetSubscription!.userId,
+              source: 'subscriptions.check-payment-status',
+              previous: previousActiveSubscription
+                ? {
+                    subscriptionId: previousActiveSubscription.id,
+                    planId: previousActiveSubscription.planId,
+                    billingPeriod: previousActiveSubscription.billingPeriod,
+                  }
+                : null,
+              next: {
+                subscriptionId: targetSubscription!.id,
+                planId: targetSubscription!.planId,
+                billingPeriod: targetSubscription!.billingPeriod,
+              },
+              paymentId: String(targetSubscription!.yookassaPaymentId),
+              effectiveAt: now,
+              occurredAt: now,
+            });
+          }
         }
       } else if (providerStatus === 'canceled') {
+        let shouldEnqueuePurchaseFailed = false;
         await db.transaction(async (tx) => {
           const inserted = await tx
             .insert(payments)
@@ -417,7 +465,23 @@ export default defineEventHandler(
               source: 'check-payment-status',
             },
           });
+
+          shouldEnqueuePurchaseFailed = true;
         });
+
+        if (shouldEnqueuePurchaseFailed) {
+          dispatchBillingPurchaseFailedEvent({
+            userId: targetSubscription!.userId,
+            subscriptionId: targetSubscription!.id,
+            paymentId: String(targetSubscription!.yookassaPaymentId),
+            planId: targetSubscription!.planId,
+            billingPeriod: targetSubscription!.billingPeriod,
+            amount: paidAmount,
+            currency: paidCurrency,
+            source: 'subscriptions.check-payment-status',
+            reason: 'canceled',
+          });
+        }
       }
 
       // Читаем уже обновлённый локальный статус после reconcile.
