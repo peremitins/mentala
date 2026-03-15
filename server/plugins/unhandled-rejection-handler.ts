@@ -3,9 +3,22 @@
  * Предотвращает падение приложения при ошибках подключения к Nuxt dev socket
  * и других необработанных промисах
  */
+import { dispatchAppCriticalEvent } from '@/server/application/events/app-events.dispatchers';
+
+type GlobalUnhandledHandlerState = typeof globalThis & {
+  __mentaiUnhandledProcessHandlersRegistered?: boolean;
+};
+
 export default defineNitroPlugin(() => {
+  const globalScope = globalThis as GlobalUnhandledHandlerState;
+  if (globalScope.__mentaiUnhandledProcessHandlersRegistered) {
+    return;
+  }
+
+  globalScope.__mentaiUnhandledProcessHandlersRegistered = true;
+
   // Обрабатываем необработанные отклонения промисов
-  process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
+  process.on('unhandledRejection', (reason: any) => {
     // Преобразуем reason в строку для проверки (может быть объектом или строкой)
     const reasonStr = String(reason?.message || reason || '');
     const reasonCode = reason?.code;
@@ -29,6 +42,14 @@ export default defineNitroPlugin(() => {
       syscall: reasonSyscall,
       stack: reason?.stack,
     });
+
+    dispatchAppCriticalEvent({
+      source: 'process.unhandledRejection',
+      error:
+        reason instanceof Error
+          ? reason
+          : new Error(reasonStr || 'Unhandled promise rejection'),
+    });
   });
 
   // Обрабатываем необработанные исключения
@@ -45,5 +66,10 @@ export default defineNitroPlugin(() => {
 
     // Для остальных ошибок логируем
     console.error('[UncaughtException] Uncaught exception:', error);
+
+    dispatchAppCriticalEvent({
+      source: 'process.uncaughtException',
+      error,
+    });
   });
 });

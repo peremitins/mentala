@@ -3,23 +3,45 @@ import { db } from '@@/server/infrastructure/db/client';
 import { chatSettings } from '@@/server/infrastructure/db/schema';
 import { eq } from 'drizzle-orm';
 import { FEATURE_TTS_ENABLED } from '@/server/config/features';
+import {
+  normalizeLastTherapyFocus,
+  type LastTherapyFocus,
+} from '@/server/application/chat/phobias-entry.service';
 
-type ChatSettings = {
+export type PublicChatSettings = {
   voice: boolean;
   avatar: boolean;
   enablePreviousResponseId: boolean;
   enableSummary: boolean;
 };
 
-const DEFAULT_SETTINGS: ChatSettings = {
+export type StoredChatSettings = PublicChatSettings & {
+  lastTherapyFocus: LastTherapyFocus | null;
+};
+
+const DEFAULT_SETTINGS: StoredChatSettings = {
   // Чатовая озвучка управляется глобальным kill-switch.
   voice: FEATURE_TTS_ENABLED,
   avatar: false,
   enablePreviousResponseId: true,
   enableSummary: true,
+  lastTherapyFocus: null,
 };
 
-export async function readChatSettings(uid: string): Promise<ChatSettings> {
+export function getPublicChatSettings(
+  settings: StoredChatSettings
+): PublicChatSettings {
+  return {
+    voice: settings.voice,
+    avatar: settings.avatar,
+    enablePreviousResponseId: settings.enablePreviousResponseId,
+    enableSummary: settings.enableSummary,
+  };
+}
+
+export async function readChatSettings(
+  uid: string
+): Promise<StoredChatSettings> {
   const userId = Number(uid);
   if (isNaN(userId)) {
     return DEFAULT_SETTINGS;
@@ -43,6 +65,7 @@ export async function readChatSettings(uid: string): Promise<ChatSettings> {
       avatar: row.avatar ?? true,
       enablePreviousResponseId: row.enablePreviousResponseId ?? true,
       enableSummary: row.enableSummary ?? true,
+      lastTherapyFocus: normalizeLastTherapyFocus(row.lastTherapyFocus),
     };
   } catch (error) {
     console.error('[Storage] Error reading chat settings:', error);
@@ -52,8 +75,8 @@ export async function readChatSettings(uid: string): Promise<ChatSettings> {
 
 export async function writeChatSettings(
   uid: string,
-  patch: Partial<ChatSettings>
-): Promise<ChatSettings> {
+  patch: Partial<StoredChatSettings>
+): Promise<StoredChatSettings> {
   const userId = Number(uid);
   if (isNaN(userId)) {
     throw new Error('Invalid user ID');
@@ -76,6 +99,7 @@ export async function writeChatSettings(
         avatar: next.avatar,
         enablePreviousResponseId: next.enablePreviousResponseId,
         enableSummary: next.enableSummary,
+        lastTherapyFocus: next.lastTherapyFocus,
         updatedAt: new Date(),
       })
       .onConflictDoUpdate({
@@ -85,6 +109,7 @@ export async function writeChatSettings(
           avatar: next.avatar,
           enablePreviousResponseId: next.enablePreviousResponseId,
           enableSummary: next.enableSummary,
+          lastTherapyFocus: next.lastTherapyFocus,
           updatedAt: new Date(),
         },
       });

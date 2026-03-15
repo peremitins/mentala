@@ -28,13 +28,17 @@ export default defineNuxtRouteMiddleware(async (to) => {
     path === '/breath-practices' || path.startsWith('/breath-practices/');
   const isHabitsRoute = path === '/habits' || path.startsWith('/habits/');
   const isTherapyRoute = path === '/therapy' || path.startsWith('/therapy/');
+  const isGratitudeDiaryRoute =
+    path === '/practices/gratitude-diary' ||
+    path.startsWith('/practices/gratitude-diary/');
 
   // Применяем guard только к маршрутам с тарифными ограничениями.
   if (
     !isMeditationsRoute &&
     !isBreathRoute &&
     !isHabitsRoute &&
-    !isTherapyRoute
+    !isTherapyRoute &&
+    !isGratitudeDiaryRoute
   ) {
     return;
   }
@@ -86,6 +90,14 @@ export default defineNuxtRouteMiddleware(async (to) => {
 
     const customTherapyAccess = getFeatureAccess('therapy.custom.create');
     if (!customTherapyAccess.available && path !== '/') {
+      return navigateTo('/', { replace: true });
+    }
+    return;
+  }
+
+  if (isGratitudeDiaryRoute) {
+    const gratitudeDiaryAccess = getFeatureAccess('gratitude.diary.full');
+    if (!gratitudeDiaryAccess.available && path !== '/') {
       return navigateTo('/', { replace: true });
     }
     return;

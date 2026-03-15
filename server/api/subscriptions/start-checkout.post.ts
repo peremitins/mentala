@@ -44,6 +44,11 @@ import {
 import { resolveExternalFlowAppUrl } from '@/server/application/auth/oauth-redirect';
 import { buildExternalSessionConsumeReturnUrl } from '@/server/application/auth/external-session-return-url';
 import { PAYMENT_RETURN_EXTERNAL_SESSION_TTL_SECONDS } from '@/server/config/subscription';
+import {
+  dispatchBillingCheckoutErrorEvent,
+  dispatchBillingPurchaseSuccessEvent,
+} from '@/server/application/events/app-events.dispatchers';
+import { dispatchBillingPlanChangedIfNeeded } from '@/server/application/events/billing-events.helpers';
 
 type SourcePlatform = 'web' | 'ios' | 'android';
 type CheckoutStatus = 'pending' | 'active';
@@ -212,8 +217,10 @@ export default defineEventHandler(async (event) => {
   const billingPeriodTyped = billingPeriod as BillingPeriod;
   const externalFlow = requestedExternalFlow === true;
   const sourcePlatform = resolveSourcePlatform(event);
+  // На native iOS/Android проводим checkout только через redirect-flow:
+  // embedded widget в мобильных WebView нестабилен для 3DS и может закрываться.
   const paymentMode: 'widget' | 'redirect' =
-    sourcePlatform === 'ios'
+    sourcePlatform === 'ios' || sourcePlatform === 'android'
       ? 'redirect'
       : requestedPaymentMode === 'redirect'
         ? 'redirect'
@@ -899,6 +906,26 @@ export default defineEventHandler(async (event) => {
         return activatedResponse;
       });
 
+      dispatchBillingPlanChangedIfNeeded({
+        userId,
+        source: 'subscriptions.start-checkout:policy_activation',
+        previous: currentActive
+          ? {
+              subscriptionId: currentActive.subscription.id,
+              planId: currentActive.subscription.planId,
+              billingPeriod: currentActive.subscription.billingPeriod,
+            }
+          : null,
+        next: {
+          subscriptionId: response.subscriptionId,
+          planId,
+          billingPeriod: billingPeriodTyped,
+        },
+        paymentId: null,
+        effectiveAt: now,
+        occurredAt: now,
+      });
+
       return response;
     }
 
@@ -1140,6 +1167,37 @@ export default defineEventHandler(async (event) => {
           });
 
           return activatedResponse;
+        });
+
+        dispatchBillingPurchaseSuccessEvent({
+          userId,
+          subscriptionId: response.subscriptionId,
+          paymentId: savedMethodPaymentId,
+          planId,
+          billingPeriod: billingPeriodTyped,
+          amount: savedMethodAmount,
+          currency: savedMethodCurrency,
+          source: 'subscriptions.start-checkout:saved_method',
+        });
+
+        dispatchBillingPlanChangedIfNeeded({
+          userId,
+          source: 'subscriptions.start-checkout:saved_method',
+          previous: currentActive
+            ? {
+                subscriptionId: currentActive.subscription.id,
+                planId: currentActive.subscription.planId,
+                billingPeriod: currentActive.subscription.billingPeriod,
+              }
+            : null,
+          next: {
+            subscriptionId: response.subscriptionId,
+            planId,
+            billingPeriod: billingPeriodTyped,
+          },
+          paymentId: savedMethodPaymentId,
+          effectiveAt: now,
+          occurredAt: now,
         });
 
         return response;
@@ -1389,6 +1447,25 @@ export default defineEventHandler(async (event) => {
     }
 
     await abortIdempotentRequest({ recordId: idempotencyRecordId });
+
+    const statusCode =
+      typeof (error as any)?.statusCode === 'number'
+        ? Number((error as any).statusCode)
+        : null;
+
+    if (!statusCode || statusCode >= 500) {
+      dispatchBillingCheckoutErrorEvent({
+        userId,
+        planId,
+        billingPeriod: billingPeriodTyped,
+        statusCode,
+        errorMessage:
+          (error as any)?.statusMessage ||
+          (error as any)?.message ||
+          'start_checkout_failed',
+      });
+    }
+
     throw error;
   }
 });

@@ -2,7 +2,7 @@ import { defineEventHandler, readBody, setHeader } from 'h3';
 import { chatStreamViaProvider } from '@@/server/application/llm.service';
 import { getSessionUserWithRole } from '@/server/utils/require-role';
 import { responseIdStore } from '@/server/utils/responseIdStore';
-import { readChatSettings } from '@/server/utils/storage';
+import { readChatSettings, writeChatSettings } from '@/server/utils/storage';
 import { db } from '@/server/infrastructure/db/client';
 import { therapySessions } from '@/server/infrastructure/db/schema';
 import { and, eq, isNull } from 'drizzle-orm';
@@ -19,6 +19,18 @@ import {
   isChatRequestOverBudget,
   resolveAllowedChatModel,
 } from '@/server/application/chat/chat-guard.service';
+import {
+  buildCrisisGuidance,
+  mergeDeveloperPrompts,
+} from '@/server/application/chat/crisis-protocol.service';
+import {
+  buildPhobiasDeveloperPrompt,
+  isPhobiasEntryContext,
+  resolveLastTherapyFocusUpdate,
+  resolvePhobiasConversationState,
+  type PhobiasConversationState,
+} from '@/server/application/chat/phobias-entry.service';
+import { trackPhobiasEvent } from '@/server/application/chat/phobias-analytics.service';
 
 export default defineEventHandler(async (event) => {
   // Не логируем ключи API (чувствительные данные)
@@ -165,13 +177,59 @@ export default defineEventHandler(async (event) => {
       return;
     }
 
+    const crisisGuidance = buildCrisisGuidance({
+      messages: body?.messages || [],
+      userLocale: body?.user_locale,
+    });
+    let phobiasState: PhobiasConversationState | null = null;
+    let phobiasChatSettings: Awaited<
+      ReturnType<typeof readChatSettings>
+    > | null = null;
+    if (isPhobiasEntryContext(body?.entryContext)) {
+      phobiasChatSettings = await readChatSettings(String(uid));
+      phobiasState = resolvePhobiasConversationState({
+        entryContext: body?.entryContext,
+        messages: body?.messages || [],
+        lastTherapyFocus: phobiasChatSettings.lastTherapyFocus,
+      });
+    }
+
+    const phobiasPrompt = buildPhobiasDeveloperPrompt(phobiasState);
+    const promptWithPhobias = mergeDeveloperPrompts(
+      body?.userPrompt,
+      phobiasPrompt
+    );
+    const effectiveUserPrompt = mergeDeveloperPrompts(
+      promptWithPhobias,
+      crisisGuidance.guidance
+    );
+
+    if (crisisGuidance.level !== 'none') {
+      console.warn('[Stream API] Crisis guidance injected', {
+        userId: uid,
+        level: crisisGuidance.level,
+        countryCode: crisisGuidance.countryCode || 'unknown',
+      });
+    }
+
+    if (
+      phobiasState?.mode === 'welcome_selector' ||
+      phobiasState?.mode === 'welcome_resume_selector'
+    ) {
+      trackPhobiasEvent('phobias_selector_shown', {
+        mode: phobiasState.mode,
+        hasLastFocus: Boolean(phobiasState.validLastTherapyFocus),
+      });
+    }
+
     // Определяем isFirstSession только по previous_response_id.
     // Summary отключена на уровне продукта — не используем её ни для контекста, ни для расчёта.
     let serverIsFirst = true;
 
     if (uid) {
       // Проверяем настройки пользователя
-      const chatSettings = await readChatSettings(String(uid));
+      const chatSettings =
+        phobiasChatSettings ?? (await readChatSettings(String(uid)));
       const enablePreviousResponseId =
         chatSettings?.enablePreviousResponseId ?? true;
 
@@ -216,7 +274,7 @@ export default defineEventHandler(async (event) => {
           user_timezone: userTimezone,
           userId: uid,
           isFirstSession: serverIsFirst,
-          userPrompt: body?.userPrompt,
+          userPrompt: effectiveUserPrompt,
           entryContext: body?.entryContext,
         },
       });
@@ -258,6 +316,47 @@ export default defineEventHandler(async (event) => {
                 therapySessionId,
                 entryContext: body?.entryContext,
               });
+
+          const phobiasFocusUpdate = resolveLastTherapyFocusUpdate({
+            state: phobiasState,
+          });
+          if (phobiasFocusUpdate) {
+            try {
+              await writeChatSettings(String(uid), {
+                lastTherapyFocus: phobiasFocusUpdate.nextFocus,
+              });
+
+              if (phobiasFocusUpdate.action === 'resumed') {
+                trackPhobiasEvent('phobias_focus_resumed', {
+                  subtopicKey: phobiasFocusUpdate.nextFocus.subtopicKey,
+                  subtopicLabel: phobiasFocusUpdate.nextFocus.subtopicLabel,
+                });
+              } else {
+                trackPhobiasEvent('phobias_focus_selected', {
+                  subtopicKey: phobiasFocusUpdate.nextFocus.subtopicKey,
+                  subtopicLabel: phobiasFocusUpdate.nextFocus.subtopicLabel,
+                });
+
+                if (phobiasFocusUpdate.changed) {
+                  trackPhobiasEvent('phobias_focus_changed', {
+                    subtopicKey: phobiasFocusUpdate.nextFocus.subtopicKey,
+                    subtopicLabel: phobiasFocusUpdate.nextFocus.subtopicLabel,
+                  });
+                }
+              }
+
+              trackPhobiasEvent('phobias_session_started', {
+                subtopicKey: phobiasFocusUpdate.nextFocus.subtopicKey,
+                subtopicLabel: phobiasFocusUpdate.nextFocus.subtopicLabel,
+                action: phobiasFocusUpdate.action,
+              });
+            } catch (error) {
+              console.error(
+                '[Stream API] Failed to persist phobias focus:',
+                error
+              );
+            }
+          }
 
           if (chips.length) {
             res.write(`data: ${JSON.stringify({ chips })}\n\n`);

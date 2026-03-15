@@ -21,10 +21,12 @@
 • Резолв медиа (`app/utils/media.ts`): в `dev` для native runtime (iOS/Android) приоритет у `window.location.origin` (Capacitor `server.url`) даже при пустом `apiBase`, чтобы изображения/аудио грузились с того же dev-хоста и не зависели от доступности CDN в эмуляторе/девайсе; далее fallback на `apiBase` и `mediaBaseUrl`. В `production` приоритет остаётся у `NUXT_PUBLIC_MEDIA_BASE_URL`.
 • Ошибки API на native логируются в `app/plugins/api.ts` с контекстом (`url`, `status`, `statusText`, `message`, `responseData`) для диагностики проблем сети/доступности backend.
 • Глобальный auth middleware (`app/middleware/auth.global.ts`) держит fail-fast стратегию в компактном виде: helper для public routes, gate по native session token (`mentai.session.token`) и единый `auth.me()` с timeout (`AUTH_ME_TIMEOUT_MS`) для избежания зависаний на мобильных сетевых сбоях.
-• Глобальный feature-access middleware (`app/middleware/feature-access.global.ts`) выполняет тарифный gate на уровне роутера: закрывает прямой доступ к `meditations`, lock-маршрутам `breath-practices/:slug` (кроме free slugs), а также к custom-маршрутам `habits/:id` и `therapy/:key` (если ключ не из каталога и нет premium entitlement). При отсутствии доступа делает `navigateTo('/', { replace: true })`.
+• Глобальный feature-access middleware (`app/middleware/feature-access.global.ts`) выполняет тарифный gate на уровне роутера: закрывает прямой доступ к `meditations`, `practices/gratitude-diary` (включая editor), lock-маршрутам `breath-practices/:slug` (кроме free slugs), а также к custom-маршрутам `habits/:id` и `therapy/:key` (если ключ не из каталога и нет premium entitlement). При отсутствии доступа делает `navigateTo('/', { replace: true })`.
 • Google OAuth на native: `@capgo/capacitor-social-login` использует `google.webClientId` (env `NUXT_OAUTH_GOOGLE_CLIENT_ID`) на Android/Web и `google.iOSClientId` (env `NUXT_PUBLIC_GOOGLE_IOS_CLIENT_ID`) на iOS. Без iOS client id initialize на iOS возвращает `No provider was initialized`. В `AppDelegate` обязательно обрабатываем callback через `GIDSignIn.sharedInstance.handle(url)`. Backend `/api/auth/google/native` валидирует `idToken` по аудиториям `web + iOS`.
 • Для `nuxt generate` фоновые notification/BullMQ воркеры не запускаются (guards в `server/plugins/notifications-worker.ts` и `server/plugins/bullmq-workers.ts`), чтобы static-сборка не зависала на Redis и `cap sync` всегда получал свежие web assets.
 • Дополнительно для static-сборки отключены фоновые cleanup-плагины (`server/plugins/auth-cleanup.ts`, `server/plugins/trial-usage-cleanup.ts`), а Redis-клиент BullMQ работает в `lazyConnect` режиме, чтобы `generate` не блокировался фоновыми коннектами.
+• AI Response Feedback (MVP): реализованы `POST/GET /api/chat/feedback`, таблица `chat_response_feedback` (composite unique `user_id + therapy_session_id + assistant_message_client_id`, `bigserial`, check-ограничения, индексы), UI кнопок `like/dislike` внутри assistant-bubble в `app/pages/index.vue`, dislike-модалка с optional `topicCode` и optional `comment`, в payload/БД сохраняется `assistantMessageText` (текст конкретного ответа ИИ), optimistic update + rollback, toast-подтверждение на like/dislike, и daily cleanup `comment` старше 60 дней через плагин `server/plugins/chat-feedback-cleanup.ts`.
+• Telegram alerts v1 (зафиксировано в `.docs/telegram_bots.md`): для внутреннего alerting используется отдельный server-side bot token (`TELEGRAM_ALERTS_*`, не reuse `NUXT_TELEGRAM_BOT_TOKEN`), но на текущем rollout все environments (`local/dev/prod`) шлют в один общий чат с обязательной env-меткой в тексте сообщения; логические каналы `devops` / `billing` / `users` / `errors` при этом остаются отдельными на уровне маршрутизации, форматирования и дедупликации. В текущей итерации thread-based routing не используется: достаточно одного `TELEGRAM_ALERTS_CHAT_ID` без `message_thread_id`. Реализованный foundation лежит в `server/application/telegram/*`, а внешний код работает через тонкий facade `server/application/events/*`: business/use-case модули публикуют typed app events, `server/application/telegram/telegram-event-subscribers.ts` маппит их в Telegram-specific orchestration, а `server/plugins/telegram-event-subscribers.ts` регистрирует bridge один раз на процесс. Это позволило убрать прямые импорты Telegram-сервисов из auth/billing/cleanup/infra-кода и оставить Telegram API, formatter, routing, delivery repository и queue/worker внутри одного изолированного слоя. В БД для Telegram остаётся только `telegram_alert_deliveries` как delivery log + dedup; `user_daily_activity`, daily summary, activity-source и registration milestones удалены из текущего scope, чтобы не создавать лишнюю запись в БД на `session_started` / `open_app` и не делать полный `count(users)` при регистрации. Для `telegram_alert_deliveries` добавлен отдельный daily cleanup plugin: он чистит только terminal-статусы `sent`/`failed`, не трогает живые `queued`/`processing`, включён по умолчанию и использует retention 30 дней с override через runtime config. Подключённые источники текущей итерации: `user.registered` (email после verify, OAuth/Telegram сразу после создания), `user.deletion_requested`, реальные billing `purchase_success` / `purchase_failed` / `subscription_canceled`, `billing.checkout_error`, `billing.webhook_error`, `billing.payment_method_bound`, `billing.plan_changed`, `billing.critical_error`, а также `error.business_flow_critical` для падений критичных process-level бизнесовых scheduler/worker flow. User-facing и billing alerts дополнительно обогащаются `users.email`; для `user.deletion_requested` email пробрасывается из delete-handler явно, потому что в режиме `immediate` запись пользователя уже удалена до постановки Telegram alert. `payment_method_bound` шлётся как через YooKassa webhook, так и через fallback `syncPendingPaymentMethodBinding`, чтобы не теряться при delayed webhook; `billing.plan_changed` шлётся только когда смена тарифа реально применена: immediate activation, webhook/polling activation или scheduled apply; `billing.critical_error` дополнительно фиксирует критичные денежные сбои scheduled plan change и денежные mismatch-сценарии в YooKassa webhook. Для очередей зафиксирован отдельный инвариант: бизнесовый `dedupKey` может содержать `:`, но BullMQ `jobId` должен быть sanitized и не использовать `:`. Для Telegram transport дополнительно зафиксировано: клиент отправляет `sendMessage` через `node:https` с form-urlencoded body и принудительным IPv4, потому что в текущей среде `fetch/undici` рвёт TLS до `api.telegram.org` ещё до handshake; transient transport errors (`ECONNRESET`, timeout и т.п.) сначала гасятся inline-retry внутри одной job, а промежуточные BullMQ retries логируются как `warn`, а не как финальные `error`. DevOps hooks упрощены: оставлены `devops.http_500_spike` и `devops.push_delivery_unavailable`, а отдельные `devops.redis_unavailable` / `devops.postgres_unavailable` удалены из текущего scope, потому что без bypass-канала они не были надёжно доставляемы при падении той же инфраструктуры. Для orchestration-слоя добавлены tests `tests/telegram-event-subscribers.test.ts`, `tests/telegram-alerts.worker.integration.test.ts`, `tests/telegram-alerts.transport-retry.test.ts` и `tests/telegram-deliveries-cleanup.service.test.ts`. При недоступности Redis app-level alerts могут временно теряться, fallback на sync-send не входит в scope v1.
 • Валидация и схемы: Zod (в связке с @vee-validate/zod).
 • Логи и мониторинг: Pino + Sentry.
 • Миграции БД: Drizzle Kit (SQL файлы хранятся для совместимости с будущими системами).
@@ -38,7 +40,8 @@
 • default (со встроенным BottomNav),
 • blank (fullscreen),
 • auth (центрирование форм; при входе на auth экран фоновые звуки и медитации принудительно выключаются).
-• Глобальная защита аудио: `app/plugins/audio-playback-guard.client.ts` отслеживает auth/роуты и через `setPlaybackAllowed` в `useSceneAudio` и `useMeditationPlayer` блокирует любой звук на публичных страницах и при разлогине.
+• Глобальная защита аудио: `app/plugins/audio-playback-guard.client.ts` отслеживает auth/роуты и через `setPlaybackAllowed` в `useSceneAudio` и `useMeditationPlayer` блокирует любой звук на публичных страницах, на `onboarding`, во время login/logout-переходов и до завершения `user.onboarding.welcome`. Фоновые сцены имеют право стартовать только внутри основного приложения после полного входа.
+• Дефолтная громкость фоновой сцены для новых пользователей задаётся через `NUXT_PUBLIC_SCENE_DEFAULT_VOLUME_PERCENT` (clamp `0..100`); значение попадает и в `runtimeConfig.public`, и в server-side создание новых пользователей. При старте/после re-login `useSceneAudio` всегда гидратируется из `sceneSettings` в безопасном mute-состоянии (`0`) и только потом может поднимать громкость до пользовательского уровня, чтобы исключить всплеск звука и наследование runtime-state от прошлой сессии.
 • Если `play()` вызывается раньше, чем guard перевёл `playbackAllowed` в `true` (типичный холодный старт после push), запуск не теряется: `useMeditationPlayer` и `useSceneAudio` сохраняют pending-start и автоматически повторяют его после `setPlaybackAllowed(true)`.
 • UI‑настройки: `useUiSettingsStore` хранит локальные параметры интерфейса (яркость фона) в `persistentStorage` (web: localStorage, mobile: Capacitor Preferences) с ключом, привязанным к `userId` (чтобы разные аккаунты не наследовали яркость). Яркость применяется к aurora‑слою и к затемнению фоновых изображений сцен (overlay). Дефолтная яркость — 85%.
 • Тема интерфейса: приложение использует только тёмную тему (dark theme) по умолчанию. Переключение между светлой и тёмной темой не поддерживается. Все CSS-переменные настроены на тёмную палитру в `:root`, класс `.dark` не используется. PWA manifest (`site.webmanifest`) и favicon настроены на тёмные цвета.
@@ -72,8 +75,10 @@ index, onboarding, chat (layout blank), therapy, habits, practices, breath-pract
 • Аналитика настроек: `useSettingsAnalytics` (Sentry breadcrumbs) — события `settings_notifications_push_toggle`, `settings_notifications_marketing_toggle`, `settings_notifications_open_system_settings`.
 • ID пользователя показывается внизу `/settings` с копированием (useClipboard/Capacitor Clipboard с fallback).
 • Чат: welcome‑ответ стартует при пустом `messages`, параметр `mode` удалён; `entryContext` приходит из `/habits`, `/therapy` и `/quick-help` (включая `sos` и `thought_dump`) и учитывается в prompt.
+• Кризисный контур (обновлено 2026-03-04): в `/api/chat` и `/api/chat/stream` внедрён server-side детектор (`server/application/chat/crisis-protocol.service.ts`), который анализирует последние user-сообщения и подмешивает safety developer-prompt (`CRISIS_HIGH`/`CRISIS_WATCH`) в `options.userPrompt`; LLM отвечает всегда (без short-circuit шаблона), при неизвестной стране допускается только вопрос о стране («В какой стране ты сейчас находишься?») и запрещены уточнения точного адреса/геолокации; при известной стране из `user_locale` подставляется соответствующий номер экстренных служб. MVP quick-help/SOS остаётся стабилизационным флоу и не считается полноценной кризисной помощью (см. `.docs/sos.md`).
 • Чат: приветствие используется только в welcome‑старте и не чаще 1 раза в день (локальная дата пользователя). Приветствие по имени — отдельный лимит; имя очищается до «только имя» без фамилии/никнеймов. Отметки хранятся в `chat_settings.last_greeting_at` и `chat_settings.last_name_greeting_at`. Инструкция про имя и выбор стартовой фразы добавляются только в первое сообщение дня, чтобы не раздувать токены.
 • Чат: альтернативная стартовая фраза в welcome‑режиме учитывает `entryContext` (`therapy_topic` / `habit` / `sos` / `thought_dump`) и `user_gender` (если есть) для естественных формулировок. Выбор фразы выполняется случайно, при этом для одного `userId + context` исключается повтор предыдущей фразы подряд (in-memory anti-repeat). Общий нейтральный шаблон используется только при входе с главной (`entryContext = null`), а при переходе из темы/привычки/SOS/выгрузки мыслей старт сразу формулируется по выбранному контексту.
+• Чат (`phobias`): для `entryContext.type = therapy_topic` и `topic_id = phobias` welcome‑start обрабатывается отдельным сервисом `server/application/chat/phobias-entry.service.ts` и не использует общий therapy-opening. Для LLM фиксируется структура сообщения, а не готовый текст: первый вход = короткая вводная + перечисление `3–5` популярных категорий страхов + 1 уточняющий вопрос; повторный вход = выбор между продолжением прошлого подтверждённого фокуса и новой темой, при необходимости с коротким упоминанием label прошлой подтемы. Спецсценарий включается при старте без пользовательских сообщений; fixed chips отдаются server-side (`4 популярных варианта + Другая тема` или `Продолжить прошлую тему + Другая тема`). `lastTherapyFocus` хранится в `chat_settings.last_therapy_focus`, используется только если подтверждён пользователем и не старше `30` дней, а `subtopicKey` нормализуется до slug (`public_speaking`, `heights`, `confined_spaces`, `social_fear`, `other_specific`).
 • Чат: suggested‑chips не сбрасываются при наборе текста, очищаются только при отправке/выборе.
 • Чат: микрофон в инпуте имеет индикацию записи через ::before/::after (пульсирующая точка), отправка на мобильных срабатывает на первый тап через pointerdown‑хэндлер даже во время записи.
 • Голосовой ввод: Whisper‑fallback временно отключён, используются только native/webspeech движки.
@@ -139,7 +144,7 @@ server/
 🧪 Инициализация БД (seed)
 • Для пустой базы используется общий скрипт `pnpm seed:required` (см. `scripts/seed-required.ts`).
 • Скрипт последовательно заполняет системные справочники: роли, тарифные планы, каталог медитаций и дефолтные тексты уведомлений.
-• Перенос шаблонов уведомлений запускается через `scripts/migrate-templates-to-db.ts` и очищает таблицы пресетов/текстов — безопасно только на пустой БД. При необходимости можно пропустить через флаг `--skip-templates`.
+• Синхронизация шаблонов уведомлений: `scripts/migrate-templates-to-db.ts` обновляет только `notification_text_presets`; `notification_texts` не трогает — пользовательские правки сохраняются. Обновлённые presets подтягиваются при нажатии «Восстановить» в UI. При seed можно пропустить через `--skip-templates`.
 • Production-миграции теперь включают `0026_roles_baseline.sql`, который гарантирует наличие базовых записей (`admin`, `user`, `moderator`, `support`) ещё до запуска `seed:required`, поэтому FK `users.role_id` никогда не будет нарушен даже без предварительного заполнения. Дополнительно, наличие `roles` теперь проверяется перед созданием пользователя: если нужной роли нет, она создаётся как часть миграции/seed-а, что позволяет выполнять регистрацию на «cold» базе.
 • После выполнения `pnpm db:migrate` обязательно запускается новая проверка `pnpm verify:schema -- --env=<...>` (или `NODE_ENV=production`), которая сравнивает колонки `information_schema` с теми, что описаны в `server/infrastructure/db/schema.ts`. Скрипт падает (и CI/развёртывание останавливается), если хотя бы одна колонка отсутствует, что делает невозможными случаи типа «column deletion_requested_at does not exist».
 • Для prod окружения используйте `--env=production` или `NODE_ENV=production`, чтобы подтянуть `.env`.
@@ -215,7 +220,7 @@ server/
 • Pinia-store `useSceneSettingsStore` отвечает за локальное состояние и дебаунс‑сохранение.
 • Сохранение настроек сцены отменяет предыдущий `PATCH /api/user/me` через `AbortController`, чтобы не было откатов при быстром переключении.
 • Дополнительно фиксируется версия локальных изменений (changeVersion), чтобы устаревшие ответы не могли откатить выбранную сцену даже до старта следующего запроса.
-• `useSceneAudio` управляет воспроизведением и fade‑in/out: loop-сцены идут через WebAudio (бесшовный цикл), non-loop — через HTMLAudio fallback. Для native mobile добавлен bootstrap fallback для loop: если после cold-start первый запуск loop в WebAudio даёт тишину, сцена одноразово стартует через HTMLAudio (прайм аудио-выхода), после чего сервис автоматически делает повторный запуск и переключает её в WebAudio для бесшовного loop.
+• `useSceneAudio` управляет воспроизведением и fade‑in/out: loop-сцены идут только через WebAudio (бесшовный цикл, без HTML fallback), а non-loop — через HTMLAudio fallback. Если loop-сцена не может стартовать сразу из-за autoplay/unlock, запуск откладывается до следующего пользовательского жеста, а не переводится во временный HTML-режим, чтобы не появлялся шов между концом и началом трека.
 • Для надёжности при быстрых переключениях сцен применяется защита от гонок: устаревшие play‑операции игнорируются по actionId, а ответы сохранения настроек не перезаписывают последние изменения.
 • В `useSceneAudio.stop/pause` добавлена жёсткая остановка обоих движков (`HTMLAudio` и `WebAudio`) независимо от текущего `playbackMode`. Это устраняет ghost-наложение звука при гонках (смена сцены, параллельный старт/стоп медитации, фон/foreground).
 • Обновление от 25 февраля 2026 (fix наложений): при переключении движка для одной и той же сцены (`HTML -> WebAudio` и `WebAudio -> HTML`) `useSceneAudio` теперь принудительно гасит предыдущий движок перед запуском нового и переносит текущую позицию. Это убирает двойное воспроизведение, «просадку» громкости и неснимаемые наложения.
@@ -225,7 +230,7 @@ server/
 • Обновление от 25 февраля 2026 (layout race guard): `syncSceneAudioState` в `default.vue` использует `runId`, чтобы отменять устаревшие async-циклы `setScene/suspend/resume/play`; это убирает обратные автозапуски сцены при быстрых сменах состояния.
 • Обновление от 25 февраля 2026 (Android audio mixing fix): на Android исправлены баги смешивания треков: (1) при переходе с медитации на сцену добавлена задержка 280 мс перед resume/play сцены, чтобы ExoPlayer освободил audio focus; (2) при suspend сцены на Android используется полный `stop()` вместо `pause()`, чтобы полностью освободить WebAudio/HTML5 и избежать duck-ования; (3) в `useMeditationPlayer.play()` при native playback выставляется `isBuffering=true` до любого await, страхуя от гонки watcher при смене треков.
 • Во время выхода из аккаунта выставляется `auth.isLoggingOut`: layout `default.vue` не запускает `useSceneAudio`, а logout‑запрос отправляется в фоне, чтобы UI не зависал и фон не стартовал заново.
-• Автозапуск фоновой сцены учитывает autoplay‑политику браузеров: `useSceneAudio` заранее слушает пользовательский жест и делает `AudioContext.resume()` только после него; дополнительно на странице `/scene-selection` пользовательские действия (слайдер громкости, выбор сцены) вызывают `kickstart`, а в `default.vue` добавлен единый first-gesture kickstart (pointer/touch/click) для сценария холодного старта. Это убирает кейс «звук не поднялся после открытия приложения». При `volume = 0` сцена не запускается и принудительно останавливается; при уходе приложения в background поведение зависит от `backgroundPlayMinutes`: `0` — стоп сразу, `N > 0` — остановка через `N` минут.
+• Автозапуск фоновой сцены учитывает autoplay‑политику браузеров: `useSceneAudio` заранее слушает пользовательский жест и делает `AudioContext.resume()` только после него; на странице `/scene-selection` пользовательские действия (слайдер громкости, выбор сцены) вызывают `kickstart`. Это убирает кейс «звук не поднялся после открытия приложения». При `volume = 0` сцена не запускается и принудительно останавливается; при уходе приложения в background поведение зависит от `backgroundPlayMinutes`: `0` — стоп сразу, `N > 0` — остановка через `N` минут.
 
 ⸻
 
@@ -252,6 +257,7 @@ server/
 • В `notification_preferences` есть вычисляемое поле `text_source_normalized`, которое нормализует `meta.textSource` в `templates/ai` (любое значение кроме `ai` трактуется как `templates`).
 • `notification_preferences.custom_prompt_notification` хранит персональные пожелания **только для шаблонных тем** (nullable). Поле используется **только для AI** и включается в `configHash`, чтобы при изменении автоматически запускалась регенерация. В промпте при конфликте с `subtype/directness/tone` приоритет за пожеланиями пользователя.
 • Для **кастомных** тем приоритет задан для описания пользователя: если описание противоречит `subtype/directness/tone`, приоритет за описанием.
+• Для **шаблонных therapy-тем** AI-генерация подтягивает `name/description` из `app/lib/therapyCatalog.ts`, а не использует сырой `entityKey`; compact prompt-логика для therapy учитывает `subtype`: `reminder` = мягкий практический шаг, `informational` = короткий факт/объяснение + применимая подсказка, `motivational` = поддержка, `mixed` = чередование. Для `anxiety/phobias` разрешены только мягкие self-help практики без жёсткой экспозиции.
 • `custom_slot_times` — массив длиной до 5 значений (в минутах, 0–1439). `null` означает автоматическое распределение и теперь безопасно передаётся/сохраняется как `null` без 400 от API.
 • `entity_key` — единое поле для идентификации источника уведомлений. Для кастомных сущностей используется ID, для готовых шаблонов - ключ шаблона.
 • API `/api/notifications/prefs` поддерживает CRUD этих полей, принимает `subtype = mixed` для привычек и отдаёт то же значение; на уровне БД обновлённое ограничение `notification_prefs_subtype_check` теперь тоже разрешает `mixed`.
@@ -350,6 +356,7 @@ server/
 • NotificationSettingsPage для режима therapy загружает кастомные темы по id, позволяет inline-редактирование названия/описания. Управление текстами уведомлений доступно через отдельную страницу `/notifications/therapy/[entityKey]/texts` (та же архитектура, что и для привычек).
 • Тексты уведомлений хранятся в таблице `notification_texts`; планировщик обрабатывает терапию так же, как привычки: при `textSource === 'templates'` используются тексты из БД; при `textSource === 'ai'` используются AI-генерированные тексты.
 • Удаление кастомной темы через UI очищает локальный store и оставляет пользователя на списке (navigateTo `/therapy`), а отдельная кнопка корзины выровнена с arrow-иконкой в NotificationIndexPage, чтобы список для therapy/habits выглядел единообразно.
+• Системный каталог терапии расширен темой `phobias` («Страхи») второй по порядку после `anxiety`; для неё быстрые действия фиксированы как `chat=true`, `meditation=true`, `breath=true`, а медитации и дыхательные практики на этапе v1 маппятся на anxiety-группы.
 
 ⸻
 
@@ -456,6 +463,10 @@ server/
 • push обязателен (`sendToUser`);
 • email отправляется при наличии `users.email` как транзакционное billing-уведомление (независимо от текущей авторизации пользователя и marketing consent);
 • антидублирование через `users.billing_reminder_sent_at`.
+• claim пользователей на reminder делается атомарно батчами через `CTE + FOR UPDATE SKIP LOCKED + UPDATE ... RETURNING`, чтобы параллельные инстансы/тики не брали одного и того же пользователя одновременно;
+• для reminder-claim используется lock в `users.billing_locked_*` с отдельным TTL (`TRIAL_BILLING_REMINDER_LOCK_TTL_MINUTES`) и обязательным release при неуспешной доставке по всем каналам;
+• за один tick worker обрабатывает несколько батчей (`TRIAL_BILLING_REMINDER_MAX_BATCHES_PER_TICK`) с контролируемым параллелизмом отправки (`TRIAL_BILLING_REMINDER_CONCURRENCY`), чтобы не упираться в фиксированный `limit` и не терять окно 24ч±1ч под нагрузкой.
+• под reminder-query добавлен partial-index `idx_users_trial_billing_reminder_due` на `(next_charge_at, id)` с предикатом `billing_collection_status='scheduled' and billing_reminder_sent_at is null and next_charge_at is not null`; запрос claim в worker повторяет эти условия и сортировку `order by next_charge_at, id`.
 
 • `/api/subscriptions/current`:
 • возвращает `scheduledChange`;
@@ -483,17 +494,18 @@ server/
 • UX/платформы (as-is):
 • `app/pages/subscription.vue`:
 • Trial countdown в UI показывается как `X дней Y часов осталось` (с fallback `меньше часа`), вычисляется от точного `trialEndsAt` и пересчитывается на клиенте каждую минуту (`@vueuse/core/useNow`).
-• Web/Android: интегрирован YooKassa Widget (`checkout-widget.js`) во встраиваемом режиме (`customization.modal=false`) с рендером в наш `Dialog`-контейнер (controlled modal на стороне приложения).
+• Web (desktop и non-compact viewport): интегрирован YooKassa Widget (`checkout-widget.js`) во встраиваемом режиме (`customization.modal=false`) с рендером в наш `Dialog`-контейнер (controlled modal на стороне приложения).
 • Checkout-диалог открыт в non-modal режиме (`Dialog modal=false`), чтобы 3DS-челлендж (который может монтироваться вне контейнера виджета) оставался интерактивным и не блокировался focus/pointer lock.
 • Загрузка скрипта виджета вынесена в клиентский Nuxt plugin `app/plugins/yookassa-widget.client.ts` (single-flight загрузка + DI через `$yooKassaWidget`), а страница подписки использует только API плагина.
 • Глобальные CSS-override внутренних классов `checkout-modal*` не используются; layout/overlay контролируются нашим `Dialog`, а виджет монтируется в выделенный DOM-контейнер.
 • Контейнер виджета обёрнут в `rounded + overflow-hidden`, чтобы скругления верхних/нижних углов сохранялись в embed-режиме на всех viewport.
 • Кнопка закрытия диалога использует стандартный визуальный стиль без явной рамки у кнопки (с принудительно тёмным цветом иконки для читаемости на белом фоне виджета); контейнер виджета имеет дополнительный верхний внутренний отступ для корректной визуальной дистанции от верхней границы.
-• Для обычного web/android flow `return_url` у widget не используется; после оплаты статус синхронизируется через widget events (`success/fail`) + short polling.
+• Native iOS/Android: checkout всегда выполняется через `redirect` во внешний браузер (без embedded widget), с возвратом в приложение через `/payment-success` и deeplink/app-link обработчик.
+• Mobile web (compact viewport): используется redirect checkout (без in-page widget popup), чтобы избежать нестабильности 3DS-кнопок в iframe на узких экранах.
+• Для widget-flow (`web` non-compact) `return_url` не используется; после оплаты статус синхронизируется через widget events (`success/fail`) + short polling.
 • Канонический endpoint возврата после внешней оплаты: `/payment-success`.
 • `return_url` в redirect-flow и bind-flow указывает на `/auth/external-session/consume?token=...&redirect=/payment-success?...`: внешний браузер сначала получает web cookie-сессию через consume endpoint и только потом редиректится в единый return-flow.
-• iOS native: внутренний checkout отключён; показывается только переход в web flow.
-• Mobile web: используется redirect checkout (без in-page widget popup), чтобы избежать нестабильности 3DS-кнопок в iframe на узких экранах.
+• Серверный safeguard в `start-checkout`: для `X-Platform: ios|android` принудительно выбирается `paymentMode=redirect`, даже если клиент запросил `widget`.
 • После старта оплаты включён short polling с прогрессивным профилем: 1 сек первые 5 секунд, затем 3 сек, окно до 30 секунд.
 • Ручная кнопка проверки статуса не используется; синхронизация статуса выполняется автоматически через widget/deeplink события и short polling.
 • Добавлен серверный verify endpoint для polling: `GET /api/subscriptions/check-payment-status`.
@@ -565,6 +577,10 @@ server/
 • Контракт ответа `/api/subscriptions/current`: `features.aiChatMode = disabled|limited|unlimited_fair_use`; `features.weeklyMinutesLimit = number|null` (`null` для unlimited); `features.fairUseGuardMinutesPerWeek` задан только для `unlimited_fair_use`.
 • Контракт ошибки лимита унифицирован: `HTTP 402`, `code=premium_fair_use_limit_reached`, `message`, `nextResetAt` (включая SSE-ветку `/api/chat/stream`).
 • Suggested replies (чипы): возвращаются отдельным финальным SSE‑чанком в `/api/chat/stream` перед `[DONE]`, формат и поля описываются в Zod‑DTO.
+• Подсистема оценки ответов ассистента (см. `.docs/ai_response_feedback_system.md`) спроектирована через `POST /api/chat/feedback` и привязывается к `therapySessionId` + клиентскому `assistantMessageClientId`, так как в текущем chat-store сообщения изначально не имеют серверного `assistantMessageId`; таблица feedback использует `id bigserial` и `unique (user_id, therapy_session_id, assistant_message_client_id)`.
+• Feedback-состояние хранится в Pinia (`useChatStore`) и привязано к конкретному assistant-сообщению (`assistantMessageClientId`) + его `therapySessionId`: это сохраняет лайк/дизлайк при client-side переходах между страницами, даже если активная `therapySessionId` уже завершена.
+• После полной перезагрузки вкладки feedback не восстанавливается: в текущем UX история чата очищается на reload, поэтому runtime-state начинается заново.
+• Для feedback-комментариев установлен retention 60 дней: cleanup-job очищает только текст `comment`, запись оценки и метаданные сохраняются.
 • Клиентский SSE‑парсер буферизует чанки и разбивает по пустой строке, чтобы не терять события при разрезании данных по сети.
 • Relay‑клиентский SSE‑парсер использует TextDecoder для корректной UTF‑8‑декодировки через границы чанков (иначе возможны пропуски дельт на кириллице).
 • Suggested replies: при разборе ответа нормализуем `null` в полях `action/params`, чтобы Zod‑валидация не отбрасывала валидные чипы.
@@ -681,7 +697,7 @@ server/
 • Источник истины по тарифным описаниям: `app/components/subscription/PlanCard.vue` + серверные сиды тарифов/доступов (`seed-subscription-plans.ts`, `seed-feature-access-policies.ts`).
 • Адаптивность лендинга обязательна с ширины `320px`; кроссбраузерная поддержка — популярные desktop/mobile браузеры по матрице из `.docs/landing.md`.
 • **CI/CD и деплой лендинга**: при пуше в `main`/`dev` workflow (`deploy-prod.yml`, `deploy-dev.yml`) выполняют **статический экспорт** лендинга (`pnpm landing:generate`) и деплой статики на сервер: rsync в `/var/www/landing/releases/<id>/`, атомарное переключение symlink `current`, хранение последних 5 релизов. `RELEASE_ID` формируется как `<run_id>-<run_attempt>`, а `.well-known/***` исключён из `rsync --delete`, чтобы rerun не падал на permission-denied при удалении системных файлов. Лендинг отдаётся Nginx (на хосте или в контейнере), Traefik маршрутизирует `mentala.app` на статику. Подробности — `.docs/landing_static_deploy_tz.md`.
-• **CI/CD и деплой приложения (обновлено 2 марта 2026)**: после `docker compose up -d --remove-orphans web` в обоих workflow (`deploy-prod.yml`, `deploy-dev.yml`) обязательно выполняются post-deploy шаги очистки Docker: `docker container prune -f`, `docker image prune -a -f --filter "until=168h"`, затем `docker system df` для контроля диска. Это предотвращает накопление `<none>` образов и удержание старых слоёв остановленными контейнерами на серверах с маленьким диском.
+• **CI/CD и деплой приложения (обновлено 10 марта 2026)**: в обоих workflow (`deploy-prod.yml`, `deploy-dev.yml`) cleanup Docker вынесен в отдельный post-deploy шаг после `docker compose up -d --remove-orphans web`. Шаг запускает `docker container prune -f`, `docker image prune -a -f --filter "until=168h"` и `docker system df`, но помечен как `continue-on-error`, поэтому конфликтующие фоновые `prune`-операции на хосте не могут уронить успешный релиз. При этом проблема cleanup остаётся видимой в логах отдельного шага.
 
 ⸻
 
@@ -707,3 +723,71 @@ server/
 • Зафиксировано отдельное ТЗ на полную локализацию лендинга с переносом всего контента в `vue-i18n` при жёстком ограничении: русский текст переносится 1:1 без редакции.
 • Документ: `.docs/landing_i18n_localization_tz.md`.
 • Scope плана: полное покрытие `apps/landing/pages/index.vue`, унификация механизма выбора локали (`/` и `/support`), локализация SEO/OG/JSON-LD и контроль отсутствия регрессий RU-контента.
+
+⸻
+
+📔 Дневник благодарности (обновлено, 12 марта 2026)
+• Канонический экран дневника: `app/pages/practices/gratitude-diary.vue`, маршрут `/practices/gratitude-diary`.
+• UX-структура разделена на две страницы:
+  - `app/pages/practices/gratitude-diary.vue` — overview (streak + история + фиксированная кнопка добавления),
+  - `app/pages/practices/gratitude-diary/editor.vue` — создание/редактирование записи (вопрос, worksheet, composer, save).
+• Точка входа №1: карточка на `Практики` (`app/pages/practices/index.vue`).
+• Карточка дневника в `Практиках` всегда видима: при отсутствии доступа по feature-key `gratitude.diary.full` рендерится lock-state с бейджем тарифа (`⭐` для PRO, `💎` для Premium) и открывает `FeaturePaywallModal` по клику, без скрытия самого элемента.
+• Точка входа №2: системная привычка `gratitude` в `Привычках` ведёт на тот же канонический экран (без отдельной реализации дневника в `habits`).
+• Настройки уведомлений остаются в контуре привычек и открываются из дневника через `/habits/gratitude/notifications`.
+• Все `server/api/gratitude-diary/*` дополнительно проверяют entitlement `gratitude.diary.full` на сервере; частичные premium-ограничения (`gratitude.worksheet.customize`, `gratitude.photo.upload`) применяются только после успешного входа в сам дневник.
+• Backend API дневника:
+  - `GET /api/gratitude-diary` — состояние экрана (streak, текущий промпт, история, поиск),
+  - `POST /api/gratitude-diary/entries` — создание записи,
+  - `GET /api/gratitude-diary/entries/:id` — получить запись для режима редактирования,
+  - `PATCH /api/gratitude-diary/entries/:id` — обновить существующую запись,
+  - `GET /api/gratitude-diary/prompts` — каталог промптов, worksheet и избранные промпты пользователя (для Premium — персональный шаблон пользователя, для остальных — дефолт),
+  - `PUT /api/gratitude-diary/worksheet` — обновление персонального worksheet-шаблона (только Premium),
+  - `POST /api/gratitude-diary/upload-photo` — upload-контур фото, вызывается только в момент `save` после локального выбора файла,
+  - `POST /api/gratitude-diary/delete-photo` — compensating cleanup для только что загруженного объекта, если после upload сохранение записи не завершилось успешно,
+  - `POST /api/gratitude-diary/favorites` — добавить промпт в избранное (catalog или custom, возвращает полный список),
+  - `PATCH /api/gratitude-diary/favorites/:id` — редактировать кастомный промпт (WHERE id AND user_id AND prompt_type='custom'),
+  - `DELETE /api/gratitude-diary/favorites/:id` — удалить из избранного (возвращает `{ removedId }`),
+  - `POST /api/gratitude-diary/favorites/migrate` — батч-миграция из localStorage (идемпотентно, ON CONFLICT DO NOTHING).
+• Данные worksheet-шаблона пользователя хранятся в `gratitude_diary_worksheet_templates` (JSON-массив пунктов с `id/emoji/text`).
+• Данные дневника хранятся в таблице `gratitude_diary_entries` (см. `server/infrastructure/db/schema.ts`): `text`, `mood`, `tags`, `photo_url`, `input_method`, timestamps.
+• Избранные промпты пользователя хранятся в таблице `gratitude_diary_favorite_prompts` (миграция 0062):
+  - полиморфная таблица: `prompt_type IN ('catalog', 'custom')`,
+  - `catalog` → хранит ссылку `catalog_prompt_id` на статический каталог,
+  - `custom` → хранит `custom_text` (VARCHAR 220),
+  - CHECK constraint гарантирует консистентность: catalog без catalogPromptId или custom без customText невозможны,
+  - partial unique index на `(user_id, catalog_prompt_id)` и `(user_id, custom_text)` для идемпотентности,
+  - "мёртвые" ссылки (catalog_prompt_id не из актуального каталога) фильтруются на уровне API GET /prompts,
+  - лимит: не более 50 кастомных промптов на пользователя (проверяется в POST /favorites).
+• Логика избранных промптов вынесена в composable `app/composables/useGratitudeDiaryFavorites.ts`:
+  - `catalogFavoriteMap` computed (O(1) lookup вместо O(n) find),
+  - оптимистичные обновления с rollback-паттерном (snapshot → update → rollback + toast при ошибке),
+  - методы: `toggleCatalogFavorite`, `addCatalogFavorite`, `removeFavorite`, `createCustomFavorite`, `updateCustomFavorite`.
+• Однократная миграция из localStorage в БД: при первом открытии editor.vue после деплоя — данные из ключа `gratitude-diary.favorite-prompts.v1` отправляются в `/favorites/migrate`, флаг `gratitude-diary.favorites-migrated.v1` ставится в localStorage. Двойная миграция не создаёт дубликатов.
+• В GratitudePromptItem (display-модель) id кастомных промптов = String(dbId), id каталожных = оригинальный catalog ID (e.g., 'self-1').
+• `Color` и `Help me write` не используются в первой волне дневника; composer ограничен mood/photo/voice/list/tag.
+• Тексты UI дневника подключены через `vue-i18n` (ключи `GRATITUDE_DIARY.*` в `app/i18n/locales/ru.ts` и `app/i18n/locales/en.ts`) — RU как основной язык, EN как готовая структура для расширения локализации.
+• Дата записи в `editor.vue` выбирается через компактный `shadcn-vue`-calendar в `PageHeader`:
+  - календарь локализуется по `user.locale` из `/api/user/me` (fallback на текущий `vue-i18n locale`),
+  - на клиенте доступны только сегодняшняя и прошедшие даты (`max-value = today()`),
+  - popover календаря стилизован под проектный glass-паттерн (`glass-deep`), а не под дефолтный shadcn background,
+  - выбранная дата отправляется в `POST/PATCH /api/gratitude-diary/entries` как `entryDate` (`YYYY-MM-DD`).
+• Серверный контур даты записи timezone-aware:
+  - timezone берётся из `X-Timezone`, который уже отправляет общий API-плагин,
+  - `createdAt` записи перестраивается из выбранного `entryDate` + локального времени пользователя, поэтому редактирование даты не ломает часы/минуты карточки,
+  - группировка истории и расчёт streak в `GET /api/gratitude-diary` теперь тоже считаются по локальному дню пользователя, а не по сырому UTC-срезу.
+• В модалке каталога промптов (`editor.vue`) используется горизонтальная лента тем с переключением свайпом влево/вправо; активная тема отображается как одиночный список промптов.
+• Вкладка `Избранное` в каталоге промптов объединяет:
+  - сохранённые промпты из системных категорий (добавление/удаление по сердечку),
+  - пользовательские промпты (ручное создание, редактирование, удаление).
+• Фото в `editor.vue` работают по staged-flow:
+  - при выборе файла фронт делает только локальный preview и держит `File` в состоянии страницы,
+  - до нажатия `Сохранить` объект в Object Storage не создаётся,
+  - при редактировании существующей записи старые `photoUrl/photoStorageKey` сохраняются в состоянии до успешного `PATCH`,
+  - удаление фото в UI лишь помечает отложенное удаление; фактическое удаление объекта выполняется сервером после успешного сохранения записи,
+  - если upload нового фото прошёл, а `POST/PATCH` записи завершился ошибкой, фронт вызывает `delete-photo` для cleanup только что загруженного объекта.
+• Список записей в `app/pages/practices/gratitude-diary/index.vue` при возврате из редактора делает повторный `refreshDiary()` на `onActivated`, а загрузка карточечных фото имеет retry с cache-buster для сценария холодного CDN-404 сразу после сохранения новой картинки.
+• UX каталога вопросов в `editor.vue` построен в схеме `header + controls + scroll-list + sticky action`:
+  - список вопросов прокручивается внутри модалки,
+  - primary-кнопка для вкладки `Избранное` всегда закреплена внизу и открывает отдельный попап добавления/редактирования вопроса (`textarea + "Готово"`),
+  - внутри `Избранного` у элементов используются действия `редактировать` и `удалить` (без иконки сердца).

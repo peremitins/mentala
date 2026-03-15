@@ -73,6 +73,7 @@ import {
   extractFeaturePlanRequiredError,
   useEntitlements,
 } from '@/app/composables/useEntitlements';
+import { useTherapyAnalytics } from '@/app/composables/useTherapyAnalytics';
 
 const colorSchemes: Record<string, string> = {
   blue: 'from-blue-500 to-cyan-500',
@@ -94,6 +95,7 @@ const { topics: userTopics } = storeToRefs(therapyStore);
 const router = useRouter();
 const route = useRoute();
 const { getFeatureAccess, refreshEntitlements } = useEntitlements();
+const { trackQuickChatClick } = useTherapyAnalytics();
 
 // Загружаем данные после монтирования компонента (с кэшированием)
 // Защита от двойного вызова реализована в store через isSkeletonLoading флаг
@@ -143,7 +145,7 @@ const customTopicItems = computed<NotificationIndexItem[]>(() =>
 );
 
 const baseTopicItems = computed<NotificationIndexItem[]>(() =>
-  THERAPY_TOPICS.filter((topic) => topic.key !== 'sos').map((topic) => {
+  THERAPY_TOPICS.map((topic) => {
     const pref = notificationsStore.getPreference('therapy', {
       entityKey: topic.key,
     });
@@ -334,6 +336,11 @@ async function handleTherapyQuickChat(item: NotificationIndexItem) {
   if (!chatAssistantAccess.value.available) {
     openPaywall('chat.assistant');
     return;
+  }
+
+  const topicKey = resolveTherapyTopicKey(item);
+  if (topicKey === 'phobias') {
+    trackQuickChatClick(topicKey);
   }
 
   const chat = useChatStore();

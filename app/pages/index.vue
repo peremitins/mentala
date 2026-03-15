@@ -49,15 +49,74 @@
             >
               <div
                 v-for="(m, index) in combinedMessages"
-                :key="`msg-${index}-${m.role}`"
-                class="w-max px-3 py-2 mb-2 items-center max-w-[80%] glass-deep markdown-content"
-                :class="{ 'ml-auto': (m as any).role === 'user' }"
-                v-html="
-                  (m as any).role === 'assistant'
-                    ? formatMessage(m.content)
-                    : m.content
-                "
-              />
+                :key="`msg-${getMessageClientId(m, index)}`"
+                class="flex flex-col w-fit max-w-[80%]"
+                :class="{
+                  'ml-auto self-end items-end': (m as any).role === 'user',
+                  'self-start items-start': (m as any).role === 'assistant',
+                }"
+              >
+                <div
+                  class="relative px-3 py-2 mb-1 glass-deep"
+                  :class="{
+                    'ml-auto': (m as any).role === 'user',
+                    'pb-6': (m as any).role === 'assistant',
+                  }"
+                  :data-chat-role="(m as any).role"
+                >
+                  <div
+                    class="items-center markdown-content"
+                    v-html="
+                      (m as any).role === 'assistant'
+                        ? formatMessage(m.content)
+                        : m.content
+                    "
+                  />
+                  <div
+                    v-if="(m as any).role === 'assistant'"
+                    class="assistant-feedback-actions absolute right-2 bottom-2 flex items-center gap-1"
+                  >
+                    <button
+                      type="button"
+                      class="feedback-action-button"
+                      :class="{
+                        'feedback-action-button-active-like':
+                          getFeedbackRating(getMessageClientId(m, index)) === 1,
+                      }"
+                      :disabled="
+                        isFeedbackButtonDisabled(getMessageClientId(m, index))
+                      "
+                      @click="handleLikeClick(getMessageClientId(m, index))"
+                      aria-label="Полезный ответ"
+                    >
+                      <IconLoaderCircle
+                        v-if="
+                          isFeedbackSubmitting(getMessageClientId(m, index))
+                        "
+                        class="w-3.5 h-3.5 animate-spin"
+                      />
+                      <IconThumbsUp v-else class="w-3.5 h-3.5" />
+                    </button>
+
+                    <button
+                      type="button"
+                      class="feedback-action-button"
+                      :class="{
+                        'feedback-action-button-active-dislike':
+                          getFeedbackRating(getMessageClientId(m, index)) ===
+                          -1,
+                      }"
+                      :disabled="
+                        isFeedbackButtonDisabled(getMessageClientId(m, index))
+                      "
+                      @click="handleDislikeClick(getMessageClientId(m, index))"
+                      aria-label="Сообщить о проблеме"
+                    >
+                      <IconThumbsDown class="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
               <!-- Индикатор загрузки при генерации ответа -->
               <ChatLoadingIndicator
                 v-if="chat.isGenerating"
@@ -146,6 +205,89 @@
       :required-plan="paywallAccess?.requiredPlan || null"
       :paywall="paywallAccess?.paywall || null"
     />
+
+    <Dialog
+      :open="isDislikeDialogOpen"
+      @update:open="handleDislikeDialogOpenChange"
+    >
+      <DialogContent
+        class="glass-deep border border-border bg-card backdrop-blur-xl text-card-foreground"
+      >
+        <DialogHeader>
+          <DialogTitle class="text-lg font-semibold">
+            Что не так с ответом?
+          </DialogTitle>
+          <DialogDescription class="text-sm text-muted-foreground">
+            Выбери причину и при необходимости добавь комментарий.
+          </DialogDescription>
+        </DialogHeader>
+
+        <form class="space-y-4" @submit.prevent="submitDislikeFeedback">
+          <div class="space-y-2">
+            <label class="text-sm font-medium text-foreground">
+              Причина (опционально)
+            </label>
+            <Select v-model="dislikeTopicCode">
+              <SelectTrigger
+                class="w-full glass-deep border-white/20 data-[placeholder]:text-foreground/70 focus:ring-0"
+              >
+                <SelectValue placeholder="Выберите причину (необязательно)" />
+              </SelectTrigger>
+              <SelectContent
+                :body-lock="false"
+                class="glass-deep border-white/20"
+              >
+                <SelectItem
+                  v-for="item in FEEDBACK_TOPIC_OPTIONS"
+                  :key="item.code"
+                  :value="item.code"
+                  class="focus:bg-white/10 focus:text-foreground"
+                >
+                  {{ item.label }}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <label class="text-sm font-medium text-foreground">
+                Комментарий (опционально)
+              </label>
+              <span class="text-xs text-muted-foreground">
+                {{ dislikeCommentLength }}/{{ FEEDBACK_COMMENT_MAX_LENGTH }}
+              </span>
+            </div>
+            <TextareaResize
+              v-model="dislikeComment"
+              variant="form"
+              :min-height="'96px'"
+              :max-height="'220px'"
+              :maxlength="FEEDBACK_COMMENT_MAX_LENGTH"
+              placeholder="Опиши, что было не так (необязательно)"
+            />
+          </div>
+
+          <div class="flex items-center justify-end gap-2 pt-2">
+            <Button
+              type="button"
+              variant="ghost"
+              @click="closeDislikeDialog"
+              :disabled="isDislikeSubmitting"
+            >
+              Отмена
+            </Button>
+            <Button type="submit" :disabled="isDislikeSubmitDisabled">
+              <IconLoaderCircle
+                v-if="isDislikeSubmitting"
+                class="w-4 h-4 animate-spin"
+              />
+              <span>Отправить</span>
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>
 
@@ -162,24 +304,47 @@ import { useRoute, useRouter } from 'vue-router';
 import { useTTS } from '@/app/composables/useTTS';
 import { useMarkdown } from '@/app/composables/useMarkdown';
 import { useVoiceDictationInput } from '@/app/composables/useVoiceDictationInput';
-import { useChatStore } from '@/app/stores/chat';
+import { useChatStore, type ChatMessageFeedbackState } from '@/app/stores/chat';
 import { useSpeechStore } from '@/app/stores/speech';
 import { useChatSettingsStore } from '@/app/stores/chatSettings';
 import { useSubscriptionStore } from '@/app/stores/subscription';
+import { useToast } from '@/app/composables/useToast';
 import { CHAT_STREAM_MODE } from '@/app/constants/chat';
 import TextareaResize from '@/app/components/ui/TextareaResize.vue';
+import { Button } from '@/app/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/app/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/app/components/ui/shadcn/select';
 
 import IconMic from '~icons/lucide/mic';
 import IconSend from '~icons/lucide/send';
+import IconThumbsUp from '~icons/lucide/thumbs-up';
+import IconThumbsDown from '~icons/lucide/thumbs-down';
+import IconLoaderCircle from '~icons/lucide/loader-circle';
 import PageHeader from '@/app/components/PageHeader.vue';
 import WelcomeScreen from '@/app/components/WelcomeScreen.vue';
 import AvatarVoiceControls from '@/app/components/AvatarVoiceControls.vue';
 import SuggestedChips from '@/app/components/chat/SuggestedChips.vue';
 import ChatLoadingIndicator from '@/app/components/chat/ChatLoadingIndicator.vue';
 import FeaturePaywallModal from '@/app/components/subscription/FeaturePaywallModal.vue';
-import type { SuggestedChip } from '@/shared/dto';
+import {
+  ChatFeedbackUpsertResponseDto,
+  type SuggestedChip,
+  type ChatFeedbackTopicCode,
+} from '@/shared/dto';
 import { useEntitlements } from '@/app/composables/useEntitlements';
-import { useRuntimeConfig } from '#imports';
+import { useNuxtApp, useRuntimeConfig } from '#imports';
 
 const emit = defineEmits<{ (e: 'send', text: string): void }>();
 
@@ -222,6 +387,7 @@ const { getFeatureAccess } = useEntitlements();
 const speechStore = useSpeechStore();
 const chatSettings = useChatSettingsStore();
 const runtimeConfig = useRuntimeConfig();
+const { $api } = useNuxtApp();
 const isTtsEnabled = computed(
   () => runtimeConfig.public.featureTtsEnabled === true
 );
@@ -238,6 +404,39 @@ const userTextCount = computed(() => chat.userText?.length ?? 0);
 const isUserTextOverLimit = computed(
   () => userTextCount.value > MAX_USER_TEXT_LENGTH
 );
+
+const FEEDBACK_COMMENT_MAX_LENGTH = 1000;
+const FEEDBACK_ASSISTANT_MESSAGE_TEXT_MAX_LENGTH = 8000;
+const FEEDBACK_TOPIC_OPTIONS: Array<{
+  code: ChatFeedbackTopicCode;
+  label: string;
+}> = [
+  { code: 'FACTUAL_ERROR', label: 'Информация не верна' },
+  { code: 'NOT_HELPFUL', label: 'Не помогло / слишком общее' },
+  { code: 'TONE_ISSUE', label: 'Неподходящий тон' },
+  { code: 'UNSAFE_ADVICE', label: 'Опасный или вредный совет' },
+  { code: 'PRIVACY_CONCERN', label: 'Нарушение приватности' },
+  { code: 'OTHER', label: 'Другое' },
+];
+
+const isDislikeDialogOpen = ref(false);
+const dislikeTargetMessageId = ref<string | null>(null);
+const dislikeTopicCode = ref<ChatFeedbackTopicCode>('OTHER');
+const dislikeComment = ref('');
+const dislikeCommentLength = computed(() => dislikeComment.value.length);
+const isDislikeSubmitting = computed(() => {
+  const messageId = dislikeTargetMessageId.value;
+  if (!messageId) return false;
+  return chat.feedbackSubmittingByMessageId[messageId] === true;
+});
+const isDislikeSubmitDisabled = computed(() => {
+  const messageId = dislikeTargetMessageId.value;
+  if (!messageId) {
+    return true;
+  }
+
+  return !getMessageTherapySessionId(messageId) || isDislikeSubmitting.value;
+});
 
 // Управление TTS озвучкой
 const { speak: speakTTS } = useTTS();
@@ -501,6 +700,239 @@ const formatMessage = (content: string) => {
   return renderMarkdown(content);
 };
 
+function getMessageClientId(message: unknown, index: number): string {
+  if (
+    typeof message === 'object' &&
+    message !== null &&
+    typeof (message as { id?: unknown }).id === 'string' &&
+    (message as { id: string }).id.trim().length > 0
+  ) {
+    return (message as { id: string }).id;
+  }
+
+  return `legacy-${index}`;
+}
+
+function getMessageByClientId(
+  messageId: string
+): (typeof combinedMessages.value)[number] | null {
+  return (
+    combinedMessages.value.find(
+      (message, index) => getMessageClientId(message, index) === messageId
+    ) ?? null
+  );
+}
+
+function getMessageTherapySessionId(messageId: string): number | null {
+  const message = getMessageByClientId(messageId);
+  const therapySessionId = message?.therapySessionId;
+
+  if (
+    typeof therapySessionId !== 'number' ||
+    !Number.isInteger(therapySessionId) ||
+    therapySessionId <= 0
+  ) {
+    return null;
+  }
+
+  return therapySessionId;
+}
+
+function getFeedbackRating(messageId: string): 1 | -1 | null {
+  return chat.feedbackByMessageId[messageId]?.rating ?? null;
+}
+
+function isFeedbackSubmitting(messageId: string): boolean {
+  return chat.feedbackSubmittingByMessageId[messageId] === true;
+}
+
+function isFeedbackButtonDisabled(messageId: string): boolean {
+  return (
+    !getMessageTherapySessionId(messageId) || isFeedbackSubmitting(messageId)
+  );
+}
+
+function setFeedbackSubmitting(messageId: string, isSubmitting: boolean) {
+  chat.setFeedbackSubmitting(messageId, isSubmitting);
+}
+
+function setFeedbackState(
+  messageId: string,
+  state: ChatMessageFeedbackState | null
+) {
+  chat.setFeedbackState(messageId, state);
+}
+
+function normalizeFeedbackComment(value: string): string | null {
+  const normalized = value.trim();
+  if (!normalized) return null;
+  return normalized.slice(0, FEEDBACK_COMMENT_MAX_LENGTH);
+}
+
+function resolveAssistantMessageTextForFeedback(
+  messageId: string
+): string | null {
+  // Берем исходный текст assistant-сообщения, чтобы в БД было видно, на что именно пожаловались.
+  const assistantMessage = getMessageByClientId(messageId);
+  if (!assistantMessage || assistantMessage.role !== 'assistant') {
+    return null;
+  }
+
+  const rawText = assistantMessage.content;
+  const normalized = rawText.trim();
+
+  if (!normalized) {
+    return null;
+  }
+
+  return normalized.slice(0, FEEDBACK_ASSISTANT_MESSAGE_TEXT_MAX_LENGTH);
+}
+
+function extractFeedbackErrorMessage(error: any): string {
+  const message =
+    error?.data?.error?.message ||
+    error?.data?.message ||
+    error?.response?._data?.error?.message ||
+    error?.response?._data?.message ||
+    error?.message;
+
+  if (typeof message === 'string' && message.trim().length > 0) {
+    return message.trim();
+  }
+
+  return 'Не удалось отправить обратную связь';
+}
+
+async function submitFeedback(params: {
+  messageId: string;
+  rating: 1 | -1;
+  topicCode: ChatFeedbackTopicCode | null;
+  comment: string | null;
+  showSuccessToast?: boolean;
+}): Promise<boolean> {
+  const therapySessionId = getMessageTherapySessionId(params.messageId);
+  if (!therapySessionId) {
+    useToast(
+      'Сессия завершена',
+      'Начни новый диалог и попробуй снова',
+      'warning'
+    );
+    return false;
+  }
+
+  const previousState = chat.feedbackByMessageId[params.messageId] ?? null;
+  const optimisticState: ChatMessageFeedbackState = {
+    rating: params.rating,
+    topicCode: params.rating === -1 ? params.topicCode : null,
+    comment: params.comment,
+    updatedAt: new Date().toISOString(),
+  };
+
+  setFeedbackState(params.messageId, optimisticState);
+  setFeedbackSubmitting(params.messageId, true);
+
+  try {
+    const response = await $api('/api/chat/feedback', {
+      method: 'POST',
+      body: {
+        therapySessionId,
+        assistantMessageClientId: params.messageId,
+        sessionId: chat.sessionId || undefined,
+        rating: params.rating,
+        topicCode:
+          params.rating === -1 ? params.topicCode || undefined : undefined,
+        comment: params.comment || undefined,
+        assistantMessageText:
+          resolveAssistantMessageTextForFeedback(params.messageId) || undefined,
+      },
+    });
+    const parsed = ChatFeedbackUpsertResponseDto.parse(response);
+
+    setFeedbackState(params.messageId, {
+      rating: parsed.item.rating,
+      topicCode: parsed.item.topicCode,
+      comment: parsed.item.comment,
+      updatedAt: parsed.item.updatedAt,
+    });
+
+    if (params.showSuccessToast) {
+      useToast('Спасибо за обратную связь');
+    }
+
+    return true;
+  } catch (error) {
+    setFeedbackState(params.messageId, previousState);
+    useToast(
+      'Не удалось отправить оценку',
+      extractFeedbackErrorMessage(error),
+      'error'
+    );
+    return false;
+  } finally {
+    setFeedbackSubmitting(params.messageId, false);
+  }
+}
+
+async function handleLikeClick(messageId: string) {
+  if (isFeedbackButtonDisabled(messageId)) return;
+  await submitFeedback({
+    messageId,
+    rating: 1,
+    topicCode: null,
+    comment: null,
+    showSuccessToast: true,
+  });
+}
+
+function handleDislikeClick(messageId: string) {
+  if (isFeedbackButtonDisabled(messageId)) return;
+
+  const current = chat.feedbackByMessageId[messageId];
+  const hasCurrentTopicInUi = FEEDBACK_TOPIC_OPTIONS.some(
+    (option) => option.code === current?.topicCode
+  );
+  dislikeTargetMessageId.value = messageId;
+  dislikeTopicCode.value =
+    current?.rating === -1 && current.topicCode && hasCurrentTopicInUi
+      ? current.topicCode
+      : 'OTHER';
+  dislikeComment.value =
+    current?.rating === -1 && current.comment ? current.comment : '';
+  isDislikeDialogOpen.value = true;
+}
+
+function closeDislikeDialog() {
+  isDislikeDialogOpen.value = false;
+  dislikeTargetMessageId.value = null;
+  dislikeTopicCode.value = 'OTHER';
+  dislikeComment.value = '';
+}
+
+function handleDislikeDialogOpenChange(open: boolean) {
+  isDislikeDialogOpen.value = open;
+  if (!open) {
+    closeDislikeDialog();
+  }
+}
+
+async function submitDislikeFeedback() {
+  if (!dislikeTargetMessageId.value) {
+    return;
+  }
+
+  const isSaved = await submitFeedback({
+    messageId: dislikeTargetMessageId.value,
+    rating: -1,
+    topicCode: dislikeTopicCode.value,
+    comment: normalizeFeedbackComment(dislikeComment.value),
+    showSuccessToast: true,
+  });
+
+  if (isSaved) {
+    closeDislikeDialog();
+  }
+}
+
 const chatRef = ref<HTMLElement | null>(null);
 const stickToBottom = ref(true); // «прилипать» ли при добавлении
 const THRESHOLD = 80; // порог, насколько близко к низу считать «рядом»
@@ -522,16 +954,16 @@ const scrollToBottom = async (behavior: 'auto' | 'smooth' = 'smooth') => {
     // Для non-stream режима находим последний ответ ИИ и скроллим так, чтобы он был вверху
     await nextTick();
 
-    // Находим все сообщения (элементы с классом bubble)
+    // Находим все сообщения ассистента по data-атрибуту роли.
     const messages = Array.from(
-      el.querySelectorAll('.bubble')
+      el.querySelectorAll('[data-chat-role="assistant"]')
     ) as HTMLElement[];
 
-    // Находим последнее сообщение ассистента (без класса ml-auto)
+    // Находим последнее сообщение ассистента.
     let lastAssistantMessage: HTMLElement | null = null;
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i];
-      if (msg && !msg.classList.contains('ml-auto')) {
+      if (msg) {
         lastAssistantMessage = msg;
         break;
       }
@@ -585,6 +1017,9 @@ watch(
 );
 
 onMounted(async () => {
+  // Нормализуем legacy-состояние сообщений без id (например, после HMR).
+  chat.ensureMessageIds();
+
   // Загружаем настройки чата при монтировании
   try {
     await chatSettings.getChatSettings();
@@ -821,6 +1256,42 @@ watch(
 .fade-slide-leave-from {
   opacity: 1;
   transform: translateY(0);
+}
+
+.feedback-action-button {
+  width: 24px;
+  height: 24px;
+  border-radius: 9999px;
+  border: none;
+  color: hsl(var(--foreground) / 0.78);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  transition:
+    color 0.2s ease,
+    background-color 0.2s ease,
+    opacity 0.2s ease;
+}
+
+.feedback-action-button:hover:not(:disabled) {
+  color: hsl(var(--foreground));
+  background: hsl(var(--background) / 0.28);
+}
+
+.feedback-action-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.feedback-action-button-active-like {
+  color: rgb(52 211 153);
+  background: rgb(16 185 129 / 0.16);
+}
+
+.feedback-action-button-active-dislike {
+  color: rgb(251 113 133);
+  background: rgb(244 63 94 / 0.16);
 }
 
 /* Стили для markdown контента в сообщениях */

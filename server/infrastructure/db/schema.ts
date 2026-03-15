@@ -1,15 +1,18 @@
 import {
   type AnyPgColumn,
   pgTable,
+  bigserial,
   serial,
   text,
   timestamp,
   boolean,
   integer,
+  smallint,
   varchar,
   uuid,
   jsonb,
   numeric,
+  check,
   unique,
   index,
   uniqueIndex,
@@ -30,116 +33,138 @@ export const roles = pgTable('roles', {
     .notNull(),
 });
 
-export const users = pgTable('users', {
-  id: serial('id').primaryKey(),
-  name: varchar('name', { length: 120 }),
-  gender: varchar('gender', { length: 10 }),
-  ageRange: varchar('age_range', { length: 20 }),
-  onboarding: jsonb('onboarding').notNull().default({}),
-  // Настройки фоновой сцены (обои, звук, анимация).
-  sceneSettings: jsonb('scene_settings').notNull().default({}),
-  email: varchar('email', { length: 255 }).unique().notNull(),
-  emailVerifiedAt: timestamp('email_verified_at'),
-  passwordHash: text('password_hash'),
-  avatarUrl: text('avatar_url'),
-  country: varchar('country', { length: 100 }),
-  locale: varchar('locale', { length: 8 }),
-  lastLoginAt: timestamp('last_login_at'),
-  lastLoginIp: text('last_login_ip'),
-  // Subscription fields
-  hasUsedTrial: boolean('has_used_trial').default(false).notNull(),
-  trialStartedAt: timestamp('trial_started_at', { withTimezone: true }),
-  trialEndedAt: timestamp('trial_ended_at', { withTimezone: true }),
-  billingCredit: numeric('billing_credit', { precision: 10, scale: 2 })
-    .default('0')
-    .notNull(), // внутренний кредит в рублях
-  timezone: varchar('timezone', { length: 100 }), // IANA timezone для расчета недель
-  // Trial-scheduled биллинг (оплата в конце пробного периода).
-  billingPlanId: varchar('billing_plan_id', { length: 50 }).references(
-    () => subscriptionPlans.id,
-    { onDelete: 'set null' }
-  ),
-  billingPeriod: varchar('billing_period', { length: 10 }), // 'month' | 'year'
-  nextChargeAt: timestamp('next_charge_at', { withTimezone: true }),
-  paymentMethodBound: boolean('payment_method_bound').default(false).notNull(),
-  paymentMethodId: text('payment_method_id'),
-  paymentMethodType: varchar('payment_method_type', { length: 50 }),
-  paymentMethodTitle: text('payment_method_title'),
-  paymentMethodCardBrand: varchar('payment_method_card_brand', { length: 50 }),
-  paymentMethodCardLast4: varchar('payment_method_card_last4', { length: 4 }),
-  paymentMethodCardExpiryMonth: varchar('payment_method_card_expiry_month', {
-    length: 2,
-  }),
-  paymentMethodCardExpiryYear: varchar('payment_method_card_expiry_year', {
-    length: 4,
-  }),
-  paymentMethodBindingId: text('payment_method_binding_id'),
-  paymentMethodBindingSessionId: text('payment_method_binding_session_id'),
-  paymentMethodBindingStatus: varchar('payment_method_binding_status', {
-    length: 20,
-  })
-    .default('none')
-    .notNull(), // 'none' | 'pending' | 'active' | 'failed'
-  paymentMethodBindingUpdatedAt: timestamp(
-    'payment_method_binding_updated_at',
-    {
+export const users = pgTable(
+  'users',
+  {
+    id: serial('id').primaryKey(),
+    name: varchar('name', { length: 120 }),
+    gender: varchar('gender', { length: 10 }),
+    ageRange: varchar('age_range', { length: 20 }),
+    onboarding: jsonb('onboarding').notNull().default({}),
+    // Настройки фоновой сцены (обои, звук, анимация).
+    sceneSettings: jsonb('scene_settings').notNull().default({}),
+    email: varchar('email', { length: 255 }).unique().notNull(),
+    emailVerifiedAt: timestamp('email_verified_at'),
+    passwordHash: text('password_hash'),
+    avatarUrl: text('avatar_url'),
+    country: varchar('country', { length: 100 }),
+    locale: varchar('locale', { length: 8 }),
+    lastLoginAt: timestamp('last_login_at'),
+    lastLoginIp: text('last_login_ip'),
+    // Subscription fields
+    hasUsedTrial: boolean('has_used_trial').default(false).notNull(),
+    trialStartedAt: timestamp('trial_started_at', { withTimezone: true }),
+    trialEndedAt: timestamp('trial_ended_at', { withTimezone: true }),
+    billingCredit: numeric('billing_credit', { precision: 10, scale: 2 })
+      .default('0')
+      .notNull(), // внутренний кредит в рублях
+    timezone: varchar('timezone', { length: 100 }), // IANA timezone для расчета недель
+    // Trial-scheduled биллинг (оплата в конце пробного периода).
+    billingPlanId: varchar('billing_plan_id', { length: 50 }).references(
+      () => subscriptionPlans.id,
+      { onDelete: 'set null' }
+    ),
+    billingPeriod: varchar('billing_period', { length: 10 }), // 'month' | 'year'
+    nextChargeAt: timestamp('next_charge_at', { withTimezone: true }),
+    paymentMethodBound: boolean('payment_method_bound')
+      .default(false)
+      .notNull(),
+    paymentMethodId: text('payment_method_id'),
+    paymentMethodType: varchar('payment_method_type', { length: 50 }),
+    paymentMethodTitle: text('payment_method_title'),
+    paymentMethodCardBrand: varchar('payment_method_card_brand', {
+      length: 50,
+    }),
+    paymentMethodCardLast4: varchar('payment_method_card_last4', { length: 4 }),
+    paymentMethodCardExpiryMonth: varchar('payment_method_card_expiry_month', {
+      length: 2,
+    }),
+    paymentMethodCardExpiryYear: varchar('payment_method_card_expiry_year', {
+      length: 4,
+    }),
+    paymentMethodBindingId: text('payment_method_binding_id'),
+    paymentMethodBindingSessionId: text('payment_method_binding_session_id'),
+    paymentMethodBindingStatus: varchar('payment_method_binding_status', {
+      length: 20,
+    })
+      .default('none')
+      .notNull(), // 'none' | 'pending' | 'active' | 'failed'
+    paymentMethodBindingUpdatedAt: timestamp(
+      'payment_method_binding_updated_at',
+      {
+        withTimezone: true,
+      }
+    ),
+    billingCollectionStatus: varchar('billing_collection_status', {
+      length: 20,
+    })
+      .default('none')
+      .notNull(), // 'none' | 'scheduled' | 'past_due'
+    graceEndsAt: timestamp('grace_ends_at', { withTimezone: true }),
+    billingReminderSentAt: timestamp('billing_reminder_sent_at', {
       withTimezone: true,
-    }
-  ),
-  billingCollectionStatus: varchar('billing_collection_status', { length: 20 })
-    .default('none')
-    .notNull(), // 'none' | 'scheduled' | 'past_due'
-  graceEndsAt: timestamp('grace_ends_at', { withTimezone: true }),
-  billingReminderSentAt: timestamp('billing_reminder_sent_at', {
-    withTimezone: true,
-  }),
-  billingLockedAt: timestamp('billing_locked_at', { withTimezone: true }),
-  billingLockedBy: varchar('billing_locked_by', { length: 100 }),
-  // Запланированная смена тарифа (last-write-wins).
-  scheduledPlanId: varchar('scheduled_plan_id', { length: 50 }).references(
-    () => subscriptionPlans.id,
-    { onDelete: 'set null' }
-  ),
-  scheduledBillingPeriod: varchar('scheduled_billing_period', { length: 10 }), // 'month' | 'year'
-  scheduledChangeAt: timestamp('scheduled_change_at', { withTimezone: true }),
-  scheduledFromSubscriptionId: integer(
-    'scheduled_from_subscription_id'
-  ).references((): AnyPgColumn => userSubscriptions.id, {
-    onDelete: 'set null',
-  }),
-  scheduledChangeUpdatedAt: timestamp('scheduled_change_updated_at', {
-    withTimezone: true,
-  }),
-  // Юридические согласия и версии документов
-  termsAcceptedAt: timestamp('terms_accepted_at', { withTimezone: true }),
-  privacyAcceptedAt: timestamp('privacy_accepted_at', { withTimezone: true }),
-  termsVersion: varchar('terms_version', { length: 32 }),
-  privacyVersion: varchar('privacy_version', { length: 32 }),
-  acceptanceSource: varchar('acceptance_source', { length: 16 }),
-  acceptanceIp: text('acceptance_ip'),
-  acceptanceUserAgent: text('acceptance_user_agent'),
-  marketingConsentAt: timestamp('marketing_consent_at', { withTimezone: true }),
-  marketingConsentSource: varchar('marketing_consent_source', { length: 16 }),
-  pushNotificationsEnabled: boolean('push_notifications_enabled')
-    .default(true)
-    .notNull(),
-  // Roles and permissions
-  roleId: varchar('role_id', { length: 50 })
-    .default('user')
-    .notNull()
-    .references(() => roles.id),
-  isBlocked: boolean('is_blocked').default(false).notNull(),
-  deletionRequestedAt: timestamp('deletion_requested_at', {
-    withTimezone: true,
-  }),
-  deletedAt: timestamp('deleted_at', { withTimezone: true }),
-  createdAt: timestamp('created_at', { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-});
+    }),
+    billingLockedAt: timestamp('billing_locked_at', { withTimezone: true }),
+    billingLockedBy: varchar('billing_locked_by', { length: 100 }),
+    // Запланированная смена тарифа (last-write-wins).
+    scheduledPlanId: varchar('scheduled_plan_id', { length: 50 }).references(
+      () => subscriptionPlans.id,
+      { onDelete: 'set null' }
+    ),
+    scheduledBillingPeriod: varchar('scheduled_billing_period', {
+      length: 10,
+    }), // 'month' | 'year'
+    scheduledChangeAt: timestamp('scheduled_change_at', { withTimezone: true }),
+    scheduledFromSubscriptionId: integer(
+      'scheduled_from_subscription_id'
+    ).references((): AnyPgColumn => userSubscriptions.id, {
+      onDelete: 'set null',
+    }),
+    scheduledChangeUpdatedAt: timestamp('scheduled_change_updated_at', {
+      withTimezone: true,
+    }),
+    // Юридические согласия и версии документов
+    termsAcceptedAt: timestamp('terms_accepted_at', { withTimezone: true }),
+    privacyAcceptedAt: timestamp('privacy_accepted_at', { withTimezone: true }),
+    termsVersion: varchar('terms_version', { length: 32 }),
+    privacyVersion: varchar('privacy_version', { length: 32 }),
+    acceptanceSource: varchar('acceptance_source', { length: 16 }),
+    acceptanceIp: text('acceptance_ip'),
+    acceptanceUserAgent: text('acceptance_user_agent'),
+    marketingConsentAt: timestamp('marketing_consent_at', {
+      withTimezone: true,
+    }),
+    marketingConsentSource: varchar('marketing_consent_source', { length: 16 }),
+    pushNotificationsEnabled: boolean('push_notifications_enabled')
+      .default(true)
+      .notNull(),
+    // Roles and permissions
+    roleId: varchar('role_id', { length: 50 })
+      .default('user')
+      .notNull()
+      .references(() => roles.id),
+    isBlocked: boolean('is_blocked').default(false).notNull(),
+    deletionRequestedAt: timestamp('deletion_requested_at', {
+      withTimezone: true,
+    }),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    // Индекс ускоряет выборку кандидатов на billing reminder (24ч окно).
+    // Partial условие держит индекс компактным и релевантным только для due-кейса.
+    trialBillingReminderDueIdx: index('idx_users_trial_billing_reminder_due')
+      .on(table.nextChargeAt, table.id)
+      .where(
+        sql`${table.billingCollectionStatus} = 'scheduled' and ${table.billingReminderSentAt} is null and ${table.nextChargeAt} is not null`
+      ),
+  })
+);
 
 // История способов оплаты пользователя (active/archived).
 export const userPaymentMethods = pgTable(
@@ -353,6 +378,126 @@ export const userPrompts = pgTable('user_prompts', {
     .notNull(),
 });
 
+// === Gratitude Diary ===
+export const gratitudeDiaryEntries = pgTable(
+  'gratitude_diary_entries',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    userId: integer('user_id').notNull(),
+    text: text('text').notNull(),
+    mood: varchar('mood', { length: 20 }),
+    tags: text('tags')
+      .array()
+      .notNull()
+      .default(sql`ARRAY[]::text[]`),
+    photoUrl: text('photo_url'),
+    // Ключ объекта в Object Storage: user-uploads/gratitude-diary/{userId}/{ts}-{uuid}.webp
+    // Публичный URL строится динамически: ${CDN_BASE}/${photoStorageKey}.
+    // Поле null для legacy-записей с локальными URL (/uploads/...).
+    photoStorageKey: text('photo_storage_key'),
+    // Текст вопроса-подсказки, который был активен при создании записи
+    promptText: text('prompt_text'),
+    inputMethod: varchar('input_method', { length: 12 })
+      .notNull()
+      .default('text'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    userCreatedIdx: index('idx_gratitude_diary_entries_user_created').on(
+      table.userId,
+      table.createdAt
+    ),
+  })
+);
+
+export const gratitudeDiaryWorksheetTemplates = pgTable(
+  'gratitude_diary_worksheet_templates',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    userId: integer('user_id').notNull(),
+    // Храним персональный шаблон целиком, чтобы поддержать произвольные формулировки и эмодзи.
+    items: jsonb('items')
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    userUniqueIdx: uniqueIndex(
+      'uk_gratitude_diary_worksheet_templates_user'
+    ).on(table.userId),
+    userUpdatedIdx: index('idx_gratitude_diary_worksheet_templates_user').on(
+      table.userId,
+      table.updatedAt
+    ),
+  })
+);
+
+// Избранные промпты пользователя в дневнике благодарности.
+// Два типа: 'catalog' — ссылка на системный промпт, 'custom' — пользовательский текст.
+export const gratitudeDiaryFavoritePrompts = pgTable(
+  'gratitude_diary_favorite_prompts',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    userId: integer('user_id').notNull(),
+    // 'catalog' — ссылка на системный промпт из catalog.ts, 'custom' — пользовательский текст
+    promptType: varchar('prompt_type', { length: 10 }).notNull(),
+    // Для catalog: id промпта из каталога (например 'self-1', 'health-3')
+    catalogPromptId: varchar('catalog_prompt_id', { length: 64 }),
+    // Для custom: текст промпта (ограничен 220 символами на уровне БД)
+    customText: varchar('custom_text', { length: 220 }),
+    // Порядок отображения (для будущего ручного перетаскивания, сейчас сортируем по created_at)
+    sortOrder: integer('sort_order').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    // Индекс для быстрой выборки избранных пользователя, сортировка по created_at DESC
+    userCreatedIdx: index('idx_gratitude_favorite_user_created').on(
+      table.userId,
+      table.createdAt
+    ),
+    // Partial unique index: один каталожный промпт в избранном одного пользователя
+    userCatalogUniqueIdx: uniqueIndex('uk_gratitude_favorite_user_catalog')
+      .on(table.userId, table.catalogPromptId)
+      .where(sql`${table.catalogPromptId} IS NOT NULL`),
+    // Partial unique index: дедупликация кастомных промптов по тексту
+    // Защищает от двойной миграции (если пользователь открыл 2 вкладки одновременно)
+    userCustomTextUniqueIdx: uniqueIndex(
+      'uk_gratitude_favorite_user_custom_text'
+    )
+      .on(table.userId, table.customText)
+      .where(sql`${table.customText} IS NOT NULL`),
+    // Тип промпта ограничен допустимыми значениями
+    promptTypeCheck: check(
+      'chk_gratitude_favorite_prompt_type',
+      sql`${table.promptType} IN ('catalog', 'custom')`
+    ),
+    // Консистентность полиморфных записей:
+    // catalog → catalog_prompt_id NOT NULL, custom_text IS NULL
+    // custom → custom_text NOT NULL, catalog_prompt_id IS NULL
+    typeConsistencyCheck: check(
+      'chk_gratitude_favorite_type_consistency',
+      sql`(${table.promptType} = 'catalog' AND ${table.catalogPromptId} IS NOT NULL AND ${table.customText} IS NULL)
+          OR
+          (${table.promptType} = 'custom' AND ${table.customText} IS NOT NULL AND ${table.catalogPromptId} IS NULL)`
+    ),
+  })
+);
+
 // === Welcome Prompts ===
 // Стартовые промпты для приветствия ассистента на welcome-экране
 export const welcomePrompts = pgTable('welcome_prompts', {
@@ -505,6 +650,19 @@ export const chatSettings = pgTable('chat_settings', {
   lastNameGreetingAt: timestamp('last_name_greeting_at', {
     withTimezone: true,
   }),
+  // Последний подтвержденный фокус внутри темы "Страхи".
+  lastTherapyFocus: jsonb('last_therapy_focus').$type<{
+    topicId: 'phobias';
+    subtopicKey:
+      | 'public_speaking'
+      | 'heights'
+      | 'confined_spaces'
+      | 'social_fear'
+      | 'other_specific';
+    subtopicLabel: string;
+    confirmedByUser: true;
+    updatedAt: string;
+  } | null>(),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull(),
@@ -961,6 +1119,73 @@ export const therapySessions = pgTable(
   })
 );
 
+// Оценки ответов ассистента (MVP feedback).
+export const chatResponseFeedback = pgTable(
+  'chat_response_feedback',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    therapySessionId: integer('therapy_session_id')
+      .notNull()
+      .references(() => therapySessions.id, { onDelete: 'cascade' }),
+    sessionId: text('session_id'),
+    // Клиентский id ассистент-сообщения (nanoid(21), оставляем запас).
+    assistantMessageClientId: varchar('assistant_message_client_id', {
+      length: 64,
+    }).notNull(),
+    rating: smallint('rating').notNull(), // -1 | 1
+    topicCode: varchar('topic_code', { length: 40 }),
+    comment: text('comment'),
+    // Текст ответа ИИ, на который пользователь оставил оценку.
+    assistantMessageText: text('assistant_message_text'),
+    platform: varchar('platform', { length: 20 }).notNull().default('web'),
+    timezone: varchar('timezone', { length: 100 }),
+    locale: varchar('locale', { length: 8 }),
+    requestId: text('request_id'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    // Одна оценка на сообщение ассистента в рамках одной therapy-сессии.
+    uniqueUserSessionMessage: unique(
+      'uk_chat_response_feedback_user_therapy_message'
+    ).on(table.userId, table.therapySessionId, table.assistantMessageClientId),
+    therapySessionCreatedIdx: index(
+      'idx_chat_response_feedback_session_created'
+    ).on(table.therapySessionId, table.createdAt),
+    ratingCreatedIdx: index('idx_chat_response_feedback_rating_created').on(
+      table.rating,
+      table.createdAt
+    ),
+    topicCreatedIdx: index('idx_chat_response_feedback_topic_created').on(
+      table.topicCode,
+      table.createdAt
+    ),
+    ratingCheck: check(
+      'chk_chat_response_feedback_rating',
+      sql`${table.rating} in (-1, 1)`
+    ),
+    commentLengthCheck: check(
+      'chk_chat_response_feedback_comment_length',
+      sql`${table.comment} is null or length(${table.comment}) <= 1000`
+    ),
+    assistantMessageTextLengthCheck: check(
+      'chk_chat_response_feedback_assistant_text_length',
+      sql`${table.assistantMessageText} is null or length(${table.assistantMessageText}) <= 8000`
+    ),
+    topicByRatingCheck: check(
+      'chk_chat_response_feedback_topic_by_rating',
+      sql`(${table.rating} = 1 and ${table.topicCode} is null) or (${table.rating} = -1)`
+    ),
+  })
+);
+
 // События подписок (для аналитики)
 export const subscriptionEvents = pgTable('subscription_events', {
   id: serial('id').primaryKey(),
@@ -974,6 +1199,46 @@ export const subscriptionEvents = pgTable('subscription_events', {
     .defaultNow()
     .notNull(),
 });
+
+// Лог доставок внутренних Telegram alerts.
+export const telegramAlertDeliveries = pgTable(
+  'telegram_alert_deliveries',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    eventType: varchar('event_type', { length: 80 }).notNull(),
+    dedupKey: varchar('dedup_key', { length: 255 }).notNull(),
+    targetChannel: varchar('target_channel', { length: 20 }).notNull(),
+    environment: varchar('environment', { length: 20 }).notNull(),
+    status: varchar('status', { length: 20 }).notNull().default('queued'),
+    source: varchar('source', { length: 100 }),
+    payload: jsonb('payload'),
+    eventCreatedAt: timestamp('event_created_at', { withTimezone: true }),
+    attempt: integer('attempt').default(0).notNull(),
+    errorMessage: text('error_message'),
+    providerResponseCode: integer('provider_response_code'),
+    providerRetryAfterSeconds: integer('provider_retry_after_seconds'),
+    telegramMessageId: text('telegram_message_id'),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    dedupKeyUnique: unique('uk_telegram_alert_deliveries_dedup_key').on(
+      table.dedupKey
+    ),
+    createdAtIdx: index('idx_telegram_alert_deliveries_created_at').on(
+      table.createdAt
+    ),
+    channelStatusIdx: index('idx_telegram_alert_deliveries_channel_status').on(
+      table.targetChannel,
+      table.status
+    ),
+  })
+);
 
 // Платежи от YooKassa (для проверки уникальности и идемпотентности)
 export const payments = pgTable(

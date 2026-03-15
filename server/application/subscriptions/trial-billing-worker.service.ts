@@ -1,4 +1,4 @@
-import { and, eq, gte, isNotNull, isNull, lt, lte, or } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull, lt, lte, or, sql } from 'drizzle-orm';
 import { db } from '@/server/infrastructure/db/client';
 import {
   billingChargeAttempts,
@@ -23,7 +23,13 @@ import {
   createYooKassaPayment,
   extractPaymentMethodPresentation,
 } from '@/server/application/payments/yookassa.client';
-import { TRIAL_BILLING_EARLY_CHARGE_MS } from '@/server/config/subscription';
+import {
+  TRIAL_BILLING_EARLY_CHARGE_MS,
+  TRIAL_BILLING_REMINDER_BATCH_SIZE,
+  TRIAL_BILLING_REMINDER_CONCURRENCY,
+  TRIAL_BILLING_REMINDER_LOCK_TTL_MS,
+  TRIAL_BILLING_REMINDER_MAX_BATCHES_PER_TICK,
+} from '@/server/config/subscription';
 
 const LOCK_TTL_MS = 10 * 60 * 1000;
 const REMINDER_LOOKAHEAD_MS = 24 * 60 * 60 * 1000;
@@ -33,113 +39,293 @@ function getPlanLabel(planId: 'pro' | 'premium'): string {
   return planId === 'premium' ? 'Premium' : 'PRO';
 }
 
-async function processReminderBatch(now: Date) {
-  const reminderFrom = new Date(
-    now.getTime() + REMINDER_LOOKAHEAD_MS - REMINDER_WINDOW_MS
+type ClaimedReminderUser = {
+  id: number;
+  email: string | null;
+  billingPlanId: string | null;
+  nextChargeAt: Date | null;
+};
+
+async function runWithConcurrency<T>(params: {
+  items: T[];
+  concurrency: number;
+  task: (item: T) => Promise<void>;
+}): Promise<void> {
+  if (!params.items.length) return;
+
+  const workerCount = Math.max(
+    1,
+    Math.min(params.concurrency, params.items.length)
   );
-  const reminderTo = new Date(
-    now.getTime() + REMINDER_LOOKAHEAD_MS + REMINDER_WINDOW_MS
+  let cursor = 0;
+
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (cursor < params.items.length) {
+      const index = cursor;
+      cursor += 1;
+      if (index >= params.items.length) {
+        return;
+      }
+
+      await params.task(params.items[index]);
+    }
+  });
+
+  await Promise.all(workers);
+}
+
+async function claimReminderUsersBatch(params: {
+  now: Date;
+  reminderFrom: Date;
+  reminderTo: Date;
+  lockOwner: string;
+  limit: number;
+}): Promise<ClaimedReminderUser[]> {
+  const reminderLockExpiredAt = new Date(
+    params.now.getTime() - TRIAL_BILLING_REMINDER_LOCK_TTL_MS
+  );
+  const rawResult = await db.execute(
+    sql`
+      with candidates as (
+        select u.id
+        from users as u
+        where
+          u.billing_collection_status = 'scheduled'
+          and u.trial_ended_at is not null
+          and u.billing_plan_id in ('pro', 'premium')
+          and u.next_charge_at is not null
+          and u.next_charge_at >= ${params.reminderFrom}
+          and u.next_charge_at <= ${params.reminderTo}
+          and u.billing_reminder_sent_at is null
+          and (
+            u.billing_locked_at is null
+            or u.billing_locked_at < ${reminderLockExpiredAt}
+          )
+        order by u.next_charge_at asc, u.id asc
+        limit ${params.limit}
+        for update skip locked
+      )
+      update users as u
+      set
+        billing_locked_at = ${params.now},
+        billing_locked_by = ${params.lockOwner},
+        updated_at = ${params.now}
+      from candidates as c
+      where u.id = c.id
+      returning
+        u.id,
+        u.email,
+        u.billing_plan_id as "billingPlanId",
+        u.next_charge_at as "nextChargeAt"
+    `
   );
 
-  const usersForReminder = await db
-    .select({
-      id: users.id,
-      email: users.email,
-      billingPlanId: users.billingPlanId,
-      nextChargeAt: users.nextChargeAt,
-      billingReminderSentAt: users.billingReminderSentAt,
+  return ((rawResult as any)?.rows ?? []) as ClaimedReminderUser[];
+}
+
+async function releaseReminderLock(params: {
+  userId: number;
+  lockOwner: string;
+  now: Date;
+}): Promise<void> {
+  await db
+    .update(users)
+    .set({
+      billingLockedAt: null,
+      billingLockedBy: null,
+      updatedAt: params.now,
     })
-    .from(users)
     .where(
       and(
-        eq(users.billingCollectionStatus, 'scheduled'),
-        isNotNull(users.trialEndedAt),
-        isNotNull(users.billingPlanId),
-        isNotNull(users.nextChargeAt),
-        gte(users.nextChargeAt, reminderFrom),
-        lte(users.nextChargeAt, reminderTo),
+        eq(users.id, params.userId),
+        eq(users.billingLockedBy, params.lockOwner)
+      )
+    );
+}
+
+async function markReminderSent(params: {
+  userId: number;
+  lockOwner: string;
+  now: Date;
+}): Promise<boolean> {
+  const updatedRows = await db
+    .update(users)
+    .set({
+      billingReminderSentAt: params.now,
+      billingLockedAt: null,
+      billingLockedBy: null,
+      updatedAt: params.now,
+    })
+    .where(
+      and(
+        eq(users.id, params.userId),
+        eq(users.billingLockedBy, params.lockOwner),
         isNull(users.billingReminderSentAt)
       )
     )
-    .limit(200);
+    .returning({ id: users.id });
 
-  for (const user of usersForReminder) {
-    if (!user.nextChargeAt || !isTrialBillingPlanId(user.billingPlanId)) {
-      continue;
-    }
+  return updatedRows.length > 0;
+}
 
-    const chargeAt = user.nextChargeAt;
-    const planLabel = getPlanLabel(user.billingPlanId);
-    const chargeAtLabel = chargeAt.toLocaleString('ru-RU', {
-      day: 'numeric',
-      month: 'long',
-      hour: '2-digit',
-      minute: '2-digit',
+async function processReminderBatch(params: { now: Date; workerId: string }) {
+  const reminderFrom = new Date(
+    params.now.getTime() + REMINDER_LOOKAHEAD_MS - REMINDER_WINDOW_MS
+  );
+  const reminderTo = new Date(
+    params.now.getTime() + REMINDER_LOOKAHEAD_MS + REMINDER_WINDOW_MS
+  );
+
+  let totalClaimed = 0;
+  let totalMarkedAsSent = 0;
+  let totalFailedAllChannels = 0;
+  let totalMarkConflicts = 0;
+
+  for (
+    let batchIndex = 0;
+    batchIndex < TRIAL_BILLING_REMINDER_MAX_BATCHES_PER_TICK;
+    batchIndex += 1
+  ) {
+    const lockOwner = `trial-reminder:${params.workerId}:${params.now.getTime()}:${batchIndex}`;
+    const claimedUsers = await claimReminderUsersBatch({
+      now: params.now,
+      reminderFrom,
+      reminderTo,
+      lockOwner,
+      limit: TRIAL_BILLING_REMINDER_BATCH_SIZE,
     });
 
-    let hasProcessedAtLeastOneChannel = false;
-
-    try {
-      await sendToUser(user.id, {
-        title: 'Напоминание о списании',
-        body: `${chargeAtLabel} спишем оплату за тариф ${planLabel}. Отменить можно до этой даты.`,
-        action: 'open',
-        deepLink: '/subscription',
-        data: {
-          source: 'trial_billing_reminder',
-          chargeAt: chargeAt.toISOString(),
-        },
-      });
-      hasProcessedAtLeastOneChannel = true;
-    } catch (error) {
-      console.warn('[TrialBillingWorker] reminder push failed', {
-        userId: user.id,
-        error,
-      });
+    if (!claimedUsers.length) {
+      break;
     }
 
-    // Биллинговое письмо — транзакционное уведомление: отправляем по email
-    // независимо от статуса авторизации пользователя и marketing consent.
-    if (user.email) {
-      try {
-        await sendBillingReminderEmail({
-          to: user.email,
-          planName: planLabel,
-          chargeAt,
-        });
-        hasProcessedAtLeastOneChannel = true;
-      } catch (error) {
-        console.warn('[TrialBillingWorker] reminder email failed', {
-          userId: user.id,
-          error,
-        });
-      }
-    }
+    totalClaimed += claimedUsers.length;
 
-    if (!hasProcessedAtLeastOneChannel) {
-      console.error(
-        '[TrialBillingWorker] reminder delivery failed for all channels',
-        {
-          userId: user.id,
+    // Отправляем в контролируемом параллелизме, чтобы не блокировать worker
+    // на долгих сетевых вызовах и при этом не перегружать провайдеры.
+    await runWithConcurrency({
+      items: claimedUsers,
+      concurrency: TRIAL_BILLING_REMINDER_CONCURRENCY,
+      task: async (user) => {
+        if (!user.nextChargeAt || !isTrialBillingPlanId(user.billingPlanId)) {
+          await releaseReminderLock({
+            userId: user.id,
+            lockOwner,
+            now: params.now,
+          });
+          return;
         }
-      );
-      continue;
-    }
 
-    try {
-      await db
-        .update(users)
-        .set({
-          billingReminderSentAt: now,
-          updatedAt: now,
-        })
-        .where(eq(users.id, user.id));
-    } catch (error) {
-      console.error('[TrialBillingWorker] reminder mark-sent failed', {
-        userId: user.id,
-        error,
-      });
-    }
+        const chargeAt = user.nextChargeAt;
+        const planLabel = getPlanLabel(user.billingPlanId);
+        const chargeAtLabel = chargeAt.toLocaleString('ru-RU', {
+          day: 'numeric',
+          month: 'long',
+          hour: '2-digit',
+          minute: '2-digit',
+        });
+
+        let hasProcessedAtLeastOneChannel = false;
+
+        try {
+          await sendToUser(user.id, {
+            title: 'Напоминание о списании',
+            body: `${chargeAtLabel} спишем оплату за тариф ${planLabel}. Отменить можно до этой даты.`,
+            action: 'open',
+            deepLink: '/subscription',
+            data: {
+              source: 'trial_billing_reminder',
+              chargeAt: chargeAt.toISOString(),
+            },
+          });
+          hasProcessedAtLeastOneChannel = true;
+        } catch (error) {
+          console.warn('[TrialBillingWorker] reminder push failed', {
+            userId: user.id,
+            error,
+          });
+        }
+
+        // Биллинговое письмо — транзакционное уведомление: отправляем по email
+        // независимо от статуса авторизации пользователя и marketing consent.
+        if (user.email) {
+          try {
+            await sendBillingReminderEmail({
+              to: user.email,
+              planName: planLabel,
+              chargeAt,
+            });
+            hasProcessedAtLeastOneChannel = true;
+          } catch (error) {
+            console.warn('[TrialBillingWorker] reminder email failed', {
+              userId: user.id,
+              error,
+            });
+          }
+        }
+
+        if (!hasProcessedAtLeastOneChannel) {
+          totalFailedAllChannels += 1;
+          console.error(
+            '[TrialBillingWorker] reminder delivery failed for all channels',
+            {
+              userId: user.id,
+            }
+          );
+          await releaseReminderLock({
+            userId: user.id,
+            lockOwner,
+            now: params.now,
+          });
+          return;
+        }
+
+        try {
+          const marked = await markReminderSent({
+            userId: user.id,
+            lockOwner,
+            now: params.now,
+          });
+          if (marked) {
+            totalMarkedAsSent += 1;
+            return;
+          }
+
+          totalMarkConflicts += 1;
+          console.warn('[TrialBillingWorker] reminder mark-sent skipped', {
+            userId: user.id,
+            reason: 'lock_owner_mismatch_or_already_sent',
+          });
+        } catch (error) {
+          console.error('[TrialBillingWorker] reminder mark-sent failed', {
+            userId: user.id,
+            error,
+          });
+          await releaseReminderLock({
+            userId: user.id,
+            lockOwner,
+            now: params.now,
+          });
+        }
+      },
+    });
+  }
+
+  if (
+    totalClaimed > 0 ||
+    totalMarkedAsSent > 0 ||
+    totalFailedAllChannels > 0 ||
+    totalMarkConflicts > 0
+  ) {
+    console.log('[TrialBillingWorker] reminder batch summary', {
+      claimed: totalClaimed,
+      markedAsSent: totalMarkedAsSent,
+      failedAllChannels: totalFailedAllChannels,
+      markConflicts: totalMarkConflicts,
+      batchSize: TRIAL_BILLING_REMINDER_BATCH_SIZE,
+      maxBatchesPerTick: TRIAL_BILLING_REMINDER_MAX_BATCHES_PER_TICK,
+      concurrency: TRIAL_BILLING_REMINDER_CONCURRENCY,
+    });
   }
 }
 
@@ -528,7 +714,10 @@ export async function runTrialBillingWorker(params: {
   const now = params.now ?? new Date();
 
   await processGraceExpirationBatch(now);
-  await processReminderBatch(now);
+  await processReminderBatch({
+    now,
+    workerId: params.workerId,
+  });
   await processChargeBatch({
     now,
     workerId: params.workerId,

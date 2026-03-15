@@ -22,13 +22,35 @@ export let db = drizzle(pool);
 let resetInFlight: Promise<void> | null = null;
 let lastResetAt = 0;
 const RESET_COOLDOWN_MS = 30_000;
+const dbPoolErrorListeners = new Set<(error: Error) => void>();
+
+function notifyDbPoolErrorListeners(error: Error): void {
+  for (const listener of dbPoolErrorListeners) {
+    try {
+      listener(error);
+    } catch (listenerError) {
+      console.error(
+        '[DB] Ошибка в обработчике dbPoolError listener:',
+        listenerError
+      );
+    }
+  }
+}
 
 function createPool() {
   const nextPool = new pg.Pool(poolConfig);
   nextPool.on('error', (error) => {
     console.error('[DB] Ошибка соединения в пуле:', error);
+    notifyDbPoolErrorListeners(error);
   });
   return nextPool;
+}
+
+export function onDbPoolError(listener: (error: Error) => void): () => void {
+  dbPoolErrorListeners.add(listener);
+  return () => {
+    dbPoolErrorListeners.delete(listener);
+  };
 }
 
 export function isDbConnectionError(error: unknown): boolean {

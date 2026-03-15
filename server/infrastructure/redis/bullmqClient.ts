@@ -197,10 +197,17 @@ export function createWorker<TData = any, TResult = any>(
   });
 
   worker.on('failed', (job, err) => {
-    console.error(
-      `[Worker:${name}] ❌ Job ${job?.id} failed (attempt ${job?.attemptsMade}/${job?.opts.attempts}):`,
-      err.message
-    );
+    const attemptsMade = Number(job?.attemptsMade || 0);
+    const maxAttempts = Number(job?.opts.attempts || 1);
+    const hasRetriesLeft = attemptsMade < maxAttempts;
+    const logMessage = `[Worker:${name}] ${hasRetriesLeft ? '⚠️' : '❌'} Job ${job?.id} failed (attempt ${attemptsMade}/${maxAttempts})${hasRetriesLeft ? ', will retry' : ''}:`;
+
+    if (hasRetriesLeft) {
+      console.warn(logMessage, err.message);
+      return;
+    }
+
+    console.error(logMessage, err.message);
   });
 
   worker.on('stalled', (jobId) => {

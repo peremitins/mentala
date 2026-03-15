@@ -1,5 +1,8 @@
 import { getSessionUser } from '@@/server/application/auth/session';
-import { readChatSettings } from '@/server/utils/storage';
+import {
+  getPublicChatSettings,
+  readChatSettings,
+} from '@/server/utils/storage';
 import { responseIdStore } from '@/server/utils/responseIdStore';
 
 export default defineEventHandler(async (event) => {
@@ -23,13 +26,16 @@ export default defineEventHandler(async (event) => {
         isFirstSession = false;
       }
     } catch (err) {
-      console.error('[Chat Settings] Failed to check previous_response_id:', err);
+      console.error(
+        '[Chat Settings] Failed to check previous_response_id:',
+        err
+      );
     }
   }
 
   return {
     settings: {
-      ...settings,
+      ...getPublicChatSettings(settings),
       isFirstSession,
     },
   };

@@ -167,6 +167,17 @@
             </Button>
 
             <Button
+              v-if="shouldShowQuickDiary(item)"
+              variant="outline"
+              size="sm"
+              class="flex-1 border-white/20 bg-white/5 text-[8px] min-[375px]:text-xs text-foreground/80 hover:border-white/40 hover:bg-white/10"
+              @click.stop="handleQuickDiary(item)"
+            >
+              <IconSquarePen class="h-4 w-4" />
+              Дневник
+            </Button>
+
+            <Button
               v-if="shouldShowQuickMeditation(item)"
               variant="outline"
               size="sm"
@@ -203,6 +214,7 @@ import { Separator } from '@/app/components/ui/shadcn/separator';
 import IconChevronRight from '~icons/lucide/chevron-right';
 import IconLeaf from '~icons/lucide/leaf';
 import IconMessageCircle from '~icons/lucide/message-circle';
+import IconSquarePen from '~icons/lucide/square-pen';
 import IconTrash from '~icons/lucide/trash';
 import IconWind from '~icons/lucide/wind';
 import IconBell from '~icons/lucide/bell';
@@ -229,6 +241,7 @@ export interface NotificationIndexItem {
     chat?: boolean;
     meditation?: boolean;
     breath?: boolean;
+    diary?: boolean;
   };
 }
 
@@ -252,6 +265,7 @@ const emit = defineEmits<{
   (e: 'quick-chat', item: NotificationIndexItem): void;
   (e: 'quick-meditation', item: NotificationIndexItem): void;
   (e: 'quick-breath', item: NotificationIndexItem): void;
+  (e: 'quick-diary', item: NotificationIndexItem): void;
 }>();
 
 const route = useRoute();
@@ -308,6 +322,7 @@ type ResolvedQuickActions = {
   chat: boolean;
   meditation: boolean;
   breath: boolean;
+  diary: boolean;
 };
 
 function resolveQuickActions(
@@ -318,6 +333,7 @@ function resolveQuickActions(
       chat: Boolean(item.quickActions.chat),
       meditation: Boolean(item.quickActions.meditation),
       breath: Boolean(item.quickActions.breath),
+      diary: Boolean(item.quickActions.diary),
     };
   }
 
@@ -328,12 +344,13 @@ function resolveQuickActions(
     chat: !isActionCard,
     meditation: false,
     breath: false,
+    diary: false,
   };
 }
 
 function hasQuickActions(item: NotificationIndexItem) {
   const actions = resolveQuickActions(item);
-  return actions.chat || actions.meditation || actions.breath;
+  return actions.chat || actions.meditation || actions.breath || actions.diary;
 }
 
 function shouldShowQuickChat(item: NotificationIndexItem) {
@@ -348,6 +365,10 @@ function shouldShowQuickBreath(item: NotificationIndexItem) {
   return resolveQuickActions(item).breath;
 }
 
+function shouldShowQuickDiary(item: NotificationIndexItem) {
+  return resolveQuickActions(item).diary;
+}
+
 function handleQuickChat(item: NotificationIndexItem) {
   emit('quick-chat', item);
 }
@@ -358,5 +379,9 @@ function handleQuickMeditation(item: NotificationIndexItem) {
 
 function handleQuickBreath(item: NotificationIndexItem) {
   emit('quick-breath', item);
+}
+
+function handleQuickDiary(item: NotificationIndexItem) {
+  emit('quick-diary', item);
 }
 </script>

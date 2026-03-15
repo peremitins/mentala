@@ -358,6 +358,83 @@
       "when": 1772094757453,
       "tag": "0054_mushy_triathlon",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1772626219517,
+      "tag": "0055_kind_bullseye",
+      "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1772628588773,
+      "tag": "0056_quiet_wonder_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1772699948714,
+      "tag": "0057_lovely_the_fallen",
+      "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1772700790388,
+      "tag": "0058_bored_punisher",
+      "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1773063586115,
+      "tag": "0059_nifty_gateway",
+      "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1773139094539,
+      "tag": "0060_even_terrax",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1773154248312,
+      "tag": "0061_awesome_pandemic",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1773236351738,
+      "tag": "0062_glossy_squirrel_girl",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1773238703734,
+      "tag": "0063_fixed_leech",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1773243872703,
+      "tag": "0064_misty_eddie_brock",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1773312099333,
+      "tag": "0065_narrow_umar",
+      "breakpoints": true
     }
   ]
 }
