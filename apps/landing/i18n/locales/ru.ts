@@ -343,7 +343,7 @@ export default {
       NAME_LABEL: 'Имя',
       NAME_PLACEHOLDER: 'Ваше имя',
       EMAIL_LABEL: 'Email',
-      EMAIL_PLACEHOLDER: 'example@mail.ru',
+      EMAIL_PLACEHOLDER: "example{'@'}mail.ru",
       GOALS_LABEL: 'Цели (можно несколько)',
       GOALS_LIST_ARIA: 'Выбор целей',
       GOALS_PLACEHOLDER: 'Выберите цели (необязательно)',

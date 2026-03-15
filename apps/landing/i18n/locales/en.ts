@@ -343,7 +343,7 @@ export default {
       NAME_LABEL: 'Name',
       NAME_PLACEHOLDER: 'Your name',
       EMAIL_LABEL: 'Email',
-      EMAIL_PLACEHOLDER: 'example@mail.com',
+      EMAIL_PLACEHOLDER: "example{'@'}mail.com",
       GOALS_LABEL: 'Goals (multiple allowed)',
       GOALS_LIST_ARIA: 'Goal selection',
       GOALS_PLACEHOLDER: 'Choose goals (optional)',
