@@ -286,7 +286,7 @@
         </div>
 
         <p class="mt-4 text-center text-xs text-muted-foreground">
-          <template v-if="mode === 'signin'">
+          <template v-if="mode === 'signin' || mode === 'signup'">
             Входя в аккаунт, вы подтверждаете согласие с
             <a
               :href="termsOfServiceUrl"
@@ -300,17 +300,6 @@
               class="underline text-primary-ui hover:text-primary-ui/80"
             >
               Политикой конфиденциальности
-            </a>
-            .
-          </template>
-          <template v-else>
-            Защита данных: end-to-end для приватных чатов, ключи разделены
-            (zero-trust). Подробнее в
-            <a
-              :href="privacyPolicyUrl"
-              class="underline text-primary-ui hover:text-primary-ui/80"
-            >
-              политике
             </a>
             .
           </template>
