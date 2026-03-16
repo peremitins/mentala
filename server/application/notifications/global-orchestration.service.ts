@@ -53,8 +53,11 @@ import { buildAiTextConfigHashCandidates } from './notification-ai-hash.helpers'
 import type {
   NotificationPayload,
   NotificationSubtype,
-  NotificationNavigation,
 } from '@/shared/dto/notifications';
+import {
+  buildLegacySuggestedChipActionPayload,
+  type AppNavigationTarget,
+} from '@/shared/navigation';
 import {
   DEFAULT_NOTIFICATION_TIME_RANGE_END,
   DEFAULT_NOTIFICATION_TIME_RANGE_START,
@@ -65,8 +68,9 @@ import {
   slotsScalingConfig,
 } from './slots-scaling.config';
 import {
-  buildDeepLinkFromNavigation,
   resolveNavigationFromActionHint,
+  resolveNavigationTargetFromActionHint,
+  buildDeepLinkFromTarget,
 } from './breath-navigation.utils';
 import {
   applyFlexibleSlotJitter,
@@ -135,26 +139,27 @@ type RegenTransactionResult = {
   lockAcquireMs: number;
 };
 
-function buildActionFromNavigation(navigation: NotificationNavigation): {
+function buildActionFromTarget(target: AppNavigationTarget): {
   action: string;
   params?: Record<string, string>;
 } {
-  switch (navigation.type) {
-    case 'meditation_track':
-      return {
-        action: 'open_meditation_track',
-        params: { trackId: navigation.trackId },
-      };
-    case 'breath_practices':
-      return { action: 'open_breath_practices' };
-    case 'breath_practice':
-      return {
-        action: 'open_breath_practice',
-        params: { practiceId: navigation.slug },
-      };
-    default:
-      return { action: 'open_home' };
+  const compat = buildLegacySuggestedChipActionPayload(target);
+  if (!compat) {
+    return { action: 'open_home' };
   }
+
+  const params = compat.params
+    ? Object.fromEntries(
+        Object.entries(compat.params).filter(
+          ([, value]) => typeof value === 'string' && value.trim().length > 0
+        )
+      )
+    : undefined;
+
+  return {
+    action: compat.action,
+    params,
+  };
 }
 
 function hasPaidPlanForImages(planId: string | null | undefined): boolean {
@@ -1675,9 +1680,13 @@ export async function orchestrateAllSlotsForUser(
             })
           : null;
 
+        const navigationTarget = resolveNavigationTargetFromActionHint(
+          actionHint,
+          text
+        );
         const navigation = resolveNavigationFromActionHint(actionHint, text);
-        const deepLink = buildDeepLinkFromNavigation(navigation);
-        const actionMeta = buildActionFromNavigation(navigation);
+        const deepLink = buildDeepLinkFromTarget(navigationTarget);
+        const actionMeta = buildActionFromTarget(navigationTarget);
 
         // Создаём payload
         const payload: NotificationPayload = {
@@ -1687,6 +1696,7 @@ export async function orchestrateAllSlotsForUser(
           action: 'open',
           deepLink,
           navigation,
+          navigationTarget,
           image: imageUrl || undefined,
           data: {
             kind: source.kind,

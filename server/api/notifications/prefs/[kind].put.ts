@@ -28,6 +28,10 @@ import {
   normalizeCustomSlotTimesByLimit,
 } from '@/server/application/notifications/preferences-limits.utils';
 import { resolveAssistantTone } from '@/shared/constants/assistantTone';
+import {
+  getDefaultNotificationTextSource,
+  normalizeRequestedNotificationTextSource,
+} from '@/shared/utils/notificationTextSource';
 
 function normalizeCustomSlotTimes(
   input: (number | null)[] | null | undefined,
@@ -158,12 +162,11 @@ export default defineEventHandler(
     // Если доступ к AI-уведомлениям недоступен (например, Trial закончился),
     // принудительно сохраняем templates, даже если клиент прислал ai.
     const requestedTextSource = body.meta?.textSource;
-    const normalizedRequestedTextSource: 'templates' | 'ai' | undefined =
-      requestedTextSource === undefined
-        ? undefined
-        : requestedTextSource === 'ai' && canUseAiNotifications
-          ? 'ai'
-          : 'templates';
+    const normalizedRequestedTextSource =
+      normalizeRequestedNotificationTextSource(
+        requestedTextSource,
+        canUseAiNotifications
+      );
 
     if (requestedTextSource === 'ai' && !canUseAiNotifications) {
       console.warn(
@@ -1132,17 +1135,18 @@ export default defineEventHandler(
 
       // Упрощенная логика: subtype сохраняется для всех типов сущностей
       const initialSubtype = body.subtype ?? 'mixed';
+      const initialTextSource =
+        normalizedRequestedTextSource ??
+        getDefaultNotificationTextSource(canUseAiNotifications);
 
-      // Формируем initialMeta: только textSource из body.meta
+      // Формируем initialMeta: для новых preferences всегда фиксируем textSource,
+      // чтобы первое состояние не зависело от UI fallback.
       const initialMeta =
         kind === 'habits' || kind === 'therapy'
           ? (() => {
               const meta: NotificationPreferenceMeta = {};
 
-              // Сохраняем textSource из запроса с учётом entitlement-понижения.
-              if (normalizedRequestedTextSource !== undefined) {
-                meta.textSource = normalizedRequestedTextSource;
-              }
+              meta.textSource = initialTextSource;
 
               // Возвращаем meta только если есть хотя бы одно поле
               return meta.textSource !== undefined ? meta : null;
