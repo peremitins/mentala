@@ -202,10 +202,6 @@ function handlePointerDown(event: PointerEvent) {
 
   shouldSuppressClick.value = false;
   isDragging.value = false;
-
-  if (typeof viewport.setPointerCapture === 'function') {
-    viewport.setPointerCapture(event.pointerId);
-  }
 }
 
 function handlePointerMove(event: PointerEvent) {
@@ -229,20 +225,11 @@ function handlePointerMove(event: PointerEvent) {
 }
 
 function finishDrag(pointerId?: number) {
-  const viewport = viewportRef.value;
   const currentDrag = dragState.value;
   if (!currentDrag) return;
 
   if (pointerId !== undefined && currentDrag.pointerId !== pointerId) {
     return;
-  }
-
-  if (
-    viewport &&
-    typeof viewport.releasePointerCapture === 'function' &&
-    viewport.hasPointerCapture(currentDrag.pointerId)
-  ) {
-    viewport.releasePointerCapture(currentDrag.pointerId);
   }
 
   dragState.value = null;
