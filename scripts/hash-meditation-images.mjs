@@ -23,9 +23,9 @@ const LEGACY_MIGRATIONS = {
   '/meditations/covers/rain-night.e9a5fa50.webp':
     '/meditations/covers/rain-night.9468982c.webp',
   '/meditations/backgrounds/ocean-slow.08de5010.webp':
-    '/meditations/backgrounds/ocean-slow.574b17af.webp',
+    '/meditations/backgrounds/ocean-slow.ed61a3eb.webp',
   '/meditations/backgrounds/ocean-slow.08de5010-portrait.webp':
-    '/meditations/backgrounds/ocean-slow.574b17af-portrait.webp',
+    '/meditations/backgrounds/ocean-slow.ed61a3eb-portrait.webp',
   '/meditations/backgrounds/rain-night.405ab09f.webp':
     '/meditations/backgrounds/rain-night.00d147c2.webp',
   '/meditations/backgrounds/rain-night.405ab09f-portrait.webp':
