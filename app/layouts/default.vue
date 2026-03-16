@@ -169,20 +169,30 @@ const sceneBackground = computed(() => {
 });
 
 const showSceneBackground = computed(() => {
-  return (
-    !isMeditationDetail.value &&
-    !isBreathPracticePage.value &&
-    Boolean(sceneBackground.value)
-  );
+  return !isMeditationDetail.value && Boolean(sceneBackground.value);
 });
 
 const isMeditationAudioActive = computed(
   () => isPlaying.value || isBuffering.value
 );
-const isBreathPracticePage = computed(() => {
+const breathPracticeSlug = computed(() => {
   const path = route.path || '';
-  // На любых дыхательных практиках фон сцены всегда глушится.
-  return path.startsWith('/breath-practices/');
+  if (!path.startsWith('/breath-practices/')) return null;
+
+  const raw = route.params.slug;
+  const slug = Array.isArray(raw) ? raw[0] : raw;
+  if (typeof slug !== 'string') return null;
+
+  const normalized = slug.trim();
+  return normalized.length > 0 ? normalized : null;
+});
+
+const isBreathPracticePlayerPage = computed(() => {
+  // Визуально scene background теперь используется везде,
+  // а route-проверка нужна только для приглушения audio сцены на реальном плеере.
+  return Boolean(
+    breathPracticeSlug.value && breathPracticeSlug.value !== 'custom'
+  );
 });
 
 const shouldMuteSceneAudio = computed(() => {
@@ -192,7 +202,7 @@ const shouldMuteSceneAudio = computed(() => {
   // иначе после stop() сцена не возобновляется.
   return (
     isMeditationAudioActive.value ||
-    isBreathPracticePage.value ||
+    isBreathPracticePlayerPage.value ||
     isSosTechniqueActive.value
   );
 });
