@@ -7,6 +7,13 @@ import { therapySessions } from '@/server/infrastructure/db/schema';
 import { eq, and, gte, lte, or, lt, isNull } from 'drizzle-orm';
 import { CHAT_IDLE_TIMEOUT_MS } from '@/server/config/subscription';
 import { toZonedTime, fromZonedTime } from 'date-fns-tz';
+import { calculateUsageForSessionsInWindow } from './usage-calculation.utils';
+
+export {
+  calculateSessionMinutes,
+  calculateUsageForSessionsInWindow,
+  type TherapySessionUsageRecord,
+} from './usage-calculation.utils';
 
 /**
  * Получить начало недели (понедельник 00:00:00) в указанной timezone
@@ -102,32 +109,28 @@ export async function endTherapySession(sessionId: number) {
 }
 
 /**
- * Рассчитать минуты из секунд (округление вниз)
- * Важно: списываем только полные минуты, меньше минуты = 0
- */
-export function calculateSessionMinutes(durationSeconds: number): number {
-  // Если сессия меньше 60 секунд - не списываем минуты
-  if (durationSeconds < 60) {
-    return 0;
-  }
-  // Округляем вниз до полных минут
-  return Math.floor(durationSeconds / 60);
-}
-
-/**
  * Получить использованные минуты в текущей неделе
  * Считает неделю в timezone пользователя
  */
 export async function getUsageForCurrentWeek(
   userId: number,
-  userTimezone: string = 'Europe/Moscow'
+  userTimezone: string = 'Europe/Moscow',
+  options?: {
+    periodStartedAt?: Date | null;
+    now?: Date;
+  }
 ) {
   // Получаем текущее время
-  const now = new Date();
+  const now = options?.now ?? new Date();
 
   // Получаем начало и конец недели в timezone пользователя, конвертированные в UTC
   const weekStartUTC = getStartOfWeek(now, userTimezone);
   const weekEndUTC = getEndOfWeek(now, userTimezone);
+  const periodStartedAt = options?.periodStartedAt ?? null;
+  const usageWindowStartUTC =
+    periodStartedAt && periodStartedAt.getTime() > weekStartUTC.getTime()
+      ? periodStartedAt
+      : weekStartUTC;
 
   // Получаем все сессии, которые пересекаются с текущей неделей:
   // - начались в этой неделе ИЛИ
@@ -141,63 +144,26 @@ export async function getUsageForCurrentWeek(
         or(
           // Сессия началась в пределах недели
           and(
-            gte(therapySessions.startedAt, weekStartUTC),
+            gte(therapySessions.startedAt, usageWindowStartUTC),
             lte(therapySessions.startedAt, weekEndUTC)
           ),
           // ИЛИ сессия началась до недели, но еще не закончилась (endedAt null) или закончилась после начала недели
           and(
-            lt(therapySessions.startedAt, weekStartUTC),
+            lt(therapySessions.startedAt, usageWindowStartUTC),
             or(
               isNull(therapySessions.endedAt),
-              gte(therapySessions.endedAt, weekStartUTC)
+              gte(therapySessions.endedAt, usageWindowStartUTC)
             )
           )
         )
       )
     );
-
-  // Считаем использованные минуты только за текущую неделю
-  let usedMinutes = 0;
-
-  for (const session of sessions) {
-    let sessionDurationSeconds = 0;
-
-    if (session.endedAt) {
-      // Сессия завершена - используем сохраненное время
-      // Но ограничиваем только частью недели, если сессия пересекает границы недели
-      const sessionStart =
-        session.startedAt < weekStartUTC ? weekStartUTC : session.startedAt;
-      const sessionEnd =
-        session.endedAt > weekEndUTC ? weekEndUTC : session.endedAt;
-      sessionDurationSeconds = Math.floor(
-        (sessionEnd.getTime() - sessionStart.getTime()) / 1000
-      );
-    } else {
-      // Сессия активна - ограничиваем время максимальным idle timeout
-      const lastActivityAt = session.lastActivityAt || session.startedAt;
-      const actualDurationMs = now.getTime() - lastActivityAt.getTime();
-
-      // Если сессия зависшая (старше idle timeout), используем startedAt + idleTimeout
-      const effectiveEndTime =
-        actualDurationMs > CHAT_IDLE_TIMEOUT_MS
-          ? new Date(lastActivityAt.getTime() + CHAT_IDLE_TIMEOUT_MS)
-          : now;
-
-      // Ограничиваем только частью недели
-      const sessionStart =
-        session.startedAt < weekStartUTC ? weekStartUTC : session.startedAt;
-      const sessionEnd =
-        effectiveEndTime > weekEndUTC ? weekEndUTC : effectiveEndTime;
-      sessionDurationSeconds = Math.floor(
-        (sessionEnd.getTime() - sessionStart.getTime()) / 1000
-      );
-
-    }
-
-    // Считаем минуты только для части недели
-    const minutes = calculateSessionMinutes(sessionDurationSeconds);
-    usedMinutes += minutes;
-  }
+  const usedMinutes = calculateUsageForSessionsInWindow(sessions, {
+    windowStart: usageWindowStartUTC,
+    windowEnd: weekEndUTC,
+    idleTimeoutMs: CHAT_IDLE_TIMEOUT_MS,
+    now,
+  });
 
   // Лимит будет получен из подписки в вызывающем коде
   // Здесь возвращаем только использованные минуты
@@ -205,5 +171,6 @@ export async function getUsageForCurrentWeek(
     usedMinutes,
     startOfWeek: weekStartUTC,
     endOfWeek: weekEndUTC,
+    countingFrom: usageWindowStartUTC,
   };
 }
