@@ -7,6 +7,7 @@ import {
   DEFAULT_ASSISTANT_TONE,
   isAssistantToneWithUnknown,
 } from '@/shared/constants/assistantTone';
+import { resolveOnboardingReasons } from '@/shared/dto/onboarding';
 
 /**
  * GET /api/settings/preferences
@@ -36,6 +37,7 @@ export default defineEventHandler(
         addressing: 'informal',
         tone: DEFAULT_ASSISTANT_TONE,
         meditationTimerMinutes: null,
+        onboardingReasons: [],
       };
     }
 
@@ -47,6 +49,10 @@ export default defineEventHandler(
       addressing: prefs.addressing as 'informal' | 'formal',
       tone,
       meditationTimerMinutes: prefs.meditationTimerMinutes ?? null,
+      onboardingReasons: resolveOnboardingReasons({
+        reasons: prefs.onboardingReasons,
+        reason: prefs.onboardingReason,
+      }),
     };
   }
 );

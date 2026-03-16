@@ -63,7 +63,6 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { useMediaQuery, useWindowSize } from '@vueuse/core';
 import BottomNav from '@/app/components/BottomNav.vue';
 import MiniMeditationPlayer from '@/app/components/meditations/MiniMeditationPlayer.vue';
 import { useMeditationPlayer } from '@/app/composables/useMeditationPlayer';
@@ -77,6 +76,8 @@ import { resolveMediaUrl } from '@/app/utils/media';
 import { useAuthStore } from '@/app/stores/auth';
 import { usePlatform } from '@/app/composables/usePlatform';
 import { Capacitor } from '@capacitor/core';
+import { useViewportOrientation } from '@/app/composables/useViewportOrientation';
+import { pickOrientationMediaPath } from '@/app/utils/orientationMedia';
 
 const {
   currentTrack,
@@ -88,14 +89,7 @@ const {
   stop,
 } = useMeditationPlayer();
 const meditationsStore = useMeditationsStore();
-const isPortraitQuery = useMediaQuery('(orientation: portrait)');
-const { width, height } = useWindowSize();
-const isPortraitMode = computed(() => {
-  if (height.value && width.value) {
-    return height.value >= width.value;
-  }
-  return isPortraitQuery.value;
-});
+const { isPortraitMode } = useViewportOrientation();
 
 const route = useRoute();
 const auth = useAuthStore();
@@ -148,34 +142,6 @@ const routeTrack = computed(() => {
   return meditationsStore.byId(id) || null;
 });
 
-function buildVariants(path?: string | null) {
-  if (!path) return [];
-  const dotIndex = path.lastIndexOf('.');
-  if (dotIndex === -1) return [path];
-  const name = path.slice(0, dotIndex);
-  const ext = path.slice(dotIndex);
-  // Поддерживаем только портретные варианты:
-  // 1) суффикс -portrait (приоритет)
-  // 2) префикс portrait-
-  const suffixedPortrait = `${name}-portrait${ext}`;
-  const prefixedPortrait = name.replace(/\/([^/]+)$/, '/portrait-$1') + ext;
-  const ordered = [suffixedPortrait, prefixedPortrait, path];
-  return Array.from(new Set(ordered.filter(Boolean)));
-}
-
-function orientationVariants(path?: string | null, portraitFirst = false) {
-  const variants = buildVariants(path);
-  if (!variants.length) return [];
-  const [portrait1, portrait2, base] = [
-    variants[0],
-    variants[1],
-    variants[2] || variants[variants.length - 1],
-  ];
-  return portraitFirst
-    ? [portrait1, portrait2, base].filter(Boolean)
-    : [base, portrait1, portrait2].filter(Boolean);
-}
-
 const detailBackground = computed(() => {
   const track =
     routeTrack.value ||
@@ -184,12 +150,9 @@ const detailBackground = computed(() => {
 
   if (!track) return '';
 
-  const ordered = orientationVariants(
-    track.backgroundPath || '',
-    isPortraitMode.value
-  );
-
-  const chosen = ordered.find(Boolean);
+  const chosen = pickOrientationMediaPath(track.backgroundPath || '', {
+    portraitFirst: isPortraitMode.value,
+  });
   return resolveMediaUrl(chosen || '');
 });
 
@@ -199,11 +162,9 @@ const currentScene = computed(
 
 const sceneBackground = computed(() => {
   if (!currentScene.value) return '';
-  const ordered = orientationVariants(
-    currentScene.value.backgroundPath || '',
-    isPortraitMode.value
-  );
-  const chosen = ordered.find(Boolean);
+  const chosen = pickOrientationMediaPath(currentScene.value.backgroundPath, {
+    portraitFirst: isPortraitMode.value,
+  });
   return resolveMediaUrl(chosen || '');
 });
 

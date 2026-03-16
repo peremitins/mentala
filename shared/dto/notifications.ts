@@ -1,4 +1,5 @@
 import type { AssistantToneWithUnknown } from '../constants/assistantTone';
+import type { OnboardingReasons } from './onboarding';
 
 /**
  * Shared DTOs для системы уведомлений
@@ -66,12 +67,14 @@ export interface UserPreferencesDto {
   addressing: Addressing;
   tone: Tone;
   meditationTimerMinutes?: number | null;
+  onboardingReasons?: OnboardingReasons;
 }
 
 export interface UpdateUserPreferencesDto {
   addressing?: Addressing;
   tone?: Tone;
   meditationTimerMinutes?: number | null;
+  onboardingReasons?: OnboardingReasons | null;
 }
 
 // ==========================================

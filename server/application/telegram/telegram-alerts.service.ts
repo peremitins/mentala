@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { getTelegramAlertsConfig } from './telegram-alerts.config';
 import {
+  isAmbiguousTelegramDeliveryError,
   isRetryableTelegramTransportError,
   sendTelegramMessage,
   TelegramApiError,
@@ -13,6 +14,7 @@ import {
   markTelegramDeliveryProcessing,
   markTelegramDeliveryQueueFailure,
   markTelegramDeliverySent,
+  markTelegramDeliveryUncertain,
 } from './repositories/telegram-deliveries.repository';
 import {
   buildTelegramAlertsJobId,
@@ -160,6 +162,24 @@ export async function processTelegramAlertDelivery(params: {
     } catch (error) {
       if (error instanceof TelegramApiError) {
         lastError = error;
+
+        // Таймаут после отправки запроса не даёт понять, дошёл ли alert до Telegram.
+        // Автоповтор в этом случае создаёт дубли, что особенно опасно для billing-событий.
+        if (isAmbiguousTelegramDeliveryError(error)) {
+          const errorMessage = `${error.message}; automatic retry skipped to avoid duplicate Telegram alerts`;
+
+          await markTelegramDeliveryUncertain({
+            dedupKey: params.event.dedupKey,
+            attempt: params.attempt,
+            errorMessage,
+          });
+
+          console.warn(
+            `[Telegram Alerts] Ambiguous delivery for ${params.event.dedupKey}; skipping automatic retry to avoid duplicates: ${error.message}`
+          );
+
+          return;
+        }
 
         const hasAttemptsLeft = iteration < maxInlineAttempts - 1;
         const isRetryable = isRetryableTelegramTransportError(error);

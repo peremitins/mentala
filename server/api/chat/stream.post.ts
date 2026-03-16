@@ -16,6 +16,7 @@ import {
 import { CHAT_IDLE_TIMEOUT_MS } from '@/server/config/subscription';
 import { endTherapySession } from '@/server/application/subscriptions/session-time.service';
 import type { ChatEntryContext, SuggestedChip } from '@/shared/dto';
+import { resolveOnboardingReasons } from '@/shared/dto/onboarding';
 import { generateSuggestedChips } from '@/server/application/suggested-chips.service';
 import {
   estimateChatRequestUpperBoundUSD,
@@ -92,11 +93,19 @@ export default defineEventHandler(async (event) => {
         ? String((sessionResult as any).timezone)
         : undefined;
     const [prefs] = await db
-      .select({ tone: userPreferences.tone })
+      .select({
+        tone: userPreferences.tone,
+        onboardingReason: userPreferences.onboardingReason,
+        onboardingReasons: userPreferences.onboardingReasons,
+      })
       .from(userPreferences)
       .where(eq(userPreferences.userId, Number(uid)))
       .limit(1);
     const toneMeta = getAssistantToneMeta(prefs?.tone);
+    const onboardingReasons = resolveOnboardingReasons({
+      reasons: prefs?.onboardingReasons,
+      reason: prefs?.onboardingReason,
+    });
 
     // Требуем валидный therapySessionId, чтобы нельзя было обойти биллинг прямыми вызовами /api/chat/stream
     const therapySessionId =
@@ -285,6 +294,7 @@ export default defineEventHandler(async (event) => {
           toneKey: toneMeta.value,
           toneLabel: toneMeta.label,
           toneDescription: toneMeta.description,
+          onboardingReasons,
           userId: uid,
           isFirstSession: serverIsFirst,
           userPrompt: effectiveUserPrompt,
@@ -311,6 +321,7 @@ export default defineEventHandler(async (event) => {
             userId: uid,
             therapySessionId,
             entryContext: body?.entryContext,
+            onboardingReasons,
           });
         }
       }
@@ -328,6 +339,7 @@ export default defineEventHandler(async (event) => {
                 userId: uid,
                 therapySessionId,
                 entryContext: body?.entryContext,
+                onboardingReasons,
               });
 
           const phobiasFocusUpdate = resolveLastTherapyFocusUpdate({

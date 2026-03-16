@@ -15,6 +15,11 @@ import type {
   TherapyApproach,
   ResponseType,
 } from '@/shared/dto';
+import {
+  normalizeOnboardingReasons,
+  type OnboardingReason,
+  type OnboardingReasons,
+} from '../../../shared/dto/onboarding';
 
 export type PromptTemplate = string;
 
@@ -393,16 +398,127 @@ function buildToneContext(vars: {
  Следуй этому стилю во всех формулировках, сохраняя правила безопасности и кризисные ограничения.`;
 }
 
+const ONBOARDING_REASON_META: Record<
+  OnboardingReason,
+  { label: string; focusHint: string }
+> = {
+  stress: {
+    label: 'справиться со стрессом',
+    focusHint:
+      'чаще помогай с перегрузкой, напряжением и восстановлением опоры',
+  },
+  anxiety: {
+    label: 'снизить тревожность',
+    focusHint:
+      'чаще помогай с тревожными сценариями, неопределенностью и заземлением',
+  },
+  thoughts: {
+    label: 'разобраться в мыслях',
+    focusHint:
+      'чаще помогай распутывать внутренний диалог, противоречия и навязчивые циклы',
+  },
+  mood: {
+    label: 'улучшить настроение',
+    focusHint:
+      'чаще поддерживай в теме эмоционального фона, истощения и маленьких сдвигов',
+  },
+  habits: {
+    label: 'работать с привычками',
+    focusHint:
+      'чаще переводи разговор в понятные паттерны, триггеры и маленькие действия',
+  },
+  support: {
+    label: 'получить поддержку',
+    focusHint:
+      'чаще давай теплую опору, ощущение контакта и ясные следующие шаги',
+  },
+  other: {
+    label: 'другой личный запрос',
+    focusHint:
+      'сохраняй широкую персонализацию и мягко уточняй, что сейчас важнее всего',
+  },
+};
+
+// Онбординг задает мягкий вектор персонализации, но не должен спорить с живым запросом пользователя.
+function buildOnboardingPersonalizationContext(vars: {
+  onboardingReasons?: OnboardingReasons;
+}): string {
+  const reasonMetaList = normalizeOnboardingReasons(vars.onboardingReasons)
+    .slice(0, 3)
+    .map((reason) => ONBOARDING_REASON_META[reason]);
+
+  if (!reasonMetaList.length) {
+    return '';
+  }
+
+  const lines = ['Контекст персонализации из онбординга:'];
+  const labels = reasonMetaList.map((reasonMeta) => reasonMeta.label);
+
+  lines.push(` Что привело пользователя: ${labels.join('; ')}.`);
+
+  lines.push(
+    ' Используй это как мягкий фоновый вектор персонализации для примеров, формулировок и микро-рекомендаций.'
+  );
+
+  if (reasonMetaList.length === 1) {
+    lines.push(` Фокус по причине: ${reasonMetaList[0].focusHint}.`);
+  } else {
+    lines.push(' Приоритетные фокусы:');
+    for (const reasonMeta of reasonMetaList) {
+      lines.push(` - ${reasonMeta.focusHint}.`);
+    }
+  }
+
+  lines.push(
+    ' Не навязывай эти темы, если текущий запрос пользователя уже ушел в другую сторону.'
+  );
+
+  return lines.join('\n');
+}
+
+function buildOnboardingSuggestedChipsContext(vars: {
+  onboardingReasons?: OnboardingReasons;
+}): string {
+  const reasonMetaList = normalizeOnboardingReasons(vars.onboardingReasons)
+    .slice(0, 3)
+    .map((reason) => ONBOARDING_REASON_META[reason]);
+
+  if (!reasonMetaList.length) {
+    return '';
+  }
+
+  const lines = ['Контекст пользователя из онбординга:'];
+  const labels = reasonMetaList.map((reasonMeta) => reasonMeta.label);
+
+  lines.push(` Что привело пользователя: ${labels.join('; ')}.`);
+
+  lines.push(
+    ' Если это естественно по текущему ответу ассистента, предложи хотя бы один чип, который помогает продвинуться в эту сторону.'
+  );
+  if (reasonMetaList.length > 1) {
+    lines.push(
+      ' Можно распределять чипы по нескольким выбранным направлениям, но не распыляй фокус без необходимости.'
+    );
+  }
+  lines.push(
+    ' Не делай чипы искусственно узкими, если диалог ушел в другую тему.'
+  );
+
+  return lines.join('\n');
+}
+
 function buildUserContext(vars: {
   user_name?: string;
   user_gender?: string;
   toneKey?: string;
   toneLabel?: string;
   toneDescription?: string;
+  onboardingReasons?: OnboardingReasons;
 }): string {
   const name = vars.user_name?.trim();
   const genderLabel = resolveGenderLabel(vars.user_gender);
   const toneContext = buildToneContext(vars);
+  const onboardingContext = buildOnboardingPersonalizationContext(vars);
 
   const nameLine = name
     ? `Имя пользователя: ${name}`
@@ -419,6 +535,7 @@ function buildUserContext(vars: {
  ${genderLine}
  ${genderInstruction}
  ${toneContext}
+ ${onboardingContext}
  Запрещены формы с альтернативами в скобках (например, "сделал / сделала").`;
 }
 
@@ -486,6 +603,7 @@ export function buildDeveloperContext(
     toneKey?: string;
     toneLabel?: string;
     toneDescription?: string;
+    onboardingReasons?: OnboardingReasons;
   },
   ctx: {
     responseNumber?: number;
@@ -676,6 +794,7 @@ export function buildWelcomePrompt(options: {
   toneKey?: string;
   toneLabel?: string;
   toneDescription?: string;
+  onboardingReasons?: OnboardingReasons;
 }): string {
   const lang = options.lang || 'ru';
   const isFirst = options.isFirstSession;
@@ -695,6 +814,9 @@ export function buildWelcomePrompt(options: {
     toneKey: options.toneKey,
     toneLabel: options.toneLabel,
     toneDescription: options.toneDescription,
+  });
+  const onboardingContext = buildOnboardingPersonalizationContext({
+    onboardingReasons: options.onboardingReasons,
   });
 
   const nameInstruction =
@@ -743,7 +865,7 @@ export function buildWelcomePrompt(options: {
       prompt +
       `\n\nВАЖНО: Не утверждай, что вы уже обсуждали конкретно эту тему; если контекст неочевиден - формулируй нейтрально. ${generatedStartInstruction}`;
 
-    const fullPrompt = `${toneContext ? `${toneContext}\n\n` : ''}${prompt}${nameInstruction}${openingInstruction}${noTemplateStartInstruction}`;
+    const fullPrompt = `${toneContext ? `${toneContext}\n\n` : ''}${onboardingContext ? `${onboardingContext}\n\n` : ''}${prompt}${nameInstruction}${openingInstruction}${noTemplateStartInstruction}`;
     return contextNote ? `${contextNote}\n\n${fullPrompt}` : fullPrompt;
   }
 
@@ -827,7 +949,7 @@ export function buildWelcomePrompt(options: {
     );
   }
 
-  const fullPrompt = `${toneContext ? `${toneContext}\n\n` : ''}${prompt}${nameInstruction}${openingInstruction}${noTemplateStartInstruction}`;
+  const fullPrompt = `${toneContext ? `${toneContext}\n\n` : ''}${onboardingContext ? `${onboardingContext}\n\n` : ''}${prompt}${nameInstruction}${openingInstruction}${noTemplateStartInstruction}`;
   return contextNote ? `${contextNote}\n\n${fullPrompt}` : fullPrompt;
 }
 
@@ -838,11 +960,15 @@ export function buildSuggestedChipsUserPrompt(params: {
   primary_topic?: string;
   max_chips: number;
   retry?: boolean;
+  onboardingReasons?: OnboardingReasons;
 }): string {
   const dialogContext = (params.dialog_context || 'Нет контекста').slice(-800);
   const assistantAnswer = (params.assistant_answer || 'Нет ответа').slice(-800);
   const recentChips = (params.recent_chips || 'Нет').slice(-600);
   const primaryTopic = params.primary_topic || 'Нет';
+  const onboardingContext = buildOnboardingSuggestedChipsContext({
+    onboardingReasons: params.onboardingReasons,
+  });
 
   const base = renderTemplate(suggestedChipsUserTemplate, {
     dialog_context: dialogContext,
@@ -853,8 +979,8 @@ export function buildSuggestedChipsUserPrompt(params: {
   });
 
   if (params.retry) {
-    return `${base}\n\n${suggestedChipsRetryHint}`;
+    return `${base}${onboardingContext ? `\n\n${onboardingContext}` : ''}\n\n${suggestedChipsRetryHint}`;
   }
 
-  return base;
+  return onboardingContext ? `${base}\n\n${onboardingContext}` : base;
 }

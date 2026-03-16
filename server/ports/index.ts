@@ -1,4 +1,5 @@
 import type { ChatEntryContext } from '@/shared/dto';
+import type { OnboardingReasons } from '@/shared/dto/onboarding';
 
 export interface LoggerPort {
   info: (msg: string, meta?: unknown) => void;
@@ -26,6 +27,7 @@ export interface LlmProviderPort {
       toneKey?: string;
       toneLabel?: string;
       toneDescription?: string;
+      onboardingReasons?: OnboardingReasons;
       userId?: number | string;
       isFirstSession?: boolean;
       userPrompt?: string;
@@ -52,6 +54,7 @@ export interface LlmProviderPort {
       toneKey?: string;
       toneLabel?: string;
       toneDescription?: string;
+      onboardingReasons?: OnboardingReasons;
       userId?: number | string;
       isFirstSession?: boolean;
       userPrompt?: string;

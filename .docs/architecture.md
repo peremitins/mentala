@@ -26,7 +26,7 @@
 • Для `nuxt generate` фоновые notification/BullMQ воркеры не запускаются (guards в `server/plugins/notifications-worker.ts` и `server/plugins/bullmq-workers.ts`), чтобы static-сборка не зависала на Redis и `cap sync` всегда получал свежие web assets.
 • Дополнительно для static-сборки отключены фоновые cleanup-плагины (`server/plugins/auth-cleanup.ts`, `server/plugins/trial-usage-cleanup.ts`), а Redis-клиент BullMQ работает в `lazyConnect` режиме, чтобы `generate` не блокировался фоновыми коннектами.
 • AI Response Feedback (MVP): реализованы `POST/GET /api/chat/feedback`, таблица `chat_response_feedback` (composite unique `user_id + therapy_session_id + assistant_message_client_id`, `bigserial`, check-ограничения, индексы), UI кнопок `like/dislike` внутри assistant-bubble в `app/pages/index.vue`, dislike-модалка с optional `topicCode` и optional `comment`, в payload/БД сохраняется `assistantMessageText` (текст конкретного ответа ИИ), optimistic update + rollback, toast-подтверждение на like/dislike, и daily cleanup `comment` старше 60 дней через плагин `server/plugins/chat-feedback-cleanup.ts`.
-• Telegram alerts v1 (зафиксировано в `.docs/telegram_bots.md`): для внутреннего alerting используется отдельный server-side bot token (`TELEGRAM_ALERTS_*`, не reuse `NUXT_TELEGRAM_BOT_TOKEN`), но на текущем rollout все environments (`local/dev/prod`) шлют в один общий чат с обязательной env-меткой в тексте сообщения; логические каналы `devops` / `billing` / `users` / `errors` при этом остаются отдельными на уровне маршрутизации, форматирования и дедупликации. В текущей итерации thread-based routing не используется: достаточно одного `TELEGRAM_ALERTS_CHAT_ID` без `message_thread_id`. Реализованный foundation лежит в `server/application/telegram/*`, а внешний код работает через тонкий facade `server/application/events/*`: business/use-case модули публикуют typed app events, `server/application/telegram/telegram-event-subscribers.ts` маппит их в Telegram-specific orchestration, а `server/plugins/telegram-event-subscribers.ts` регистрирует bridge один раз на процесс. Это позволило убрать прямые импорты Telegram-сервисов из auth/billing/cleanup/infra-кода и оставить Telegram API, formatter, routing, delivery repository и queue/worker внутри одного изолированного слоя. В БД для Telegram остаётся только `telegram_alert_deliveries` как delivery log + dedup; `user_daily_activity`, daily summary, activity-source и registration milestones удалены из текущего scope, чтобы не создавать лишнюю запись в БД на `session_started` / `open_app` и не делать полный `count(users)` при регистрации. Для `telegram_alert_deliveries` добавлен отдельный daily cleanup plugin: он чистит только terminal-статусы `sent`/`failed`, не трогает живые `queued`/`processing`, включён по умолчанию и использует retention 30 дней с override через runtime config. Подключённые источники текущей итерации: `user.registered` (email после verify, OAuth/Telegram сразу после создания), `user.deletion_requested`, реальные billing `purchase_success` / `purchase_failed` / `subscription_canceled`, `billing.checkout_error`, `billing.webhook_error`, `billing.payment_method_bound`, `billing.plan_changed`, `billing.critical_error`, а также `error.business_flow_critical` для падений критичных process-level бизнесовых scheduler/worker flow. User-facing и billing alerts дополнительно обогащаются `users.email`; для `user.deletion_requested` email пробрасывается из delete-handler явно, потому что в режиме `immediate` запись пользователя уже удалена до постановки Telegram alert. `payment_method_bound` шлётся как через YooKassa webhook, так и через fallback `syncPendingPaymentMethodBinding`, чтобы не теряться при delayed webhook; `billing.plan_changed` шлётся только когда смена тарифа реально применена: immediate activation, webhook/polling activation или scheduled apply; `billing.critical_error` дополнительно фиксирует критичные денежные сбои scheduled plan change и денежные mismatch-сценарии в YooKassa webhook. Для очередей зафиксирован отдельный инвариант: бизнесовый `dedupKey` может содержать `:`, но BullMQ `jobId` должен быть sanitized и не использовать `:`. Для Telegram transport дополнительно зафиксировано: клиент отправляет `sendMessage` через `node:https` с form-urlencoded body и принудительным IPv4, потому что в текущей среде `fetch/undici` рвёт TLS до `api.telegram.org` ещё до handshake; transient transport errors (`ECONNRESET`, timeout и т.п.) сначала гасятся inline-retry внутри одной job, а промежуточные BullMQ retries логируются как `warn`, а не как финальные `error`. DevOps hooks упрощены: оставлены `devops.http_500_spike` и `devops.push_delivery_unavailable`, а отдельные `devops.redis_unavailable` / `devops.postgres_unavailable` удалены из текущего scope, потому что без bypass-канала они не были надёжно доставляемы при падении той же инфраструктуры. Для orchestration-слоя добавлены tests `tests/telegram-event-subscribers.test.ts`, `tests/telegram-alerts.worker.integration.test.ts`, `tests/telegram-alerts.transport-retry.test.ts` и `tests/telegram-deliveries-cleanup.service.test.ts`. При недоступности Redis app-level alerts могут временно теряться, fallback на sync-send не входит в scope v1.
+• Telegram alerts v1 (зафиксировано в `.docs/telegram_bots.md`): для внутреннего alerting используется отдельный server-side bot token (`TELEGRAM_ALERTS_*`, не reuse `NUXT_TELEGRAM_BOT_TOKEN`), но на текущем rollout все environments (`local/dev/prod`) шлют в один общий чат с обязательной env-меткой в тексте сообщения; логические каналы `devops` / `billing` / `users` / `errors` при этом остаются отдельными на уровне маршрутизации, форматирования и дедупликации. В текущей итерации thread-based routing не используется: достаточно одного `TELEGRAM_ALERTS_CHAT_ID` без `message_thread_id`. Реализованный foundation лежит в `server/application/telegram/*`, а внешний код работает через тонкий facade `server/application/events/*`: business/use-case модули публикуют typed app events, `server/application/telegram/telegram-event-subscribers.ts` маппит их в Telegram-specific orchestration, а `server/plugins/telegram-event-subscribers.ts` регистрирует bridge один раз на процесс. Это позволило убрать прямые импорты Telegram-сервисов из auth/billing/cleanup/infra-кода и оставить Telegram API, formatter, routing, delivery repository и queue/worker внутри одного изолированного слоя. В БД для Telegram остаётся только `telegram_alert_deliveries` как delivery log + dedup; `user_daily_activity`, daily summary, activity-source и registration milestones удалены из текущего scope, чтобы не создавать лишнюю запись в БД на `session_started` / `open_app` и не делать полный `count(users)` при регистрации. Для `telegram_alert_deliveries` добавлен отдельный daily cleanup plugin: он чистит terminal-статусы `sent` / `failed` / `uncertain`, не трогает живые `queued` / `processing`, включён по умолчанию и использует retention 30 дней с override через runtime config. Подключённые источники текущей итерации: `user.registered` (email после verify, OAuth/Telegram сразу после создания), `user.deletion_requested`, реальные billing `purchase_success` / `purchase_failed` / `subscription_canceled`, `billing.checkout_error`, `billing.webhook_error`, `billing.payment_method_bound`, `billing.plan_changed`, `billing.critical_error`, а также `error.business_flow_critical` для падений критичных process-level бизнесовых scheduler/worker flow. User-facing и billing alerts дополнительно обогащаются `users.email`; для `user.deletion_requested` email пробрасывается из delete-handler явно, потому что в режиме `immediate` запись пользователя уже удалена до постановки Telegram alert. `payment_method_bound` шлётся как через YooKassa webhook, так и через fallback `syncPendingPaymentMethodBinding`, чтобы не теряться при delayed webhook; `billing.plan_changed` шлётся только когда смена тарифа реально применена: immediate activation, webhook/polling activation или scheduled apply; `billing.critical_error` дополнительно фиксирует критичные денежные сбои scheduled plan change и денежные mismatch-сценарии в YooKassa webhook. Для очередей зафиксирован отдельный инвариант: бизнесовый `dedupKey` может содержать `:`, но BullMQ `jobId` должен быть sanitized и не использовать `:`. Для Telegram transport дополнительно зафиксировано: клиент отправляет `sendMessage` через `node:https` с form-urlencoded body и принудительным IPv4, потому что в текущей среде `fetch/undici` рвёт TLS до `api.telegram.org` ещё до handshake; безопасно ретраятся только явные transport-failure сценарии (`ECONNRESET`, `EAI_AGAIN`, `429` и т.п.), а timeout ответа после отправки запроса считается ambiguous delivery и помечается статусом `uncertain` без автоматического повторного `sendMessage`, чтобы не дублировать billing/user alerts. Промежуточные BullMQ retries логируются как `warn`, а не как финальные `error`. DevOps hooks упрощены: оставлены `devops.http_500_spike` и `devops.push_delivery_unavailable`, а отдельные `devops.redis_unavailable` / `devops.postgres_unavailable` удалены из текущего scope, потому что без bypass-канала они не были надёжно доставляемы при падении той же инфраструктуры. Для orchestration-слоя добавлены tests `tests/telegram-event-subscribers.test.ts`, `tests/telegram-alerts.worker.integration.test.ts`, `tests/telegram-alerts.transport-retry.test.ts` и `tests/telegram-deliveries-cleanup.service.test.ts`. При недоступности Redis app-level alerts могут временно теряться, fallback на sync-send не входит в scope v1.
 • Валидация и схемы: Zod (в связке с @vee-validate/zod).
 • Логи и мониторинг: Pino + Sentry.
 • Миграции БД: Drizzle Kit (SQL файлы хранятся для совместимости с будущими системами).
@@ -75,6 +75,7 @@ index, onboarding, chat (layout blank), therapy, habits, practices, breath-pract
 • Аналитика настроек: `useSettingsAnalytics` (Sentry breadcrumbs) — события `settings_notifications_push_toggle`, `settings_notifications_marketing_toggle`, `settings_notifications_open_system_settings`.
 • ID пользователя показывается внизу `/settings` с копированием (useClipboard/Capacitor Clipboard с fallback).
 • Чат: welcome‑ответ стартует при пустом `messages`, параметр `mode` удалён; `entryContext` приходит из `/habits`, `/therapy` и `/quick-help` (включая `sos` и `thought_dump`) и учитывается в prompt.
+• Чат и suggested‑chips: `user_preferences.onboarding_reasons` передаётся в server-side prompt assembly как мягкий вектор персонализации. Он влияет на welcome‑start, обычные ответы ассистента и генерацию suggested‑chips, но не должен навязываться поверх актуальной темы диалога.
 • Кризисный контур (обновлено 2026-03-04): в `/api/chat` и `/api/chat/stream` внедрён server-side детектор (`server/application/chat/crisis-protocol.service.ts`), который анализирует последние user-сообщения и подмешивает safety developer-prompt (`CRISIS_HIGH`/`CRISIS_WATCH`) в `options.userPrompt`; LLM отвечает всегда (без short-circuit шаблона), при неизвестной стране допускается только вопрос о стране («В какой стране ты сейчас находишься?») и запрещены уточнения точного адреса/геолокации; при известной стране из `user_locale` подставляется соответствующий номер экстренных служб. MVP quick-help/SOS остаётся стабилизационным флоу и не считается полноценной кризисной помощью (см. `.docs/sos.md`).
 • Чат: приветствие используется только в welcome‑старте и не чаще 1 раза в день (локальная дата пользователя). Приветствие по имени — отдельный лимит; имя очищается до «только имя» без фамилии/никнеймов. Отметки хранятся в `chat_settings.last_greeting_at` и `chat_settings.last_name_greeting_at`. Инструкция про имя и выбор стартовой фразы добавляются только в первое сообщение дня, чтобы не раздувать токены.
 • Чат: альтернативная стартовая фраза в welcome‑режиме учитывает `entryContext` (`therapy_topic` / `habit` / `sos` / `thought_dump`) и `user_gender` (если есть) для естественных формулировок. Выбор фразы выполняется случайно, при этом для одного `userId + context` исключается повтор предыдущей фразы подряд (in-memory anti-repeat). Общий нейтральный шаблон используется только при входе с главной (`entryContext = null`), а при переходе из темы/привычки/SOS/выгрузки мыслей старт сразу формулируется по выбранному контексту.
@@ -245,11 +246,20 @@ server/
 🧭 Онбординг welcome_setup
 • Пол обязателен, но для генерации текстов есть нейтральный fallback на случай отсутствия/невалидности.
 • Возрастные диапазоны: "До 30" (`under_30`), "30–45" (`30_45`), "45+" (`45_plus`).
-• Кнопка "Назад" обязательна; прогресс-бар считает `Y` динамически при пропусках.
+• Для шага "Что привело вас в Ментала?" используется отдельное массивное поле `user_preferences.onboarding_reasons`: это часть персонализации, а не техническое состояние flow, поэтому его не кладём в `users.onboarding`.
+• В шаге "Что привело вас в Ментала?" вариант "Другое" сохраняется как фиксированное enum-значение `other` без отдельного текстового ввода в первой итерации.
+• Кнопка "Назад" обязательна; прогресс-бар показывает только интерактивные шаги анкеты (`5` шагов: имя, причина, возраст, пол, tone), а welcome/final не входят в счётчик.
 • Имя из онбординга всегда перезаписывает OAuth имя в `users.name`.
 • В `users`: `gender`, `age_range`, `onboarding` (jsonb с флагами, сейчас `welcome`).
-• `GET /api/user/me` возвращает `onboarding.welcome`; `POST /api/user/onboarding/complete` сохраняет профиль и `userPreferences.tone`.
+• Шаг причины поддерживает мультивыбор. Порядок кликов сохраняется и считается мягким приоритетом пользователя; для LLM-персонализации и suggested-chips используются первые 1-3 причины как фоновый вектор, без навязывания темы поверх живого запроса.
+• `GET /api/user/me` возвращает `onboarding.welcome`; `POST /api/user/onboarding/complete` сохраняет профиль (`name`, `gender`, `ageRange`) и onboarding-персонализацию в `user_preferences` (`tone`, `onboarding_reasons`).
 • Глобальный `tone` унифицирован в shared-справочнике: `gentle`, `balanced`, `uplifting`, `direct` (+ `unknown` только как skip-сентинел). Для каждого тона хранятся `label` и `description`.
+• Welcome-онбординг использует отдельный слой фоновых обоев из `public/onboarding/welcome`; этот слой живёт только на маршруте `/onboarding`, не читает и не изменяет `sceneSettings`, не участвует в `scene-selection` и не переиспользуется как фон основного приложения.
+• Текущий синий фон остаётся базовым слоем/fallback; onboarding-обои рендерятся поверх него. Выбор ассета должен совпадать с логикой scene background: источник истины — ориентация viewport (`height >= width` = portrait-first), fallback-порядок файлов — `*-portrait`, затем `portrait-*`, затем базовый файл.
+• Финальный экран переиспользует первый фон приветственного шага; отдельный дополнительный onboarding-ассет для него не нужен.
+• Логика определения orientation и выбора onboarding-ассета вынесена в общие frontend helper’ы `app/composables/useViewportOrientation.ts` и `app/utils/orientationMedia.ts`, чтобы onboarding и scene background не расходились по правилам.
+• Смена onboarding-шага должна синхронно анимировать и контент карточки, и background-слой (мягкий cross-fade/opacity + спокойный motion без резкого параллакса); для `prefers-reduced-motion` используется упрощённый режим.
+• Поверх onboarding-обоев обязателен затемняющий overlay для стабильной читаемости текста и контролов на всех шагах; при ошибке загрузки ассета интерфейс деградирует на базовый синий фон без broken-state.
 
 ⸻
 
@@ -397,7 +407,7 @@ server/
 • Правила lock/paywall хранятся в БД (`feature_access_policies`) и отдаются через entitlement API, фронт не хардкодит тексты/тариф.
 • Обязательный bootstrap реализован: `GET /api/user/me`возвращает объект`billing`(plan/trial/aiChatMode/entitlements snapshot), чтобы при старте приложения UI сразу знал, показывать lock-иконки и paywall-модалки или нет.
 • Для общего входа в чат используется entitlement`chat.assistant`: блоки «Начать/Поговорить в чате» показывают lock-иконку (`⭐`/`💎`) и открывают paywall-модалку вместо попытки запуска чата на недоступном тарифе.
-• Кастомные привычки и кастомная терапия закрыты entitlement-ключами `habits.custom.create` и `therapy.custom.create`: create/open/update API отдают `feature_plan_required`, а индексные карточки показывают lock-бейдж и открывают стандартную paywall-модалку вместо модалки создания.
+• Кастомные привычки и кастомная терапия закрыты entitlement-ключами `habits.custom.create`и`therapy.custom.create`: create/open/update API отдают `feature_plan_required`, а индексные карточки показывают lock-бейдж и открывают стандартную paywall-модалку вместо модалки создания.
 • Исключение по UX: удаление уже созданных кастомных привычек/тем терапии разрешено всегда (для владельца), даже если entitlement на создание/открытие больше недоступен; блокируются только вход в карточку/настройки и взаимодействия, требующие доступа к фиче.
 • Для уведомлений введён авто-fallback: если у пользователя нет entitlement на `notifications.text_source_ai`(например, Trial истёк на Basic), сервер принудительно переводит`textSource=ai`в`templates`в API prefs и в фоновых AI-воркерах, чтобы не останавливать уже настроенные уведомления и не запускать новые AI-генерации без доступа.
 • В`NotificationSettingsPage` блоки «Способ создания / ИИ» и «Мои пожелания» используют entitlement-gate с lock-иконкой (`⭐`/`💎`) и paywall-модалкой; поле пожеланий остаётся read-only без доступа и не участвует в AI-генерации до открытия тарифа.
@@ -592,7 +602,7 @@ server/
 
 • Миграции (Drizzle):
 • Меняем `server/infrastructure/db/schema.ts` → запускаем `pnpm db:generate` → `pnpm db:migrate`.
-• Миграции для подписок/биллинга: `0005_*` (база), `0006_*` (payments/idempotency/billing*period/last_activity_at), `0007_*` (checkout-поля + response_json), `0049_*` (external auth tokens + `idempotency_keys.request_hash`), `0050_*` (`users.scheduled_*` для downgrade scheduling), `0051_*` (trial-scheduled billing: `users.billing_*` + `billing_charge_attempts`).
+• Миграции для подписок/биллинга: `0005_*` (база), `0006_*` (payments/idempotency/billing*period/last*activity*at), `0007**`(checkout-поля + response_json),`0049*\*`(external auth tokens +`idempotency*keys.request_hash`), `0050\**` (`users.scheduled\_\_`для downgrade scheduling),`0051\_\*`(trial-scheduled billing:`users.billing\*\*`+`billing_charge_attempts`).
 
 ⸻
 
@@ -731,65 +741,66 @@ server/
 📔 Дневник благодарности (обновлено, 12 марта 2026)
 • Канонический экран дневника: `app/pages/practices/gratitude-diary.vue`, маршрут `/practices/gratitude-diary`.
 • UX-структура разделена на две страницы:
-  - `app/pages/practices/gratitude-diary.vue` — overview (streak + история + фиксированная кнопка добавления),
-  - `app/pages/practices/gratitude-diary/editor.vue` — создание/редактирование записи (вопрос, worksheet, composer, save).
-• Точка входа №1: карточка на `Практики` (`app/pages/practices/index.vue`).
-• Карточка дневника в `Практиках` всегда видима: при отсутствии доступа по feature-key `gratitude.diary.full` рендерится lock-state с бейджем тарифа (`⭐` для PRO, `💎` для Premium) и открывает `FeaturePaywallModal` по клику, без скрытия самого элемента.
-• Точка входа №2: системная привычка `gratitude` в `Привычках` ведёт на тот же канонический экран (без отдельной реализации дневника в `habits`).
-• Настройки уведомлений остаются в контуре привычек и открываются из дневника через `/habits/gratitude/notifications`.
-• Все `server/api/gratitude-diary/*` дополнительно проверяют entitlement `gratitude.diary.full` на сервере; частичные premium-ограничения (`gratitude.worksheet.customize`, `gratitude.photo.upload`) применяются только после успешного входа в сам дневник.
-• Backend API дневника:
-  - `GET /api/gratitude-diary` — состояние экрана (streak, текущий промпт, история, поиск),
-  - `POST /api/gratitude-diary/entries` — создание записи,
-  - `GET /api/gratitude-diary/entries/:id` — получить запись для режима редактирования,
-  - `PATCH /api/gratitude-diary/entries/:id` — обновить существующую запись,
-  - `GET /api/gratitude-diary/prompts` — каталог промптов, worksheet и избранные промпты пользователя (для Premium — персональный шаблон пользователя, для остальных — дефолт),
-  - `PUT /api/gratitude-diary/worksheet` — обновление персонального worksheet-шаблона (только Premium),
-  - `POST /api/gratitude-diary/upload-photo` — upload-контур фото, вызывается только в момент `save` после локального выбора файла,
-  - `POST /api/gratitude-diary/delete-photo` — compensating cleanup для только что загруженного объекта, если после upload сохранение записи не завершилось успешно,
-  - `POST /api/gratitude-diary/favorites` — добавить промпт в избранное (catalog или custom, возвращает полный список),
-  - `PATCH /api/gratitude-diary/favorites/:id` — редактировать кастомный промпт (WHERE id AND user_id AND prompt_type='custom'),
-  - `DELETE /api/gratitude-diary/favorites/:id` — удалить из избранного (возвращает `{ removedId }`),
-  - `POST /api/gratitude-diary/favorites/migrate` — батч-миграция из localStorage (идемпотентно, ON CONFLICT DO NOTHING).
-• Данные worksheet-шаблона пользователя хранятся в `gratitude_diary_worksheet_templates` (JSON-массив пунктов с `id/emoji/text`).
-• Данные дневника хранятся в таблице `gratitude_diary_entries` (см. `server/infrastructure/db/schema.ts`): `text`, `mood`, `tags`, `photo_url`, `input_method`, timestamps.
-• Избранные промпты пользователя хранятся в таблице `gratitude_diary_favorite_prompts` (миграция 0062):
-  - полиморфная таблица: `prompt_type IN ('catalog', 'custom')`,
-  - `catalog` → хранит ссылку `catalog_prompt_id` на статический каталог,
-  - `custom` → хранит `custom_text` (VARCHAR 220),
-  - CHECK constraint гарантирует консистентность: catalog без catalogPromptId или custom без customText невозможны,
-  - partial unique index на `(user_id, catalog_prompt_id)` и `(user_id, custom_text)` для идемпотентности,
-  - "мёртвые" ссылки (catalog_prompt_id не из актуального каталога) фильтруются на уровне API GET /prompts,
-  - лимит: не более 50 кастомных промптов на пользователя (проверяется в POST /favorites).
-• Логика избранных промптов вынесена в composable `app/composables/useGratitudeDiaryFavorites.ts`:
-  - `catalogFavoriteMap` computed (O(1) lookup вместо O(n) find),
-  - оптимистичные обновления с rollback-паттерном (snapshot → update → rollback + toast при ошибке),
-  - методы: `toggleCatalogFavorite`, `addCatalogFavorite`, `removeFavorite`, `createCustomFavorite`, `updateCustomFavorite`.
-• Однократная миграция из localStorage в БД: при первом открытии editor.vue после деплоя — данные из ключа `gratitude-diary.favorite-prompts.v1` отправляются в `/favorites/migrate`, флаг `gratitude-diary.favorites-migrated.v1` ставится в localStorage. Двойная миграция не создаёт дубликатов.
-• В GratitudePromptItem (display-модель) id кастомных промптов = String(dbId), id каталожных = оригинальный catalog ID (e.g., 'self-1').
-• `Color` и `Help me write` не используются в первой волне дневника; composer ограничен mood/photo/voice/list/tag.
-• Тексты UI дневника подключены через `vue-i18n` (ключи `GRATITUDE_DIARY.*` в `app/i18n/locales/ru.ts` и `app/i18n/locales/en.ts`) — RU как основной язык, EN как готовая структура для расширения локализации.
-• Дата записи в `editor.vue` выбирается через компактный `shadcn-vue`-calendar в `PageHeader`:
-  - календарь локализуется по `user.locale` из `/api/user/me` (fallback на текущий `vue-i18n locale`),
-  - на клиенте доступны только сегодняшняя и прошедшие даты (`max-value = today()`),
-  - popover календаря стилизован под проектный glass-паттерн (`glass-deep`), а не под дефолтный shadcn background,
-  - выбранная дата отправляется в `POST/PATCH /api/gratitude-diary/entries` как `entryDate` (`YYYY-MM-DD`).
-• Серверный контур даты записи timezone-aware:
-  - timezone берётся из `X-Timezone`, который уже отправляет общий API-плагин,
-  - `createdAt` записи перестраивается из выбранного `entryDate` + локального времени пользователя, поэтому редактирование даты не ломает часы/минуты карточки,
-  - группировка истории и расчёт streak в `GET /api/gratitude-diary` теперь тоже считаются по локальному дню пользователя, а не по сырому UTC-срезу.
-• В модалке каталога промптов (`editor.vue`) используется горизонтальная лента тем с переключением свайпом влево/вправо; активная тема отображается как одиночный список промптов.
-• Вкладка `Избранное` в каталоге промптов объединяет:
-  - сохранённые промпты из системных категорий (добавление/удаление по сердечку),
-  - пользовательские промпты (ручное создание, редактирование, удаление).
-• Фото в `editor.vue` работают по staged-flow:
-  - при выборе файла фронт делает только локальный preview и держит `File` в состоянии страницы,
-  - до нажатия `Сохранить` объект в Object Storage не создаётся,
-  - при редактировании существующей записи старые `photoUrl/photoStorageKey` сохраняются в состоянии до успешного `PATCH`,
-  - удаление фото в UI лишь помечает отложенное удаление; фактическое удаление объекта выполняется сервером после успешного сохранения записи,
-  - если upload нового фото прошёл, а `POST/PATCH` записи завершился ошибкой, фронт вызывает `delete-photo` для cleanup только что загруженного объекта.
-• Список записей в `app/pages/practices/gratitude-diary/index.vue` при возврате из редактора делает повторный `refreshDiary()` на `onActivated`, а загрузка карточечных фото имеет retry с cache-buster для сценария холодного CDN-404 сразу после сохранения новой картинки.
-• UX каталога вопросов в `editor.vue` построен в схеме `header + controls + scroll-list + sticky action`:
-  - список вопросов прокручивается внутри модалки,
-  - primary-кнопка для вкладки `Избранное` всегда закреплена внизу и открывает отдельный попап добавления/редактирования вопроса (`textarea + "Готово"`),
-  - внутри `Избранного` у элементов используются действия `редактировать` и `удалить` (без иконки сердца).
+
+- `app/pages/practices/gratitude-diary.vue` — overview (streak + история + фиксированная кнопка добавления),
+- `app/pages/practices/gratitude-diary/editor.vue` — создание/редактирование записи (вопрос, worksheet, composer, save).
+  • Точка входа №1: карточка на `Практики` (`app/pages/practices/index.vue`).
+  • Карточка дневника в `Практиках` всегда видима: при отсутствии доступа по feature-key `gratitude.diary.full` рендерится lock-state с бейджем тарифа (`⭐` для PRO, `💎` для Premium) и открывает `FeaturePaywallModal` по клику, без скрытия самого элемента.
+  • Точка входа №2: системная привычка `gratitude` в `Привычках` ведёт на тот же канонический экран (без отдельной реализации дневника в `habits`).
+  • Настройки уведомлений остаются в контуре привычек и открываются из дневника через `/habits/gratitude/notifications`.
+  • Все `server/api/gratitude-diary/*` дополнительно проверяют entitlement `gratitude.diary.full` на сервере; частичные premium-ограничения (`gratitude.worksheet.customize`, `gratitude.photo.upload`) применяются только после успешного входа в сам дневник.
+  • Backend API дневника:
+- `GET /api/gratitude-diary` — состояние экрана (streak, текущий промпт, история, поиск),
+- `POST /api/gratitude-diary/entries` — создание записи,
+- `GET /api/gratitude-diary/entries/:id` — получить запись для режима редактирования,
+- `PATCH /api/gratitude-diary/entries/:id` — обновить существующую запись,
+- `GET /api/gratitude-diary/prompts` — каталог промптов, worksheet и избранные промпты пользователя (для Premium — персональный шаблон пользователя, для остальных — дефолт),
+- `PUT /api/gratitude-diary/worksheet` — обновление персонального worksheet-шаблона (только Premium),
+- `POST /api/gratitude-diary/upload-photo` — upload-контур фото, вызывается только в момент `save` после локального выбора файла,
+- `POST /api/gratitude-diary/delete-photo` — compensating cleanup для только что загруженного объекта, если после upload сохранение записи не завершилось успешно,
+- `POST /api/gratitude-diary/favorites` — добавить промпт в избранное (catalog или custom, возвращает полный список),
+- `PATCH /api/gratitude-diary/favorites/:id` — редактировать кастомный промпт (WHERE id AND user_id AND prompt_type='custom'),
+- `DELETE /api/gratitude-diary/favorites/:id` — удалить из избранного (возвращает `{ removedId }`),
+- `POST /api/gratitude-diary/favorites/migrate` — батч-миграция из localStorage (идемпотентно, ON CONFLICT DO NOTHING).
+  • Данные worksheet-шаблона пользователя хранятся в `gratitude_diary_worksheet_templates` (JSON-массив пунктов с `id/emoji/text`).
+  • Данные дневника хранятся в таблице `gratitude_diary_entries` (см. `server/infrastructure/db/schema.ts`): `text`, `mood`, `tags`, `photo_url`, `input_method`, timestamps.
+  • Избранные промпты пользователя хранятся в таблице `gratitude_diary_favorite_prompts` (миграция 0062):
+- полиморфная таблица: `prompt_type IN ('catalog', 'custom')`,
+- `catalog` → хранит ссылку `catalog_prompt_id` на статический каталог,
+- `custom` → хранит `custom_text` (VARCHAR 220),
+- CHECK constraint гарантирует консистентность: catalog без catalogPromptId или custom без customText невозможны,
+- partial unique index на `(user_id, catalog_prompt_id)` и `(user_id, custom_text)` для идемпотентности,
+- "мёртвые" ссылки (catalog_prompt_id не из актуального каталога) фильтруются на уровне API GET /prompts,
+- лимит: не более 50 кастомных промптов на пользователя (проверяется в POST /favorites).
+  • Логика избранных промптов вынесена в composable `app/composables/useGratitudeDiaryFavorites.ts`:
+- `catalogFavoriteMap` computed (O(1) lookup вместо O(n) find),
+- оптимистичные обновления с rollback-паттерном (snapshot → update → rollback + toast при ошибке),
+- методы: `toggleCatalogFavorite`, `addCatalogFavorite`, `removeFavorite`, `createCustomFavorite`, `updateCustomFavorite`.
+  • Однократная миграция из localStorage в БД: при первом открытии editor.vue после деплоя — данные из ключа `gratitude-diary.favorite-prompts.v1` отправляются в `/favorites/migrate`, флаг `gratitude-diary.favorites-migrated.v1` ставится в localStorage. Двойная миграция не создаёт дубликатов.
+  • В GratitudePromptItem (display-модель) id кастомных промптов = String(dbId), id каталожных = оригинальный catalog ID (e.g., 'self-1').
+  • `Color` и `Help me write` не используются в первой волне дневника; composer ограничен mood/photo/voice/list/tag.
+  • Тексты UI дневника подключены через `vue-i18n` (ключи `GRATITUDE_DIARY.*` в `app/i18n/locales/ru.ts` и `app/i18n/locales/en.ts`) — RU как основной язык, EN как готовая структура для расширения локализации.
+  • Дата записи в `editor.vue` выбирается через компактный `shadcn-vue`-calendar в `PageHeader`:
+- календарь локализуется по `user.locale` из `/api/user/me` (fallback на текущий `vue-i18n locale`),
+- на клиенте доступны только сегодняшняя и прошедшие даты (`max-value = today()`),
+- popover календаря стилизован под проектный glass-паттерн (`glass-deep`), а не под дефолтный shadcn background,
+- выбранная дата отправляется в `POST/PATCH /api/gratitude-diary/entries` как `entryDate` (`YYYY-MM-DD`).
+  • Серверный контур даты записи timezone-aware:
+- timezone берётся из `X-Timezone`, который уже отправляет общий API-плагин,
+- `createdAt` записи перестраивается из выбранного `entryDate` + локального времени пользователя, поэтому редактирование даты не ломает часы/минуты карточки,
+- группировка истории и расчёт streak в `GET /api/gratitude-diary` теперь тоже считаются по локальному дню пользователя, а не по сырому UTC-срезу.
+  • В модалке каталога промптов (`editor.vue`) используется горизонтальная лента тем с переключением свайпом влево/вправо; активная тема отображается как одиночный список промптов.
+  • Вкладка `Избранное` в каталоге промптов объединяет:
+- сохранённые промпты из системных категорий (добавление/удаление по сердечку),
+- пользовательские промпты (ручное создание, редактирование, удаление).
+  • Фото в `editor.vue` работают по staged-flow:
+- при выборе файла фронт делает только локальный preview и держит `File` в состоянии страницы,
+- до нажатия `Сохранить` объект в Object Storage не создаётся,
+- при редактировании существующей записи старые `photoUrl/photoStorageKey` сохраняются в состоянии до успешного `PATCH`,
+- удаление фото в UI лишь помечает отложенное удаление; фактическое удаление объекта выполняется сервером после успешного сохранения записи,
+- если upload нового фото прошёл, а `POST/PATCH` записи завершился ошибкой, фронт вызывает `delete-photo` для cleanup только что загруженного объекта.
+  • Список записей в `app/pages/practices/gratitude-diary/index.vue` при возврате из редактора делает повторный `refreshDiary()` на `onActivated`, а загрузка карточечных фото имеет retry с cache-buster для сценария холодного CDN-404 сразу после сохранения новой картинки.
+  • UX каталога вопросов в `editor.vue` построен в схеме `header + controls + scroll-list + sticky action`:
+- список вопросов прокручивается внутри модалки,
+- primary-кнопка для вкладки `Избранное` всегда закреплена внизу и открывает отдельный попап добавления/редактирования вопроса (`textarea + "Готово"`),
+- внутри `Избранного` у элементов используются действия `редактировать` и `удалить` (без иконки сердца).

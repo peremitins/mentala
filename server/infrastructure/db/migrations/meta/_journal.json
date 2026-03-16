@@ -442,6 +442,20 @@
       "when": 1773390131417,
       "tag": "0066_first_darwin",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1773396968642,
+      "tag": "0067_tearful_talkback",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1773409195088,
+      "tag": "0068_loose_logan",
+      "breakpoints": true
     }
   ]
 }

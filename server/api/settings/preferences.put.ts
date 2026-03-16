@@ -12,10 +12,15 @@ import {
   DEFAULT_ASSISTANT_TONE,
   isAssistantToneWithUnknown,
 } from '@/shared/constants/assistantTone';
+import {
+  areOnboardingReasonListsEqual,
+  normalizeOnboardingReasons,
+  resolveOnboardingReasons,
+} from '@/shared/dto/onboarding';
 
 /**
  * PUT /api/settings/preferences
- * Обновить глобальные настройки пользователя (addressing, tone)
+ * Обновить глобальные настройки пользователя (addressing, tone, onboardingReasons)
  */
 export default defineEventHandler(
   async (event): Promise<UserPreferencesDto> => {
@@ -56,6 +61,18 @@ export default defineEventHandler(
       }
     }
 
+    if (
+      body.onboardingReasons !== undefined &&
+      body.onboardingReasons !== null &&
+      normalizeOnboardingReasons(body.onboardingReasons).length !==
+        body.onboardingReasons.length
+    ) {
+      throw createError({
+        statusCode: 400,
+        message: 'Invalid onboarding reasons value',
+      });
+    }
+
     // Пытаемся найти существующие настройки
     const [existing] = await db
       .select()
@@ -71,6 +88,14 @@ export default defineEventHandler(
         body.meditationTimerMinutes !== undefined
           ? body.meditationTimerMinutes
           : (existing.meditationTimerMinutes ?? null);
+      const existingOnboardingReasons = resolveOnboardingReasons({
+        reasons: existing.onboardingReasons,
+        reason: existing.onboardingReason,
+      });
+      const nextOnboardingReasons =
+        body.onboardingReasons !== undefined
+          ? normalizeOnboardingReasons(body.onboardingReasons)
+          : existingOnboardingReasons;
       // Обновляем существующие
       const nextAddressing = body.addressing ?? existing.addressing;
       const nextTone = body.tone ?? currentTone;
@@ -81,6 +106,12 @@ export default defineEventHandler(
         body.tone !== undefined
           ? body.tone !== existing.tone
           : currentTone !== existing.tone;
+      const onboardingReasonsChanged =
+        body.onboardingReasons !== undefined &&
+        !areOnboardingReasonListsEqual(
+          nextOnboardingReasons,
+          existingOnboardingReasons
+        );
 
       const [updated] = await db
         .update(userPreferences)
@@ -88,12 +119,21 @@ export default defineEventHandler(
           addressing: nextAddressing,
           tone: nextTone,
           meditationTimerMinutes: nextMeditationTimer,
+          onboardingReason: nextOnboardingReasons[0] ?? null,
+          onboardingReasons: nextOnboardingReasons,
           updatedAt: new Date(),
         })
         .where(eq(userPreferences.userId, userId))
         .returning();
 
-      if (addressingChanged || toneChanged) {
+      if (!updated) {
+        throw createError({
+          statusCode: 500,
+          message: 'Failed to update user preferences',
+        });
+      }
+
+      if (addressingChanged || toneChanged || onboardingReasonsChanged) {
         // Запускаем асинхронно, чтобы не блокировать ответ
         void enqueueAiRegenerationForUser({
           userId,
@@ -113,13 +153,22 @@ export default defineEventHandler(
           ? updated.tone
           : DEFAULT_ASSISTANT_TONE,
         meditationTimerMinutes: updated.meditationTimerMinutes ?? null,
+        onboardingReasons: resolveOnboardingReasons({
+          reasons: updated.onboardingReasons,
+          reason: updated.onboardingReason,
+        }),
       };
     } else {
       // Создаём новые
       const createdAddressing = body.addressing ?? 'informal';
       const createdTone = body.tone ?? DEFAULT_ASSISTANT_TONE;
+      const createdOnboardingReasons = normalizeOnboardingReasons(
+        body.onboardingReasons
+      );
       const shouldRegenerateAiOnCreate =
-        body.addressing !== undefined || body.tone !== undefined;
+        body.addressing !== undefined ||
+        body.tone !== undefined ||
+        body.onboardingReasons !== undefined;
 
       const [created] = await db
         .insert(userPreferences)
@@ -128,9 +177,18 @@ export default defineEventHandler(
           userId,
           addressing: createdAddressing,
           tone: createdTone,
+          onboardingReason: createdOnboardingReasons[0] ?? null,
+          onboardingReasons: createdOnboardingReasons,
           meditationTimerMinutes: body.meditationTimerMinutes ?? null,
         })
         .returning();
+
+      if (!created) {
+        throw createError({
+          statusCode: 500,
+          message: 'Failed to create user preferences',
+        });
+      }
 
       if (shouldRegenerateAiOnCreate) {
         // Запускаем асинхронно, чтобы не блокировать ответ
@@ -152,6 +210,10 @@ export default defineEventHandler(
           ? created.tone
           : DEFAULT_ASSISTANT_TONE,
         meditationTimerMinutes: created.meditationTimerMinutes ?? null,
+        onboardingReasons: resolveOnboardingReasons({
+          reasons: created.onboardingReasons,
+          reason: created.onboardingReason,
+        }),
       };
     }
   }

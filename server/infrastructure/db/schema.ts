@@ -626,6 +626,13 @@ export const userPreferences = pgTable('user_preferences', {
     .notNull()
     .default('informal'), // 'informal' | 'formal'
   tone: varchar('tone', { length: 20 }).notNull().default('balanced'), // 'gentle' | 'balanced' | 'uplifting' | 'direct' | 'unknown'
+  // Legacy single-select колонка. Держим до полного rollout массива причин.
+  onboardingReason: varchar('onboarding_reason', { length: 40 }),
+  // Контекст welcome-онбординга для персонализации рекомендаций и общения.
+  onboardingReasons: text('onboarding_reasons')
+    .array()
+    .notNull()
+    .default(sql`ARRAY[]::text[]`),
   meditationTimerMinutes: integer('meditation_timer_minutes'),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()

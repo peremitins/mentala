@@ -10,6 +10,7 @@ import {
   ChatResponseDto,
   type SuggestedChip,
 } from '@/shared/dto';
+import { resolveOnboardingReasons } from '@/shared/dto/onboarding';
 import { getSessionUserWithRole } from '@/server/utils/require-role';
 import { db } from '@/server/infrastructure/db/client';
 import {
@@ -64,11 +65,19 @@ export default defineEventHandler(async (event) => {
         ? String((sessionResult as any).timezone)
         : undefined;
     const [prefs] = await db
-      .select({ tone: userPreferences.tone })
+      .select({
+        tone: userPreferences.tone,
+        onboardingReason: userPreferences.onboardingReason,
+        onboardingReasons: userPreferences.onboardingReasons,
+      })
       .from(userPreferences)
       .where(eq(userPreferences.userId, uid))
       .limit(1);
     const toneMeta = getAssistantToneMeta(prefs?.tone);
+    const onboardingReasons = resolveOnboardingReasons({
+      reasons: prefs?.onboardingReasons,
+      reason: prefs?.onboardingReason,
+    });
 
     // Требуем валидный therapySessionId, чтобы нельзя было обойти биллинг прямыми вызовами /api/chat
     const therapySessionId =
@@ -230,6 +239,7 @@ export default defineEventHandler(async (event) => {
       toneKey: toneMeta.value,
       toneLabel: toneMeta.label,
       toneDescription: toneMeta.description,
+      onboardingReasons,
       userId: uid, // серверный стабильный uid
       isFirstSession: undefined, // рассчитывается в других местах при стриминге
       userPrompt: effectiveUserPrompt,
@@ -294,6 +304,7 @@ export default defineEventHandler(async (event) => {
           userId: uid,
           therapySessionId,
           entryContext: parsed.entryContext,
+          onboardingReasons,
         });
       } catch (chipsError) {
         // Не ломаем основной ответ, если чипы не сгенерировались.
