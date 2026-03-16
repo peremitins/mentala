@@ -7,6 +7,14 @@ import type {
   InteractionAction,
   NotificationNavigation,
 } from '@/shared/dto/notifications';
+import {
+  buildAppNavigationPath,
+  parseAppNavigationTarget,
+  resolveTargetFromLegacyNotificationNavigation,
+  resolveTargetFromLegacySuggestedChipAction,
+  type AppNavigationTarget,
+} from '@/shared/navigation';
+import { useAppNavigation } from '@/app/composables/useAppNavigation';
 import { useAuthStore } from '@/app/stores/auth';
 import { useMeditationPlayer } from '@/app/composables/useMeditationPlayer';
 
@@ -31,6 +39,7 @@ export default defineNuxtPlugin({
     const canUsePreferences = Capacitor.isPluginAvailable('Preferences');
     const auth = useAuthStore();
     const meditationPlayer = useMeditationPlayer();
+    const { navigateToTarget: executeAppNavigation } = useAppNavigation();
     const isIos = platform === 'ios';
     const isAndroid = platform === 'android';
     const PUSH_TOKEN_STORAGE_KEY = 'pushToken';
@@ -78,6 +87,7 @@ export default defineNuxtPlugin({
     // Сохраняем отложенную навигацию, чтобы не потерять тап на холодном старте.
     type PendingNavigation = {
       targetPath: string;
+      target?: AppNavigationTarget | null;
       messageId?: string | null;
       createdAt: number;
     };
@@ -194,6 +204,79 @@ export default defineNuxtPlugin({
       return null;
     }
 
+    function resolveNavigationTarget(
+      payload?: Record<string, any>
+    ): AppNavigationTarget | null {
+      if (!payload) return null;
+
+      if (
+        typeof payload.navigationTarget === 'string' &&
+        payload.navigationTarget.trim()
+      ) {
+        try {
+          const parsed = JSON.parse(payload.navigationTarget) as unknown;
+          const normalized = parseAppNavigationTarget(parsed);
+          if (normalized) return normalized;
+        } catch {
+          // Ошибки парсинга не блокируют legacy fallback.
+        }
+      }
+
+      if (
+        payload.navigationTarget &&
+        typeof payload.navigationTarget === 'object'
+      ) {
+        const normalized = parseAppNavigationTarget(payload.navigationTarget);
+        if (normalized) return normalized;
+      }
+
+      const navigation = resolveNavigation(payload);
+      if (navigation) {
+        return resolveTargetFromLegacyNotificationNavigation(navigation);
+      }
+
+      const actionParams =
+        payload.actionParams && typeof payload.actionParams === 'object'
+          ? payload.actionParams
+          : payload;
+
+      return resolveTargetFromLegacySuggestedChipAction({
+        action: typeof payload.action === 'string' ? payload.action : undefined,
+        params: {
+          trackId:
+            typeof actionParams.trackId === 'string'
+              ? actionParams.trackId
+              : undefined,
+          collectionId:
+            typeof actionParams.collectionId === 'string'
+              ? actionParams.collectionId
+              : undefined,
+          practiceId:
+            typeof actionParams.practiceId === 'string'
+              ? actionParams.practiceId
+              : typeof actionParams.slug === 'string'
+                ? actionParams.slug
+                : undefined,
+          groupKey:
+            typeof actionParams.groupKey === 'string'
+              ? actionParams.groupKey
+              : undefined,
+          sosEntry:
+            typeof actionParams.sosEntry === 'string'
+              ? actionParams.sosEntry
+              : undefined,
+          topicKey:
+            typeof actionParams.topicKey === 'string'
+              ? actionParams.topicKey
+              : undefined,
+          habitKey:
+            typeof actionParams.habitKey === 'string'
+              ? actionParams.habitKey
+              : undefined,
+        },
+      });
+    }
+
     // Fallback по action-коду, если deepLink или navigation отсутствуют.
     function resolveActionTargetPath(
       payload?: Record<string, any>
@@ -246,6 +329,43 @@ export default defineNuxtPlugin({
         return '/';
       }
 
+      if (action === 'open_gratitude_diary') {
+        return '/practices/gratitude-diary';
+      }
+
+      if (action === 'open_therapy') {
+        return '/therapy';
+      }
+
+      if (action === 'open_therapy_topic') {
+        const topicKey =
+          readString(payload.topicKey) ||
+          readString(payload.actionParams?.topicKey);
+        return topicKey
+          ? `/therapy/${encodeURIComponent(topicKey)}`
+          : '/therapy';
+      }
+
+      if (action === 'open_habits') {
+        return '/habits';
+      }
+
+      if (action === 'open_habit') {
+        const habitKey =
+          readString(payload.habitKey) ||
+          readString(payload.actionParams?.habitKey);
+        return habitKey ? `/habits/${encodeURIComponent(habitKey)}` : '/habits';
+      }
+
+      if (action === 'open_sos') {
+        const entry =
+          readString(payload.sosEntry) ||
+          readString(payload.actionParams?.sosEntry);
+        return entry
+          ? `/quick-help?entry=${encodeURIComponent(entry)}`
+          : '/quick-help';
+      }
+
       return null;
     }
 
@@ -260,6 +380,7 @@ export default defineNuxtPlugin({
           payload?.id ??
           null,
         deepLink: payload?.deepLink ?? null,
+        navigationTarget: payload?.navigationTarget ?? null,
         action: payload?.action ?? null,
         navType: payload?.navType ?? null,
         navId: payload?.navId ?? null,
@@ -446,6 +567,7 @@ export default defineNuxtPlugin({
         return;
       }
 
+      const navigationTarget = resolveNavigationTarget(payload);
       const navigation = resolveNavigation(payload);
       const deepLink =
         typeof payload.deepLink === 'string' && payload.deepLink.trim()
@@ -453,6 +575,7 @@ export default defineNuxtPlugin({
           : null;
       const actionPath = resolveActionTargetPath(payload);
       const targetPath =
+        (navigationTarget ? buildAppNavigationPath(navigationTarget) : null) ||
         deepLink ||
         actionPath ||
         (navigation ? buildPathFromNavigation(navigation) : null);
@@ -469,7 +592,7 @@ export default defineNuxtPlugin({
           error
         );
       }
-      await enqueueNavigation(targetPath, messageId);
+      await enqueueNavigation(targetPath, messageId, navigationTarget);
       await flushPendingNavigation();
     }
 
@@ -546,10 +669,12 @@ export default defineNuxtPlugin({
 
     async function enqueueNavigation(
       targetPath: string,
-      messageId?: string | null
+      messageId?: string | null,
+      target?: AppNavigationTarget | null
     ): Promise<void> {
       const nextValue: PendingNavigation = {
         targetPath,
+        target: target ?? null,
         messageId,
         createdAt: Date.now(),
       };
@@ -560,6 +685,7 @@ export default defineNuxtPlugin({
 
     async function navigateToTarget(
       targetPath: string,
+      target?: AppNavigationTarget | null,
       messageId?: string | null
     ): Promise<boolean> {
       try {
@@ -569,6 +695,31 @@ export default defineNuxtPlugin({
         }
         await ensureAuthReady();
         await nuxtApp.$router.isReady();
+
+        if (target) {
+          const result = await executeAppNavigation(
+            {
+              target,
+              source: 'push',
+              entryPoint: 'push_notification_tap',
+              sourceMeta: {
+                messageId: messageId ?? null,
+              },
+            },
+            {
+              replace: false,
+            }
+          );
+          if (result.status === 'opened' || result.status === 'paywall') {
+            lastNavigation = {
+              path: normalized,
+              messageId,
+              at: Date.now(),
+            };
+            return true;
+          }
+          return false;
+        }
 
         const expected = nuxtApp.$router.resolve(normalized);
         const expectedFullPath = expected.fullPath;
@@ -623,6 +774,7 @@ export default defineNuxtPlugin({
         }
         const success = await navigateToTarget(
           pending.targetPath,
+          pending.target,
           pending.messageId
         );
         if (success) {
@@ -854,12 +1006,16 @@ export default defineNuxtPlugin({
               );
             }
 
+            const navigationTarget = resolveNavigationTarget(payload);
             const deepLink =
               typeof payload?.deepLink === 'string' && payload.deepLink.trim()
                 ? payload.deepLink.trim()
                 : null;
             const actionPath = resolveActionTargetPath(payload);
             const targetPath =
+              (navigationTarget
+                ? buildAppNavigationPath(navigationTarget)
+                : null) ||
               deepLink ||
               actionPath ||
               (navigation ? buildPathFromNavigation(navigation) : '/');
@@ -868,7 +1024,7 @@ export default defineNuxtPlugin({
               void logMissingNavigation(payload);
             }
 
-            await enqueueNavigation(targetPath, messageId);
+            await enqueueNavigation(targetPath, messageId, navigationTarget);
             await flushPendingNavigation();
           }
         }

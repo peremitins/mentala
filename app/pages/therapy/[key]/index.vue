@@ -182,20 +182,19 @@ import { onClickOutside } from '@vueuse/core';
 import { useTherapyTopicsStore } from '@/app/stores/therapyTopics';
 import { mapTherapyToMeditationTopic } from '@/app/lib/meditations';
 import { mapTherapyToBreathGroup } from '@/app/lib/practiceActions';
-import {
-  BREATH_PRACTICES,
-  type BreathPracticeTag,
-} from '@/app/lib/breathPracticesCatalog';
+import type { BreathPracticeTag } from '@/app/lib/breathPracticesCatalog';
 import FeaturePaywallModal from '@/app/components/subscription/FeaturePaywallModal.vue';
 import {
   extractFeaturePlanRequiredError,
   useEntitlements,
 } from '@/app/composables/useEntitlements';
 import { useTherapyAnalytics } from '@/app/composables/useTherapyAnalytics';
+import { useAppNavigation } from '@/app/composables/useAppNavigation';
 
 const route = useRoute();
 const chat = useChatStore();
 const { startEntryChat } = useEntryChat();
+const { navigateToTarget } = useAppNavigation();
 const loaders = useLoadersStore();
 const therapyTopicsStore = useTherapyTopicsStore();
 const { getFeatureAccess, refreshEntitlements } = useEntitlements();
@@ -311,36 +310,31 @@ function getPlanBadgeEmoji(plan: string) {
 
 async function goToMeditations() {
   if (!meditationTopicKey.value) return;
-
-  if (!meditationsAccess.value.available) {
-    openPaywall('meditations.library.full');
-    return;
-  }
-
-  await navigateTo(`/meditations?topic=${meditationTopicKey.value}`);
+  await navigateToTarget(
+    {
+      type: 'meditation_collection',
+      topicKey: meditationTopicKey.value,
+    },
+    {
+      source: 'therapy_page',
+      entryPoint: 'therapy_meditation_cta',
+    }
+  );
 }
 
 async function goToBreathPractices() {
   const groupKey = breathGroupKey.value;
   if (!groupKey) return;
-
-  if (!breathCatalogAccess.value.available) {
-    openPaywall('breath.catalog.full');
-    return;
-  }
-
-  const firstPractice = BREATH_PRACTICES.find((practice) =>
-    practice.tags.includes(groupKey)
+  await navigateToTarget(
+    {
+      type: 'breath_practice_group',
+      groupKey,
+    },
+    {
+      source: 'therapy_page',
+      entryPoint: 'therapy_breath_cta',
+    }
   );
-  if (!firstPractice) {
-    useToast('Подборка дыхательных практик пока недоступна');
-    return;
-  }
-
-  await navigateTo({
-    path: `/breath-practices/${firstPractice.slug}`,
-    query: { group: groupKey },
-  });
 }
 
 function startEditTitle() {

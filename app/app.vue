@@ -22,6 +22,9 @@
       close-button
       close-button-position="top-right"
     />
+    <ClientOnly>
+      <GlobalNavigationPaywall />
+    </ClientOnly>
 
     <!-- Глобальный PageLoader -->
     <!-- <Transition name="fade">
@@ -41,6 +44,7 @@ import { Toaster } from 'vue-sonner';
 import { useAuthStore } from '@/app/stores/auth';
 import { useSceneSettingsStore } from '@/app/stores/sceneSettings';
 import { useUiSettingsStore } from '@/app/stores/uiSettings';
+import GlobalNavigationPaywall from '@/app/components/navigation/GlobalNavigationPaywall.vue';
 import {
   DEFAULT_SCENE_ID,
   findSceneTrack,

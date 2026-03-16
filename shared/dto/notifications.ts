@@ -1,5 +1,9 @@
 import type { AssistantToneWithUnknown } from '../constants/assistantTone';
 import type { OnboardingReasons } from './onboarding';
+import type {
+  AppNavigationTarget,
+  LegacyNotificationNavigation,
+} from '../navigation';
 
 /**
  * Shared DTOs для системы уведомлений
@@ -50,11 +54,7 @@ export type NotificationSubtype =
 export type NotificationActionHint = 'none' | 'meditation' | 'breathing';
 export type AppEnv = 'dev' | 'prod';
 
-export type NotificationNavigation =
-  | { type: 'home' }
-  | { type: 'meditation_track'; trackId: string }
-  | { type: 'breath_practices' }
-  | { type: 'breath_practice'; slug: string };
+export type NotificationNavigation = LegacyNotificationNavigation;
 
 // Обратная совместимость
 export type HabitSubtype = NotificationSubtype;
@@ -301,6 +301,7 @@ export interface NotificationPayload {
   action: string; // 'open' | 'snooze:15m' | 'snooze:1h' | ...
   deepLink?: string;
   navigation?: NotificationNavigation;
+  navigationTarget?: AppNavigationTarget;
   data?: Record<string, any>;
 }
 

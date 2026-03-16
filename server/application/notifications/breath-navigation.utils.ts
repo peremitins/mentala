@@ -2,6 +2,11 @@ import type {
   NotificationActionHint,
   NotificationNavigation,
 } from '../../../shared/dto/notifications';
+import {
+  buildAppNavigationPath,
+  buildLegacyNotificationNavigation,
+  type AppNavigationTarget,
+} from '../../../shared/navigation';
 
 const DEFAULT_MEDITATION_TRACK_ID =
   process.env.DEFAULT_MEDITATION_TRACK_ID?.trim() || 'ultimate-relaxation';
@@ -15,7 +20,10 @@ const BREATH_TECHNIQUE_PATTERNS: ReadonlyArray<{
   slug: string;
 }> = [
   { pattern: /4\s*[-–—‑]?\s*7\s*[-–—‑]?\s*8/iu, slug: '4-7-8' },
-  { pattern: /4\s*[-–—‑]?\s*4\s*[-–—‑]?\s*4\s*[-–—‑]?\s*4/iu, slug: 'box-breathing' },
+  {
+    pattern: /4\s*[-–—‑]?\s*4\s*[-–—‑]?\s*4\s*[-–—‑]?\s*4/iu,
+    slug: 'box-breathing',
+  },
   { pattern: /4\s*[-–—‑]?\s*6\b/iu, slug: 'long-exhale-4-6' },
   { pattern: /5\s*[-–—‑]?\s*5\b/iu, slug: 'equal-5-5' },
   { pattern: /6\s*[-–—‑]?\s*6\b/iu, slug: 'equal-6-6' },
@@ -56,6 +64,17 @@ export function resolveNavigationFromActionHint(
   actionHint?: NotificationActionHint | null,
   notificationText?: string | null
 ): NotificationNavigation {
+  const target = resolveNavigationTargetFromActionHint(
+    actionHint,
+    notificationText
+  );
+  return buildLegacyNotificationNavigation(target) ?? { type: 'home' };
+}
+
+export function resolveNavigationTargetFromActionHint(
+  actionHint?: NotificationActionHint | null,
+  notificationText?: string | null
+): AppNavigationTarget {
   if (actionHint === 'meditation') {
     return {
       type: 'meditation_track',
@@ -70,6 +89,12 @@ export function resolveNavigationFromActionHint(
     return {
       type: 'breath_practice',
       slug: detectedSlug,
+      groupKey:
+        detectedSlug === '4-7-8'
+          ? 'sleep'
+          : detectedSlug === 'box-breathing'
+            ? 'popular'
+            : 'anxiety',
     };
   }
 
@@ -80,16 +105,30 @@ export function resolveNavigationFromActionHint(
 export function buildDeepLinkFromNavigation(
   navigation: NotificationNavigation
 ): string {
-  switch (navigation.type) {
-    case 'meditation_track':
-      return `/meditations?trackId=${encodeURIComponent(navigation.trackId)}`;
-    case 'breath_practice':
-      return `/breath-practices/${encodeURIComponent(navigation.slug)}${
-        navigation.slug === DEFAULT_BREATH_PRACTICE_SLUG ? '?group=popular' : ''
-      }`;
-    case 'breath_practices':
-      return '/breath-practices';
-    default:
-      return '/';
-  }
+  const target: AppNavigationTarget =
+    navigation.type === 'home'
+      ? { type: 'home' }
+      : navigation.type === 'meditation_track'
+        ? {
+            type: 'meditation_track',
+            trackId: navigation.trackId,
+          }
+        : navigation.type === 'breath_practices'
+          ? { type: 'breath_practices_list' }
+          : {
+              type: 'breath_practice',
+              slug: navigation.slug,
+              groupKey:
+                navigation.slug === '4-7-8'
+                  ? 'sleep'
+                  : navigation.slug === DEFAULT_BREATH_PRACTICE_SLUG
+                    ? 'popular'
+                    : undefined,
+            };
+
+  return buildAppNavigationPath(target);
+}
+
+export function buildDeepLinkFromTarget(target: AppNavigationTarget): string {
+  return buildAppNavigationPath(target);
 }
