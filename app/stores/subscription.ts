@@ -1,5 +1,9 @@
 import { defineStore } from 'pinia';
 import { useAPI } from '@/app/composables/useAPI';
+import {
+  buildUsageCacheContextKey,
+  hasSubscriptionStateTransitionPassed,
+} from '@/app/utils/subscription-cache';
 
 interface Plan {
   id: string;
@@ -12,6 +16,7 @@ interface Plan {
 interface Subscription {
   id: number;
   planId: string;
+  startDate: string;
   endDate: string;
   paymentStatus: string;
   autoRenew?: boolean;
@@ -135,6 +140,16 @@ export const useSubscriptionStore = defineStore('subscription', {
     shouldRefetch(key: 'plans' | 'subscription' | 'usage'): boolean {
       const lastFetched = this.lastFetched[key];
       if (!lastFetched) return true;
+
+      // Для подписки и usage нельзя полагаться только на TTL:
+      // часть переходов наступает ровно по времени (конец trial, scheduled apply).
+      if (
+        key !== 'plans' &&
+        hasSubscriptionStateTransitionPassed(this.subscriptionData)
+      ) {
+        return true;
+      }
+
       return Date.now() - lastFetched > this.cacheTimeout;
     },
 
@@ -181,6 +196,9 @@ export const useSubscriptionStore = defineStore('subscription', {
 
       this.loading.subscription = true;
       try {
+        const previousUsageContextKey = buildUsageCacheContextKey(
+          this.subscriptionData
+        );
         const query = force ? { _ts: Date.now() } : undefined;
         const response = await useAPI<SubscriptionResponse>(
           '/api/subscriptions/current',
@@ -194,6 +212,24 @@ export const useSubscriptionStore = defineStore('subscription', {
         this.subscriptionData = data;
         this.currentSubscription = data?.subscription || null;
         this.lastFetched.subscription = Date.now();
+
+        const nextUsageContextKey = buildUsageCacheContextKey(data);
+        if (previousUsageContextKey !== nextUsageContextKey) {
+          // При смене access-period usage нужно запрашивать заново,
+          // иначе фронт может показать минуты из предыдущего тарифа/trial.
+          this.usage = null;
+          this.lastFetched.usage = null;
+
+          if (!this.loading.usage) {
+            await this.fetchUsage(true).catch((error) => {
+              console.warn(
+                '[SubscriptionStore] Failed to refresh usage after subscription transition:',
+                error
+              );
+            });
+          }
+        }
+
         return this.subscriptionData;
       } catch (error) {
         console.error('Failed to fetch subscription:', error);

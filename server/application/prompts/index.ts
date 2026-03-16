@@ -310,7 +310,7 @@ export const suggestedChipsSystemPrompt = `Ты генератор вариан�
 Пиши от лица пользователя. Обращайся к ассистенту как к помощнику.
 Без канцелярита, повторов, диагнозов и дисклеймеров.
 Запрещены пустые шаблоны: "расскажи больше", "уточни", "приведи пример".
-Если в ответе ассистента есть рекомендация медитации или практики, допускается 1 action chip для открытия раздела медитаций.`;
+Навигационные action-chip формируются отдельным deterministic-слоем на сервере, поэтому ты генерируешь только text-чипы.`;
 
 export const suggestedChipsDeveloperPrompt = `Сгенерируй 1..maxChips чипов.
 Правила:
@@ -325,11 +325,7 @@ export const suggestedChipsDeveloperPrompt = `Сгенерируй 1..maxChips �
  Не повторяй чипы из recent_chips.
  text <= 80 символов.
  Тон: дружелюбный, взрослый.
-Action chip (максимум 1):
- kind: "action"
- action: "open_meditations" | "open_meditation_track" | "open_meditations_collection" | "open_sos"
- params: { trackId?: string, collectionId?: string, sosEntry?: "panic" | "tension" | "technique_picker", source?: "chat" }
-Остальные чипы: kind: "text".
+Все чипы: kind: "text".
 Ответ строго JSON:
 {
   "chips": [
@@ -344,7 +340,6 @@ const suggestedChipsUserTemplate = `Контекст: {{dialog_context}}
 Тема (если есть): {{primary_topic}}
 Если тема есть, упомяни ее минимум в одном чипе.
 Важно: чипы - это реплики пользователя, а ассистент - терапевт/помощник.
-Если в ответе ассистента есть рекомендация медитации, добавь action chip.
 Сгенерируй до {{max_chips}} чипов.`;
 
 export const suggestedChipsRetryHint = `Повторы или слишком похожие формулировки.

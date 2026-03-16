@@ -378,6 +378,10 @@ export async function sendFCMNotification(
       }
     }
 
+    if (payload.navigationTarget) {
+      dataPayload.navigationTarget = JSON.stringify(payload.navigationTarget);
+    }
+
     // Добавляем дополнительные данные из payload.data
     // Фильтруем undefined значения, чтобы не отправлять ключи с "undefined"
     if (payload.data) {

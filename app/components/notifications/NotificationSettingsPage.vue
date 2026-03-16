@@ -559,6 +559,7 @@ import type {
   UserPreferencesDto,
 } from '@/shared/dto/notifications';
 import { MAX_CUSTOM_PROMPT_NOTIFICATION_LENGTH } from '@/shared/dto/notifications';
+import { getDefaultNotificationTextSource } from '@/shared/utils/notificationTextSource';
 
 const props = defineProps<{
   mentaiMode: 'habits' | 'therapy';
@@ -717,6 +718,9 @@ const paywallAccess = computed(() =>
 );
 
 const canUseAiTextSource = computed(() => aiTextSourceAccess.value.available);
+const defaultTextSource = computed(() =>
+  getDefaultNotificationTextSource(canUseAiTextSource.value)
+);
 
 const enabled = ref(false);
 const timesPerDay = ref(3);
@@ -1224,7 +1228,7 @@ onMounted(async () => {
         await forceTemplatesTextSourceForCurrentEntity();
       }
     } else {
-      textSource.value = 'templates';
+      textSource.value = defaultTextSource.value;
       customPromptNotification.value = '';
     }
     initialStateSignature.value = computeStateSignature();

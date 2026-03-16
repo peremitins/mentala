@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildDeepLinkFromNavigation,
   resolveNavigationFromActionHint,
+  resolveNavigationTargetFromActionHint,
 } from '../server/application/notifications/breath-navigation.utils';
 
 describe('notification breath navigation', () => {
@@ -97,6 +98,19 @@ describe('notification breath navigation', () => {
     expect(navigation).toEqual({
       type: 'breath_practice',
       slug: '4-7-8',
+    });
+  });
+
+  it('строит typed target для push orchestration', () => {
+    const target = resolveNavigationTargetFromActionHint(
+      'breathing',
+      'Попробуй дыхание 4-7-8 для успокоения.'
+    );
+
+    expect(target).toEqual({
+      type: 'breath_practice',
+      slug: '4-7-8',
+      groupKey: 'sleep',
     });
   });
 });
