@@ -204,7 +204,7 @@
           </div>
         </div>
 
-        <div class="glass-deep">
+        <div v-if="isAdmin" class="glass-deep">
           <p
             class="text-xs font-semibold text-muted-foreground tracking-wide pt-4 pb-1 px-4"
           >
@@ -370,9 +370,12 @@ import {
 import { buttonVariants } from '@/app/components/ui/button';
 import type {
   Addressing,
-  Tone,
   UserPreferencesDto,
 } from '@/shared/dto/notifications';
+import {
+  DEFAULT_ASSISTANT_TONE,
+  getAssistantToneLabel,
+} from '@/shared/constants/assistantTone';
 import IconChevronRight from '~icons/lucide/chevron-right';
 
 const auth = useAuthStore();
@@ -419,15 +422,6 @@ const userInitials = computed(() => {
   return letters.toUpperCase();
 });
 
-const toneLabels: Record<Tone, string> = {
-  delicate: 'Деликатный',
-  neutral: 'Нейтральный',
-  uplifting: 'Воодушевляющий',
-  resolute: 'Решительный',
-  demanding: 'Требовательный',
-  unknown: 'Нейтральный',
-};
-
 const addressingLabel = computed(() => {
   const value = preferences.value?.addressing as Addressing | undefined;
   if (value === 'formal') return 'На "вы"';
@@ -438,7 +432,9 @@ const addressingLabel = computed(() => {
 const toneLabel = computed(() => {
   if (!preferences.value) return '—';
   const value = preferences.value.tone;
-  return toneLabels[value] || 'Нейтральный';
+  return value === 'unknown'
+    ? getAssistantToneLabel(DEFAULT_ASSISTANT_TONE)
+    : getAssistantToneLabel(value);
 });
 
 const localeLabel = computed(() => {
