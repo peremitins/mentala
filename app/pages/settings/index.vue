@@ -108,7 +108,7 @@
               <div class="">
                 <p class="text-sm font-medium">Push-уведомления</p>
                 <p class="text-xs text-muted-foreground">
-                  Напоминания и сообщения от Ментала
+                  Напоминания и сообщения
                 </p>
               </div>
               <Switch
@@ -126,7 +126,7 @@
               <div class="">
                 <p class="text-sm font-medium">Маркетинговые сообщения</p>
                 <p class="text-xs text-muted-foreground">
-                  Новости, обновления и предложения Ментала
+                  Новости, обновления и предложения
                 </p>
               </div>
               <Switch
@@ -227,26 +227,11 @@
           </div>
         </div>
 
-        <!-- Модалки Push-уведомлений -->
-        <Dialog v-model:open="showPushDeniedModal" :modal="true">
-          <DialogContent class="glass-deep max-w-sm">
-            <DialogHeader>
-              <DialogTitle>Уведомления отключены</DialogTitle>
-              <DialogDescription>
-                Уведомления отключены в системных настройках. Разрешите их,
-                чтобы получать напоминания.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button variant="outline" @click="showPushDeniedModal = false">
-                Отмена
-              </Button>
-              <Button class="mb-2" @click="handleOpenSystemSettings">
-                Открыть настройки
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <PushPermissionDeniedDialog
+          :open="pushPermissionGate.showPushDeniedModal.value"
+          @update:open="pushPermissionGate.setPushDeniedModalOpen"
+          @open-settings="handleOpenPushSystemSettings"
+        />
 
         <Dialog v-model:open="showPushDisableConfirmModal" :modal="true">
           <DialogContent class="glass-deep max-w-sm">
@@ -341,11 +326,12 @@ import { useAuthStore } from '@/app/stores/auth';
 import { useNotificationsSettings } from '@/app/composables/useNotificationsSettings';
 import { useCopyToClipboard } from '@/app/composables/useCopyToClipboard';
 import { useToast } from '@/app/composables/useToast';
-import { usePushSettings } from '@/app/composables/usePushSettings';
+import { usePushPermissionGate } from '@/app/composables/usePushPermissionGate';
 import { useSettingsAnalytics } from '@/app/composables/useSettingsAnalytics';
 import SubscriptionBlock from '@/app/components/settings/SubscriptionBlock.vue';
 import Skeleton from '@/app/components/ui/Skeleton.vue';
 import ButtonLoader from '@/app/components/ui/ButtonLoader.vue';
+import PushPermissionDeniedDialog from '@/app/components/notifications/PushPermissionDeniedDialog.vue';
 import { Switch } from '@/app/components/ui/shadcn/switch';
 import {
   Dialog,
@@ -390,10 +376,10 @@ const showDeleteDialog = ref(false);
 const isDeleting = ref(false);
 const marketingConsent = ref(false);
 const marketingConsentLoading = ref(false);
-const showPushDeniedModal = ref(false);
 const showPushDisableConfirmModal = ref(false);
 
-const pushSettings = usePushSettings();
+const pushPermissionGate = usePushPermissionGate();
+const pushSettings = pushPermissionGate.pushSettings;
 const settingsAnalytics = useSettingsAnalytics();
 
 /** Состояние свитчера Push берём из composable */
@@ -525,24 +511,12 @@ async function handlePushToggle(checked: boolean) {
   if (!isPushNative.value) return;
 
   if (checked) {
-    const statusRef = pushSettings.pushPermissionStatus;
-    const status =
-      typeof statusRef?.value !== 'undefined' ? statusRef.value : null;
-    if (status === 'denied') {
-      showPushDeniedModal.value = true;
-      settingsAnalytics.trackPushToggle(true, 'denied');
-      return;
-    }
-
-    const enabled = await pushSettings.enablePushInApp();
+    const enabled = await pushPermissionGate.ensureAppPushEnabled();
     const permission = pushSettings.pushPermissionStatus?.value ?? 'denied';
     settingsAnalytics.trackPushToggle(
       enabled,
       permission === 'granted' ? 'granted' : 'denied'
     );
-    if (!enabled && permission === 'denied') {
-      showPushDeniedModal.value = true;
-    }
   } else {
     showPushDisableConfirmModal.value = true;
   }
@@ -556,40 +530,9 @@ async function confirmDisablePush() {
 }
 
 /** Открыть системные настройки и обновить UI при возврате (best practice: re-check permission) */
-async function handleOpenSystemSettings() {
+async function handleOpenPushSystemSettings() {
   settingsAnalytics.trackOpenSystemSettings();
-  showPushDeniedModal.value = false;
-
-  const refreshOnReturn = async () => {
-    await new Promise((r) => setTimeout(r, 500));
-    await pushSettings.refreshPermissionStatus();
-    const status = pushSettings.pushPermissionStatus?.value ?? null;
-    if (status === 'granted') {
-      await pushSettings.enablePushInApp();
-    }
-  };
-
-  if (typeof document !== 'undefined') {
-    const handler = () => {
-      if (document.visibilityState === 'visible') {
-        document.removeEventListener('visibilitychange', handler);
-        void refreshOnReturn();
-      }
-    };
-    document.addEventListener('visibilitychange', handler);
-  }
-
-  if (isPushNative.value) {
-    const { App } = await import('@capacitor/app');
-    const listener = await App.addListener('appStateChange', ({ isActive }) => {
-      if (isActive) {
-        listener.remove();
-        void refreshOnReturn();
-      }
-    });
-  }
-
-  await pushSettings.openAppSettings();
+  await pushPermissionGate.openSystemSettings();
 }
 
 async function copyUserId() {

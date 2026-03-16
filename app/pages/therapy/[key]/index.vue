@@ -137,6 +137,12 @@
       </StateBlock>
     </div>
 
+    <PushPermissionDeniedDialog
+      :open="pushPermissionGate.showPushDeniedModal.value"
+      @update:open="pushPermissionGate.setPushDeniedModalOpen"
+      @open-settings="handleOpenPushSystemSettings"
+    />
+
     <FeaturePaywallModal
       v-model:open="paywallOpen"
       :feature-key="paywallFeatureKey"
@@ -154,10 +160,12 @@ import NotificationsSummaryCard from '@/app/components/notifications/Notificatio
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/shadcn/input';
 import InputComponent from '@/app/components/ui/shadcn/input/Input.vue';
+import PushPermissionDeniedDialog from '@/app/components/notifications/PushPermissionDeniedDialog.vue';
 import IconMessageCircle from '~icons/lucide/message-circle';
 import IconLeaf from '~icons/lucide/leaf';
 import IconWind from '~icons/lucide/wind';
 import { useNotificationsSettings } from '@/app/composables/useNotificationsSettings';
+import { usePushPermissionGate } from '@/app/composables/usePushPermissionGate';
 import { useChatStore } from '@/app/stores/chat';
 import { useLoadersStore } from '@/app/stores/loaders';
 import { useToast } from '@/app/composables/useToast';
@@ -195,6 +203,7 @@ const { trackTopicOpen } = useTherapyAnalytics();
 const { fetchNotificationPreferences, updateNotificationPreferences } =
   useNotificationsSettings();
 const { $api } = useNuxtApp();
+const pushPermissionGate = usePushPermissionGate();
 
 const entityKey = computed(() => String(route.params.key || ''));
 const catalogTopic = computed(() =>
@@ -442,6 +451,21 @@ async function loadPreference() {
   }
 }
 
+async function updateNotificationsPreference(enabled: boolean) {
+  try {
+    const data = await updateNotificationPreferences('therapy', {
+      enabled,
+      entityKey: entityKey.value,
+    });
+    if (data) preference.value = data;
+  } catch (error: any) {
+    console.error('[TherapyDetail] Toggle notifications failed:', error);
+    notificationError.value =
+      error?.message || 'Не удалось обновить настройки уведомлений';
+    throw error;
+  }
+}
+
 /** Обновление включено/выключено уведомлений по переключателю на карточке */
 async function onToggleNotifications(enabled: boolean) {
   if (!entityKey.value) return;
@@ -453,18 +477,31 @@ async function onToggleNotifications(enabled: boolean) {
   notificationError.value = null;
   prefToggleLoading.value = true;
   try {
-    const data = await updateNotificationPreferences('therapy', {
-      enabled,
-      entityKey: entityKey.value,
-    });
-    if (data) preference.value = data;
-  } catch (error: any) {
-    console.error('[TherapyDetail] Toggle notifications failed:', error);
-    notificationError.value =
-      error?.message || 'Не удалось обновить настройки уведомлений';
+    if (enabled) {
+      const canEnable = await pushPermissionGate.ensureAppPushEnabled({
+        onGrantedFromSettings: async () => {
+          prefToggleLoading.value = true;
+          try {
+            await updateNotificationsPreference(true);
+          } finally {
+            prefToggleLoading.value = false;
+          }
+        },
+      });
+
+      if (!canEnable) {
+        return;
+      }
+    }
+
+    await updateNotificationsPreference(enabled);
   } finally {
     prefToggleLoading.value = false;
   }
+}
+
+async function handleOpenPushSystemSettings() {
+  await pushPermissionGate.openSystemSettings();
 }
 
 const entryContext = computed<ChatEntryContext>(() => ({
