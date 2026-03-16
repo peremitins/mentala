@@ -23,12 +23,10 @@
       </Button>
     </div>
 
-    <div class="relative">
-      <div
-        class="flex gap-4 overflow-x-auto pb-4 pl-4 pr-6 no-scrollbar"
-        data-lenis-prevent
-        style="touch-action: pan-y pan-x"
-      >
+    <HorizontalScroller
+      :aria-label="`Лента дыхательных практик раздела ${title}`"
+    >
+      <template #default>
         <BreathPracticeCard
           v-for="item in items"
           :key="item.practice.slug"
@@ -39,8 +37,8 @@
           :required-plan="item.requiredPlan"
           @open="emit('open', $event)"
         />
-      </div>
-    </div>
+      </template>
+    </HorizontalScroller>
   </section>
 </template>
 
@@ -48,6 +46,7 @@
 import { Button } from '@/app/components/ui/button';
 import type { BreathPractice } from '@/app/lib/breathPracticesCatalog';
 import BreathPracticeCard from '@/app/components/breath-practices/BreathPracticeCard.vue';
+import HorizontalScroller from '@/app/components/ui/HorizontalScroller.vue';
 
 // Описываем карточки с заранее рассчитанным цветом/типом.
 export interface BreathPracticeCardItem {
