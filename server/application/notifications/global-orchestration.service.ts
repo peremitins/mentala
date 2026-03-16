@@ -14,20 +14,8 @@ import {
   therapyTopicsCustom,
   notificationPreferences,
 } from '@/server/infrastructure/db/schema';
-import type { NotificationKind, Tone } from '@/shared/dto/notifications';
-
-function resolveTone(value?: string | null): Tone {
-  if (
-    value === 'delicate' ||
-    value === 'neutral' ||
-    value === 'uplifting' ||
-    value === 'resolute' ||
-    value === 'demanding'
-  ) {
-    return value;
-  }
-  return 'neutral';
-}
+import type { NotificationKind } from '@/shared/dto/notifications';
+import { resolveAssistantTone } from '@/shared/constants/assistantTone';
 import {
   toLocalTime,
   toUTC,
@@ -56,7 +44,6 @@ import {
   type AiNotificationText,
 } from './ai-generation.service';
 import { enqueueAiTextGenerationJob } from './queues/aiTextGeneration.queue';
-import { computeGenerationConfigHash } from '@/server/utils/notification-ai-config-hash';
 import { computeDayOfYear } from './notification-date.utils';
 import { and, eq, sql } from 'drizzle-orm';
 import { pickNotificationImage } from './notification-images.service';
@@ -1482,7 +1469,7 @@ export async function orchestrateAllSlotsForUser(
       let aiTextsAvailable = false;
       if (textSource === 'ai' && entityName) {
         // ВАЖНО: Используем tone из userPreferences, а не из preference.meta
-        const tone = resolveTone(
+        const tone = resolveAssistantTone(
           globalPrefs?.tone as string | null | undefined
         );
 

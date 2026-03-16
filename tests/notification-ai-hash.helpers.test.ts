@@ -11,7 +11,7 @@ describe('notification AI hash helpers', () => {
       entityName: 'Страхи',
       entityDescription:
         'Помогаем мягко встретиться со страхами и вернуть ощущение контроля: маленькие шаги и поддержка.',
-      tone: 'neutral',
+      tone: 'balanced',
       addressing: 'informal',
       directness: 'moderate',
       subtype: 'motivational',
@@ -30,7 +30,7 @@ describe('notification AI hash helpers', () => {
       entityKey: 'custom-topic-id',
       entityName: 'Мой страх',
       entityDescription: 'Кастомное описание',
-      tone: 'neutral',
+      tone: 'balanced',
       addressing: 'informal',
       directness: 'moderate',
       subtype: 'motivational',

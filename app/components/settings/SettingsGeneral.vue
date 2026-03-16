@@ -4,17 +4,13 @@
 
     <div v-else class="space-y-2">
       <section class="scroll-mt-24 rounded-lg glass-deep p-4 space-y-3">
-        <ToggleButtonGroup
+        <AssistantToneGrid
           v-model="tone"
-          :options="toneOptions"
           label="Стиль общения"
-          size="sm"
-          variant="outline"
-          description="Эти параметры влияют на стиль общения ИИ-ассистента и текст всех уведомлений."
-          item-max-width="200px"
+          description="Эти параметры влияют на стиль общения ИИ-ассистента и AI-тексты уведомлений."
         />
         <p v-if="toneWasUnknown" class="text-xs text-foreground">
-          Тон не выбран — сейчас используется нейтральный.
+          Тон не выбран — сейчас используется спокойный стиль.
         </p>
       </section>
 
@@ -50,15 +46,17 @@ import { computed, ref, onMounted } from 'vue';
 import ToggleButtonGroup from '@/app/components/ui/ToggleButtonGroup.vue';
 import ButtonLoader from '@/app/components/ui/ButtonLoader.vue';
 import { Button } from '@/app/components/ui/button';
+import AssistantToneGrid from '@/app/components/settings/AssistantToneGrid.vue';
 import { useNotificationsSettings } from '@/app/composables/useNotificationsSettings';
 import { useToast } from '@/app/composables/useToast';
 import type { Addressing, Tone } from '@/shared/dto/notifications';
+import { DEFAULT_ASSISTANT_TONE } from '@/shared/constants/assistantTone';
 
 const { fetchGlobalPreferences, updateGlobalPreferences } =
   useNotificationsSettings();
 
 const addressing = ref<Addressing>('informal');
-const tone = ref<Tone>('neutral');
+const tone = ref<Tone>(DEFAULT_ASSISTANT_TONE);
 const savingGlobal = ref(false);
 const toneWasUnknown = ref(false);
 const loading = ref(true);
@@ -72,14 +70,6 @@ const addressingOptions = [
   { value: 'formal' as Addressing, label: 'вы' },
 ];
 
-const toneOptions = [
-  { value: 'delicate' as Tone, label: 'Деликатный' },
-  { value: 'neutral' as Tone, label: 'Нейтральный' },
-  { value: 'uplifting' as Tone, label: 'Воодушевляющий' },
-  { value: 'resolute' as Tone, label: 'Решительный' },
-  { value: 'demanding' as Tone, label: 'Требовательный' },
-];
-
 onMounted(async () => {
   try {
     const prefs = await fetchGlobalPreferences();
@@ -87,7 +77,7 @@ onMounted(async () => {
       addressing.value = prefs.addressing;
       if (prefs.tone === 'unknown') {
         toneWasUnknown.value = true;
-        tone.value = 'neutral';
+        tone.value = DEFAULT_ASSISTANT_TONE;
       } else {
         tone.value = prefs.tone;
       }

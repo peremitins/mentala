@@ -4,6 +4,7 @@ import { deepseekProvider } from '../infrastructure/llm/deepseek';
 import { yandexProvider } from '../infrastructure/llm/yandex';
 import { config } from '../config';
 import type { ChatEntryContext } from '@/shared/dto';
+import type { OnboardingReasons } from '@/shared/dto/onboarding';
 
 const providers: Record<LlmProviderPort['id'], LlmProviderPort> = {
   openai: openaiProvider,
@@ -33,6 +34,10 @@ export async function chatViaProvider(params: {
     user_name?: string;
     user_gender?: string;
     user_timezone?: string;
+    toneKey?: string;
+    toneLabel?: string;
+    toneDescription?: string;
+    onboardingReasons?: OnboardingReasons;
     userId?: number | string;
     isFirstSession?: boolean;
     userPrompt?: string;
@@ -144,6 +149,10 @@ export function chatStreamViaProvider(params: {
     user_name?: string;
     user_gender?: string;
     user_timezone?: string;
+    toneKey?: string;
+    toneLabel?: string;
+    toneDescription?: string;
+    onboardingReasons?: OnboardingReasons;
     userId?: number | string;
     isFirstSession?: boolean;
     userPrompt?: string;

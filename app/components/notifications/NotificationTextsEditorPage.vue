@@ -21,50 +21,46 @@
       <section class="space-y-3">
         <!-- Фокус уведомлений -->
         <div v-if="hasSubtypeOptions" class="glass-deep p-3 space-y-2">
-          <label class="text-sm font-semibold text-foreground">
+          <label class="text-sm font-semibold text-foreground flex">
             Фокус уведомлений
           </label>
-          <div class="rounded-2xl border border-white/10 bg-background/20 p-2">
-            <ToggleGroup
-              :model-value="selectedSubtype || ''"
-              type="single"
-              class="inline-flex w-full gap-2 overflow-auto no-scrollbar"
-              @update:model-value="handleSubtypeChange"
+          <ToggleGroup
+            :model-value="selectedSubtype || ''"
+            type="single"
+            class="inline-flex w-full gap-2 overflow-auto no-scrollbar"
+            @update:model-value="handleSubtypeChange"
+          >
+            <ToggleGroupItem
+              v-for="option in subtypeOptions"
+              :key="option.value"
+              :value="option.value"
+              class="flex-1 rounded-lg px-2 py-2 text-xs xs:text-sm whitespace-nowrap font-medium transition-all"
             >
-              <ToggleGroupItem
-                v-for="option in subtypeOptions"
-                :key="option.value"
-                :value="option.value"
-                class="flex-1 rounded-lg px-2 py-2 text-xs xs:text-sm whitespace-nowrap font-medium transition-all"
-              >
-                {{ option.icon }} {{ option.label }}
-              </ToggleGroupItem>
-            </ToggleGroup>
-          </div>
+              {{ option.icon }} {{ option.label }}
+            </ToggleGroupItem>
+          </ToggleGroup>
         </div>
 
         <!-- Стиль уведомлений -->
         <div class="glass-deep p-3 space-y-2">
-          <label class="text-sm font-semibold text-foreground">
+          <label class="text-sm font-semibold text-foreground flex">
             Стиль уведомлений
           </label>
-          <div class="rounded-2xl border border-white/10 bg-background/20 p-2">
-            <ToggleGroup
-              :model-value="selectedDirectness"
-              type="single"
-              class="inline-flex w-full gap-2 overflow-auto no-scrollbar"
-              @update:model-value="handleDirectnessChange"
+          <ToggleGroup
+            :model-value="selectedDirectness"
+            type="single"
+            class="inline-flex w-full gap-2 overflow-auto no-scrollbar"
+            @update:model-value="handleDirectnessChange"
+          >
+            <ToggleGroupItem
+              v-for="option in DIRECTNESS_OPTIONS"
+              :key="option.value"
+              :value="option.value"
+              class="flex-1 rounded-lg px-2 py-2 text-xs xs:text-sm whitespace-nowrap font-medium transition-all"
             >
-              <ToggleGroupItem
-                v-for="option in DIRECTNESS_OPTIONS"
-                :key="option.value"
-                :value="option.value"
-                class="flex-1 rounded-lg px-2 py-2 text-xs xs:text-sm whitespace-nowrap font-medium transition-all"
-              >
-                {{ option.icon }} {{ option.label }}
-              </ToggleGroupItem>
-            </ToggleGroup>
-          </div>
+              {{ option.icon }} {{ option.label }}
+            </ToggleGroupItem>
+          </ToggleGroup>
         </div>
       </section>
 
@@ -153,7 +149,7 @@
               :data-text-id="text.id || text.tempId"
               class="relative"
             >
-              <span
+              <!-- <span
                 class="absolute text-[10px] right-[5px] top-[-12px]"
                 :class="{
                   'text-destructive':
@@ -163,11 +159,22 @@
                 }"
               >
                 {{ editModel?.length }}/{{ MAX_NOTIFICATION_TEXT_LENGTH }}
-              </span>
+              </span> -->
+              <div
+                class="pointer-events-none absolute left-2 bottom-2 rounded-full border border-white/15 bg-black/30 px-2 py-0.5 text-[11px] font-medium z-1"
+                :class="{
+                  'text-destructive':
+                    editModel?.length > MAX_NOTIFICATION_TEXT_LENGTH,
+                  'text-foreground/70':
+                    editModel?.length <= MAX_NOTIFICATION_TEXT_LENGTH,
+                }"
+              >
+                {{ editModel?.length }}/{{ MAX_NOTIFICATION_TEXT_LENGTH }}
+              </div>
               <TextareaResize
                 ref="textareaRef"
                 v-model="editModel"
-                class="w-full min-h-[80px] rounded-2xl border border-white/10 bg-background/40 px-3 py-2 text-sm text-foreground/90 resize-none focus:outline-none focus:ring-2 focus:ring-primary-ui/40 focus:ring-offset-2"
+                class="w-full min-h-[80px] rounded-2xl border border-white/10 bg-background/40 px-3 py-2 pb-[40px] text-sm text-foreground/90 resize-none focus:outline-none focus:ring-2 focus:ring-primary-ui/40 focus:ring-offset-2"
                 :max-length="MAX_NOTIFICATION_TEXT_LENGTH"
               />
             </div>

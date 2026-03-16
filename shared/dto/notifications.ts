@@ -1,3 +1,6 @@
+import type { AssistantToneWithUnknown } from '../constants/assistantTone';
+import type { OnboardingReasons } from './onboarding';
+
 /**
  * Shared DTOs для системы уведомлений
  * Используется на клиенте и сервере
@@ -13,13 +16,7 @@ export const MAX_CUSTOM_PROMPT_NOTIFICATION_LENGTH = 400;
 export type NotificationKind = 'therapy' | 'habits';
 export type NotificationTextSource = 'default' | 'user';
 export type Addressing = 'informal' | 'formal';
-export type Tone =
-  | 'delicate'
-  | 'neutral'
-  | 'uplifting'
-  | 'resolute'
-  | 'demanding'
-  | 'unknown';
+export type Tone = AssistantToneWithUnknown;
 export type Directness = 'soft' | 'moderate' | 'hard';
 export type Platform = 'ios' | 'android' | 'web';
 export type SlotStatus = 'planned' | 'sent' | 'skipped' | 'failed';
@@ -70,12 +67,14 @@ export interface UserPreferencesDto {
   addressing: Addressing;
   tone: Tone;
   meditationTimerMinutes?: number | null;
+  onboardingReasons?: OnboardingReasons;
 }
 
 export interface UpdateUserPreferencesDto {
   addressing?: Addressing;
   tone?: Tone;
   meditationTimerMinutes?: number | null;
+  onboardingReasons?: OnboardingReasons | null;
 }
 
 // ==========================================

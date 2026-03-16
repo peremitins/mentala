@@ -13,20 +13,7 @@ import {
 import { generateNotificationTexts } from './ai-generation.service';
 import { computeGenerationConfigHash } from '@/server/utils/notification-ai-config-hash';
 import type { NotificationPreferenceMeta } from '@/shared/dto/notifications';
-import type { Tone } from '@/shared/dto/notifications';
-
-function resolveTone(value?: string | null): Tone {
-  if (
-    value === 'delicate' ||
-    value === 'neutral' ||
-    value === 'uplifting' ||
-    value === 'resolute' ||
-    value === 'demanding'
-  ) {
-    return value;
-  }
-  return 'neutral';
-}
+import { resolveAssistantTone } from '@/shared/constants/assistantTone';
 
 /**
  * Перегенерирует AI-тексты для всех preferences сущности при изменении названия/описания
@@ -68,7 +55,9 @@ export async function regenerateAiTextsForEntity(params: {
       .where(eq(userPreferences.userId, Number(userId))) // Преобразуем в number для БД
       .limit(1);
 
-    const tone = resolveTone(userPrefs?.tone as string | null | undefined);
+    const tone = resolveAssistantTone(
+      userPrefs?.tone as string | null | undefined
+    );
     const addressing = (userPrefs?.addressing as any) || 'informal';
     const [userProfile] = await db
       .select({ gender: users.gender })

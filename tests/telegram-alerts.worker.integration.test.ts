@@ -5,7 +5,7 @@ type DeliveryLogRecord = {
   dedupKey: string;
   targetChannel: string;
   environment: string;
-  status: 'queued' | 'processing' | 'sent' | 'failed';
+  status: 'queued' | 'processing' | 'sent' | 'failed' | 'uncertain';
   source: string;
   payload: Record<string, unknown>;
   eventCreatedAt: Date;
@@ -183,6 +183,26 @@ vi.mock(
         record.providerRetryAfterSeconds = providerRetryAfterSeconds ?? null;
       }
     ),
+    markTelegramDeliveryUncertain: vi.fn(
+      async ({
+        dedupKey,
+        attempt,
+        errorMessage,
+      }: {
+        dedupKey: string;
+        attempt: number;
+        errorMessage: string;
+      }) => {
+        const record = deliveryLog.get(dedupKey);
+        if (!record) return;
+
+        record.status = 'uncertain';
+        record.attempt = attempt;
+        record.errorMessage = errorMessage;
+        record.providerResponseCode = null;
+        record.providerRetryAfterSeconds = null;
+      }
+    ),
   })
 );
 vi.mock(
@@ -303,6 +323,26 @@ vi.mock(
         record.errorMessage = errorMessage;
         record.providerResponseCode = providerResponseCode ?? null;
         record.providerRetryAfterSeconds = providerRetryAfterSeconds ?? null;
+      }
+    ),
+    markTelegramDeliveryUncertain: vi.fn(
+      async ({
+        dedupKey,
+        attempt,
+        errorMessage,
+      }: {
+        dedupKey: string;
+        attempt: number;
+        errorMessage: string;
+      }) => {
+        const record = deliveryLog.get(dedupKey);
+        if (!record) return;
+
+        record.status = 'uncertain';
+        record.attempt = attempt;
+        record.errorMessage = errorMessage;
+        record.providerResponseCode = null;
+        record.providerRetryAfterSeconds = null;
       }
     ),
   })
