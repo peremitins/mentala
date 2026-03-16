@@ -226,7 +226,7 @@ r2-bucket/
 | subtype     | enum \| null   | NotificationSubtype: `reminder`, `informational`, `motivational`, `mixed`                                       |
 | directness  | enum           | Directness: `soft`, `moderate`, `hard`                                                                          |
 | habitIntent | enum \| null   | Только для habits: `build`, `quit`, `custom`                                                                    |
-| tone        | enum           | `delicate`, `neutral`, `uplifting`, `resolute`, `demanding`, `unknown` (в правилах изображений не используется) |
+| tone        | enum           | `gentle`, `balanced`, `uplifting`, `direct`, `unknown` (в правилах изображений не используется) |
 
 Важно: `subtype` и `directness` уже есть в системе и передаются в генерацию. Их не нужно дублировать в объектах ответа AI, кроме режима `mixed`.
 

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const markProcessing = vi.fn(async () => undefined);
 const markSent = vi.fn(async () => undefined);
 const markFailed = vi.fn(async () => undefined);
+const markUncertain = vi.fn(async () => undefined);
 
 vi.mock('#imports', () => ({
   useRuntimeConfig: () => ({
@@ -38,6 +39,7 @@ vi.mock(
     markTelegramDeliveryProcessing: markProcessing,
     markTelegramDeliverySent: markSent,
     markTelegramDeliveryFailed: markFailed,
+    markTelegramDeliveryUncertain: markUncertain,
   })
 );
 vi.mock(
@@ -49,6 +51,7 @@ vi.mock(
     markTelegramDeliveryProcessing: markProcessing,
     markTelegramDeliverySent: markSent,
     markTelegramDeliveryFailed: markFailed,
+    markTelegramDeliveryUncertain: markUncertain,
   })
 );
 vi.mock('@/server/infrastructure/redis/bullmqClient', () => ({
@@ -139,5 +142,76 @@ describe('telegram alerts transport retry', () => {
     expect(markProcessing).toHaveBeenCalledTimes(1);
     expect(markSent).toHaveBeenCalledTimes(1);
     expect(markFailed).not.toHaveBeenCalled();
+    expect(markUncertain).not.toHaveBeenCalled();
+  });
+
+  it('не ретраит timeout, а помечает доставку как uncertain, чтобы не дублировать алерт', async () => {
+    const sendTelegramMessage = vi.fn();
+
+    vi.doMock('@/server/application/telegram/telegram.client', async () => {
+      const actual = await vi.importActual<
+        typeof import('../server/application/telegram/telegram.client')
+      >('../server/application/telegram/telegram.client');
+
+      sendTelegramMessage.mockRejectedValueOnce(
+        new actual.TelegramApiError({
+          message: 'Telegram sendMessage timed out after 5000ms',
+          transportCode: 'TIMEOUT',
+        })
+      );
+
+      return {
+        ...actual,
+        sendTelegramMessage,
+      };
+    });
+    vi.doMock('../server/application/telegram/telegram.client', async () => {
+      const actual = await vi.importActual<
+        typeof import('../server/application/telegram/telegram.client')
+      >('../server/application/telegram/telegram.client');
+
+      sendTelegramMessage.mockRejectedValueOnce(
+        new actual.TelegramApiError({
+          message: 'Telegram sendMessage timed out after 5000ms',
+          transportCode: 'TIMEOUT',
+        })
+      );
+
+      return {
+        ...actual,
+        sendTelegramMessage,
+      };
+    });
+
+    const { processTelegramAlertDelivery } = await import(
+      '../server/application/telegram/telegram-alerts.service'
+    );
+
+    await processTelegramAlertDelivery({
+      event: {
+        type: 'billing.purchase_success',
+        dedupKey: 'billing:purchase_success:payment:test-payment',
+        source: 'subscriptions.check-payment-status',
+        createdAt: '2026-03-16T10:11:24.000Z',
+        environment: 'test',
+        payload: {
+          userId: 107,
+          subscriptionId: 203,
+          paymentId: 'test-payment',
+          planId: 'premium',
+          billingPeriod: 'year',
+          amountMinor: 623000,
+          currency: 'RUB',
+          occurredAt: '2026-03-16T10:11:24.000Z',
+        },
+      },
+      attempt: 1,
+    });
+
+    expect(sendTelegramMessage).toHaveBeenCalledTimes(1);
+    expect(markProcessing).toHaveBeenCalledTimes(1);
+    expect(markSent).not.toHaveBeenCalled();
+    expect(markFailed).not.toHaveBeenCalled();
+    expect(markUncertain).toHaveBeenCalledTimes(1);
   });
 });

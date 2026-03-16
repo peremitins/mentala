@@ -34,7 +34,8 @@ export type TelegramDeliveryStatus =
   | 'queued'
   | 'processing'
   | 'sent'
-  | 'failed';
+  | 'failed'
+  | 'uncertain';
 
 export type TelegramUserRegistrationMethod =
   | 'email'

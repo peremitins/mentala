@@ -12,7 +12,6 @@ import type {
   NotificationPreferencesDto,
   UpdateNotificationPreferencesDto,
   NotificationPreferenceMeta,
-  Tone,
 } from '@/shared/dto/notifications';
 import { getSessionUser } from '@/server/application/auth/session';
 import { generateAllSlotsForUser } from '@/server/application/notifications/scheduler.service';
@@ -28,6 +27,7 @@ import {
   MIN_NOTIFICATION_TIMES_PER_DAY,
   normalizeCustomSlotTimesByLimit,
 } from '@/server/application/notifications/preferences-limits.utils';
+import { resolveAssistantTone } from '@/shared/constants/assistantTone';
 
 function normalizeCustomSlotTimes(
   input: (number | null)[] | null | undefined,
@@ -119,19 +119,6 @@ const NOTIFICATION_SUBTYPES: NotificationSubtype[] = [
   'motivational',
   'mixed',
 ];
-
-function resolveTone(value?: string | null): Tone {
-  if (
-    value === 'delicate' ||
-    value === 'neutral' ||
-    value === 'uplifting' ||
-    value === 'resolute' ||
-    value === 'demanding'
-  ) {
-    return value;
-  }
-  return 'neutral';
-}
 
 export default defineEventHandler(
   async (event): Promise<NotificationPreferencesDto> => {
@@ -756,7 +743,9 @@ export default defineEventHandler(
           .where(eq(userPreferences.userId, userId))
           .limit(1);
 
-        const tone = resolveTone(userPrefs?.tone as string | null | undefined);
+        const tone = resolveAssistantTone(
+          userPrefs?.tone as string | null | undefined
+        );
         const addressing = (userPrefs?.addressing as any) || 'informal';
 
         // Определяем textSource (единое поле для всех типов сущностей)
@@ -1255,7 +1244,9 @@ export default defineEventHandler(
           .where(eq(userPreferences.userId, userId))
           .limit(1);
 
-        const tone = resolveTone(userPrefs?.tone as string | null | undefined);
+        const tone = resolveAssistantTone(
+          userPrefs?.tone as string | null | undefined
+        );
         const addressing = (userPrefs?.addressing as any) || 'informal';
 
         const newConfigHash = computeGenerationConfigHash({

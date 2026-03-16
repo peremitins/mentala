@@ -13,6 +13,7 @@ import {
   type SuggestedChipKind,
   type SuggestedChipAction,
 } from '@/shared/dto';
+import type { OnboardingReasons } from '@/shared/dto/onboarding';
 import {
   buildSuggestedChipsUserPrompt,
   suggestedChipsSystemPrompt,
@@ -305,6 +306,7 @@ async function requestChipsFromModel(params: {
   primaryTopic?: string;
   maxChips: number;
   retry?: boolean;
+  onboardingReasons?: OnboardingReasons;
 }): Promise<SuggestedChip[]> {
   const userPrompt = buildSuggestedChipsUserPrompt({
     dialog_context: params.dialogContext,
@@ -313,6 +315,7 @@ async function requestChipsFromModel(params: {
     primary_topic: params.primaryTopic,
     max_chips: params.maxChips,
     retry: params.retry,
+    onboardingReasons: params.onboardingReasons,
   });
 
   const result = await chatViaProvider({
@@ -453,6 +456,7 @@ export async function generateSuggestedChips(params: {
   userId?: number | string;
   therapySessionId?: number | null;
   entryContext?: ChatEntryContext | null;
+  onboardingReasons?: OnboardingReasons;
 }) {
   if (
     params.entryContext?.type === 'sos' &&
@@ -523,6 +527,7 @@ export async function generateSuggestedChips(params: {
       recentChips: recent,
       primaryTopic,
       maxChips: MAX_CHIPS,
+      onboardingReasons: params.onboardingReasons,
     });
   } catch (error) {
     console.error('[SuggestedChips] Failed to generate chips:', error);
@@ -550,6 +555,7 @@ export async function generateSuggestedChips(params: {
         primaryTopic,
         maxChips: MAX_CHIPS,
         retry: true,
+        onboardingReasons: params.onboardingReasons,
       });
     } catch (error) {
       console.error('[SuggestedChips] Retry failed:', error);

@@ -4,7 +4,11 @@ import { telegramAlertDeliveries } from '@/server/infrastructure/db/schema';
 
 const DEFAULT_TELEGRAM_ALERT_DELIVERIES_RETENTION_DAYS = 30;
 const DEFAULT_TELEGRAM_ALERT_DELIVERIES_CLEANUP_BATCH_SIZE = 1000;
-const TERMINAL_TELEGRAM_DELIVERY_STATUSES = ['sent', 'failed'] as const;
+const TERMINAL_TELEGRAM_DELIVERY_STATUSES = [
+  'sent',
+  'failed',
+  'uncertain',
+] as const;
 
 export async function cleanupTelegramAlertDeliveries(params?: {
   retentionDays?: number;

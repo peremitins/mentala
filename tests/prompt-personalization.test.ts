@@ -1,0 +1,51 @@
+import { describe, expect, it } from 'vitest';
+import {
+  buildDeveloperContext,
+  buildSuggestedChipsUserPrompt,
+  buildWelcomePrompt,
+} from '../server/application/prompts';
+
+describe('prompt personalization', () => {
+  it('добавляет несколько onboarding reasons в developer context', () => {
+    const prompt = buildDeveloperContext(
+      {
+        user_name: 'Аня',
+        user_gender: 'female',
+        onboardingReasons: ['anxiety', 'support'],
+      },
+      { responseNumber: 2 }
+    );
+
+    expect(prompt).toContain('Контекст персонализации из онбординга');
+    expect(prompt).toContain(
+      'Что привело пользователя: снизить тревожность; получить поддержку.'
+    );
+    expect(prompt).toContain('Приоритетные фокусы:');
+  });
+
+  it('добавляет onboarding personalization в welcome prompt', () => {
+    const prompt = buildWelcomePrompt({
+      isFirstSession: true,
+      lang: 'ru',
+      onboardingReasons: ['habits'],
+    });
+
+    expect(prompt).toContain('Контекст персонализации из онбординга');
+    expect(prompt).toContain('работать с привычками');
+  });
+
+  it('передает onboarding personalization в prompt для suggested chips', () => {
+    const prompt = buildSuggestedChipsUserPrompt({
+      dialog_context: 'Пользователь: Мне тяжело остановить тревожные мысли',
+      assistant_answer:
+        'Давай начнем с того, что сейчас крутится сильнее всего.',
+      recent_chips: 'Нет',
+      max_chips: 4,
+      onboardingReasons: ['thoughts', 'stress'],
+    });
+
+    expect(prompt).toContain('Контекст пользователя из онбординга');
+    expect(prompt).toContain('разобраться в мыслях');
+    expect(prompt).toContain('справиться со стрессом');
+  });
+});

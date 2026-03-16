@@ -102,3 +102,21 @@ export async function markTelegramDeliveryFailed(params: {
     })
     .where(eq(telegramAlertDeliveries.dedupKey, params.dedupKey));
 }
+
+export async function markTelegramDeliveryUncertain(params: {
+  dedupKey: string;
+  attempt: number;
+  errorMessage: string;
+}): Promise<void> {
+  await db
+    .update(telegramAlertDeliveries)
+    .set({
+      status: 'uncertain',
+      attempt: params.attempt,
+      errorMessage: params.errorMessage,
+      providerResponseCode: null,
+      providerRetryAfterSeconds: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(telegramAlertDeliveries.dedupKey, params.dedupKey));
+}
