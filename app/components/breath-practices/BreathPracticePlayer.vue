@@ -1,6 +1,6 @@
 <template>
   <div class="flex flex-col space-y-2 justify-between h-full">
-    <div class="flex flex-col items-center gap-2 text-center">
+    <div class="glass-deep p-5 flex flex-col items-center gap-2 text-center">
       <p class="max-w-xl text-sm text-white/85 text-elevated">
         {{ practice.description }}
       </p>

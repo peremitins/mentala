@@ -343,6 +343,7 @@ import {
   type SuggestedChip,
   type ChatFeedbackTopicCode,
 } from '@/shared/dto';
+import { useAppNavigation } from '@/app/composables/useAppNavigation';
 import { useEntitlements } from '@/app/composables/useEntitlements';
 import { useNuxtApp, useRuntimeConfig } from '#imports';
 
@@ -350,6 +351,7 @@ const emit = defineEmits<{ (e: 'send', text: string): void }>();
 
 const route = useRoute();
 const router = useRouter();
+const { navigateToTarget } = useAppNavigation();
 const chatViewportStyle = computed(() => {
   const bottomOffset = '95px';
 
@@ -653,41 +655,16 @@ const handleChipSelect = async (chip: SuggestedChip) => {
 };
 
 const handleActionChip = async (chip: SuggestedChip) => {
-  if (!chip.action) return;
+  if (!chip.target && !chip.action) return;
 
   // Скрываем текущие чипы, чтобы не дублировать навигацию
   chat.clearSuggestedChips();
 
-  if (chip.action === 'open_meditations') {
-    await router.push('/meditations');
-    return;
-  }
-
-  if (chip.action === 'open_meditation_track' && chip.params?.trackId) {
-    await router.push({
-      path: '/meditations',
-      query: { trackId: chip.params.trackId },
+  if (chip.target) {
+    await navigateToTarget(chip.target, {
+      source: 'chat_chip',
+      entryPoint: 'assistant_suggested_chip',
     });
-    return;
-  }
-
-  if (
-    chip.action === 'open_meditations_collection' &&
-    chip.params?.collectionId
-  ) {
-    // collectionId трактуем как ключ темы медитаций
-    await router.push(`/meditations?topic=${chip.params.collectionId}`);
-    return;
-  }
-
-  if (chip.action === 'open_sos') {
-    const entry = chip.params?.sosEntry;
-    const query =
-      entry === 'panic' || entry === 'tension' || entry === 'technique_picker'
-        ? { entry }
-        : {};
-    await router.push({ path: '/quick-help', query });
-    return;
   }
 };
 
