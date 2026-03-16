@@ -40,15 +40,11 @@
           </div>
         </div>
 
-        <div
+        <HorizontalScroller
           v-if="customManageAccess.available && customItems.length"
-          class="relative"
+          aria-label="Лента пользовательских дыхательных практик"
         >
-          <div
-            class="flex gap-4 overflow-x-auto pb-4 pl-4 pr-6 no-scrollbar"
-            data-lenis-prevent
-            style="touch-action: pan-y pan-x"
-          >
+          <template #default>
             <BreathPracticeCard
               v-for="item in customItems"
               :key="item.practice.slug"
@@ -59,8 +55,8 @@
               @open="openPracticeInGroup('custom', $event)"
               @delete="handleDeletePractice"
             />
-          </div>
-        </div>
+          </template>
+        </HorizontalScroller>
 
         <div
           v-else-if="customManageAccess.available"
@@ -212,6 +208,7 @@ import BreathPracticeSection, {
   type BreathPracticeCardItem,
 } from '@/app/components/breath-practices/BreathPracticeSection.vue';
 import BreathPracticeCard from '@/app/components/breath-practices/BreathPracticeCard.vue';
+import HorizontalScroller from '@/app/components/ui/HorizontalScroller.vue';
 import { useBreathPracticesStore } from '@/app/stores/breathPractices';
 import {
   Dialog,
