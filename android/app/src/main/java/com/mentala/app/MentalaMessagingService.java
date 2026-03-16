@@ -1,6 +1,5 @@
 package com.mentala.app;
 
-import android.app.ActivityManager;
 import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -21,7 +20,6 @@ import com.google.firebase.messaging.RemoteMessage;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.util.List;
 import java.util.Map;
 
 public class MentalaMessagingService extends FirebaseMessagingService {
@@ -39,14 +37,12 @@ public class MentalaMessagingService extends FirebaseMessagingService {
     public void onMessageReceived(RemoteMessage remoteMessage) {
         super.onMessageReceived(remoteMessage);
 
-        // Всегда прокидываем событие в Capacitor (для аналитики/логики).
+        // Всегда прокидываем событие в Capacitor, чтобы JS-слой мог
+        // обновить UI/аналитику независимо от состояния приложения.
         PushNotificationsPlugin.sendRemoteMessage(remoteMessage);
 
-        // В фоне показываем системное уведомление сами, чтобы контролировать клики
-        // в раскрытом виде. В фореграунде оставляем только JS-обработку.
-        if (isAppInForeground()) {
-            return;
-        }
+        // Системное уведомление строим сами и в фоне, и в фореграунде.
+        // Так сохраняем единый tap/deeplink flow через contentIntent.
 
         Map<String, String> data = remoteMessage.getData();
         String title = data.get("title");
@@ -180,31 +176,5 @@ public class MentalaMessagingService extends FirebaseMessagingService {
                 connection.disconnect();
             }
         }
-    }
-
-    private boolean isAppInForeground() {
-        ActivityManager manager =
-            (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
-        if (manager == null) {
-            return false;
-        }
-
-        List<ActivityManager.RunningAppProcessInfo> processes =
-            manager.getRunningAppProcesses();
-        if (processes == null) {
-            return false;
-        }
-
-        String packageName = getPackageName();
-        for (ActivityManager.RunningAppProcessInfo process : processes) {
-            if (packageName.equals(process.processName)) {
-                return process.importance
-                    == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
-                    || process.importance
-                    == ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE;
-            }
-        }
-
-        return false;
     }
 }
