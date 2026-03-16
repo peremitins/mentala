@@ -748,12 +748,14 @@ export default defineNuxtPlugin({
         console.error('[PushPlugin] Registration error:', err);
       });
 
-      // Push получен (приложение на переднем плане)
+      // Push получен в активном приложении.
+      // На Android системное уведомление уже построено нативным сервисом,
+      // здесь оставляем только клиентскую реакцию (логика/UI/аналитика).
       PushNotifications.addListener(
         'pushNotificationReceived',
         (notification) => {
           console.log('[PushPlugin] Notification received:', notification);
-          // Здесь можно показать локальное уведомление или обновить UI
+          // При необходимости здесь можно обновить UI без локального дубля.
         }
       );
 
@@ -875,7 +877,6 @@ export default defineNuxtPlugin({
       console.error('[PushPlugin] Failed to add push listeners:', error);
     }
 
-    const PERMISSION_REQUESTED_KEY = 'mentai.push.permissionRequestedOnce';
     const DENIED_PENDING_SYNC_KEY = 'mentai.push.deniedPendingSync';
 
     async function patchPushEnabled(value: boolean): Promise<boolean> {
@@ -915,9 +916,9 @@ export default defineNuxtPlugin({
       }
     }
 
-    // Отложенная инициализация уведомлений после полной загрузки приложения.
-    // Запрос показывается только при первом запуске (prompt + флаг не установлен).
-    // На части Android checkPermissions возвращает prompt каждый раз — флаг защищает от повторных запросов.
+    // После старта приложения не показываем системный prompt автоматически.
+    // Разрешение запрашивается только по явному действию пользователя из UI.
+    // Здесь делаем только тихую синхронизацию denied/granted состояния.
     const initNotifications = async () => {
       try {
         console.log('[PushPlugin] Starting notification initialization');
@@ -926,7 +927,6 @@ export default defineNuxtPlugin({
         const permStatus = await PushNotifications.checkPermissions();
 
         if (permStatus.receive === 'denied') {
-          await writeStoredValue(PERMISSION_REQUESTED_KEY, '1');
           await writeStoredValue(DENIED_PENDING_SYNC_KEY, '1');
           const ok = await patchPushEnabled(false);
           if (!ok) {
@@ -938,46 +938,7 @@ export default defineNuxtPlugin({
           return;
         }
 
-        if (permStatus.receive === 'prompt') {
-          const alreadyRequested = await readStoredValue(
-            PERMISSION_REQUESTED_KEY
-          );
-          if (alreadyRequested === '1') {
-            return;
-          }
-          await writeStoredValue(PERMISSION_REQUESTED_KEY, '1');
-          const result = await PushNotifications.requestPermissions();
-          if (result.receive === 'denied') {
-            await writeStoredValue(DENIED_PENDING_SYNC_KEY, '1');
-            const ok = await patchPushEnabled(false);
-            if (!ok) {
-              setTimeout(() => void trySyncDeniedToServer(), 2000);
-              setTimeout(() => void trySyncDeniedToServer(), 5000);
-            } else {
-              await writeStoredValue(DENIED_PENDING_SYNC_KEY, null);
-            }
-            return;
-          }
-          // Пользователь разрешил — PATCH true, затем register
-          const sessionToken =
-            typeof window !== 'undefined'
-              ? localStorage.getItem('mentai.session.token')
-              : null;
-          if (sessionToken) {
-            try {
-              await nuxtApp.$api('/api/user/me', {
-                method: 'PATCH',
-                body: { pushNotificationsEnabled: true },
-              });
-              if (auth.user) auth.user.pushNotificationsEnabled = true;
-            } catch (e) {
-              console.warn(
-                '[PushPlugin] Не удалось синхронизировать pushNotificationsEnabled=true:',
-                e
-              );
-            }
-          }
-        } else if (permStatus.receive !== 'granted') {
+        if (permStatus.receive !== 'granted') {
           return;
         }
 

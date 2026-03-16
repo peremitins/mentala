@@ -155,7 +155,11 @@
             </h3>
             <p class="text-xs text-foreground">Дни, время и частота отправки</p>
           </div>
-          <Switch v-model:checked="enabled" :loading="loading" />
+          <Switch
+            :checked="enabled"
+            :loading="loading || enabledToggleLoading"
+            @update:checked="handleEnabledToggle"
+          />
         </div>
 
         <div class="space-y-4">
@@ -502,6 +506,12 @@
         :required-plan="paywallAccess?.requiredPlan || null"
         :paywall="paywallAccess?.paywall || null"
       />
+
+      <PushPermissionDeniedDialog
+        :open="pushPermissionGate.showPushDeniedModal.value"
+        @update:open="pushPermissionGate.setPushDeniedModalOpen"
+        @open-settings="handleOpenPushSystemSettings"
+      />
     </div>
   </div>
 </template>
@@ -518,6 +528,7 @@ import TimePicker from '@/app/components/TimePicker.vue';
 import { useTimeSlotControls } from '@/app/composables/useTimeSlotControls';
 import FeaturePaywallModal from '@/app/components/subscription/FeaturePaywallModal.vue';
 import { useEntitlements } from '@/app/composables/useEntitlements';
+import { usePushPermissionGate } from '@/app/composables/usePushPermissionGate';
 import {
   SUBTYPE_OPTIONS,
   SUBTYPE_OPTIONS_BUILD,
@@ -530,6 +541,7 @@ import { Input } from '@/app/components/ui/shadcn/input';
 import InputComponent from '@/app/components/ui/shadcn/input/Input.vue';
 import TextareaResize from '@/app/components/ui/TextareaResize.vue';
 import ButtonLoader from '@/app/components/ui/ButtonLoader.vue';
+import PushPermissionDeniedDialog from '@/app/components/notifications/PushPermissionDeniedDialog.vue';
 import { Switch } from '@/app/components/ui/shadcn/switch';
 import { useNotificationsStore } from '@/app/stores/notifications';
 import { useUserHabitsStore } from '@/app/stores/userHabits';
@@ -689,6 +701,7 @@ const notificationsStore = useNotificationsStore();
 const userHabitsStore = useUserHabitsStore();
 const therapyTopicsStore = useTherapyTopicsStore();
 const { getFeatureAccess, refreshEntitlements } = useEntitlements();
+const pushPermissionGate = usePushPermissionGate();
 
 const paywallOpen = ref(false);
 const paywallFeatureKey = ref<string | null>(null);
@@ -721,6 +734,7 @@ const activeDays = ref<number[]>([0, 1, 2, 3, 4, 5, 6]);
 const timeRange = ref({ start: 540, end: 1350 });
 const customSlotTimes = ref<(number | null)[]>([]);
 const loading = ref(false);
+const enabledToggleLoading = ref(false);
 const addressing = ref<Addressing>('informal');
 const textSource = ref<'templates' | 'ai'>('templates');
 const customPromptNotification = ref('');
@@ -1222,6 +1236,34 @@ onMounted(async () => {
     }
   }
 });
+
+async function handleEnabledToggle(nextEnabled: boolean) {
+  if (loading.value || enabledToggleLoading.value) {
+    return;
+  }
+
+  if (!nextEnabled) {
+    enabled.value = false;
+    return;
+  }
+
+  enabledToggleLoading.value = true;
+  try {
+    const canEnable = await pushPermissionGate.ensureAppPushEnabled({
+      onGrantedFromSettings: async () => {
+        enabled.value = true;
+      },
+    });
+
+    enabled.value = canEnable;
+  } finally {
+    enabledToggleLoading.value = false;
+  }
+}
+
+async function handleOpenPushSystemSettings() {
+  await pushPermissionGate.openSystemSettings();
+}
 
 async function saveSettings() {
   // Разрешаем сохранять настройки без текстов

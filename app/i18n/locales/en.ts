@@ -104,8 +104,8 @@ export default {
   },
   NOTIFICATIONS: {
     BANNER: {
-      TIP: 'Recommendation. Keep the total under 10 notifications per day — this way reminders remain useful and not overwhelming.',
-      OVER: 'Notification volume has become high. We recommend keeping it within 10 per day. The main thing is that reminders support, and do not overload.',
+      TIP: 'Recommendation. Keep the total under {threshold} notifications per day. This way reminders remain useful and not overwhelming.',
+      OVER: 'Your notification intensity is currently high. Choose the rhythm that works best for you. The key is that reminders should support you, not overwhelm you.',
       TOTAL_PER_DAY:
         'No notifications per day | {n} notification per day | {n} notifications per day',
     },
