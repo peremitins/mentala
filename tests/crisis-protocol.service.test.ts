@@ -75,6 +75,16 @@ describe('crisis protocol service', () => {
     expect(result.guidance).toContain('8-800');
   });
 
+  it('в formal addressing просит страну на вы', () => {
+    const result = buildCrisisGuidance({
+      messages: [{ role: 'user', content: 'Я хочу умереть' }],
+      userLocale: 'ru',
+      addressing: 'formal',
+    });
+
+    expect(result.guidance).toContain('В какой стране вы сейчас находитесь?');
+  });
+
   it('подставляет экстренный номер, если страна известна', () => {
     const result = buildCrisisGuidance({
       messages: [{ role: 'user', content: 'I feel suicidal' }],

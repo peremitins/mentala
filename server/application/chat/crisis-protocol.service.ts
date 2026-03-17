@@ -1,3 +1,9 @@
+import type { Addressing } from '../../../shared/dto/notifications';
+import {
+  pickAddressingText,
+  resolveAddressing,
+} from '../../../shared/utils/addressing';
+
 export type CrisisLevel = 'none' | 'crisis_watch' | 'crisis_high';
 
 type ChatLikeMessage = {
@@ -203,6 +209,7 @@ function formatEmergencyNumbers(numbers: string[] | null): string | null {
 function buildHighRiskGuidance(params: {
   countryCode: string | null;
   emergencyNumbersDisplay: string | null;
+  addressing?: Addressing;
 }): string {
   const numbersInstruction =
     params.countryCode && params.emergencyNumbersDisplay
@@ -211,13 +218,20 @@ function buildHighRiskGuidance(params: {
 
   const fallbackEmergency =
     params.emergencyNumbersDisplay || DEFAULT_EMERGENCY_HINT;
+  const countryQuestionExample = pickAddressingText(
+    resolveAddressing(params.addressing),
+    {
+      informal: 'В какой стране ты сейчас находишься?',
+      formal: 'В какой стране вы сейчас находитесь?',
+    }
+  );
 
   return `РЕЖИМ БЕЗОПАСНОСТИ: CRISIS_HIGH
 Короткий ответ, максимум один вопрос.
 1) Эмпатия + серьёзность.
 2) Обязательно предложи немедленно обратиться в экстренные службы: ${fallbackEmergency}.
 3) Только короткие номера из списка. Не добавляй другие номера, hotline, «телефон доверия», 8-800 и любые длинные номера.
-4) Обязательно задай вопрос о стране пребывания (например: «В какой стране ты сейчас находишься?»). Этот вопрос обязателен даже если страна кажется известной.
+4) Обязательно задай вопрос о стране пребывания (например: «${countryQuestionExample}»). Этот вопрос обязателен даже если страна кажется известной.
 5) ${numbersInstruction}
 6) Не спрашивай адрес/город/геолокацию.
 7) Без медсоветов и инструкций по самоповреждению.
@@ -246,6 +260,7 @@ function buildWatchGuidance(params: {
 export function buildCrisisGuidance(params: {
   messages: ChatLikeMessage[];
   userLocale?: string | null;
+  addressing?: Addressing;
 }): CrisisGuidanceResult {
   const level = resolveCrisisLevel(params.messages);
   const countryCode = resolveCountryCodeFromLocale(params.userLocale);
@@ -265,7 +280,11 @@ export function buildCrisisGuidance(params: {
   if (level === 'crisis_high') {
     return {
       level,
-      guidance: buildHighRiskGuidance({ countryCode, emergencyNumbersDisplay }),
+      guidance: buildHighRiskGuidance({
+        countryCode,
+        emergencyNumbersDisplay,
+        addressing: params.addressing,
+      }),
       countryCode,
       emergencyNumbers,
       emergencyNumbersDisplay,

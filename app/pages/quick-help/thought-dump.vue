@@ -81,9 +81,7 @@
           </button>
         </div>
 
-        <div
-          class="glass-border flex flex-wrap items-center justify-between gap-2 rounded-2xl p-3"
-        >
+        <div class="flex flex-wrap items-center justify-between gap-2">
           <!-- <div class="flex items-center gap-2"> -->
           <Button
             variant="outline"

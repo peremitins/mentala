@@ -1,7 +1,11 @@
-import { getSessionUserWithRole } from '@/server/utils/require-role';
-import { UserMeDto } from '@/shared/dto/user';
-import { toIsoString } from '@/server/utils/serialize';
+import { eq } from 'drizzle-orm';
 import { getBillingSnapshot } from '@/server/application/subscriptions/entitlements.service';
+import { db } from '@/server/infrastructure/db/client';
+import { userPreferences } from '@/server/infrastructure/db/schema';
+import { getSessionUserWithRole } from '@/server/utils/require-role';
+import { toIsoString } from '@/server/utils/serialize';
+import { UserMeDto } from '@/shared/dto/user';
+import { resolveAddressing } from '@/shared/utils/addressing';
 
 export default defineEventHandler(async (event) => {
   const user = await getSessionUserWithRole(event);
@@ -9,12 +13,22 @@ export default defineEventHandler(async (event) => {
   // Если пользователь авторизован - возвращаем его данные
   if (user?.id) {
     const onboarding = (user as any)?.onboarding || {};
-    const billing = await getBillingSnapshot(user.id, (user as any)?.role);
+    const [billing, prefs] = await Promise.all([
+      getBillingSnapshot(user.id, (user as any)?.role),
+      db
+        .select({ addressing: userPreferences.addressing })
+        .from(userPreferences)
+        .where(eq(userPreferences.userId, user.id))
+        .limit(1),
+    ]);
+
     const response = {
       user: {
         id: user.id,
         email: user.email,
         name: user.name,
+        // Возвращаем addressing в профиле, чтобы фронт не делал отдельный запрос.
+        addressing: resolveAddressing(prefs[0]?.addressing),
         gender: (user as any)?.gender || null,
         ageRange: (user as any)?.ageRange || null,
         onboarding: {

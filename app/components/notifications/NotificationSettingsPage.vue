@@ -488,17 +488,16 @@
       </section>
 
       <!-- Карточка сохранения -->
-      <section class="glass-deep p-3">
-        <button
-          type="button"
-          class="relative rounded-lg px-4 py-3 text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 w-full"
-          :disabled="isSaveDisabled"
-          @click="saveSettings"
-        >
-          <ButtonLoader v-if="loading" />
-          <span :class="loading ? 'invisible' : ''">Сохранить</span>
-        </button>
-      </section>
+      <Button
+        type="button"
+        class="relative w-full"
+        size="lg"
+        :disabled="isSaveDisabled"
+        @click="saveSettings"
+      >
+        <ButtonLoader v-if="loading" />
+        <span :class="loading ? 'invisible' : ''">Сохранить</span>
+      </Button>
 
       <FeaturePaywallModal
         v-model:open="paywallOpen"
@@ -518,6 +517,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { onClickOutside } from '@vueuse/core';
 import { SliderRange, SliderRoot, SliderThumb, SliderTrack } from 'radix-vue';
 import { useToast } from '@/app/composables/useToast';
@@ -537,6 +537,7 @@ import {
 } from '@/app/constants/select-options';
 import ToggleGroup from '@/app/components/ui/toggle-group/ToggleGroup.vue';
 import ToggleGroupItem from '@/app/components/ui/toggle-group/ToggleGroupItem.vue';
+import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/shadcn/input';
 import InputComponent from '@/app/components/ui/shadcn/input/Input.vue';
 import TextareaResize from '@/app/components/ui/TextareaResize.vue';
@@ -560,6 +561,7 @@ import type {
 } from '@/shared/dto/notifications';
 import { MAX_CUSTOM_PROMPT_NOTIFICATION_LENGTH } from '@/shared/dto/notifications';
 import { getDefaultNotificationTextSource } from '@/shared/utils/notificationTextSource';
+import { getLocalizedRequiredPlanLabel } from '@/app/utils/planI18n';
 
 const props = defineProps<{
   mentaiMode: 'habits' | 'therapy';
@@ -567,6 +569,7 @@ const props = defineProps<{
 }>();
 
 const router = useRouter();
+const { t } = useI18n();
 
 // Навигация к редактору текстов с передачей фильтров
 function goToTextsEditor() {
@@ -598,7 +601,7 @@ function getPlanBadgeEmoji(plan: string) {
 }
 
 function getPlanBadgeLabel(plan: string) {
-  return plan === 'premium' ? 'Premium' : 'PRO и Premium';
+  return getLocalizedRequiredPlanLabel(plan, t);
 }
 
 function onTextSourceChange(value: string | string[] | undefined) {
