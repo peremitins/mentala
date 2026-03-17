@@ -4,7 +4,37 @@
       <p class="max-w-xl text-sm text-white/85 text-elevated">
         {{ practice.description }}
       </p>
-      <p class="text-xs text-white/60">{{ practice.pattern }}</p>
+      <div
+        class="flex max-w-xl flex-wrap items-center justify-center gap-y-1 text-xs font-medium"
+      >
+        <template
+          v-for="(segment, index) in practicePatternSegments"
+          :key="segment.key"
+        >
+          <span
+            :class="[
+              'rounded-full px-2 py-0.5 transition-all duration-300',
+              activePatternPhaseIndex === index
+                ? 'bg-white/12 text-white shadow-[0_0_14px_rgba(255,255,255,0.14)]'
+                : 'text-white/50',
+            ]"
+          >
+            {{ segment.text }}
+          </span>
+          <span
+            v-if="index < practicePatternSegments.length - 1"
+            class="px-1 transition-colors duration-300"
+            :class="
+              activePatternPhaseIndex === index ||
+              activePatternPhaseIndex === index + 1
+                ? 'text-white/45'
+                : 'text-white/20'
+            "
+          >
+            →
+          </span>
+        </template>
+      </div>
     </div>
 
     <div class="flex flex-col items-center gap-2 justify-center">
@@ -130,7 +160,7 @@
       <div class="space-y-5">
         <div class="space-y-2">
           <TimePicker
-            v-model="sessionMinutes"
+            v-model="sessionMinutesValue"
             mode="minutes"
             :label="'Длительность'"
             :minute-min="1"
@@ -320,6 +350,7 @@ const player = useBreathPracticePlayer({
 
 const {
   currentPhase,
+  phaseIndex,
   phaseRemainingSeconds,
   sessionRemainingSeconds,
   sessionDurationSeconds,
@@ -346,12 +377,45 @@ const sessionTotalLabel = computed(() =>
   formatSeconds(sessionDurationSeconds.value)
 );
 
+interface PracticePatternSegment {
+  key: string;
+  text: string;
+}
+
+// Разбиваем паттерн на сегменты, чтобы подсвечивать текущую фазу и не терять кастомный текст.
+const practicePatternSegments = computed<PracticePatternSegment[]>(() => {
+  const patternSegments = props.practice.pattern
+    .split('→')
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+
+  if (patternSegments.length === props.practice.phases.length) {
+    return patternSegments.map((text, index) => ({
+      key: `${props.practice.slug}-pattern-${index}`,
+      text,
+    }));
+  }
+
+  return props.practice.phases.map((phase, index) => ({
+    key: `${props.practice.slug}-${phase.type}-${phase.seconds}-${index}`,
+    text: `${phase.label} ${phase.seconds}`,
+  }));
+});
+
+const activePatternPhaseIndex = computed<number | null>(() => {
+  if (!isRunning.value || prepCountdown.value > 0 || isCompleted.value) {
+    return null;
+  }
+
+  return phaseIndex.value;
+});
+
 const settingsOpen = ref(false);
 const voiceEnabled = ref(false);
 const soundEnabled = ref(true);
 const soundVolume = ref(70);
 const hapticsEnabled = ref(true);
-const sessionMinutes = ref(5);
+const sessionMinutesValue = ref(5);
 const voiceSaving = ref(false);
 const soundSaving = ref(false);
 const hapticsSaving = ref(false);
@@ -444,9 +508,13 @@ onMounted(async () => {
   soundVolume.value = settings.volume;
   hapticsEnabled.value = settings.hapticsEnabled;
   if (hasFixedSessionMinutes.value) {
-    sessionMinutes.value = clampNumber(Number(props.sessionMinutes), 1, 60);
+    sessionMinutesValue.value = clampNumber(
+      Number(props.sessionMinutes),
+      1,
+      60
+    );
   } else {
-    sessionMinutes.value = clampNumber(settings.sessionMinutes, 1, 60);
+    sessionMinutesValue.value = clampNumber(settings.sessionMinutes, 1, 60);
   }
 
   if (soundEnabled.value) {
@@ -457,7 +525,7 @@ onMounted(async () => {
   }
 
   player.setPhases(props.practice.phases);
-  player.setSessionDuration(sessionMinutes.value * 60);
+  player.setSessionDuration(sessionMinutesValue.value * 60);
 
   if (props.autoStart) {
     player.start();
@@ -474,27 +542,24 @@ watch(
   }
 );
 
-watch(
-  () => sessionMinutes.value,
-  (value) => {
-    const safe = clampNumber(value, 1, 60);
-    if (safe !== value) {
-      sessionMinutes.value = safe;
-      return;
-    }
-    player.setSessionDuration(safe * 60);
-    if (!hasFixedSessionMinutes.value) {
-      void saveBreathPracticeSettings({ sessionMinutes: safe });
-    }
+watch(sessionMinutesValue, (value) => {
+  const safe = clampNumber(value, 1, 60);
+  if (safe !== value) {
+    sessionMinutesValue.value = safe;
+    return;
   }
-);
+  player.setSessionDuration(safe * 60);
+  if (!hasFixedSessionMinutes.value) {
+    void saveBreathPracticeSettings({ sessionMinutes: safe });
+  }
+});
 
 watch(
   () => props.sessionMinutes,
   (value) => {
     if (typeof value !== 'number') return;
     const safe = clampNumber(value, 1, 60);
-    sessionMinutes.value = safe;
+    sessionMinutesValue.value = safe;
     player.setSessionDuration(safe * 60);
   }
 );
