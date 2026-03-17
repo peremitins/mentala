@@ -15,7 +15,7 @@
     </NuxtLayout>
     <NuxtRouteAnnouncer />
     <Toaster
-      theme="dark"
+      theme="light"
       rich-colors
       position="top-right"
       :expand="false"

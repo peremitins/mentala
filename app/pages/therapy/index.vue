@@ -45,6 +45,7 @@
 
 <script setup lang="ts">
 import { computed, ref, onMounted, nextTick } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
 import { useChatStore } from '@/app/stores/chat';
 import NotificationIndexPage, {
@@ -74,6 +75,7 @@ import {
   useEntitlements,
 } from '@/app/composables/useEntitlements';
 import { useTherapyAnalytics } from '@/app/composables/useTherapyAnalytics';
+import { getLocalizedPlanName } from '@/app/utils/planI18n';
 
 const colorSchemes: Record<string, string> = {
   blue: 'from-blue-500 to-cyan-500',
@@ -91,11 +93,13 @@ const colorSchemes: Record<string, string> = {
 const therapyStore = useTherapyTopicsStore();
 const loadersStore = useLoadersStore();
 const notificationsStore = useNotificationsStore();
+const { t } = useI18n();
 const { topics: userTopics } = storeToRefs(therapyStore);
 const router = useRouter();
 const route = useRoute();
 const { getFeatureAccess, refreshEntitlements } = useEntitlements();
 const { trackQuickChatClick } = useTherapyAnalytics();
+const premiumPlanLabel = computed(() => getLocalizedPlanName('premium', t));
 
 // Загружаем данные после монтирования компонента (с кэшированием)
 // Защита от двойного вызова реализована в store через isSkeletonLoading флаг
@@ -139,7 +143,9 @@ const customTopicItems = computed<NotificationIndexItem[]>(() =>
         : getPlanBadgeEmoji(customTherapyAccess.value.requiredPlan),
       lockBadgeTitle: customTherapyAccess.value.available
         ? undefined
-        : 'Личная терапия доступна в Premium',
+        : t('PLANS.PERSONAL_THERAPY_AVAILABLE', {
+            plan: premiumPlanLabel.value,
+          }),
     };
   })
 );
@@ -167,7 +173,9 @@ const createCard = computed<NotificationIndexItem>(() => ({
   name: 'Создать свою терапию',
   description: customTherapyAccess.value.available
     ? 'Сформулируйте собственный запрос и настройте тексты под себя'
-    : 'Создание личной терапии доступно в Premium',
+    : t('PLANS.PERSONAL_THERAPY_CREATE_AVAILABLE', {
+        plan: premiumPlanLabel.value,
+      }),
   emoji: '✏️',
   gradientClass: 'from-gray-500 to-gray-700',
   payload: { action: 'create-topic' },
@@ -177,7 +185,9 @@ const createCard = computed<NotificationIndexItem>(() => ({
     : getPlanBadgeEmoji(customTherapyAccess.value.requiredPlan),
   lockBadgeTitle: customTherapyAccess.value.available
     ? undefined
-    : 'Создание личной терапии доступно в Premium',
+    : t('PLANS.PERSONAL_THERAPY_CREATE_AVAILABLE', {
+        plan: premiumPlanLabel.value,
+      }),
 }));
 
 const topicItems = computed<NotificationIndexItem[]>(() => [

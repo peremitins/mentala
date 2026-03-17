@@ -46,6 +46,7 @@
 
 <script setup lang="ts">
 import { computed, ref, onMounted, nextTick } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
 import NotificationIndexPage, {
   type NotificationIndexItem,
@@ -74,6 +75,7 @@ import {
   extractFeaturePlanRequiredError,
   useEntitlements,
 } from '@/app/composables/useEntitlements';
+import { getLocalizedPlanName } from '@/app/utils/planI18n';
 
 const intentColors: Record<string, string> = {
   build: 'from-blue-500 to-cyan-500',
@@ -85,8 +87,10 @@ const userHabitsStore = useUserHabitsStore();
 const chat = useChatStore();
 const loadersStore = useLoadersStore();
 const notificationsStore = useNotificationsStore();
+const { t } = useI18n();
 const { habits: userHabits } = storeToRefs(userHabitsStore);
 const { getFeatureAccess, refreshEntitlements } = useEntitlements();
+const premiumPlanLabel = computed(() => getLocalizedPlanName('premium', t));
 
 // Загружаем данные после монтирования компонента (с кэшированием)
 // Защита от двойного вызова реализована в store через isSkeletonLoading флаг
@@ -163,7 +167,9 @@ const customHabitItems = computed(() =>
         : getPlanBadgeEmoji(customHabitsAccess.value.requiredPlan),
       lockBadgeTitle: customHabitsAccess.value.available
         ? undefined
-        : 'Кастомные привычки доступны в Premium',
+        : t('PLANS.CUSTOM_HABITS_AVAILABLE', {
+            plan: premiumPlanLabel.value,
+          }),
     };
   })
 );
@@ -173,7 +179,9 @@ const createCard = computed<NotificationIndexItem>(() => ({
   name: 'Создать свою привычку',
   description: customHabitsAccess.value.available
     ? 'Настройте свои напоминания под себя: название, текст и частоту'
-    : 'Создание кастомных привычек доступно в Premium',
+    : t('PLANS.CUSTOM_HABITS_CREATE_AVAILABLE', {
+        plan: premiumPlanLabel.value,
+      }),
   emoji: '✏️',
   gradientClass: 'from-gray-500 to-gray-700',
   payload: {
@@ -185,7 +193,9 @@ const createCard = computed<NotificationIndexItem>(() => ({
     : getPlanBadgeEmoji(customHabitsAccess.value.requiredPlan),
   lockBadgeTitle: customHabitsAccess.value.available
     ? undefined
-    : 'Создание кастомных привычек доступно в Premium',
+    : t('PLANS.CUSTOM_HABITS_CREATE_AVAILABLE', {
+        plan: premiumPlanLabel.value,
+      }),
 }));
 
 const habitItems = computed(() => [

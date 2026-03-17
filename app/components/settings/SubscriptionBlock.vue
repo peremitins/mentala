@@ -100,10 +100,7 @@
         v-if="shouldShowNoAccessInfo"
         class="rounded-md bg-muted/50 border border-border p-3 space-y-2"
       >
-        <p class="text-xs text-muted-foreground">
-          На тарифе Basic функционал ограничен. Выберите тариф PRO или Premium,
-          чтобы открыть расширенные возможности приложения.
-        </p>
+        <p class="text-xs text-muted-foreground">{{ limitedAccessLabel }}</p>
       </div>
 
       <Button
@@ -143,11 +140,17 @@ import { usePlatform } from '@/app/composables/usePlatform';
 import { useSubscriptionStore } from '@/app/stores/subscription';
 import { useToast } from '@/app/composables/useToast';
 import {
+  getLocalizedPlanName,
+  getLocalizedTrialPlanLabel,
+} from '@/app/utils/planI18n';
+import {
   formatTrialCountdown,
   getTrialCountdown,
 } from '@/app/utils/trialCountdown';
+import { useI18n } from 'vue-i18n';
 
 const subscriptionStore = useSubscriptionStore();
+const { t } = useI18n();
 const { platform } = usePlatform();
 const externalFlowAppUrl = useExternalFlowAppUrl();
 const openingExternalFlow = ref(false);
@@ -195,20 +198,21 @@ const planName = computed(() => {
     subscriptionData.value?.trialActive &&
     subscription.value.planId === 'basic'
   ) {
-    if (trialTimeLeftLabel.value) {
-      return `Пробный период · ${trialTimeLeftLabel.value} осталось`;
-    }
-    return 'Пробный период';
+    return getLocalizedTrialPlanLabel(t, trialTimeLeftLabel.value);
   }
 
   const effectivePlanId =
     subscriptionData.value?.currentEntitlementsPlan ||
     subscription.value.planId;
-  if (effectivePlanId === 'basic') return 'Basic';
-  if (effectivePlanId === 'pro') return 'PRO';
-  if (effectivePlanId === 'premium') return 'Premium';
-  return effectivePlanId;
+  return getLocalizedPlanName(effectivePlanId, t);
 });
+
+const limitedAccessLabel = computed(() =>
+  t('PLANS.BASIC_LIMITED_ACCESS', {
+    basic: getLocalizedPlanName('basic', t),
+    plans: t('PLANS.PRO_AND_PREMIUM'),
+  })
+);
 
 // Получаем лимит минут из features (учитывает Trial)
 const aiChatMode = computed(() => subscriptionStore.aiChatMode);

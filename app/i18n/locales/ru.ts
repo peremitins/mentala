@@ -1,5 +1,32 @@
 export default {
   COMMON: {},
+  PLANS: {
+    BASIC: 'Базовый',
+    PRO: 'Про',
+    PREMIUM: 'Премиум',
+    TRIAL: 'Пробный период',
+    TRIAL_WITH_TIME_LEFT: 'Пробный период · {timeLeft} осталось',
+    PRO_AND_PREMIUM: 'Про и Премиум',
+    PRO_OR_PREMIUM: 'Про или Премиум',
+    AVAILABLE_IN: 'Доступно в {plans}',
+    MEDITATIONS_LIBRARY_UNLOCK: 'Открой библиотеку медитаций в {plans}',
+    GRATITUDE_DIARY_UNLOCK: 'Открой дневник благодарности в {plans}',
+    FULL_MEDITATIONS_LIBRARY_AVAILABLE:
+      'Полная библиотека медитаций доступна в {plans}.',
+    FEATURE_AVAILABLE_IN: 'Эта функция доступна в {plans}',
+    BASIC_LIMITED_ACCESS:
+      'На тарифе {basic} функционал ограничен. Выберите тариф {plans}, чтобы открыть расширенные возможности приложения.',
+    CUSTOM_HABITS_AVAILABLE: 'Кастомные привычки доступны в {plan}',
+    CUSTOM_HABITS_CREATE_AVAILABLE:
+      'Создание кастомных привычек доступно в {plan}',
+    PERSONAL_THERAPY_AVAILABLE: 'Личная терапия доступна в {plan}',
+    PERSONAL_THERAPY_CREATE_AVAILABLE:
+      'Создание личной терапии доступно в {plan}',
+    ALL_FROM: 'Всё из {plan}',
+    FULL_ACCESS_TO_FEATURES: 'Полный доступ к функциям {plan}',
+    SELECT_PLAN: 'Выбрать тариф',
+    UNLOCK_FEATURE: 'Подключи подходящий тариф, чтобы открыть эту возможность.',
+  },
   GRATITUDE_DIARY: {
     TITLE: 'Дневник благодарности',
     EDITOR_TITLE_CREATE: 'Новая запись',

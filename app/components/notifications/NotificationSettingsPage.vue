@@ -517,6 +517,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { onClickOutside } from '@vueuse/core';
 import { SliderRange, SliderRoot, SliderThumb, SliderTrack } from 'radix-vue';
 import { useToast } from '@/app/composables/useToast';
@@ -560,6 +561,7 @@ import type {
 } from '@/shared/dto/notifications';
 import { MAX_CUSTOM_PROMPT_NOTIFICATION_LENGTH } from '@/shared/dto/notifications';
 import { getDefaultNotificationTextSource } from '@/shared/utils/notificationTextSource';
+import { getLocalizedRequiredPlanLabel } from '@/app/utils/planI18n';
 
 const props = defineProps<{
   mentaiMode: 'habits' | 'therapy';
@@ -567,6 +569,7 @@ const props = defineProps<{
 }>();
 
 const router = useRouter();
+const { t } = useI18n();
 
 // Навигация к редактору текстов с передачей фильтров
 function goToTextsEditor() {
@@ -598,7 +601,7 @@ function getPlanBadgeEmoji(plan: string) {
 }
 
 function getPlanBadgeLabel(plan: string) {
-  return plan === 'premium' ? 'Premium' : 'PRO и Premium';
+  return getLocalizedRequiredPlanLabel(plan, t);
 }
 
 function onTextSourceChange(value: string | string[] | undefined) {

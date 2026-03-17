@@ -1,5 +1,32 @@
 export default {
   COMMON: {},
+  PLANS: {
+    BASIC: 'Basic',
+    PRO: 'Pro',
+    PREMIUM: 'Premium',
+    TRIAL: 'Trial period',
+    TRIAL_WITH_TIME_LEFT: 'Trial period · {timeLeft} left',
+    PRO_AND_PREMIUM: 'Pro and Premium',
+    PRO_OR_PREMIUM: 'Pro or Premium',
+    AVAILABLE_IN: 'Available in {plans}',
+    MEDITATIONS_LIBRARY_UNLOCK: 'Unlock the meditation library in {plans}',
+    GRATITUDE_DIARY_UNLOCK: 'Unlock the gratitude diary in {plans}',
+    FULL_MEDITATIONS_LIBRARY_AVAILABLE:
+      'The full meditation library is available in {plans}.',
+    FEATURE_AVAILABLE_IN: 'This feature is available in {plans}',
+    BASIC_LIMITED_ACCESS:
+      'Features are limited on the {basic} plan. Choose {plans} to unlock the extended app experience.',
+    CUSTOM_HABITS_AVAILABLE: 'Custom habits are available in {plan}',
+    CUSTOM_HABITS_CREATE_AVAILABLE:
+      'Creating custom habits is available in {plan}',
+    PERSONAL_THERAPY_AVAILABLE: 'Personal therapy is available in {plan}',
+    PERSONAL_THERAPY_CREATE_AVAILABLE:
+      'Creating personal therapy is available in {plan}',
+    ALL_FROM: 'Everything from {plan}',
+    FULL_ACCESS_TO_FEATURES: 'Full access to {plan} features',
+    SELECT_PLAN: 'Choose a plan',
+    UNLOCK_FEATURE: 'Choose the right plan to unlock this feature.',
+  },
   GRATITUDE_DIARY: {
     TITLE: 'Gratitude Diary',
     EDITOR_TITLE_CREATE: 'New entry',
