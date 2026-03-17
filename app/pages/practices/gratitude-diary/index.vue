@@ -80,7 +80,7 @@
           v-else-if="!groupedEntries.length"
           class="glass-deep p-4 text-sm text-foreground/70"
         >
-          {{ t('GRATITUDE_DIARY.EMPTY') }}
+          {{ diaryT('EMPTY') }}
         </div>
 
         <div v-else class="space-y-3">
@@ -168,11 +168,17 @@ import { navigateTo, useNuxtApp } from '#app';
 import { useRouter } from 'vue-router';
 import PageHeader from '@/app/components/PageHeader.vue';
 import { Button } from '@/app/components/ui/button';
+import { useAuthStore } from '@/app/stores/auth';
+import {
+  getGratitudeDiaryAddressingCopy,
+  type GratitudeDiaryAddressingCopyKey,
+} from '@/app/lib/addressingCopy';
 import IconHeart from '~icons/lucide/heart';
 import IconPlus from '~icons/lucide/plus';
 import IconSquarePen from '~icons/lucide/square-pen';
 import { usePhotoSwipe } from '@/app/composables/usePhotoSwipe';
 import type { GratitudeDiaryMood } from '@/shared/dto';
+import { resolveAddressing } from '@/shared/utils/addressing';
 
 const { openPhotoSwipeFromImg } = usePhotoSwipe();
 
@@ -219,7 +225,9 @@ const STREAK_CARD_TITLE_KEY: Record<StreakCardTone, string> = {
 const { t, locale } = useI18n();
 const { $api } = useNuxtApp();
 const router = useRouter();
+const auth = useAuthStore();
 const now = useNow({ interval: 60_000 });
+const addressing = computed(() => resolveAddressing(auth.user?.addressing));
 
 const streak = ref(0);
 const entriesCount = ref(0);
@@ -232,6 +240,14 @@ const entryPhotoRetryTimerMap = new Map<
   number,
   ReturnType<typeof setTimeout>
 >();
+
+function diaryT(key: GratitudeDiaryAddressingCopyKey): string {
+  if (!locale.value.toLowerCase().startsWith('ru')) {
+    return t(`GRATITUDE_DIARY.${key}`);
+  }
+
+  return getGratitudeDiaryAddressingCopy(key, addressing.value);
+}
 
 const allEntries = computed(() =>
   groupedEntries.value.flatMap((group) => group.items)

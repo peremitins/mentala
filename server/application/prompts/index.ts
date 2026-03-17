@@ -14,12 +14,17 @@ import type {
   ChatEntryContext,
   TherapyApproach,
   ResponseType,
-} from '@/shared/dto';
+} from '../../../shared/dto';
+import type { Addressing } from '../../../shared/dto/notifications';
 import {
   normalizeOnboardingReasons,
   type OnboardingReason,
   type OnboardingReasons,
 } from '../../../shared/dto/onboarding';
+import {
+  pickAddressingText,
+  resolveAddressing,
+} from '../../../shared/utils/addressing';
 
 export type PromptTemplate = string;
 
@@ -152,7 +157,7 @@ export function getResponseTypeByNumber(responseNumber: number): {
       description: 'АНАЛИТИКА + ВАРИАНТЫ (ПРИВЯЗАНЫ К ДЕТАЛЯМ)',
       structure: `1. Короткая рефлексия по сути и эмоции (1 фраза)
 2. Гипотеза о паттерне
-3. 2 ВАРИАНТА (ссылаются на конкретные слова: "когда ты сказал X...")
+3. 2 ВАРИАНТА (ссылаются на конкретные слова: "когда пользователь сказал X...")
 4. Максимум 1 вопрос-выбор`,
     },
     support: {
@@ -393,6 +398,20 @@ function buildToneContext(vars: {
  Следуй этому стилю во всех формулировках, сохраняя правила безопасности и кризисные ограничения.`;
 }
 
+function buildAddressingContext(addressing?: Addressing): string {
+  const resolvedAddressing = resolveAddressing(addressing);
+  const addressingLabel = resolvedAddressing === 'formal' ? 'на вы' : 'на ты';
+  const addressingInstruction = pickAddressingText(resolvedAddressing, {
+    informal:
+      'Обращайся к пользователю только на «ты»: используй формы «ты/тебе/тебя» и не переходи на «вы/вам/вас».',
+    formal:
+      'Обращайся к пользователю только на «вы»: используй формы «вы/вам/вас» и не переходи на «ты/тебе/тебя».',
+  });
+
+  return `Обращение к пользователю: ${addressingLabel}.
+ ${addressingInstruction}`;
+}
+
 const ONBOARDING_REASON_META: Record<
   OnboardingReason,
   { label: string; focusHint: string }
@@ -505,6 +524,7 @@ function buildOnboardingSuggestedChipsContext(vars: {
 function buildUserContext(vars: {
   user_name?: string;
   user_gender?: string;
+  addressing?: Addressing;
   toneKey?: string;
   toneLabel?: string;
   toneDescription?: string;
@@ -512,6 +532,7 @@ function buildUserContext(vars: {
 }): string {
   const name = vars.user_name?.trim();
   const genderLabel = resolveGenderLabel(vars.user_gender);
+  const addressingContext = buildAddressingContext(vars.addressing);
   const toneContext = buildToneContext(vars);
   const onboardingContext = buildOnboardingPersonalizationContext(vars);
 
@@ -529,6 +550,7 @@ function buildUserContext(vars: {
  ${nameLine}
  ${genderLine}
  ${genderInstruction}
+ ${addressingContext}
  ${toneContext}
  ${onboardingContext}
  Запрещены формы с альтернативами в скобках (например, "сделал / сделала").`;
@@ -595,6 +617,7 @@ export function buildDeveloperContext(
   vars: {
     user_name?: string;
     user_gender?: string;
+    addressing?: Addressing;
     toneKey?: string;
     toneLabel?: string;
     toneDescription?: string;
@@ -778,6 +801,7 @@ export function buildWelcomePrompt(options: {
   user_locale?: string;
   user_name?: string;
   user_gender?: string;
+  addressing?: Addressing;
   greetingName?: string | null;
   includeNameValidationPrompt?: boolean;
   openingMode?: 'greeting' | 'alternative';
@@ -805,6 +829,7 @@ export function buildWelcomePrompt(options: {
     Boolean(options.disableOpeningTemplates) ||
     options.entryContext?.type === 'thought_dump' ||
     isPhobiasEntry;
+  const addressingContext = buildAddressingContext(options.addressing);
   const toneContext = buildToneContext({
     toneKey: options.toneKey,
     toneLabel: options.toneLabel,
@@ -858,9 +883,9 @@ export function buildWelcomePrompt(options: {
 
     prompt =
       prompt +
-      `\n\nВАЖНО: Не утверждай, что вы уже обсуждали конкретно эту тему; если контекст неочевиден - формулируй нейтрально. ${generatedStartInstruction}`;
+      `\n\nВАЖНО: Не утверждай, что тема уже обсуждалась конкретно раньше; если контекст неочевиден - формулируй нейтрально. ${generatedStartInstruction}`;
 
-    const fullPrompt = `${toneContext ? `${toneContext}\n\n` : ''}${onboardingContext ? `${onboardingContext}\n\n` : ''}${prompt}${nameInstruction}${openingInstruction}${noTemplateStartInstruction}`;
+    const fullPrompt = `${addressingContext ? `${addressingContext}\n\n` : ''}${toneContext ? `${toneContext}\n\n` : ''}${onboardingContext ? `${onboardingContext}\n\n` : ''}${prompt}${nameInstruction}${openingInstruction}${noTemplateStartInstruction}`;
     return contextNote ? `${contextNote}\n\n${fullPrompt}` : fullPrompt;
   }
 
@@ -869,7 +894,7 @@ export function buildWelcomePrompt(options: {
 
 Сгенерируй приветствие (2-3 предложения):
  Представься и объясни чем помогаешь
- Добавь 1 конкретную опору (например выбор: "часто полезно выбрать: ты ищешь причину или один узкий узел?")
+ Добавь 1 конкретную опору (например выбор: "часто полезно выбрать: сейчас важнее причина или один узкий узел?")
  Затем 1 открытый вопрос
 `,
 
@@ -879,7 +904,7 @@ export function buildWelcomePrompt(options: {
 {{sessionMemoryText}}
 
 Сгенерируй приветствие (2-3 предложения), которое:
- Не утверждает, что вы уже обсуждали конкретно эту тему; формулируй нейтрально
+ Не утверждает, что тема уже обсуждалась конкретно раньше; формулируй нейтрально
  Добавляет 1 конкретную опору (выбор/инсайт/рамка)
  Мягко предлагает вернуться к темам или перейти к новым
  Завершается 1 открытым вопросом
@@ -944,7 +969,7 @@ export function buildWelcomePrompt(options: {
     );
   }
 
-  const fullPrompt = `${toneContext ? `${toneContext}\n\n` : ''}${onboardingContext ? `${onboardingContext}\n\n` : ''}${prompt}${nameInstruction}${openingInstruction}${noTemplateStartInstruction}`;
+  const fullPrompt = `${addressingContext ? `${addressingContext}\n\n` : ''}${toneContext ? `${toneContext}\n\n` : ''}${onboardingContext ? `${onboardingContext}\n\n` : ''}${prompt}${nameInstruction}${openingInstruction}${noTemplateStartInstruction}`;
   return contextNote ? `${contextNote}\n\n${fullPrompt}` : fullPrompt;
 }
 

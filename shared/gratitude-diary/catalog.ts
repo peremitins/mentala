@@ -1,3 +1,6 @@
+import type { Addressing } from '../dto/notifications';
+import { resolveAddressing } from '../utils/addressing';
+
 export interface GratitudePromptItem {
   id: string;
   text: string;
@@ -207,6 +210,71 @@ export const GRATITUDE_PROMPT_CATEGORIES: readonly GratitudePromptCategory[] = [
   },
 ];
 
+const FORMAL_GRATITUDE_PROMPT_TEXT_OVERRIDES: Readonly<Record<string, string>> =
+  {
+    'self-1': 'Что в себе сегодня вызывает у вас искреннюю благодарность?',
+    'self-2': 'Какое личное качество помогло вам пройти через сложный момент?',
+    'self-3': 'Какой маленький шаг к себе вы сделали сегодня?',
+    'self-4': 'Что вы сделали сегодня, даже если было непросто?',
+    'self-5': 'Какой урок, полученный за последнее время, вы особенно цените?',
+    'self-6': 'Какая часть вашей жизни сейчас дает вам ощущение опоры?',
+    'self-7': 'Какое улучшение в образе жизни вы замечаете и цените?',
+    'self-8': 'Что вы хотели бы сказать себе из прошлого с благодарностью?',
+    'self-9':
+      'О чем вы спросили бы себя из будущего, чтобы поддержать себя сегодня?',
+    'self-10': 'Какой опыт этой недели сделал вас сильнее или мудрее?',
+    'little-things-1':
+      'Какое простое удовольствие сегодня напомнило вам, что жизнь прекрасна?',
+    'little-things-2':
+      'Какую маленькую деталь вокруг вы заметили и по-настоящему оценили?',
+    'little-things-3':
+      'За что в погоде сегодняшнего дня вы можете поблагодарить жизнь?',
+    'little-things-4':
+      'Какой недавний момент на природе подарил вам спокойствие?',
+    'little-things-5':
+      'Какое место, где вы были, до сих пор греет вас изнутри?',
+    'little-things-6':
+      'Какая музыка или звук в последнее время особенно поддерживают вас?',
+    'little-things-7':
+      'Назовите три вещи, которые помогают вам чувствовать уют и тепло.',
+    'little-things-8':
+      'Какой момент дня вне дома вы любите больше всего и почему?',
+    'little-things-9':
+      'За что вы благодарны месту, в котором сейчас находитесь?',
+    'health-1': 'За что ваше тело сегодня заслуживает отдельного «спасибо»?',
+    'health-2': 'Какая привычка помогает вам оставаться в ресурсе?',
+    'health-3': 'Какой недавний шаг в заботе о здоровье вы цените в себе?',
+    'health-4':
+      'За какую способность своего тела вы особенно благодарны сегодня?',
+    'health-5':
+      'Как движение или прогулка недавно помогли вам почувствовать себя лучше?',
+    'health-6':
+      'За что вы благодарны своим рукам, ногам или дыханию прямо сейчас?',
+    'health-7':
+      'Как тренировки или физическая активность поддерживают вас эмоционально?',
+    'health-8':
+      'Какие три вещи в вашем физическом состоянии сегодня радуют вас?',
+    'health-9':
+      'Что помогает вашему телу быстрее восстанавливаться после нагрузки?',
+    'health-10':
+      'За какую часть своего здоровья вы благодарны особенно глубоко?',
+    'relationships-1': 'Кто сегодня стал для вас источником тепла и поддержки?',
+    'relationships-2':
+      'Какой короткий разговор сегодня оставил у вас приятный след?',
+    'relationships-3':
+      'Кому вы особенно хотите сказать «спасибо» и за что именно?',
+    'relationships-5':
+      'Как вы почувствовали, что рядом есть люди, на которых можно опереться?',
+    'mindset-1': 'Что делает вашу жизнь сейчас по-настоящему счастливой?',
+    'mindset-2': 'Что вы хотите видеть в своей жизни чаще, и почему это важно?',
+    'mindset-3':
+      'Какой выбор сегодня приблизил вас к той жизни, которую вы хотите?',
+    'mindset-4':
+      'За какую свою внутреннюю силу вы особенно благодарны сегодня?',
+    'mindset-5':
+      'Если бы этот день был письмом к вам, за что бы он поблагодарил?',
+  };
+
 export const GRATITUDE_WORKSHEET_TEMPLATE: readonly GratitudeWorksheetItem[] = [
   { id: 'gratitude', emoji: '🫶', text: 'За что я благодарен сегодня' },
   { id: 'affirmation', emoji: '💡', text: 'Что сегодня было для меня важным' },
@@ -217,6 +285,27 @@ export const GRATITUDE_WORKSHEET_TEMPLATE: readonly GratitudeWorksheetItem[] = [
   },
 ];
 
-export function getAllGratitudePrompts(): GratitudePromptItem[] {
-  return GRATITUDE_PROMPT_CATEGORIES.flatMap((category) => category.prompts);
+export function getGratitudePromptCategories(
+  addressing?: Addressing
+): GratitudePromptCategory[] {
+  const resolvedAddressing = resolveAddressing(addressing);
+
+  return GRATITUDE_PROMPT_CATEGORIES.map((category) => ({
+    ...category,
+    prompts: category.prompts.map((prompt) => ({
+      ...prompt,
+      text:
+        resolvedAddressing === 'formal'
+          ? FORMAL_GRATITUDE_PROMPT_TEXT_OVERRIDES[prompt.id] || prompt.text
+          : prompt.text,
+    })),
+  }));
+}
+
+export function getAllGratitudePrompts(
+  addressing?: Addressing
+): GratitudePromptItem[] {
+  return getGratitudePromptCategories(addressing).flatMap(
+    (category) => category.prompts
+  );
 }

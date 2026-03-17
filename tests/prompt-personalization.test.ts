@@ -23,6 +23,21 @@ describe('prompt personalization', () => {
     expect(prompt).toContain('Приоритетные фокусы:');
   });
 
+  it('добавляет formal addressing в developer context', () => {
+    const prompt = buildDeveloperContext(
+      {
+        user_name: 'Анна',
+        user_gender: 'female',
+        addressing: 'formal',
+      },
+      { responseNumber: 1 }
+    );
+
+    expect(prompt).toContain('Обращение к пользователю: на вы.');
+    expect(prompt).toContain('используй формы «вы/вам/вас»');
+    expect(prompt).not.toContain('Обращайся к пользователю только на «ты»');
+  });
+
   it('добавляет onboarding personalization в welcome prompt', () => {
     const prompt = buildWelcomePrompt({
       isFirstSession: true,
@@ -32,6 +47,17 @@ describe('prompt personalization', () => {
 
     expect(prompt).toContain('Контекст персонализации из онбординга');
     expect(prompt).toContain('работать с привычками');
+  });
+
+  it('добавляет formal addressing в welcome prompt', () => {
+    const prompt = buildWelcomePrompt({
+      isFirstSession: true,
+      lang: 'ru',
+      addressing: 'formal',
+    });
+
+    expect(prompt).toContain('Обращение к пользователю: на вы.');
+    expect(prompt).toContain('используй формы «вы/вам/вас»');
   });
 
   it('передает onboarding personalization в prompt для suggested chips', () => {

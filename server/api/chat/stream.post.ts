@@ -36,6 +36,7 @@ import {
 } from '@/server/application/chat/phobias-entry.service';
 import { trackPhobiasEvent } from '@/server/application/chat/phobias-analytics.service';
 import { getAssistantToneMeta } from '@/shared/constants/assistantTone';
+import { resolveAddressing } from '@/shared/utils/addressing';
 
 export default defineEventHandler(async (event) => {
   // Не логируем ключи API (чувствительные данные)
@@ -94,6 +95,7 @@ export default defineEventHandler(async (event) => {
         : undefined;
     const [prefs] = await db
       .select({
+        addressing: userPreferences.addressing,
         tone: userPreferences.tone,
         onboardingReason: userPreferences.onboardingReason,
         onboardingReasons: userPreferences.onboardingReasons,
@@ -102,6 +104,7 @@ export default defineEventHandler(async (event) => {
       .where(eq(userPreferences.userId, Number(uid)))
       .limit(1);
     const toneMeta = getAssistantToneMeta(prefs?.tone);
+    const addressing = resolveAddressing(prefs?.addressing);
     const onboardingReasons = resolveOnboardingReasons({
       reasons: prefs?.onboardingReasons,
       reason: prefs?.onboardingReason,
@@ -199,6 +202,7 @@ export default defineEventHandler(async (event) => {
     const crisisGuidance = buildCrisisGuidance({
       messages: body?.messages || [],
       userLocale: body?.user_locale,
+      addressing,
     });
     let phobiasState: PhobiasConversationState | null = null;
     let phobiasChatSettings: Awaited<
@@ -291,6 +295,7 @@ export default defineEventHandler(async (event) => {
           user_name: userName,
           user_gender: userGender,
           user_timezone: userTimezone,
+          addressing,
           toneKey: toneMeta.value,
           toneLabel: toneMeta.label,
           toneDescription: toneMeta.description,

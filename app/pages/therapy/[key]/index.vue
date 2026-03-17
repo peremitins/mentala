@@ -178,7 +178,9 @@ import type {
 } from '@/shared/dto/notifications';
 import type { ChatEntryContext } from '@/shared/dto';
 import { useEntryChat } from '@/app/composables/useEntryChat';
+import { getAddressingCopy } from '@/app/lib/addressingCopy';
 import { onClickOutside } from '@vueuse/core';
+import { useAuthStore } from '@/app/stores/auth';
 import { useTherapyTopicsStore } from '@/app/stores/therapyTopics';
 import { mapTherapyToMeditationTopic } from '@/app/lib/meditations';
 import { mapTherapyToBreathGroup } from '@/app/lib/practiceActions';
@@ -190,9 +192,11 @@ import {
 } from '@/app/composables/useEntitlements';
 import { useTherapyAnalytics } from '@/app/composables/useTherapyAnalytics';
 import { useAppNavigation } from '@/app/composables/useAppNavigation';
+import { resolveAddressing } from '@/shared/utils/addressing';
 
 const route = useRoute();
 const chat = useChatStore();
+const auth = useAuthStore();
 const { startEntryChat } = useEntryChat();
 const { navigateToTarget } = useAppNavigation();
 const loaders = useLoadersStore();
@@ -240,6 +244,7 @@ const customTherapyAccess = computed(() =>
 const paywallAccess = computed(() =>
   paywallFeatureKey.value ? getFeatureAccess(paywallFeatureKey.value) : null
 );
+const addressing = computed(() => resolveAddressing(auth.user?.addressing));
 
 const isEditingTitle = ref(false);
 const titleDraft = ref('');
@@ -256,7 +261,7 @@ const entityName = computed(() => {
 const entityDescription = computed(
   () =>
     entityData.value?.description ||
-    'Выберите фокус и получайте поддержку, когда вам нужна опора.'
+    getAddressingCopy('therapyDetailDescription', addressing.value)
 );
 const entityEmoji = computed(() => entityData.value?.emoji || '💬');
 
