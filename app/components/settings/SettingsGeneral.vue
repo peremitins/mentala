@@ -49,11 +49,13 @@ import { Button } from '@/app/components/ui/button';
 import AssistantToneGrid from '@/app/components/settings/AssistantToneGrid.vue';
 import { useNotificationsSettings } from '@/app/composables/useNotificationsSettings';
 import { useToast } from '@/app/composables/useToast';
+import { useAuthStore } from '@/app/stores/auth';
 import type { Addressing, Tone } from '@/shared/dto/notifications';
 import { DEFAULT_ASSISTANT_TONE } from '@/shared/constants/assistantTone';
 
 const { fetchGlobalPreferences, updateGlobalPreferences } =
   useNotificationsSettings();
+const auth = useAuthStore();
 
 const addressing = ref<Addressing>('informal');
 const tone = ref<Tone>(DEFAULT_ASSISTANT_TONE);
@@ -116,6 +118,9 @@ async function saveGlobalPreferences() {
   savingGlobal.value = false;
 
   if (result) {
+    if (auth.user) {
+      auth.user.addressing = addressing.value;
+    }
     toneWasUnknown.value = false;
     initialPreferences.value = {
       addressing: addressing.value,

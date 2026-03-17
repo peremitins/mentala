@@ -780,6 +780,7 @@ export const openaiProvider: LlmProviderPort = {
           {
             user_name: options?.user_name,
             user_gender: options?.user_gender,
+            addressing: options?.addressing,
             toneKey: options?.toneKey,
             toneLabel: options?.toneLabel,
             toneDescription: options?.toneDescription,
@@ -1256,6 +1257,7 @@ export const openaiProvider: LlmProviderPort = {
           alternativeOpening = pickAlternativeOpening({
             userId: numericUserId,
             timezone,
+            addressing: options?.addressing,
             sessionId: options?.sessionId,
             entryContext: options?.entryContext,
             userGender,
@@ -1275,6 +1277,7 @@ export const openaiProvider: LlmProviderPort = {
         user_locale: options?.user_locale,
         user_name: options?.user_name,
         user_gender: options?.user_gender,
+        addressing: options?.addressing,
         toneKey: options?.toneKey,
         toneLabel: options?.toneLabel,
         toneDescription: options?.toneDescription,
@@ -1491,6 +1494,7 @@ export const openaiProvider: LlmProviderPort = {
       {
         user_name: options?.user_name,
         user_gender: options?.user_gender,
+        addressing: options?.addressing,
         toneKey: options?.toneKey,
         toneLabel: options?.toneLabel,
         toneDescription: options?.toneDescription,

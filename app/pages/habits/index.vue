@@ -2,8 +2,7 @@
   <div class="h-full flex flex-col z-0">
     <NotificationIndexPage
       title="📋&nbsp;&nbsp;Привычки"
-      description="Выберите привычку, которую хотите приобрести или избавиться. <br />
-Мы поможем через разговор, практики и напоминания, которые можно настроить под себя."
+      :description="pageDescription"
       mentai-mode="habits"
       :items="habitItems"
       :loading="loadersStore.isSkeletonLoading"
@@ -20,7 +19,6 @@
       :open="createModalOpen"
       :default-intent="defaultIntent"
       header-title="Новая привычка"
-      header-subtitle="Настройте свою привычку: выберите цель, добавьте описание и сохраните"
       submit-label="Создать и настроить"
       @update:open="createModalOpen = $event"
       @created="handleHabitCreated"
@@ -46,12 +44,14 @@
 
 <script setup lang="ts">
 import { computed, ref, onMounted, nextTick } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
 import NotificationIndexPage, {
   type NotificationIndexItem,
 } from '@/app/components/notifications/NotificationIndexPage.vue';
 import { BREATH_PRACTICES } from '@/app/lib/breathPracticesCatalog';
 import { HABITS_CATALOG, type HabitCatalogItem } from '@/app/lib/habitsCatalog';
+import { useAuthStore } from '@/app/stores/auth';
 import { useUserHabitsStore } from '@/app/stores/userHabits';
 import { useLoadersStore } from '@/app/stores/loaders';
 import { useNotificationsStore } from '@/app/stores/notifications';
@@ -70,10 +70,13 @@ import {
   mapHabitToBreathGroup,
 } from '@/app/lib/practiceActions';
 import FeaturePaywallModal from '@/app/components/subscription/FeaturePaywallModal.vue';
+import { getAddressingCopy } from '@/app/lib/addressingCopy';
 import {
   extractFeaturePlanRequiredError,
   useEntitlements,
 } from '@/app/composables/useEntitlements';
+import { getLocalizedPlanName } from '@/app/utils/planI18n';
+import { resolveAddressing } from '@/shared/utils/addressing';
 
 const intentColors: Record<string, string> = {
   build: 'from-blue-500 to-cyan-500',
@@ -83,10 +86,17 @@ const intentColors: Record<string, string> = {
 
 const userHabitsStore = useUserHabitsStore();
 const chat = useChatStore();
+const auth = useAuthStore();
 const loadersStore = useLoadersStore();
 const notificationsStore = useNotificationsStore();
+const { t } = useI18n();
 const { habits: userHabits } = storeToRefs(userHabitsStore);
 const { getFeatureAccess, refreshEntitlements } = useEntitlements();
+const addressing = computed(() => resolveAddressing(auth.user?.addressing));
+const premiumPlanLabel = computed(() => getLocalizedPlanName('premium', t));
+const pageDescription = computed(() =>
+  getAddressingCopy('habitsPageDescription', addressing.value)
+);
 
 // Загружаем данные после монтирования компонента (с кэшированием)
 // Защита от двойного вызова реализована в store через isSkeletonLoading флаг
@@ -163,7 +173,9 @@ const customHabitItems = computed(() =>
         : getPlanBadgeEmoji(customHabitsAccess.value.requiredPlan),
       lockBadgeTitle: customHabitsAccess.value.available
         ? undefined
-        : 'Кастомные привычки доступны в Premium',
+        : t('PLANS.CUSTOM_HABITS_AVAILABLE', {
+            plan: premiumPlanLabel.value,
+          }),
     };
   })
 );
@@ -172,8 +184,10 @@ const createCard = computed<NotificationIndexItem>(() => ({
   id: '__create_habit',
   name: 'Создать свою привычку',
   description: customHabitsAccess.value.available
-    ? 'Настройте свои напоминания под себя: название, текст и частоту'
-    : 'Создание кастомных привычек доступно в Premium',
+    ? getAddressingCopy('habitsCreateCardDescription', addressing.value)
+    : t('PLANS.CUSTOM_HABITS_CREATE_AVAILABLE', {
+        plan: premiumPlanLabel.value,
+      }),
   emoji: '✏️',
   gradientClass: 'from-gray-500 to-gray-700',
   payload: {
@@ -185,7 +199,9 @@ const createCard = computed<NotificationIndexItem>(() => ({
     : getPlanBadgeEmoji(customHabitsAccess.value.requiredPlan),
   lockBadgeTitle: customHabitsAccess.value.available
     ? undefined
-    : 'Создание кастомных привычек доступно в Premium',
+    : t('PLANS.CUSTOM_HABITS_CREATE_AVAILABLE', {
+        plan: premiumPlanLabel.value,
+      }),
 }));
 
 const habitItems = computed(() => [

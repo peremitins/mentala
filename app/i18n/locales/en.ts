@@ -1,5 +1,32 @@
 export default {
   COMMON: {},
+  PLANS: {
+    BASIC: 'Basic',
+    PRO: 'Pro',
+    PREMIUM: 'Premium',
+    TRIAL: 'Trial period',
+    TRIAL_WITH_TIME_LEFT: 'Trial period · {timeLeft} left',
+    PRO_AND_PREMIUM: 'Pro and Premium',
+    PRO_OR_PREMIUM: 'Pro or Premium',
+    AVAILABLE_IN: 'Available in {plans}',
+    MEDITATIONS_LIBRARY_UNLOCK: 'Unlock the meditation library in {plans}',
+    GRATITUDE_DIARY_UNLOCK: 'Unlock the gratitude diary in {plans}',
+    FULL_MEDITATIONS_LIBRARY_AVAILABLE:
+      'The full meditation library is available in {plans}.',
+    FEATURE_AVAILABLE_IN: 'This feature is available in {plans}',
+    BASIC_LIMITED_ACCESS:
+      'Features are limited on the {basic} plan. Choose {plans} to unlock the extended app experience.',
+    CUSTOM_HABITS_AVAILABLE: 'Custom habits are available in {plan}',
+    CUSTOM_HABITS_CREATE_AVAILABLE:
+      'Creating custom habits is available in {plan}',
+    PERSONAL_THERAPY_AVAILABLE: 'Personal therapy is available in {plan}',
+    PERSONAL_THERAPY_CREATE_AVAILABLE:
+      'Creating personal therapy is available in {plan}',
+    ALL_FROM: 'Everything from {plan}',
+    FULL_ACCESS_TO_FEATURES: 'Full access to {plan} features',
+    SELECT_PLAN: 'Choose a plan',
+    UNLOCK_FEATURE: 'Choose the right plan to unlock this feature.',
+  },
   GRATITUDE_DIARY: {
     TITLE: 'Gratitude Diary',
     EDITOR_TITLE_CREATE: 'New entry',
@@ -10,6 +37,35 @@ export default {
     STREAK_FORMAT: '{count} days in a row',
     STREAK_SUBTITLE:
       'You have been writing gratitude notes for {count} days in a row. Keep it up.',
+    STREAK_LABEL: 'streak',
+    STREAK_ADD_TODAY_ARIA: 'Add a gratitude entry for today',
+    STREAK_START_LINE: 'Today is a good day to begin',
+    STREAK_RESTART_LINE: 'You can restart the streak',
+    STREAK_EARLY_LINE: 'A good start',
+    STREAK_ACTIVE_LINE: 'The streak is holding',
+    STREAK_LONG_LINE: 'A strong streak',
+    STREAK_DONE_LINE: 'Today is already counted',
+    STREAK_START_HEADING: 'Start your first streak',
+    STREAK_START_SUBTITLE: 'One short note today will start a new rhythm.',
+    STREAK_RESTART_HEADING: 'The streak can be restarted',
+    STREAK_RESTART_SUBTITLE:
+      'A new note today will start the count again and bring the rhythm back.',
+    STREAK_EARLY_HEADING: 'A solid start',
+    STREAK_EARLY_SUBTITLE:
+      'You already have momentum. A bit more, and the streak will feel steady.',
+    STREAK_ACTIVE_HEADING: 'The rhythm is holding',
+    STREAK_ACTIVE_SUBTITLE:
+      'The practice is becoming more natural. Keep the pace going today.',
+    STREAK_LONG_HEADING: 'Your streak has real momentum',
+    STREAK_LONG_SUBTITLE:
+      'This is no longer random. It is becoming a reliable ritual.',
+    STREAK_DONE_HEADING: 'Today is already counted in the streak',
+    STREAK_DONE_SUBTITLE:
+      'Today is marked. You can simply hold onto that feeling and move on.',
+    STREAK_TODAY_DONE: 'Today already has an entry',
+    STREAK_TODAY_CONTINUE: 'Today can extend the streak',
+    STREAK_TODAY_START: 'Today is a good day to begin',
+    STREAK_ENTRIES_TOTAL: 'Entries: {count}',
     DEFAULT_PROMPT: 'What supported you today?',
     NEW_PROMPT: 'Random',
     ADD_PROMPT: 'Add',

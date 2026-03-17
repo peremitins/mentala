@@ -89,7 +89,12 @@
           <div class="space-y-1">
             <h2 class="text-lg font-semibold text-foreground">Медитации</h2>
             <p class="text-sm text-foreground/80">
-              Открой библиотеку медитаций в PRO и Premium
+              {{
+                getLockedFeatureLabel(
+                  'meditations',
+                  meditationsAccess.requiredPlan
+                )
+              }}
             </p>
           </div>
         </div>
@@ -186,7 +191,12 @@
               Дневник благодарности
             </h2>
             <p class="text-sm text-foreground/80">
-              Открой дневник благодарности в PRO и Premium
+              {{
+                getLockedFeatureLabel(
+                  'gratitude',
+                  gratitudeDiaryAccess.requiredPlan
+                )
+              }}
             </p>
           </div>
         </div>
@@ -204,12 +214,15 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import IconHeartPulse from '~icons/lucide/heart-pulse';
 import PageHeader from '@/app/components/PageHeader.vue';
 import FeaturePaywallModal from '@/app/components/subscription/FeaturePaywallModal.vue';
 import { useEntitlements } from '@/app/composables/useEntitlements';
+import { getLocalizedRequiredPlanLabel } from '@/app/utils/planI18n';
 
 const { getFeatureAccess } = useEntitlements();
+const { t } = useI18n();
 
 const paywallOpen = ref(false);
 const paywallFeatureKey = ref<string | null>(null);
@@ -231,6 +244,17 @@ function openPaywall(featureKey: string) {
 
 function getPlanBadgeEmoji(plan: string) {
   return plan === 'premium' ? '💎' : '⭐';
+}
+
+function getLockedFeatureLabel(
+  type: 'meditations' | 'gratitude',
+  plan: string
+) {
+  const plans = getLocalizedRequiredPlanLabel(plan, t);
+
+  return type === 'meditations'
+    ? t('PLANS.MEDITATIONS_LIBRARY_UNLOCK', { plans })
+    : t('PLANS.GRATITUDE_DIARY_UNLOCK', { plans });
 }
 </script>
 

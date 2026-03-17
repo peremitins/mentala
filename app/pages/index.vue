@@ -143,7 +143,7 @@
                 :resize="true"
                 :prevent-enter-default="true"
                 @enter-pressed="handleKeydown"
-                :placeholder="'Напишите сообщение…'"
+                :placeholder="chatInputPlaceholder"
                 :class="
                   isUserTextOverLimit
                     ? 'ring-2 ring-red-500/60 !border-red-500/70 transition-colors duration-200'
@@ -212,13 +212,14 @@
     >
       <DialogContent
         class="glass-deep border border-border bg-card backdrop-blur-xl text-card-foreground"
+        @interact-outside="handleDislikeDialogInteractOutside"
       >
         <DialogHeader>
           <DialogTitle class="text-lg font-semibold">
             Что не так с ответом?
           </DialogTitle>
           <DialogDescription class="text-sm text-muted-foreground">
-            Выбери причину и при необходимости добавь комментарий.
+            {{ feedbackReasonDescription }}
           </DialogDescription>
         </DialogHeader>
 
@@ -227,11 +228,14 @@
             <label class="text-sm font-medium text-foreground">
               Причина (опционально)
             </label>
-            <Select v-model="dislikeTopicCode">
+            <Select
+              v-model="dislikeTopicCode"
+              v-model:open="isDislikeTopicSelectOpen"
+            >
               <SelectTrigger
                 class="w-full glass-deep border-white/20 data-[placeholder]:text-foreground/70 focus:ring-0"
               >
-                <SelectValue placeholder="Выберите причину (необязательно)" />
+                <SelectValue :placeholder="feedbackReasonPlaceholder" />
               </SelectTrigger>
               <SelectContent
                 :body-lock="false"
@@ -264,7 +268,7 @@
               :min-height="'96px'"
               :max-height="'220px'"
               :maxlength="FEEDBACK_COMMENT_MAX_LENGTH"
-              placeholder="Опиши, что было не так (необязательно)"
+              :placeholder="feedbackCommentPlaceholder"
             />
           </div>
 
@@ -308,6 +312,7 @@ import { useChatStore, type ChatMessageFeedbackState } from '@/app/stores/chat';
 import { useSpeechStore } from '@/app/stores/speech';
 import { useChatSettingsStore } from '@/app/stores/chatSettings';
 import { useSubscriptionStore } from '@/app/stores/subscription';
+import { useAuthStore } from '@/app/stores/auth';
 import { useToast } from '@/app/composables/useToast';
 import { CHAT_STREAM_MODE } from '@/app/constants/chat';
 import TextareaResize from '@/app/components/ui/TextareaResize.vue';
@@ -343,15 +348,19 @@ import {
   type SuggestedChip,
   type ChatFeedbackTopicCode,
 } from '@/shared/dto';
+import { getAddressingCopy } from '@/app/lib/addressingCopy';
 import { useAppNavigation } from '@/app/composables/useAppNavigation';
 import { useEntitlements } from '@/app/composables/useEntitlements';
 import { useNuxtApp, useRuntimeConfig } from '#imports';
+import { resolveAddressing } from '@/shared/utils/addressing';
 
 const emit = defineEmits<{ (e: 'send', text: string): void }>();
 
 const route = useRoute();
 const router = useRouter();
 const { navigateToTarget } = useAppNavigation();
+const auth = useAuthStore();
+const addressing = computed(() => resolveAddressing(auth.user?.addressing));
 const chatViewportStyle = computed(() => {
   const bottomOffset = '95px';
 
@@ -399,6 +408,21 @@ const chatAssistantAccess = computed(() => getFeatureAccess('chat.assistant'));
 const paywallAccess = computed(() =>
   paywallFeatureKey.value ? getFeatureAccess(paywallFeatureKey.value) : null
 );
+const chatInputPlaceholder = computed(() =>
+  getAddressingCopy('chatInputPlaceholder', addressing.value)
+);
+const feedbackReasonDescription = computed(() =>
+  getAddressingCopy('chatFeedbackReasonDescription', addressing.value)
+);
+const feedbackReasonPlaceholder = computed(() =>
+  getAddressingCopy('chatFeedbackReasonPlaceholder', addressing.value)
+);
+const feedbackCommentPlaceholder = computed(() =>
+  getAddressingCopy('chatFeedbackCommentPlaceholder', addressing.value)
+);
+const chatRetryHint = computed(() =>
+  getAddressingCopy('chatRetryHint', addressing.value)
+);
 
 // Ограничение длины пользовательского ввода для защиты бюджета.
 const MAX_USER_TEXT_LENGTH = 2500;
@@ -422,6 +446,7 @@ const FEEDBACK_TOPIC_OPTIONS: Array<{
 ];
 
 const isDislikeDialogOpen = ref(false);
+const isDislikeTopicSelectOpen = ref(false);
 const dislikeTargetMessageId = ref<string | null>(null);
 const dislikeTopicCode = ref<ChatFeedbackTopicCode>('OTHER');
 const dislikeComment = ref('');
@@ -789,11 +814,7 @@ async function submitFeedback(params: {
 }): Promise<boolean> {
   const therapySessionId = getMessageTherapySessionId(params.messageId);
   if (!therapySessionId) {
-    useToast(
-      'Сессия завершена',
-      'Начни новый диалог и попробуй снова',
-      'warning'
-    );
+    useToast('Сессия завершена', chatRetryHint.value, 'warning');
     return false;
   }
 
@@ -880,16 +901,26 @@ function handleDislikeClick(messageId: string) {
 
 function closeDislikeDialog() {
   isDislikeDialogOpen.value = false;
+  isDislikeTopicSelectOpen.value = false;
   dislikeTargetMessageId.value = null;
   dislikeTopicCode.value = 'OTHER';
   dislikeComment.value = '';
 }
 
+function handleDislikeDialogInteractOutside(event: Event) {
+  // Если dropdown причины открыт, первый клик снаружи должен закрыть только его.
+  if (isDislikeTopicSelectOpen.value) {
+    event.preventDefault();
+  }
+}
+
 function handleDislikeDialogOpenChange(open: boolean) {
-  isDislikeDialogOpen.value = open;
   if (!open) {
     closeDislikeDialog();
+    return;
   }
+
+  isDislikeDialogOpen.value = true;
 }
 
 async function submitDislikeFeedback() {
