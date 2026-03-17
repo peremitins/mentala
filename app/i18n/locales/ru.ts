@@ -10,6 +10,35 @@ export default {
     STREAK_FORMAT: '{count} дней подряд',
     STREAK_SUBTITLE:
       'Вы записываете благодарности уже {count} дней подряд. Продолжайте.',
+    STREAK_LABEL: 'серия',
+    STREAK_ADD_TODAY_ARIA: 'Добавить запись благодарности за сегодня',
+    STREAK_START_LINE: 'Сегодня можно начать',
+    STREAK_RESTART_LINE: 'Серию можно вернуть',
+    STREAK_EARLY_LINE: 'Хорошее начало',
+    STREAK_ACTIVE_LINE: 'Серия держится',
+    STREAK_LONG_LINE: 'Сильная серия',
+    STREAK_DONE_LINE: 'Сегодня уже засчитано',
+    STREAK_START_HEADING: 'Начни первую серию',
+    STREAK_START_SUBTITLE: 'Одна короткая запись сегодня запустит новый ритм.',
+    STREAK_RESTART_HEADING: 'Серию можно перезапустить',
+    STREAK_RESTART_SUBTITLE:
+      'Новая запись сегодня начнёт отсчёт заново и вернёт ритм.',
+    STREAK_EARLY_HEADING: 'Хороший старт',
+    STREAK_EARLY_SUBTITLE:
+      'Ты уже начал ритм. Ещё немного, и серия станет устойчивой.',
+    STREAK_ACTIVE_HEADING: 'Ритм уже держится',
+    STREAK_ACTIVE_SUBTITLE:
+      'Практика становится привычнее. Сохрани этот темп сегодня.',
+    STREAK_LONG_HEADING: 'Серия набрала силу',
+    STREAK_LONG_SUBTITLE:
+      'Это уже не случайность, а твой устойчивый ритуал. Продолжай в том же духе.',
+    STREAK_DONE_HEADING: 'Сегодняшняя запись уже в серии',
+    STREAK_DONE_SUBTITLE:
+      'День уже отмечен. Можно просто зафиксировать это ощущение и идти дальше.',
+    STREAK_TODAY_DONE: 'Сегодня уже есть запись',
+    STREAK_TODAY_CONTINUE: 'Сегодня можно продолжить серию',
+    STREAK_TODAY_START: 'Сегодня хороший день для старта',
+    STREAK_ENTRIES_TOTAL: 'Записей: {count}',
     DEFAULT_PROMPT: 'Что сегодня поддержало тебя?',
     NEW_PROMPT: 'Случайный',
     ADD_PROMPT: 'Добавить',

@@ -488,17 +488,16 @@
       </section>
 
       <!-- Карточка сохранения -->
-      <section class="glass-deep p-3">
-        <button
-          type="button"
-          class="relative rounded-lg px-4 py-3 text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 w-full"
-          :disabled="isSaveDisabled"
-          @click="saveSettings"
-        >
-          <ButtonLoader v-if="loading" />
-          <span :class="loading ? 'invisible' : ''">Сохранить</span>
-        </button>
-      </section>
+      <Button
+        type="button"
+        class="relative w-full"
+        size="lg"
+        :disabled="isSaveDisabled"
+        @click="saveSettings"
+      >
+        <ButtonLoader v-if="loading" />
+        <span :class="loading ? 'invisible' : ''">Сохранить</span>
+      </Button>
 
       <FeaturePaywallModal
         v-model:open="paywallOpen"
@@ -537,6 +536,7 @@ import {
 } from '@/app/constants/select-options';
 import ToggleGroup from '@/app/components/ui/toggle-group/ToggleGroup.vue';
 import ToggleGroupItem from '@/app/components/ui/toggle-group/ToggleGroupItem.vue';
+import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/shadcn/input';
 import InputComponent from '@/app/components/ui/shadcn/input/Input.vue';
 import TextareaResize from '@/app/components/ui/TextareaResize.vue';

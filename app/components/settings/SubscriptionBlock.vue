@@ -106,26 +106,28 @@
         </p>
       </div>
 
-      <button
+      <Button
         type="button"
+        variant="outline"
+        class="w-fit border-white/20 bg-white/5 text-foreground hover:border-white/35 hover:bg-white/10 hover:text-foreground"
         :disabled="openingExternalFlow"
-        class="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 transition-opacity"
         @click="handleManageSubscription"
       >
         {{ actionButtonLabel }}
-      </button>
+      </Button>
     </div>
 
     <div v-else class="space-y-2">
       <p class="text-sm text-foreground">Текущий план: нет активной подписки</p>
-      <button
+      <Button
         type="button"
+        variant="outline"
+        class="w-fit border-white/20 bg-white/5 text-foreground hover:border-white/35 hover:bg-white/10 hover:text-foreground"
         :disabled="openingExternalFlow"
-        class="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 transition-opacity"
         @click="handleManageSubscription"
       >
         {{ actionButtonLabel }}
-      </button>
+      </Button>
     </div>
   </div>
 </template>
@@ -135,6 +137,7 @@ import { Capacitor } from '@capacitor/core';
 import { useNow } from '@vueuse/core';
 import { computed, onMounted, ref } from 'vue';
 import { useAPI } from '@/app/composables/useAPI';
+import { Button } from '@/app/components/ui/button';
 import { useExternalFlowAppUrl } from '@/app/composables/useExternalFlowAppUrl';
 import { usePlatform } from '@/app/composables/usePlatform';
 import { useSubscriptionStore } from '@/app/stores/subscription';

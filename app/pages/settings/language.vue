@@ -18,16 +18,14 @@
         </p>
       </div>
 
-      <section class="glass-deep p-3">
-        <Button
-          class="relative w-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-          :disabled="!canSave"
-          @click="saveLocale"
-        >
-          <ButtonLoader v-if="saving" />
-          <span :class="saving ? 'invisible' : ''">Сохранить</span>
-        </Button>
-      </section>
+      <Button
+        class="relative w-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+        :disabled="!canSave"
+        @click="saveLocale"
+      >
+        <ButtonLoader v-if="saving" />
+        <span :class="saving ? 'invisible' : ''">Сохранить</span>
+      </Button>
     </section>
   </div>
 </template>

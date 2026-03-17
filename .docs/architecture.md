@@ -15,6 +15,7 @@
 • iOS bundle id:`com.mentala.app`(prod) и`com.mentala.app.dev`(dev), отдельные схемы в Xcode.
 • Android backup отключён на уровне`AndroidManifest.xml` (`android:allowBackup="false"`). Причина: приложение хранит чувствительные локальные сессионные/permission-флаги в `SharedPreferences` (`@capacitor/preferences`, файл `CapacitorStorage`), и их автоматическое восстановление после переустановки ломает ожидаемый сценарий “чистого первого запуска”, включая повторный системный prompt для push-разрешений.
 • Разрешение на push больше не запрашивается автоматически при `app:mounted`. Клиент после старта только тихо синхронизирует already-`granted`/`denied`состояние, а системный prompt вызывается исключительно по явному действию пользователя при включении уведомлений: глобальный тумблер в`app/pages/settings/index.vue` и entity-level тумблеры на detail/settings страницах привычек и терапии. Выключение entity-level уведомлений не должно отключать app-level push; полное отключение токена/`pushNotificationsEnabled`допустимо только из общих настроек приложения.
+• В `app/components/settings/SubscriptionBlock.vue` CTA `Управление подпиской` в settings-блоке использует светлый outline-стиль (`Button variant="outline"` + белый border), а не primary-fill, чтобы вторичное действие не спорило с основными CTA экрана.
 • Совместимость CocoaPods/Xcode: в`ios/App/App.xcodeproj/project.pbxproj`должен быть`objectVersion = 77`(не`70`), иначе `pod install`падает на CocoaPods 1.16.2 с ошибкой`[Xcodeproj] Unable to find compatibility version string for object version 70`; скрипт `scripts/setup-capacitor-dev.sh`автоматически нормализует`70 -> 77`перед`cap sync`.
 • Sync-конвейер Capacitor централизован через скрипты: `pnpm cap:sync:device|emulator`включает`CAPACITOR_SERVER_URL`для dev,`pnpm cap:sync:prod`принудительно очищает`server.url` в runtime-конфигах Android/iOS (`scripts/fix-capacitor-config.js`) и валидирует prod-safe состояние (`scripts/verify-capacitor-config.js`), чтобы в релиз не попал локальный LAN-IP.
 • iOS Audio Session: в `ios/App/App/AppDelegate.swift`принудительно активируется`AVAudioSession`с категорией`.playback`(при launch и`applicationDidBecomeActive`) для стабильного звучания WebAudio loop-треков на реальных iPhone, включая сценарий с hardware silent switch.
@@ -802,6 +803,13 @@ server/
 - timezone берётся из `X-Timezone`, который уже отправляет общий API-плагин,
 - `createdAt` записи перестраивается из выбранного `entryDate` + локального времени пользователя, поэтому редактирование даты не ломает часы/минуты карточки,
 - группировка истории и расчёт streak в `GET /api/gratitude-diary` теперь тоже считаются по локальному дню пользователя, а не по сырому UTC-срезу.
+  • Summary-card streak на `app/pages/practices/gratitude-diary/index.vue`
+  использует компактный счётчик серии, 7-дневный трекер и только одну
+  короткую статусную строку; декоративная иконка и нижний статусный chip
+  убраны, а zero-copy вида `0 дней подряд` не показывается. Подсветка дней
+  по-прежнему строится от серверного `streak`, чтобы фронт не расходился с
+  backend-правилами. Ячейка `today` с иконкой `+` интерактивна и ведёт в
+  `editor` тем же действием, что и нижняя primary-кнопка `Добавить запись`.
   • В модалке каталога промптов (`editor.vue`) используется горизонтальная лента тем с переключением свайпом влево/вправо; активная тема отображается как одиночный список промптов.
   • Вкладка `Избранное` в каталоге промптов объединяет:
 - сохранённые промпты из системных категорий (добавление/удаление по сердечку),
