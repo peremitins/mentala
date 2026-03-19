@@ -71,7 +71,7 @@ export function getTelegramAlertsConfig(): TelegramAlertsConfig {
     envLabel: detectEnvLabel(runtimeConfig.TELEGRAM_ALERTS_ENV_LABEL),
     apiTimeoutMs: Math.max(
       1000,
-      normalizeNumber(runtimeConfig.TELEGRAM_API_TIMEOUT_MS, 5000)
+      normalizeNumber(runtimeConfig.TELEGRAM_API_TIMEOUT_MS, 15000)
     ),
     http5xxSpikeThreshold: Math.max(
       1,

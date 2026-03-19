@@ -4,7 +4,10 @@ import { getSessionUserWithRole } from '@/server/utils/require-role';
 import { responseIdStore } from '@/server/utils/responseIdStore';
 import { readChatSettings, writeChatSettings } from '@/server/utils/storage';
 import { db } from '@/server/infrastructure/db/client';
-import { therapySessions } from '@/server/infrastructure/db/schema';
+import {
+  therapySessions,
+  userPreferences,
+} from '@/server/infrastructure/db/schema';
 import { and, eq, isNull } from 'drizzle-orm';
 import {
   getAiUsageGate,
@@ -13,6 +16,7 @@ import {
 import { CHAT_IDLE_TIMEOUT_MS } from '@/server/config/subscription';
 import { endTherapySession } from '@/server/application/subscriptions/session-time.service';
 import type { ChatEntryContext, SuggestedChip } from '@/shared/dto';
+import { resolveOnboardingReasons } from '@/shared/dto/onboarding';
 import { generateSuggestedChips } from '@/server/application/suggested-chips.service';
 import {
   estimateChatRequestUpperBoundUSD,
@@ -31,6 +35,8 @@ import {
   type PhobiasConversationState,
 } from '@/server/application/chat/phobias-entry.service';
 import { trackPhobiasEvent } from '@/server/application/chat/phobias-analytics.service';
+import { getAssistantToneMeta } from '@/shared/constants/assistantTone';
+import { resolveAddressing } from '@/shared/utils/addressing';
 
 export default defineEventHandler(async (event) => {
   // Не логируем ключи API (чувствительные данные)
@@ -87,6 +93,22 @@ export default defineEventHandler(async (event) => {
       typeof (sessionResult as any)?.timezone === 'string'
         ? String((sessionResult as any).timezone)
         : undefined;
+    const [prefs] = await db
+      .select({
+        addressing: userPreferences.addressing,
+        tone: userPreferences.tone,
+        onboardingReason: userPreferences.onboardingReason,
+        onboardingReasons: userPreferences.onboardingReasons,
+      })
+      .from(userPreferences)
+      .where(eq(userPreferences.userId, Number(uid)))
+      .limit(1);
+    const toneMeta = getAssistantToneMeta(prefs?.tone);
+    const addressing = resolveAddressing(prefs?.addressing);
+    const onboardingReasons = resolveOnboardingReasons({
+      reasons: prefs?.onboardingReasons,
+      reason: prefs?.onboardingReason,
+    });
 
     // Требуем валидный therapySessionId, чтобы нельзя было обойти биллинг прямыми вызовами /api/chat/stream
     const therapySessionId =
@@ -180,6 +202,7 @@ export default defineEventHandler(async (event) => {
     const crisisGuidance = buildCrisisGuidance({
       messages: body?.messages || [],
       userLocale: body?.user_locale,
+      addressing,
     });
     let phobiasState: PhobiasConversationState | null = null;
     let phobiasChatSettings: Awaited<
@@ -272,6 +295,11 @@ export default defineEventHandler(async (event) => {
           user_name: userName,
           user_gender: userGender,
           user_timezone: userTimezone,
+          addressing,
+          toneKey: toneMeta.value,
+          toneLabel: toneMeta.label,
+          toneDescription: toneMeta.description,
+          onboardingReasons,
           userId: uid,
           isFirstSession: serverIsFirst,
           userPrompt: effectiveUserPrompt,
@@ -298,6 +326,7 @@ export default defineEventHandler(async (event) => {
             userId: uid,
             therapySessionId,
             entryContext: body?.entryContext,
+            onboardingReasons,
           });
         }
       }
@@ -315,6 +344,7 @@ export default defineEventHandler(async (event) => {
                 userId: uid,
                 therapySessionId,
                 entryContext: body?.entryContext,
+                onboardingReasons,
               });
 
           const phobiasFocusUpdate = resolveLastTherapyFocusUpdate({

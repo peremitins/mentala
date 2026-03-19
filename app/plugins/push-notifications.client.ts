@@ -7,6 +7,14 @@ import type {
   InteractionAction,
   NotificationNavigation,
 } from '@/shared/dto/notifications';
+import {
+  buildAppNavigationPath,
+  parseAppNavigationTarget,
+  resolveTargetFromLegacyNotificationNavigation,
+  resolveTargetFromLegacySuggestedChipAction,
+  type AppNavigationTarget,
+} from '@/shared/navigation';
+import { useAppNavigation } from '@/app/composables/useAppNavigation';
 import { useAuthStore } from '@/app/stores/auth';
 import { useMeditationPlayer } from '@/app/composables/useMeditationPlayer';
 
@@ -31,6 +39,7 @@ export default defineNuxtPlugin({
     const canUsePreferences = Capacitor.isPluginAvailable('Preferences');
     const auth = useAuthStore();
     const meditationPlayer = useMeditationPlayer();
+    const { navigateToTarget: executeAppNavigation } = useAppNavigation();
     const isIos = platform === 'ios';
     const isAndroid = platform === 'android';
     const PUSH_TOKEN_STORAGE_KEY = 'pushToken';
@@ -78,6 +87,7 @@ export default defineNuxtPlugin({
     // Сохраняем отложенную навигацию, чтобы не потерять тап на холодном старте.
     type PendingNavigation = {
       targetPath: string;
+      target?: AppNavigationTarget | null;
       messageId?: string | null;
       createdAt: number;
     };
@@ -194,6 +204,79 @@ export default defineNuxtPlugin({
       return null;
     }
 
+    function resolveNavigationTarget(
+      payload?: Record<string, any>
+    ): AppNavigationTarget | null {
+      if (!payload) return null;
+
+      if (
+        typeof payload.navigationTarget === 'string' &&
+        payload.navigationTarget.trim()
+      ) {
+        try {
+          const parsed = JSON.parse(payload.navigationTarget) as unknown;
+          const normalized = parseAppNavigationTarget(parsed);
+          if (normalized) return normalized;
+        } catch {
+          // Ошибки парсинга не блокируют legacy fallback.
+        }
+      }
+
+      if (
+        payload.navigationTarget &&
+        typeof payload.navigationTarget === 'object'
+      ) {
+        const normalized = parseAppNavigationTarget(payload.navigationTarget);
+        if (normalized) return normalized;
+      }
+
+      const navigation = resolveNavigation(payload);
+      if (navigation) {
+        return resolveTargetFromLegacyNotificationNavigation(navigation);
+      }
+
+      const actionParams =
+        payload.actionParams && typeof payload.actionParams === 'object'
+          ? payload.actionParams
+          : payload;
+
+      return resolveTargetFromLegacySuggestedChipAction({
+        action: typeof payload.action === 'string' ? payload.action : undefined,
+        params: {
+          trackId:
+            typeof actionParams.trackId === 'string'
+              ? actionParams.trackId
+              : undefined,
+          collectionId:
+            typeof actionParams.collectionId === 'string'
+              ? actionParams.collectionId
+              : undefined,
+          practiceId:
+            typeof actionParams.practiceId === 'string'
+              ? actionParams.practiceId
+              : typeof actionParams.slug === 'string'
+                ? actionParams.slug
+                : undefined,
+          groupKey:
+            typeof actionParams.groupKey === 'string'
+              ? actionParams.groupKey
+              : undefined,
+          sosEntry:
+            typeof actionParams.sosEntry === 'string'
+              ? actionParams.sosEntry
+              : undefined,
+          topicKey:
+            typeof actionParams.topicKey === 'string'
+              ? actionParams.topicKey
+              : undefined,
+          habitKey:
+            typeof actionParams.habitKey === 'string'
+              ? actionParams.habitKey
+              : undefined,
+        },
+      });
+    }
+
     // Fallback по action-коду, если deepLink или navigation отсутствуют.
     function resolveActionTargetPath(
       payload?: Record<string, any>
@@ -246,6 +329,43 @@ export default defineNuxtPlugin({
         return '/';
       }
 
+      if (action === 'open_gratitude_diary') {
+        return '/practices/gratitude-diary';
+      }
+
+      if (action === 'open_therapy') {
+        return '/therapy';
+      }
+
+      if (action === 'open_therapy_topic') {
+        const topicKey =
+          readString(payload.topicKey) ||
+          readString(payload.actionParams?.topicKey);
+        return topicKey
+          ? `/therapy/${encodeURIComponent(topicKey)}`
+          : '/therapy';
+      }
+
+      if (action === 'open_habits') {
+        return '/habits';
+      }
+
+      if (action === 'open_habit') {
+        const habitKey =
+          readString(payload.habitKey) ||
+          readString(payload.actionParams?.habitKey);
+        return habitKey ? `/habits/${encodeURIComponent(habitKey)}` : '/habits';
+      }
+
+      if (action === 'open_sos') {
+        const entry =
+          readString(payload.sosEntry) ||
+          readString(payload.actionParams?.sosEntry);
+        return entry
+          ? `/quick-help?entry=${encodeURIComponent(entry)}`
+          : '/quick-help';
+      }
+
       return null;
     }
 
@@ -260,6 +380,7 @@ export default defineNuxtPlugin({
           payload?.id ??
           null,
         deepLink: payload?.deepLink ?? null,
+        navigationTarget: payload?.navigationTarget ?? null,
         action: payload?.action ?? null,
         navType: payload?.navType ?? null,
         navId: payload?.navId ?? null,
@@ -446,6 +567,7 @@ export default defineNuxtPlugin({
         return;
       }
 
+      const navigationTarget = resolveNavigationTarget(payload);
       const navigation = resolveNavigation(payload);
       const deepLink =
         typeof payload.deepLink === 'string' && payload.deepLink.trim()
@@ -453,6 +575,7 @@ export default defineNuxtPlugin({
           : null;
       const actionPath = resolveActionTargetPath(payload);
       const targetPath =
+        (navigationTarget ? buildAppNavigationPath(navigationTarget) : null) ||
         deepLink ||
         actionPath ||
         (navigation ? buildPathFromNavigation(navigation) : null);
@@ -469,7 +592,7 @@ export default defineNuxtPlugin({
           error
         );
       }
-      await enqueueNavigation(targetPath, messageId);
+      await enqueueNavigation(targetPath, messageId, navigationTarget);
       await flushPendingNavigation();
     }
 
@@ -546,10 +669,12 @@ export default defineNuxtPlugin({
 
     async function enqueueNavigation(
       targetPath: string,
-      messageId?: string | null
+      messageId?: string | null,
+      target?: AppNavigationTarget | null
     ): Promise<void> {
       const nextValue: PendingNavigation = {
         targetPath,
+        target: target ?? null,
         messageId,
         createdAt: Date.now(),
       };
@@ -560,6 +685,7 @@ export default defineNuxtPlugin({
 
     async function navigateToTarget(
       targetPath: string,
+      target?: AppNavigationTarget | null,
       messageId?: string | null
     ): Promise<boolean> {
       try {
@@ -569,6 +695,31 @@ export default defineNuxtPlugin({
         }
         await ensureAuthReady();
         await nuxtApp.$router.isReady();
+
+        if (target) {
+          const result = await executeAppNavigation(
+            {
+              target,
+              source: 'push',
+              entryPoint: 'push_notification_tap',
+              sourceMeta: {
+                messageId: messageId ?? null,
+              },
+            },
+            {
+              replace: false,
+            }
+          );
+          if (result.status === 'opened' || result.status === 'paywall') {
+            lastNavigation = {
+              path: normalized,
+              messageId,
+              at: Date.now(),
+            };
+            return true;
+          }
+          return false;
+        }
 
         const expected = nuxtApp.$router.resolve(normalized);
         const expectedFullPath = expected.fullPath;
@@ -623,6 +774,7 @@ export default defineNuxtPlugin({
         }
         const success = await navigateToTarget(
           pending.targetPath,
+          pending.target,
           pending.messageId
         );
         if (success) {
@@ -748,12 +900,14 @@ export default defineNuxtPlugin({
         console.error('[PushPlugin] Registration error:', err);
       });
 
-      // Push получен (приложение на переднем плане)
+      // Push получен в активном приложении.
+      // На Android системное уведомление уже построено нативным сервисом,
+      // здесь оставляем только клиентскую реакцию (логика/UI/аналитика).
       PushNotifications.addListener(
         'pushNotificationReceived',
         (notification) => {
           console.log('[PushPlugin] Notification received:', notification);
-          // Здесь можно показать локальное уведомление или обновить UI
+          // При необходимости здесь можно обновить UI без локального дубля.
         }
       );
 
@@ -852,12 +1006,16 @@ export default defineNuxtPlugin({
               );
             }
 
+            const navigationTarget = resolveNavigationTarget(payload);
             const deepLink =
               typeof payload?.deepLink === 'string' && payload.deepLink.trim()
                 ? payload.deepLink.trim()
                 : null;
             const actionPath = resolveActionTargetPath(payload);
             const targetPath =
+              (navigationTarget
+                ? buildAppNavigationPath(navigationTarget)
+                : null) ||
               deepLink ||
               actionPath ||
               (navigation ? buildPathFromNavigation(navigation) : '/');
@@ -866,7 +1024,7 @@ export default defineNuxtPlugin({
               void logMissingNavigation(payload);
             }
 
-            await enqueueNavigation(targetPath, messageId);
+            await enqueueNavigation(targetPath, messageId, navigationTarget);
             await flushPendingNavigation();
           }
         }
@@ -875,7 +1033,6 @@ export default defineNuxtPlugin({
       console.error('[PushPlugin] Failed to add push listeners:', error);
     }
 
-    const PERMISSION_REQUESTED_KEY = 'mentai.push.permissionRequestedOnce';
     const DENIED_PENDING_SYNC_KEY = 'mentai.push.deniedPendingSync';
 
     async function patchPushEnabled(value: boolean): Promise<boolean> {
@@ -915,9 +1072,9 @@ export default defineNuxtPlugin({
       }
     }
 
-    // Отложенная инициализация уведомлений после полной загрузки приложения.
-    // Запрос показывается только при первом запуске (prompt + флаг не установлен).
-    // На части Android checkPermissions возвращает prompt каждый раз — флаг защищает от повторных запросов.
+    // После старта приложения не показываем системный prompt автоматически.
+    // Разрешение запрашивается только по явному действию пользователя из UI.
+    // Здесь делаем только тихую синхронизацию denied/granted состояния.
     const initNotifications = async () => {
       try {
         console.log('[PushPlugin] Starting notification initialization');
@@ -926,7 +1083,6 @@ export default defineNuxtPlugin({
         const permStatus = await PushNotifications.checkPermissions();
 
         if (permStatus.receive === 'denied') {
-          await writeStoredValue(PERMISSION_REQUESTED_KEY, '1');
           await writeStoredValue(DENIED_PENDING_SYNC_KEY, '1');
           const ok = await patchPushEnabled(false);
           if (!ok) {
@@ -938,46 +1094,7 @@ export default defineNuxtPlugin({
           return;
         }
 
-        if (permStatus.receive === 'prompt') {
-          const alreadyRequested = await readStoredValue(
-            PERMISSION_REQUESTED_KEY
-          );
-          if (alreadyRequested === '1') {
-            return;
-          }
-          await writeStoredValue(PERMISSION_REQUESTED_KEY, '1');
-          const result = await PushNotifications.requestPermissions();
-          if (result.receive === 'denied') {
-            await writeStoredValue(DENIED_PENDING_SYNC_KEY, '1');
-            const ok = await patchPushEnabled(false);
-            if (!ok) {
-              setTimeout(() => void trySyncDeniedToServer(), 2000);
-              setTimeout(() => void trySyncDeniedToServer(), 5000);
-            } else {
-              await writeStoredValue(DENIED_PENDING_SYNC_KEY, null);
-            }
-            return;
-          }
-          // Пользователь разрешил — PATCH true, затем register
-          const sessionToken =
-            typeof window !== 'undefined'
-              ? localStorage.getItem('mentai.session.token')
-              : null;
-          if (sessionToken) {
-            try {
-              await nuxtApp.$api('/api/user/me', {
-                method: 'PATCH',
-                body: { pushNotificationsEnabled: true },
-              });
-              if (auth.user) auth.user.pushNotificationsEnabled = true;
-            } catch (e) {
-              console.warn(
-                '[PushPlugin] Не удалось синхронизировать pushNotificationsEnabled=true:',
-                e
-              );
-            }
-          }
-        } else if (permStatus.receive !== 'granted') {
+        if (permStatus.receive !== 'granted') {
           return;
         }
 

@@ -18,6 +18,7 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { sql, type SQL } from 'drizzle-orm';
+import { DEFAULT_ASSISTANT_VOICE_ID } from '../../../shared/constants/assistantVoiceCatalog';
 
 // Roles table (must be defined before users references it)
 export const roles = pgTable('roles', {
@@ -625,7 +626,14 @@ export const userPreferences = pgTable('user_preferences', {
   addressing: varchar('addressing', { length: 20 })
     .notNull()
     .default('informal'), // 'informal' | 'formal'
-  tone: varchar('tone', { length: 20 }).notNull().default('neutral'), // 'delicate' | 'neutral' | 'uplifting' | 'resolute' | 'demanding'
+  tone: varchar('tone', { length: 20 }).notNull().default('balanced'), // 'gentle' | 'balanced' | 'uplifting' | 'direct' | 'unknown'
+  // Legacy single-select колонка. Держим до полного rollout массива причин.
+  onboardingReason: varchar('onboarding_reason', { length: 40 }),
+  // Контекст welcome-онбординга для персонализации рекомендаций и общения.
+  onboardingReasons: text('onboarding_reasons')
+    .array()
+    .notNull()
+    .default(sql`ARRAY[]::text[]`),
   meditationTimerMinutes: integer('meditation_timer_minutes'),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
@@ -639,6 +647,9 @@ export const userPreferences = pgTable('user_preferences', {
 export const chatSettings = pgTable('chat_settings', {
   userId: integer('user_id').primaryKey().notNull(),
   voice: boolean('voice').notNull().default(true),
+  assistantVoice: varchar('assistant_voice', { length: 80 })
+    .notNull()
+    .default(DEFAULT_ASSISTANT_VOICE_ID),
   avatar: boolean('avatar').notNull().default(true),
   enablePreviousResponseId: boolean('enable_previous_response_id')
     .notNull()
@@ -1115,6 +1126,92 @@ export const therapySessions = pgTable(
     userStartedIdx: index('idx_therapy_sessions_user_started').on(
       table.userId,
       table.startedAt
+    ),
+  })
+);
+
+export const realtimeVoiceSessions = pgTable(
+  'realtime_voice_sessions',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    therapySessionId: integer('therapy_session_id')
+      .notNull()
+      .references(() => therapySessions.id, { onDelete: 'cascade' }),
+    chatSessionId: varchar('chat_session_id', { length: 120 }),
+    status: varchar('status', { length: 20 }).notNull().default('created'),
+    endReason: varchar('end_reason', { length: 40 }),
+    provider: varchar('provider', { length: 40 }).notNull().default('openai'),
+    providerModel: varchar('provider_model', { length: 120 }).notNull(),
+    providerVoice: varchar('provider_voice', { length: 80 }).notNull(),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
+    lastActivityAt: timestamp('last_activity_at', { withTimezone: true }),
+    endedAt: timestamp('ended_at', { withTimezone: true }),
+    durationSeconds: integer('duration_seconds').default(0).notNull(),
+    userTurnsCount: integer('user_turns_count').default(0).notNull(),
+    assistantTurnsCount: integer('assistant_turns_count').default(0).notNull(),
+    interruptCount: integer('interrupt_count').default(0).notNull(),
+    inputAudioSeconds: integer('input_audio_seconds').default(0).notNull(),
+    outputAudioSeconds: integer('output_audio_seconds').default(0).notNull(),
+    inputAudioTokens: integer('input_audio_tokens').default(0).notNull(),
+    outputAudioTokens: integer('output_audio_tokens').default(0).notNull(),
+    quotaPeriodKey: varchar('quota_period_key', { length: 80 }).notNull(),
+    errorCode: varchar('error_code', { length: 80 }),
+    errorMessage: text('error_message'),
+    clientPlatform: varchar('client_platform', { length: 20 })
+      .notNull()
+      .default('web'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    userStartedIdx: index('idx_realtime_voice_sessions_user_started').on(
+      table.userId,
+      table.startedAt
+    ),
+    userStatusIdx: index('idx_realtime_voice_sessions_user_status').on(
+      table.userId,
+      table.status,
+      table.startedAt
+    ),
+    therapySessionIdx: uniqueIndex(
+      'uk_realtime_voice_sessions_therapy_session'
+    ).on(table.therapySessionId),
+    quotaPeriodIdx: index('idx_realtime_voice_sessions_quota_period').on(
+      table.userId,
+      table.quotaPeriodKey
+    ),
+  })
+);
+
+export const realtimeVoiceSessionEvents = pgTable(
+  'realtime_voice_session_events',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    sessionId: varchar('session_id', { length: 64 })
+      .notNull()
+      .references(() => realtimeVoiceSessions.id, { onDelete: 'cascade' }),
+    eventId: varchar('event_id', { length: 120 }).notNull(),
+    type: varchar('type', { length: 40 }).notNull(),
+    occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
+    payloadJson: jsonb('payload_json').notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    uniqueSessionEvent: uniqueIndex(
+      'uk_realtime_voice_session_events_unique'
+    ).on(table.sessionId, table.eventId),
+    sessionOccurredIdx: index('idx_realtime_voice_session_events_occurred').on(
+      table.sessionId,
+      table.occurredAt
     ),
   })
 );

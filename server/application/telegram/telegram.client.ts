@@ -30,13 +30,6 @@ export function isRetryableTelegramTransportError(
     return true;
   }
 
-  if (
-    typeof error.message === 'string' &&
-    error.message.includes('timed out')
-  ) {
-    return true;
-  }
-
   return [
     'ECONNRESET',
     'ETIMEDOUT',
@@ -49,6 +42,16 @@ export function isRetryableTelegramTransportError(
     String(error.transportCode || '')
       .trim()
       .toUpperCase()
+  );
+}
+
+export function isAmbiguousTelegramDeliveryError(
+  error: TelegramApiError
+): boolean {
+  return (
+    String(error.transportCode || '')
+      .trim()
+      .toUpperCase() === 'TIMEOUT'
   );
 }
 

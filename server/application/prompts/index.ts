@@ -14,7 +14,19 @@ import type {
   ChatEntryContext,
   TherapyApproach,
   ResponseType,
-} from '@/shared/dto';
+} from '../../../shared/dto';
+import type { AssistantVoiceGender } from '../../../shared/constants/assistantVoiceCatalog';
+import type { Addressing } from '../../../shared/dto/notifications';
+import {
+  normalizeOnboardingReasons,
+  type OnboardingReason,
+  type OnboardingReasons,
+} from '../../../shared/dto/onboarding';
+import { buildAssistantPersonaInstruction } from '../chat/assistant-persona';
+import {
+  pickAddressingText,
+  resolveAddressing,
+} from '../../../shared/utils/addressing';
 
 export type PromptTemplate = string;
 
@@ -147,7 +159,7 @@ export function getResponseTypeByNumber(responseNumber: number): {
       description: 'АНАЛИТИКА + ВАРИАНТЫ (ПРИВЯЗАНЫ К ДЕТАЛЯМ)',
       structure: `1. Короткая рефлексия по сути и эмоции (1 фраза)
 2. Гипотеза о паттерне
-3. 2 ВАРИАНТА (ссылаются на конкретные слова: "когда ты сказал X...")
+3. 2 ВАРИАНТА (ссылаются на конкретные слова: "когда пользователь сказал X...")
 4. Максимум 1 вопрос-выбор`,
     },
     support: {
@@ -305,7 +317,7 @@ export const suggestedChipsSystemPrompt = `Ты генератор вариан�
 Пиши от лица пользователя. Обращайся к ассистенту как к помощнику.
 Без канцелярита, повторов, диагнозов и дисклеймеров.
 Запрещены пустые шаблоны: "расскажи больше", "уточни", "приведи пример".
-Если в ответе ассистента есть рекомендация медитации или практики, допускается 1 action chip для открытия раздела медитаций.`;
+Навигационные action-chip формируются отдельным deterministic-слоем на сервере, поэтому ты генерируешь только text-чипы.`;
 
 export const suggestedChipsDeveloperPrompt = `Сгенерируй 1..maxChips чипов.
 Правила:
@@ -320,11 +332,7 @@ export const suggestedChipsDeveloperPrompt = `Сгенерируй 1..maxChips �
  Не повторяй чипы из recent_chips.
  text <= 80 символов.
  Тон: дружелюбный, взрослый.
-Action chip (максимум 1):
- kind: "action"
- action: "open_meditations" | "open_meditation_track" | "open_meditations_collection" | "open_sos"
- params: { trackId?: string, collectionId?: string, sosEntry?: "panic" | "tension" | "technique_picker", source?: "chat" }
-Остальные чипы: kind: "text".
+Все чипы: kind: "text".
 Ответ строго JSON:
 {
   "chips": [
@@ -339,7 +347,6 @@ const suggestedChipsUserTemplate = `Контекст: {{dialog_context}}
 Тема (если есть): {{primary_topic}}
 Если тема есть, упомяни ее минимум в одном чипе.
 Важно: чипы - это реплики пользователя, а ассистент - терапевт/помощник.
-Если в ответе ассистента есть рекомендация медитации, добавь action chip.
 Сгенерируй до {{max_chips}} чипов.`;
 
 export const suggestedChipsRetryHint = `Повторы или слишком похожие формулировки.
@@ -377,12 +384,159 @@ function resolveGenderLabel(value?: string | null): string | null {
   return null;
 }
 
+function buildToneContext(vars: {
+  toneKey?: string;
+  toneLabel?: string;
+  toneDescription?: string;
+}): string {
+  if (!vars.toneKey || !vars.toneLabel || !vars.toneDescription) {
+    return '';
+  }
+
+  return `Предпочитаемый стиль поддержки пользователя:
+ Ключ tone: ${vars.toneKey}
+ Название tone: ${vars.toneLabel}
+ Описание tone: ${vars.toneDescription}
+ Следуй этому стилю во всех формулировках, сохраняя правила безопасности и кризисные ограничения.`;
+}
+
+function buildAddressingContext(addressing?: Addressing): string {
+  const resolvedAddressing = resolveAddressing(addressing);
+  const addressingLabel = resolvedAddressing === 'formal' ? 'на вы' : 'на ты';
+  const addressingInstruction = pickAddressingText(resolvedAddressing, {
+    informal:
+      'Обращайся к пользователю только на «ты»: используй формы «ты/тебе/тебя» и не переходи на «вы/вам/вас».',
+    formal:
+      'Обращайся к пользователю только на «вы»: используй формы «вы/вам/вас» и не переходи на «ты/тебе/тебя».',
+  });
+
+  return `Обращение к пользователю: ${addressingLabel}.
+ ${addressingInstruction}`;
+}
+
+const ONBOARDING_REASON_META: Record<
+  OnboardingReason,
+  { label: string; focusHint: string }
+> = {
+  stress: {
+    label: 'справиться со стрессом',
+    focusHint:
+      'чаще помогай с перегрузкой, напряжением и восстановлением опоры',
+  },
+  anxiety: {
+    label: 'снизить тревожность',
+    focusHint:
+      'чаще помогай с тревожными сценариями, неопределенностью и заземлением',
+  },
+  thoughts: {
+    label: 'разобраться в мыслях',
+    focusHint:
+      'чаще помогай распутывать внутренний диалог, противоречия и навязчивые циклы',
+  },
+  mood: {
+    label: 'улучшить настроение',
+    focusHint:
+      'чаще поддерживай в теме эмоционального фона, истощения и маленьких сдвигов',
+  },
+  habits: {
+    label: 'работать с привычками',
+    focusHint:
+      'чаще переводи разговор в понятные паттерны, триггеры и маленькие действия',
+  },
+  support: {
+    label: 'получить поддержку',
+    focusHint:
+      'чаще давай теплую опору, ощущение контакта и ясные следующие шаги',
+  },
+  other: {
+    label: 'другой личный запрос',
+    focusHint:
+      'сохраняй широкую персонализацию и мягко уточняй, что сейчас важнее всего',
+  },
+};
+
+// Онбординг задает мягкий вектор персонализации, но не должен спорить с живым запросом пользователя.
+function buildOnboardingPersonalizationContext(vars: {
+  onboardingReasons?: OnboardingReasons;
+}): string {
+  const reasonMetaList = normalizeOnboardingReasons(vars.onboardingReasons)
+    .slice(0, 3)
+    .map((reason) => ONBOARDING_REASON_META[reason]);
+
+  if (!reasonMetaList.length) {
+    return '';
+  }
+
+  const lines = ['Контекст персонализации из онбординга:'];
+  const labels = reasonMetaList.map((reasonMeta) => reasonMeta.label);
+
+  lines.push(` Что привело пользователя: ${labels.join('; ')}.`);
+
+  lines.push(
+    ' Используй это как мягкий фоновый вектор персонализации для примеров, формулировок и микро-рекомендаций.'
+  );
+
+  if (reasonMetaList.length === 1) {
+    lines.push(` Фокус по причине: ${reasonMetaList[0].focusHint}.`);
+  } else {
+    lines.push(' Приоритетные фокусы:');
+    for (const reasonMeta of reasonMetaList) {
+      lines.push(` - ${reasonMeta.focusHint}.`);
+    }
+  }
+
+  lines.push(
+    ' Не навязывай эти темы, если текущий запрос пользователя уже ушел в другую сторону.'
+  );
+
+  return lines.join('\n');
+}
+
+function buildOnboardingSuggestedChipsContext(vars: {
+  onboardingReasons?: OnboardingReasons;
+}): string {
+  const reasonMetaList = normalizeOnboardingReasons(vars.onboardingReasons)
+    .slice(0, 3)
+    .map((reason) => ONBOARDING_REASON_META[reason]);
+
+  if (!reasonMetaList.length) {
+    return '';
+  }
+
+  const lines = ['Контекст пользователя из онбординга:'];
+  const labels = reasonMetaList.map((reasonMeta) => reasonMeta.label);
+
+  lines.push(` Что привело пользователя: ${labels.join('; ')}.`);
+
+  lines.push(
+    ' Если это естественно по текущему ответу ассистента, предложи хотя бы один чип, который помогает продвинуться в эту сторону.'
+  );
+  if (reasonMetaList.length > 1) {
+    lines.push(
+      ' Можно распределять чипы по нескольким выбранным направлениям, но не распыляй фокус без необходимости.'
+    );
+  }
+  lines.push(
+    ' Не делай чипы искусственно узкими, если диалог ушел в другую тему.'
+  );
+
+  return lines.join('\n');
+}
+
 function buildUserContext(vars: {
   user_name?: string;
   user_gender?: string;
+  addressing?: Addressing;
+  toneKey?: string;
+  toneLabel?: string;
+  toneDescription?: string;
+  onboardingReasons?: OnboardingReasons;
 }): string {
   const name = vars.user_name?.trim();
   const genderLabel = resolveGenderLabel(vars.user_gender);
+  const addressingContext = buildAddressingContext(vars.addressing);
+  const toneContext = buildToneContext(vars);
+  const onboardingContext = buildOnboardingPersonalizationContext(vars);
 
   const nameLine = name
     ? `Имя пользователя: ${name}`
@@ -398,7 +552,20 @@ function buildUserContext(vars: {
  ${nameLine}
  ${genderLine}
  ${genderInstruction}
+ ${addressingContext}
+ ${toneContext}
+ ${onboardingContext}
  Запрещены формы с альтернативами в скобках (например, "сделал / сделала").`;
+}
+
+function buildAssistantPersonaContext(vars: {
+  assistant_gender?: AssistantVoiceGender;
+  assistant_display_name?: string;
+}): string {
+  return buildAssistantPersonaInstruction({
+    assistantGender: vars.assistant_gender,
+    assistantDisplayName: vars.assistant_display_name,
+  });
 }
 
 export function detectApproachFromContext(
@@ -462,6 +629,13 @@ export function buildDeveloperContext(
   vars: {
     user_name?: string;
     user_gender?: string;
+    assistant_gender?: AssistantVoiceGender;
+    assistant_display_name?: string;
+    addressing?: Addressing;
+    toneKey?: string;
+    toneLabel?: string;
+    toneDescription?: string;
+    onboardingReasons?: OnboardingReasons;
   },
   ctx: {
     responseNumber?: number;
@@ -470,8 +644,11 @@ export function buildDeveloperContext(
   const responseNumber = ctx.responseNumber || 1;
   const responseTypeInfo = getResponseTypeByNumber(responseNumber);
   const userContext = buildUserContext(vars);
+  const assistantPersonaContext = buildAssistantPersonaContext(vars);
 
-  return `${userContext}
+  return `${assistantPersonaContext}
+
+${userContext}
 
 Контекст текущего ответа:
  Номер: ${responseNumber}
@@ -641,6 +818,9 @@ export function buildWelcomePrompt(options: {
   user_locale?: string;
   user_name?: string;
   user_gender?: string;
+  assistant_gender?: AssistantVoiceGender;
+  assistant_display_name?: string;
+  addressing?: Addressing;
   greetingName?: string | null;
   includeNameValidationPrompt?: boolean;
   openingMode?: 'greeting' | 'alternative';
@@ -649,6 +829,10 @@ export function buildWelcomePrompt(options: {
   welcomePromptContent?: string;
   entryContext?: ChatEntryContext;
   disableOpeningTemplates?: boolean;
+  toneKey?: string;
+  toneLabel?: string;
+  toneDescription?: string;
+  onboardingReasons?: OnboardingReasons;
 }): string {
   const lang = options.lang || 'ru';
   const isFirst = options.isFirstSession;
@@ -664,6 +848,19 @@ export function buildWelcomePrompt(options: {
     Boolean(options.disableOpeningTemplates) ||
     options.entryContext?.type === 'thought_dump' ||
     isPhobiasEntry;
+  const addressingContext = buildAddressingContext(options.addressing);
+  const assistantPersonaContext = buildAssistantPersonaContext({
+    assistant_gender: options.assistant_gender,
+    assistant_display_name: options.assistant_display_name,
+  });
+  const toneContext = buildToneContext({
+    toneKey: options.toneKey,
+    toneLabel: options.toneLabel,
+    toneDescription: options.toneDescription,
+  });
+  const onboardingContext = buildOnboardingPersonalizationContext({
+    onboardingReasons: options.onboardingReasons,
+  });
 
   const nameInstruction =
     options.includeNameValidationPrompt && options.greetingName
@@ -709,9 +906,9 @@ export function buildWelcomePrompt(options: {
 
     prompt =
       prompt +
-      `\n\nВАЖНО: Не утверждай, что вы уже обсуждали конкретно эту тему; если контекст неочевиден - формулируй нейтрально. ${generatedStartInstruction}`;
+      `\n\nВАЖНО: Не утверждай, что тема уже обсуждалась конкретно раньше; если контекст неочевиден - формулируй нейтрально. ${generatedStartInstruction}`;
 
-    const fullPrompt = `${prompt}${nameInstruction}${openingInstruction}${noTemplateStartInstruction}`;
+    const fullPrompt = `${assistantPersonaContext ? `${assistantPersonaContext}\n\n` : ''}${addressingContext ? `${addressingContext}\n\n` : ''}${toneContext ? `${toneContext}\n\n` : ''}${onboardingContext ? `${onboardingContext}\n\n` : ''}${prompt}${nameInstruction}${openingInstruction}${noTemplateStartInstruction}`;
     return contextNote ? `${contextNote}\n\n${fullPrompt}` : fullPrompt;
   }
 
@@ -720,7 +917,7 @@ export function buildWelcomePrompt(options: {
 
 Сгенерируй приветствие (2-3 предложения):
  Представься и объясни чем помогаешь
- Добавь 1 конкретную опору (например выбор: "часто полезно выбрать: ты ищешь причину или один узкий узел?")
+ Добавь 1 конкретную опору (например выбор: "часто полезно выбрать: сейчас важнее причина или один узкий узел?")
  Затем 1 открытый вопрос
 `,
 
@@ -730,7 +927,7 @@ export function buildWelcomePrompt(options: {
 {{sessionMemoryText}}
 
 Сгенерируй приветствие (2-3 предложения), которое:
- Не утверждает, что вы уже обсуждали конкретно эту тему; формулируй нейтрально
+ Не утверждает, что тема уже обсуждалась конкретно раньше; формулируй нейтрально
  Добавляет 1 конкретную опору (выбор/инсайт/рамка)
  Мягко предлагает вернуться к темам или перейти к новым
  Завершается 1 открытым вопросом
@@ -795,7 +992,7 @@ export function buildWelcomePrompt(options: {
     );
   }
 
-  const fullPrompt = `${prompt}${nameInstruction}${openingInstruction}${noTemplateStartInstruction}`;
+  const fullPrompt = `${assistantPersonaContext ? `${assistantPersonaContext}\n\n` : ''}${addressingContext ? `${addressingContext}\n\n` : ''}${toneContext ? `${toneContext}\n\n` : ''}${onboardingContext ? `${onboardingContext}\n\n` : ''}${prompt}${nameInstruction}${openingInstruction}${noTemplateStartInstruction}`;
   return contextNote ? `${contextNote}\n\n${fullPrompt}` : fullPrompt;
 }
 
@@ -806,11 +1003,15 @@ export function buildSuggestedChipsUserPrompt(params: {
   primary_topic?: string;
   max_chips: number;
   retry?: boolean;
+  onboardingReasons?: OnboardingReasons;
 }): string {
   const dialogContext = (params.dialog_context || 'Нет контекста').slice(-800);
   const assistantAnswer = (params.assistant_answer || 'Нет ответа').slice(-800);
   const recentChips = (params.recent_chips || 'Нет').slice(-600);
   const primaryTopic = params.primary_topic || 'Нет';
+  const onboardingContext = buildOnboardingSuggestedChipsContext({
+    onboardingReasons: params.onboardingReasons,
+  });
 
   const base = renderTemplate(suggestedChipsUserTemplate, {
     dialog_context: dialogContext,
@@ -821,8 +1022,8 @@ export function buildSuggestedChipsUserPrompt(params: {
   });
 
   if (params.retry) {
-    return `${base}\n\n${suggestedChipsRetryHint}`;
+    return `${base}${onboardingContext ? `\n\n${onboardingContext}` : ''}\n\n${suggestedChipsRetryHint}`;
   }
 
-  return base;
+  return onboardingContext ? `${base}\n\n${onboardingContext}` : base;
 }

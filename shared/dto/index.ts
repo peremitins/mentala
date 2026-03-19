@@ -1,9 +1,13 @@
 import { z } from 'zod';
+import { AppNavigationTargetDto } from '../navigation';
 export * from './auth';
 export * from './onboarding';
 export * from './meditations';
 export * from './user';
 export * from './landing';
+export * from './realtime';
+export * from './chat-settings';
+export * from '../navigation';
 
 const THOUGHT_DUMP_ENTRY_CONTEXT_MAX_CHARS = 2_500;
 
@@ -101,13 +105,26 @@ export const SuggestedChipActionEnum = z.enum([
   'open_meditations',
   'open_meditation_track',
   'open_meditations_collection',
+  'open_breath_practices',
+  'open_breath_practice',
   'open_sos',
+  'open_gratitude_diary',
+  'open_therapy',
+  'open_therapy_topic',
+  'open_habits',
+  'open_habit',
 ]);
 
 export const SuggestedChipActionParamsDto = z.object({
   trackId: z.string().optional(),
   collectionId: z.string().optional(),
+  practiceId: z.string().optional(),
+  groupKey: z
+    .enum(['popular', 'sleep', 'anxiety', 'focus', 'custom'])
+    .optional(),
   sosEntry: z.enum(['panic', 'tension', 'technique_picker']).optional(),
+  topicKey: z.string().optional(),
+  habitKey: z.string().optional(),
   source: z.enum(['chat']).optional(),
 });
 
@@ -118,18 +135,19 @@ export const SuggestedChipDto = z
     kind: SuggestedChipKindEnum.optional().default('text'),
     action: SuggestedChipActionEnum.optional(),
     params: SuggestedChipActionParamsDto.optional(),
+    target: AppNavigationTargetDto.optional(),
   })
   .superRefine((value, ctx) => {
-    if (value.kind === 'action' && !value.action) {
+    if (value.kind === 'action' && !value.action && !value.target) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'action is required for action chips',
+        message: 'action or target is required for action chips',
       });
     }
-    if (value.kind === 'text' && value.action) {
+    if (value.kind === 'text' && (value.action || value.target)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'action is not allowed for text chips',
+        message: 'action target is not allowed for text chips',
       });
     }
   });

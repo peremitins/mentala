@@ -155,6 +155,12 @@
       </StateBlock>
     </div>
 
+    <PushPermissionDeniedDialog
+      :open="pushPermissionGate.showPushDeniedModal.value"
+      @update:open="pushPermissionGate.setPushDeniedModalOpen"
+      @open-settings="handleOpenPushSystemSettings"
+    />
+
     <FeaturePaywallModal
       v-model:open="paywallOpen"
       :feature-key="paywallFeatureKey"
@@ -173,11 +179,13 @@ import NotificationsSummaryCard from '@/app/components/notifications/Notificatio
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/shadcn/input';
 import InputComponent from '@/app/components/ui/shadcn/input/Input.vue';
+import PushPermissionDeniedDialog from '@/app/components/notifications/PushPermissionDeniedDialog.vue';
 import IconMessageCircle from '~icons/lucide/message-circle';
 import IconLeaf from '~icons/lucide/leaf';
 import IconWind from '~icons/lucide/wind';
 import IconSquarePen from '~icons/lucide/square-pen';
 import { useNotificationsSettings } from '@/app/composables/useNotificationsSettings';
+import { usePushPermissionGate } from '@/app/composables/usePushPermissionGate';
 import { useChatStore } from '@/app/stores/chat';
 import { useToast } from '@/app/composables/useToast';
 import { useNuxtApp, navigateTo } from '#app';
@@ -196,14 +204,13 @@ import {
 } from '@/app/composables/useEntitlements';
 import { mapHabitToMeditationTopic } from '@/app/lib/meditations';
 import { mapHabitToBreathGroup } from '@/app/lib/practiceActions';
-import {
-  BREATH_PRACTICES,
-  type BreathPracticeTag,
-} from '@/app/lib/breathPracticesCatalog';
+import type { BreathPracticeTag } from '@/app/lib/breathPracticesCatalog';
+import { useAppNavigation } from '@/app/composables/useAppNavigation';
 
 const route = useRoute();
 const chat = useChatStore();
 const { startEntryChat } = useEntryChat();
+const { navigateToTarget } = useAppNavigation();
 const userHabitsStore = useUserHabitsStore();
 const loaders = useLoadersStore();
 const { getFeatureAccess, refreshEntitlements } = useEntitlements();
@@ -217,6 +224,7 @@ const customHabit = ref<HabitDto | null>(null);
 const entityLoading = ref(false);
 const entityError = ref<string | null>(null);
 const { $api } = useNuxtApp();
+const pushPermissionGate = usePushPermissionGate();
 
 const preference = ref<NotificationPreferencesDto | null>(null);
 const prefLoading = ref(true);
@@ -327,48 +335,43 @@ function getPlanBadgeEmoji(plan: string) {
 
 async function goToMeditations() {
   if (!meditationTopicKey.value) return;
-
-  if (!meditationsAccess.value.available) {
-    openPaywall('meditations.library.full');
-    return;
-  }
-
-  await navigateTo({
-    path: '/meditations',
-    query: { topic: meditationTopicKey.value },
-  });
+  await navigateToTarget(
+    {
+      type: 'meditation_collection',
+      topicKey: meditationTopicKey.value,
+    },
+    {
+      source: 'habit_page',
+      entryPoint: 'habit_practice_cta',
+    }
+  );
 }
 
 function goToGratitudeDiary() {
-  if (!gratitudeDiaryAccess.value.available) {
-    openPaywall('gratitude.diary.full');
-    return;
-  }
-
-  void navigateTo('/practices/gratitude-diary');
+  void navigateToTarget(
+    {
+      type: 'gratitude_diary',
+    },
+    {
+      source: 'habit_page',
+      entryPoint: 'habit_gratitude_cta',
+    }
+  );
 }
 
 async function goToBreathPractices() {
   const groupKey = breathGroupKey.value;
   if (!groupKey) return;
-
-  if (!breathCatalogAccess.value.available) {
-    openPaywall('breath.catalog.full');
-    return;
-  }
-
-  const firstPractice = BREATH_PRACTICES.find((practice) =>
-    practice.tags.includes(groupKey)
+  await navigateToTarget(
+    {
+      type: 'breath_practice_group',
+      groupKey,
+    },
+    {
+      source: 'habit_page',
+      entryPoint: 'habit_breath_cta',
+    }
   );
-  if (!firstPractice) {
-    useToast('Подборка дыхательных практик пока недоступна');
-    return;
-  }
-
-  await navigateTo({
-    path: `/breath-practices/${firstPractice.slug}`,
-    query: { group: groupKey },
-  });
 }
 
 function startEditTitle() {
@@ -487,6 +490,21 @@ async function loadPreference() {
   }
 }
 
+async function updateNotificationsPreference(enabled: boolean) {
+  try {
+    const data = await updateNotificationPreferences('habits', {
+      enabled,
+      entityKey: entityKey.value,
+    });
+    if (data) preference.value = data;
+  } catch (error: any) {
+    console.error('[HabitDetail] Toggle notifications failed:', error);
+    notificationError.value =
+      error?.message || 'Не удалось обновить настройки уведомлений';
+    throw error;
+  }
+}
+
 /** Обновление включено/выключено уведомлений по переключателю на карточке */
 async function onToggleNotifications(enabled: boolean) {
   if (!entityKey.value) return;
@@ -498,18 +516,31 @@ async function onToggleNotifications(enabled: boolean) {
   notificationError.value = null;
   prefToggleLoading.value = true;
   try {
-    const data = await updateNotificationPreferences('habits', {
-      enabled,
-      entityKey: entityKey.value,
-    });
-    if (data) preference.value = data;
-  } catch (error: any) {
-    console.error('[HabitDetail] Toggle notifications failed:', error);
-    notificationError.value =
-      error?.message || 'Не удалось обновить настройки уведомлений';
+    if (enabled) {
+      const canEnable = await pushPermissionGate.ensureAppPushEnabled({
+        onGrantedFromSettings: async () => {
+          prefToggleLoading.value = true;
+          try {
+            await updateNotificationsPreference(true);
+          } finally {
+            prefToggleLoading.value = false;
+          }
+        },
+      });
+
+      if (!canEnable) {
+        return;
+      }
+    }
+
+    await updateNotificationsPreference(enabled);
   } finally {
     prefToggleLoading.value = false;
   }
+}
+
+async function handleOpenPushSystemSettings() {
+  await pushPermissionGate.openSystemSettings();
 }
 
 const entryContext = computed<ChatEntryContext>(() => ({

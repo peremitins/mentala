@@ -14,6 +14,13 @@ import {
   type SuggestedChipAction,
 } from '@/shared/dto';
 import {
+  buildLegacySuggestedChipActionPayload,
+  buildNavigationTargetKey,
+  parseAppNavigationTarget,
+  resolveTargetFromLegacySuggestedChipAction,
+} from '@/shared/navigation';
+import type { OnboardingReasons } from '@/shared/dto/onboarding';
+import {
   buildSuggestedChipsUserPrompt,
   suggestedChipsSystemPrompt,
   suggestedChipsDeveloperPrompt,
@@ -27,6 +34,7 @@ import {
   buildStaticPhobiasSuggestedChips,
   resolvePhobiasConversationState,
 } from '@/server/application/chat/phobias-entry.service';
+import { buildNavigationSuggestedChips } from '@/server/application/navigation/chat-navigation.service';
 
 const MAX_CHIPS = 4;
 const MIN_CHIPS = 3;
@@ -100,7 +108,11 @@ function normalizeActionParams(
   | {
       trackId?: string;
       collectionId?: string;
+      practiceId?: string;
+      groupKey?: 'popular' | 'sleep' | 'anxiety' | 'focus' | 'custom';
       sosEntry?: 'panic' | 'tension' | 'technique_picker';
+      topicKey?: string;
+      habitKey?: string;
       source?: 'chat';
     }
   | undefined {
@@ -110,7 +122,11 @@ function normalizeActionParams(
     trackId: typeof raw.trackId === 'string' ? raw.trackId : undefined,
     collectionId:
       typeof raw.collectionId === 'string' ? raw.collectionId : undefined,
+    practiceId: typeof raw.practiceId === 'string' ? raw.practiceId : undefined,
+    groupKey: typeof raw.groupKey === 'string' ? raw.groupKey : undefined,
     sosEntry: typeof raw.sosEntry === 'string' ? raw.sosEntry : undefined,
+    topicKey: typeof raw.topicKey === 'string' ? raw.topicKey : undefined,
+    habitKey: typeof raw.habitKey === 'string' ? raw.habitKey : undefined,
     source: typeof raw.source === 'string' ? raw.source : undefined,
   };
   const parsed = SuggestedChipActionParamsDto.safeParse(normalized);
@@ -122,7 +138,16 @@ function normalizeActionParams(
   if (action === 'open_meditations_collection' && !parsed.data.collectionId) {
     return undefined;
   }
+  if (action === 'open_breath_practice' && !parsed.data.practiceId) {
+    return undefined;
+  }
   if (action === 'open_sos' && !parsed.data.sosEntry) {
+    return undefined;
+  }
+  if (action === 'open_therapy_topic' && !parsed.data.topicKey) {
+    return undefined;
+  }
+  if (action === 'open_habit' && !parsed.data.habitKey) {
     return undefined;
   }
   return parsed.data;
@@ -134,6 +159,7 @@ function normalizeChip(raw: {
   kind?: string;
   action?: string;
   params?: unknown;
+  target?: unknown;
 }): SuggestedChip | null {
   const text = String(raw?.text || '')
     .trim()
@@ -142,28 +168,46 @@ function normalizeChip(raw: {
 
   const intent = normalizeIntent(raw?.intent);
   const kind = normalizeKind(raw?.kind);
+  const target = parseAppNavigationTarget(raw?.target);
 
   if (kind === 'action') {
     const action = normalizeAction(raw?.action);
-    if (!action) return null;
-    const params = normalizeActionParams(action, raw?.params);
-    if (action === 'open_meditation_track' && !params?.trackId) {
+    const params = action
+      ? normalizeActionParams(action, raw?.params)
+      : undefined;
+    const resolvedTarget =
+      target ??
+      resolveTargetFromLegacySuggestedChipAction({
+        action,
+        params: params ?? undefined,
+      });
+    const compat =
+      action && params
+        ? { action, params }
+        : resolvedTarget
+          ? buildLegacySuggestedChipActionPayload(resolvedTarget)
+          : null;
+
+    if (!resolvedTarget && !compat?.action) {
       return null;
     }
-    if (action === 'open_meditations_collection' && !params?.collectionId) {
-      return null;
-    }
-    if (action === 'open_sos' && !params?.sosEntry) {
-      return null;
-    }
+
     return SuggestedChipDto.safeParse({
       text,
       intent,
       kind,
-      action,
-      params,
+      action: compat?.action,
+      params: compat?.params,
+      target: resolvedTarget ?? undefined,
     }).success
-      ? { text, intent, kind, action, params }
+      ? {
+          text,
+          intent,
+          kind,
+          action: compat?.action,
+          params: compat?.params,
+          target: resolvedTarget ?? undefined,
+        }
       : null;
   }
 
@@ -171,6 +215,7 @@ function normalizeChip(raw: {
     text,
     intent,
     kind,
+    target: undefined,
   }).success
     ? { text, intent, kind }
     : null;
@@ -182,7 +227,9 @@ function filterBySimilarity(chips: SuggestedChip[], recentChips: string[]) {
 
   for (const chip of chips) {
     if (chip.kind === 'action') {
-      const actionKey = `${chip.action || 'action'}:${chip.params?.trackId || ''}:${chip.params?.collectionId || ''}:${chip.params?.sosEntry || ''}:${chip.params?.source || ''}`;
+      const actionKey = chip.target
+        ? buildNavigationTargetKey(chip.target)
+        : `${chip.action || 'action'}:${chip.params?.trackId || ''}:${chip.params?.collectionId || ''}:${chip.params?.practiceId || ''}:${chip.params?.groupKey || ''}:${chip.params?.sosEntry || ''}:${chip.params?.topicKey || ''}:${chip.params?.habitKey || ''}:${chip.params?.source || ''}`;
       if (actionKeys.has(actionKey)) continue;
       actionKeys.add(actionKey);
       unique.push(chip);
@@ -270,6 +317,9 @@ function normalizeChipsPayload(payload: unknown): unknown {
     if (chipRecord.action === null) {
       delete chipRecord.action;
     }
+    if (chipRecord.target === null) {
+      delete chipRecord.target;
+    }
 
     const params = chipRecord.params;
     if (params === null || typeof params !== 'object') {
@@ -281,6 +331,21 @@ function normalizeChipsPayload(payload: unknown): unknown {
       }
       if (paramsRecord.collectionId === null) {
         delete paramsRecord.collectionId;
+      }
+      if (paramsRecord.practiceId === null) {
+        delete paramsRecord.practiceId;
+      }
+      if (paramsRecord.groupKey === null) {
+        delete paramsRecord.groupKey;
+      }
+      if (paramsRecord.sosEntry === null) {
+        delete paramsRecord.sosEntry;
+      }
+      if (paramsRecord.topicKey === null) {
+        delete paramsRecord.topicKey;
+      }
+      if (paramsRecord.habitKey === null) {
+        delete paramsRecord.habitKey;
       }
       if (Object.keys(paramsRecord).length === 0) {
         delete chipRecord.params;
@@ -305,7 +370,12 @@ async function requestChipsFromModel(params: {
   primaryTopic?: string;
   maxChips: number;
   retry?: boolean;
+  onboardingReasons?: OnboardingReasons;
 }): Promise<SuggestedChip[]> {
+  if (params.maxChips <= 0) {
+    return [];
+  }
+
   const userPrompt = buildSuggestedChipsUserPrompt({
     dialog_context: params.dialogContext,
     assistant_answer: params.assistantAnswer,
@@ -313,6 +383,7 @@ async function requestChipsFromModel(params: {
     primary_topic: params.primaryTopic,
     max_chips: params.maxChips,
     retry: params.retry,
+    onboardingReasons: params.onboardingReasons,
   });
 
   const result = await chatViaProvider({
@@ -453,36 +524,20 @@ export async function generateSuggestedChips(params: {
   userId?: number | string;
   therapySessionId?: number | null;
   entryContext?: ChatEntryContext | null;
+  onboardingReasons?: OnboardingReasons;
 }) {
   if (
     params.entryContext?.type === 'sos' &&
     params.entryContext.sos_entry === 'vent' &&
     params.messages.length === 0
   ) {
-    const sosChips: SuggestedChip[] = [
-      {
-        text: 'Мне тревожно',
-        intent: 'support',
-        kind: 'action',
-        action: 'open_sos',
-        params: { sosEntry: 'panic', source: 'chat' },
+    return buildNavigationSuggestedChips({
+      messages: params.messages,
+      entryContext: {
+        type: 'sos',
+        sos_entry: 'vent',
       },
-      {
-        text: 'Снять напряжение',
-        intent: 'action_step',
-        kind: 'action',
-        action: 'open_sos',
-        params: { sosEntry: 'tension', source: 'chat' },
-      },
-      {
-        text: 'Дай короткую технику',
-        intent: 'action_step',
-        kind: 'action',
-        action: 'open_sos',
-        params: { sosEntry: 'technique_picker', source: 'chat' },
-      },
-    ];
-    return sosChips;
+    });
   }
 
   if (params.userId != null) {
@@ -506,7 +561,11 @@ export async function generateSuggestedChips(params: {
   }
 
   const answer = String(params.assistantAnswer || '').trim();
-  if (!answer) return [];
+  const navigationChips = await buildNavigationSuggestedChips({
+    messages: params.messages,
+    entryContext: params.entryContext,
+  });
+  if (!answer) return navigationChips;
 
   // Ограничиваем длину ответа, чтобы не раздувать промпт.
   const answerForPrompt = answer.slice(0, 1200);
@@ -514,6 +573,7 @@ export async function generateSuggestedChips(params: {
   const chipsKey = resolveChipsKey(params);
   const recent = chipsKey ? getRecentChips(chipsKey) : [];
   const primaryTopic = resolvePrimaryTopic(params.entryContext);
+  const textChipLimit = Math.max(0, MAX_CHIPS - navigationChips.length);
 
   let chips: SuggestedChip[] = [];
   try {
@@ -522,24 +582,26 @@ export async function generateSuggestedChips(params: {
       assistantAnswer: answerForPrompt,
       recentChips: recent,
       primaryTopic,
-      maxChips: MAX_CHIPS,
+      maxChips: textChipLimit,
+      onboardingReasons: params.onboardingReasons,
     });
   } catch (error) {
     console.error('[SuggestedChips] Failed to generate chips:', error);
-    return [];
+    return navigationChips;
   }
 
   const baseNormalized = chips
     .map((chip) => normalizeChip(chip))
     .filter((chip): chip is SuggestedChip => chip !== null);
   const filteredNormalized = filterBySimilarity(baseNormalized, recent);
-  let normalized = filteredNormalized;
+  let normalizedText = filteredNormalized;
 
   if (
-    normalized.length < MIN_CHIPS ||
-    !hasEnoughIntentDiversity(normalized) ||
-    !hasPrimaryTopic(normalized, primaryTopic) ||
-    !hasEnoughShortChips(normalized)
+    textChipLimit >= MIN_CHIPS &&
+    (normalizedText.length < MIN_CHIPS ||
+      !hasEnoughIntentDiversity(normalizedText) ||
+      !hasPrimaryTopic(normalizedText, primaryTopic) ||
+      !hasEnoughShortChips(normalizedText))
   ) {
     let retryChips: SuggestedChip[] = [];
     try {
@@ -548,8 +610,9 @@ export async function generateSuggestedChips(params: {
         assistantAnswer: answerForPrompt,
         recentChips: recent,
         primaryTopic,
-        maxChips: MAX_CHIPS,
+        maxChips: textChipLimit,
         retry: true,
+        onboardingReasons: params.onboardingReasons,
       });
     } catch (error) {
       console.error('[SuggestedChips] Retry failed:', error);
@@ -562,15 +625,18 @@ export async function generateSuggestedChips(params: {
     const retryFiltered = filterBySimilarity(retryNormalized, recent);
 
     if (retryFiltered.length >= MIN_CHIPS) {
-      normalized = retryFiltered;
+      normalizedText = retryFiltered;
     }
   }
+
+  const normalized = filterBySimilarity(
+    [...navigationChips, ...normalizedText],
+    recent
+  );
 
   if (!normalized.length) {
     return [];
   }
-
-  normalized = filterBySimilarity(normalized, recent);
 
   if (chipsKey) {
     // Сохраняем историю чипов для анти-повторов.

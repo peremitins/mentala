@@ -15,13 +15,16 @@
     </NuxtLayout>
     <NuxtRouteAnnouncer />
     <Toaster
-      theme="dark"
-      richColors
+      theme="light"
+      rich-colors
       position="top-right"
       :expand="false"
-      closeButton
-      closeButtonPosition="top-right"
+      close-button
+      close-button-position="top-right"
     />
+    <ClientOnly>
+      <GlobalNavigationPaywall />
+    </ClientOnly>
 
     <!-- Глобальный PageLoader -->
     <!-- <Transition name="fade">
@@ -37,44 +40,27 @@
 
 <script lang="ts" setup>
 import { computed, onMounted, watch } from 'vue';
-import { useRoute } from 'vue-router';
 import { Toaster } from 'vue-sonner';
-import { useLoadersStore } from '@/app/stores/loaders';
-import PageLoader from '@/app/components/ui/PageLoader.vue';
 import { useAuthStore } from '@/app/stores/auth';
 import { useSceneSettingsStore } from '@/app/stores/sceneSettings';
 import { useUiSettingsStore } from '@/app/stores/uiSettings';
+import GlobalNavigationPaywall from '@/app/components/navigation/GlobalNavigationPaywall.vue';
 import {
   DEFAULT_SCENE_ID,
   findSceneTrack,
 } from '@/app/lib/sceneSelectionCatalog';
 
-const loaders = useLoadersStore();
 const auth = useAuthStore();
 const sceneSettings = useSceneSettingsStore();
 const uiSettings = useUiSettingsStore();
-const route = useRoute();
 
-const isBreathPracticeDetail = computed(() => {
-  const path = route.path || '';
-  // Исключаем страницу создания кастомной практики из показа синего фона
-  if (path === '/breath-practices/custom') {
-    return false;
-  }
-  return path.startsWith('/breath-practices/');
-});
-
-// Если выбран «стандартный фон» или открыта практика — показываем aurora.
+// Aurora остаётся только как глобальный fallback-слой под layout-ами.
 const showAurora = computed(() => {
   const scene = findSceneTrack(sceneSettings.sceneId);
   // "Стандартный фон" = нет кастомного изображения, показываем aurora.
   const isStandardBackground =
     sceneSettings.sceneId === 'default' || !scene?.backgroundPath;
-  return (
-    sceneSettings.sceneId === DEFAULT_SCENE_ID ||
-    isStandardBackground ||
-    isBreathPracticeDetail.value
-  );
+  return sceneSettings.sceneId === DEFAULT_SCENE_ID || isStandardBackground;
 });
 
 const auroraOpacity = computed(() => uiSettings.auroraOpacity);
@@ -86,15 +72,21 @@ onMounted(async () => {
   ]);
 });
 
-watch(() => auth.user?.id, async (userId) => {
-  await uiSettings.loadFromStorage(userId ?? null);
-});
+watch(
+  () => auth.user?.id,
+  async (userId) => {
+    await uiSettings.loadFromStorage(userId ?? null);
+  }
+);
 
-watch(() => auth.user?.sceneSettings, async () => {
-  if (!auth.user) return;
-  // Следим за сменой пользователя и настройками сцены после авторизации.
-  await sceneSettings.loadFromUser();
-});
+watch(
+  () => auth.user?.sceneSettings,
+  async () => {
+    if (!auth.user) return;
+    // Следим за сменой пользователя и настройками сцены после авторизации.
+    await sceneSettings.loadFromUser();
+  }
+);
 </script>
 
 <style lang="scss" scoped>

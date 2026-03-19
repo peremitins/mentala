@@ -85,7 +85,7 @@
           <!-- Текст вопроса со крестиком скрытия в правом верхнем углу -->
           <div v-if="isPromptVisible" class="relative">
             <p class="pr-7 text-lg font-semibold leading-tight text-foreground">
-              {{ activePrompt?.text || t('GRATITUDE_DIARY.DEFAULT_PROMPT') }}
+              {{ activePrompt?.text || diaryT('DEFAULT_PROMPT') }}
             </p>
             <button
               type="button"
@@ -300,7 +300,7 @@
           <div class="px-4 pt-4">
             <DialogTitle>{{ t('GRATITUDE_DIARY.PROMPTS_TITLE') }}</DialogTitle>
             <DialogDescription>
-              {{ t('GRATITUDE_DIARY.PROMPTS_SUBTITLE') }}
+              {{ diaryT('PROMPTS_SUBTITLE') }}
             </DialogDescription>
           </div>
         </DialogHeader>
@@ -351,7 +351,7 @@
                 promptSearch.trim()
                   ? t('GRATITUDE_DIARY.PROMPTS_EMPTY_SEARCH')
                   : activePromptCategoryId === 'favorites'
-                    ? t('GRATITUDE_DIARY.PROMPTS_EMPTY_FAVORITES')
+                    ? diaryT('PROMPTS_EMPTY_FAVORITES')
                     : t('GRATITUDE_DIARY.PROMPTS_EMPTY_CATEGORY')
               }}
             </div>
@@ -450,9 +450,7 @@
             ref="favoritePromptInputRef"
             v-model="favoritePromptDraft"
             class="w-full rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm text-foreground outline-none placeholder:text-foreground/45"
-            :placeholder="
-              t('GRATITUDE_DIARY.PROMPTS_CREATE_FAVORITE_PLACEHOLDER')
-            "
+            :placeholder="diaryT('PROMPTS_CREATE_FAVORITE_PLACEHOLDER')"
             :max-length="220"
             :min-height="'96px'"
             :max-height="'220px'"
@@ -496,7 +494,7 @@
       >
         <div class="mb-3 flex items-center justify-between gap-2">
           <p class="text-sm font-medium text-foreground">
-            {{ t('GRATITUDE_DIARY.SELECT_MOOD') }}
+            {{ diaryT('SELECT_MOOD') }}
           </p>
           <button
             type="button"
@@ -704,7 +702,7 @@
             v-model="tagDraft"
             type="text"
             class="flex-1 rounded-xl border border-white/15 bg-black/25 px-3 py-2 text-sm text-foreground outline-none placeholder:text-foreground/45"
-            :placeholder="t('GRATITUDE_DIARY.TAG_PLACEHOLDER')"
+            :placeholder="diaryT('TAG_PLACEHOLDER')"
             @keydown.enter.prevent="addTag"
           />
           <Button size="sm" variant="outline" @click="addTag">
@@ -786,7 +784,12 @@ import IconTrash2 from '~icons/lucide/trash-2';
 import IconHistory from '~icons/lucide/history';
 import IconHeart from '~icons/lucide/heart';
 import IconCalendarDays from '~icons/lucide/calendar-days';
+import {
+  getGratitudeDiaryAddressingCopy,
+  type GratitudeDiaryAddressingCopyKey,
+} from '@/app/lib/addressingCopy';
 import type { GratitudeDiaryMood } from '@/shared/dto';
+import { resolveAddressing } from '@/shared/utils/addressing';
 import {
   GRATITUDE_WORKSHEET_TEMPLATE,
   type GratitudePromptCategory,
@@ -827,6 +830,15 @@ const route = useRoute();
 const auth = useAuthStore();
 const { getFeatureAccess } = useEntitlements();
 const { openPhotoSwipeFromImg } = usePhotoSwipe();
+const addressing = computed(() => resolveAddressing(auth.user?.addressing));
+
+function diaryT(key: GratitudeDiaryAddressingCopyKey): string {
+  if (!locale.value.toLowerCase().startsWith('ru')) {
+    return t(`GRATITUDE_DIARY.${key}`);
+  }
+
+  return getGratitudeDiaryAddressingCopy(key, addressing.value);
+}
 
 // Composable для работы с избранными промптами (API + оптимистичные обновления)
 const {
@@ -1077,7 +1089,7 @@ const {
   onStartError: () => {
     useToast(
       t('GRATITUDE_DIARY.VOICE_UNAVAILABLE'),
-      t('GRATITUDE_DIARY.VOICE_FALLBACK'),
+      diaryT('VOICE_FALLBACK'),
       'warning'
     );
   },

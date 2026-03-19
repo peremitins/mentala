@@ -119,6 +119,9 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
+import { getLocalizedPlanName } from '@/app/utils/planI18n';
+
 interface Plan {
   id: string;
   name: string;
@@ -155,6 +158,7 @@ const emit = defineEmits<{
   'update:billingPeriod': [value: 'month' | 'year'];
   'confirm-change': [plan: Plan];
 }>();
+const { t } = useI18n();
 
 function handlePeriodChange(period: 'month' | 'year') {
   emit('update:billingPeriod', period);
@@ -167,10 +171,7 @@ function handleButtonClick() {
 }
 
 function getPlanName() {
-  if (props.plan.name === 'basic') return 'Basic';
-  if (props.plan.name === 'pro') return 'PRO';
-  if (props.plan.name === 'premium') return 'Premium';
-  return props.plan.name;
+  return getLocalizedPlanName(props.plan.name, t);
 }
 
 function getPrice() {
@@ -238,7 +239,11 @@ function getFeatures() {
     if (props.trialActive) {
       // Trial-период на базе Basic.
       features.push({ label: 'Пробный период 7 дней' });
-      features.push({ label: 'Полный доступ к функциям Premium' });
+      features.push({
+        label: t('PLANS.FULL_ACCESS_TO_FEATURES', {
+          plan: getLocalizedPlanName('premium', t),
+        }),
+      });
       features.push({ label: 'Безлимитные ИИ-сессии' });
     } else {
       features.push({
@@ -252,7 +257,11 @@ function getFeatures() {
       });
     }
   } else if (props.plan.name === 'pro') {
-    features.push({ label: 'Всё из Basic' });
+    features.push({
+      label: t('PLANS.ALL_FROM', {
+        plan: getLocalizedPlanName('basic', t),
+      }),
+    });
     features.push({ label: 'ИИ-сессии для регулярной поддержки' });
     features.push({ label: 'До 100 минут в неделю' });
     features.push({ label: 'Полная библиотека медитаций' });
@@ -262,7 +271,11 @@ function getFeatures() {
       tooltip: imageReminderTooltip,
     });
   } else if (props.plan.name === 'premium') {
-    features.push({ label: 'Всё из PRO' });
+    features.push({
+      label: t('PLANS.ALL_FROM', {
+        plan: getLocalizedPlanName('pro', t),
+      }),
+    });
     features.push({ label: 'Безлимитные ИИ-сессии' });
     features.push({
       label: 'Персональный стиль ИИ-напоминаний',

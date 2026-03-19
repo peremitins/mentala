@@ -1,7 +1,10 @@
 import { defineEventHandler, getQuery, setResponseStatus } from 'h3';
 import { and, desc, eq, ilike } from 'drizzle-orm';
 import { db } from '@@/server/infrastructure/db/client';
-import { gratitudeDiaryEntries } from '@@/server/infrastructure/db/schema';
+import {
+  gratitudeDiaryEntries,
+  userPreferences,
+} from '@@/server/infrastructure/db/schema';
 import { getSessionUser } from '@@/server/application/auth/session';
 import { assertGratitudeDiaryAccess } from '@/server/application/gratitude-diary/access';
 import {
@@ -12,9 +15,10 @@ import {
 } from '@/server/application/gratitude-diary/entry-date';
 import { GratitudeDiaryQueryDto } from '@/shared/dto';
 import {
-  GRATITUDE_PROMPT_CATEGORIES,
   getAllGratitudePrompts,
+  getGratitudePromptCategories,
 } from '@/shared/gratitude-diary/catalog';
+import { resolveAddressing } from '@/shared/utils/addressing';
 
 interface GroupedEntries {
   title: string;
@@ -139,13 +143,20 @@ export default defineEventHandler(async (event) => {
   const { search, promptId } = parsed.data;
   const normalizedSearch = (search || '').trim().toLowerCase();
   const timezone = resolveEntryTimezone(event);
+  const userId = Number(sessionResult.user.id);
+  const userPrefs = await db
+    .select({ addressing: userPreferences.addressing })
+    .from(userPreferences)
+    .where(eq(userPreferences.userId, userId))
+    .limit(1);
+  const addressing = resolveAddressing(userPrefs[0]?.addressing);
 
   const where = normalizedSearch
     ? and(
-        eq(gratitudeDiaryEntries.userId, Number(sessionResult.user.id)),
+        eq(gratitudeDiaryEntries.userId, userId),
         ilike(gratitudeDiaryEntries.text, `%${normalizedSearch}%`)
       )
-    : eq(gratitudeDiaryEntries.userId, Number(sessionResult.user.id));
+    : eq(gratitudeDiaryEntries.userId, userId);
 
   const rows = await db
     .select()
@@ -164,7 +175,7 @@ export default defineEventHandler(async (event) => {
       )
     : rows;
 
-  const allPrompts = getAllGratitudePrompts();
+  const allPrompts = getAllGratitudePrompts(addressing);
   const currentPrompt =
     allPrompts.find((prompt) => prompt.id === promptId) ||
     allPrompts[0] ||
@@ -182,7 +193,7 @@ export default defineEventHandler(async (event) => {
     entriesCount: filteredRows.length,
     currentPrompt,
     groupedEntries: buildGroups(filteredRows, timezone),
-    promptCategories: GRATITUDE_PROMPT_CATEGORIES,
+    promptCategories: getGratitudePromptCategories(addressing),
     isEmpty: filteredRows.length === 0,
   };
 });

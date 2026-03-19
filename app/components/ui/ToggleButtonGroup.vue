@@ -37,7 +37,7 @@ const toggleItemVariants = cva(
   // Базовые стили
   [
     'inline-flex items-center justify-center rounded-lg border',
-    'font-medium transition-colors',
+    'font-medium transition-colors whitespace-nowrap',
     'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
     'disabled:pointer-events-none disabled:opacity-50',
     // Стили для активного состояния (через data-атрибуты Radix)

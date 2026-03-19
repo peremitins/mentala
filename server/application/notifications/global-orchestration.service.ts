@@ -14,20 +14,8 @@ import {
   therapyTopicsCustom,
   notificationPreferences,
 } from '@/server/infrastructure/db/schema';
-import type { NotificationKind, Tone } from '@/shared/dto/notifications';
-
-function resolveTone(value?: string | null): Tone {
-  if (
-    value === 'delicate' ||
-    value === 'neutral' ||
-    value === 'uplifting' ||
-    value === 'resolute' ||
-    value === 'demanding'
-  ) {
-    return value;
-  }
-  return 'neutral';
-}
+import type { NotificationKind } from '@/shared/dto/notifications';
+import { resolveAssistantTone } from '@/shared/constants/assistantTone';
 import {
   toLocalTime,
   toUTC,
@@ -56,7 +44,6 @@ import {
   type AiNotificationText,
 } from './ai-generation.service';
 import { enqueueAiTextGenerationJob } from './queues/aiTextGeneration.queue';
-import { computeGenerationConfigHash } from '@/server/utils/notification-ai-config-hash';
 import { computeDayOfYear } from './notification-date.utils';
 import { and, eq, sql } from 'drizzle-orm';
 import { pickNotificationImage } from './notification-images.service';
@@ -66,8 +53,11 @@ import { buildAiTextConfigHashCandidates } from './notification-ai-hash.helpers'
 import type {
   NotificationPayload,
   NotificationSubtype,
-  NotificationNavigation,
 } from '@/shared/dto/notifications';
+import {
+  buildLegacySuggestedChipActionPayload,
+  type AppNavigationTarget,
+} from '@/shared/navigation';
 import {
   DEFAULT_NOTIFICATION_TIME_RANGE_END,
   DEFAULT_NOTIFICATION_TIME_RANGE_START,
@@ -78,8 +68,9 @@ import {
   slotsScalingConfig,
 } from './slots-scaling.config';
 import {
-  buildDeepLinkFromNavigation,
   resolveNavigationFromActionHint,
+  resolveNavigationTargetFromActionHint,
+  buildDeepLinkFromTarget,
 } from './breath-navigation.utils';
 import {
   applyFlexibleSlotJitter,
@@ -148,26 +139,27 @@ type RegenTransactionResult = {
   lockAcquireMs: number;
 };
 
-function buildActionFromNavigation(navigation: NotificationNavigation): {
+function buildActionFromTarget(target: AppNavigationTarget): {
   action: string;
   params?: Record<string, string>;
 } {
-  switch (navigation.type) {
-    case 'meditation_track':
-      return {
-        action: 'open_meditation_track',
-        params: { trackId: navigation.trackId },
-      };
-    case 'breath_practices':
-      return { action: 'open_breath_practices' };
-    case 'breath_practice':
-      return {
-        action: 'open_breath_practice',
-        params: { practiceId: navigation.slug },
-      };
-    default:
-      return { action: 'open_home' };
+  const compat = buildLegacySuggestedChipActionPayload(target);
+  if (!compat) {
+    return { action: 'open_home' };
   }
+
+  const params = compat.params
+    ? Object.fromEntries(
+        Object.entries(compat.params).filter(
+          ([, value]) => typeof value === 'string' && value.trim().length > 0
+        )
+      )
+    : undefined;
+
+  return {
+    action: compat.action,
+    params,
+  };
 }
 
 function hasPaidPlanForImages(planId: string | null | undefined): boolean {
@@ -1482,7 +1474,7 @@ export async function orchestrateAllSlotsForUser(
       let aiTextsAvailable = false;
       if (textSource === 'ai' && entityName) {
         // ВАЖНО: Используем tone из userPreferences, а не из preference.meta
-        const tone = resolveTone(
+        const tone = resolveAssistantTone(
           globalPrefs?.tone as string | null | undefined
         );
 
@@ -1688,9 +1680,13 @@ export async function orchestrateAllSlotsForUser(
             })
           : null;
 
+        const navigationTarget = resolveNavigationTargetFromActionHint(
+          actionHint,
+          text
+        );
         const navigation = resolveNavigationFromActionHint(actionHint, text);
-        const deepLink = buildDeepLinkFromNavigation(navigation);
-        const actionMeta = buildActionFromNavigation(navigation);
+        const deepLink = buildDeepLinkFromTarget(navigationTarget);
+        const actionMeta = buildActionFromTarget(navigationTarget);
 
         // Создаём payload
         const payload: NotificationPayload = {
@@ -1700,6 +1696,7 @@ export async function orchestrateAllSlotsForUser(
           action: 'open',
           deepLink,
           navigation,
+          navigationTarget,
           image: imageUrl || undefined,
           data: {
             kind: source.kind,

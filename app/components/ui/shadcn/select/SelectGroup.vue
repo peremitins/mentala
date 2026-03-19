@@ -1,17 +1,15 @@
 <script setup lang="ts">
-import type { SelectGroupProps } from 'radix-vue'
-import type { HTMLAttributes } from 'vue'
-import { cn } from '@/app/lib/utils'
-import { SelectGroup } from 'radix-vue'
-import { computed } from 'vue'
+import type { SelectGroupProps } from 'reka-ui';
+import type { HTMLAttributes } from 'vue';
+import { reactiveOmit } from '@vueuse/core';
+import { cn } from '@/app/lib/utils';
+import { SelectGroup } from 'reka-ui';
 
-const props = defineProps<SelectGroupProps & { class?: HTMLAttributes['class'] }>()
+const props = defineProps<
+  SelectGroupProps & { class?: HTMLAttributes['class'] }
+>();
 
-const delegatedProps = computed(() => {
-  const { class: _, ...delegated } = props
-
-  return delegated
-})
+const delegatedProps = reactiveOmit(props, 'class');
 </script>
 
 <template>

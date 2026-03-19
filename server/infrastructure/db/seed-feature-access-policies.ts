@@ -149,6 +149,17 @@ const policies = [
     paywallTargetPlan: 'pro',
   },
   {
+    featureKey: 'chat.realtime_voice',
+    requiredPlan: 'premium',
+    trialUnlocked: true,
+    lockIcon: 'premium',
+    paywallTitle: 'Realtime voice доступен в Premium',
+    paywallDescription:
+      'Подключи Premium, чтобы вести живой голосовой диалог с ассистентом в реальном времени.',
+    paywallCtaText: 'Открыть Premium',
+    paywallTargetPlan: 'premium',
+  },
+  {
     featureKey: 'notifications.text_source_ai',
     requiredPlan: 'pro',
     trialUnlocked: true,

@@ -30,6 +30,10 @@ import type {
 } from '@/shared/dto/notifications';
 import { MAX_NOTIFICATION_TEXT_LENGTH } from '@/shared/dto/notifications';
 import {
+  getAssistantToneMeta,
+  resolveAssistantTone,
+} from '@/shared/constants/assistantTone';
+import {
   buildTherapyNotificationSubtypeInstructions,
   resolveTemplateTherapyTopic,
 } from './notification-prompt-helpers';
@@ -212,19 +216,6 @@ interface GenerationResult {
   model: string;
   tokensUsed: number;
   costUsd: number;
-}
-
-function resolveTone(value?: string | null): Tone {
-  if (
-    value === 'delicate' ||
-    value === 'neutral' ||
-    value === 'uplifting' ||
-    value === 'resolute' ||
-    value === 'demanding'
-  ) {
-    return value;
-  }
-  return 'neutral';
 }
 
 function normalizeCustomPromptNotification(
@@ -1304,7 +1295,9 @@ export async function generateNotificationTexts(
     .where(eq(userPreferences.userId, params.userId))
     .limit(1);
 
-  const tone = resolveTone(userPrefs?.tone as string | null | undefined);
+  const tone = resolveAssistantTone(
+    userPrefs?.tone as string | null | undefined
+  );
   const addressing: Addressing =
     (userPrefs?.addressing as Addressing) || 'informal';
 
@@ -1648,15 +1641,7 @@ function buildNotificationSystemPrompt(params: {
       : params.userGender === 'female'
         ? 'женский'
         : null;
-
-  const toneMap: Record<Tone, string> = {
-    delicate: 'деликатный, мягкий',
-    neutral: 'нейтральный',
-    uplifting: 'поддерживающий, вдохновляющий',
-    resolute: 'решительный, мотивационный',
-    demanding: 'требовательный, директивный',
-    unknown: 'нейтральный',
-  };
+  const toneMeta = getAssistantToneMeta(params.tone);
 
   const directnessMap: Record<Directness, string> = {
     soft: 'Мягкий',
@@ -1844,7 +1829,9 @@ ${params.description ? '- Используй описание как основ�
 - Пол пользователя: ${genderLabel || 'не указан'}
 
 Стиль:
-- Тон: ${toneMap[params.tone]}
+- Ключ tone: ${toneMeta.value}
+- Название tone: ${toneMeta.label}
+- Описание tone: ${toneMeta.description}
 - Обращение: ${params.addressing === 'formal' ? 'на вы' : 'на ты'}
 - Прямота: ${directnessMap[params.directness]}
 ${params.subtype ? `- Фокус уведомления: ${subtypeMap[params.subtype]}` : ''}
@@ -2220,7 +2207,9 @@ export async function refillTextPool(
       .where(eq(userPreferences.userId, userId))
       .limit(1);
 
-    const tone = resolveTone(userPrefs?.tone as string | null | undefined);
+    const tone = resolveAssistantTone(
+      userPrefs?.tone as string | null | undefined
+    );
     const addressing: Addressing =
       (userPrefs?.addressing as Addressing) || 'informal';
 

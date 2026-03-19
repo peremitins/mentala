@@ -1,10 +1,10 @@
 <template>
   <div
-    class="group relative flex w-[78vw] min-w-[210px] max-w-[240px] sm:w-52 flex-col overflow-hidden rounded-xl text-left transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-primary-ui/60"
+    class="group relative flex w-[78vw] min-w-[210px] max-w-[240px] sm:w-52 cursor-inherit flex-col overflow-hidden rounded-xl text-left transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-primary-ui/60"
   >
     <button
       type="button"
-      class="relative flex w-full flex-col overflow-hidden rounded-xl text-left transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-primary-ui/60"
+      class="relative flex w-full cursor-inherit flex-col overflow-hidden rounded-xl text-left transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-primary-ui/60"
       @click="emit('open', practice.slug)"
     >
       <div
@@ -48,6 +48,7 @@
     <button
       v-if="isCustom && customId"
       type="button"
+      data-no-drag-scroll
       class="absolute top-2 right-2 z-20 rounded-full p-1.5 text-foreground/80 transition hover:text-destructive hover:bg-destructive/20 hover:bg-opacity-50"
       title="Удалить практику"
       @click.stop="emit('delete', customId)"
