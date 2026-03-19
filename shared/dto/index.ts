@@ -5,6 +5,8 @@ export * from './onboarding';
 export * from './meditations';
 export * from './user';
 export * from './landing';
+export * from './realtime';
+export * from './chat-settings';
 export * from '../navigation';
 
 const THOUGHT_DUMP_ENTRY_CONTEXT_MAX_CHARS = 2_500;

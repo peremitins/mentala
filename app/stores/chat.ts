@@ -37,6 +37,11 @@ export type ChatStoreMessage = {
   content: string;
   // Терапевтическая сессия, в рамках которой сгенерировано сообщение.
   therapySessionId: number | null;
+  // Временные сообщения живут только на текущем экране и не сохраняются на сервере.
+  transient?: boolean;
+  source?: 'chat' | 'realtime';
+  feedbackDisabled?: boolean;
+  realtimeTurnId?: string | null;
 };
 
 export type ChatMessageFeedbackState = {
@@ -281,14 +286,121 @@ export const useChatStore = defineStore('chat', {
     },
     _createMessage(
       role: ChatStoreMessage['role'],
-      content: string
+      content: string,
+      options?: Partial<
+        Omit<ChatStoreMessage, 'id' | 'role' | 'content' | 'therapySessionId'>
+      > & {
+        therapySessionId?: number | null;
+      }
     ): ChatStoreMessage {
       return {
         id: nanoid(),
         role,
         content,
-        therapySessionId: this.therapySessionId ?? null,
+        therapySessionId:
+          options?.therapySessionId ?? this.therapySessionId ?? null,
+        transient: options?.transient === true,
+        source: options?.source || 'chat',
+        feedbackDisabled: options?.feedbackDisabled === true,
+        realtimeTurnId:
+          typeof options?.realtimeTurnId === 'string'
+            ? options.realtimeTurnId
+            : null,
       };
+    },
+    /**
+     * Создаёт runtime-сообщение с точными метаданными.
+     * Используется адаптерами realtime и другими потоковыми сценариями.
+     */
+    addRuntimeMessage(params: {
+      role: ChatStoreMessage['role'];
+      content?: string;
+      therapySessionId?: number | null;
+      transient?: boolean;
+      source?: 'chat' | 'realtime';
+      feedbackDisabled?: boolean;
+      realtimeTurnId?: string | null;
+      id?: string | null;
+    }): string {
+      const message = this._createMessage(params.role, params.content || '', {
+        therapySessionId: params.therapySessionId,
+        transient: params.transient,
+        source: params.source,
+        feedbackDisabled: params.feedbackDisabled,
+        realtimeTurnId: params.realtimeTurnId,
+      });
+
+      if (typeof params.id === 'string' && params.id.trim().length > 0) {
+        message.id = params.id.trim();
+      }
+
+      this.messages.push(message);
+      return message.id;
+    },
+    findMessageIndexById(messageId: string): number {
+      return this.messages.findIndex((message) => message.id === messageId);
+    },
+    appendMessageContent(messageId: string, delta: string) {
+      if (!delta) return;
+      const idx = this.findMessageIndexById(messageId);
+      if (idx < 0) return;
+
+      const message = this.messages[idx];
+      if (!message) return;
+      message.content += delta;
+    },
+    replaceMessageContent(messageId: string, content: string) {
+      const idx = this.findMessageIndexById(messageId);
+      if (idx < 0) return;
+
+      const message = this.messages[idx];
+      if (!message) return;
+      message.content = content;
+    },
+    patchMessage(
+      messageId: string,
+      patch: Partial<
+        Omit<ChatStoreMessage, 'id' | 'role' | 'content' | 'therapySessionId'>
+      > & {
+        content?: string;
+        therapySessionId?: number | null;
+      }
+    ) {
+      const idx = this.findMessageIndexById(messageId);
+      if (idx < 0) return;
+
+      const message = this.messages[idx];
+      if (!message) return;
+
+      if (typeof patch.content === 'string') {
+        message.content = patch.content;
+      }
+      if (
+        typeof patch.therapySessionId === 'number' ||
+        patch.therapySessionId === null
+      ) {
+        message.therapySessionId = patch.therapySessionId;
+      }
+      if (typeof patch.transient === 'boolean') {
+        message.transient = patch.transient;
+      }
+      if (patch.source === 'chat' || patch.source === 'realtime') {
+        message.source = patch.source;
+      }
+      if (typeof patch.feedbackDisabled === 'boolean') {
+        message.feedbackDisabled = patch.feedbackDisabled;
+      }
+      if (
+        typeof patch.realtimeTurnId === 'string' ||
+        patch.realtimeTurnId === null
+      ) {
+        message.realtimeTurnId = patch.realtimeTurnId;
+      }
+    },
+    removeMessage(messageId: string) {
+      const idx = this.findMessageIndexById(messageId);
+      if (idx < 0) return;
+      this.messages.splice(idx, 1);
     },
     /**
      * Подготавливает параметры для API запроса
@@ -323,19 +435,28 @@ export const useChatStore = defineStore('chat', {
           role: message.role,
           content: message.content,
           therapySessionId: nextTherapySessionId,
+          transient: message.transient === true,
+          source: message.source === 'realtime' ? 'realtime' : 'chat',
+          feedbackDisabled: message.feedbackDisabled === true,
+          realtimeTurnId:
+            typeof message?.realtimeTurnId === 'string'
+              ? message.realtimeTurnId
+              : null,
         } satisfies ChatStoreMessage;
       });
     },
     /**
      * Преобразует сообщения стора в API-пейлоад без client-id.
      */
-    _toApiMessages(
-      messages: ChatStoreMessage[] = this.messages
-    ): ChatApiMessage[] {
-      return messages.map((message) => ({
-        role: message.role,
-        content: message.content,
-      }));
+    _toApiMessages(messages?: ChatStoreMessage[]): ChatApiMessage[] {
+      const sourceMessages = messages ?? this.messages;
+
+      return sourceMessages
+        .filter((message) => message.transient !== true)
+        .map((message) => ({
+          role: message.role,
+          content: message.content,
+        }));
     },
     /**
      * Останавливает текущий chat stream запрос

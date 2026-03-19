@@ -1,5 +1,6 @@
 import { getHeader, readBody } from 'h3';
 import { eq } from 'drizzle-orm';
+import { getUserAssistantSettingsProjection } from '@/server/application/chat/assistant-persona.service';
 import { getSessionUserWithRole } from '@/server/utils/require-role';
 import { db } from '@/server/infrastructure/db/client';
 import { users } from '@/server/infrastructure/db/schema';
@@ -94,7 +95,10 @@ export default defineEventHandler(async (event) => {
     .where(eq(users.id, user.id));
 
   const onboarding = (user as any)?.onboarding || {};
-  const billing = await getBillingSnapshot(user.id, (user as any)?.role);
+  const [billing, assistantSettings] = await Promise.all([
+    getBillingSnapshot(user.id, (user as any)?.role),
+    getUserAssistantSettingsProjection(user.id, user.locale),
+  ]);
   const response = {
     user: {
       id: user.id,
@@ -114,10 +118,10 @@ export default defineEventHandler(async (event) => {
       marketingConsent: hasMarketingUpdate
         ? body.marketingConsent
         : Boolean((user as any)?.marketingConsentAt),
-      pushNotificationsEnabled:
-        hasPushUpdate
-          ? body.pushNotificationsEnabled!
-          : Boolean((user as any)?.pushNotificationsEnabled ?? true),
+      pushNotificationsEnabled: hasPushUpdate
+        ? body.pushNotificationsEnabled!
+        : Boolean((user as any)?.pushNotificationsEnabled ?? true),
+      assistantSettings,
       billing,
     },
   };

@@ -75,7 +75,7 @@
           </Button>
 
           <Button class="sm:hidden" size="sm" @click="openPrimaryCTA">
-            {{ t('LANDING.HEADER.CTA_MOBILE') }}
+            {{ primaryCtaTextMobile }}
           </Button>
         </div>
       </div>
@@ -1313,6 +1313,12 @@ const primaryCtaText = computed(() =>
   isReleased.value
     ? String(t('LANDING.HERO.PRIMARY_CTA_RELEASED'))
     : String(t('LANDING.HERO.PRIMARY_CTA_EARLY_ACCESS'))
+);
+
+const primaryCtaTextMobile = computed(() =>
+  isReleased.value
+    ? String(t('LANDING.HERO.PRIMARY_CTA_RELEASED'))
+    : String(t('LANDING.HEADER.CTA_MOBILE'))
 );
 
 const pricingCtaText = computed(() =>

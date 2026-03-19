@@ -47,8 +47,11 @@ pnpm dev
 # Для эмулятора:
 pnpm run cap:sync:emulator
 
-# ИЛИ для реального устройства:
+# Для реального устройства с realtime voice:
 pnpm run cap:sync:device
+
+# Если нужен live reload на физическом Android и при этом должен работать realtime voice:
+pnpm run cap:run:android:device:live
 
 # Это автоматически настроит правильные URL и синхронизирует проект
 ```
@@ -119,8 +122,11 @@ pnpm run cap:sync
 # Для эмулятора
 pnpm run cap:sync:emulator
 
-# Для реального устройства
+# Для реального устройства с локальным bundle
 pnpm run cap:sync:device
+
+# Для live reload на Android-устройстве с автоматическим запуском app
+pnpm run cap:run:android:device:live
 
 # Просмотр логов
 adb logcat
@@ -156,7 +162,7 @@ adb shell am start -n com.mentai.app/.MainActivity
    # Для эмулятора:
    pnpm run cap:sync:emulator
 
-   # ИЛИ для реального устройства:
+   # ИЛИ для реального устройства (realtime-safe режим):
    pnpm run cap:sync:device
    ```
 
@@ -170,7 +176,7 @@ adb shell am start -n com.mentai.app/.MainActivity
 
 **Причина**: Приложение пытается загрузить статические файлы, но они не загружаются правильно.
 
-**Решение**: Используй dev-сервер для разработки:
+**Решение**: Используй корректный режим для устройства:
 
 ```bash
 # 1. Запусти dev-сервер в отдельном терминале
@@ -179,7 +185,7 @@ pnpm dev
 # 2. Для эмулятора:
 pnpm run cap:sync:emulator
 
-# ИЛИ для реального устройства:
+# ИЛИ для реального устройства (локальный bundle + API на LAN-IP):
 pnpm run cap:sync:device
 
 # 3. Пересобери и запусти приложение
@@ -192,7 +198,10 @@ cd android && ./gradlew clean installDebug
 
    - Запусти dev-сервер: `pnpm dev`
    - Используй `pnpm run cap:sync:emulator` (для эмулятора) или `pnpm run cap:sync:device` (для устройства)
-   - Это автоматически настроит правильные URL
+   - Для реального устройства `cap:sync:device` собирает локальный bundle на `localhost`, а API направляет на LAN-IP. Это нужно для realtime voice.
+   - Если нужен live reload на Android-устройстве и при этом нужен realtime voice, используй `pnpm run cap:run:android:device:live`. Эта команда переводит Android на `http://localhost:3000` через `adb reverse`, поэтому origin остаётся доверенным для микрофона, а фронтенд обновляется автоматически.
+   - `pnpm run cap:sync:device:live` теперь тоже готовит Android к `localhost`-режиму и настраивает `adb reverse` для подключённых девайсов, но сама не запускает приложение.
+   - Важно: live reload на Android остаётся зависимым от `pnpm dev` и активного `adb reverse`. Если потом открыть уже установленное приложение без dev-сервера, можно получить `ERR_CONNECTION_REFUSED` на `http://localhost:3000`. Для возврата в стабильный режим сразу выполняй `pnpm run cap:sync:device` и заново устанавливай debug build.
 
 2. **Для production сборки**:
    - IP больше не нужно указывать вручную - используются относительные пути

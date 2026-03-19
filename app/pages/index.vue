@@ -73,7 +73,10 @@
                     "
                   />
                   <div
-                    v-if="(m as any).role === 'assistant'"
+                    v-if="
+                      (m as any).role === 'assistant' &&
+                      !(m as any).feedbackDisabled
+                    "
                     class="assistant-feedback-actions absolute right-2 bottom-2 flex items-center gap-1"
                   >
                     <button
@@ -127,7 +130,7 @@
                 key="suggested-chips"
                 class="max-w-[85%] self-start"
                 :chips="chat.suggestedChips"
-                :disabled="isSending"
+                :disabled="isSending || isTextInputDisabled"
                 @select="handleChipSelect"
               />
             </TransitionGroup>
@@ -140,6 +143,7 @@
               <TextareaResize
                 ref="textareaRef"
                 v-model.trim="chat.userText"
+                :disabled="isTextInputDisabled"
                 :resize="true"
                 :prevent-enter-default="true"
                 @enter-pressed="handleKeydown"
@@ -166,22 +170,62 @@
               <button
                 type="button"
                 @click="toggleMic"
-                class="chat-action-button relative flex items-center justify-center cursor-pointer flex-none"
+                class="chat-action-button relative flex items-center justify-center cursor-pointer flex-none disabled:cursor-not-allowed disabled:opacity-45"
                 :class="
-                  speechStore.isListening
+                  speechStore.isListening && !isDictationMicDisabled
                     ? 'is-recording ring-2 ring-red-400/60 bg-red-500/15 shadow-[0_0_20px_rgba(239,68,68,0.35)]'
                     : ''
                 "
                 :style="{ borderRadius: 'var(--radius-icon)' }"
                 :aria-pressed="speechStore.isListening"
+                :aria-disabled="isDictationMicDisabled"
                 aria-label="Запись голоса"
+                :disabled="isDictationMicDisabled"
               >
                 <IconMic
                   :class="
-                    speechStore.isListening ? 'text-red-300' : 'text-foreground'
+                    speechStore.isListening && !isDictationMicDisabled
+                      ? 'text-red-300'
+                      : 'text-foreground'
                   "
                   class="w-5 h-5"
                 />
+              </button>
+            </div>
+            <div class="flex items-center">
+              <button
+                type="button"
+                class="chat-action-button chat-action-button-call relative flex items-center justify-center cursor-pointer flex-none disabled:cursor-not-allowed disabled:opacity-45"
+                :class="realtimeVoiceCallButtonClass"
+                :style="{ borderRadius: 'var(--radius-icon)' }"
+                :aria-busy="realtimeVoice.isBusy.value"
+                :aria-disabled="realtimeVoice.isBusy.value"
+                :aria-pressed="realtimeVoice.isActive.value"
+                :aria-label="realtimeVoiceCallAriaLabel"
+                :disabled="realtimeVoice.isBusy.value"
+                @click="handleRealtimeVoiceAction"
+              >
+                <IconLoaderCircle
+                  v-if="realtimeVoice.isBusy.value"
+                  class="w-5 h-5 animate-spin"
+                />
+                <IconPhoneOff
+                  v-else-if="realtimeVoice.isActive.value"
+                  class="w-5 h-5"
+                />
+                <IconPhoneCall v-else class="w-5 h-5" />
+
+                <span
+                  v-if="
+                    !realtimeVoiceAccess.available &&
+                    !realtimeVoice.isBusy.value &&
+                    !realtimeVoice.isActive.value
+                  "
+                  class="chat-action-button-badge"
+                  aria-hidden="true"
+                >
+                  {{ getPlanBadgeEmoji(realtimeVoiceAccess.requiredPlan) }}
+                </span>
               </button>
             </div>
             <button
@@ -190,7 +234,7 @@
               @click="onSendClick"
               class="chat-action-button flex items-center justify-center cursor-pointer flex-none disabled:cursor-not-allowed disabled:opacity-40"
               :style="{ borderRadius: 'var(--radius-icon)' }"
-              :disabled="isUserTextOverLimit"
+              :disabled="isUserTextOverLimit || isTextInputDisabled"
             >
               <IconSend class="w-5 h-5" />
             </button>
@@ -307,6 +351,8 @@ import {
 import { useRoute, useRouter } from 'vue-router';
 import { useTTS } from '@/app/composables/useTTS';
 import { useMarkdown } from '@/app/composables/useMarkdown';
+import { useRealtimeVoiceSession } from '@/app/composables/useRealtimeVoiceSession';
+import { useRealtimeVoiceCallFeedback } from '@/app/composables/useRealtimeVoiceCallFeedback';
 import { useVoiceDictationInput } from '@/app/composables/useVoiceDictationInput';
 import { useChatStore, type ChatMessageFeedbackState } from '@/app/stores/chat';
 import { useSpeechStore } from '@/app/stores/speech';
@@ -334,6 +380,8 @@ import {
 
 import IconMic from '~icons/lucide/mic';
 import IconSend from '~icons/lucide/send';
+import IconPhoneCall from '~icons/lucide/phone-call';
+import IconPhoneOff from '~icons/lucide/phone-off';
 import IconThumbsUp from '~icons/lucide/thumbs-up';
 import IconThumbsDown from '~icons/lucide/thumbs-down';
 import IconLoaderCircle from '~icons/lucide/loader-circle';
@@ -405,11 +453,11 @@ const isTtsEnabled = computed(
 const paywallOpen = ref(false);
 const paywallFeatureKey = ref<string | null>(null);
 const chatAssistantAccess = computed(() => getFeatureAccess('chat.assistant'));
+const realtimeVoiceAccess = computed(() =>
+  getFeatureAccess('chat.realtime_voice')
+);
 const paywallAccess = computed(() =>
   paywallFeatureKey.value ? getFeatureAccess(paywallFeatureKey.value) : null
-);
-const chatInputPlaceholder = computed(() =>
-  getAddressingCopy('chatInputPlaceholder', addressing.value)
 );
 const feedbackReasonDescription = computed(() =>
   getAddressingCopy('chatFeedbackReasonDescription', addressing.value)
@@ -466,7 +514,7 @@ const isDislikeSubmitDisabled = computed(() => {
 });
 
 // Управление TTS озвучкой
-const { speak: speakTTS } = useTTS();
+const { speak: speakTTS, stop: stopTTS } = useTTS();
 const { renderMarkdown } = useMarkdown();
 
 const isSending = ref(false); // Флаг отправки сообщения - блокирует обновление textarea из голосового ввода
@@ -491,6 +539,94 @@ const {
     emitSend();
   },
 });
+const realtimeVoice = useRealtimeVoiceSession({
+  onBeforeStart: async () => {
+    chat.stopChatStream();
+    stopTTS();
+
+    if (speechStore.isListening) {
+      await stopMic();
+    }
+
+    clearVoiceBase();
+
+    if (chat.therapySessionId && !chat.isEndingSession) {
+      await chat.endTherapySession();
+    }
+  },
+  getReadyMessageText: () =>
+    getAddressingCopy('realtimeReadyHint', addressing.value),
+});
+const realtimeVoiceCallFeedback = useRealtimeVoiceCallFeedback({
+  status: realtimeVoice.status,
+  errorMessage: realtimeVoice.errorMessage,
+});
+const isTextInputDisabled = computed(() => realtimeVoice.blocksTextInput.value);
+const isDictationMicDisabled = computed(
+  () =>
+    isTextInputDisabled.value ||
+    realtimeVoice.isActive.value ||
+    realtimeVoice.isBusy.value
+);
+const chatInputPlaceholder = computed(() =>
+  getAddressingCopy('chatInputPlaceholder', addressing.value)
+);
+const realtimeVoiceCallButtonClass = computed(() => {
+  if (realtimeVoice.isActive.value) {
+    return 'is-call-active';
+  }
+
+  if (realtimeVoice.status.value === 'starting') {
+    return 'is-call-connecting';
+  }
+
+  if (realtimeVoice.status.value === 'stopping') {
+    return 'is-call-stopping';
+  }
+
+  if (!realtimeVoiceAccess.value.available) {
+    return 'is-call-locked';
+  }
+
+  return '';
+});
+const realtimeVoiceCallAriaLabel = computed(() => {
+  if (realtimeVoice.isBusy.value) {
+    return realtimeVoice.status.value === 'starting'
+      ? 'Подключаю realtime voice'
+      : 'Завершаю realtime voice';
+  }
+
+  if (realtimeVoice.isActive.value) {
+    return `Завершить realtime voice. Осталось ${formatDurationShort(realtimeVoice.remainingSeconds.value)}.`;
+  }
+
+  if (!realtimeVoiceAccess.value.available) {
+    return `Realtime voice доступен на тарифе ${realtimeVoiceAccess.value.requiredPlan}. Открыть paywall.`;
+  }
+
+  return 'Подключить realtime voice';
+});
+const lastRealtimeVoiceToastError = ref('');
+
+watch(
+  () => realtimeVoice.errorMessage.value,
+  (nextMessage) => {
+    const normalized = String(nextMessage || '').trim();
+
+    if (!normalized) {
+      lastRealtimeVoiceToastError.value = '';
+      return;
+    }
+
+    if (normalized === lastRealtimeVoiceToastError.value) {
+      return;
+    }
+
+    lastRealtimeVoiceToastError.value = normalized;
+    useToast('Голосовой чат недоступен', normalized, 'error');
+  }
+);
 
 // Функция для обновления URL с query параметрами
 function updateURL(screen: 'welcome' | 'chat') {
@@ -555,12 +691,14 @@ function emitSend() {
   if (!ensureChatAccessOrPaywall()) return;
   if (!chat.userText?.trim()) return;
   if (isUserTextOverLimit.value) return;
+  if (isTextInputDisabled.value) return;
   if (isSending.value) return;
   const finalText = chat.userText?.trim();
   emit('send', finalText);
 }
 
 function handleKeydown(e: KeyboardEvent) {
+  if (isTextInputDisabled.value) return;
   if (!chat.userText?.trim()) return;
   if (isUserTextOverLimit.value) return;
   if (e.ctrlKey || e.metaKey) {
@@ -593,6 +731,7 @@ const textareaRef = ref<InstanceType<typeof TextareaResize> | null>(null);
 
 const sendText = async (rawText: string) => {
   if (!ensureChatAccessOrPaywall()) return;
+  if (isTextInputDisabled.value) return;
   const textToSend = rawText?.trim();
   if (!textToSend) return;
 
@@ -651,6 +790,7 @@ const sendText = async (rawText: string) => {
 
 const onSend = async () => {
   if (!ensureChatAccessOrPaywall()) return;
+  if (isTextInputDisabled.value) return;
   if (isSending.value) return;
   if (isUserTextOverLimit.value) return;
   if (!chat.userText?.trim()) return;
@@ -671,6 +811,7 @@ function onSendClick() {
 
 const handleChipSelect = async (chip: SuggestedChip) => {
   // Чипы отправляются сразу, не заполняя textarea.
+  if (isTextInputDisabled.value) return;
   if (isSending.value) return;
   if (chip.kind === 'action') {
     await handleActionChip(chip);
@@ -1094,6 +1235,10 @@ function openPaywall(featureKey: string) {
   paywallOpen.value = true;
 }
 
+function getPlanBadgeEmoji(plan: string): string {
+  return plan === 'premium' ? '💎' : '⭐';
+}
+
 function ensureChatAccessOrPaywall() {
   if (chatAssistantAccess.value.available) {
     return true;
@@ -1101,6 +1246,43 @@ function ensureChatAccessOrPaywall() {
 
   openPaywall('chat.assistant');
   return false;
+}
+
+function ensureRealtimeVoiceAccessOrPaywall() {
+  if (realtimeVoiceAccess.value.available) {
+    return true;
+  }
+
+  openPaywall('chat.realtime_voice');
+  return false;
+}
+
+function formatDurationShort(totalSeconds: number): string {
+  const normalized = Math.max(0, Math.floor(totalSeconds));
+  const minutes = Math.floor(normalized / 60);
+  const seconds = normalized % 60;
+
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+async function handleRealtimeVoiceAction() {
+  if (realtimeVoice.isBusy.value) {
+    return;
+  }
+
+  if (realtimeVoice.isActive.value) {
+    await realtimeVoiceCallFeedback.notifyHangupIntent();
+    await realtimeVoice.stop('user_stop');
+    return;
+  }
+
+  if (!ensureRealtimeVoiceAccessOrPaywall()) {
+    await realtimeVoiceCallFeedback.notifyUnavailableIntent();
+    return;
+  }
+
+  await realtimeVoiceCallFeedback.notifyCallIntent();
+  await realtimeVoice.start();
 }
 
 // Завершаем therapy сессию и останавливаем сервисы при уходе со страницы
