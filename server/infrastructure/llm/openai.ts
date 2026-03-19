@@ -21,6 +21,7 @@ import {
   reserveDailyGreeting,
   resolveUserTimezone,
 } from '@/server/application/chat/name-greeting.service';
+import { resolveAssistantPersonaFromVoice } from '@/server/application/chat/assistant-persona';
 import { isPhobiasEntryContext } from '@/server/application/chat/phobias-entry.service';
 import {
   buildSummaryPrompt,
@@ -684,6 +685,9 @@ export const openaiProvider: LlmProviderPort = {
         const chatSettings = options?.userId
           ? await readChatSettings(String(options.userId))
           : null;
+        const assistantPersona = resolveAssistantPersonaFromVoice(
+          chatSettings?.assistantVoice
+        );
         const enablePreviousResponseId =
           chatSettings?.enablePreviousResponseId ?? true;
         // Summary отключена глобально (см. SUMMARY_ENABLED), настройки пользователя игнорируем.
@@ -780,6 +784,9 @@ export const openaiProvider: LlmProviderPort = {
           {
             user_name: options?.user_name,
             user_gender: options?.user_gender,
+            assistant_gender: assistantPersona.gender,
+            assistant_display_name: assistantPersona.displayName,
+            addressing: options?.addressing,
             toneKey: options?.toneKey,
             toneLabel: options?.toneLabel,
             toneDescription: options?.toneDescription,
@@ -1112,6 +1119,9 @@ export const openaiProvider: LlmProviderPort = {
     const chatSettings = options?.userId
       ? await readChatSettings(String(options.userId))
       : null;
+    const assistantPersona = resolveAssistantPersonaFromVoice(
+      chatSettings?.assistantVoice
+    );
     const enablePreviousResponseId =
       chatSettings?.enablePreviousResponseId ?? true;
     // Summary отключена глобально (см. SUMMARY_ENABLED), настройки пользователя игнорируем.
@@ -1256,6 +1266,7 @@ export const openaiProvider: LlmProviderPort = {
           alternativeOpening = pickAlternativeOpening({
             userId: numericUserId,
             timezone,
+            addressing: options?.addressing,
             sessionId: options?.sessionId,
             entryContext: options?.entryContext,
             userGender,
@@ -1275,6 +1286,9 @@ export const openaiProvider: LlmProviderPort = {
         user_locale: options?.user_locale,
         user_name: options?.user_name,
         user_gender: options?.user_gender,
+        assistant_gender: assistantPersona.gender,
+        assistant_display_name: assistantPersona.displayName,
+        addressing: options?.addressing,
         toneKey: options?.toneKey,
         toneLabel: options?.toneLabel,
         toneDescription: options?.toneDescription,
@@ -1491,6 +1505,9 @@ export const openaiProvider: LlmProviderPort = {
       {
         user_name: options?.user_name,
         user_gender: options?.user_gender,
+        assistant_gender: assistantPersona.gender,
+        assistant_display_name: assistantPersona.displayName,
+        addressing: options?.addressing,
         toneKey: options?.toneKey,
         toneLabel: options?.toneLabel,
         toneDescription: options?.toneDescription,

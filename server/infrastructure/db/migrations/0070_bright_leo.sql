@@ -1,0 +1,1 @@
+ALTER TABLE "chat_settings" ADD COLUMN "assistant_voice" varchar(80) DEFAULT 'sage' NOT NULL;

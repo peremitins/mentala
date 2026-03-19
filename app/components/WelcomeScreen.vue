@@ -4,8 +4,8 @@
   >
     <!-- Приветственный блок -->
     <div class="text-center space-y-2 animate-fade-in">
-      <h1 class="text-3xl font-bold text-foreground">Привет!</h1>
-      <p class="text-lg text-white/80">Здесь можно поговорить</p>
+      <h1 class="text-3xl font-bold text-foreground">{{ titleText }}</h1>
+      <p class="text-lg text-white/80">{{ subtitleText }}</p>
     </div>
 
     <!-- Основное действие -->
@@ -30,6 +30,11 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
+import { getAddressingCopy } from '@/app/lib/addressingCopy';
+import { useAuthStore } from '@/app/stores/auth';
+import { resolveAddressing } from '@/shared/utils/addressing';
+
 defineProps<{
   locked?: boolean;
   requiredPlan?: 'basic' | 'pro' | 'premium' | null;
@@ -38,6 +43,16 @@ defineProps<{
 const emit = defineEmits<{
   (e: 'select'): void;
 }>();
+
+const auth = useAuthStore();
+const addressing = computed(() => resolveAddressing(auth.user?.addressing));
+
+const titleText = computed(() =>
+  getAddressingCopy('welcomeTitle', addressing.value)
+);
+const subtitleText = computed(() =>
+  getAddressingCopy('welcomeSubtitle', addressing.value)
+);
 
 function handleSelect() {
   emit('select');

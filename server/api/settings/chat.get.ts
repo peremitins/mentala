@@ -1,14 +1,23 @@
+import { createError } from 'h3';
 import { getSessionUser } from '@@/server/application/auth/session';
 import {
   getPublicChatSettings,
   readChatSettings,
 } from '@/server/utils/storage';
+import {
+  getAssistantVoicePresentation,
+  resolveAssistantVoiceCatalogItem,
+} from '@/shared/constants/assistantVoiceCatalog';
+import { ChatSettingsResponseDto } from '@/shared/dto';
 import { responseIdStore } from '@/server/utils/responseIdStore';
 
 export default defineEventHandler(async (event) => {
   const sessionResult = await getSessionUser(event);
   if (!sessionResult?.user?.id) {
-    return { error: true, message: 'Unauthorized' } as const;
+    throw createError({
+      statusCode: 401,
+      statusMessage: 'Unauthorized',
+    });
   }
   const uid = Number(sessionResult.user.id);
   const settings = await readChatSettings(String(uid));
@@ -33,10 +42,22 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  return {
+  const assistantVoiceMeta = resolveAssistantVoiceCatalogItem(
+    settings.assistantVoice
+  );
+  const assistantVoicePresentation = getAssistantVoicePresentation(
+    assistantVoiceMeta,
+    sessionResult.user.locale
+  );
+
+  return ChatSettingsResponseDto.parse({
     settings: {
       ...getPublicChatSettings(settings),
       isFirstSession,
     },
-  };
+    assistantVoiceMeta: {
+      label: assistantVoicePresentation.label,
+      gender: assistantVoiceMeta.gender,
+    },
+  });
 });

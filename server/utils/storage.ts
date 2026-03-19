@@ -7,9 +7,15 @@ import {
   normalizeLastTherapyFocus,
   type LastTherapyFocus,
 } from '@/server/application/chat/phobias-entry.service';
+import {
+  DEFAULT_ASSISTANT_VOICE_ID,
+  isAssistantVoiceSelectable,
+  resolveAssistantVoiceId,
+} from '@/shared/constants/assistantVoiceCatalog';
 
 export type PublicChatSettings = {
   voice: boolean;
+  assistantVoice: string;
   avatar: boolean;
   enablePreviousResponseId: boolean;
   enableSummary: boolean;
@@ -22,6 +28,7 @@ export type StoredChatSettings = PublicChatSettings & {
 const DEFAULT_SETTINGS: StoredChatSettings = {
   // Чатовая озвучка управляется глобальным kill-switch.
   voice: FEATURE_TTS_ENABLED,
+  assistantVoice: DEFAULT_ASSISTANT_VOICE_ID,
   avatar: false,
   enablePreviousResponseId: true,
   enableSummary: true,
@@ -33,6 +40,7 @@ export function getPublicChatSettings(
 ): PublicChatSettings {
   return {
     voice: settings.voice,
+    assistantVoice: settings.assistantVoice,
     avatar: settings.avatar,
     enablePreviousResponseId: settings.enablePreviousResponseId,
     enableSummary: settings.enableSummary,
@@ -59,9 +67,14 @@ export async function readChatSettings(
     }
 
     const row = result[0];
+    if (!row) {
+      return DEFAULT_SETTINGS;
+    }
+
     return {
       // При выключенном kill-switch принудительно отдаём false.
       voice: FEATURE_TTS_ENABLED ? (row.voice ?? true) : false,
+      assistantVoice: resolveAssistantVoiceId(row.assistantVoice),
       avatar: row.avatar ?? true,
       enablePreviousResponseId: row.enablePreviousResponseId ?? true,
       enableSummary: row.enableSummary ?? true,
@@ -83,8 +96,16 @@ export async function writeChatSettings(
   }
 
   try {
+    if (
+      patch.assistantVoice !== undefined &&
+      !isAssistantVoiceSelectable(patch.assistantVoice)
+    ) {
+      throw new Error('Unsupported assistant voice');
+    }
+
     const prev = await readChatSettings(uid);
     const next = { ...prev, ...patch };
+    next.assistantVoice = resolveAssistantVoiceId(next.assistantVoice);
 
     // Не даём включить voice, пока kill-switch выключен.
     if (!FEATURE_TTS_ENABLED) {
@@ -96,6 +117,7 @@ export async function writeChatSettings(
       .values({
         userId,
         voice: next.voice,
+        assistantVoice: next.assistantVoice,
         avatar: next.avatar,
         enablePreviousResponseId: next.enablePreviousResponseId,
         enableSummary: next.enableSummary,
@@ -106,6 +128,7 @@ export async function writeChatSettings(
         target: chatSettings.userId,
         set: {
           voice: next.voice,
+          assistantVoice: next.assistantVoice,
           avatar: next.avatar,
           enablePreviousResponseId: next.enablePreviousResponseId,
           enableSummary: next.enableSummary,

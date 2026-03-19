@@ -44,13 +44,18 @@ function getEndOfWeek(date: Date, timezone: string): Date {
 // Конвертируем миллисекунды в секунды для использования в расчетах
 export const CHAT_IDLE_TIMEOUT_SECONDS = CHAT_IDLE_TIMEOUT_MS / 1000;
 
+function resolveDbClient(tx?: any) {
+  return tx ?? db;
+}
+
 /**
  * Начать сессию терапии
  */
-export async function startTherapySession(userId: number) {
+export async function startTherapySession(userId: number, tx?: any) {
   const now = new Date();
+  const client = resolveDbClient(tx);
 
-  const [session] = await db
+  const [session] = await client
     .insert(therapySessions)
     .values({
       userId,
@@ -67,10 +72,21 @@ export async function startTherapySession(userId: number) {
  * Завершить сессию терапии
  * Использует lastActivityAt если есть, иначе startedAt + idleTimeout для зависших сессий
  */
-export async function endTherapySession(sessionId: number) {
-  const now = new Date();
+export async function endTherapySession(sessionId: number, tx?: any) {
+  return endTherapySessionWithOptions(sessionId, tx);
+}
 
-  const session = await db
+export async function endTherapySessionWithOptions(
+  sessionId: number,
+  tx?: any,
+  options?: {
+    endedAt?: Date;
+  }
+) {
+  const now = new Date();
+  const client = resolveDbClient(tx);
+
+  const session = await client
     .select()
     .from(therapySessions)
     .where(eq(therapySessions.id, sessionId))
@@ -85,25 +101,29 @@ export async function endTherapySession(sessionId: number) {
   // Используем lastActivityAt если есть, иначе startedAt
   // Для зависших сессий используем startedAt + idleTimeout
   const lastActivityAt = session[0].lastActivityAt || startedAt;
+  const requestedEndTime =
+    options?.endedAt instanceof Date ? options.endedAt : now;
   const actualEndTime =
     now.getTime() - lastActivityAt.getTime() > CHAT_IDLE_TIMEOUT_MS
       ? new Date(lastActivityAt.getTime() + CHAT_IDLE_TIMEOUT_MS) // Зависшая сессия - ограничиваем idle timeout
-      : now; // Нормальное завершение
+      : requestedEndTime; // Нормальное завершение или внешне заданное время
+  const normalizedEndTime =
+    actualEndTime.getTime() < startedAt.getTime() ? startedAt : actualEndTime;
 
-  const durationMs = actualEndTime.getTime() - startedAt.getTime();
+  const durationMs = normalizedEndTime.getTime() - startedAt.getTime();
   const durationSeconds = Math.max(0, Math.floor(durationMs / 1000)); // Гарантируем неотрицательное значение
 
-  await db
+  await client
     .update(therapySessions)
     .set({
-      endedAt: actualEndTime,
+      endedAt: normalizedEndTime,
       durationSeconds,
     })
     .where(eq(therapySessions.id, sessionId));
 
   return {
     ...session[0],
-    endedAt: actualEndTime,
+    endedAt: normalizedEndTime,
     durationSeconds,
   };
 }

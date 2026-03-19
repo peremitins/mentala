@@ -92,6 +92,22 @@
               </div>
               <IconChevronRight class="h-4 w-4 text-muted-foreground" />
             </NuxtLink>
+
+            <Separator class="w-auto mx-4" />
+
+            <NuxtLink
+              to="/settings/assistant"
+              class="px-4 py-3"
+              :class="rowClass()"
+            >
+              <div class="">
+                <p class="text-sm font-medium">Голос ассистента</p>
+                <p class="text-xs text-muted-foreground">
+                  {{ assistantVoiceSummary }}
+                </p>
+              </div>
+              <IconChevronRight class="h-4 w-4 text-muted-foreground" />
+            </NuxtLink>
           </div>
         </div>
 
@@ -323,6 +339,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useAuthStore } from '@/app/stores/auth';
+import { useChatSettingsStore } from '@/app/stores/chatSettings';
 import { useNotificationsSettings } from '@/app/composables/useNotificationsSettings';
 import { useCopyToClipboard } from '@/app/composables/useCopyToClipboard';
 import { useToast } from '@/app/composables/useToast';
@@ -362,9 +379,14 @@ import {
   DEFAULT_ASSISTANT_TONE,
   getAssistantToneLabel,
 } from '@/shared/constants/assistantTone';
+import {
+  getAssistantVoicePresentation,
+  resolveAssistantVoiceCatalogItem,
+} from '@/shared/constants/assistantVoiceCatalog';
 import IconChevronRight from '~icons/lucide/chevron-right';
 
 const auth = useAuthStore();
+const chatSettings = useChatSettingsStore();
 const { fetchGlobalPreferences } = useNotificationsSettings();
 const { copy } = useCopyToClipboard();
 const { locale } = useI18n();
@@ -423,6 +445,22 @@ const toneLabel = computed(() => {
     : getAssistantToneLabel(value);
 });
 
+const assistantVoiceSummary = computed(() => {
+  const fallbackVoice = auth.user?.assistantSettings?.voice;
+  const currentVoice = chatSettings.assistantVoice || fallbackVoice;
+  const meta = resolveAssistantVoiceCatalogItem(currentVoice);
+  const presentation = getAssistantVoicePresentation(
+    meta,
+    auth.user?.locale || locale.value
+  );
+  if (!meta) {
+    return '—';
+  }
+
+  const genderLabel = meta.gender === 'female' ? 'Женский' : 'Мужской';
+  return `${genderLabel} • ${presentation.label}`;
+});
+
 const localeLabel = computed(() => {
   const value = (auth.user?.locale || locale.value || 'ru').toString();
   if (value === 'ru') return 'Русский';
@@ -468,7 +506,14 @@ onMounted(async () => {
 
   loadingPreferences.value = true;
   try {
-    preferences.value = await fetchGlobalPreferences();
+    const [loadedPreferences] = await Promise.all([
+      fetchGlobalPreferences(),
+      chatSettings.getChatSettings().catch((error) => {
+        console.error('Не удалось загрузить chat settings:', error);
+        return null;
+      }),
+    ]);
+    preferences.value = loadedPreferences;
   } catch (error) {
     console.error('Не удалось загрузить настройки ассистента:', error);
   } finally {

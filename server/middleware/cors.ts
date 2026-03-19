@@ -34,6 +34,8 @@ function getAllowedOrigins(): string[] {
   const fromEnv = parseOrigins(process.env.DEV_ALLOWED_ORIGINS);
   // В dev всегда разрешаем стандартные локальные origins для web-приложения и лендинга.
   const defaults = [
+    'http://localhost',
+    'http://127.0.0.1',
     'http://localhost:3000',
     'http://127.0.0.1:3000',
     'http://localhost:3001',

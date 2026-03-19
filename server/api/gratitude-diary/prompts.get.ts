@@ -5,6 +5,7 @@ import { db } from '@@/server/infrastructure/db/client';
 import {
   gratitudeDiaryWorksheetTemplates,
   gratitudeDiaryFavoritePrompts,
+  userPreferences,
 } from '@@/server/infrastructure/db/schema';
 import {
   getBillingSnapshot,
@@ -14,8 +15,10 @@ import { assertGratitudeDiaryAccess } from '@/server/application/gratitude-diary
 import {
   GRATITUDE_PROMPT_CATEGORIES,
   GRATITUDE_WORKSHEET_TEMPLATE,
+  getGratitudePromptCategories,
   type GratitudeWorksheetItem,
 } from '@/shared/gratitude-diary/catalog';
+import { resolveAddressing } from '@/shared/utils/addressing';
 
 // Набор всех актуальных ID промптов из каталога для фильтрации "мёртвых" ссылок
 const CATALOG_PROMPT_IDS = new Set(
@@ -30,6 +33,12 @@ export default defineEventHandler(async (event) => {
   }
 
   const userId = Number(sessionResult.user.id);
+  const userPrefs = await db
+    .select({ addressing: userPreferences.addressing })
+    .from(userPreferences)
+    .where(eq(userPreferences.userId, userId))
+    .limit(1);
+  const addressing = resolveAddressing(userPrefs[0]?.addressing);
   const billingSnapshot = await getBillingSnapshot(
     userId,
     sessionResult.user.roleId
@@ -102,7 +111,7 @@ export default defineEventHandler(async (event) => {
     }));
 
   return {
-    categories: GRATITUDE_PROMPT_CATEGORIES,
+    categories: getGratitudePromptCategories(addressing),
     worksheet: worksheet.length ? worksheet : GRATITUDE_WORKSHEET_TEMPLATE,
     canEditWorksheet: worksheetAccess.available,
     worksheetFeatureKey,

@@ -246,34 +246,34 @@
 
     <!-- Липкая панель сохранения -->
     <div class="sticky bottom-[98px] z-40">
-      <div class="glass-deep p-2">
-        <button
-          class="relative inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors w-full hover:bg-primary/90 disabled:opacity-70 disabled:cursor-not-allowed"
-          :disabled="!hasChanges || saving"
-          @click="handleSave"
+      <Button
+        type="button"
+        class="relative w-full"
+        size="lg"
+        :disabled="!hasChanges || saving"
+        @click="handleSave"
+      >
+        <ButtonLoader v-if="saving" />
+        <span
+          class="inline-flex items-center justify-center gap-2"
+          :class="saving ? 'invisible' : ''"
         >
-          <ButtonLoader v-if="saving" />
-          <span
-            class="inline-flex items-center justify-center gap-2"
-            :class="saving ? 'invisible' : ''"
+          <svg
+            class="h-4 w-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
           >
-            <svg
-              class="h-4 w-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M5 13l4 4L19 7"
-              />
-            </svg>
-            <span>Сохранить изменения ({{ changesCount }})</span>
-          </span>
-        </button>
-      </div>
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M5 13l4 4L19 7"
+            />
+          </svg>
+          <span>Сохранить изменения ({{ changesCount }})</span>
+        </span>
+      </Button>
     </div>
 
     <!-- Модалка подтверждения сброса -->
@@ -304,6 +304,7 @@ import PageHeader from '@/app/components/PageHeader.vue';
 import TextareaResize from '@/app/components/ui/TextareaResize.vue';
 import ConfirmModal from '@/app/components/ui/ConfirmModal.vue';
 import ButtonLoader from '@/app/components/ui/ButtonLoader.vue';
+import { Button } from '@/app/components/ui/button';
 import Skeleton from '@/app/components/ui/Skeleton.vue';
 import { Checkbox } from '@/app/components/ui/shadcn/checkbox';
 import { useToast } from '@/app/composables/useToast';

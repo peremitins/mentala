@@ -406,6 +406,7 @@ import { Capacitor } from '@capacitor/core';
 import { useNow } from '@vueuse/core';
 import { nanoid } from 'nanoid';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { useAPI } from '@/app/composables/useAPI';
 import { useEntitlements } from '@/app/composables/useEntitlements';
@@ -416,6 +417,10 @@ import { runSubscriptionShortPolling } from '@/app/lib/subscriptionPolling';
 import { useAuthStore } from '@/app/stores/auth';
 import { useLoadersStore } from '@/app/stores/loaders';
 import { useSubscriptionStore } from '@/app/stores/subscription';
+import {
+  getLocalizedPlanName,
+  getLocalizedTrialPlanLabel,
+} from '@/app/utils/planI18n';
 import {
   formatTrialCountdown,
   getTrialCountdown,
@@ -512,6 +517,7 @@ interface BindPaymentMethodResponse {
 const subscriptionStore = useSubscriptionStore();
 const authStore = useAuthStore();
 const loadersStore = useLoadersStore();
+const { t } = useI18n();
 const { refreshEntitlements } = useEntitlements();
 const route = useRoute();
 const router = useRouter();
@@ -676,16 +682,12 @@ function getPlanDisplayName(name: string) {
   if (name === 'basic') {
     // Если Trial активен, показываем как "Пробный период"
     if (trialActive.value) {
-      if (trialTimeLeftLabel.value) {
-        return `Пробный период · ${trialTimeLeftLabel.value} осталось`;
-      }
-      return 'Пробный период';
+      return getLocalizedTrialPlanLabel(t, trialTimeLeftLabel.value);
     }
-    return 'Basic';
+    return getLocalizedPlanName('basic', t);
   }
-  if (name === 'pro') return 'PRO';
-  if (name === 'premium') return 'Premium';
-  return name;
+
+  return getLocalizedPlanName(name, t);
 }
 
 function getPlanDisplayNameById(planId: string) {
@@ -699,10 +701,7 @@ function getPlanDisplayNameById(planId: string) {
 function getCurrentStatusPlanLabel(): string {
   // В trial у пользователя остается Premium-доступ, даже если выбрано будущее списание PRO.
   if (trialActive.value && currentSubscription.value?.planId === 'basic') {
-    if (trialTimeLeftLabel.value) {
-      return `Пробный период · ${trialTimeLeftLabel.value} осталось`;
-    }
-    return 'Пробный период';
+    return getLocalizedTrialPlanLabel(t, trialTimeLeftLabel.value);
   }
 
   const effectivePlanId =
