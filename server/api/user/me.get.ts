@@ -1,4 +1,5 @@
 import { eq } from 'drizzle-orm';
+import { getUserAssistantSettingsProjection } from '@/server/application/chat/assistant-persona.service';
 import { getBillingSnapshot } from '@/server/application/subscriptions/entitlements.service';
 import { db } from '@/server/infrastructure/db/client';
 import { userPreferences } from '@/server/infrastructure/db/schema';
@@ -13,13 +14,14 @@ export default defineEventHandler(async (event) => {
   // Если пользователь авторизован - возвращаем его данные
   if (user?.id) {
     const onboarding = (user as any)?.onboarding || {};
-    const [billing, prefs] = await Promise.all([
+    const [billing, prefs, assistantSettings] = await Promise.all([
       getBillingSnapshot(user.id, (user as any)?.role),
       db
         .select({ addressing: userPreferences.addressing })
         .from(userPreferences)
         .where(eq(userPreferences.userId, user.id))
         .limit(1),
+      getUserAssistantSettingsProjection(user.id, user.locale),
     ]);
 
     const response = {
@@ -44,6 +46,7 @@ export default defineEventHandler(async (event) => {
         pushNotificationsEnabled: Boolean(
           (user as any)?.pushNotificationsEnabled ?? true
         ),
+        assistantSettings,
         billing,
       },
     };

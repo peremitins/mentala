@@ -2,6 +2,11 @@ import { computed } from 'vue';
 import { Capacitor } from '@capacitor/core';
 import { getCsrfTokenForHeader } from '@/app/utils/csrf';
 import { useRuntimeConfig } from '#imports';
+import {
+  resolveClientPlatformHeader,
+  resolveClientTimezone,
+  resolveRuntimeApiUrl,
+} from '@/app/utils/runtime-api';
 
 /**
  * Composable для управления TTS озвучкой
@@ -14,6 +19,12 @@ const globalTTSState = {
   currentAudio: null as HTMLAudioElement | null,
   currentAbortController: null as AbortController | null,
   currentBlobURL: null as string | null,
+};
+
+type TtsSpeakOptions = {
+  voice?: string;
+  format?: 'mp3' | 'wav' | 'opus';
+  model?: string;
 };
 
 export function useTTS() {
@@ -64,7 +75,10 @@ export function useTTS() {
    * Воспроизводит текст через TTS API
    * Автоматически останавливает предыдущую озвучку перед запуском новой
    */
-  async function speak(text: string): Promise<void> {
+  async function speak(
+    text: string,
+    options: TtsSpeakOptions = {}
+  ): Promise<void> {
     const runtimeConfig = useRuntimeConfig();
     if (runtimeConfig.public.featureTtsEnabled !== true) {
       return;
@@ -84,8 +98,15 @@ export function useTTS() {
     try {
       // Используем нативный fetch вместо $api для гарантированной поддержки AbortController
       const config = useRuntimeConfig();
-      const baseURL = (config.public as any).apiBase || '';
-      const url = `${baseURL}/api/tts/openai`;
+      const isCapacitor = Capacitor.isNativePlatform();
+      const platform = Capacitor.getPlatform();
+      const url = resolveRuntimeApiUrl('/api/tts/openai', {
+        apiBase: (config.public as any).apiBase,
+        isDev: (config.public as any).isDev === true,
+        appOrigin: typeof window !== 'undefined' ? window.location.origin : '',
+        isCapacitor,
+        platform,
+      });
 
       // Получаем токен сессии для заголовка
       const SESSION_TOKEN_KEY = 'mentai.session.token';
@@ -96,9 +117,10 @@ export function useTTS() {
 
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
+        'X-Timezone': resolveClientTimezone(),
+        'X-Platform': resolveClientPlatformHeader(platform),
       };
 
-      const isCapacitor = Capacitor.isNativePlatform();
       if (isCapacitor) {
         // Для Capacitor отправляем X-Session-Token
         if (token) {
@@ -117,7 +139,12 @@ export function useTTS() {
         method: 'POST',
         headers,
         credentials: 'include',
-        body: JSON.stringify({ text, voice: 'sage', format: 'mp3' }),
+        body: JSON.stringify({
+          text,
+          ...(options.voice ? { voice: options.voice } : {}),
+          ...(options.model ? { model: options.model } : {}),
+          format: options.format || 'mp3',
+        }),
         signal: abortController.signal, // Передаем signal для отмены запроса
       });
 

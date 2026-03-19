@@ -19,7 +19,7 @@
 
           <div class="relative flex items-center gap-2.5">
             <div
-              class="flex w-[68px] shrink-0 flex-col justify-end rounded-[18px] border border-white/10 bg-black/10 px-2 py-3"
+              class="flex items-center w-[68px] shrink-0 flex-col justify-end rounded-[18px] border border-white/10 bg-black/10 px-2 py-3"
             >
               <p class="text-4xl font-semibold leading-none text-white">
                 {{ streak }}

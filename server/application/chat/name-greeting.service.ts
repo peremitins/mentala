@@ -1,6 +1,7 @@
 import { and, eq, isNull, lt, or } from 'drizzle-orm';
 import { db } from '../../infrastructure/db/client';
 import { chatSettings } from '../../infrastructure/db/schema';
+import { DEFAULT_ASSISTANT_VOICE_ID } from '../../../shared/constants/assistantVoiceCatalog';
 import type { ChatEntryContext } from '../../../shared/dto';
 import type { Gender } from '../../../shared/dto/onboarding';
 import type { Addressing } from '../../../shared/dto/notifications';
@@ -642,6 +643,7 @@ export async function reserveDailyGreeting(params: {
       userId: params.userId,
       // Синхронизируем значения с DEFAULT_SETTINGS из storage.ts
       voice: true,
+      assistantVoice: DEFAULT_ASSISTANT_VOICE_ID,
       avatar: false,
       enablePreviousResponseId: true,
       enableSummary: true,
@@ -690,6 +692,7 @@ export async function reserveDailyNameGreeting(params: {
       userId: params.userId,
       // Синхронизируем значения с DEFAULT_SETTINGS из storage.ts
       voice: true,
+      assistantVoice: DEFAULT_ASSISTANT_VOICE_ID,
       avatar: false,
       enablePreviousResponseId: true,
       enableSummary: true,

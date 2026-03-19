@@ -36,6 +36,8 @@ function getAllowedOrigins(): string[] {
     // В development: whitelist из env
     const devOrigins = parseOrigins(process.env.DEV_ALLOWED_ORIGINS);
     const defaults = [
+      'http://localhost',
+      'http://127.0.0.1',
       'http://localhost:3000',
       'http://127.0.0.1:3000',
       'http://localhost:3001',
