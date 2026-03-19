@@ -15,12 +15,14 @@ import type {
   TherapyApproach,
   ResponseType,
 } from '../../../shared/dto';
+import type { AssistantVoiceGender } from '../../../shared/constants/assistantVoiceCatalog';
 import type { Addressing } from '../../../shared/dto/notifications';
 import {
   normalizeOnboardingReasons,
   type OnboardingReason,
   type OnboardingReasons,
 } from '../../../shared/dto/onboarding';
+import { buildAssistantPersonaInstruction } from '../chat/assistant-persona';
 import {
   pickAddressingText,
   resolveAddressing,
@@ -556,6 +558,16 @@ function buildUserContext(vars: {
  Запрещены формы с альтернативами в скобках (например, "сделал / сделала").`;
 }
 
+function buildAssistantPersonaContext(vars: {
+  assistant_gender?: AssistantVoiceGender;
+  assistant_display_name?: string;
+}): string {
+  return buildAssistantPersonaInstruction({
+    assistantGender: vars.assistant_gender,
+    assistantDisplayName: vars.assistant_display_name,
+  });
+}
+
 export function detectApproachFromContext(
   userMessage: string,
   messageHistory: Array<{ role: string; content: string }> = []
@@ -617,6 +629,8 @@ export function buildDeveloperContext(
   vars: {
     user_name?: string;
     user_gender?: string;
+    assistant_gender?: AssistantVoiceGender;
+    assistant_display_name?: string;
     addressing?: Addressing;
     toneKey?: string;
     toneLabel?: string;
@@ -630,8 +644,11 @@ export function buildDeveloperContext(
   const responseNumber = ctx.responseNumber || 1;
   const responseTypeInfo = getResponseTypeByNumber(responseNumber);
   const userContext = buildUserContext(vars);
+  const assistantPersonaContext = buildAssistantPersonaContext(vars);
 
-  return `${userContext}
+  return `${assistantPersonaContext}
+
+${userContext}
 
 Контекст текущего ответа:
  Номер: ${responseNumber}
@@ -801,6 +818,8 @@ export function buildWelcomePrompt(options: {
   user_locale?: string;
   user_name?: string;
   user_gender?: string;
+  assistant_gender?: AssistantVoiceGender;
+  assistant_display_name?: string;
   addressing?: Addressing;
   greetingName?: string | null;
   includeNameValidationPrompt?: boolean;
@@ -830,6 +849,10 @@ export function buildWelcomePrompt(options: {
     options.entryContext?.type === 'thought_dump' ||
     isPhobiasEntry;
   const addressingContext = buildAddressingContext(options.addressing);
+  const assistantPersonaContext = buildAssistantPersonaContext({
+    assistant_gender: options.assistant_gender,
+    assistant_display_name: options.assistant_display_name,
+  });
   const toneContext = buildToneContext({
     toneKey: options.toneKey,
     toneLabel: options.toneLabel,
@@ -885,7 +908,7 @@ export function buildWelcomePrompt(options: {
       prompt +
       `\n\nВАЖНО: Не утверждай, что тема уже обсуждалась конкретно раньше; если контекст неочевиден - формулируй нейтрально. ${generatedStartInstruction}`;
 
-    const fullPrompt = `${addressingContext ? `${addressingContext}\n\n` : ''}${toneContext ? `${toneContext}\n\n` : ''}${onboardingContext ? `${onboardingContext}\n\n` : ''}${prompt}${nameInstruction}${openingInstruction}${noTemplateStartInstruction}`;
+    const fullPrompt = `${assistantPersonaContext ? `${assistantPersonaContext}\n\n` : ''}${addressingContext ? `${addressingContext}\n\n` : ''}${toneContext ? `${toneContext}\n\n` : ''}${onboardingContext ? `${onboardingContext}\n\n` : ''}${prompt}${nameInstruction}${openingInstruction}${noTemplateStartInstruction}`;
     return contextNote ? `${contextNote}\n\n${fullPrompt}` : fullPrompt;
   }
 
@@ -969,7 +992,7 @@ export function buildWelcomePrompt(options: {
     );
   }
 
-  const fullPrompt = `${addressingContext ? `${addressingContext}\n\n` : ''}${toneContext ? `${toneContext}\n\n` : ''}${onboardingContext ? `${onboardingContext}\n\n` : ''}${prompt}${nameInstruction}${openingInstruction}${noTemplateStartInstruction}`;
+  const fullPrompt = `${assistantPersonaContext ? `${assistantPersonaContext}\n\n` : ''}${addressingContext ? `${addressingContext}\n\n` : ''}${toneContext ? `${toneContext}\n\n` : ''}${onboardingContext ? `${onboardingContext}\n\n` : ''}${prompt}${nameInstruction}${openingInstruction}${noTemplateStartInstruction}`;
   return contextNote ? `${contextNote}\n\n${fullPrompt}` : fullPrompt;
 }
 

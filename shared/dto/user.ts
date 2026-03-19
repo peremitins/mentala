@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { AssistantSettingsDto } from '@/shared/dto/assistant-settings';
 
 export const BillingFeaturePaywallDto = z.object({
   title: z.string(),
@@ -47,6 +48,7 @@ export const UserMeDto = z.object({
       sceneSettings: z.record(z.any()).optional(),
       marketingConsent: z.boolean().optional(),
       pushNotificationsEnabled: z.boolean().optional(),
+      assistantSettings: AssistantSettingsDto.optional(),
       billing: UserBillingDto.optional(),
     })
     .nullable(),

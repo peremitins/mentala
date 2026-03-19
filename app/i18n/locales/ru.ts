@@ -1,5 +1,6 @@
 export default {
   COMMON: {},
+  CHAT: {},
   PLANS: {
     BASIC: 'Базовый',
     PRO: 'Про',

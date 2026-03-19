@@ -25,3 +25,12 @@ export const FEATURE_TTS_ENABLED = readBooleanFlag(
   ['FEATURE_TTS_ENABLED', 'NUXT_FEATURE_TTS_ENABLED'],
   false
 );
+
+/**
+ * Глобальный kill-switch для realtime voice.
+ * По умолчанию включён, чтобы feature работала без дополнительного env.
+ */
+export const FEATURE_REALTIME_VOICE_ENABLED = readBooleanFlag(
+  ['FEATURE_REALTIME_VOICE_ENABLED', 'NUXT_FEATURE_REALTIME_VOICE_ENABLED'],
+  true
+);

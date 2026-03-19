@@ -12,12 +12,14 @@ import process from 'node:process';
 
 const CONFIG_TARGETS = [
   {
+    id: 'android',
     name: 'Android',
     path: 'android/app/src/main/assets/capacitor.config.json',
     forceAndroidRuntimeDefaults: true,
     normalizeWebDir: true,
   },
   {
+    id: 'ios',
     name: 'iOS',
     path: 'ios/App/App/capacitor.config.json',
     forceAndroidRuntimeDefaults: false,
@@ -25,8 +27,7 @@ const CONFIG_TARGETS = [
   },
 ];
 
-function normalizeServerUrlFromEnv() {
-  const rawValue = process.env.CAPACITOR_SERVER_URL;
+function normalizeServerUrl(rawValue) {
   if (rawValue === undefined) {
     return '';
   }
@@ -47,6 +48,46 @@ function normalizeServerUrlFromEnv() {
       error instanceof Error ? error.message : 'invalid CAPACITOR_SERVER_URL';
     throw new Error(`Invalid CAPACITOR_SERVER_URL "${value}": ${message}`);
   }
+}
+
+function resolveServerUrlForTarget(targetId) {
+  const targetKey = String(targetId || '')
+    .trim()
+    .toUpperCase();
+  const platformSpecificValue =
+    process.env[`CAPACITOR_SERVER_URL_${targetKey}`] ?? undefined;
+
+  if (platformSpecificValue !== undefined) {
+    return normalizeServerUrl(platformSpecificValue);
+  }
+
+  return normalizeServerUrl(process.env.CAPACITOR_SERVER_URL);
+}
+
+function resolveRequestedTargets() {
+  const rawValue = String(process.env.CAPACITOR_CONFIG_TARGETS || '').trim();
+  if (!rawValue) {
+    return CONFIG_TARGETS;
+  }
+
+  const requested = new Set(
+    rawValue
+      .split(',')
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean)
+  );
+
+  const filteredTargets = CONFIG_TARGETS.filter((target) =>
+    requested.has(target.id)
+  );
+
+  if (!filteredTargets.length) {
+    throw new Error(
+      `Unknown CAPACITOR_CONFIG_TARGETS value "${rawValue}". Supported targets: ${CONFIG_TARGETS.map((target) => target.id).join(', ')}`
+    );
+  }
+
+  return filteredTargets;
 }
 
 function ensureObject(value) {
@@ -120,11 +161,12 @@ function patchConfig(target, serverUrl) {
 }
 
 function main() {
-  const serverUrl = normalizeServerUrlFromEnv();
-  const prodSafeMode = !serverUrl;
+  const targets = resolveRequestedTargets();
 
-  for (const target of CONFIG_TARGETS) {
+  for (const target of targets) {
     try {
+      const serverUrl = resolveServerUrlForTarget(target.id);
+      const prodSafeMode = !serverUrl;
       const result = patchConfig(target, serverUrl);
       if (!result.changed) {
         console.log(`• ${target.name}: no changes`);
