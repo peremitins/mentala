@@ -30,10 +30,10 @@ export const RealtimeVoiceSessionStartRequestDto = z.object({
   clientPlatformHint: RealtimeVoiceClientPlatformEnum.optional(),
 });
 
-export const RealtimeVoiceMonthlyQuotaDto = z.object({
-  limitMinutes: z.number().int().nonnegative(),
-  usedMinutes: z.number().int().nonnegative(),
-  remainingMinutes: z.number().int().nonnegative(),
+export const RealtimeVoiceQuotaDto = z.object({
+  limitSeconds: z.number().int().nonnegative(),
+  usedSeconds: z.number().int().nonnegative(),
+  remainingSeconds: z.number().int().nonnegative(),
   resetsAt: z.string(),
 });
 
@@ -60,7 +60,7 @@ export const RealtimeVoiceSessionStartResponseDto = z.object({
     expiresAt: z.string(),
     webrtcUrl: z.string().url(),
   }),
-  quota: RealtimeVoiceMonthlyQuotaDto,
+  quota: RealtimeVoiceQuotaDto,
   weeklyAi: RealtimeVoiceWeeklyQuotaDto,
 });
 
@@ -119,7 +119,7 @@ export const RealtimeVoiceSessionEndResponseDto = z.object({
     inputAudioSeconds: z.number().int().nonnegative(),
     outputAudioSeconds: z.number().int().nonnegative(),
   }),
-  quota: RealtimeVoiceMonthlyQuotaDto,
+  quota: RealtimeVoiceQuotaDto,
   weeklyAi: RealtimeVoiceWeeklyQuotaDto,
 });
 

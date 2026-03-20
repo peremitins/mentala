@@ -9,6 +9,33 @@ type RealtimeVoiceServerEvent = {
   [key: string]: any;
 };
 
+type NavigatorWithAudioSession = Navigator & {
+  audioSession?: {
+    type?: string;
+  };
+};
+
+const AUDIO_SESSION_PLAYBACK = 'playback';
+
+function ensureRealtimeVoicePlaybackAudioSessionType() {
+  if (typeof navigator === 'undefined') {
+    return;
+  }
+
+  const session = (navigator as NavigatorWithAudioSession).audioSession;
+  if (!session) {
+    return;
+  }
+
+  try {
+    if (session.type !== AUDIO_SESSION_PLAYBACK) {
+      session.type = AUDIO_SESSION_PLAYBACK;
+    }
+  } catch {
+    // В старых WebView API может отсутствовать или быть read-only.
+  }
+}
+
 async function waitForIceGatheringComplete(
   connection: RTCPeerConnection,
   timeoutMs = 3_000
@@ -59,6 +86,41 @@ export class RealtimeVoiceTransport {
     );
   }
 
+  private ensureRemoteAudioElement(): HTMLAudioElement | null {
+    if (typeof Audio === 'undefined') {
+      return null;
+    }
+
+    if (!this.remoteAudioElement) {
+      const audioElement = new Audio();
+      audioElement.autoplay = true;
+      audioElement.muted = false;
+      audioElement.volume = 1;
+      audioElement.preload = 'auto';
+      audioElement.setAttribute('playsinline', 'true');
+      this.remoteAudioElement = audioElement;
+    }
+
+    return this.remoteAudioElement;
+  }
+
+  private async attachRemoteAudioStream(stream: MediaStream) {
+    const remoteAudioElement = this.ensureRemoteAudioElement();
+    if (!remoteAudioElement) {
+      return;
+    }
+
+    ensureRealtimeVoicePlaybackAudioSessionType();
+    remoteAudioElement.srcObject = stream;
+    remoteAudioElement.muted = false;
+    remoteAudioElement.volume = 1;
+
+    await remoteAudioElement.play().catch(() => {
+      // Автоплей может быть ограничен браузером. Повторное воспроизведение
+      // произойдёт автоматически после следующего user gesture.
+    });
+  }
+
   async start(params: {
     clientSecret?: string | null;
     webrtcUrl: string;
@@ -67,7 +129,14 @@ export class RealtimeVoiceTransport {
     requestHeaders?: Record<string, string>;
     audioConstraints?: MediaTrackConstraints | boolean;
   }) {
-    if (!getRealtimeVoiceSupport().isSupported) {
+    const support = getRealtimeVoiceSupport();
+    if (!support.isSecureContext) {
+      throw new Error(
+        `Realtime voice requires a secure context. Current origin: ${support.origin || 'unknown'}`
+      );
+    }
+
+    if (!support.isSupported) {
       throw new Error('Realtime voice is not supported on this device');
     }
 
@@ -83,30 +152,30 @@ export class RealtimeVoiceTransport {
     const localStream = await requestRealtimeVoiceUserMedia({
       audio: params.audioConstraints ?? true,
     });
-    const remoteAudioElement = new Audio();
-    remoteAudioElement.autoplay = true;
-    remoteAudioElement.setAttribute('playsinline', 'true');
-
     this.peerConnection = peerConnection;
     this.dataChannel = dataChannel;
     this.localStream = localStream;
-    this.remoteAudioElement = remoteAudioElement;
 
     peerConnection.addEventListener('connectionstatechange', () => {
       params.onConnectionStateChange?.(peerConnection.connectionState);
     });
 
     peerConnection.addEventListener('track', (event) => {
-      const [stream] = event.streams;
+      const [eventStream] = event.streams;
+      const stream =
+        eventStream ||
+        (typeof MediaStream !== 'undefined'
+          ? new MediaStream([event.track])
+          : null);
       if (!stream) {
         return;
       }
 
-      remoteAudioElement.srcObject = stream;
-      void remoteAudioElement.play().catch(() => {
-        // Автоплей может быть ограничен браузером. Повторное воспроизведение
-        // произойдёт автоматически после следующего user gesture.
+      console.info('[RealtimeVoiceTransport] Remote audio track received', {
+        trackKind: event.track?.kind || 'unknown',
+        streamId: stream.id || 'unknown',
       });
+      void this.attachRemoteAudioStream(stream);
     });
 
     dataChannel.addEventListener('message', (event) => {

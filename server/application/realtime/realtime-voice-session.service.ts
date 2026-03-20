@@ -186,9 +186,9 @@ function buildQuotaPayload(
   quota: Awaited<ReturnType<typeof getRealtimeVoiceQuotaSnapshot>>
 ) {
   return {
-    limitMinutes: quota.limitMinutes,
-    usedMinutes: quota.usedMinutes,
-    remainingMinutes: quota.remainingMinutes,
+    limitSeconds: quota.limitSeconds,
+    usedSeconds: quota.usedSeconds,
+    remainingSeconds: quota.remainingSeconds,
     resetsAt: quota.resetsAt.toISOString(),
   };
 }
@@ -375,7 +375,7 @@ export async function startRealtimeVoiceSession(params: {
       now: prepared.now,
     });
     const remainingByQuota = resolveRealtimeVoiceMaxDurationSeconds({
-      remainingMonthlyMinutes: refreshedQuota.remainingMinutes,
+      remainingMonthlySeconds: refreshedQuota.remainingSeconds,
       remainingWeeklyMinutes: prepared.access.weeklyAi.availableMinutes,
     });
     const remainingBySession = resolveRemainingHardCeilingSeconds(

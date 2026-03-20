@@ -15,6 +15,14 @@ import { useChatStore } from '@/app/stores/chat';
 import { getCsrfTokenForHeader } from '@/app/utils/csrf';
 import { RealtimeVoiceTransport } from '@/app/services/realtime/realtimeVoiceTransport';
 import {
+  activateRealtimeVoiceNativeAudioSession,
+  deactivateRealtimeVoiceNativeAudioSession,
+} from '@/app/services/realtime/realtimeVoiceNativeAudio';
+import {
+  startRealtimeVoiceForegroundService,
+  stopRealtimeVoiceForegroundService,
+} from '@/app/services/realtime/realtimeVoiceForegroundBridge';
+import {
   buildRealtimeVoiceAudioConstraints,
   shouldInterruptRealtimeAssistantOnSpeechStart,
 } from '@/app/services/realtime/realtimeVoicePolicy';
@@ -240,12 +248,6 @@ export function useRealtimeVoiceSession(options?: {
   const sessionId = ref<string | null>(null);
   const therapySessionId = ref<number | null>(null);
   const remainingSeconds = ref(0);
-  const monthlyQuota = ref<{
-    limitMinutes: number;
-    usedMinutes: number;
-    remainingMinutes: number;
-    resetsAt: string;
-  } | null>(null);
   const weeklyQuota = ref<{
     weeklyLimitMinutes: number;
     usedMinutes: number;
@@ -268,7 +270,10 @@ export function useRealtimeVoiceSession(options?: {
   let isEnding = false;
   let readyHintMessageId: string | null = null;
 
-  const isSupported = computed(() => getRealtimeVoiceSupport().isSupported);
+  const isSupported = computed(() => {
+    const support = getRealtimeVoiceSupport();
+    return support.isSupported && support.isSecureContext;
+  });
   const isActive = computed(() => status.value === 'active');
   const isBusy = computed(
     () => status.value === 'starting' || status.value === 'stopping'
@@ -555,7 +560,6 @@ export function useRealtimeVoiceSession(options?: {
         } as Record<string, unknown>,
       });
       const parsed = RealtimeVoiceSessionEndResponseDto.parse(response);
-      monthlyQuota.value = parsed.quota;
       weeklyQuota.value = parsed.weeklyAi;
 
       return parsed;
@@ -576,6 +580,8 @@ export function useRealtimeVoiceSession(options?: {
       transport = null;
     }
 
+    await deactivateRealtimeVoiceNativeAudioSession();
+    await stopRealtimeVoiceForegroundService();
     adapter = null;
     resetRuntimeMaps();
     startedAtMs = 0;
@@ -723,6 +729,10 @@ export function useRealtimeVoiceSession(options?: {
           return;
         }
 
+        // На Android Chromium/WebView может заново перехватывать audio route.
+        // На каждом assistant playback повторно закрепляем communication-mode
+        // на основном динамике, не ломая duplex-захват микрофона.
+        void activateRealtimeVoiceNativeAudioSession();
         assistantAudioStartedAtMsByResponseId.set(
           responseId,
           performance.now()
@@ -844,13 +854,17 @@ export function useRealtimeVoiceSession(options?: {
       return false;
     }
 
-    if (!isSupported.value) {
-      const support = getRealtimeVoiceSupport();
+    const support = getRealtimeVoiceSupport();
+    if (!support.isSecureContext) {
+      status.value = 'error';
+      errorMessage.value = `Realtime voice недоступен на небезопасном origin ${support.origin || 'unknown'}. Для микрофона в Android WebView нужен https://... или localhost.`;
+      return false;
+    }
+
+    if (!support.isSupported) {
       status.value = 'error';
       errorMessage.value =
-        !support.isSecureContext && !support.hasUserMedia
-          ? `Realtime voice недоступен на небезопасном origin ${support.origin || 'unknown'}. Для микрофона в Android WebView нужен https://... или localhost.`
-          : 'На этом устройстве WebRTC или доступ к микрофону недоступен.';
+        'На этом устройстве WebRTC или доступ к микрофону недоступен.';
       return false;
     }
 
@@ -878,7 +892,6 @@ export function useRealtimeVoiceSession(options?: {
       sessionId.value = parsed.session.id;
       therapySessionId.value = parsed.session.therapySessionId;
       clientPlatform.value = parsed.session.clientPlatform;
-      monthlyQuota.value = parsed.quota;
       weeklyQuota.value = parsed.weeklyAi;
 
       adapter = buildChatAdapter(parsed.session.therapySessionId);
@@ -903,6 +916,11 @@ export function useRealtimeVoiceSession(options?: {
             void stop('network_error');
           }
         },
+      });
+      await activateRealtimeVoiceNativeAudioSession();
+      await startRealtimeVoiceForegroundService({
+        title: 'Ментала',
+        subtitle: 'Идёт голосовой разговор',
       });
 
       status.value = 'active';
@@ -1002,7 +1020,6 @@ export function useRealtimeVoiceSession(options?: {
     sessionId,
     therapySessionId,
     remainingSeconds,
-    monthlyQuota,
     weeklyQuota,
     isSupported,
     isActive,

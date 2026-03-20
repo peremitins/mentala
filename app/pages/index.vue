@@ -126,7 +126,7 @@
                 key="loading-indicator"
               />
               <SuggestedChips
-                v-if="chat.suggestedChips.length"
+                v-if="shouldShowSuggestedChips"
                 key="suggested-chips"
                 class="max-w-[85%] self-start"
                 :chips="chat.suggestedChips"
@@ -562,6 +562,12 @@ const realtimeVoiceCallFeedback = useRealtimeVoiceCallFeedback({
   errorMessage: realtimeVoice.errorMessage,
 });
 const isTextInputDisabled = computed(() => realtimeVoice.blocksTextInput.value);
+const shouldShowSuggestedChips = computed(
+  () =>
+    chat.suggestedChips.length > 0 &&
+    !realtimeVoice.isActive.value &&
+    !realtimeVoice.isBusy.value
+);
 const isDictationMicDisabled = computed(
   () =>
     isTextInputDisabled.value ||

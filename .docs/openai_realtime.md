@@ -206,7 +206,7 @@ Realtime voice не должен ломать текущий текстовый 
 Обязательные поля:
 
 - `type: "realtime"`
-- `model: "gpt-realtime"` либо актуальный production-safe alias, задаваемый сервером
+- `model: "gpt-realtime-mini"` либо актуальный production-safe alias, задаваемый сервером
 - `audio.input.turn_detection.type: "server_vad"`
 - `audio.input.turn_detection.threshold`
 - `audio.input.turn_detection.prefix_padding_ms`
@@ -344,7 +344,7 @@ Response body:
     "id": "local_realtime_session_id",
     "therapySessionId": 123,
     "status": "created",
-    "model": "gpt-realtime",
+    "model": "gpt-realtime-mini",
     "voice": "marin",
     "maxDurationSeconds": 3600,
     "idleTimeoutSeconds": 60

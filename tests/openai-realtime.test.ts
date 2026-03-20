@@ -15,7 +15,7 @@ vi.mock('h3', () => ({
 vi.mock('@/server/config/realtime', () => ({
   REALTIME_VOICE_CLIENT_SECRET_TIMEOUT_MS: 60_000,
   REALTIME_VOICE_CLIENT_SECRET_TTL_SECONDS: 60,
-  REALTIME_VOICE_OPENAI_MODEL: 'gpt-realtime',
+  REALTIME_VOICE_OPENAI_MODEL: 'gpt-realtime-mini',
   REALTIME_VOICE_OPENAI_VOICE: 'alloy',
   REALTIME_VOICE_PROVIDER_TIMEOUT_MS: 60_000,
   REALTIME_VOICE_PREFIX_PADDING_MS: 300,
@@ -61,7 +61,7 @@ describe('openai realtime SDP exchange', () => {
         sdp: sdpOffer,
         sessionConfig: {
           type: 'realtime',
-          model: 'gpt-realtime',
+          model: 'gpt-realtime-mini',
           instructions: 'Говори кратко.',
           audio: {
             input: {
@@ -95,7 +95,9 @@ describe('openai realtime SDP exchange', () => {
 
     const sentFormData = options.body as FormData;
     expect(sentFormData.get('sdp')).toBe(sdpOffer);
-    expect(sentFormData.get('session')).toContain('"model":"gpt-realtime"');
+    expect(sentFormData.get('session')).toContain(
+      '"model":"gpt-realtime-mini"'
+    );
   });
 
   it('строит realtime session config с near_field noise reduction и без auto-interrupt провайдера', async () => {
@@ -109,7 +111,7 @@ describe('openai realtime SDP exchange', () => {
       })
     ).toEqual({
       type: 'realtime',
-      model: 'gpt-realtime',
+      model: 'gpt-realtime-mini',
       instructions: 'Отвечай спокойно.',
       audio: {
         input: {
@@ -153,7 +155,7 @@ describe('openai realtime SDP exchange', () => {
         sdp: sdpOffer,
         sessionConfig: {
           type: 'realtime',
-          model: 'gpt-realtime',
+          model: 'gpt-realtime-mini',
           instructions: 'Говори кратко.',
           audio: {
             input: {
@@ -186,7 +188,7 @@ describe('openai realtime SDP exchange', () => {
       clientSecret: '',
       session: expect.objectContaining({
         type: 'realtime',
-        model: 'gpt-realtime',
+        model: 'gpt-realtime-mini',
       }),
       timeoutMs: 60_000,
     });

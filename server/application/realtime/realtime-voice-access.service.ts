@@ -61,16 +61,16 @@ export async function assertRealtimeVoiceAccess(params: {
     userId: params.userId,
   });
 
-  if (quota.remainingMinutes <= 0) {
+  if (quota.remainingSeconds <= 0) {
     throw createError({
       statusCode: 402,
       statusMessage:
         'Ежемесячный лимит realtime voice исчерпан. Доступ восстановится в следующем периоде.',
       data: {
         code: 'realtime_voice_monthly_limit_reached',
-        limitMinutes: quota.limitMinutes,
-        usedMinutes: quota.usedMinutes,
-        remainingMinutes: quota.remainingMinutes,
+        limitSeconds: quota.limitSeconds,
+        usedSeconds: quota.usedSeconds,
+        remainingSeconds: quota.remainingSeconds,
         resetsAt: quota.resetsAt.toISOString(),
       },
     });
