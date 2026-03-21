@@ -98,28 +98,26 @@ function getOpenAiTransportConfig() {
 function mapTranscriptToResponsesInput(
   messages: TherapySessionTranscriptMessage[]
 ): ResponsesInputItem[] {
-  return messages.flatMap((message) => {
+  return messages.reduce<ResponsesInputItem[]>((accumulator, message) => {
     const text = String(message.content || '').trim();
     if (!text) {
-      return [];
+      return accumulator;
     }
 
     if (message.role === 'assistant') {
-      return [
-        {
-          role: 'assistant',
-          content: [{ type: 'output_text', text }],
-        },
-      ];
+      accumulator.push({
+        role: 'assistant',
+        content: [{ type: 'output_text', text }],
+      });
+      return accumulator;
     }
 
-    return [
-      {
-        role: 'user',
-        content: [{ type: 'input_text', text }],
-      },
-    ];
-  });
+    accumulator.push({
+      role: 'user',
+      content: [{ type: 'input_text', text }],
+    });
+    return accumulator;
+  }, []);
 }
 
 function buildSerializedTranscriptInput(params: {
@@ -349,12 +347,16 @@ export async function generateRuntimeCompactState(params: {
     maxOutputTokens: 350,
     fallbackValue: createEmptyRuntimeCompactState(),
     throwOnError: params.throwOnError,
-    parse: (raw) =>
-      runtimeCompactStateSchema.parse({
+    parse: (raw) => {
+      const rawRecord =
+        raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+
+      return runtimeCompactStateSchema.parse({
         ...createEmptyRuntimeCompactState(),
-        ...raw,
+        ...rawRecord,
         schemaVersion: CHAT_RUNTIME_COMPACT_SCHEMA_VERSION,
-      }),
+      });
+    },
   });
 }
 
@@ -370,6 +372,9 @@ export async function generateSessionEndMemoryBundle(params: {
   handoffSummary: SessionHandoffSummary;
   durableUserMemory: DurableUserMemory;
 }> {
+  const previousDurableUserMemory = params.previousDurableUserMemory
+    ? normalizeDurableUserMemory(params.previousDurableUserMemory)
+    : null;
   const developerBlocks: string[] = [];
 
   if (params.runtimeCompactState) {
@@ -378,9 +383,12 @@ export async function generateSessionEndMemoryBundle(params: {
     );
   }
 
-  if (hasMeaningfulDurableUserMemory(params.previousDurableUserMemory)) {
+  if (
+    previousDurableUserMemory &&
+    hasMeaningfulDurableUserMemory(previousDurableUserMemory)
+  ) {
     developerBlocks.push(
-      serializeDurableUserMemoryForPrompt(params.previousDurableUserMemory)
+      serializeDurableUserMemoryForPrompt(previousDurableUserMemory)
     );
   }
 
@@ -408,8 +416,8 @@ export async function generateSessionEndMemoryBundle(params: {
     responseFormat: sessionEndMemoryBundleResponseFormat,
     fallbackValue: {
       handoffSummary: createEmptyHandoffSummary(),
-      durableUserMemory: params.previousDurableUserMemory
-        ? normalizeDurableUserMemory(params.previousDurableUserMemory)
+      durableUserMemory: previousDurableUserMemory
+        ? previousDurableUserMemory
         : createEmptyDurableUserMemory(),
     },
     throwOnError: params.throwOnError,

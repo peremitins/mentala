@@ -23,7 +23,7 @@ export const CHAT_MEMORY_MAX_INPUT_TOKENS = readPositiveIntEnv(
 
 export const CHAT_MEMORY_MAX_TURNS_PER_CHAIN = readPositiveIntEnv(
   process.env.CHAT_MEMORY_MAX_TURNS_PER_CHAIN,
-  3
+  12
 );
 
 export const CHAT_HANDOFF_SUMMARY_SCHEMA_VERSION = 1;
