@@ -549,10 +549,6 @@ const realtimeVoice = useRealtimeVoiceSession({
     }
 
     clearVoiceBase();
-
-    if (chat.therapySessionId && !chat.isEndingSession) {
-      await chat.endTherapySession();
-    }
   },
   getReadyMessageText: () =>
     getAddressingCopy('realtimeReadyHint', addressing.value),
@@ -773,8 +769,6 @@ const sendText = async (rawText: string) => {
   }
 
   if (res?.ok) {
-    chat.startSession();
-
     // Озвучим последний ответ ассистента через TTS OpenAI
     if (isTtsEnabled.value && chatSettings.voice === true) {
       const last = [...chat.messages]

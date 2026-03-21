@@ -25,6 +25,10 @@ vi.mock('@/server/config/realtime', () => ({
   REALTIME_VOICE_WEBRTC_URL: 'https://api.openai.com/v1/realtime/calls',
 }));
 
+vi.mock('@/server/config/chatMemory', () => ({
+  CHAT_MEMORY_SOFT_INPUT_TOKENS: 5_000,
+}));
+
 vi.mock('@/server/infrastructure/llm/relayClient', () => ({
   isRelayEnabled: () => isRelayEnabledMock(),
   relayRealtimeCall: (...args: any[]) => relayRealtimeCallMock(...args),
@@ -63,6 +67,13 @@ describe('openai realtime SDP exchange', () => {
           type: 'realtime',
           model: 'gpt-realtime-mini',
           instructions: 'Говори кратко.',
+          truncation: {
+            type: 'retention_ratio',
+            retention_ratio: 0.8,
+            token_limits: {
+              post_instructions: 5_000,
+            },
+          },
           audio: {
             input: {
               noise_reduction: {
@@ -113,6 +124,13 @@ describe('openai realtime SDP exchange', () => {
       type: 'realtime',
       model: 'gpt-realtime-mini',
       instructions: 'Отвечай спокойно.',
+      truncation: {
+        type: 'retention_ratio',
+        retention_ratio: 0.8,
+        token_limits: {
+          post_instructions: 5_000,
+        },
+      },
       audio: {
         input: {
           noise_reduction: {
@@ -157,6 +175,13 @@ describe('openai realtime SDP exchange', () => {
           type: 'realtime',
           model: 'gpt-realtime-mini',
           instructions: 'Говори кратко.',
+          truncation: {
+            type: 'retention_ratio',
+            retention_ratio: 0.8,
+            token_limits: {
+              post_instructions: 5_000,
+            },
+          },
           audio: {
             input: {
               noise_reduction: {

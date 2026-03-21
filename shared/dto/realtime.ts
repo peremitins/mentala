@@ -100,9 +100,21 @@ export const RealtimeVoiceSessionEventRequestDto = z.object({
   meta: z.record(z.any()).optional(),
 });
 
+export const RealtimeVoiceRuntimeCompactionReasonEnum = z.enum([
+  'soft_threshold',
+  'hard_threshold',
+  'max_turns',
+]);
+
+export const RealtimeVoiceRuntimeCompactionDto = z.object({
+  reason: RealtimeVoiceRuntimeCompactionReasonEnum,
+  instructions: z.string().trim().min(1).max(40_000),
+});
+
 export const RealtimeVoiceSessionEventResponseDto = z.object({
   ok: z.literal(true),
   deduplicated: z.boolean(),
+  runtimeCompaction: RealtimeVoiceRuntimeCompactionDto.nullish(),
 });
 
 export const RealtimeVoiceSessionEndRequestDto = z.object({
@@ -146,6 +158,12 @@ export type RealtimeVoiceSessionEventRequest = z.infer<
 >;
 export type RealtimeVoiceSessionEventResponse = z.infer<
   typeof RealtimeVoiceSessionEventResponseDto
+>;
+export type RealtimeVoiceRuntimeCompactionReason = z.infer<
+  typeof RealtimeVoiceRuntimeCompactionReasonEnum
+>;
+export type RealtimeVoiceRuntimeCompaction = z.infer<
+  typeof RealtimeVoiceRuntimeCompactionDto
 >;
 export type RealtimeVoiceSessionEndRequest = z.infer<
   typeof RealtimeVoiceSessionEndRequestDto

@@ -17,6 +17,7 @@ export interface LlmProviderPort {
     model?: string;
     options?: {
       sessionId?: string;
+      therapySessionId?: number;
       temperature?: number;
       maxOutputTokens?: number; // Для Responses API
       scenario?: 'chat' | 'notifications' | 'chips'; // Сценарий использования
@@ -45,6 +46,7 @@ export interface LlmProviderPort {
     model?: string;
     options?: {
       sessionId?: string;
+      therapySessionId?: number;
       temperature?: number;
       maxOutputTokens?: number; // Для Responses API
       scenario?: 'chat' | 'notifications' | 'chips'; // Сценарий использования
