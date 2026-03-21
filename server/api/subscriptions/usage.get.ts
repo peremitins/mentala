@@ -16,6 +16,7 @@ import {
   resolveCurrentEntitlementsPlan,
 } from '@/server/application/subscriptions/trial-billing.service';
 import { resolveAiUsagePeriodStartedAt } from '@/server/application/subscriptions/usage-window.service';
+import { getRealtimeVoiceQuotaSnapshot } from '@/server/application/realtime/realtime-voice-quota.service';
 
 /**
  * GET /api/subscriptions/usage
@@ -128,9 +129,15 @@ export default defineEventHandler(async (event) => {
     billingCollectionStatus: userRecord?.billingCollectionStatus ?? null,
     nextChargeAt: userRecord?.nextChargeAt ?? null,
   });
-  const usage = await getUsageForCurrentWeek(sessionResult.user.id, timezone, {
-    periodStartedAt: usagePeriodStartedAt,
-  });
+  const [usage, realtimeVoiceQuota] = await Promise.all([
+    getUsageForCurrentWeek(sessionResult.user.id, timezone, {
+      periodStartedAt: usagePeriodStartedAt,
+    }),
+    getRealtimeVoiceQuotaSnapshot({
+      userId: sessionResult.user.id,
+      now,
+    }),
+  ]);
 
   // Вычисляем дополнительные поля
   let availableMinutes: number;
@@ -163,5 +170,11 @@ export default defineEventHandler(async (event) => {
     weeklyLimit,
     availableMinutes,
     overdraftUsed,
+    realtimeVoice: {
+      limitSeconds: realtimeVoiceQuota.limitSeconds,
+      usedSeconds: realtimeVoiceQuota.usedSeconds,
+      remainingSeconds: realtimeVoiceQuota.remainingSeconds,
+      resetsAt: realtimeVoiceQuota.resetsAt.toISOString(),
+    },
   };
 });

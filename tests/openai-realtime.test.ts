@@ -15,7 +15,7 @@ vi.mock('h3', () => ({
 vi.mock('@/server/config/realtime', () => ({
   REALTIME_VOICE_CLIENT_SECRET_TIMEOUT_MS: 60_000,
   REALTIME_VOICE_CLIENT_SECRET_TTL_SECONDS: 60,
-  REALTIME_VOICE_OPENAI_MODEL: 'gpt-realtime',
+  REALTIME_VOICE_OPENAI_MODEL: 'gpt-realtime-mini',
   REALTIME_VOICE_OPENAI_VOICE: 'alloy',
   REALTIME_VOICE_PROVIDER_TIMEOUT_MS: 60_000,
   REALTIME_VOICE_PREFIX_PADDING_MS: 300,
@@ -23,6 +23,10 @@ vi.mock('@/server/config/realtime', () => ({
   REALTIME_VOICE_TRANSCRIPTION_MODEL: 'gpt-4o-mini-transcribe',
   REALTIME_VOICE_TURN_THRESHOLD: 0.5,
   REALTIME_VOICE_WEBRTC_URL: 'https://api.openai.com/v1/realtime/calls',
+}));
+
+vi.mock('@/server/config/chatMemory', () => ({
+  CHAT_MEMORY_SOFT_INPUT_TOKENS: 5_000,
 }));
 
 vi.mock('@/server/infrastructure/llm/relayClient', () => ({
@@ -61,8 +65,15 @@ describe('openai realtime SDP exchange', () => {
         sdp: sdpOffer,
         sessionConfig: {
           type: 'realtime',
-          model: 'gpt-realtime',
+          model: 'gpt-realtime-mini',
           instructions: 'Говори кратко.',
+          truncation: {
+            type: 'retention_ratio',
+            retention_ratio: 0.8,
+            token_limits: {
+              post_instructions: 5_000,
+            },
+          },
           audio: {
             input: {
               noise_reduction: {
@@ -95,7 +106,9 @@ describe('openai realtime SDP exchange', () => {
 
     const sentFormData = options.body as FormData;
     expect(sentFormData.get('sdp')).toBe(sdpOffer);
-    expect(sentFormData.get('session')).toContain('"model":"gpt-realtime"');
+    expect(sentFormData.get('session')).toContain(
+      '"model":"gpt-realtime-mini"'
+    );
   });
 
   it('строит realtime session config с near_field noise reduction и без auto-interrupt провайдера', async () => {
@@ -109,8 +122,15 @@ describe('openai realtime SDP exchange', () => {
       })
     ).toEqual({
       type: 'realtime',
-      model: 'gpt-realtime',
+      model: 'gpt-realtime-mini',
       instructions: 'Отвечай спокойно.',
+      truncation: {
+        type: 'retention_ratio',
+        retention_ratio: 0.8,
+        token_limits: {
+          post_instructions: 5_000,
+        },
+      },
       audio: {
         input: {
           noise_reduction: {
@@ -153,8 +173,15 @@ describe('openai realtime SDP exchange', () => {
         sdp: sdpOffer,
         sessionConfig: {
           type: 'realtime',
-          model: 'gpt-realtime',
+          model: 'gpt-realtime-mini',
           instructions: 'Говори кратко.',
+          truncation: {
+            type: 'retention_ratio',
+            retention_ratio: 0.8,
+            token_limits: {
+              post_instructions: 5_000,
+            },
+          },
           audio: {
             input: {
               noise_reduction: {
@@ -186,7 +213,7 @@ describe('openai realtime SDP exchange', () => {
       clientSecret: '',
       session: expect.objectContaining({
         type: 'realtime',
-        model: 'gpt-realtime',
+        model: 'gpt-realtime-mini',
       }),
       timeoutMs: 60_000,
     });

@@ -67,8 +67,8 @@
         </template>
       </div>
 
-      <!-- Прогресс-бар использования минут (только если есть доступ к ИИ) -->
-      <div v-if="shouldShowProgressBar" class="space-y-1">
+      <!-- Недельный прогресс-бар использования AI-чата -->
+      <div v-if="shouldShowWeeklyProgressBar" class="space-y-1">
         <div class="flex items-center justify-between text-xs">
           <span class="text-foreground">Использовано:</span>
           <span class="font-medium">
@@ -86,12 +86,58 @@
               )
             "
             :style="{
-              width: `${Math.min(100, ((usage?.usedMinutes || 0) / weeklyMinutesLimitValue) * 100)}%`,
+              width: `${getProgressPercent(usage?.usedMinutes || 0, weeklyMinutesLimitValue)}%`,
             }"
           />
         </div>
         <p class="text-xs text-muted-foreground">
           Лимит обновится в понедельник.
+        </p>
+      </div>
+
+      <!-- Отдельный лимит realtime voice -->
+      <div
+        v-if="shouldShowRealtimeVoiceProgressBar"
+        class="space-y-1 border-t border-white/10 pt-3 mt-3"
+      >
+        <div class="flex items-center justify-between text-xs">
+          <span class="text-foreground">Голосовой диалог:</span>
+          <span class="font-medium">
+            {{
+              formatRealtimeVoiceDuration(realtimeVoiceUsage?.usedSeconds || 0)
+            }}
+            из
+            {{
+              formatRealtimeVoiceDuration(realtimeVoiceUsage?.limitSeconds || 0)
+            }}
+            в текущем периоде
+          </span>
+        </div>
+        <div class="h-2 w-full rounded-full bg-primary-ui/20 overflow-hidden">
+          <div
+            class="h-full transition-all duration-300"
+            :class="
+              getProgressBarColor(
+                realtimeVoiceUsage?.usedSeconds || 0,
+                realtimeVoiceUsage?.limitSeconds || 0
+              )
+            "
+            :style="{
+              width: `${getProgressPercent(
+                realtimeVoiceUsage?.usedSeconds || 0,
+                realtimeVoiceUsage?.limitSeconds || 0
+              )}%`,
+            }"
+          />
+        </div>
+        <p class="text-xs text-muted-foreground">
+          Осталось
+          {{
+            formatRealtimeVoiceDuration(
+              realtimeVoiceUsage?.remainingSeconds || 0
+            )
+          }}. Следующее обновление:
+          {{ formatDate(realtimeVoiceUsage?.resetsAt || '') }}.
         </p>
       </div>
 
@@ -160,6 +206,7 @@ const now = useNow({ interval: 60_000 });
 const subscription = computed(() => subscriptionStore.currentSubscription);
 const subscriptionData = computed(() => subscriptionStore.subscriptionData);
 const usage = computed(() => subscriptionStore.usage);
+const realtimeVoiceUsage = computed(() => usage.value?.realtimeVoice ?? null);
 const loading = computed(
   () =>
     subscriptionStore.loading.subscription || subscriptionStore.loading.usage
@@ -221,7 +268,7 @@ const weeklyMinutesLimitValue = computed(
 );
 
 // Проверяем, нужно ли показывать прогресс-бар
-const shouldShowProgressBar = computed(() => {
+const shouldShowWeeklyProgressBar = computed(() => {
   // Показываем прогресс-бар только если:
   // 1. Есть активная подписка
   // 2. Лимит минут > 0 (т.е. есть доступ к ИИ)
@@ -231,6 +278,15 @@ const shouldShowProgressBar = computed(() => {
     aiChatMode.value !== 'disabled' &&
     weeklyMinutesLimitValue.value > 0 &&
     usage.value !== null
+  );
+});
+
+const shouldShowRealtimeVoiceProgressBar = computed(() => {
+  return (
+    subscription.value?.paymentStatus === 'active' &&
+    aiChatMode.value !== 'disabled' &&
+    realtimeVoiceUsage.value !== null &&
+    realtimeVoiceUsage.value.limitSeconds > 0
   );
 });
 
@@ -246,6 +302,7 @@ const shouldShowNoAccessInfo = computed(() => {
 });
 
 function formatDate(dateString: string) {
+  if (!dateString) return '—';
   const date = new Date(dateString);
   return date.toLocaleDateString('ru-RU', {
     day: 'numeric',
@@ -265,10 +322,32 @@ function formatTrialDate(dateString: string | null) {
 }
 
 function getProgressBarColor(used: number, limit: number) {
+  if (limit <= 0) return 'bg-primary';
   const percentage = (used / limit) * 100;
   if (percentage >= 100) return 'bg-destructive';
   if (percentage >= 90) return 'bg-yellow-500';
   return 'bg-primary';
+}
+
+function getProgressPercent(used: number, limit: number) {
+  if (limit <= 0) return 0;
+  return Math.min(100, (used / limit) * 100);
+}
+
+function formatRealtimeVoiceDuration(totalSeconds: number) {
+  const normalizedSeconds = Math.max(0, Math.floor(totalSeconds));
+  const minutes = Math.floor(normalizedSeconds / 60);
+  const seconds = normalizedSeconds % 60;
+
+  if (minutes <= 0) {
+    return `${seconds} сек`;
+  }
+
+  if (seconds === 0) {
+    return `${minutes} мин`;
+  }
+
+  return `${minutes} мин ${seconds} сек`;
 }
 
 function getPaymentStatusText(status: string) {

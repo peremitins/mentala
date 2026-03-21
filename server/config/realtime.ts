@@ -45,7 +45,7 @@ export const REALTIME_VOICE_STALE_GRACE_SECONDS = readPositiveInt(
 );
 
 export const REALTIME_VOICE_OPENAI_MODEL =
-  process.env.OPENAI_REALTIME_MODEL || 'gpt-realtime';
+  process.env.OPENAI_REALTIME_MODEL || 'gpt-realtime-mini';
 
 export const REALTIME_VOICE_OPENAI_VOICE =
   process.env.OPENAI_REALTIME_VOICE || DEFAULT_ASSISTANT_VOICE_ID;

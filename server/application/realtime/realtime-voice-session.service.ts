@@ -11,8 +11,13 @@ import type {
   ChatEntryContext,
   RealtimeVoiceSessionEndReason,
   RealtimeVoiceSessionEventRequest,
+  RealtimeVoiceRuntimeCompactionReason,
   RealtimeVoiceSessionStartRequest,
 } from '@/shared/dto';
+import {
+  CHAT_MEMORY_MAX_INPUT_TOKENS,
+  CHAT_MEMORY_SOFT_INPUT_TOKENS,
+} from '@/server/config/chatMemory';
 import {
   REALTIME_VOICE_HARD_CEILING_SECONDS,
   REALTIME_VOICE_IDLE_TIMEOUT_SECONDS,
@@ -36,9 +41,23 @@ import {
 import { isRealtimeVoiceSessionStale } from './realtime-voice-period.utils';
 import { getAiUsageGate } from '@/server/application/subscriptions/ai-usage.service';
 import {
+  appendTranscriptMessages,
+  handleTherapySessionEnded,
+  isChatMemoryEnabledForUser,
+  performRuntimeCompaction,
+} from '@/server/application/chat/chatMemory.service';
+import { hasMeaningfulRuntimeCompactState } from '@/server/application/chat/chatSummary.service';
+import { chatSessionMemoryStore } from '@/server/utils/chatSessionMemoryStore';
+import {
   deleteRealtimeVoiceSessionConfig,
+  getRealtimeVoiceSessionConfig,
   saveRealtimeVoiceSessionConfig,
 } from './realtime-voice-session-config.store';
+import {
+  resolveRealtimeVoiceRuntimeCompactionModel,
+  resolveRealtimeVoiceRuntimeCompactionReason,
+} from './realtime-voice-runtime-compaction';
+import { upsertRealtimeVoiceRuntimeCompactInstructions } from './realtime-voice-instructions';
 
 type RealtimeVoiceSessionRecord = typeof realtimeVoiceSessions.$inferSelect;
 
@@ -49,6 +68,25 @@ function buildSessionId(): string {
 function sanitizeChatSessionId(value?: string | null): string | null {
   const normalized = String(value || '').trim();
   return normalized.length > 0 ? normalized : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+function normalizeUsageNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
 }
 
 function resolveSessionStatusByReason(reason: RealtimeVoiceSessionEndReason) {
@@ -101,6 +139,128 @@ function resolveRemainingHardCeilingSeconds(
   );
 
   return Math.max(0, REALTIME_VOICE_HARD_CEILING_SECONDS - elapsedSeconds);
+}
+
+function resolveTranscriptTurnIndex(
+  session: Pick<
+    RealtimeVoiceSessionRecord,
+    'userTurnsCount' | 'assistantTurnsCount'
+  >
+): number {
+  return Math.max(1, session.userTurnsCount + session.assistantTurnsCount + 1);
+}
+
+async function recordRealtimeVoiceSuccessfulTurn(params: {
+  therapySessionId: number;
+  userId: number;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  totalTokens: number | null;
+}) {
+  const pendingSoftCompaction =
+    typeof params.inputTokens === 'number' &&
+    params.inputTokens >= CHAT_MEMORY_SOFT_INPUT_TOKENS &&
+    params.inputTokens < CHAT_MEMORY_MAX_INPUT_TOKENS;
+
+  await chatSessionMemoryStore.recordSuccessfulTurn({
+    therapySessionId: params.therapySessionId,
+    userId: params.userId,
+    inputTokens: params.inputTokens,
+    outputTokens: params.outputTokens,
+    totalTokens: params.totalTokens,
+    // Для realtime voice сам факт прохождения turn после soft-threshold
+    // уже является безопасной точкой compaction, поэтому ниже reason
+    // вычисляется отдельно. Здесь храним флаг для единообразия метрик.
+    pendingSoftCompaction,
+  });
+
+  return await chatSessionMemoryStore.get(params.therapySessionId);
+}
+
+async function maybeBuildRealtimeVoiceRuntimeCompaction(params: {
+  realtimeSessionId: string;
+  userId: number;
+  therapySessionId: number;
+  model?: string | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  totalTokens: number | null;
+}): Promise<{
+  reason: RealtimeVoiceRuntimeCompactionReason;
+  instructions: string;
+} | null> {
+  const state = await recordRealtimeVoiceSuccessfulTurn({
+    therapySessionId: params.therapySessionId,
+    userId: params.userId,
+    inputTokens: params.inputTokens,
+    outputTokens: params.outputTokens,
+    totalTokens: params.totalTokens,
+  });
+  const reason = resolveRealtimeVoiceRuntimeCompactionReason({
+    inputTokens: state?.lastObservedInputTokens ?? params.inputTokens,
+    chainTurnCount: state?.chainTurnCount ?? 0,
+  });
+
+  if (!reason) {
+    return null;
+  }
+
+  const runtimeCompactState = await performRuntimeCompaction({
+    therapySessionId: params.therapySessionId,
+    userId: params.userId,
+    model: resolveRealtimeVoiceRuntimeCompactionModel(params.model),
+    reason,
+  });
+
+  if (!hasMeaningfulRuntimeCompactState(runtimeCompactState)) {
+    console.warn(
+      '[RealtimeVoice] Runtime compaction produced empty compact-state, skip live reset',
+      {
+        therapySessionId: params.therapySessionId,
+        userId: params.userId,
+        reason,
+      }
+    );
+    return null;
+  }
+
+  const storedRealtimeSessionConfig = await getRealtimeVoiceSessionConfig(
+    params.realtimeSessionId
+  );
+  const fallbackInstructions = await buildRealtimeVoiceInstructions({
+    userId: params.userId,
+    runtimeCompactState,
+  });
+  const nextInstructions = upsertRealtimeVoiceRuntimeCompactInstructions({
+    instructions:
+      storedRealtimeSessionConfig?.sessionConfig.instructions ||
+      fallbackInstructions,
+    runtimeCompactState,
+  });
+
+  if (storedRealtimeSessionConfig?.sessionConfig) {
+    await saveRealtimeVoiceSessionConfig({
+      sessionId: params.realtimeSessionId,
+      sessionConfig: {
+        ...storedRealtimeSessionConfig.sessionConfig,
+        instructions: nextInstructions,
+      },
+    });
+  }
+
+  console.info('[RealtimeVoice] Runtime compaction prepared', {
+    realtimeSessionId: params.realtimeSessionId,
+    therapySessionId: params.therapySessionId,
+    userId: params.userId,
+    reason,
+    chainTurnCountBeforeReset: state?.chainTurnCount ?? 0,
+    inputTokens: params.inputTokens,
+  });
+
+  return {
+    reason,
+    instructions: nextInstructions,
+  };
 }
 
 async function closeRealtimeVoiceSessionInternal(params: {
@@ -186,9 +346,9 @@ function buildQuotaPayload(
   quota: Awaited<ReturnType<typeof getRealtimeVoiceQuotaSnapshot>>
 ) {
   return {
-    limitMinutes: quota.limitMinutes,
-    usedMinutes: quota.usedMinutes,
-    remainingMinutes: quota.remainingMinutes,
+    limitSeconds: quota.limitSeconds,
+    usedSeconds: quota.usedSeconds,
+    remainingSeconds: quota.remainingSeconds,
     resetsAt: quota.resetsAt.toISOString(),
   };
 }
@@ -227,6 +387,7 @@ async function createOrReuseRealtimeVoiceSession(params: {
       tx
     );
     const [primarySession, ...staleSessions] = activeSessions;
+    const closedTherapySessionIds: number[] = [];
 
     for (const staleSession of staleSessions) {
       await closeRealtimeVoiceSessionInternal({
@@ -235,6 +396,7 @@ async function createOrReuseRealtimeVoiceSession(params: {
         reason: 'replaced_by_new_session',
         now,
       });
+      closedTherapySessionIds.push(staleSession.therapySessionId);
     }
 
     if (primarySession) {
@@ -269,6 +431,7 @@ async function createOrReuseRealtimeVoiceSession(params: {
 
         return {
           createdNew: false,
+          closedTherapySessionIds,
           session: {
             ...primarySession,
             status: 'active',
@@ -284,9 +447,12 @@ async function createOrReuseRealtimeVoiceSession(params: {
         reason: 'replaced_by_new_session',
         now,
       });
+      closedTherapySessionIds.push(primarySession.therapySessionId);
     }
 
-    const therapySession = await startTherapySession(params.userId, tx);
+    const therapySession = await startTherapySession(params.userId, tx, {
+      clientSessionId: requestedChatSessionId,
+    });
     const [session] = await tx
       .insert(realtimeVoiceSessions)
       .values({
@@ -308,6 +474,7 @@ async function createOrReuseRealtimeVoiceSession(params: {
 
     return {
       createdNew: true,
+      closedTherapySessionIds,
       session,
     };
   });
@@ -326,6 +493,24 @@ export async function startRealtimeVoiceSession(params: {
   clientPlatform: 'web' | 'ios' | 'android';
 }) {
   const prepared = await createOrReuseRealtimeVoiceSession(params);
+
+  for (const closedTherapySessionId of prepared.closedTherapySessionIds || []) {
+    try {
+      await handleTherapySessionEnded({
+        therapySessionId: closedTherapySessionId,
+        userId: params.userId,
+      });
+    } catch (error) {
+      console.error(
+        '[RealtimeVoice] Failed to trigger handoff for replaced session:',
+        {
+          therapySessionId: closedTherapySessionId,
+          userId: params.userId,
+          error,
+        }
+      );
+    }
+  }
 
   try {
     const assistantPersona = await getUserAssistantPersona(params.userId);
@@ -375,7 +560,7 @@ export async function startRealtimeVoiceSession(params: {
       now: prepared.now,
     });
     const remainingByQuota = resolveRealtimeVoiceMaxDurationSeconds({
-      remainingMonthlyMinutes: refreshedQuota.remainingMinutes,
+      remainingMonthlySeconds: refreshedQuota.remainingSeconds,
       remainingWeeklyMinutes: prepared.access.weeklyAi.availableMinutes,
     });
     const remainingBySession = resolveRemainingHardCeilingSeconds(
@@ -489,8 +674,13 @@ export async function recordRealtimeVoiceSessionEvent(params: {
   body: RealtimeVoiceSessionEventRequest;
 }) {
   const occurredAt = new Date(params.body.at);
-
-  return await db.transaction(async (tx) => {
+  const shouldPersistTranscript =
+    params.body.type === 'user_turn_completed' ||
+    params.body.type === 'response_completed';
+  const enableMemory = shouldPersistTranscript
+    ? await isChatMemoryEnabledForUser(params.userId)
+    : false;
+  const persistedEvent = await db.transaction(async (tx) => {
     const [session] = await tx
       .select()
       .from(realtimeVoiceSessions)
@@ -521,6 +711,7 @@ export async function recordRealtimeVoiceSessionEvent(params: {
       return {
         ok: true as const,
         deduplicated: true,
+        runtimeCompactionCandidate: null,
       };
     }
 
@@ -545,6 +736,7 @@ export async function recordRealtimeVoiceSessionEvent(params: {
       params.body.type === 'started' || params.body.type === 'response_started'
         ? 'active'
         : session.status;
+    const transcriptTurnIndex = resolveTranscriptTurnIndex(session);
 
     await tx
       .update(realtimeVoiceSessions)
@@ -572,17 +764,117 @@ export async function recordRealtimeVoiceSessionEvent(params: {
 
     await touchTherapySessionActivity(session.therapySessionId, occurredAt, tx);
 
+    const meta = isRecord(params.body.meta) ? params.body.meta : {};
+    const usage = isRecord(meta.usage) ? meta.usage : {};
+    const inputTokens = normalizeUsageNumber(usage.inputTokens);
+    const outputTokens = normalizeUsageNumber(usage.outputTokens);
+    const totalTokens = normalizeUsageNumber(usage.totalTokens);
+
+    if (params.body.type === 'response_completed') {
+      console.info('[RealtimeVoice usage]', {
+        userId: params.userId,
+        sessionId: params.body.sessionId,
+        responseId: typeof meta.responseId === 'string' ? meta.responseId : '',
+        status: typeof meta.status === 'string' ? meta.status : 'completed',
+        inputTokens,
+        outputTokens,
+        totalTokens,
+        cachedTokens: normalizeUsageNumber(usage.cachedTokens) ?? 0,
+        reasoningTokens: normalizeUsageNumber(usage.reasoningTokens) ?? 0,
+        inputAudioTokensDelta: metrics.inputAudioTokensDelta || 0,
+        outputAudioTokensDelta: metrics.outputAudioTokensDelta || 0,
+        inputAudioSecondsDelta: metrics.inputAudioSecondsDelta || 0,
+        outputAudioSecondsDelta: metrics.outputAudioSecondsDelta || 0,
+      });
+    }
+
+    if (enableMemory) {
+      const transcriptMessages: Array<{
+        role: 'user' | 'assistant';
+        content: string;
+      }> = [];
+
+      if (params.body.type === 'user_turn_completed') {
+        const transcript =
+          typeof meta.transcript === 'string' ? meta.transcript.trim() : '';
+        if (transcript) {
+          transcriptMessages.push({
+            role: 'user',
+            content: transcript,
+          });
+        }
+      }
+
+      if (params.body.type === 'response_completed') {
+        const assistantText =
+          typeof meta.assistantText === 'string'
+            ? meta.assistantText.trim()
+            : '';
+        if (assistantText) {
+          transcriptMessages.push({
+            role: 'assistant',
+            content: assistantText,
+          });
+        }
+      }
+
+      if (transcriptMessages.length > 0) {
+        await appendTranscriptMessages(
+          {
+            therapySessionId: session.therapySessionId,
+            userId: params.userId,
+            turnIndex: transcriptTurnIndex,
+            messages: transcriptMessages,
+          },
+          tx
+        );
+      }
+    }
+
     return {
       ok: true as const,
       deduplicated: false,
+      runtimeCompactionCandidate:
+        enableMemory && params.body.type === 'response_completed'
+          ? {
+              therapySessionId: session.therapySessionId,
+              model: session.providerModel || REALTIME_VOICE_OPENAI_MODEL,
+              inputTokens,
+              outputTokens,
+              totalTokens,
+            }
+          : null,
     };
   });
+
+  if (
+    persistedEvent.deduplicated ||
+    !persistedEvent.runtimeCompactionCandidate
+  ) {
+    return {
+      ok: true as const,
+      deduplicated: persistedEvent.deduplicated,
+    };
+  }
+
+  const runtimeCompaction = await maybeBuildRealtimeVoiceRuntimeCompaction({
+    realtimeSessionId: params.body.sessionId,
+    userId: params.userId,
+    ...persistedEvent.runtimeCompactionCandidate,
+  });
+
+  return {
+    ok: true as const,
+    deduplicated: false,
+    ...(runtimeCompaction ? { runtimeCompaction } : {}),
+  };
 }
 
 export async function endRealtimeVoiceSession(params: {
   userId: number;
   sessionId: string;
   reason: RealtimeVoiceSessionEndReason;
+  skipPostEndMemoryLifecycle?: boolean;
 }) {
   const now = new Date();
 
@@ -614,11 +906,42 @@ export async function endRealtimeVoiceSession(params: {
 
   await deleteRealtimeVoiceSessionConfig(endedSession.id);
 
+  console.info('[RealtimeVoice session summary]', {
+    userId: params.userId,
+    sessionId: endedSession.id,
+    model: endedSession.providerModel,
+    voice: endedSession.providerVoice,
+    status: endedSession.status || 'completed',
+    reason: params.reason,
+    durationSeconds: endedSession.durationSeconds,
+    userTurnsCount: endedSession.userTurnsCount,
+    assistantTurnsCount: endedSession.assistantTurnsCount,
+    interruptCount: endedSession.interruptCount,
+    inputAudioSeconds: endedSession.inputAudioSeconds,
+    outputAudioSeconds: endedSession.outputAudioSeconds,
+    inputAudioTokens: endedSession.inputAudioTokens,
+    outputAudioTokens: endedSession.outputAudioTokens,
+  });
+
   const quota = await getRealtimeVoiceQuotaSnapshot({
     userId: params.userId,
     now,
   });
   const weeklyAi = await getAiUsageGate(params.userId);
+
+  if (params.skipPostEndMemoryLifecycle !== true) {
+    try {
+      await handleTherapySessionEnded({
+        therapySessionId: endedSession.therapySessionId,
+        userId: params.userId,
+      });
+    } catch (error) {
+      console.error(
+        '[RealtimeVoice] Failed to trigger post-end session memory pipeline:',
+        error
+      );
+    }
+  }
 
   return {
     session: {

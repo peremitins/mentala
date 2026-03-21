@@ -8,6 +8,7 @@ import { eq, and, gte, lte, or, lt, isNull } from 'drizzle-orm';
 import { CHAT_IDLE_TIMEOUT_MS } from '@/server/config/subscription';
 import { toZonedTime, fromZonedTime } from 'date-fns-tz';
 import { calculateUsageForSessionsInWindow } from './usage-calculation.utils';
+import { handleTherapySessionEnded } from '@/server/application/chat/chatMemory.service';
 
 export {
   calculateSessionMinutes,
@@ -48,10 +49,21 @@ function resolveDbClient(tx?: any) {
   return tx ?? db;
 }
 
+function normalizeClientSessionId(value?: string | null): string | null {
+  const normalized = String(value || '').trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
 /**
  * Начать сессию терапии
  */
-export async function startTherapySession(userId: number, tx?: any) {
+export async function startTherapySession(
+  userId: number,
+  tx?: any,
+  options?: {
+    clientSessionId?: string | null;
+  }
+) {
   const now = new Date();
   const client = resolveDbClient(tx);
 
@@ -59,6 +71,7 @@ export async function startTherapySession(userId: number, tx?: any) {
     .insert(therapySessions)
     .values({
       userId,
+      clientSessionId: normalizeClientSessionId(options?.clientSessionId),
       startedAt: now,
       lastActivityAt: now, // Устанавливаем начальную активность
       durationSeconds: 0,
@@ -81,6 +94,7 @@ export async function endTherapySessionWithOptions(
   tx?: any,
   options?: {
     endedAt?: Date;
+    skipPostEndMemoryLifecycle?: boolean;
   }
 ) {
   const now = new Date();
@@ -94,6 +108,10 @@ export async function endTherapySessionWithOptions(
 
   if (!session.length) {
     throw new Error(`Session ${sessionId} not found`);
+  }
+
+  if (session[0].endedAt) {
+    return session[0];
   }
 
   const startedAt = session[0].startedAt;
@@ -121,11 +139,28 @@ export async function endTherapySessionWithOptions(
     })
     .where(eq(therapySessions.id, sessionId));
 
-  return {
+  const endedSession = {
     ...session[0],
     endedAt: normalizedEndTime,
     durationSeconds,
   };
+
+  // Для transaction-aware вызовов не запускаем асинхронный lifecycle внутри tx.
+  if (!tx && options?.skipPostEndMemoryLifecycle !== true) {
+    try {
+      await handleTherapySessionEnded({
+        therapySessionId: endedSession.id,
+        userId: endedSession.userId,
+      });
+    } catch (error) {
+      console.error(
+        '[SessionTime] Failed to trigger post-end session memory pipeline:',
+        error
+      );
+    }
+  }
+
+  return endedSession;
 }
 
 /**

@@ -30,10 +30,10 @@ export const RealtimeVoiceSessionStartRequestDto = z.object({
   clientPlatformHint: RealtimeVoiceClientPlatformEnum.optional(),
 });
 
-export const RealtimeVoiceMonthlyQuotaDto = z.object({
-  limitMinutes: z.number().int().nonnegative(),
-  usedMinutes: z.number().int().nonnegative(),
-  remainingMinutes: z.number().int().nonnegative(),
+export const RealtimeVoiceQuotaDto = z.object({
+  limitSeconds: z.number().int().nonnegative(),
+  usedSeconds: z.number().int().nonnegative(),
+  remainingSeconds: z.number().int().nonnegative(),
   resetsAt: z.string(),
 });
 
@@ -60,7 +60,7 @@ export const RealtimeVoiceSessionStartResponseDto = z.object({
     expiresAt: z.string(),
     webrtcUrl: z.string().url(),
   }),
-  quota: RealtimeVoiceMonthlyQuotaDto,
+  quota: RealtimeVoiceQuotaDto,
   weeklyAi: RealtimeVoiceWeeklyQuotaDto,
 });
 
@@ -100,9 +100,21 @@ export const RealtimeVoiceSessionEventRequestDto = z.object({
   meta: z.record(z.any()).optional(),
 });
 
+export const RealtimeVoiceRuntimeCompactionReasonEnum = z.enum([
+  'soft_threshold',
+  'hard_threshold',
+  'max_turns',
+]);
+
+export const RealtimeVoiceRuntimeCompactionDto = z.object({
+  reason: RealtimeVoiceRuntimeCompactionReasonEnum,
+  instructions: z.string().trim().min(1).max(40_000),
+});
+
 export const RealtimeVoiceSessionEventResponseDto = z.object({
   ok: z.literal(true),
   deduplicated: z.boolean(),
+  runtimeCompaction: RealtimeVoiceRuntimeCompactionDto.nullish(),
 });
 
 export const RealtimeVoiceSessionEndRequestDto = z.object({
@@ -119,7 +131,7 @@ export const RealtimeVoiceSessionEndResponseDto = z.object({
     inputAudioSeconds: z.number().int().nonnegative(),
     outputAudioSeconds: z.number().int().nonnegative(),
   }),
-  quota: RealtimeVoiceMonthlyQuotaDto,
+  quota: RealtimeVoiceQuotaDto,
   weeklyAi: RealtimeVoiceWeeklyQuotaDto,
 });
 
@@ -146,6 +158,12 @@ export type RealtimeVoiceSessionEventRequest = z.infer<
 >;
 export type RealtimeVoiceSessionEventResponse = z.infer<
   typeof RealtimeVoiceSessionEventResponseDto
+>;
+export type RealtimeVoiceRuntimeCompactionReason = z.infer<
+  typeof RealtimeVoiceRuntimeCompactionReasonEnum
+>;
+export type RealtimeVoiceRuntimeCompaction = z.infer<
+  typeof RealtimeVoiceRuntimeCompactionDto
 >;
 export type RealtimeVoiceSessionEndRequest = z.infer<
   typeof RealtimeVoiceSessionEndRequestDto

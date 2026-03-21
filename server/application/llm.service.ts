@@ -27,6 +27,7 @@ export async function chatViaProvider(params: {
   }>;
   options?: {
     sessionId?: string;
+    therapySessionId?: number;
     temperature?: number;
     maxOutputTokens?: number; // Для Responses API
     scenario?: 'chat' | 'notifications' | 'chips'; // Сценарий использования
@@ -143,6 +144,7 @@ export function chatStreamViaProvider(params: {
   messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
   options?: {
     sessionId?: string;
+    therapySessionId?: number;
     temperature?: number;
     maxOutputTokens?: number; // Для Responses API
     scenario?: 'chat' | 'notifications' | 'chips'; // Сценарий использования
