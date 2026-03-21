@@ -1,4 +1,4 @@
-import { defineNuxtPlugin, useRuntimeConfig } from 'nuxt/app';
+import { defineNuxtPlugin } from 'nuxt/app';
 import { Capacitor } from '@capacitor/core';
 import { useChatStore } from '@/app/stores/chat';
 
@@ -34,15 +34,13 @@ export default defineNuxtPlugin(() => {
   // Обработчик для Web и мобильных платформ
   const handleUnload = () => {
     try {
-      // ВСЕГДА завершаем therapy сессию при обновлении/закрытии страницы
-      // Это критично для правильного подсчета времени
-      handleEndTherapySession();
-
-      // Завершаем сессию чата
       if (chat.sessionId && chat.messages && chat.messages.length > 0) {
-        // Вызываем обычный метод - он использует $api с правильными заголовками
         void chat.finishAndSave();
+        return;
       }
+
+      // Если пользователь ушёл, не начав диалог, закрываем только therapySession.
+      handleEndTherapySession();
     } catch (error) {
       console.error('[Session Finish Plugin] Error:', error);
     }

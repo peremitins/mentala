@@ -9,8 +9,11 @@ import {
   resolveAssistantVoiceCatalogItem,
 } from '@/shared/constants/assistantVoiceCatalog';
 import { ChatSettingsPatchDto, ChatSettingsResponseDto } from '@/shared/dto';
-import { responseIdStore } from '@/server/utils/responseIdStore';
 import { FEATURE_TTS_ENABLED } from '@/server/config/features';
+import {
+  clearAllChatMemoryForUser,
+  hasAnyMeaningfulChatMemoryForUser,
+} from '@/server/application/chat/chatMemory.service';
 
 export default defineEventHandler(async (event) => {
   const sessionResult = await getSessionUser(event);
@@ -38,24 +41,24 @@ export default defineEventHandler(async (event) => {
   }
   const next = await writeChatSettings(String(uid), body || {});
 
+  if (body.enablePreviousResponseId === false) {
+    try {
+      await clearAllChatMemoryForUser(uid);
+    } catch (error) {
+      console.error('[Chat Settings] Failed to clear chat memory:', error);
+    }
+  }
+
   const enablePreviousResponseId = next?.enablePreviousResponseId ?? true;
   let isFirstSession = true;
 
-  // Summary отключена: определяем "первую сессию" только по previous_response_id.
   if (enablePreviousResponseId) {
     try {
-      const lastResponse = await responseIdStore.getLastValid(String(uid));
-      if (
-        lastResponse &&
-        responseIdStore.isResponseValid(lastResponse.expiresAt)
-      ) {
+      if (await hasAnyMeaningfulChatMemoryForUser(uid)) {
         isFirstSession = false;
       }
     } catch (err) {
-      console.error(
-        '[Chat Settings] Failed to check previous_response_id:',
-        err
-      );
+      console.error('[Chat Settings] Failed to check chat memory:', err);
     }
   }
 

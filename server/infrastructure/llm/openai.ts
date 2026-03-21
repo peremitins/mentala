@@ -1,6 +1,6 @@
 // server/infrastructure/llm/openai.ts
 
-import { randomUUID, createHash } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { $fetch } from 'ofetch';
 import { createError } from 'h3';
 import OpenAI from 'openai';
@@ -11,10 +11,15 @@ import {
   relayResponsesRequest,
   relayResponsesStream,
 } from './relayClient';
-import { summaryStore } from '../../utils/summaryStore';
-import { responseIdStore } from '../../utils/responseIdStore';
 import { readChatSettings } from '../../utils/storage';
 import { welcomePromptStore } from '../../utils/welcomePromptStore';
+import { chatSessionMemoryStore } from '../../utils/chatSessionMemoryStore';
+import {
+  buildSessionMemoryPromptBlocks,
+  estimateTokensByTexts,
+  recordSuccessfulChatTurn,
+  resolveChatMemoryContext,
+} from '@/server/application/chat/chatMemory.service';
 import {
   getDailyGreetingName,
   pickAlternativeOpening,
@@ -24,22 +29,15 @@ import {
 import { resolveAssistantPersonaFromVoice } from '@/server/application/chat/assistant-persona';
 import { isPhobiasEntryContext } from '@/server/application/chat/phobias-entry.service';
 import {
-  buildSummaryPrompt,
-  buildDeveloperContext,
-  buildSessionMemoryText,
-  buildChatPreludeWithMemory,
+  buildChatPrelude,
   buildWelcomePrompt,
   buildEntryContextDescription,
+  buildSessionBootstrapDeveloperContext,
+  buildTurnDeveloperContext,
 } from '@@/server/application/prompts';
+import { formatPromptsForLogging, logOpenAiUsage } from './openaiLogging';
 
 const OPENAI_URL = 'https://api.openai.com/v1/responses';
-const MIN_SUMMARY_USER_MESSAGES = 1;
-const MIN_SUMMARY_USER_CHARS = 20;
-// Summary-память полностью отключена в продукте:
-// - экономим токены (не передаём лишний контекст в OpenAI),
-// - оставляем только manual-память через previous_response_id.
-// Код summary сохраняем для возможного возвращения в будущем, но НЕ используем сейчас.
-const SUMMARY_ENABLED = false;
 
 // Временно отключаем отправку запросов в OpenAI (чат и уведомления).
 const OPENAI_REQUESTS_DISABLED = false;
@@ -49,9 +47,6 @@ const sessionCache = new Map<
   string,
   { encryptedReasoning?: string | null; lastUsedModel?: string }
 >();
-
-// В проде никогда не логируем промпты. В dev всегда показываем полный текст.
-const ALLOW_PROMPT_LOGS = process.env.NODE_ENV === 'development';
 
 type RelayPurpose =
   | 'chat'
@@ -138,145 +133,6 @@ function extractText(res: any): string {
   return res?.output_text || res?.output?.[0]?.content?.[0]?.text || '';
 }
 
-// remove ```json fences and parse
-function parseStrictJson(raw: string): any {
-  const s = String(raw || '').trim();
-  const fenced = s.match(/```json\s*([\s\S]*?)```/i);
-  const body = (fenced ? fenced[1] : s).trim();
-  try {
-    return JSON.parse(body);
-  } catch {
-    return { summary_text: s };
-  }
-}
-
-// === Валидация и нормализация summary ===
-function validateAndNormalizeSummary(parsed: any): any {
-  // Базовые проверки
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    return createEmptySummary();
-  }
-
-  // Список допустимых ключей
-  const validKeys = [
-    'summary_detailed',
-    'themes_explored',
-    'patterns_identified',
-    'homework_suggested',
-    'emotional_journey',
-    'topics',
-    'risk_flag',
-    'approaches_used',
-  ];
-
-  // Если есть неправильные ключи - возвращаем пустой summary
-  const hasInvalidKeys = Object.keys(parsed).some(
-    (key) => !validKeys.includes(key)
-  );
-  if (hasInvalidKeys) {
-    console.warn(
-      '[OpenAI finishSession] Invalid summary: unexpected keys found, using empty summary'
-    );
-    return createEmptySummary();
-  }
-
-  // Нормализуем структуру, заполняя недостающие поля
-  return {
-    summary_detailed:
-      typeof parsed.summary_detailed === 'string'
-        ? parsed.summary_detailed
-        : '',
-    themes_explored: Array.isArray(parsed.themes_explored)
-      ? parsed.themes_explored.map((theme: any) => ({
-          theme:
-            typeof theme?.theme === 'string'
-              ? theme.theme
-              : String(theme || ''),
-          depth:
-            theme?.depth === 'surface' ||
-            theme?.depth === 'moderate' ||
-            theme?.depth === 'deep'
-              ? theme.depth
-              : 'surface',
-          key_insight:
-            typeof theme?.key_insight === 'string' ? theme.key_insight : '',
-        }))
-      : [],
-    patterns_identified: Array.isArray(parsed.patterns_identified)
-      ? parsed.patterns_identified
-          .filter((p: any) => typeof p === 'string')
-          .slice(0, 10)
-      : [],
-    homework_suggested:
-      parsed.homework_suggested &&
-      typeof parsed.homework_suggested === 'object' &&
-      !Array.isArray(parsed.homework_suggested)
-        ? {
-            name:
-              typeof parsed.homework_suggested.name === 'string'
-                ? parsed.homework_suggested.name
-                : '',
-            instruction:
-              typeof parsed.homework_suggested.instruction === 'string'
-                ? parsed.homework_suggested.instruction
-                : '',
-            duration:
-              typeof parsed.homework_suggested.duration === 'string'
-                ? parsed.homework_suggested.duration
-                : '',
-          }
-        : null,
-    emotional_journey:
-      parsed.emotional_journey &&
-      typeof parsed.emotional_journey === 'object' &&
-      !Array.isArray(parsed.emotional_journey)
-        ? {
-            start_level:
-              typeof parsed.emotional_journey.start_level === 'string'
-                ? parsed.emotional_journey.start_level
-                : '5',
-            end_level:
-              typeof parsed.emotional_journey.end_level === 'string'
-                ? parsed.emotional_journey.end_level
-                : '5',
-            shift_observed:
-              typeof parsed.emotional_journey.shift_observed === 'string'
-                ? parsed.emotional_journey.shift_observed
-                : '',
-          }
-        : null,
-    topics: Array.isArray(parsed.topics)
-      ? parsed.topics.filter((t: any) => typeof t === 'string').slice(0, 20)
-      : [],
-    risk_flag:
-      parsed.risk_flag === 'none' ||
-      parsed.risk_flag === 'watch' ||
-      parsed.risk_flag === 'elevated'
-        ? parsed.risk_flag
-        : 'none',
-    approaches_used: Array.isArray(parsed.approaches_used)
-      ? parsed.approaches_used
-          .filter((a: any) =>
-            ['cbt', 'psychoanalysis', 'existential', 'positive'].includes(a)
-          )
-          .slice(0, 4)
-      : [],
-  };
-}
-
-function createEmptySummary(): any {
-  return {
-    summary_detailed: '',
-    themes_explored: [],
-    patterns_identified: [],
-    homework_suggested: null,
-    emotional_journey: null,
-    topics: [],
-    risk_flag: 'none',
-    approaches_used: [],
-  };
-}
-
 // === Маппер сообщений под Responses API ===
 function mapToResponsesInput(
   messages: Array<{ role: string; content: string }>
@@ -308,40 +164,6 @@ function mapToResponsesInput(
 
     // tool/прочие роли тут не обрабатываем (при необходимости добавить поддержку)
     return [];
-  });
-}
-
-// === Функция для форматирования промптов для логирования ===
-function formatPromptsForLogging(input: any[]): any[] {
-  return input.map((item, index) => {
-    const role = item.role;
-    const content = item.content || [];
-    // Извлекаем текст из content, который может быть массивом объектов с type и text
-    const textContent = content
-      .map((c: any) => {
-        // content может быть в формате { type: 'input_text' | 'output_text', text: string }
-        if (c.text !== undefined) return c.text;
-        // Или в других форматах
-        return '';
-      })
-      .join('')
-      .trim();
-
-    const textHash = !ALLOW_PROMPT_LOGS
-      ? createHash('sha256').update(textContent).digest('hex')
-      : undefined;
-    // В dev логируем полный текст без обрезки, чтобы видеть реальный prompt.
-    // В проде содержимое скрывается через ALLOW_PROMPT_LOGS=false.
-    const textPreview = ALLOW_PROMPT_LOGS ? textContent : undefined;
-
-    // В проде не логируем содержимое; оставляем длину и хэш.
-    return {
-      index,
-      role,
-      textLength: textContent.length,
-      ...(textPreview ? { textPreview } : {}),
-      ...(textHash ? { textHash } : {}),
-    };
   });
 }
 
@@ -397,27 +219,14 @@ export const openaiProvider: LlmProviderPort = {
         properties: {
           chips: {
             type: 'array',
-            maxItems: 5,
+            maxItems: 3,
             items: {
-              // OpenAI strict json_schema не поддерживает oneOf.
-              // Поэтому требуем все поля, а необязательные допускаем как null.
               type: 'object',
               additionalProperties: false,
-              required: ['text', 'intent', 'kind', 'action', 'params'],
+              required: ['text', 'intent'],
               properties: {
                 text: { type: 'string', minLength: 1, maxLength: 80 },
                 intent: { type: 'string', enum: chipIntents },
-                kind: { type: 'string', enum: ['text', 'action'] },
-                action: { type: ['string', 'null'] },
-                params: {
-                  type: ['object', 'null'],
-                  additionalProperties: false,
-                  required: ['trackId', 'collectionId'],
-                  properties: {
-                    trackId: { type: ['string', 'null'] },
-                    collectionId: { type: ['string', 'null'] },
-                  },
-                },
               },
             },
           },
@@ -443,6 +252,7 @@ export const openaiProvider: LlmProviderPort = {
       const purpose = resolveRelayPurpose(options, false);
 
       try {
+        const requestStartedAtMs = Date.now();
         const res: any = await sendResponsesRequest({
           body,
           purpose,
@@ -455,6 +265,19 @@ export const openaiProvider: LlmProviderPort = {
         });
 
         const content = extractText(res);
+        logOpenAiUsage({
+          scope: 'chips',
+          model: usedModel,
+          input,
+          usageSource: res,
+          latencyMs: Date.now() - requestStartedAtMs,
+          outputTextChars: content.length,
+          userId: options?.userId,
+          sessionId: options?.sessionId,
+          extra: {
+            maxOutputTokens: maxTokens,
+          },
+        });
         return { role: 'assistant', content, model: usedModel };
       } catch (err: any) {
         const status =
@@ -478,48 +301,6 @@ export const openaiProvider: LlmProviderPort = {
           errorType: err?.data?.error?.type,
           errorCode: err?.data?.error?.code,
         });
-
-        // Fallback: если OpenAI отклонил structured output (json_schema),
-        // пробуем повторить запрос без `text.format`, чтобы чипы не "умирали" целиком в dev.
-        // Парсинг JSON будет выполнен на уровне suggested-chips.service.ts как и раньше.
-        if (status === 400 || status === 422) {
-          try {
-            const fallbackBody = {
-              ...body,
-              text: {}, // без structured output
-            };
-            const fallbackRes: any = await sendResponsesRequest({
-              body: fallbackBody,
-              purpose,
-              timeoutMs: 30_000,
-              apiKey,
-              org,
-              project,
-              idempotencyKey,
-              requestId: randomUUID(),
-            });
-            const content = extractText(fallbackRes);
-            console.warn(
-              '[OpenAI chips] Fallback without json_schema succeeded'
-            );
-            return { role: 'assistant', content, model: usedModel };
-          } catch (fallbackErr: any) {
-            const fallbackStatus =
-              fallbackErr?.response?.status ||
-              fallbackErr?.status ||
-              fallbackErr?.statusCode ||
-              status;
-            const fallbackMessage =
-              fallbackErr?.data?.error?.message ||
-              fallbackErr?.data?.message ||
-              fallbackErr?.message ||
-              openaiMessage;
-            throw createError({
-              statusCode: fallbackStatus,
-              message: `OpenAI chips error (fallback failed): ${fallbackStatus} ${fallbackMessage}`,
-            });
-          }
-        }
 
         throw createError({
           statusCode: status,
@@ -598,6 +379,7 @@ export const openaiProvider: LlmProviderPort = {
       });
 
       try {
+        const requestStartedAtMs = Date.now();
         const res: any = await sendResponsesRequest({
           body,
           purpose,
@@ -609,6 +391,18 @@ export const openaiProvider: LlmProviderPort = {
           requestId: relayRequestId,
         });
         const content = extractText(res);
+        logOpenAiUsage({
+          scope: 'notifications',
+          model: usedModel,
+          input,
+          usageSource: res,
+          latencyMs: Date.now() - requestStartedAtMs,
+          outputTextChars: content.length,
+          userId: options?.userId,
+          extra: {
+            maxOutputTokens: maxTokens,
+          },
+        });
         return { role: 'assistant', content, model: usedModel };
       } catch (err: any) {
         const status =
@@ -690,66 +484,17 @@ export const openaiProvider: LlmProviderPort = {
         );
         const enablePreviousResponseId =
           chatSettings?.enablePreviousResponseId ?? true;
-        // Summary отключена глобально (см. SUMMARY_ENABLED), настройки пользователя игнорируем.
-        const enableSummary =
-          SUMMARY_ENABLED && (chatSettings?.enableSummary ?? true);
-        // Получаем последний валидный response_id (если включено)
-        let previousResponseId: string | undefined;
-        if (enablePreviousResponseId && options?.userId) {
-          try {
-            const lastResponse = await responseIdStore.getLastValid(
-              String(options.userId)
-            );
-            if (lastResponse) {
-              const isValid = responseIdStore.isResponseValid(
-                lastResponse.expiresAt
-              );
-              if (isValid) {
-                previousResponseId = lastResponse.responseId;
-              }
-            }
-          } catch (err) {
-            console.error(
-              '[OpenAI chat()] ❌ Failed to get previous_response_id:',
-              err
-            );
-          }
-        }
-
-        // Memory-aware prelude: при повторных — подмешиваем summary (если включено)
-        // Важно: isFirst должен учитывать не только summary, но и previous_response_id
-        // Если хотя бы один механизм памяти включен и есть данные - это не первая сессия
-        const hasPreviousResponseId =
-          enablePreviousResponseId && previousResponseId;
-
-        // Определяем isFirst: это первая сессия только если НЕТ ни summary, ни previous_response_id
-        let sessionMemoryText = '';
-        let isFirst = Boolean(options?.isFirstSession);
-
-        // Summary-память сейчас отключена (SUMMARY_ENABLED = false).
-        // Логику оставляем в коде для возможного будущего возвращения.
-        if (enableSummary && options?.userId != null) {
-          try {
-            const all = await summaryStore.getSummaries(options.userId, 4); // Лимит последних 4 для оптимизации токенов
-            if (all && all.length > 0) {
-              sessionMemoryText = buildSessionMemoryText(
-                all,
-                options?.lang ?? 'ru'
-                // Не передаем maxSummaryLength - truncation: "auto" обработает превышение контекста
-              );
-              isFirst = false; // Если есть summary - это не первая сессия
-            }
-          } catch {
-            // Игнорируем: summary отключена на уровне продукта и не должна ломать чат.
-          }
-        }
-
-        // Если есть previous_response_id - это точно не первая сессия
-        if (hasPreviousResponseId) {
-          isFirst = false;
-        }
-
         const lang = options?.lang ?? 'ru';
+        const numericUserId =
+          options?.userId !== undefined ? Number(options.userId) : NaN;
+        const therapySessionId =
+          typeof options?.therapySessionId === 'number'
+            ? options.therapySessionId
+            : null;
+        const canUseSessionMemory =
+          enablePreviousResponseId &&
+          therapySessionId !== null &&
+          Number.isFinite(numericUserId);
 
         // Вычисляем responseNumber для ротации типов ответов
         // Считаем количество сообщений пользователя в текущей сессии
@@ -764,23 +509,13 @@ export const openaiProvider: LlmProviderPort = {
             .filter((m: { role: string; content: string }) => m.role === 'user')
             .slice(-1)[0]?.content || '';
 
-        // Для повторных сессий исключаем память из system и добавляем её отдельным developer-сообщением ниже
-        const systemPrelude = buildChatPreludeWithMemory(
-          {
-            lang,
-            user_locale: options?.user_locale,
-            user_name: options?.user_name,
-            user_gender: options?.user_gender,
-          },
-          {
-            isFirstSession: isFirst,
-            sessionMemoryText: sessionMemoryText,
-            responseNumber,
-            userMessage: lastUserMessage,
-          }
-        );
-
-        const developerContext = buildDeveloperContext(
+        const systemBootstrap = buildChatPrelude({
+          lang,
+          user_locale: options?.user_locale,
+          user_name: options?.user_name,
+          user_gender: options?.user_gender,
+        });
+        const bootstrapDeveloperContext = buildSessionBootstrapDeveloperContext(
           {
             user_name: options?.user_name,
             user_gender: options?.user_gender,
@@ -791,9 +526,54 @@ export const openaiProvider: LlmProviderPort = {
             toneLabel: options?.toneLabel,
             toneDescription: options?.toneDescription,
             onboardingReasons: options?.onboardingReasons,
-          },
-          { responseNumber }
+          }
         );
+        const turnDeveloperContext = buildTurnDeveloperContext({
+          responseNumber,
+        });
+
+        const memoryContext =
+          canUseSessionMemory && therapySessionId !== null
+            ? await resolveChatMemoryContext({
+                userId: numericUserId,
+                therapySessionId,
+                model: usedModel,
+                enableMemory: true,
+                estimatedBootstrapTokens: estimateTokensByTexts([
+                  systemBootstrap,
+                  bootstrapDeveloperContext,
+                ]),
+                estimatedPerTurnTokens: estimateTokensByTexts([
+                  turnDeveloperContext,
+                  String(options?.userPrompt || ''),
+                  lastUserMessage,
+                ]),
+                isSafeUserTurn: Boolean(lastUserMessage.trim()),
+              })
+            : {
+                previousResponseId: null,
+                shouldSendBootstrap: true,
+                isFirstSession: true,
+                durableUserMemory: null,
+                handoffSummary: null,
+                runtimeCompactState: null,
+                compactionReason: null,
+                estimatedNextInputTokens: estimateTokensByTexts([
+                  systemBootstrap,
+                  bootstrapDeveloperContext,
+                  turnDeveloperContext,
+                  String(options?.userPrompt || ''),
+                  lastUserMessage,
+                ]),
+              };
+        const previousResponseId =
+          memoryContext.previousResponseId || undefined;
+        const isFirst = memoryContext.isFirstSession;
+        const sessionMemoryBlocks = buildSessionMemoryPromptBlocks({
+          durableUserMemory: memoryContext.durableUserMemory,
+          handoffSummary: memoryContext.handoffSummary,
+          runtimeCompactState: memoryContext.runtimeCompactState,
+        });
 
         // Собираем корректный массив сообщений с валидными типами контента
         const minimalMessages = lastUserMessage
@@ -801,20 +581,35 @@ export const openaiProvider: LlmProviderPort = {
           : [];
 
         const input = [
-          {
-            role: 'system',
-            content: [{ type: 'input_text' as const, text: systemPrelude }],
-          },
-          ...(developerContext
+          ...(memoryContext.shouldSendBootstrap
             ? [
+                {
+                  role: 'system' as const,
+                  content: [
+                    { type: 'input_text' as const, text: systemBootstrap },
+                  ],
+                },
                 {
                   role: 'developer' as const,
                   content: [
-                    { type: 'input_text' as const, text: developerContext },
+                    {
+                      type: 'input_text' as const,
+                      text: bootstrapDeveloperContext,
+                    },
                   ],
                 },
+                ...sessionMemoryBlocks.map((block) => ({
+                  role: 'developer' as const,
+                  content: [{ type: 'input_text' as const, text: block }],
+                })),
               ]
             : []),
+          {
+            role: 'developer' as const,
+            content: [
+              { type: 'input_text' as const, text: turnDeveloperContext },
+            ],
+          },
           ...(options?.userPrompt
             ? [
                 {
@@ -839,7 +634,7 @@ export const openaiProvider: LlmProviderPort = {
           max_output_tokens: maxTokens,
           temperature: options?.temperature ?? 0.3,
           // store должен быть true только если включена память через previous_response_id
-          store: enablePreviousResponseId,
+          store: canUseSessionMemory,
           metadata: { app: 'mentai', feature: 'psych_support' },
           text: {}, // при необходимости можно добавить text.format с json_schema
           // ВАЖНО: truncation: "auto" автоматически усекает контекст, если его размер превышает
@@ -849,7 +644,7 @@ export const openaiProvider: LlmProviderPort = {
 
         // Добавляем previous_response_id только если включено и есть валидный
         // Это позволяет модели помнить контекст предыдущих бесед для лучшего пользовательского опыта
-        if (enablePreviousResponseId && previousResponseId) {
+        if (canUseSessionMemory && previousResponseId) {
           body.previous_response_id = previousResponseId;
           body.store = true; // Принудительно устанавливаем store: true при использовании previous_response_id
         }
@@ -871,6 +666,8 @@ export const openaiProvider: LlmProviderPort = {
           messagesCount: (messages || []).length,
           messagesInContext: minimalMessages.length,
           userMessagesCount,
+          estimatedNextInputTokens: memoryContext.estimatedNextInputTokens,
+          compactionReason: memoryContext.compactionReason,
           temperature: body.temperature,
           maxOutputTokens: maxTokens,
           store: body.store,
@@ -879,6 +676,7 @@ export const openaiProvider: LlmProviderPort = {
           prompts: formatPromptsForLogging(input),
         });
 
+        const requestStartedAtMs = Date.now();
         const res: any = await sendResponsesRequest({
           body,
           purpose,
@@ -891,6 +689,23 @@ export const openaiProvider: LlmProviderPort = {
         });
 
         const content = extractText(res);
+        logOpenAiUsage({
+          scope: 'chat',
+          model: usedModel,
+          input,
+          usageSource: res,
+          latencyMs: Date.now() - requestStartedAtMs,
+          outputTextChars: content.length,
+          userId: options?.userId,
+          sessionId,
+          extra: {
+            mode: 'sync',
+            isFirstSession: isFirst,
+            hasPreviousResponseId: Boolean(previousResponseId),
+            responseNumber,
+            userMessagesCount,
+          },
+        });
 
         // Сохраняем response_id для следующего запроса (если включено)
         // В Responses API response_id может быть в res.id или в другом месте
@@ -901,17 +716,18 @@ export const openaiProvider: LlmProviderPort = {
           res?.response_id ||
           (res?.output?.[0] as any)?.id;
 
-        if (enablePreviousResponseId && options?.userId) {
-          if (responseId) {
-            try {
-              await responseIdStore.save(String(options.userId), responseId);
-            } catch (err) {
-              console.error(
-                '[OpenAI chat()] ❌ Failed to save response_id:',
-                err
-              );
-            }
-          }
+        if (canUseSessionMemory && therapySessionId !== null) {
+          await recordSuccessfulChatTurn({
+            userId: numericUserId,
+            therapySessionId,
+            turnIndex: responseNumber,
+            enableMemory: true,
+            conversationMessages: messages,
+            userMessage: lastUserMessage,
+            assistantMessage: content,
+            responseId: responseId ? String(responseId) : null,
+            usageSource: res,
+          });
         }
 
         if (tryEncrypted) {
@@ -977,131 +793,16 @@ export const openaiProvider: LlmProviderPort = {
   },
 
   async finishSession({ sessionId, allMessages, userId, model }: any) {
-    ensureOpenAiEnabled('finish_session');
-    if (!sessionId || !userId) {
+    void allMessages;
+    void userId;
+    void model;
+    if (!sessionId) {
       return;
     }
 
-    // Summary отключена на уровне продукта: не генерируем и не сохраняем.
-    // Очищаем кэш сессии и выходим, чтобы не тратить токены.
-    if (!SUMMARY_ENABLED) {
-      sessionCache.delete(sessionId);
-      return;
-    }
-
-    // Проверяем настройки пользователя
-    const chatSettings = await readChatSettings(String(userId));
-    const enableSummary = chatSettings?.enableSummary ?? true;
-
-    // Создаем summary только если включено
-    if (!enableSummary) {
-      sessionCache.delete(sessionId);
-      return;
-    }
-
-    // Проверяем, что есть сообщения для создания summary
-    if (!allMessages || allMessages.length === 0) {
-      sessionCache.delete(sessionId);
-      return;
-    }
-
-    const userMessages = (allMessages || []).filter(
-      (m: { role: string; content: string }) =>
-        m?.role === 'user' && String(m?.content || '').trim().length > 0
-    );
-    const totalUserChars = userMessages.reduce(
-      (sum: number, m: { content: string }) =>
-        sum + String(m?.content || '').trim().length,
-      0
-    );
-
-    if (
-      userMessages.length < MIN_SUMMARY_USER_MESSAGES ||
-      totalUserChars < MIN_SUMMARY_USER_CHARS
-    ) {
-      sessionCache.delete(sessionId);
-      return;
-    }
-
-    const useRelay = isRelayEnabled();
-    const apiKey = useRelay ? undefined : process.env.NUXT_OPENAI_API_KEY;
-
-    const usedModel = model || config.llm.openai.defaultModel;
-    const org = process.env.NUXT_OPENAI_ORG_ID || process.env.OPENAI_ORG_ID;
-    const project =
-      process.env.NUXT_OPENAI_PROJECT_ID || process.env.OPENAI_PROJECT_ID;
-    const idempotencyKey = randomUUID();
-    const relayRequestId = randomUUID();
-
-    const lastK = (allMessages || []).slice(-12);
-
-    const systemSummary = buildSummaryPrompt({ lang: 'ru' });
-
-    const input = [
-      {
-        role: 'system',
-        content: [{ type: 'input_text' as const, text: systemSummary }],
-      },
-      ...mapToResponsesInput(lastK),
-      {
-        role: 'user',
-        content: [
-          { type: 'input_text' as const, text: 'Ответь строго валидным JSON.' },
-        ],
-      },
-    ];
-
-    const body: any = {
-      model: usedModel,
-      input,
-      store: false, // Для finishSession всегда false
-      include: [],
-      text: {},
-      max_output_tokens: 600,
-      temperature: 0.2,
-    };
-
-    // Логирование запроса finishSession в OpenAI
-    console.log(
-      '[OpenAI finishSession()] Отправка запроса завершения сессии:',
-      {
-        model: usedModel,
-        userId: String(userId),
-        sessionId: sessionId || 'none',
-        messagesCount: lastK.length,
-        maxOutputTokens: body.max_output_tokens,
-        temperature: body.temperature,
-        prompts: formatPromptsForLogging(input),
-      }
-    );
-
-    try {
-      const res: any = await sendResponsesRequest({
-        body,
-        purpose: 'finish_session',
-        timeoutMs: 30_000,
-        apiKey,
-        org,
-        project,
-        idempotencyKey,
-        requestId: relayRequestId,
-      });
-
-      const raw = extractText(res);
-      const parsed = parseStrictJson(raw);
-      const normalized = validateAndNormalizeSummary(parsed);
-      await summaryStore.save(userId, sessionId, JSON.stringify(normalized));
-    } catch (error) {
-      // Сохраняем пустой summary с правильной структурой в случае ошибки
-      console.error(
-        '[OpenAI finishSession] Error during summary generation:',
-        error
-      );
-      const emptySummary = createEmptySummary();
-      await summaryStore.save(userId, sessionId, JSON.stringify(emptySummary));
-    } finally {
-      sessionCache.delete(sessionId);
-    }
+    // Канонический summary pipeline теперь запускается server-side через therapySession end + BullMQ.
+    // Этот метод оставлен только для совместимости со старым endpoint /api/session/finish.
+    sessionCache.delete(sessionId);
   },
 
   async *chatStream({ messages, model, options }: any): AsyncIterable<string> {
@@ -1124,78 +825,86 @@ export const openaiProvider: LlmProviderPort = {
     );
     const enablePreviousResponseId =
       chatSettings?.enablePreviousResponseId ?? true;
-    // Summary отключена глобально (см. SUMMARY_ENABLED), настройки пользователя игнорируем.
-    const enableSummary =
-      SUMMARY_ENABLED && (chatSettings?.enableSummary ?? true);
-    // ВАЖНО: Получаем последний валидный response_id ДО проверки welcome start
-    // Это нужно для правильной работы памяти
-    let previousResponseId: string | undefined;
-    if (options?.userId) {
-      try {
-        const lastResponse = await responseIdStore.getLastValid(
-          String(options.userId)
-        );
-        if (lastResponse) {
-          const isValid = responseIdStore.isResponseValid(
-            lastResponse.expiresAt
-          );
-
-          if (isValid) {
-            previousResponseId = lastResponse.responseId;
-          }
-        }
-      } catch (err) {
-        console.error(
-          '[OpenAI Stream] ❌ Failed to get previous_response_id:',
-          err
-        );
-      }
-    }
-
     const usedModel = model || config.llm.openai.defaultModel;
     const maxOutputTokens =
       options?.maxOutputTokens || config.llm.openai.defaultMaxOutputTokens;
+    const numericUserId =
+      options?.userId !== undefined ? Number(options.userId) : NaN;
+    const therapySessionId =
+      typeof options?.therapySessionId === 'number'
+        ? options.therapySessionId
+        : null;
+    const canUseSessionMemory =
+      enablePreviousResponseId &&
+      therapySessionId !== null &&
+      Number.isFinite(numericUserId);
 
     // Проверяем, является ли это стартом с welcome-экрана (messages пустой)
     const isWelcomeStart = (messages?.length || 0) === 0;
-
-    // Важно: isFirst должен учитывать не только summary, но и previous_response_id
-    // Если хотя бы один механизм памяти включен и есть данные - это не первая сессия
-    const hasPreviousResponseId =
-      enablePreviousResponseId && previousResponseId;
-
-    let sessionMemoryText = '';
-    let isFirst = Boolean(options?.isFirstSession);
-
-    // Summary-память сейчас отключена (SUMMARY_ENABLED = false).
-    // Логику оставляем в коде для возможного будущего возвращения.
-    if (enableSummary && options?.userId != null) {
-      try {
-        const all = await summaryStore.getSummaries(options.userId, 10); // Лимит последних 10
-        if (all && all.length > 0) {
-          sessionMemoryText = buildSessionMemoryText(
-            all,
-            options?.lang ?? 'ru'
-          );
-          isFirst = false; // Если есть summary - это не первая сессия
-        }
-      } catch {
-        // Игнорируем: summary отключена на уровне продукта и не должна ломать чат.
-      }
-    }
-
-    // Если есть previous_response_id - это точно не первая сессия
-    if (hasPreviousResponseId) {
-      isFirst = false;
-    }
 
     const lang = options?.lang ?? 'ru';
     const contextNote = options?.entryContext
       ? buildEntryContextDescription(options.entryContext)
       : '';
+    const systemBootstrap = buildChatPrelude({
+      lang,
+      user_locale: options?.user_locale,
+      user_name: options?.user_name,
+      user_gender: options?.user_gender,
+    });
+    const bootstrapDeveloperContext = buildSessionBootstrapDeveloperContext({
+      user_name: options?.user_name,
+      user_gender: options?.user_gender,
+      assistant_gender: assistantPersona.gender,
+      assistant_display_name: assistantPersona.displayName,
+      addressing: options?.addressing,
+      toneKey: options?.toneKey,
+      toneLabel: options?.toneLabel,
+      toneDescription: options?.toneDescription,
+      onboardingReasons: options?.onboardingReasons,
+    });
 
     // ОБРАБОТКА СТАРТА С WELCOME-ЭКРАНА
     if (isWelcomeStart) {
+      const welcomeMemoryContext =
+        canUseSessionMemory && therapySessionId !== null
+          ? await resolveChatMemoryContext({
+              userId: numericUserId,
+              therapySessionId,
+              model: usedModel,
+              enableMemory: true,
+              estimatedBootstrapTokens: estimateTokensByTexts([
+                systemBootstrap,
+                bootstrapDeveloperContext,
+              ]),
+              estimatedPerTurnTokens: estimateTokensByTexts([
+                String(options?.userPrompt || ''),
+              ]),
+              isSafeUserTurn: false,
+            })
+          : {
+              previousResponseId: null,
+              shouldSendBootstrap: true,
+              isFirstSession: true,
+              durableUserMemory: null,
+              handoffSummary: null,
+              runtimeCompactState: null,
+              compactionReason: null,
+              estimatedNextInputTokens: estimateTokensByTexts([
+                systemBootstrap,
+                bootstrapDeveloperContext,
+                String(options?.userPrompt || ''),
+              ]),
+            };
+      const previousResponseId =
+        welcomeMemoryContext.previousResponseId || undefined;
+      const isFirst = welcomeMemoryContext.isFirstSession;
+      const sessionMemoryBlocks = buildSessionMemoryPromptBlocks({
+        durableUserMemory: welcomeMemoryContext.durableUserMemory,
+        handoffSummary: welcomeMemoryContext.handoffSummary,
+        runtimeCompactState: welcomeMemoryContext.runtimeCompactState,
+      });
+
       // Загружаем welcome-промпт из БД (или используем дефолтный)
       let welcomePromptContent: string | null = null;
       if (options.userId) {
@@ -1225,8 +934,6 @@ export const openaiProvider: LlmProviderPort = {
         }
       }
 
-      const numericUserId =
-        options?.userId !== undefined ? Number(options.userId) : null;
       const timezone = resolveUserTimezone(options?.user_timezone);
       // Нормализуем пол: берём только allowlist значений из профиля.
       const userGender =
@@ -1281,7 +988,7 @@ export const openaiProvider: LlmProviderPort = {
       // Формируем стартовый промпт
       const welcomePrompt = buildWelcomePrompt({
         isFirstSession: isFirst,
-        sessionMemoryText: sessionMemoryText,
+        sessionMemoryText: '',
         lang,
         user_locale: options?.user_locale,
         user_name: options?.user_name,
@@ -1303,29 +1010,31 @@ export const openaiProvider: LlmProviderPort = {
         disableOpeningTemplates: isThoughtDumpEntry || isPhobiasWelcomeEntry,
       });
 
-      // System промпт для старта
-      // Для welcome-старта responseNumber = 1 (первое сообщение)
-      const responseNumber = 1;
-      const systemPrelude = buildChatPreludeWithMemory(
-        {
-          lang,
-          user_locale: options?.user_locale,
-          user_name: options?.user_name,
-          user_gender: options?.user_gender,
-        },
-        {
-          isFirstSession: isFirst,
-          sessionMemoryText: sessionMemoryText,
-          responseNumber,
-        }
-      );
-
       // Для welcome-старта формируем input БЕЗ messages (они пустые)
       const input = [
-        {
-          role: 'system',
-          content: [{ type: 'input_text' as const, text: systemPrelude }],
-        },
+        ...(welcomeMemoryContext.shouldSendBootstrap
+          ? [
+              {
+                role: 'system' as const,
+                content: [
+                  { type: 'input_text' as const, text: systemBootstrap },
+                ],
+              },
+              {
+                role: 'developer' as const,
+                content: [
+                  {
+                    type: 'input_text' as const,
+                    text: bootstrapDeveloperContext,
+                  },
+                ],
+              },
+              ...sessionMemoryBlocks.map((block) => ({
+                role: 'developer' as const,
+                content: [{ type: 'input_text' as const, text: block }],
+              })),
+            ]
+          : []),
         {
           role: 'developer',
           content: [{ type: 'input_text' as const, text: welcomePrompt }],
@@ -1352,7 +1061,7 @@ export const openaiProvider: LlmProviderPort = {
         temperature: options?.temperature ?? 0.3,
         max_output_tokens: 400, // Ограничение для стартового сообщения (2-3 предложения)
         // store должен быть true только если включена память через previous_response_id
-        store: enablePreviousResponseId,
+        store: canUseSessionMemory,
         // ВАЖНО: truncation: "auto" автоматически усекает контекст, если его размер превышает
         // допустимый лимит. Это позволяет использовать previous_response_id даже для длинных диалогов,
         // сохраняя начало и конец беседы, удаляя избыточные части из середины.
@@ -1360,7 +1069,7 @@ export const openaiProvider: LlmProviderPort = {
       };
 
       // Используем previous_response_id для сохранения контекста предыдущих бесед
-      if (enablePreviousResponseId && previousResponseId) {
+      if (canUseSessionMemory && previousResponseId) {
         streamOptions.previous_response_id = previousResponseId;
         streamOptions.store = true;
       }
@@ -1375,6 +1084,8 @@ export const openaiProvider: LlmProviderPort = {
           isFirstSession: isFirst,
           hasPreviousResponseId: Boolean(previousResponseId),
           hasWelcomePrompt: Boolean(welcomePromptContent),
+          estimatedNextInputTokens:
+            welcomeMemoryContext.estimatedNextInputTokens,
           temperature: streamOptions.temperature,
           maxOutputTokens: streamOptions.max_output_tokens,
           store: streamOptions.store,
@@ -1387,9 +1098,12 @@ export const openaiProvider: LlmProviderPort = {
 
       let responseId: string | undefined;
       let deltaCount = 0;
+      let streamedTextChars = 0;
+      let completedResponse: Record<string, unknown> | null = null;
+      const streamStartedAtMs = Date.now();
 
       if (useRelay) {
-        const { stream, responseIdPromise } = await relayResponsesStream({
+        const { stream, completionPromise } = await relayResponsesStream({
           path: '/v1/responses',
           body: { ...streamOptions, stream: true },
           purpose: 'chat_stream',
@@ -1399,7 +1113,9 @@ export const openaiProvider: LlmProviderPort = {
         try {
           for await (const delta of stream) {
             deltaCount++;
-            yield String(delta);
+            const normalizedDelta = String(delta);
+            streamedTextChars += normalizedDelta.length;
+            yield normalizedDelta;
           }
         } catch (streamError: any) {
           console.error(
@@ -1414,7 +1130,9 @@ export const openaiProvider: LlmProviderPort = {
           throw streamError;
         }
 
-        responseId = await responseIdPromise;
+        const completion = await completionPromise;
+        responseId = completion.responseId;
+        completedResponse = completion.response || null;
       } else {
         const openai = createOpenAiClient(apiKey!);
         const stream = await openai.responses.stream(streamOptions);
@@ -1423,14 +1141,23 @@ export const openaiProvider: LlmProviderPort = {
           for await (const ev of stream as any) {
             if (ev?.type === 'response.output_text.delta' && ev?.delta) {
               deltaCount++;
-              yield String(ev.delta);
+              const normalizedDelta = String(ev.delta);
+              streamedTextChars += normalizedDelta.length;
+              yield normalizedDelta;
             }
-            if (ev?.type === 'response.completed') {
+            if (
+              ev?.type === 'response.completed' ||
+              ev?.type === 'response.done'
+            ) {
               responseId =
                 ev?.response?.id ||
                 ev?.id ||
                 ev?.response_id ||
                 (ev?.response as any)?.id;
+              completedResponse =
+                ev?.response && typeof ev.response === 'object'
+                  ? (ev.response as Record<string, unknown>)
+                  : null;
               break;
             }
             if (ev?.type === 'response.error') {
@@ -1461,14 +1188,38 @@ export const openaiProvider: LlmProviderPort = {
         }
       }
 
-      // Сохраняем response_id для следующего запроса (если включено)
-      if (enablePreviousResponseId && options?.userId && responseId) {
+      // Welcome-ответ не считается turn, но response_id нужен для продолжения этой же chain.
+      if (canUseSessionMemory && therapySessionId !== null && responseId) {
         try {
-          await responseIdStore.save(String(options.userId), responseId);
+          await chatSessionMemoryStore.saveResponseId({
+            therapySessionId,
+            userId: numericUserId,
+            responseId: String(responseId),
+          });
         } catch (err) {
-          console.error('[OpenAI Stream] ❌ Failed to save response_id:', err);
+          console.error(
+            '[OpenAI Stream] ❌ Failed to save session-scoped response_id:',
+            err
+          );
         }
       }
+
+      logOpenAiUsage({
+        scope: 'chat_welcome_stream',
+        model: usedModel,
+        input,
+        usageSource: completedResponse,
+        latencyMs: Date.now() - streamStartedAtMs,
+        outputTextChars: streamedTextChars,
+        userId: options?.userId,
+        sessionId: options?.sessionId,
+        extra: {
+          isFirstSession: isFirst,
+          hasPreviousResponseId: Boolean(previousResponseId),
+          deltaCount,
+          hasWelcomePrompt: Boolean(welcomePromptContent),
+        },
+      });
 
       return; // Выходим из функции после welcome-старта
     }
@@ -1485,47 +1236,61 @@ export const openaiProvider: LlmProviderPort = {
       (messages || [])
         .filter((m: { role: string; content: string }) => m.role === 'user')
         .slice(-1)[0]?.content || '';
-
-    const systemPrelude = buildChatPreludeWithMemory(
-      {
-        lang,
-        user_locale: options?.user_locale,
-        user_name: options?.user_name,
-        user_gender: options?.user_gender,
-      },
-      {
-        isFirstSession: isFirst,
-        sessionMemoryText: sessionMemoryText,
-        responseNumber,
-        userMessage: lastUserMessage,
-      }
-    );
-
-    const developerContext = buildDeveloperContext(
-      {
-        user_name: options?.user_name,
-        user_gender: options?.user_gender,
-        assistant_gender: assistantPersona.gender,
-        assistant_display_name: assistantPersona.displayName,
-        addressing: options?.addressing,
-        toneKey: options?.toneKey,
-        toneLabel: options?.toneLabel,
-        toneDescription: options?.toneDescription,
-        onboardingReasons: options?.onboardingReasons,
-      },
-      { responseNumber }
-    );
+    const turnDeveloperContext = buildTurnDeveloperContext({
+      responseNumber,
+    });
+    const memoryContext =
+      canUseSessionMemory && therapySessionId !== null
+        ? await resolveChatMemoryContext({
+            userId: numericUserId,
+            therapySessionId,
+            model: usedModel,
+            enableMemory: true,
+            estimatedBootstrapTokens: estimateTokensByTexts([
+              systemBootstrap,
+              bootstrapDeveloperContext,
+            ]),
+            estimatedPerTurnTokens: estimateTokensByTexts([
+              turnDeveloperContext,
+              contextNote,
+              String(options?.userPrompt || ''),
+              lastUserMessage,
+            ]),
+            isSafeUserTurn: Boolean(lastUserMessage.trim()),
+          })
+        : {
+            previousResponseId: null,
+            shouldSendBootstrap: true,
+            isFirstSession: true,
+            durableUserMemory: null,
+            handoffSummary: null,
+            runtimeCompactState: null,
+            compactionReason: null,
+            estimatedNextInputTokens: estimateTokensByTexts([
+              systemBootstrap,
+              bootstrapDeveloperContext,
+              turnDeveloperContext,
+              contextNote,
+              String(options?.userPrompt || ''),
+              lastUserMessage,
+            ]),
+          };
+    const previousResponseId = memoryContext.previousResponseId || undefined;
+    const isFirst = memoryContext.isFirstSession;
+    const sessionMemoryBlocks = buildSessionMemoryPromptBlocks({
+      durableUserMemory: memoryContext.durableUserMemory,
+      handoffSummary: memoryContext.handoffSummary,
+      runtimeCompactState: memoryContext.runtimeCompactState,
+    });
     const developerMessages: Array<{
       role: 'developer';
       content: Array<{ type: 'input_text'; text: string }>;
     }> = [];
 
-    if (developerContext) {
-      developerMessages.push({
-        role: 'developer',
-        content: [{ type: 'input_text' as const, text: developerContext }],
-      });
-    }
+    developerMessages.push({
+      role: 'developer',
+      content: [{ type: 'input_text' as const, text: turnDeveloperContext }],
+    });
 
     if (contextNote) {
       developerMessages.push({
@@ -1535,10 +1300,27 @@ export const openaiProvider: LlmProviderPort = {
     }
 
     const input = [
-      {
-        role: 'system',
-        content: [{ type: 'input_text' as const, text: systemPrelude }],
-      },
+      ...(memoryContext.shouldSendBootstrap
+        ? [
+            {
+              role: 'system' as const,
+              content: [{ type: 'input_text' as const, text: systemBootstrap }],
+            },
+            {
+              role: 'developer' as const,
+              content: [
+                {
+                  type: 'input_text' as const,
+                  text: bootstrapDeveloperContext,
+                },
+              ],
+            },
+            ...sessionMemoryBlocks.map((block) => ({
+              role: 'developer' as const,
+              content: [{ type: 'input_text' as const, text: block }],
+            })),
+          ]
+        : []),
       ...developerMessages,
       ...(options?.userPrompt
         ? [
@@ -1570,7 +1352,7 @@ export const openaiProvider: LlmProviderPort = {
       temperature: options?.temperature ?? 0.3,
       max_output_tokens: maxOutputTokens,
       // store должен быть true только если включена память через previous_response_id
-      store: enablePreviousResponseId,
+      store: canUseSessionMemory,
       // ВАЖНО: truncation: "auto" автоматически усекает контекст, если его размер превышает
       // допустимый лимит. Это позволяет использовать previous_response_id даже для длинных диалогов,
       // сохраняя начало и конец беседы, удаляя избыточные части из середины.
@@ -1579,7 +1361,7 @@ export const openaiProvider: LlmProviderPort = {
 
     // Добавляем previous_response_id только если включено и есть валидный
     // Это позволяет модели помнить контекст предыдущих бесед для лучшего пользовательского опыта
-    if (enablePreviousResponseId && previousResponseId) {
+    if (canUseSessionMemory && previousResponseId) {
       streamOptions.previous_response_id = previousResponseId;
       streamOptions.store = true; // Принудительно устанавливаем store: true при использовании previous_response_id
     }
@@ -1599,6 +1381,8 @@ export const openaiProvider: LlmProviderPort = {
         responseNumber,
         hasEntryContext: Boolean(contextNote),
         hasUserPrompt: Boolean(options?.userPrompt),
+        estimatedNextInputTokens: memoryContext.estimatedNextInputTokens,
+        compactionReason: memoryContext.compactionReason,
         temperature: streamOptions.temperature,
         maxOutputTokens: streamOptions.max_output_tokens,
         store: streamOptions.store,
@@ -1609,8 +1393,13 @@ export const openaiProvider: LlmProviderPort = {
       }
     );
     let responseId: string | undefined;
+    let deltaCount = 0;
+    let streamedTextChars = 0;
+    let streamedText = '';
+    let completedResponse: Record<string, unknown> | null = null;
+    const streamStartedAtMs = Date.now();
     if (useRelay) {
-      const { stream, responseIdPromise } = await relayResponsesStream({
+      const { stream, completionPromise } = await relayResponsesStream({
         path: '/v1/responses',
         body: { ...streamOptions, stream: true },
         purpose: 'chat_stream',
@@ -1618,11 +1407,13 @@ export const openaiProvider: LlmProviderPort = {
       });
 
       let streamError: unknown;
-      let deltaCount = 0;
       try {
         for await (const delta of stream) {
           deltaCount++;
-          yield String(delta);
+          const normalizedDelta = String(delta);
+          streamedText += normalizedDelta;
+          streamedTextChars += normalizedDelta.length;
+          yield normalizedDelta;
         }
       } catch (err) {
         streamError = err;
@@ -1636,7 +1427,9 @@ export const openaiProvider: LlmProviderPort = {
           (err as Error)?.message || String(err)
         );
       } finally {
-        responseId = await responseIdPromise;
+        const completion = await completionPromise;
+        responseId = completion.responseId;
+        completedResponse = completion.response || null;
       }
 
       if (streamError) {
@@ -1647,14 +1440,19 @@ export const openaiProvider: LlmProviderPort = {
       const stream = await openai.responses.stream(streamOptions);
 
       let streamError: unknown;
-      let deltaCount = 0;
       try {
         for await (const ev of stream as any) {
           if (ev?.type === 'response.output_text.delta' && ev?.delta) {
             deltaCount++;
-            yield String(ev.delta);
+            const normalizedDelta = String(ev.delta);
+            streamedText += normalizedDelta;
+            streamedTextChars += normalizedDelta.length;
+            yield normalizedDelta;
           }
-          if (ev?.type === 'response.completed') {
+          if (
+            ev?.type === 'response.completed' ||
+            ev?.type === 'response.done'
+          ) {
             // Сохраняем response_id из завершенного ответа
             // В Responses API stream response_id может быть в разных местах
             responseId =
@@ -1662,6 +1460,10 @@ export const openaiProvider: LlmProviderPort = {
               ev?.id ||
               ev?.response_id ||
               (ev?.response as any)?.id;
+            completedResponse =
+              ev?.response && typeof ev.response === 'object'
+                ? (ev.response as Record<string, unknown>)
+                : null;
             break;
           }
           if (ev?.type === 'response.error') {
@@ -1689,15 +1491,36 @@ export const openaiProvider: LlmProviderPort = {
       }
     }
 
-    // Сохраняем response_id для следующего запроса (если включено)
-    if (enablePreviousResponseId && options?.userId) {
-      if (responseId) {
-        try {
-          await responseIdStore.save(String(options.userId), responseId);
-        } catch (err) {
-          console.error('[OpenAI Stream] ❌ Failed to save response_id:', err);
-        }
-      }
+    logOpenAiUsage({
+      scope: 'chat_stream',
+      model: usedModel,
+      input,
+      usageSource: completedResponse,
+      latencyMs: Date.now() - streamStartedAtMs,
+      outputTextChars: streamedTextChars,
+      userId: options?.userId,
+      sessionId: options?.sessionId,
+      extra: {
+        isFirstSession: isFirst,
+        hasPreviousResponseId: Boolean(previousResponseId),
+        responseNumber,
+        userMessagesCount,
+        deltaCount,
+      },
+    });
+
+    if (canUseSessionMemory && therapySessionId !== null) {
+      await recordSuccessfulChatTurn({
+        userId: numericUserId,
+        therapySessionId,
+        turnIndex: responseNumber,
+        enableMemory: true,
+        conversationMessages: messages,
+        userMessage: lastUserMessage,
+        assistantMessage: streamedText,
+        responseId: responseId ? String(responseId) : null,
+        usageSource: completedResponse,
+      });
     }
 
     if (options?.scenario === 'notifications') {

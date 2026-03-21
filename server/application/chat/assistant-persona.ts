@@ -49,7 +49,7 @@ export function buildAssistantPersonaInstruction(params: {
   }
 
   const displayName = String(params.assistantDisplayName || 'Mentala').trim();
-  const genderLabel = gender === 'female' ? 'женская' : 'мужская';
+  const genderLabel = gender === 'female' ? 'женщина' : ' мужчина';
   const selfReferenceInstruction =
     gender === 'female'
       ? 'Если говоришь о себе в первом лице по-русски, используй женские формы: «я заметила», «я подумала», «я сделала».'
@@ -57,8 +57,6 @@ export function buildAssistantPersonaInstruction(params: {
 
   return `Персона ассистента:
  Ты — ассистент ${displayName}.
- Твоя продуктовая голосовая персона: ${genderLabel}.
- ${selfReferenceInstruction}
- Не подчеркивай свой пол без необходимости.
- Не выдумывай биографию, телесность или личный опыт.`;
+ Ты ${genderLabel}.
+ ${selfReferenceInstruction}`;
 }

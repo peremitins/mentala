@@ -8,6 +8,7 @@ import {
   REALTIME_VOICE_TRANSCRIPTION_MODEL,
   REALTIME_VOICE_TURN_THRESHOLD,
 } from '@/server/config/realtime';
+import { CHAT_MEMORY_SOFT_INPUT_TOKENS } from '@/server/config/chatMemory';
 import {
   isRelayEnabled,
   relayRealtimeCall,
@@ -19,6 +20,13 @@ export type OpenAiRealtimeSessionConfig = {
   type: 'realtime';
   model: string;
   instructions: string;
+  truncation: {
+    type: 'retention_ratio';
+    retention_ratio: number;
+    token_limits: {
+      post_instructions: number;
+    };
+  };
   audio: {
     input: {
       noise_reduction: {
@@ -42,6 +50,8 @@ export type OpenAiRealtimeSessionConfig = {
   };
 };
 
+const REALTIME_VOICE_CONTEXT_RETENTION_RATIO = 0.8;
+
 function getOpenAiProviderHeaders(apiKey: string): Record<string, string> {
   const organization =
     process.env.NUXT_OPENAI_ORG_ID || process.env.OPENAI_ORG_ID;
@@ -63,6 +73,13 @@ export function buildOpenAiRealtimeSessionConfig(params: {
     type: 'realtime',
     model: REALTIME_VOICE_OPENAI_MODEL,
     instructions: params.instructions,
+    truncation: {
+      type: 'retention_ratio',
+      retention_ratio: REALTIME_VOICE_CONTEXT_RETENTION_RATIO,
+      token_limits: {
+        post_instructions: CHAT_MEMORY_SOFT_INPUT_TOKENS,
+      },
+    },
     audio: {
       input: {
         noise_reduction: {

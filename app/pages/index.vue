@@ -126,7 +126,7 @@
                 key="loading-indicator"
               />
               <SuggestedChips
-                v-if="chat.suggestedChips.length"
+                v-if="shouldShowSuggestedChips"
                 key="suggested-chips"
                 class="max-w-[85%] self-start"
                 :chips="chat.suggestedChips"
@@ -549,10 +549,6 @@ const realtimeVoice = useRealtimeVoiceSession({
     }
 
     clearVoiceBase();
-
-    if (chat.therapySessionId && !chat.isEndingSession) {
-      await chat.endTherapySession();
-    }
   },
   getReadyMessageText: () =>
     getAddressingCopy('realtimeReadyHint', addressing.value),
@@ -562,6 +558,12 @@ const realtimeVoiceCallFeedback = useRealtimeVoiceCallFeedback({
   errorMessage: realtimeVoice.errorMessage,
 });
 const isTextInputDisabled = computed(() => realtimeVoice.blocksTextInput.value);
+const shouldShowSuggestedChips = computed(
+  () =>
+    chat.suggestedChips.length > 0 &&
+    !realtimeVoice.isActive.value &&
+    !realtimeVoice.isBusy.value
+);
 const isDictationMicDisabled = computed(
   () =>
     isTextInputDisabled.value ||
@@ -767,8 +769,6 @@ const sendText = async (rawText: string) => {
   }
 
   if (res?.ok) {
-    chat.startSession();
-
     // Озвучим последний ответ ассистента через TTS OpenAI
     if (isTtsEnabled.value && chatSettings.voice === true) {
       const last = [...chat.messages]

@@ -76,6 +76,12 @@ interface Usage {
   weeklyLimit: number;
   overdraftUsed: number;
   availableMinutes: number;
+  realtimeVoice: {
+    limitSeconds: number;
+    usedSeconds: number;
+    remainingSeconds: number;
+    resetsAt: string;
+  } | null;
 }
 
 export const useSubscriptionStore = defineStore('subscription', {
