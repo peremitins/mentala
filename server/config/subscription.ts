@@ -33,8 +33,8 @@ export const DEFAULT_WEEKLY_MINUTES_LIMIT = PRO_WEEKLY_MINUTES_LIMIT;
 
 // Таймаут бездействия для чата (в миллисекундах)
 // Используется для автоматического завершения сессий при отсутствии активности
-// 2 минуты = 120000 мс
-export const CHAT_IDLE_TIMEOUT_MS = 2 * 60 * 1000;
+// 15 минут = 900000 мс
+export const CHAT_IDLE_TIMEOUT_MS = 15 * 60 * 1000;
 
 // Длительность trial в часах (дефолт: 7 дней).
 export const TRIAL_DURATION_HOURS = readPositiveIntFromEnv(

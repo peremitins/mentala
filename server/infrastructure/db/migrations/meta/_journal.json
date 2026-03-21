@@ -477,6 +477,27 @@
       "when": 1773916030576,
       "tag": "0071_spooky_mordo",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1774000458365,
+      "tag": "0072_bent_black_knight",
+      "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1774007386455,
+      "tag": "0073_keen_young_avengers",
+      "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1774011754037,
+      "tag": "0074_left_northstar",
+      "breakpoints": true
     }
   ]
 }

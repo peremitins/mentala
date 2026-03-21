@@ -39,7 +39,12 @@ open -a "Android Studio"
 pnpm dev
 ```
 
-Сервер должен запуститься на `http://0.0.0.0:3000` (слушает на всех интерфейсах)
+Сервер должен запуститься на `http://0.0.0.0:3000` (слушает на всех интерфейсах).
+
+Важно:
+- `pnpm dev` должен жить только в одном экземпляре
+- если порт `3000` уже занят, нужно разрулить это, а не запускать второй dev-сервер на `3001`
+- иначе `cap:sync:device` пропишет телефону `server.url` на `3000`, а фактический фронтенд окажется на другом порту
 
 ### Шаг 1: Синхронизация с Capacitor
 
@@ -47,14 +52,17 @@ pnpm dev
 # Для эмулятора:
 pnpm run cap:sync:emulator
 
-# Для реального устройства с realtime voice:
+# Для реального устройства:
 pnpm run cap:sync:device
-
-# Если нужен live reload на физическом Android и при этом должен работать realtime voice:
-pnpm run cap:run:android:device:live
 
 # Это автоматически настроит правильные URL и синхронизирует проект
 ```
+
+Скрипт синка дополнительно проверяет, что dev-сервер реально отвечает на `127.0.0.1:3000`, и только потом пишет `server.url` в runtime-конфиг Capacitor.
+Если Android-устройство подключено по `adb`, скрипт:
+- всегда переводит Android на `http://localhost:3000` через `adb reverse`
+- не использует для Android realtime voice прямой `http://192.168.x.x`, даже если LAN доступен
+- затем пересобирает и переустанавливает debug APK, чтобы телефон не оставался на старом `server.url`
 
 ### Шаг 2: Открытие в Android Studio
 
@@ -122,11 +130,8 @@ pnpm run cap:sync
 # Для эмулятора
 pnpm run cap:sync:emulator
 
-# Для реального устройства с локальным bundle
+# Для реального устройства
 pnpm run cap:sync:device
-
-# Для live reload на Android-устройстве с автоматическим запуском app
-pnpm run cap:run:android:device:live
 
 # Просмотр логов
 adb logcat
@@ -166,6 +171,9 @@ adb shell am start -n com.mentai.app/.MainActivity
    pnpm run cap:sync:device
    ```
 
+   Важно:
+   `cap:sync:device` обновляет `server.url` внутри APK. Если телефон подключён по `adb`, скрипт сам переустановит debug APK и для Android всегда запишет `http://localhost:3000` через `adb reverse`, потому что realtime voice требует secure-context для микрофона. Если устройство вообще не подключено по `adb`, приложение на телефоне может продолжать жить со старым URL до следующей установки.
+
 4. **Пересобери приложение**:
    ```bash
    cd android
@@ -198,10 +206,9 @@ cd android && ./gradlew clean installDebug
 
    - Запусти dev-сервер: `pnpm dev`
    - Используй `pnpm run cap:sync:emulator` (для эмулятора) или `pnpm run cap:sync:device` (для устройства)
-   - Для реального устройства `cap:sync:device` собирает локальный bundle на `localhost`, а API направляет на LAN-IP. Это нужно для realtime voice.
-   - Если нужен live reload на Android-устройстве и при этом нужен realtime voice, используй `pnpm run cap:run:android:device:live`. Эта команда переводит Android на `http://localhost:3000` через `adb reverse`, поэтому origin остаётся доверенным для микрофона, а фронтенд обновляется автоматически.
-   - `pnpm run cap:sync:device:live` теперь тоже готовит Android к `localhost`-режиму и настраивает `adb reverse` для подключённых девайсов, но сама не запускает приложение.
-   - Важно: live reload на Android остаётся зависимым от `pnpm dev` и активного `adb reverse`. Если потом открыть уже установленное приложение без dev-сервера, можно получить `ERR_CONNECTION_REFUSED` на `http://localhost:3000`. Для возврата в стабильный режим сразу выполняй `pnpm run cap:sync:device` и заново устанавливай debug build.
+   - Скрипт проверит доступность dev-сервера на `3000`
+   - для Android real device он использует `http://localhost:3000` через `adb reverse`
+   - это специально нужно для realtime voice, чтобы WebView не жил на небезопасном `http://192.168.x.x`
 
 2. **Для production сборки**:
    - IP больше не нужно указывать вручную - используются относительные пути

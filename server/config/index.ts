@@ -79,7 +79,7 @@ export const config = {
         },
         chips: {
           temperature: 0.7, // Нужна вариативность формулировок
-          maxOutputTokens: 200,
+          maxOutputTokens: 120,
           enableReasoning: false,
         },
       },
@@ -87,7 +87,7 @@ export const config = {
       pricingUSDPerMTok: {
         // Approx pricing; adjust from OpenAI pricing page if changed
         'gpt-4o-mini': { in: 0.15, out: 0.6 },
-        'gpt-4o': { in: 5.0, out: 15.0 },
+        // 'gpt-4o': { in: 5.0, out: 15.0 },
         // Когда появится GPT-5:
         // 'gpt-5': { in: 10.0, out: 30.0 },
       },

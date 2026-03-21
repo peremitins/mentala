@@ -5,7 +5,7 @@ import {
   userSubscriptions,
   users,
 } from '@/server/infrastructure/db/schema';
-import { calculateUsageForSessionsInWindow } from '@/server/application/subscriptions/usage-calculation.utils';
+import { calculateUsageSecondsForSessionsInWindow } from '@/server/application/subscriptions/usage-calculation.utils';
 import {
   normalizeBillingCollectionStatus,
   resolveCurrentEntitlementsPlan,
@@ -20,9 +20,9 @@ import {
 import { resolveRealtimeVoiceQuotaPeriod } from './realtime-voice-period.utils';
 
 export type RealtimeVoiceQuotaSnapshot = {
-  limitMinutes: number;
-  usedMinutes: number;
-  remainingMinutes: number;
+  limitSeconds: number;
+  usedSeconds: number;
+  remainingSeconds: number;
   periodKey: string;
   startedAt: Date;
   resetsAt: Date;
@@ -132,22 +132,20 @@ export async function getRealtimeVoiceQuotaSnapshot(params: {
       )
     );
 
-  const usedMinutes = calculateUsageForSessionsInWindow(sessions, {
+  const limitSeconds = REALTIME_VOICE_MONTHLY_LIMIT_MINUTES * 60;
+  const usedSeconds = calculateUsageSecondsForSessionsInWindow(sessions, {
     windowStart: quotaPeriod.startedAt,
     windowEnd: quotaPeriod.endsAt,
     idleTimeoutMs: REALTIME_VOICE_IDLE_TIMEOUT_SECONDS * 1000,
     now,
   });
 
-  const remainingMinutes = Math.max(
-    0,
-    REALTIME_VOICE_MONTHLY_LIMIT_MINUTES - usedMinutes
-  );
+  const remainingSeconds = Math.max(0, limitSeconds - usedSeconds);
 
   return {
-    limitMinutes: REALTIME_VOICE_MONTHLY_LIMIT_MINUTES,
-    usedMinutes,
-    remainingMinutes,
+    limitSeconds,
+    usedSeconds,
+    remainingSeconds,
     periodKey: quotaPeriod.key,
     startedAt: quotaPeriod.startedAt,
     resetsAt: quotaPeriod.endsAt,
@@ -155,13 +153,13 @@ export async function getRealtimeVoiceQuotaSnapshot(params: {
 }
 
 export function resolveRealtimeVoiceMaxDurationSeconds(params: {
-  remainingMonthlyMinutes: number;
+  remainingMonthlySeconds: number;
   remainingWeeklyMinutes: number;
 }) {
   return Math.max(
     0,
     Math.min(
-      params.remainingMonthlyMinutes * 60,
+      params.remainingMonthlySeconds,
       params.remainingWeeklyMinutes * 60,
       REALTIME_VOICE_HARD_CEILING_SECONDS
     )

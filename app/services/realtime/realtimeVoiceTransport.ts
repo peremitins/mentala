@@ -9,6 +9,41 @@ type RealtimeVoiceServerEvent = {
   [key: string]: any;
 };
 
+type RealtimeVoiceWindow = Window &
+  typeof globalThis & {
+    webkitAudioContext?: typeof AudioContext;
+  };
+
+type NavigatorWithAudioSession = Navigator & {
+  audioSession?: {
+    type?: string;
+  };
+};
+
+const AUDIO_SESSION_PLAYBACK = 'playback';
+const INPUT_ACTIVITY_VOLUME_THRESHOLD = 4;
+const INPUT_ACTIVITY_CHECK_INTERVAL_MS = 750;
+const INPUT_ACTIVITY_THROTTLE_MS = 1_500;
+
+function ensureRealtimeVoicePlaybackAudioSessionType() {
+  if (typeof navigator === 'undefined') {
+    return;
+  }
+
+  const session = (navigator as NavigatorWithAudioSession).audioSession;
+  if (!session) {
+    return;
+  }
+
+  try {
+    if (session.type !== AUDIO_SESSION_PLAYBACK) {
+      session.type = AUDIO_SESSION_PLAYBACK;
+    }
+  } catch {
+    // В старых WebView API может отсутствовать или быть read-only.
+  }
+}
+
 async function waitForIceGatheringComplete(
   connection: RTCPeerConnection,
   timeoutMs = 3_000
@@ -51,6 +86,11 @@ export class RealtimeVoiceTransport {
   private dataChannel: RTCDataChannel | null = null;
   private localStream: MediaStream | null = null;
   private remoteAudioElement: HTMLAudioElement | null = null;
+  private inputAudioContext: AudioContext | null = null;
+  private inputAnalyser: AnalyserNode | null = null;
+  private inputAudioSource: MediaStreamAudioSourceNode | null = null;
+  private inputActivityInterval: number | null = null;
+  private lastInputActivityAtMs = 0;
 
   get isConnected(): boolean {
     return (
@@ -59,15 +99,168 @@ export class RealtimeVoiceTransport {
     );
   }
 
+  private ensureRemoteAudioElement(): HTMLAudioElement | null {
+    if (typeof Audio === 'undefined') {
+      return null;
+    }
+
+    if (!this.remoteAudioElement) {
+      const audioElement = new Audio();
+      audioElement.autoplay = true;
+      audioElement.muted = false;
+      audioElement.volume = 1;
+      audioElement.preload = 'auto';
+      audioElement.setAttribute('playsinline', 'true');
+      this.remoteAudioElement = audioElement;
+    }
+
+    return this.remoteAudioElement;
+  }
+
+  private async attachRemoteAudioStream(stream: MediaStream) {
+    const remoteAudioElement = this.ensureRemoteAudioElement();
+    if (!remoteAudioElement) {
+      return;
+    }
+
+    ensureRealtimeVoicePlaybackAudioSessionType();
+    remoteAudioElement.srcObject = stream;
+    remoteAudioElement.muted = false;
+    remoteAudioElement.volume = 1;
+
+    await remoteAudioElement.play().catch(() => {
+      // Автоплей может быть ограничен браузером. Повторное воспроизведение
+      // произойдёт автоматически после следующего user gesture.
+    });
+  }
+
+  private startInputActivityMonitor(
+    stream: MediaStream,
+    onInputAudioActivity: (() => void) | undefined
+  ) {
+    if (!onInputAudioActivity || typeof window === 'undefined') {
+      return;
+    }
+
+    const AudioContextCtor =
+      window.AudioContext ||
+      (window as RealtimeVoiceWindow).webkitAudioContext ||
+      null;
+
+    if (!AudioContextCtor) {
+      return;
+    }
+
+    try {
+      this.stopInputActivityMonitor();
+
+      this.inputAudioContext = new AudioContextCtor();
+      this.inputAnalyser = this.inputAudioContext.createAnalyser();
+      this.inputAnalyser.fftSize = 256;
+      this.inputAnalyser.smoothingTimeConstant = 0.8;
+      this.inputAudioSource =
+        this.inputAudioContext.createMediaStreamSource(stream);
+      this.inputAudioSource.connect(this.inputAnalyser);
+      this.lastInputActivityAtMs = 0;
+
+      this.inputActivityInterval = window.setInterval(() => {
+        if (!this.inputAnalyser) {
+          return;
+        }
+
+        // Держим idle-session живой по реальному микрофонному сигналу,
+        // даже если Realtime provider ещё не прислал speech_stopped/delta события.
+        const dataArray = new Uint8Array(this.inputAnalyser.frequencyBinCount);
+        this.inputAnalyser.getByteTimeDomainData(dataArray);
+
+        let sum = 0;
+        for (let index = 0; index < dataArray.length; index += 1) {
+          const sample = dataArray[index] ?? 128;
+          const normalized = (sample - 128) / 128;
+          sum += normalized * normalized;
+        }
+
+        const rms = Math.sqrt(sum / dataArray.length);
+        const volume = Math.round(rms * 100);
+        const now = Date.now();
+
+        if (
+          volume > INPUT_ACTIVITY_VOLUME_THRESHOLD &&
+          now - this.lastInputActivityAtMs >= INPUT_ACTIVITY_THROTTLE_MS
+        ) {
+          this.lastInputActivityAtMs = now;
+          onInputAudioActivity();
+        }
+      }, INPUT_ACTIVITY_CHECK_INTERVAL_MS);
+    } catch (error) {
+      console.warn(
+        '[RealtimeVoiceTransport] Failed to start input activity monitor:',
+        error
+      );
+      this.stopInputActivityMonitor();
+    }
+  }
+
+  private stopInputActivityMonitor() {
+    if (this.inputActivityInterval) {
+      clearInterval(this.inputActivityInterval);
+      this.inputActivityInterval = null;
+    }
+
+    if (this.inputAudioSource) {
+      try {
+        this.inputAudioSource.disconnect();
+      } catch (error) {
+        console.error(
+          '[RealtimeVoiceTransport] Failed to disconnect input audio source:',
+          error
+        );
+      }
+      this.inputAudioSource = null;
+    }
+
+    if (this.inputAnalyser) {
+      try {
+        this.inputAnalyser.disconnect();
+      } catch (error) {
+        console.error(
+          '[RealtimeVoiceTransport] Failed to disconnect input analyser:',
+          error
+        );
+      }
+      this.inputAnalyser = null;
+    }
+
+    if (this.inputAudioContext) {
+      void this.inputAudioContext.close().catch((error) => {
+        console.error(
+          '[RealtimeVoiceTransport] Failed to close input audio context:',
+          error
+        );
+      });
+      this.inputAudioContext = null;
+    }
+
+    this.lastInputActivityAtMs = 0;
+  }
+
   async start(params: {
     clientSecret?: string | null;
     webrtcUrl: string;
     onEvent: (event: RealtimeVoiceServerEvent) => void;
+    onInputAudioActivity?: () => void;
     onConnectionStateChange?: (state: RTCPeerConnectionState) => void;
     requestHeaders?: Record<string, string>;
     audioConstraints?: MediaTrackConstraints | boolean;
   }) {
-    if (!getRealtimeVoiceSupport().isSupported) {
+    const support = getRealtimeVoiceSupport();
+    if (!support.isSecureContext) {
+      throw new Error(
+        `Realtime voice requires a secure context. Current origin: ${support.origin || 'unknown'}`
+      );
+    }
+
+    if (!support.isSupported) {
       throw new Error('Realtime voice is not supported on this device');
     }
 
@@ -83,30 +276,30 @@ export class RealtimeVoiceTransport {
     const localStream = await requestRealtimeVoiceUserMedia({
       audio: params.audioConstraints ?? true,
     });
-    const remoteAudioElement = new Audio();
-    remoteAudioElement.autoplay = true;
-    remoteAudioElement.setAttribute('playsinline', 'true');
-
     this.peerConnection = peerConnection;
     this.dataChannel = dataChannel;
     this.localStream = localStream;
-    this.remoteAudioElement = remoteAudioElement;
 
     peerConnection.addEventListener('connectionstatechange', () => {
       params.onConnectionStateChange?.(peerConnection.connectionState);
     });
 
     peerConnection.addEventListener('track', (event) => {
-      const [stream] = event.streams;
+      const [eventStream] = event.streams;
+      const stream =
+        eventStream ||
+        (typeof MediaStream !== 'undefined'
+          ? new MediaStream([event.track])
+          : null);
       if (!stream) {
         return;
       }
 
-      remoteAudioElement.srcObject = stream;
-      void remoteAudioElement.play().catch(() => {
-        // Автоплей может быть ограничен браузером. Повторное воспроизведение
-        // произойдёт автоматически после следующего user gesture.
+      console.info('[RealtimeVoiceTransport] Remote audio track received', {
+        trackKind: event.track?.kind || 'unknown',
+        streamId: stream.id || 'unknown',
       });
+      void this.attachRemoteAudioStream(stream);
     });
 
     dataChannel.addEventListener('message', (event) => {
@@ -124,6 +317,8 @@ export class RealtimeVoiceTransport {
     for (const track of localStream.getTracks()) {
       peerConnection.addTrack(track, localStream);
     }
+
+    this.startInputActivityMonitor(localStream, params.onInputAudioActivity);
 
     const offer = await peerConnection.createOffer({
       offerToReceiveAudio: true,
@@ -213,6 +408,8 @@ export class RealtimeVoiceTransport {
     } finally {
       this.peerConnection = null;
     }
+
+    this.stopInputActivityMonitor();
 
     if (this.localStream) {
       for (const track of this.localStream.getTracks()) {

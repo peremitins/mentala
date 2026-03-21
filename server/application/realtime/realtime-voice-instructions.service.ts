@@ -1,5 +1,11 @@
 import { eq } from 'drizzle-orm';
 import { getUserAssistantPersona } from '../chat/assistant-persona.service';
+import {
+  getMeaningfulDurableUserMemoryForUser,
+  getLatestMeaningfulHandoffSummaryForUser,
+  isChatMemoryEnabledForUser,
+} from '../chat/chatMemory.service';
+import type { RuntimeCompactState } from '../chat/chatMemory.types';
 import { db } from '../../infrastructure/db/client';
 import { userPreferences, users } from '../../infrastructure/db/schema';
 import { resolveOnboardingReasons } from '../../../shared/dto/onboarding';
@@ -12,6 +18,7 @@ export async function buildRealtimeVoiceInstructions(params: {
   userId: number;
   entryContext?: ChatEntryContext | null;
   crisisGuidance?: string | null;
+  runtimeCompactState?: RuntimeCompactState | null;
 }) {
   const rows = await db
     .select({
@@ -36,6 +43,14 @@ export async function buildRealtimeVoiceInstructions(params: {
     reasons: profile?.onboardingReasons,
     reason: profile?.onboardingReason,
   });
+  const [handoffSummary, durableUserMemory] = (await isChatMemoryEnabledForUser(
+    params.userId
+  ))
+    ? await Promise.all([
+        getLatestMeaningfulHandoffSummaryForUser(params.userId),
+        getMeaningfulDurableUserMemoryForUser(params.userId),
+      ])
+    : [null, null];
 
   return composeRealtimeVoiceInstructions({
     userName: profile?.name,
@@ -49,5 +64,8 @@ export async function buildRealtimeVoiceInstructions(params: {
     onboardingReasons,
     entryContext: params.entryContext,
     crisisGuidance: params.crisisGuidance,
+    durableUserMemory,
+    handoffSummary,
+    runtimeCompactState: params.runtimeCompactState,
   });
 }
