@@ -151,7 +151,7 @@
       </section>
     </div>
 
-    <section class="fixed inset-x-2 bottom-[94px] z-30">
+    <section class="absolute inset-x-2 bottom-[94px] z-30">
       <Button class="w-full" size="lg" @click="openCreateEntry">
         <IconSquarePen class="mr-2 h-4 w-4" />
         {{ t('GRATITUDE_DIARY.ADD_ENTRY') }}
