@@ -52,6 +52,7 @@
 • Валидация и схемы: Zod (в связке с @vee-validate/zod).
 • Логи и мониторинг: Pino + Sentry.
 • Миграции БД: Drizzle Kit (SQL файлы хранятся для совместимости с будущими системами).
+• PostgreSQL MCP (Cursor): подключён через `mcp-postgres`, доступ к схеме и SQL. URL передаётся через `DATABASE_URL` в `mcp.json` (секция postgres.env). Значение можно скопировать из `NUXT_PRIVATE_DB_URL` в `.env.development`.
 • Процесс миграций: запуск только через скрипты `db:migrate`и`db:baseline`с обязательным`--env=development|production`; для production требуется подтверждение `MIGRATE_PROD_CONFIRM=YES`. Env‑файл выбирается явно (dev: `.env.development`, local prod: `.env.production`, server prod: `.env`), автоматическое подмешивание `.env`запрещено, в env фиксируется`MENTALA_DB_ENV`. Для защиты от гонок используется PostgreSQL advisory lock. В CI миграции проверяются на тестовой БД при PR и push в main (apply + повторный запуск без ошибок), production‑секреты в PR недоступны.
 • Медитации v1: медиа в Object Storage + CDN `media.mentala.app`, в БД — относительные пути `/meditations/\*`, на фронте URL строятся через `NUXT_PUBLIC_MEDIA_BASE_URL`(public),`public/meditations/\*`в проде не используется; кнопка Play показывает лоадер при буферизации аудио (сервисная таблица в БД — источник метаданных, для плеера используем`backgroundPath`; секции каталога: Избранное, Сон, Стресс, Тревога, Фокус, Самооценка, Эмоции, Поддержка).
 
