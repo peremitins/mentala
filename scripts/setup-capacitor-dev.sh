@@ -1,9 +1,10 @@
 #!/bin/bash
 # Скрипт для настройки Capacitor для разработки
 # Использование:
-#   ./scripts/setup-capacitor-dev.sh emulator    - для эмулятора
-#   ./scripts/setup-capacitor-dev.sh device      - для реального устройства
-#   ./scripts/setup-capacitor-dev.sh            - без dev-сервера (production build)
+#   ./scripts/setup-capacitor-dev.sh emulator          - для эмулятора
+#   ./scripts/setup-capacitor-dev.sh device            - live reload через adb reverse (требует USB или wireless adb)
+#   ./scripts/setup-capacitor-dev.sh device-standalone - статический bundle без кабеля (телефон и Mac в одной Wi-Fi)
+#   ./scripts/setup-capacitor-dev.sh                   - без dev-сервера (production build)
 
 DEVICE_TYPE=${1:-none}
 IOS_PROJECT_FILE="ios/App/App.xcodeproj/project.pbxproj"
@@ -12,6 +13,7 @@ DEV_SERVER_PORT="3000"
 ANDROID_DEBUG_APK_PATH="android/app/build/outputs/apk/debug/app-debug.apk"
 ANDROID_SERVER_URL=""
 IOS_SERVER_URL=""
+API_BASE_URL=""
 USE_ADB_REVERSE=false
 
 ensure_ios_project_object_version_compatible() {
@@ -111,7 +113,7 @@ device_can_reach_url() {
 }
 
 deploy_android_debug_build_to_connected_devices() {
-  if [ "$DEVICE_TYPE" != "device" ]; then
+  if [ "$DEVICE_TYPE" != "device" ] && [ "$DEVICE_TYPE" != "device-standalone" ]; then
     return
   fi
 
@@ -130,7 +132,7 @@ deploy_android_debug_build_to_connected_devices() {
   if [ "${#devices[@]}" -eq 0 ]; then
     echo "ℹ️  Подключённое Android-устройство не найдено."
     echo "   Если на телефоне уже установлена старая APK, она продолжит использовать старый server.url."
-    echo "   Подключи устройство и повтори: pnpm run cap:sync:device"
+    echo "   Подключи устройство и повтори: pnpm run cap:sync:${DEVICE_TYPE}"
     return
   fi
 
@@ -193,6 +195,24 @@ elif [ "$DEVICE_TYPE" = "device" ]; then
     echo "   ⚠️ Android-устройство не подключено по adb, поэтому secure localhost-маршрут для realtime voice сейчас недоступен."
   fi
   echo "   Убедись, что dev-сервер запущен: pnpm dev"
+elif [ "$DEVICE_TYPE" = "device-standalone" ]; then
+  # Для устройства без USB-кабеля — статический bundle + API по LAN IP.
+  # Capacitor раздаёт файлы через встроенный сервер (http://localhost) →
+  # secure context → Realtime Voice работает. Кабель не нужен после установки APK.
+  LOCAL_IP=$(ipconfig getifaddr en0 || ipconfig getifaddr en1)
+
+  if [ -z "$LOCAL_IP" ]; then
+    echo "❌ Не удалось определить локальный IP автоматически"
+    echo "   Убедись, что компьютер подключен к Wi-Fi сети"
+    exit 1
+  fi
+
+  API_BASE_URL="http://${LOCAL_IP}:${DEV_SERVER_PORT}"
+  echo "🔧 Настройка для устройства без кабеля: bundle + API ${API_BASE_URL}"
+  echo "   Телефон и MacBook должны быть в одной Wi-Fi сети."
+  echo "   Realtime Voice работает: Capacitor раздаёт файлы через http://localhost (secure context)."
+  echo "   Первый запуск: подключи телефон по USB для установки APK, потом кабель можно убрать."
+  echo "   Убедись, что dev-сервер запущен: pnpm dev"
 else
   # Production - без dev-сервера
   SERVER_URL=""
@@ -218,6 +238,13 @@ if [ "$DEVICE_TYPE" = "device" ]; then
     ensure_android_reverse_port_forwarding "$DEV_SERVER_PORT"
   fi
   deploy_android_debug_build_to_connected_devices
+elif [ "$DEVICE_TYPE" = "device-standalone" ]; then
+  ensure_dev_server_is_available "http://127.0.0.1:${DEV_SERVER_PORT}"
+  echo "📦 Сборка статического bundle для устройства без кабеля..."
+  NUXT_PUBLIC_API_SERVER_URL="$API_BASE_URL" pnpm run generate
+  npx cap sync && CAPACITOR_SERVER_URL="" node scripts/fix-capacitor-config.js
+  node scripts/verify-capacitor-config.js
+  deploy_android_debug_build_to_connected_devices
 elif [ -n "$SERVER_URL" ]; then
   ensure_dev_server_is_available "http://127.0.0.1:${DEV_SERVER_PORT}"
   echo "📦 Синхронизация с dev-сервером..."
@@ -230,10 +257,16 @@ else
 fi
 
 echo "✅ Готово! Теперь можно запускать приложение."
-if [ -n "$SERVER_URL" ]; then
+if [ "$DEVICE_TYPE" = "device-standalone" ]; then
+  echo "⚠️  APK настроена для работы без USB-кабеля."
+  echo "   API: ${API_BASE_URL}"
+  echo "   Телефон и MacBook должны быть в одной Wi-Fi сети."
+  echo "⚠️  Не забудь запустить dev-сервер: pnpm dev"
+  echo "   При изменении кода повтори: pnpm cap:sync:device:standalone"
+elif [ -n "$SERVER_URL" ]; then
   echo "⚠️  Не забудь запустить dev-сервер: pnpm dev"
   if [ "$USE_ADB_REVERSE" = true ]; then
     echo "⚠️  Для Android в этом окружении включён localhost через adb reverse."
-    echo "   Если нужен режим без USB-кабеля, подключай устройство через wireless adb."
+    echo "   Если нужен режим без USB-кабеля, используй: pnpm cap:sync:device:standalone"
   fi
 fi
