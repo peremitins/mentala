@@ -126,8 +126,8 @@
 ```json
 {
   "subscriptionId": 123,
-  "amount": 649,
-  "toPay": 649,
+  "amount": 899,
+  "toPay": 899,
   "creditApplied": 0,
   "creditGranted": 0,
   "status": "pending",
