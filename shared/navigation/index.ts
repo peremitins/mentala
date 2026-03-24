@@ -13,6 +13,7 @@ export const QuickHelpEntryEnum = z.enum([
   'panic',
   'tension',
   'technique_picker',
+  'thought_dump',
 ]);
 
 export const AppNavigationTargetTypeEnum = z.enum([
@@ -413,6 +414,9 @@ export function buildAppNavigationRoute(
     case 'quick_help':
       return { path: '/quick-help' };
     case 'quick_help_entry':
+      if (target.entry === 'thought_dump') {
+        return { path: '/quick-help/thought-dump' };
+      }
       return {
         path: '/quick-help',
         query: { entry: target.entry },

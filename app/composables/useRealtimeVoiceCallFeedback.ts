@@ -458,8 +458,8 @@ export function useRealtimeVoiceCallFeedback(params: {
     await triggerImpact('medium');
   }
 
-  async function notifyUnavailableIntent(): Promise<void> {
-    await triggerNotification('warning');
+  function notifyUnavailableIntent(): void {
+    // Без вибрации — достаточно появления модалки paywall
   }
 
   watch(
