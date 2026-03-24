@@ -191,6 +191,9 @@ export default defineNuxtConfig({
         process.env.NUXT_FEATURE_NATIVE_MEDITATION_AUDIO_ENABLED !== 'false',
       // Дефолтная громкость фоновой сцены для новых пользователей задаётся через env.
       sceneDefaultVolumePercent,
+      yandexMetrikaId: process.env.NUXT_PUBLIC_YANDEX_METRIKA_ID || '',
+      yandexMetrikaDisabled:
+        process.env.NUXT_PUBLIC_YANDEX_METRIKA_DISABLED === 'true',
     },
   },
   nitro: {
