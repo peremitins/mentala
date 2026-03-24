@@ -1451,7 +1451,14 @@ export default defineEventHandler(async (event) => {
     const statusCode =
       typeof (error as any)?.statusCode === 'number'
         ? Number((error as any).statusCode)
-        : null;
+        : typeof (error as any)?.status === 'number'
+          ? Number((error as any).status)
+          : null;
+
+    const errorMessage =
+      (error as any)?.statusMessage ||
+      (error as any)?.message ||
+      'start_checkout_failed';
 
     if (!statusCode || statusCode >= 500) {
       dispatchBillingCheckoutErrorEvent({
@@ -1459,10 +1466,35 @@ export default defineEventHandler(async (event) => {
         planId,
         billingPeriod: billingPeriodTyped,
         statusCode,
-        errorMessage:
-          (error as any)?.statusMessage ||
-          (error as any)?.message ||
-          'start_checkout_failed',
+        errorMessage,
+      });
+    }
+
+    // Ошибки от YooKassa ($fetch) приходят с statusCode 4xx/5xx и пробрасываются как «unhandled».
+    // H3 маскирует message в «Server Error», но сохраняет statusCode — клиент получает 403 + "Server Error".
+    // Нормализуем: upstream-ошибки платёжного провайдера → 502 с понятным сообщением.
+    // Наши createError: 400, 401, 404, 409, 500, 502. 403 и др. 4xx — от YooKassa.
+    const our4xxCodes = [400, 401, 404, 409];
+    const isUpstreamApiError =
+      statusCode !== null &&
+      statusCode >= 400 &&
+      statusCode < 500 &&
+      !our4xxCodes.includes(statusCode);
+
+    if (isUpstreamApiError) {
+      event.context.logger?.warn(
+        {
+          userId,
+          planId,
+          upstreamStatus: statusCode,
+          upstreamMessage: errorMessage,
+        },
+        'YooKassa upstream error in start-checkout'
+      );
+      throw createError({
+        statusCode: 502,
+        statusMessage: 'Payment provider temporarily unavailable',
+        message: 'Платёжный провайдер временно недоступен. Попробуйте позже.',
       });
     }
 
