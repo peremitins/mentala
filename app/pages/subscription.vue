@@ -1729,11 +1729,8 @@ async function startCheckout(): Promise<boolean> {
     );
   } catch (error: any) {
     console.error('Checkout error:', error);
-    useToast(
-      'Ошибка при оформлении подписки',
-      error?.message || 'Неизвестная ошибка',
-      'error'
-    );
+    // Тост уже показывает глобальный api.ts onResponseError с message из ответа сервера.
+    // Не дублируем, иначе будут два уведомления.
     return false;
   } finally {
     processing.value = false;
