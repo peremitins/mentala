@@ -1482,7 +1482,9 @@ export default defineEventHandler(async (event) => {
       !our4xxCodes.includes(statusCode);
 
     if (isUpstreamApiError) {
-      const yookassaBody = (error as any)?.data;
+      const err = error as any;
+      const yookassaBody =
+        err?.data ?? err?.response?._data ?? err?.response?.data ?? null;
       const yookassaCode =
         typeof yookassaBody?.code === 'string' ? yookassaBody.code : null;
       const yookassaDesc =
@@ -1492,6 +1494,24 @@ export default defineEventHandler(async (event) => {
       const isTestKey = String(config.yookassaSecretKey || '').startsWith(
         'test_'
       );
+
+      // Данные для обращения в поддержку ЮKassa — копируй этот блок целиком
+      const supportPayload = {
+        timestamp: new Date().toISOString(),
+        source: 'start-checkout',
+        shopId: config.yookassaShopId || '(пусто)',
+        isTestKey,
+        httpStatus: statusCode,
+        yookassaResponse: yookassaBody ?? null,
+        yookassaCode: yookassaCode ?? '(нет в ответе)',
+        yookassaDescription: yookassaDesc ?? '(нет в ответе)',
+        requestId: getHeader(event, 'x-request-id') || null,
+      };
+      console.error(
+        '[YooKassa] Ошибка для поддержки ЮKassa (скопируй в тикет):\n' +
+          JSON.stringify(supportPayload, null, 2)
+      );
+
       event.context.logger?.warn(
         {
           userId,
