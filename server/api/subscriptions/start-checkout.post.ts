@@ -1482,14 +1482,31 @@ export default defineEventHandler(async (event) => {
       !our4xxCodes.includes(statusCode);
 
     if (isUpstreamApiError) {
+      const yookassaBody = (error as any)?.data;
+      const yookassaCode =
+        typeof yookassaBody?.code === 'string' ? yookassaBody.code : null;
+      const yookassaDesc =
+        typeof yookassaBody?.description === 'string'
+          ? yookassaBody.description
+          : null;
+      const isTestKey = String(config.yookassaSecretKey || '').startsWith(
+        'test_'
+      );
       event.context.logger?.warn(
         {
           userId,
           planId,
           upstreamStatus: statusCode,
           upstreamMessage: errorMessage,
+          yookassaCode,
+          yookassaDesc,
+          yookassaBody: yookassaBody ?? null,
+          isTestKey,
+          shopIdPrefix: config.yookassaShopId
+            ? String(config.yookassaShopId).slice(0, 4) + '***'
+            : 'empty',
         },
-        'YooKassa upstream error in start-checkout'
+        'YooKassa upstream error in start-checkout (403=недостаточно прав, проверь активацию магазина и return_url домен)'
       );
       throw createError({
         statusCode: 502,
