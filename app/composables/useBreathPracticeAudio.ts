@@ -28,6 +28,13 @@ export function useBreathPracticeAudio() {
   ): Howl {
     const sound = new HowlCtor({
       src: [src],
+      // html5: true форсирует HTML5 Audio вместо Web Audio API.
+      // Это критично для Android Capacitor WebView: Web Audio API
+      // там ненадёжен (suspended AudioContext, нестабильный fade через
+      // linearRampToValueAtTime, сбои decodeAudioData для .m4a).
+      // HTML5 Audio делегирует декодирование нативному плееру Android —
+      // именно так работает useBreathPracticeVoice, и там всё стабильно.
+      html5: true,
       preload: true,
       onplayerror: () => {
         // Ждём авто‑unlock и повторяем воспроизведение (важно для iOS/Android).
@@ -165,17 +172,15 @@ export function useBreathPracticeAudio() {
     if (!sound) return;
 
     try {
-      // Делаем мягкий переход: короткий фейд‑аут и фейд‑ин.
+      // Предыдущий звук — мягкий фейд‑аут.
       stopAll(TRANSITION_FADE_MS);
       const targetVolume = normalizeVolume(volume);
       const id = sound.play();
       activeSoundIds[type] = id;
-      sound.volume(0, id);
-      if (TRANSITION_FADE_MS > 0) {
-        sound.fade(0, targetVolume, TRANSITION_FADE_MS, id);
-      } else {
-        sound.volume(targetVolume, id);
-      }
+      // Сразу ставим целевую громкость без fade-in:
+      // на Android (html5: true) linearRampToValueAtTime ненадёжен —
+      // звук стартовал на 0 и там и оставался.
+      sound.volume(targetVolume, id);
     } catch (error) {
       console.error('[BreathAudio] Failed to play cue:', error);
     }
