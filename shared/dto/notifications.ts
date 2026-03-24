@@ -51,7 +51,14 @@ export type NotificationSubtype =
   | 'motivational'
   | 'mixed';
 
-export type NotificationActionHint = 'none' | 'meditation' | 'breathing';
+export type NotificationActionHint =
+  | 'none'
+  | 'meditation'
+  | 'breathing'
+  | 'gratitude_diary'
+  | 'grounding'
+  | 'tension_release'
+  | 'thought_dump';
 export type AppEnv = 'dev' | 'prod';
 
 export type NotificationNavigation = LegacyNotificationNavigation;
