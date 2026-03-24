@@ -2,6 +2,8 @@ import { computed, onScopeDispose, ref } from 'vue';
 import { nanoid } from 'nanoid';
 import { useRuntimeConfig } from '#imports';
 import {
+  ChatModeHandoffResponseDto,
+  RealtimeVoiceSessionEventResponseDto,
   RealtimeVoiceSessionEndResponseDto,
   RealtimeVoiceSessionStartResponseDto,
   type RealtimeVoiceClientPlatform,
@@ -14,6 +16,14 @@ import { RealtimeVoiceChatAdapter } from '@/app/services/realtime/realtimeVoiceC
 import { useChatStore } from '@/app/stores/chat';
 import { getCsrfTokenForHeader } from '@/app/utils/csrf';
 import { RealtimeVoiceTransport } from '@/app/services/realtime/realtimeVoiceTransport';
+import {
+  activateRealtimeVoiceNativeAudioSession,
+  deactivateRealtimeVoiceNativeAudioSession,
+} from '@/app/services/realtime/realtimeVoiceNativeAudio';
+import {
+  startRealtimeVoiceForegroundService,
+  stopRealtimeVoiceForegroundService,
+} from '@/app/services/realtime/realtimeVoiceForegroundBridge';
 import {
   buildRealtimeVoiceAudioConstraints,
   shouldInterruptRealtimeAssistantOnSpeechStart,
@@ -29,6 +39,80 @@ type RealtimeVoiceStatus =
   | 'active'
   | 'stopping'
   | 'error';
+
+function normalizeRealtimeUsageNumber(value: unknown): number {
+  const normalized =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string'
+        ? Number(value)
+        : NaN;
+
+  return Number.isFinite(normalized) && normalized > 0 ? normalized : 0;
+}
+
+function extractRealtimeUsageMeta(response: any) {
+  const usage = response?.usage || {};
+  const inputTokens = normalizeRealtimeUsageNumber(
+    usage?.input_tokens ?? usage?.prompt_tokens
+  );
+  const outputTokens = normalizeRealtimeUsageNumber(
+    usage?.output_tokens ?? usage?.completion_tokens
+  );
+  const totalTokens = normalizeRealtimeUsageNumber(
+    usage?.total_tokens ?? inputTokens + outputTokens
+  );
+
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens,
+    cachedTokens: normalizeRealtimeUsageNumber(
+      usage?.input_tokens_details?.cached_tokens ??
+        usage?.input_token_details?.cached_tokens ??
+        usage?.prompt_tokens_details?.cached_tokens
+    ),
+    reasoningTokens: normalizeRealtimeUsageNumber(
+      usage?.output_tokens_details?.reasoning_tokens ??
+        usage?.output_token_details?.reasoning_tokens ??
+        usage?.completion_tokens_details?.reasoning_tokens
+    ),
+    inputAudioTokens: normalizeRealtimeUsageNumber(
+      usage?.input_tokens_details?.audio_tokens ??
+        usage?.input_token_details?.audio_tokens
+    ),
+    outputAudioTokens: normalizeRealtimeUsageNumber(
+      usage?.output_tokens_details?.audio_tokens ??
+        usage?.output_token_details?.audio_tokens ??
+        usage?.completion_tokens_details?.audio_tokens
+    ),
+  };
+}
+
+function extractRealtimeAssistantText(response: any): string {
+  const outputItems = Array.isArray(response?.output) ? response.output : [];
+  const chunks: string[] = [];
+
+  for (const item of outputItems) {
+    if (item?.role !== 'assistant') {
+      continue;
+    }
+
+    const contentParts = Array.isArray(item?.content) ? item.content : [];
+    for (const part of contentParts) {
+      const transcript =
+        typeof part?.transcript === 'string' ? part.transcript.trim() : '';
+      const text = typeof part?.text === 'string' ? part.text.trim() : '';
+      const value = transcript || text;
+
+      if (value) {
+        chunks.push(value);
+      }
+    }
+  }
+
+  return chunks.join('\n').trim();
+}
 
 function extractApiErrorMessage(error: any): string {
   const payloadCode =
@@ -240,12 +324,6 @@ export function useRealtimeVoiceSession(options?: {
   const sessionId = ref<string | null>(null);
   const therapySessionId = ref<number | null>(null);
   const remainingSeconds = ref(0);
-  const monthlyQuota = ref<{
-    limitMinutes: number;
-    usedMinutes: number;
-    remainingMinutes: number;
-    resetsAt: string;
-  } | null>(null);
   const weeklyQuota = ref<{
     weeklyLimitMinutes: number;
     usedMinutes: number;
@@ -263,12 +341,18 @@ export function useRealtimeVoiceSession(options?: {
   let userSpeechStartMsByItemId = new Map<string, number>();
   let assistantAudioStartedAtMsByResponseId = new Map<string, number>();
   let assistantAudioSecondsByResponseId = new Map<string, number>();
+  let conversationItemIds = new Set<string>();
+  let pendingRuntimeCompactionEventIds = new Set<string>();
   let interruptedResponseIds = new Set<string>();
   let activeResponseId: string | null = null;
   let isEnding = false;
   let readyHintMessageId: string | null = null;
+  let idleTimeoutMs = 30_000;
 
-  const isSupported = computed(() => getRealtimeVoiceSupport().isSupported);
+  const isSupported = computed(() => {
+    const support = getRealtimeVoiceSupport();
+    return support.isSupported && support.isSecureContext;
+  });
   const isActive = computed(() => status.value === 'active');
   const isBusy = computed(
     () => status.value === 'starting' || status.value === 'stopping'
@@ -401,6 +485,8 @@ export function useRealtimeVoiceSession(options?: {
     userSpeechStartMsByItemId = new Map<string, number>();
     assistantAudioStartedAtMsByResponseId = new Map<string, number>();
     assistantAudioSecondsByResponseId = new Map<string, number>();
+    conversationItemIds = new Set<string>();
+    pendingRuntimeCompactionEventIds = new Set<string>();
     interruptedResponseIds = new Set<string>();
     activeResponseId = null;
   }
@@ -469,7 +555,64 @@ export function useRealtimeVoiceSession(options?: {
 
     idleStopTimer = setTimeout(() => {
       void stop('timeout');
-    }, 30_000);
+    }, idleTimeoutMs);
+  }
+
+  function rememberConversationItemId(value: unknown) {
+    const itemId = String(value || '').trim();
+    if (!itemId) {
+      return;
+    }
+
+    conversationItemIds.add(itemId);
+  }
+
+  function forgetConversationItemId(value: unknown) {
+    const itemId = String(value || '').trim();
+    if (!itemId) {
+      return;
+    }
+
+    conversationItemIds.delete(itemId);
+  }
+
+  function applyRuntimeCompaction(params: {
+    instructions: string;
+    reason: string;
+  }) {
+    if (!transport || !transport.isConnected) {
+      return;
+    }
+
+    // Сначала обновляем session.instructions, чтобы следующий turn уже шёл
+    // поверх compact-state, а затем удаляем старые conversation items.
+    const sessionUpdateEventId = nanoid();
+    pendingRuntimeCompactionEventIds.add(sessionUpdateEventId);
+    transport.sendEvent({
+      event_id: sessionUpdateEventId,
+      type: 'session.update',
+      session: {
+        instructions: params.instructions,
+      },
+    });
+
+    for (const itemId of conversationItemIds) {
+      const deleteEventId = nanoid();
+      pendingRuntimeCompactionEventIds.add(deleteEventId);
+      transport.sendEvent({
+        event_id: deleteEventId,
+        type: 'conversation.item.delete',
+        item_id: itemId,
+      });
+    }
+
+    conversationItemIds.clear();
+
+    console.info('[RealtimeVoice] Applied runtime compaction to live session', {
+      sessionId: sessionId.value,
+      therapySessionId: therapySessionId.value,
+      reason: params.reason,
+    });
   }
 
   async function sendSessionEvent(params: {
@@ -491,7 +634,7 @@ export function useRealtimeVoiceSession(options?: {
     }
 
     try {
-      await realtimeApiFetch({
+      const response = await realtimeApiFetch({
         path: '/api/realtime/session/event',
         method: 'POST',
         body: {
@@ -504,6 +647,14 @@ export function useRealtimeVoiceSession(options?: {
           meta: params.meta,
         } as Record<string, unknown>,
       });
+      const parsed = RealtimeVoiceSessionEventResponseDto.parse(response);
+
+      if (parsed.runtimeCompaction) {
+        applyRuntimeCompaction({
+          instructions: parsed.runtimeCompaction.instructions,
+          reason: parsed.runtimeCompaction.reason,
+        });
+      }
     } catch (error) {
       console.error('[RealtimeVoice] Failed to send session event:', error);
     }
@@ -555,12 +706,90 @@ export function useRealtimeVoiceSession(options?: {
         } as Record<string, unknown>,
       });
       const parsed = RealtimeVoiceSessionEndResponseDto.parse(response);
-      monthlyQuota.value = parsed.quota;
       weeklyQuota.value = parsed.weeklyAi;
 
       return parsed;
     } catch (error) {
       console.error('[RealtimeVoice] Session end failed:', error);
+      return null;
+    }
+  }
+
+  async function finalizeTherapySessionOnServer(
+    sourceTherapySessionId: number,
+    options?: {
+      keepalive?: boolean;
+    }
+  ) {
+    if (
+      !Number.isInteger(sourceTherapySessionId) ||
+      sourceTherapySessionId <= 0
+    ) {
+      return null;
+    }
+
+    if (options?.keepalive) {
+      try {
+        await fetch(resolveRealtimeApiUrl('/api/therapy/session/end'), {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            ...buildRealtimeAppAuthHeaders({
+              includeSessionToken: shouldIncludeRealtimeSessionToken(),
+            }),
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            sessionId: sourceTherapySessionId,
+          }),
+          keepalive: true,
+        });
+      } catch (error) {
+        console.error(
+          '[RealtimeVoice] Keepalive therapy session end failed:',
+          error
+        );
+      }
+
+      return null;
+    }
+
+    try {
+      return await realtimeApiFetch({
+        path: '/api/therapy/session/end',
+        method: 'POST',
+        body: {
+          sessionId: sourceTherapySessionId,
+        } as Record<string, unknown>,
+      });
+    } catch (error) {
+      console.error('[RealtimeVoice] Therapy session end failed:', error);
+      return null;
+    }
+  }
+
+  async function handoffRealtimeSessionToText(
+    reason: RealtimeVoiceSessionEndReason
+  ) {
+    if (!sessionId.value) {
+      return null;
+    }
+
+    try {
+      const response = await realtimeApiFetch({
+        path: '/api/session/handoff',
+        method: 'POST',
+        body: {
+          sourceMode: 'realtime_voice',
+          targetMode: 'text',
+          sourceRealtimeSessionId: sessionId.value,
+          sourceRealtimeEndReason: reason,
+        } as Record<string, unknown>,
+      });
+
+      return ChatModeHandoffResponseDto.parse(response);
+    } catch (error) {
+      console.error('[RealtimeVoice] Realtime->text handoff failed:', error);
       return null;
     }
   }
@@ -576,6 +805,8 @@ export function useRealtimeVoiceSession(options?: {
       transport = null;
     }
 
+    await deactivateRealtimeVoiceNativeAudioSession();
+    await stopRealtimeVoiceForegroundService();
     adapter = null;
     resetRuntimeMaps();
     startedAtMs = 0;
@@ -613,6 +844,13 @@ export function useRealtimeVoiceSession(options?: {
   }) {
     if (typeof event.type !== 'string') {
       return;
+    }
+
+    rememberConversationItemId(event.item_id);
+    rememberConversationItemId(event.item?.id);
+
+    if (event.type === 'conversation.item.deleted') {
+      forgetConversationItemId(event.item_id);
     }
 
     adapter?.handleServerEvent(event);
@@ -682,6 +920,8 @@ export function useRealtimeVoiceSession(options?: {
         const inputAudioSecondsDelta = Number.isFinite(storedValue)
           ? Math.max(0, Math.floor(storedValue))
           : 0;
+        const transcript =
+          typeof event.transcript === 'string' ? event.transcript.trim() : '';
         userSpeechStartMsByItemId.delete(itemId);
 
         void sendSessionEvent({
@@ -691,6 +931,7 @@ export function useRealtimeVoiceSession(options?: {
           },
           meta: {
             itemId,
+            transcript,
           },
         });
         touchActivity();
@@ -723,6 +964,10 @@ export function useRealtimeVoiceSession(options?: {
           return;
         }
 
+        // На Android Chromium/WebView может заново перехватывать audio route.
+        // На каждом assistant playback повторно закрепляем communication-mode
+        // на основном динамике, не ломая duplex-захват микрофона.
+        void activateRealtimeVoiceNativeAudioSession();
         assistantAudioStartedAtMsByResponseId.set(
           responseId,
           performance.now()
@@ -761,14 +1006,10 @@ export function useRealtimeVoiceSession(options?: {
           return;
         }
 
-        const inputAudioTokensDelta = Math.max(
-          0,
-          Number(event.response?.usage?.input_token_details?.audio_tokens || 0)
-        );
-        const outputAudioTokensDelta = Math.max(
-          0,
-          Number(event.response?.usage?.output_token_details?.audio_tokens || 0)
-        );
+        const usageMeta = extractRealtimeUsageMeta(event.response);
+        const assistantText = extractRealtimeAssistantText(event.response);
+        const inputAudioTokensDelta = usageMeta.inputAudioTokens;
+        const outputAudioTokensDelta = usageMeta.outputAudioTokens;
         const outputAudioSecondsDelta =
           assistantAudioSecondsByResponseId.get(responseId) ?? 0;
 
@@ -801,6 +1042,8 @@ export function useRealtimeVoiceSession(options?: {
             meta: {
               responseId,
               status: event.response?.status || 'completed',
+              assistantText,
+              usage: usageMeta,
             },
           });
         }
@@ -813,16 +1056,36 @@ export function useRealtimeVoiceSession(options?: {
       }
 
       case 'error': {
-        void sendSessionEvent({
-          type: 'failed',
-          error: {
-            code: String(event.error?.code || 'realtime_error'),
-            message: String(
-              event.error?.message || 'Realtime provider returned an error'
-            ),
-          },
+        const relatedClientEventId = String(event.error?.event_id || '').trim();
+        if (
+          relatedClientEventId &&
+          pendingRuntimeCompactionEventIds.has(relatedClientEventId)
+        ) {
+          pendingRuntimeCompactionEventIds.delete(relatedClientEventId);
+          console.warn(
+            '[RealtimeVoice] Ignoring recoverable runtime compaction error',
+            {
+              sessionId: sessionId.value,
+              relatedClientEventId,
+              code: String(event.error?.code || 'unknown'),
+              message: String(event.error?.message || 'Unknown realtime error'),
+            }
+          );
+          return;
+        }
+
+        // Realtime error-события чаще recoverable и не должны ронять всю
+        // voice-сессию. Фатальный разрыв мы отдельно ловим по connectionState.
+        console.warn('[RealtimeVoice] Recoverable realtime provider error', {
+          sessionId: sessionId.value,
+          code: String(event.error?.code || 'realtime_error'),
+          message: String(
+            event.error?.message || 'Realtime provider returned an error'
+          ),
+          eventId: String(event.event_id || ''),
+          relatedClientEventId,
         });
-        void stop('provider_error');
+        touchActivity();
         return;
       }
 
@@ -844,13 +1107,17 @@ export function useRealtimeVoiceSession(options?: {
       return false;
     }
 
-    if (!isSupported.value) {
-      const support = getRealtimeVoiceSupport();
+    const support = getRealtimeVoiceSupport();
+    if (!support.isSecureContext) {
+      status.value = 'error';
+      errorMessage.value = `Realtime voice недоступен на небезопасном origin ${support.origin || 'unknown'}. Для микрофона в Android WebView нужен https://... или localhost.`;
+      return false;
+    }
+
+    if (!support.isSupported) {
       status.value = 'error';
       errorMessage.value =
-        !support.isSecureContext && !support.hasUserMedia
-          ? `Realtime voice недоступен на небезопасном origin ${support.origin || 'unknown'}. Для микрофона в Android WebView нужен https://... или localhost.`
-          : 'На этом устройстве WebRTC или доступ к микрофону недоступен.';
+        'На этом устройстве WebRTC или доступ к микрофону недоступен.';
       return false;
     }
 
@@ -863,6 +1130,14 @@ export function useRealtimeVoiceSession(options?: {
       }
 
       await options?.onBeforeStart?.();
+
+      const textHandoffPrepared =
+        await chat.handoffTextSessionToRealtimeVoice();
+      if (!textHandoffPrepared) {
+        throw new Error(
+          'Не удалось подготовить перенос контекста из текстового чата в голосовой режим.'
+        );
+      }
 
       const response = await realtimeApiFetch({
         path: '/api/realtime/session',
@@ -878,7 +1153,6 @@ export function useRealtimeVoiceSession(options?: {
       sessionId.value = parsed.session.id;
       therapySessionId.value = parsed.session.therapySessionId;
       clientPlatform.value = parsed.session.clientPlatform;
-      monthlyQuota.value = parsed.quota;
       weeklyQuota.value = parsed.weeklyAi;
 
       adapter = buildChatAdapter(parsed.session.therapySessionId);
@@ -894,6 +1168,9 @@ export function useRealtimeVoiceSession(options?: {
           includeSessionToken: getPlatform() !== 'web',
         }),
         onEvent: handleRealtimeServerEvent,
+        onInputAudioActivity: () => {
+          touchActivity();
+        },
         onConnectionStateChange: (connectionState) => {
           if (
             (connectionState === 'failed' || connectionState === 'closed') &&
@@ -904,7 +1181,15 @@ export function useRealtimeVoiceSession(options?: {
           }
         },
       });
+      await activateRealtimeVoiceNativeAudioSession();
+      await startRealtimeVoiceForegroundService({
+        title: 'Ментала',
+        subtitle: 'Идёт голосовой разговор',
+      });
 
+      // Берём server-side idle timeout как источник истины, чтобы client stop
+      // не расходился с back-end lifecycle.
+      idleTimeoutMs = Math.max(1_000, parsed.session.idleTimeoutSeconds * 1000);
       status.value = 'active';
       touchActivity();
       startCountdown(parsed.session.maxDurationSeconds);
@@ -939,10 +1224,25 @@ export function useRealtimeVoiceSession(options?: {
 
     isEnding = true;
     status.value = 'stopping';
+    const activeTherapySessionId = therapySessionId.value;
 
     try {
       await cleanupLocalTransport();
-      await finalizeSessionOnServer(reason);
+      const handoffResponse = await handoffRealtimeSessionToText(reason);
+
+      if (!handoffResponse) {
+        await finalizeSessionOnServer(reason);
+      }
+
+      // Для voice-flow дублируем клиентский сигнал завершения therapy session
+      // через общий endpoint текстового чата. Серверный end идемпотентен,
+      // поэтому это безопасно даже после handoff/realtime end.
+      const therapySessionIdToFinalize =
+        handoffResponse?.sourceTherapySessionId ?? activeTherapySessionId;
+      if (typeof therapySessionIdToFinalize === 'number') {
+        await finalizeTherapySessionOnServer(therapySessionIdToFinalize);
+      }
+
       await options?.onAfterStop?.(reason);
 
       if (reason === 'network_error' || reason === 'provider_error') {
@@ -969,11 +1269,17 @@ export function useRealtimeVoiceSession(options?: {
       return;
     }
 
+    const activeTherapySessionId = therapySessionId.value;
     clearTimers();
     await cleanupLocalTransport();
     await finalizeSessionOnServer('page_leave', {
       keepalive: true,
     });
+    if (typeof activeTherapySessionId === 'number') {
+      await finalizeTherapySessionOnServer(activeTherapySessionId, {
+        keepalive: true,
+      });
+    }
     sessionId.value = null;
     therapySessionId.value = null;
     status.value = 'idle';
@@ -1002,7 +1308,6 @@ export function useRealtimeVoiceSession(options?: {
     sessionId,
     therapySessionId,
     remainingSeconds,
-    monthlyQuota,
     weeklyQuota,
     isSupported,
     isActive,

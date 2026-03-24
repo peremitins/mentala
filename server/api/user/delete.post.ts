@@ -8,6 +8,7 @@ import {
   aiGeneratedNotificationTexts,
   aiMessages,
   aiSessions,
+  chatSessionMemories,
   chatSettings,
   dailyAdherence,
   habits,
@@ -26,6 +27,7 @@ import {
   subscriptionEvents,
   trialUsageTracking,
   therapySessions,
+  therapySessionMessages,
   therapyTopicsCustom,
   telegramAccounts,
   userDevices,
@@ -160,10 +162,16 @@ export default defineEventHandler(async (event) => {
             .where(eq(therapyTopicsCustom.userId, userId)),
           tx.delete(userPreferences).where(eq(userPreferences.userId, userId)),
           tx.delete(chatSettings).where(eq(chatSettings.userId, userId)),
+          tx
+            .delete(chatSessionMemories)
+            .where(eq(chatSessionMemories.userId, userId)),
           tx.delete(aiSessions).where(eq(aiSessions.userId, userId)),
           tx
             .delete(sessionSummaries)
             .where(eq(sessionSummaries.userId, String(userId))),
+          tx
+            .delete(therapySessionMessages)
+            .where(eq(therapySessionMessages.userId, userId)),
           tx
             .delete(userResponseIds)
             .where(eq(userResponseIds.userId, String(userId))),

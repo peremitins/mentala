@@ -312,47 +312,36 @@ export const sessionSummaryJson = `Создай подробное резюме 
 // SUGGESTED CHIPS PROMPT
 // ===================================================================
 
-export const suggestedChipsSystemPrompt = `Ты генератор вариантов реплик пользователя (suggested replies).
-Сгенерируй до 5 коротких, естественных, разнообразных чипов на русском языке.
-Пиши от лица пользователя. Обращайся к ассистенту как к помощнику.
-Без канцелярита, повторов, диагнозов и дисклеймеров.
-Запрещены пустые шаблоны: "расскажи больше", "уточни", "приведи пример".
-Навигационные action-chip формируются отдельным deterministic-слоем на сервере, поэтому ты генерируешь только text-чипы.`;
+export const suggestedChipsSystemPrompt = `Ты генерируешь короткие реплики пользователя для чипов.
+Пиши по-русски, естественно, от первого лица.
+Только text-чипы.
+Без повторов, канцелярита, диагнозов и пустых фраз вроде "расскажи больше".`;
 
 export const suggestedChipsDeveloperPrompt = `Сгенерируй 1..maxChips чипов.
 Правила:
- Чипы это реплики пользователя в первом лице.
- Нельзя задавать терапевтические вопросы собеседнику.
- Можно задавать вопросы ассистенту и отвечать на него.
- Если контекста мало, дай общие варианты.
- Минимум 2 чипа <= 40 символов.
- Если maxChips >= 4, минимум 3 разных intent.
- Без повторов смысла и форм.
- Не начинай одинаково более одного чипа.
- Не повторяй чипы из recent_chips.
- text <= 80 символов.
- Тон: дружелюбный, взрослый.
-Все чипы: kind: "text".
+ - только text и intent
+ - реплики пользователя в первом лице
+ - можно спросить помощника или ответить ему
+ - при слабом контексте дай общие, но полезные варианты
+ - минимум 2 чипа <= 40 символов
+ - если maxChips >= 3, используй минимум 2 intent
+ - без повторов смысла и одинаковых начал
+ - text <= 60 символов
 Ответ строго JSON:
 {
   "chips": [
-    { "text": "...", "intent": "clarify", "kind": "text" },
-    { "text": "...", "intent": "apply_to_self", "kind": "text" }
+    { "text": "...", "intent": "clarify" },
+    { "text": "...", "intent": "apply_to_self" }
   ]
 }`;
 
-const suggestedChipsUserTemplate = `Контекст: {{dialog_context}}
+const suggestedChipsUserTemplate = `Диалог: {{dialog_context}}
 Ответ ассистента: {{assistant_answer}}
-Недавние чипы: {{recent_chips}}
-Тема (если есть): {{primary_topic}}
-Если тема есть, упомяни ее минимум в одном чипе.
-Важно: чипы - это реплики пользователя, а ассистент - терапевт/помощник.
-Сгенерируй до {{max_chips}} чипов.`;
+До {{max_chips}} чипов.`;
 
 export const suggestedChipsRetryHint = `Повторы или слишком похожие формулировки.
-Сгенерируй новые, сильно отличающиеся по структуре и глаголам.
-Не начинай фразы одинаковыми словами. Без общих фраз.
-Минимум 2 чипа короче 40 символов и один чип с темой, если она есть.`;
+Сделай новые: другие начала, глаголы и смысл.
+Без общих фраз. Минимум 2 чипа короче 40 символов.`;
 
 // ===================================================================
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
@@ -503,24 +492,12 @@ function buildOnboardingSuggestedChipsContext(vars: {
     return '';
   }
 
-  const lines = ['Контекст пользователя из онбординга:'];
   const labels = reasonMetaList.map((reasonMeta) => reasonMeta.label);
 
-  lines.push(` Что привело пользователя: ${labels.join('; ')}.`);
-
-  lines.push(
-    ' Если это естественно по текущему ответу ассистента, предложи хотя бы один чип, который помогает продвинуться в эту сторону.'
-  );
-  if (reasonMetaList.length > 1) {
-    lines.push(
-      ' Можно распределять чипы по нескольким выбранным направлениям, но не распыляй фокус без необходимости.'
-    );
-  }
-  lines.push(
-    ' Не делай чипы искусственно узкими, если диалог ушел в другую тему.'
-  );
-
-  return lines.join('\n');
+  return [
+    `Онбординг: ${labels.join('; ')}.`,
+    'Если уместно, свяжи с этим один чип. Не навязывай.',
+  ].join('\n');
 }
 
 function buildUserContext(vars: {
@@ -651,6 +628,40 @@ export function buildDeveloperContext(
 ${userContext}
 
 Контекст текущего ответа:
+ Номер: ${responseNumber}
+ Тип: ${responseTypeInfo.description}
+ Структура:
+${responseTypeInfo.structure}`;
+}
+
+export function buildSessionBootstrapDeveloperContext(vars: {
+  user_name?: string;
+  user_gender?: string;
+  assistant_gender?: AssistantVoiceGender;
+  assistant_display_name?: string;
+  addressing?: Addressing;
+  toneKey?: string;
+  toneLabel?: string;
+  toneDescription?: string;
+  onboardingReasons?: OnboardingReasons;
+}): string {
+  const userContext = buildUserContext(vars);
+  const assistantPersonaContext = buildAssistantPersonaContext(vars);
+
+  return `${assistantPersonaContext}
+
+${userContext}`;
+}
+
+export function buildTurnDeveloperContext(
+  ctx: {
+    responseNumber?: number;
+  } = {}
+): string {
+  const responseNumber = ctx.responseNumber || 1;
+  const responseTypeInfo = getResponseTypeByNumber(responseNumber);
+
+  return `Контекст текущего ответа:
  Номер: ${responseNumber}
  Тип: ${responseTypeInfo.description}
  Структура:
@@ -999,16 +1010,12 @@ export function buildWelcomePrompt(options: {
 export function buildSuggestedChipsUserPrompt(params: {
   dialog_context: string;
   assistant_answer: string;
-  recent_chips: string;
-  primary_topic?: string;
   max_chips: number;
   retry?: boolean;
   onboardingReasons?: OnboardingReasons;
 }): string {
-  const dialogContext = (params.dialog_context || 'Нет контекста').slice(-800);
-  const assistantAnswer = (params.assistant_answer || 'Нет ответа').slice(-800);
-  const recentChips = (params.recent_chips || 'Нет').slice(-600);
-  const primaryTopic = params.primary_topic || 'Нет';
+  const dialogContext = (params.dialog_context || 'Нет контекста').slice(-320);
+  const assistantAnswer = (params.assistant_answer || 'Нет ответа').slice(-260);
   const onboardingContext = buildOnboardingSuggestedChipsContext({
     onboardingReasons: params.onboardingReasons,
   });
@@ -1016,9 +1023,7 @@ export function buildSuggestedChipsUserPrompt(params: {
   const base = renderTemplate(suggestedChipsUserTemplate, {
     dialog_context: dialogContext,
     assistant_answer: assistantAnswer,
-    recent_chips: recentChips,
-    primary_topic: primaryTopic,
-    max_chips: String(params.max_chips || 5),
+    max_chips: String(params.max_chips || 3),
   });
 
   if (params.retry) {

@@ -235,6 +235,7 @@ export default defineEventHandler(async (event) => {
 
     const commonOptions = {
       sessionId: parsed.sessionId,
+      therapySessionId,
       lang: parsed.lang,
       user_locale: parsed.user_locale,
       user_name: userName,
@@ -246,7 +247,6 @@ export default defineEventHandler(async (event) => {
       toneDescription: toneMeta.description,
       onboardingReasons,
       userId: uid, // серверный стабильный uid
-      isFirstSession: undefined, // рассчитывается в других местах при стриминге
       userPrompt: effectiveUserPrompt,
       entryContext: parsed.entryContext ?? undefined, // Преобразуем null в undefined
     };

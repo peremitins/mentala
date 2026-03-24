@@ -22,6 +22,10 @@ type RelayRequestParams = {
 type RelayStreamResult = {
   stream: AsyncIterable<string>;
   responseIdPromise: Promise<string | undefined>;
+  completionPromise: Promise<{
+    responseId?: string;
+    response?: Record<string, unknown> | null;
+  }>;
 };
 
 const RELAY_DEFAULT_TIMEOUT_MS = 60_000;
@@ -319,10 +323,15 @@ export async function relayResponsesStream(
 
     const stream = toAsyncIterable(resp._data);
     const responseIdDeferred = createDeferred<string | undefined>();
+    const completionDeferred = createDeferred<{
+      responseId?: string;
+      response?: Record<string, unknown> | null;
+    }>();
 
     const deltaStream = (async function* () {
       let responseId: string | undefined;
       let candidateResponseId: string | undefined;
+      let completedResponse: Record<string, unknown> | null = null;
       try {
         for await (const data of iterateSseData(stream)) {
           if (data === '[DONE]') break;
@@ -362,6 +371,9 @@ export async function relayResponsesStream(
           ) {
             responseId =
               responseIdFromResponse || candidateResponseId || responseId;
+            if (Object.keys(responseObj).length > 0) {
+              completedResponse = responseObj;
+            }
           }
 
           if (eventType === 'error' || eventType === 'response.error') {
@@ -376,12 +388,17 @@ export async function relayResponsesStream(
         }
       } finally {
         responseIdDeferred.resolve(responseId);
+        completionDeferred.resolve({
+          responseId,
+          response: completedResponse,
+        });
       }
     })();
 
     return {
       stream: deltaStream,
       responseIdPromise: responseIdDeferred.promise,
+      completionPromise: completionDeferred.promise,
     };
   } catch (err: unknown) {
     normalizeRelayError(err, 'Relay stream failed');

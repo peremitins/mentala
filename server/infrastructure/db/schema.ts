@@ -249,14 +249,57 @@ export const aiMessages = pgTable('ai_messages', {
 });
 
 // Encrypted session summaries (AES-GCM: iv+tag base64, ct base64)
-export const sessionSummaries = pgTable('session_summaries', {
-  id: serial('id').primaryKey(),
-  userId: text('user_id').notNull(),
-  sessionId: text('session_id').notNull(),
-  model: text('model').notNull(),
-  summaryIv: text('summary_iv').notNull(),
-  summaryCt: text('summary_ct').notNull(),
+export const sessionSummaries = pgTable(
+  'session_summaries',
+  {
+    id: serial('id').primaryKey(),
+    userId: text('user_id').notNull(),
+    sessionId: text('session_id').notNull(),
+    therapySessionId: integer('therapy_session_id').references(
+      () => therapySessions.id,
+      {
+        onDelete: 'cascade',
+      }
+    ),
+    model: text('model').notNull(),
+    summaryKind: varchar('summary_kind', { length: 32 })
+      .notNull()
+      .default('handoff'),
+    schemaVersion: integer('schema_version').notNull().default(1),
+    summaryIv: text('summary_iv').notNull(),
+    summaryCt: text('summary_ct').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    therapySessionUnique: uniqueIndex(
+      'uk_session_summaries_therapy_session_id'
+    ).on(table.therapySessionId),
+    userCreatedIdx: index('idx_session_summaries_user_created_at').on(
+      table.userId,
+      table.createdAt
+    ),
+  })
+);
+
+// Encrypted durable user memory profile (AES-GCM: iv+tag base64, ct base64)
+export const userMemoryProfiles = pgTable('user_memory_profiles', {
+  userId: integer('user_id')
+    .primaryKey()
+    .references(() => users.id, {
+      onDelete: 'cascade',
+    }),
+  schemaVersion: integer('schema_version').notNull().default(1),
+  memoryIv: text('memory_iv').notNull(),
+  memoryCt: text('memory_ct').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
     .defaultNow()
     .notNull(),
 });
@@ -1110,6 +1153,7 @@ export const therapySessions = pgTable(
     userId: integer('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
+    clientSessionId: varchar('client_session_id', { length: 120 }),
     startedAt: timestamp('started_at', { withTimezone: true }).notNull(), // когда отправлено первое сообщение
     lastActivityAt: timestamp('last_activity_at', { withTimezone: true }), // последняя активность в сессии
     endedAt: timestamp('ended_at', { withTimezone: true }), // когда сессия завершена
@@ -1126,6 +1170,88 @@ export const therapySessions = pgTable(
     userStartedIdx: index('idx_therapy_sessions_user_started').on(
       table.userId,
       table.startedAt
+    ),
+    // Ускоряет переиспользование/закрытие session по client chatSessionId.
+    userClientSessionIdx: index('idx_therapy_sessions_user_client_session').on(
+      table.userId,
+      table.clientSessionId
+    ),
+  })
+);
+
+// Техническая память активной текстовой therapySession.
+// Здесь живет session-scoped previous_response_id и compact-state текущей цепочки.
+export const chatSessionMemories = pgTable(
+  'chat_session_memories',
+  {
+    therapySessionId: integer('therapy_session_id')
+      .primaryKey()
+      .references(() => therapySessions.id, { onDelete: 'cascade' }),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    previousResponseId: text('previous_response_id'),
+    previousResponseExpiresAt: timestamp('previous_response_expires_at', {
+      withTimezone: true,
+    }),
+    runtimeCompactSchemaVersion: integer('runtime_compact_schema_version'),
+    runtimeCompactIv: text('runtime_compact_iv'),
+    runtimeCompactCt: text('runtime_compact_ct'),
+    runtimeCompactCursorMessageId: integer('runtime_compact_cursor_message_id'),
+    chainTurnCount: integer('chain_turn_count').default(0).notNull(),
+    pendingSoftCompaction: boolean('pending_soft_compaction')
+      .default(false)
+      .notNull(),
+    lastObservedInputTokens: integer('last_observed_input_tokens'),
+    lastObservedOutputTokens: integer('last_observed_output_tokens'),
+    lastObservedTotalTokens: integer('last_observed_total_tokens'),
+    lastObservedAt: timestamp('last_observed_at', { withTimezone: true }),
+    lastCompactedAt: timestamp('last_compacted_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    userUpdatedIdx: index('idx_chat_session_memories_user_updated_at').on(
+      table.userId,
+      table.updatedAt
+    ),
+  })
+);
+
+// Временный transcript активной text-session.
+// Сообщения нужны только для runtime compaction и session-end summary, затем очищаются.
+export const therapySessionMessages = pgTable(
+  'therapy_session_messages',
+  {
+    id: serial('id').primaryKey(),
+    therapySessionId: integer('therapy_session_id')
+      .notNull()
+      .references(() => therapySessions.id, { onDelete: 'cascade' }),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    turnIndex: integer('turn_index').notNull(),
+    role: varchar('role', { length: 20 }).notNull(),
+    contentIv: text('content_iv').notNull(),
+    contentCt: text('content_ct').notNull(),
+    tokenCount: integer('token_count'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    sessionTurnIdx: index('idx_therapy_session_messages_session_turn').on(
+      table.therapySessionId,
+      table.turnIndex,
+      table.id
+    ),
+    userCreatedIdx: index('idx_therapy_session_messages_user_created_at').on(
+      table.userId,
+      table.createdAt
     ),
   })
 );

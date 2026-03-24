@@ -9,7 +9,7 @@ import {
   resolveAssistantVoiceCatalogItem,
 } from '@/shared/constants/assistantVoiceCatalog';
 import { ChatSettingsResponseDto } from '@/shared/dto';
-import { responseIdStore } from '@/server/utils/responseIdStore';
+import { hasAnyMeaningfulChatMemoryForUser } from '@/server/application/chat/chatMemory.service';
 
 export default defineEventHandler(async (event) => {
   const sessionResult = await getSessionUser(event);
@@ -24,21 +24,13 @@ export default defineEventHandler(async (event) => {
   const enablePreviousResponseId = settings?.enablePreviousResponseId ?? true;
   let isFirstSession = true;
 
-  // Summary отключена: определяем "первую сессию" только по previous_response_id.
   if (enablePreviousResponseId) {
     try {
-      const lastResponse = await responseIdStore.getLastValid(String(uid));
-      if (
-        lastResponse &&
-        responseIdStore.isResponseValid(lastResponse.expiresAt)
-      ) {
+      if (await hasAnyMeaningfulChatMemoryForUser(uid)) {
         isFirstSession = false;
       }
     } catch (err) {
-      console.error(
-        '[Chat Settings] Failed to check previous_response_id:',
-        err
-      );
+      console.error('[Chat Settings] Failed to check chat memory:', err);
     }
   }
 

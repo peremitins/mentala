@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "build": "nuxt build",
-    "dev": "pnpm dev:redis:up && ./scripts/wait-for-redis.sh && nuxt dev --dotenv .env.development --host 0.0.0.0 --port 3000",
+    "dev": "./scripts/run-dev.sh",
     "landing:dev": "nuxt dev apps/landing --dotenv .env.development --host localhost --port 3001",
     "landing:dev:network": "nuxt dev apps/landing --dotenv .env.development --host 0.0.0.0 --port 3001",
     "landing:build": "nuxt build apps/landing",
@@ -42,8 +42,7 @@
     "cap:sync:prod": "./scripts/setup-capacitor-dev.sh",
     "cap:sync:emulator": "./scripts/setup-capacitor-dev.sh emulator",
     "cap:sync:device": "./scripts/setup-capacitor-dev.sh device",
-    "cap:sync:device:live": "./scripts/setup-capacitor-dev.sh device-live",
-    "cap:run:android:device:live": "./scripts/run-android-device-live.sh",
+    "cap:sync:device:standalone": "./scripts/setup-capacitor-dev.sh device-standalone",
     "cap:verify:prod": "node scripts/verify-capacitor-config.js",
     "cap:open:android": "npx cap open android",
     "build:mobile": "pnpm run cap:sync:prod && pnpm run cap:verify:prod",

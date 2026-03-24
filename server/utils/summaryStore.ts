@@ -1,103 +1,164 @@
-import { randomBytes, createCipheriv, createDecipheriv } from 'node:crypto';
+import { and, desc, eq, isNotNull } from 'drizzle-orm';
 import { db } from '../infrastructure/db/client';
 import { sessionSummaries } from '../infrastructure/db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { parseEncryptedJson, serializeEncryptedJson } from './securePayload';
 
-// Упрощаем хранение: сохраняем summary как plaintext в summary_ct без шифрования.
-const RAW_KEY = null as unknown as Buffer;
-const ENCRYPT_DISABLED = true;
+export const HANDOFF_SUMMARY_SCHEMA_VERSION = 1;
 
-function encrypt(plaintext: string): { iv: string; ct: string } {
-  const key = RAW_KEY && RAW_KEY.length === 32 ? RAW_KEY : randomBytes(32);
-  const iv = randomBytes(12);
-  const cipher = createCipheriv('aes-256-gcm', key, iv);
-  const ct = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return {
-    iv: Buffer.concat([iv, tag]).toString('base64'),
-    ct: ct.toString('base64'),
-  };
-}
+type SaveHandoffSummaryParams = {
+  userId: number | string;
+  therapySessionId: number;
+  model: string;
+  summary: unknown;
+  schemaVersion?: number;
+};
 
-function decrypt(ivAndTagB64: string, ctB64: string): string {
-  const key = RAW_KEY && RAW_KEY.length === 32 ? RAW_KEY : null;
-  if (!key) throw new Error('No stable SUMMARY_AES_KEY set');
-  const buf = Buffer.from(ivAndTagB64, 'base64');
-  const iv = buf.subarray(0, 12);
-  const tag = buf.subarray(12);
-  const decipher = createDecipheriv('aes-256-gcm', key, iv);
-  decipher.setAuthTag(tag);
-  const pt = Buffer.concat([
-    decipher.update(Buffer.from(ctB64, 'base64')),
-    decipher.final(),
-  ]);
-  return pt.toString('utf8');
+type StoredSummaryRow = typeof sessionSummaries.$inferSelect;
+
+function decodeSummaryRow<T>(row: StoredSummaryRow): T | null {
+  try {
+    if (!row.summaryCt) {
+      return null;
+    }
+
+    return parseEncryptedJson<T>(row.summaryIv, row.summaryCt);
+  } catch (error) {
+    console.error('[summaryStore] Failed to decode summary row:', error);
+    return null;
+  }
 }
 
 export const summaryStore = {
-  async save(userId: string, sessionId: string, summaryJson: string) {
-    // dev/DEBUG: allow plaintext storage
-    await db.insert(sessionSummaries).values({
-      userId: String(userId),
-      sessionId,
-      model: 'openai',
-      summaryIv: '',
-      summaryCt: summaryJson,
-    });
+  async saveHandoffSummary(params: SaveHandoffSummaryParams) {
+    const schemaVersion =
+      params.schemaVersion ?? HANDOFF_SUMMARY_SCHEMA_VERSION;
+    const encrypted = serializeEncryptedJson(params.summary);
+    const now = new Date();
+
+    await db
+      .insert(sessionSummaries)
+      .values({
+        userId: String(params.userId),
+        sessionId: String(params.therapySessionId),
+        therapySessionId: params.therapySessionId,
+        model: params.model,
+        summaryKind: 'handoff',
+        schemaVersion,
+        summaryIv: encrypted.iv,
+        summaryCt: encrypted.ct,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: sessionSummaries.therapySessionId,
+        set: {
+          userId: String(params.userId),
+          sessionId: String(params.therapySessionId),
+          model: params.model,
+          summaryKind: 'handoff',
+          schemaVersion,
+          summaryIv: encrypted.iv,
+          summaryCt: encrypted.ct,
+          updatedAt: now,
+        },
+      });
   },
-  async loadAllForUser(userId: string): Promise<string[]> {
+
+  async getLatestHandoffSummary<T>(userId: number | string): Promise<{
+    summary: T;
+    therapySessionId: number;
+    schemaVersion: number;
+  } | null> {
     const rows = await db
       .select()
       .from(sessionSummaries)
-      .where(eq(sessionSummaries.userId, String(userId)));
-    const results: string[] = [];
-    for (const r of rows) {
-      const s = String(r.summaryCt ?? '');
-      results.push(s);
-    }
-    return results;
-  },
-  /**
-   * Возвращает последние summary пользователя, отсортированные по created_at DESC.
-   * Если limit не указан — возвращает все.
-   */
-  async getSummaries(
-    userId: number | string,
-    limit?: number
-  ): Promise<Array<Record<string, any>>> {
-    let rows: any[];
-    if (typeof limit === 'number') {
-      rows = (await db
-        .select()
-        .from(sessionSummaries)
-        .where(eq(sessionSummaries.userId, String(userId)))
-        .orderBy(desc(sessionSummaries.createdAt))
-        .limit(limit as any)) as any[];
-    } else {
-      rows = (await db
-        .select()
-        .from(sessionSummaries)
-        .where(eq(sessionSummaries.userId, String(userId)))
-        .orderBy(desc(sessionSummaries.createdAt))) as any[];
+      .where(
+        and(
+          eq(sessionSummaries.userId, String(userId)),
+          eq(sessionSummaries.summaryKind, 'handoff'),
+          isNotNull(sessionSummaries.therapySessionId)
+        )
+      )
+      .orderBy(desc(sessionSummaries.createdAt))
+      .limit(1);
+
+    const row = rows[0];
+    if (!row || typeof row.therapySessionId !== 'number') {
+      return null;
     }
 
-    const out: Array<Record<string, any>> = [];
-    for (const r of rows as any[]) {
-      try {
-        const jsonStr = String(r.summaryCt ?? '');
-        const obj = JSON.parse(String(jsonStr || '{}')) as Record<string, any>;
-        out.push(obj);
-      } catch {}
+    const summary = decodeSummaryRow<T>(row);
+    if (!summary) {
+      return null;
     }
-    return out;
+
+    return {
+      summary,
+      therapySessionId: row.therapySessionId,
+      schemaVersion: row.schemaVersion,
+    };
   },
-  /** Возвращает количество сохраненных summary для пользователя */
-  async countByUser(userId: number | string): Promise<number> {
+
+  async getHandoffSummaryByTherapySessionId<T>(
+    therapySessionId: number
+  ): Promise<{
+    summary: T;
+    therapySessionId: number;
+    schemaVersion: number;
+  } | null> {
+    const rows = await db
+      .select()
+      .from(sessionSummaries)
+      .where(
+        and(
+          eq(sessionSummaries.therapySessionId, therapySessionId),
+          eq(sessionSummaries.summaryKind, 'handoff')
+        )
+      )
+      .limit(1);
+
+    const row = rows[0];
+    if (!row || typeof row.therapySessionId !== 'number') {
+      return null;
+    }
+
+    const summary = decodeSummaryRow<T>(row);
+    if (!summary) {
+      return null;
+    }
+
+    return {
+      summary,
+      therapySessionId: row.therapySessionId,
+      schemaVersion: row.schemaVersion,
+    };
+  },
+
+  async hasHandoffSummary(userId: number | string): Promise<boolean> {
     const rows = await db
       .select({ id: sessionSummaries.id })
       .from(sessionSummaries)
-      .where(eq(sessionSummaries.userId, String(userId)));
-    return Array.isArray(rows) ? rows.length : 0;
+      .where(
+        and(
+          eq(sessionSummaries.userId, String(userId)),
+          eq(sessionSummaries.summaryKind, 'handoff'),
+          isNotNull(sessionSummaries.therapySessionId)
+        )
+      )
+      .limit(1);
+
+    return rows.length > 0;
   },
-  // getAllParsed больше не нужен — используйте getSummaries(userId) без limit
+
+  async deleteByTherapySessionId(therapySessionId: number): Promise<void> {
+    await db
+      .delete(sessionSummaries)
+      .where(eq(sessionSummaries.therapySessionId, therapySessionId));
+  },
+
+  async deleteByUserId(userId: number | string): Promise<void> {
+    await db
+      .delete(sessionSummaries)
+      .where(eq(sessionSummaries.userId, String(userId)));
+  },
 };

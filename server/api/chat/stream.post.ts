@@ -1,7 +1,6 @@
 import { defineEventHandler, readBody, setHeader } from 'h3';
 import { chatStreamViaProvider } from '@@/server/application/llm.service';
 import { getSessionUserWithRole } from '@/server/utils/require-role';
-import { responseIdStore } from '@/server/utils/responseIdStore';
 import { readChatSettings, writeChatSettings } from '@/server/utils/storage';
 import { db } from '@/server/infrastructure/db/client';
 import {
@@ -245,41 +244,6 @@ export default defineEventHandler(async (event) => {
       });
     }
 
-    // Определяем isFirstSession только по previous_response_id.
-    // Summary отключена на уровне продукта — не используем её ни для контекста, ни для расчёта.
-    let serverIsFirst = true;
-
-    if (uid) {
-      // Проверяем настройки пользователя
-      const chatSettings =
-        phobiasChatSettings ?? (await readChatSettings(String(uid)));
-      const enablePreviousResponseId =
-        chatSettings?.enablePreviousResponseId ?? true;
-
-      // Проверяем previous_response_id (важно для памяти OpenAI)
-      if (enablePreviousResponseId && serverIsFirst) {
-        try {
-          const lastResponse = await responseIdStore.getLastValid(uid);
-          if (
-            lastResponse &&
-            responseIdStore.isResponseValid(lastResponse.expiresAt)
-          ) {
-            serverIsFirst = false;
-            // Не логируем responseId (чувствительные данные)
-            // console.log('[Stream API] Found valid previous_response_id for user:', uid);
-          }
-        } catch (err) {
-          console.error(
-            '[Stream API] Failed to check previous_response_id:',
-            err
-          );
-        }
-      }
-    }
-
-    // Логируем только метаданные (без чувствительных данных)
-    // console.log('[Stream API] User:', uid, 'isFirstSession:', serverIsFirst);
-
     try {
       // console.log('[Stream API] Calling chatStreamViaProvider (OpenAI)...');
 
@@ -289,6 +253,7 @@ export default defineEventHandler(async (event) => {
         messages: body?.messages || [],
         options: {
           sessionId: body?.sessionId,
+          therapySessionId,
           temperature: body?.temperature,
           lang: body?.lang,
           user_locale: body?.user_locale,
@@ -301,7 +266,6 @@ export default defineEventHandler(async (event) => {
           toneDescription: toneMeta.description,
           onboardingReasons,
           userId: uid,
-          isFirstSession: serverIsFirst,
           userPrompt: effectiveUserPrompt,
           entryContext: body?.entryContext,
         },

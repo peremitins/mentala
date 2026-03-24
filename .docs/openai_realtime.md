@@ -28,7 +28,7 @@
 Ниже решения уже приняты и не считаются open questions:
 
 1. Realtime voice доступен только на тарифе `Premium`.
-2. Действует жёсткий лимит `60 минут` на один месячный quota-период.
+2. Действует жёсткий лимит `120 минут` на один месячный quota-период.
 3. Realtime voice дополнительно расходует существующие weekly AI minutes текстового чата.
 4. Во время активной realtime voice-сессии:
    - текстовое поле ввода отключено;
@@ -206,7 +206,7 @@ Realtime voice не должен ломать текущий текстовый 
 Обязательные поля:
 
 - `type: "realtime"`
-- `model: "gpt-realtime"` либо актуальный production-safe alias, задаваемый сервером
+- `model: "gpt-realtime-mini"` либо актуальный production-safe alias, задаваемый сервером
 - `audio.input.turn_detection.type: "server_vad"`
 - `audio.input.turn_detection.threshold`
 - `audio.input.turn_detection.prefix_padding_ms`
@@ -344,7 +344,7 @@ Response body:
     "id": "local_realtime_session_id",
     "therapySessionId": 123,
     "status": "created",
-    "model": "gpt-realtime",
+    "model": "gpt-realtime-mini",
     "voice": "marin",
     "maxDurationSeconds": 3600,
     "idleTimeoutSeconds": 60
@@ -355,9 +355,9 @@ Response body:
     "webrtcUrl": "https://api.openai.com/v1/realtime/calls"
   },
   "quota": {
-    "limitMinutes": 60,
+    "limitMinutes": 120,
     "usedMinutes": 12,
-    "remainingMinutes": 48,
+    "remainingMinutes": 108,
     "resetsAt": "2026-04-01T00:00:00.000Z"
   }
 }
@@ -456,9 +456,9 @@ Response body:
     "outputAudioSeconds": 76
   },
   "quota": {
-    "limitMinutes": 60,
+    "limitMinutes": 120,
     "usedMinutes": 16,
-    "remainingMinutes": 44,
+    "remainingMinutes": 104,
     "resetsAt": "2026-04-01T00:00:00.000Z"
   }
 }
@@ -557,7 +557,7 @@ Response body:
 
 Нужен отдельный hard limit:
 
-- `60 минут` realtime voice на один месячный quota-период.
+- `120 минут` realtime voice на один месячный quota-период.
 
 Правило best practice:
 
@@ -650,13 +650,13 @@ Realtime voice обязан переиспользовать текущий prom
 
 Рекомендуемые дефолты MVP:
 
-- `maxSessionDurationSeconds = 3600` (60 минут как верхний hard ceiling)
+- `maxSessionDurationSeconds = 7200` (120 минут как верхний hard ceiling)
 - `idleSilenceTimeoutSeconds = 60`
 
 Дополнение:
 
 - effective `maxSessionDurationSeconds` для конкретного старта не обязан всегда быть `3600`;
-- он должен вычисляться как `min(remaining realtime monthly quota, remaining weekly AI minutes, 3600 секунд)`.
+- он должен вычисляться как `min(remaining realtime monthly quota, remaining weekly AI minutes, 7200 секунд)`.
 
 ### 12.3 Что делать при ошибке
 
@@ -830,7 +830,7 @@ Sentry / structured logs должны содержать:
 - transcript не сохраняется на сервере;
 - метаданные сессии сохраняются на сервере;
 - realtime voice корректно расходует существующие weekly AI minutes;
-- hard limit `60 минут` реально блокирует новые сессии;
+- hard limit `120 минут` реально блокирует новые сессии;
 - hard reload / app kill не оставляет session-призрак, который блокирует следующий старт;
 - cleanup не ломает обычный текстовый чат.
 
@@ -879,5 +879,5 @@ Sentry / structured logs должны содержать:
 
 - realtime voice дополнительно расходует существующие weekly AI minutes;
 - product-level cap `15 минут` не используется;
-- верхний hard ceiling одной сессии — `60 минут`, но effective duration cap вычисляется сервером динамически;
+- верхний hard ceiling одной сессии — `120 минут`, но effective duration cap вычисляется сервером динамически;
 - `idle silence auto-stop = 60 секунд`.

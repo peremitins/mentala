@@ -26,12 +26,12 @@ function readFloatInRange(
 
 export const REALTIME_VOICE_MONTHLY_LIMIT_MINUTES = readPositiveInt(
   process.env.REALTIME_VOICE_MONTHLY_LIMIT_MINUTES,
-  60
+  120
 );
 
 export const REALTIME_VOICE_HARD_CEILING_SECONDS = readPositiveInt(
   process.env.REALTIME_VOICE_HARD_CEILING_SECONDS,
-  60 * 60
+  120 * 60
 );
 
 export const REALTIME_VOICE_IDLE_TIMEOUT_SECONDS = readPositiveInt(
@@ -45,7 +45,7 @@ export const REALTIME_VOICE_STALE_GRACE_SECONDS = readPositiveInt(
 );
 
 export const REALTIME_VOICE_OPENAI_MODEL =
-  process.env.OPENAI_REALTIME_MODEL || 'gpt-realtime';
+  process.env.OPENAI_REALTIME_MODEL || 'gpt-realtime-mini';
 
 export const REALTIME_VOICE_OPENAI_VOICE =
   process.env.OPENAI_REALTIME_VOICE || DEFAULT_ASSISTANT_VOICE_ID;

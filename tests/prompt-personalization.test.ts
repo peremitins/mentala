@@ -65,13 +65,14 @@ describe('prompt personalization', () => {
       dialog_context: 'Пользователь: Мне тяжело остановить тревожные мысли',
       assistant_answer:
         'Давай начнем с того, что сейчас крутится сильнее всего.',
-      recent_chips: 'Нет',
-      max_chips: 4,
+      max_chips: 3,
       onboardingReasons: ['thoughts', 'stress'],
     });
 
-    expect(prompt).toContain('Контекст пользователя из онбординга');
+    expect(prompt).toContain('Онбординг:');
     expect(prompt).toContain('разобраться в мыслях');
     expect(prompt).toContain('справиться со стрессом');
+    expect(prompt).not.toContain('Недавние чипы');
+    expect(prompt).not.toContain('Тема:');
   });
 });
