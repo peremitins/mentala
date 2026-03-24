@@ -8,7 +8,7 @@
     ]"
   >
     <div class="flex items-start justify-between gap-2">
-      <h3 class="text-lg font-semibold">
+      <h3 class="text-lg font-semibold whitespace-nowrap">
         {{ getPlanName() }}
         {{ plan.name === 'premium' ? '💎' : plan.name === 'pro' ? '⭐' : '' }}
       </h3>
@@ -277,6 +277,7 @@ function getFeatures() {
       }),
     });
     features.push({ label: 'Безлимитные ИИ-сессии' });
+    features.push({ label: 'Голосовой диалог с ИИ в реальном времени' });
     features.push({
       label: 'Персональный стиль ИИ-напоминаний',
       tooltip: personalAiStyleTooltip,
