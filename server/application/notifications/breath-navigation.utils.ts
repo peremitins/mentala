@@ -98,6 +98,22 @@ export function resolveNavigationTargetFromActionHint(
     };
   }
 
+  if (actionHint === 'gratitude_diary') {
+    return { type: 'gratitude_diary' };
+  }
+
+  if (actionHint === 'grounding') {
+    return { type: 'quick_help_entry', entry: 'panic' };
+  }
+
+  if (actionHint === 'tension_release') {
+    return { type: 'quick_help_entry', entry: 'tension' };
+  }
+
+  if (actionHint === 'thought_dump') {
+    return { type: 'quick_help_entry', entry: 'thought_dump' };
+  }
+
   return { type: 'home' };
 }
 

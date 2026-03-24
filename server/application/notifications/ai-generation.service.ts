@@ -164,6 +164,39 @@ const BREATHING_HINT_MARKERS = [
   /пранаям/iu,
   /pranayama/iu,
 ];
+
+const GRATITUDE_DIARY_HINT_MARKERS = [
+  /дневник.*благодарн/iu,
+  /благодарн.*дневник/iu,
+  /gratitude.*diary/iu,
+  /запиши.*благодарн/iu,
+  /практик.*благодарн/iu,
+];
+
+const GROUNDING_HINT_MARKERS = [
+  /заземлен/iu,
+  /5\s*[-–—‑,]\s*4\s*[-–—‑,]\s*3\s*[-–—‑,]\s*2\s*[-–—‑,]\s*1/iu,
+  /ground/iu,
+  /техник.*5.*4.*3.*2.*1/iu,
+];
+
+const TENSION_RELEASE_HINT_MARKERS = [
+  /напряжен.*в\s*тел/iu,
+  /снять\s*напряжен/iu,
+  /расслаб.*мышц/iu,
+  /мышечн.*релакс/iu,
+  /прогрессивн.*расслабл/iu,
+  /tension.*release/iu,
+  /muscle.*relax/iu,
+];
+
+const THOUGHT_DUMP_HINT_MARKERS = [
+  /выгрузк.*мысл/iu,
+  /выгрузи.*мысл/iu,
+  /разгруз.*голов/iu,
+  /thought.*dump/iu,
+  /brain.*dump/iu,
+];
 type ImageTag =
   | 'harm_organs'
   | 'harm_appearance'
@@ -541,6 +574,18 @@ function normalizeActionHint(value: unknown): NotificationActionHint {
   ) {
     return 'meditation';
   }
+  if (normalized === 'gratitude_diary' || normalized === 'gratitude') {
+    return 'gratitude_diary';
+  }
+  if (normalized === 'grounding' || normalized === 'ground') {
+    return 'grounding';
+  }
+  if (normalized === 'tension_release' || normalized === 'tension') {
+    return 'tension_release';
+  }
+  if (normalized === 'thought_dump' || normalized === 'thought_unload') {
+    return 'thought_dump';
+  }
   return 'none';
 }
 
@@ -549,7 +594,22 @@ function inferActionHintFromText(
   imageTag: ImageTag | null
 ): NotificationActionHint {
   // Бэкап-эвристика: если actionHint не пришёл от модели, определяем по смысловым маркерам.
+  // Специфичные разделы проверяем первыми — они приоритетнее общих (дыхание/медитация).
   const raw = stripEmojiPrefix(text).toLowerCase();
+
+  if (GRATITUDE_DIARY_HINT_MARKERS.some((p) => p.test(raw))) {
+    return 'gratitude_diary';
+  }
+  if (GROUNDING_HINT_MARKERS.some((p) => p.test(raw))) {
+    return 'grounding';
+  }
+  if (TENSION_RELEASE_HINT_MARKERS.some((p) => p.test(raw))) {
+    return 'tension_release';
+  }
+  if (THOUGHT_DUMP_HINT_MARKERS.some((p) => p.test(raw))) {
+    return 'thought_dump';
+  }
+
   const hasMeditation = MEDITATION_HINT_MARKERS.some((pattern) =>
     pattern.test(raw)
   );
