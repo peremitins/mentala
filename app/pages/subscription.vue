@@ -380,6 +380,8 @@
       <DialogContent
         overlay-class="z-[190] bg-black/70 backdrop-blur-sm"
         class="z-[200] !w-[min(96vw,560px)] !max-w-[560px] !bg-transparent !border-0 !shadow-none !p-0 !max-h-[92dvh] !overflow-y-auto [&>button]:z-[220] [&>button]:opacity-100 [&>button]:text-slate-700 [&>button]:right-2.5 [&>button]:top-2.5 [&>button]:focus:ring-0 [&>button]:focus:ring-offset-0"
+        @interact-outside.prevent
+        @focus-outside.prevent
       >
         <DialogTitle class="sr-only">Оплата подписки</DialogTitle>
         <DialogDescription class="sr-only">
