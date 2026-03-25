@@ -105,5 +105,6 @@ module.exports = {
     'dist',
     '.output',
     'android',
+    'ios',
   ],
 };

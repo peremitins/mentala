@@ -108,7 +108,7 @@ mentai/frontend/
 Весь код должен работать на всех устройствах и браузерах, включая:
 
 - **Web**: современные браузеры (Chrome, Firefox, Safari, Edge) последних версий
-- **iOS**: iOS 13+ (iPhone и iPad)
+- **iOS**: iOS 15+ (iPhone и iPad)
 - **Android**: Android 8.0+ (API level 26+)
 
 ### 10.2. Требования к коду

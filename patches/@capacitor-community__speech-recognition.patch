@@ -1,0 +1,44 @@
+diff --git a/ios/Plugin/Plugin.swift b/ios/Plugin/Plugin.swift
+index 5d1b35b175de90e2aafbd75b8a20a791f068dc17..04879b276c09f3890827f7fb6dc40436efad2e16 100644
+--- a/ios/Plugin/Plugin.swift
++++ b/ios/Plugin/Plugin.swift
+@@ -67,6 +67,8 @@ public class SpeechRecognition: CAPPlugin {
+             do {
+                 try audioSession.setCategory(AVAudioSession.Category.playAndRecord, options: AVAudioSession.CategoryOptions.defaultToSpeaker)
+                 try audioSession.setMode(AVAudioSession.Mode.default)
++                // Подсказка системе о желаемой частоте ДО активации — помогает избежать 0 Hz на некоторых устройствах
++                try? audioSession.setPreferredSampleRate(48000)
+                 do {
+                     try audioSession.setActive(true, options: AVAudioSession.SetActiveOptions.notifyOthersOnDeactivation)
+                 } catch {
+@@ -81,7 +83,21 @@ public class SpeechRecognition: CAPPlugin {
+             self.recognitionRequest?.shouldReportPartialResults = partialResults
+ 
+             let inputNode: AVAudioInputNode = self.audioEngine!.inputNode
+-            let format: AVAudioFormat = inputNode.outputFormat(forBus: 0)
++
++            // Вызываем prepare() до получения формата — иначе outputFormat может вернуть 0 Hz и installTap крашит с IsFormatSampleRateAndChannelCountValid
++            self.audioEngine?.prepare()
++
++            var format: AVAudioFormat = inputNode.outputFormat(forBus: 0)
++            // Если формат невалиден (0 Hz) — пробуем inputFormat, иначе reject чтобы не крашить
++            if format.sampleRate <= 0 || format.channelCount <= 0 {
++                let inputFmt = inputNode.inputFormat(forBus: 0)
++                if inputFmt.sampleRate > 0 && inputFmt.channelCount > 0 {
++                    format = inputFmt
++                } else {
++                    call.reject("Audio hardware format not ready. Please close other audio apps and try again.")
++                    return
++                }
++            }
+ 
+             self.recognitionTask = self.speechRecognizer?.recognitionTask(with: self.recognitionRequest!, resultHandler: { (result, error) in
+                 if result != nil {
+@@ -126,7 +142,6 @@ public class SpeechRecognition: CAPPlugin {
+                 self.recognitionRequest?.append(buffer)
+             }
+ 
+-            self.audioEngine?.prepare()
+             do {
+                 try self.audioEngine?.start()
+                 self.notifyListeners("listeningState", data: ["status": "started"])

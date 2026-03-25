@@ -22,10 +22,10 @@ function isAudioBlockedRoute(path: string) {
 export default defineNuxtPlugin({
   name: 'audio-playback-guard',
   dependsOn: ['pinia'],
-  setup(nuxtApp) {
+  setup() {
     if (process.server) return;
 
-    const auth = useAuthStore(nuxtApp.$pinia);
+    const auth = useAuthStore();
     const route = useRoute();
     const meditationPlayer = useMeditationPlayer();
     const sceneAudio = useSceneAudio();
