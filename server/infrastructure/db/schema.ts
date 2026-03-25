@@ -60,6 +60,15 @@ export const users = pgTable(
       .default('0')
       .notNull(), // внутренний кредит в рублях
     timezone: varchar('timezone', { length: 100 }), // IANA timezone для расчета недель
+    // Источник и значение storefront (регион App Store аккаунта пользователя).
+    // Нужны для разведения сценариев оплаты на iOS (RU -> внешняя оплата, WW -> Apple IAP).
+    billingRegionSource: varchar('billing_region_source', { length: 20 }), // 'storefront' | null
+    billingStorefrontCountry: varchar('billing_storefront_country', {
+      length: 2,
+    }), // 'RU' | 'DE' | ... | null
+    billingStorefrontUpdatedAt: timestamp('billing_storefront_updated_at', {
+      withTimezone: true,
+    }),
     // Trial-scheduled биллинг (оплата в конце пробного периода).
     billingPlanId: varchar('billing_plan_id', { length: 50 }).references(
       () => subscriptionPlans.id,
@@ -1110,7 +1119,15 @@ export const userSubscriptions = pgTable(
     })
       .default('0')
       .notNull(), // сколько кредита нужно начислить при финализации (downgrade)
+    paymentProvider: varchar('payment_provider', { length: 20 })
+      .notNull()
+      .default('yookassa'), // 'yookassa' | 'apple_iap'
     yookassaPaymentId: text('yookassa_payment_id'), // payment.id в YooKassa (если известен)
+    // Apple In-App Purchase (StoreKit) данные (для дедупликации и отладки).
+    appleTransactionId: text('apple_transaction_id'),
+    appleOriginalTransactionId: text('apple_original_transaction_id'),
+    appleProductId: text('apple_product_id'),
+    appleEnvironment: varchar('apple_environment', { length: 20 }), // 'sandbox' | 'production'
     startDate: timestamp('start_date', { withTimezone: true }).notNull(),
     endDate: timestamp('end_date', { withTimezone: true }).notNull(),
     paymentStatus: varchar('payment_status', { length: 20 })
@@ -1142,6 +1159,86 @@ export const userSubscriptions = pgTable(
     yookassaPaymentUnique: unique(
       'uk_user_subscriptions_yookassa_payment_id'
     ).on(table.yookassaPaymentId),
+    // Уникальность transactionId от Apple (Postgres допускает множество NULL)
+    appleTransactionUnique: unique(
+      'uk_user_subscriptions_apple_transaction_id'
+    ).on(table.appleTransactionId),
+  })
+);
+
+// Аудит Apple транзакций (StoreKit 2 / App Store Server API).
+// Используется для дедупа, расследований refund/chargeback и связки originalTransactionId -> user.
+export const appleTransactions = pgTable(
+  'apple_transactions',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references((): AnyPgColumn => users.id, { onDelete: 'cascade' }),
+    originalTransactionId: text('original_transaction_id').notNull(),
+    transactionId: text('transaction_id').notNull(),
+    productId: text('product_id').notNull(),
+    environment: varchar('environment', { length: 20 }).notNull(), // 'sandbox' | 'production'
+    purchaseDate: timestamp('purchase_date', { withTimezone: true }),
+    expiresDate: timestamp('expires_date', { withTimezone: true }),
+    revocationDate: timestamp('revocation_date', { withTimezone: true }),
+    storefront: varchar('storefront', { length: 2 }),
+    appAccountToken: text('app_account_token'),
+    signedPayload: text('signed_payload').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    transactionUnique: unique('uk_apple_transactions_transaction_id').on(
+      table.transactionId
+    ),
+    originalEnvironmentIdx: index('idx_apple_transactions_original_env').on(
+      table.originalTransactionId,
+      table.environment
+    ),
+    userCreatedIdx: index('idx_apple_transactions_user_created').on(
+      table.userId,
+      table.createdAt
+    ),
+  })
+);
+
+// Дедуп и аудит App Store Server Notifications v2.
+export const appleNotificationEvents = pgTable(
+  'apple_notification_events',
+  {
+    id: serial('id').primaryKey(),
+    notificationUUID: varchar('notification_uuid', { length: 64 }).notNull(),
+    notificationType: varchar('notification_type', { length: 80 }),
+    notificationSubtype: varchar('notification_subtype', { length: 80 }),
+    userId: integer('user_id').references((): AnyPgColumn => users.id, {
+      onDelete: 'set null',
+    }),
+    transactionId: text('transaction_id'),
+    originalTransactionId: text('original_transaction_id'),
+    processingStatus: varchar('processing_status', { length: 20 })
+      .notNull()
+      .default('received'), // received | processed | ignored | failed
+    signedPayload: text('signed_payload').notNull(),
+    lastError: text('last_error'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    notificationUuidUnique: unique(
+      'uk_apple_notification_events_notification_uuid'
+    ).on(table.notificationUUID),
+    createdIdx: index('idx_apple_notification_events_created').on(
+      table.createdAt
+    ),
   })
 );
 
