@@ -207,7 +207,7 @@ const isNativeIos = computed(
   () => platform.value === 'ios' && Capacitor.isNativePlatform()
 );
 const actionButtonLabel = computed(() => {
-  return isNativeIos.value ? 'Управление подпиской' : 'Управлять подпиской';
+  return 'Управление подпиской';
 });
 
 // Реактивный countdown trial (дни + часы) с пересчетом каждую минуту.
