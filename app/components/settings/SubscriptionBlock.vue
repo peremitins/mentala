@@ -153,7 +153,6 @@
         type="button"
         variant="outline"
         class="w-fit border-white/20 bg-white/5 text-foreground hover:border-white/35 hover:bg-white/10 hover:text-foreground"
-        :disabled="openingExternalFlow"
         @click="handleManageSubscription"
       >
         {{ actionButtonLabel }}
@@ -166,7 +165,6 @@
         type="button"
         variant="outline"
         class="w-fit border-white/20 bg-white/5 text-foreground hover:border-white/35 hover:bg-white/10 hover:text-foreground"
-        :disabled="openingExternalFlow"
         @click="handleManageSubscription"
       >
         {{ actionButtonLabel }}
@@ -178,13 +176,9 @@
 <script setup lang="ts">
 import { Capacitor } from '@capacitor/core';
 import { useNow } from '@vueuse/core';
-import { computed, onMounted, ref } from 'vue';
-import { useAPI } from '@/app/composables/useAPI';
-import { Button } from '@/app/components/ui/button';
-import { useExternalFlowAppUrl } from '@/app/composables/useExternalFlowAppUrl';
+import { computed, onMounted } from 'vue';
 import { usePlatform } from '@/app/composables/usePlatform';
 import { useSubscriptionStore } from '@/app/stores/subscription';
-import { useToast } from '@/app/composables/useToast';
 import {
   getLocalizedPlanName,
   getLocalizedTrialPlanLabel,
@@ -198,8 +192,6 @@ import { useI18n } from 'vue-i18n';
 const subscriptionStore = useSubscriptionStore();
 const { t } = useI18n();
 const { platform } = usePlatform();
-const externalFlowAppUrl = useExternalFlowAppUrl();
-const openingExternalFlow = ref(false);
 const now = useNow({ interval: 60_000 });
 
 // Computed для удобства доступа
@@ -215,7 +207,7 @@ const isNativeIos = computed(
   () => platform.value === 'ios' && Capacitor.isNativePlatform()
 );
 const actionButtonLabel = computed(() => {
-  return isNativeIos.value ? 'Управление подпиской' : 'Управлять подпиской';
+  return 'Управление подпиской';
 });
 
 // Реактивный countdown trial (дни + часы) с пересчетом каждую минуту.
@@ -360,69 +352,9 @@ function getPaymentStatusText(status: string) {
   return statusMap[status] || status;
 }
 
-async function openExternalBrowser(url: string) {
-  if (typeof window === 'undefined') {
-    return;
-  }
-
-  try {
-    const { InAppBrowser } = await import('@capacitor/inappbrowser');
-    await InAppBrowser.openInExternalBrowser({ url });
-  } catch (error) {
-    // Fallback для окружений без нативного плагина.
-    console.warn(
-      '[SubscriptionBlock] openInExternalBrowser unavailable, using window.open fallback:',
-      error
-    );
-    window.open(url, '_blank');
-  }
-}
-
 async function handleManageSubscription() {
-  if (!isNativeIos.value) {
-    await navigateTo('/subscription');
-    return;
-  }
-
-  if (openingExternalFlow.value) {
-    return;
-  }
-
-  openingExternalFlow.value = true;
-  try {
-    const response = await useAPI<{
-      consumeUrl: string;
-      expiresAt: string;
-      ttlSeconds: number;
-    }>('/api/auth/external-session/create', {
-      method: 'POST',
-      body: {
-        redirectPath: '/subscription',
-        appUrl: externalFlowAppUrl.value || undefined,
-      },
-    });
-
-    const consumeUrl = String(response?.consumeUrl || '').trim();
-    if (!consumeUrl) {
-      throw new Error('Missing consumeUrl');
-    }
-
-    await openExternalBrowser(consumeUrl);
-    useToast(
-      'Открываем веб-версию',
-      'Управление подпиской продолжится во внешнем браузере.',
-      'info'
-    );
-  } catch (error: any) {
-    console.error('Failed to open external subscription flow:', error);
-    useToast(
-      'Не удалось открыть браузер',
-      error?.message || 'Попробуйте еще раз.',
-      'error'
-    );
-  } finally {
-    openingExternalFlow.value = false;
-  }
+  // По требованиям Apple: CTA "Управлять подпиской" всегда ведёт на внутренний экран Subscription.
+  await navigateTo('/subscription');
 }
 
 onMounted(async () => {

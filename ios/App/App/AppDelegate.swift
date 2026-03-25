@@ -134,17 +134,18 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             queue: .main
         ) { [weak self] notification in
             guard let self = self else { return }
+            let reasonValue = (notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt) ?? 0
             #if DEBUG
-            if let userInfo = notification.userInfo,
-               let reasonValue = userInfo[AVAudioSessionRouteChangeReasonKey] as? UInt,
-               let reason = AVAudioSession.RouteChangeReason(rawValue: reasonValue) {
-                print("[AudioSession] route changed: \(reason)")
-            } else {
-                print("[AudioSession] route changed")
-            }
+            print("[AudioSession] route changed: \(reasonValue)")
             #endif
 
-            // После смены маршрута иногда «падает» WebAudio звук в фоне.
+            // Не переопределяем на playback при categoryChange (rawValue 3) — speech recognition ставит playAndRecord,
+            // иначе получаем конфликт: 0 Hz, error -50, IsFormatSampleRateAndChannelCountValid.
+            if reasonValue == AVAudioSession.RouteChangeReason.categoryChange.rawValue {
+                return
+            }
+
+            // После смены маршрута (наушники, bluetooth и т.д.) иногда «падает» WebAudio звук в фоне.
             self.configurePlaybackAudioSession(reason: "routeChange")
         }
     }

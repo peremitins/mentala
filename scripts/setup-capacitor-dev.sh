@@ -194,6 +194,14 @@ elif [ "$DEVICE_TYPE" = "device" ]; then
     echo "🔧 Настройка для реального устройства: $SERVER_URL"
     echo "   ⚠️ Android-устройство не подключено по adb, поэтому secure localhost-маршрут для realtime voice сейчас недоступен."
   fi
+
+  # iOS: WKWebView не предоставляет navigator.mediaDevices на HTTP non-localhost origin.
+  # У iOS нет аналога adb reverse (iproxy туннелирует Mac→Device, а не Device→Mac).
+  # Поэтому в device-режиме iOS использует LAN IP — всё работает кроме Realtime Voice.
+  # Для Realtime Voice на iOS используй device-standalone (Capacitor раздаёт файлы локально = secure context).
+  echo "   ℹ️  iOS: Realtime Voice в device-режиме недоступен (WKWebView ограничение)."
+  echo "   Для Realtime Voice на iOS используй: pnpm cap:sync:device:standalone"
+
   echo "   Убедись, что dev-сервер запущен: pnpm dev"
 elif [ "$DEVICE_TYPE" = "device-standalone" ]; then
   # Для устройства без USB-кабеля — статический bundle + API по LAN IP.

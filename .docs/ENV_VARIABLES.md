@@ -23,7 +23,7 @@
 **Пример:**
 
 ```bash
-IOS_APP_LINK_BUNDLE_IDS=com.mentala.app,com.mentala.app.dev
+IOS_APP_LINK_BUNDLE_IDS=com.mentala.app
 ```
 
 ### `ANDROID_APP_LINK_PACKAGE_NAME`
@@ -434,6 +434,66 @@ SMTP_FROM_NAME=Mentala
 
 - Токен не должен истекать, пока пользователь находится в платежной форме YooKassa.
 - После возврата браузер сначала получает web cookie-сессию через `/auth/external-session/consume`, затем открывает `/subscription`.
+
+---
+
+##  Apple In‑App Purchase (StoreKit 2, iOS WW)
+
+### (Legacy) `NUXT_APPLE_IAP_SHARED_SECRET` (удалён, не использовать)
+
+**Описание:** App Store Connect → App‑Specific Shared Secret для legacy‑валидации `verifyReceipt` (receipt base64).
+
+**Статус:**
+
+- В целевой архитектуре StoreKit 2 + signed transactions + App Store Server API + ASN v2 **не нужен**.
+- Должен быть полностью удалён вместе с `verifyReceipt` контуром (см. `.docs/ios_storekit2_migration.md`).
+
+---
+
+### `APPLE_IAP_ISSUER_ID` (обязательно, server-only)
+
+**Описание:** Issuer ID для App Store Server API (In‑App Purchase key).
+
+**Где используется:**
+
+- Генерация JWT для запросов в App Store Server API (backend).
+
+---
+
+### `APPLE_IAP_KEY_ID` (обязательно, server-only)
+
+**Описание:** Key ID для App Store Server API (In‑App Purchase key).
+
+---
+
+### `APPLE_IAP_PRIVATE_KEY_BASE64` (обязательно, server-only)
+
+**Описание:** Приватный ключ `.p8` для App Store Server API.
+
+**Рекомендация:**
+
+- Хранить в `base64`, чтобы не страдать с переносами строк в env.
+- Это секрет, он **не должен** попадать в `runtimeConfig.public`.
+
+---
+
+### `APPLE_IAP_BUNDLE_IDS` (обязательно, server-only)
+
+**Описание:** Allowlist iOS bundle id (через запятую/пробел) для проверки `bundleId` в signed payload (confirm + ASN v2).
+
+**Зачем нужно:**
+
+- Защищает от подтверждения транзакций/нотификаций не из нашего приложения (bundle mismatch).
+
+**Пример:**
+
+```bash
+APPLE_IAP_BUNDLE_IDS=com.mentala.app
+```
+
+**Примечание:**
+
+- Для обратной совместимости временно допускается `NUXT_APPLE_IAP_BUNDLE_IDS`/`NUXT_APPLE_IAP_BUNDLE_ID`, но целевой нейминг — только `APPLE_IAP_*`.
 
 ---
 
