@@ -175,6 +175,9 @@
   "pnpm": {
     "overrides": {
       "on-change": "6.0.2"
+    },
+    "patchedDependencies": {
+      "@capacitor-community/speech-recognition": "patches/@capacitor-community__speech-recognition.patch"
     }
   },
   "config": {

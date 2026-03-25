@@ -14,8 +14,10 @@ interface Subscription {
   planId: string;
   endDate: string;
   paymentStatus: string;
+  paymentProvider?: 'yookassa' | 'apple_iap';
   autoRenew?: boolean;
   billingPeriod?: 'month' | 'year';
+  sourcePlatform?: 'web' | 'ios' | 'android';
   plan: {
     id: string;
     name: string;
@@ -29,6 +31,8 @@ interface SubscriptionResponse {
   trialActive: boolean;
   trialEndsAt: string | null;
   currentEntitlementsPlan?: 'basic' | 'pro' | 'premium';
+  storefrontCountry?: string | null;
+  billingProviderHint?: 'yookassa' | 'apple_iap';
   billingPlan?: 'pro' | 'premium' | null;
   billingPeriod?: 'month' | 'year' | null;
   nextChargeAt?: string | null;

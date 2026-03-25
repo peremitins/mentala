@@ -386,6 +386,20 @@
       "when": 1772700790388,
       "tag": "0058_bored_punisher",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1772709990123,
+      "tag": "0059_right_pyro",
+      "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1772730987228,
+      "tag": "0060_absent_longshot",
+      "breakpoints": true
     }
   ]
 }

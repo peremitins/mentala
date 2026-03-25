@@ -291,6 +291,20 @@ export default defineEventHandler(async (event) => {
       now,
     });
 
+    // MVP: запрещаем параллельные подписки. Если активная подписка в App Store —
+    // не даём запускать checkout через сайт (YooKassa), чтобы не получить double charge.
+    if (
+      currentActive &&
+      currentActive.subscription.paymentProvider === 'apple_iap' &&
+      currentActive.plan.name !== 'basic'
+    ) {
+      throw createError({
+        statusCode: 409,
+        statusMessage:
+          'Active subscription is managed by App Store. Checkout via site is disabled to avoid double charge.',
+      });
+    }
+
     const currentSnapshot: ActiveSubscriptionSnapshot | null = currentActive
       ? {
           id: currentActive.subscription.id,

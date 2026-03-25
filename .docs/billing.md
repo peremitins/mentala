@@ -3,7 +3,10 @@
 **Дата:** 19 февраля 2026 г.  
 **Версия:** 5.0  
 **Статус:** Финальное ТЗ для реализации YooKassa в текущем репозитории  
-**Приоритет источников:** при конфликте решений первичен `.docs/billing_add.md`
+**Приоритет источников (актуально):**
+
+1. Для YooKassa / external browser flow первичен `.docs/billing_add.md`.
+2. Для iOS Storefront + Apple In‑App Purchase первичен `.docs/ios_storekit.md`.
 
 ---
 
@@ -16,11 +19,14 @@
 
 Если есть пересечение и противоречие, применяется решение из `.docs/billing_add.md`.
 
-Ключевые приоритетные решения из `.docs/billing_add.md`, обязательные для финальной архитектуры:
+Ключевые приоритетные решения (актуальная финальная модель):
 
 1. **Web + Android:** оплата через **YooKassa Checkout Widget** внутри интерфейса.
-2. **iOS:** оплата только через **внешний браузер** (out-of-app flow), без WebView внутри приложения.
-3. **Переход iOS -> Web:** пользователь должен попадать на web-оплату **без повторного логина**.
+2. **iOS (Storefront-based):**
+   - **App Store RU** → внешний переход (YooKassa) как сейчас, редирект только после выбора тарифа.
+   - **Остальной мир** → **Apple In‑App Purchase (StoreKit)** внутри приложения.
+3. **Переход iOS RU → Web:** пользователь должен попадать на web-оплату **без повторного логина**.
+4. **iOS WW (Apple IAP):** цены только из StoreKit, обязательны Restore Purchases + управление подписками Apple + текст про автопродление.
 
 ---
 
@@ -46,7 +52,9 @@
 1. Экран `/subscription` общий для платформ, без платформенной маршрутизации оплаты.
 2. В `settings` есть переход «Управлять подпиской» на внутренний `/subscription`.
 3. Composable `usePlatform` уже существует (`web/ios/android`).
-4. Специальный iOS external purchase flow сейчас **не реализован**.
+4. iOS-flow теперь гибридный (см. `.docs/ios_storekit.md`):
+   - RU storefront → внешний браузер (external session → web checkout).
+   - WW storefront → Apple In‑App Purchase (StoreKit) внутри приложения.
 
 ---
 
@@ -58,14 +66,18 @@
 | ------------------- | ------------------------------------ | ----------------------------------------------- | --------------------------------------------------- |
 | Web                 | Внутри приложения (страница/модалка) | YooKassa Checkout Widget (`checkout-widget.js`) | Использовать `confirmation_token`                   |
 | Android (Capacitor) | Внутри приложения                    | YooKassa Checkout Widget                        | Допускается WebView-контур приложения               |
-| iOS (Capacitor)     | **Внешний системный браузер**        | Redirect на web-страницу оплаты                 | **Запрещено** проводить оплату в WebView приложения |
+| iOS (RU storefront) | **Внешний системный браузер**        | Redirect на web-страницу оплаты (YooKassa)      | **Запрещено** проводить оплату в WebView приложения |
+| iOS (WW storefront) | Внутри приложения                    | Apple In‑App Purchase (StoreKit)                | Цены только из StoreKit + Restore Purchases         |
 
 ### 2.2 Политика iOS (App Store-safe)
 
-1. В iOS приложении кнопка должна вести на внешний браузер и называться нейтрально: `Управление подпиской`.
-2. В iOS клиенте нельзя строить flow «Купить за N ₽» внутри приложения для цифрового контента без IAP.
-3. На iOS-экранах приложения не показывать агрессивный pricing CTA для внешней покупки.
-4. Оплата и изменение тарифа на iOS выполняются на web-странице Mentala во внешнем браузере.
+1. Источник истины региона: **StoreKit storefront** (не геолокация/локаль). Если storefront не получен — безопасный дефолт **Apple IAP**.
+2. CTA «Управление подпиской» всегда ведёт на внутренний экран `/subscription`; редирект или покупка происходят только после выбора тарифа и кнопки «Выбрать».
+3. **RU storefront:** внешний системный браузер (out-of-app), без WebView; CTA и тексты нейтральные.
+4. **WW storefront:** покупка строго через **Apple In‑App Purchase** (StoreKit) внутри приложения:
+   - цены показываются только из StoreKit (localized price), без хардкода;
+   - в UI обязательны Restore Purchases + управление подпиской Apple + текст про автопродление;
+   - для WW-flow не должно быть внешних ссылок/редиректов на оплату.
 
 ---
 
@@ -81,7 +93,7 @@
 6. Клиент открывает YooKassa Widget в модалке (`#payment-form`).
 7. Доступ активируется только после webhook verify на сервере.
 
-### 3.2 iOS (External browser flow)
+### 3.2 iOS RU (External browser flow)
 
 1. Пользователь в приложении нажимает `Управление подпиской`.
 2. Приложение запрашивает у backend одноразовый токен web-авторизации.
@@ -89,6 +101,20 @@
 4. Web backend валидирует токен, создает web cookie-сессию (`mentala.sid`) и редиректит на страницу оплаты/подписки.
 5. Дальше checkout идет на web-странице Mentala; для оплаты используется YooKassa (widget/redirect по реализации web-экрана).
 6. Пользователь не должен логиниться повторно.
+
+### 3.4 iOS WW (Apple IAP / StoreKit flow)
+
+1. При открытии `/subscription` iOS-клиент получает Storefront через StoreKit и синхронизирует его на backend (`POST /api/subscriptions/storefront`).
+2. Backend возвращает `billingProviderHint='apple_iap'`, и UI включает WW-flow.
+3. Клиент загружает продукты StoreKit по `productId` и отображает цены в локализованном формате (без хардкода).
+4. По нажатию «Выбрать» запускается покупка через StoreKit (Apple In‑App Purchase).
+5. После **verified** транзакции клиент отправляет на backend (`POST /api/subscriptions/apple/confirm`) с `Idempotency-Key`:
+   - `transactionId`
+   - `signedTransactionInfo` (JWS; берём из StoreKit 2 `VerificationResult<Transaction>.jwsRepresentation`)
+6. Backend валидирует JWS (bundleId/productId allowlist) и активирует подписку в Mentala (опционально использует App Store Server API для reconcile).
+7. UI обновляет `GET /api/subscriptions/current`.
+8. В интерфейсе обязательны действия: **Restore Purchases** (restore + confirm) и **Manage Subscriptions**.
+9. MVP safeguard: если у пользователя уже есть активная подписка, оформленная через YooKassa (сайт), то покупка Apple IAP **блокируется** в UI, чтобы избежать двойных списаний.
 
 ### 3.3 Возврат пользователя в приложение после web-оплаты (обязательно)
 
@@ -279,13 +305,19 @@
 
 ### 7.3 iOS
 
-1. В settings использовать CTA `Управление подпиской`.
-2. CTA открывает внешний браузер (default browser app), не WebView.
-3. Для Capacitor использовать открытие именно во внешнем браузере (`@capacitor/inappbrowser` -> `openInExternalBrowser`).
+**RU storefront (внешняя оплата):**
+
+1. В settings использовать CTA `Управление подпиской` → всегда ведёт на внутренний `/subscription`.
+2. Редирект на web-оплату выполняется только после выбора тарифа и кнопки «Выбрать».
+3. Открытие оплаты — только во внешнем браузере (`@capacitor/inappbrowser` → `openInExternalBrowser`).
 4. Не использовать `@capacitor/browser` для этого сценария на iOS, так как он использует `SFSafariViewController` (in-app system browser).
 5. После возврата по deep link запускать short polling статуса подписки с тем же прогрессивным профилем (1 сек первые 5 секунд, затем 3 сек, общее окно до 30 секунд).
-6. Не использовать внутри iOS приложения кнопку вида `Купить Premium за ...`.
-7. На iOS в приложении показывать описание преимуществ тарифа без прямого ценового checkout CTA.
+
+**WW storefront (Apple IAP):**
+
+1. Покупка выполняется внутри приложения через StoreKit (Apple In‑App Purchase), без внешних редиректов.
+2. Цены на карточках — только из StoreKit (localized price), без хардкода.
+3. В интерфейсе обязательны: Restore Purchases + управление подпиской Apple + текст про автопродление.
 
 ---
 
@@ -298,6 +330,10 @@
 1. `NUXT_YOOKASSA_SHOP_ID` — Shop ID YooKassa (test/prod в зависимости от окружения).
 2. `NUXT_YOOKASSA_SECRET_KEY` — секретный API-ключ YooKassa для серверных запросов (`POST /v3/payments`, `GET /v3/payments/{id}`).
 3. `NUXT_YOOKASSA_TEST_MODE` — флаг тестового режима (`true|false`).
+4. `NUXT_APPLE_IAP_ISSUER_ID` — Issuer ID для App Store Server API (In‑App Purchase key).
+5. `NUXT_APPLE_IAP_KEY_ID` — Key ID для App Store Server API (In‑App Purchase key).
+6. `NUXT_APPLE_IAP_PRIVATE_KEY` — приватный ключ `.p8` для App Store Server API (секрет).
+7. `NUXT_APPLE_IAP_BUNDLE_IDS` — allowlist bundle id (через запятую) для проверки `bundleId` в signed payload (confirm + ASN v2).
 
 Операционные переменные/параметры:
 
@@ -313,7 +349,7 @@
 1. В первую очередь отключить mock-ветку checkout в runtime (никаких заглушечных `paymentUrl` для боевого сценария).
 2. В `start-checkout` включить реальный `POST /v3/payments`.
 3. Для `web/android` использовать embedded-подтверждение и отдавать `confirmation_token`.
-4. Для `ios` использовать redirect-flow для внешнего браузера.
+4. Для iOS RU storefront использовать redirect-flow для внешнего браузера (external session → web checkout); для iOS WW storefront оплата выполняется через Apple IAP (см. `.docs/ios_storekit.md`).
 5. Сохранять `payment.id` в `user_subscriptions.yookassa_payment_id`.
 6. Реализовать iOS external auth bridge (create/consume transfer-token).
 7. Сохранить существующие правила reserve/refund `billingCredit` и идемпотентности.
@@ -329,7 +365,8 @@
 ### 8.3 Дальнейший roadmap
 
 1. Provider-level cancel recurring в `POST /api/subscriptions/cancel`.
-2. Затем server-side мультипровайдерная маршрутизация (YooKassa/Stripe/IAP verify).
+2. (Этап 2) Apple App Store Server Notifications (ASN v2) для server-to-server синхронизации (renewals/cancellations/refunds) поверх StoreKit 2 confirm (JWS).
+3. Дальше — Google Play Billing (Android) и расширение мультипровайдерной маршрутизации.
 
 ---
 
@@ -344,13 +381,22 @@
 5. При задержке webhook UI корректно удерживает `pending` и обновляет статус через прогрессивный short polling без ложной ошибки.
 6. В боевом режиме `start-checkout` не возвращает mock URL-редиректы внутреннего приложения как способ оплаты.
 
-### 9.2 iOS
+### 9.2 iOS (гибридный flow по Storefront)
 
-1. В приложении нет внутреннего checkout в WebView.
-2. Кнопка `Управление подпиской` открывает внешний браузер.
-3. Пользователь попадает на web-страницу оплаты без повторного логина.
-4. Успешная оплата на web активирует подписку в мобильном приложении после синхронизации.
+**RU storefront (YooKassa / внешний браузер):**
+
+1. В приложении нет checkout в WebView.
+2. Редирект во внешний системный браузер происходит только после выбора тарифа и кнопки «Выбрать».
+3. Пользователь попадает на web-страницу оплаты без повторного логина (external-session consume).
+4. Успешная оплата на web активирует подписку; приложение подтягивает статус через `GET /api/subscriptions/current`.
 5. На web success-странице есть рабочая кнопка `Вернуться в приложение` (deep link / universal link).
+
+**WW storefront (Apple IAP / StoreKit 2):**
+
+1. Нет внешних ссылок/редиректов на оплату; покупка выполняется внутри приложения через Apple In‑App Purchase.
+2. Цены на карточках — только из StoreKit (localized price), без хардкода.
+3. `POST /api/subscriptions/apple/confirm` подтверждает покупку по `transactionId` + `signedTransactionInfo` (JWS) с идемпотентностью по `Idempotency-Key`.
+4. В UI обязательны: Restore Purchases + управление подпиской Apple + текст про автопродление.
 
 ### 9.3 Безопасность и отказоустойчивость
 

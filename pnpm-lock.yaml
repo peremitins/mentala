@@ -7,6 +7,11 @@ settings:
 overrides:
   on-change: 6.0.2
 
+patchedDependencies:
+  '@capacitor-community/speech-recognition':
+    hash: 1b6c30bb5e45c4977eb929caea60a4ef071738786f4749fbb3eecf9a08cb3d3d
+    path: patches/@capacitor-community__speech-recognition.patch
+
 importers:
 
   .:
@@ -16,7 +21,7 @@ importers:
         version: 7.3.0(@capacitor/core@7.4.3)
       '@capacitor-community/speech-recognition':
         specifier: ^7.0.1
-        version: 7.0.1(@capacitor/core@7.4.3)
+        version: 7.0.1(patch_hash=1b6c30bb5e45c4977eb929caea60a4ef071738786f4749fbb3eecf9a08cb3d3d)(@capacitor/core@7.4.3)
       '@capacitor/android':
         specifier: ^7.4.4
         version: 7.4.4(@capacitor/core@7.4.3)
@@ -9903,7 +9908,7 @@ snapshots:
     dependencies:
       '@capacitor/core': 7.4.3
 
-  '@capacitor-community/speech-recognition@7.0.1(@capacitor/core@7.4.3)':
+  '@capacitor-community/speech-recognition@7.0.1(patch_hash=1b6c30bb5e45c4977eb929caea60a4ef071738786f4749fbb3eecf9a08cb3d3d)(@capacitor/core@7.4.3)':
     dependencies:
       '@capacitor/core': 7.4.3
 

@@ -11,10 +11,10 @@
 • Landing static-build совместимость: `apps/landing/components/ui/ButtonLoader.vue` использует встроенный SVG-спиннер (без `~icons/*`, чтобы Rollup не падал на unresolved import). `v-tooltip` в лендинге сохранён; падение компиляции Vue (`Symbol(ProxyTarget)`) устранено pin-override зависимостью `on-change@6.0.2` через `package.json > pnpm.overrides` (Nuxt `4.1.2` по умолчанию тянет `on-change@^5.0.1`).
 • Safe-area на mobile: для iOS в layout (`default/auth/blank`) применяется только верхний safe-area (`safe-area-inset-top`) через класс `ios-safe-layout`; нижняя часть интерфейса (BottomNav/контент) не получает дополнительных iOS-отступов, чтобы сохранять прежнюю высоту и визуальный ритм.
 • iOS‑гайд и паритет с Android: см. `.docs/IOS_SETUP.md` (dev/prod, push, Apple Developer Program, FCM/APNs особенности).
-• iOS bundle id: `com.mentala.app` (prod) и `com.mentala.app.dev` (dev), отдельные схемы в Xcode.
+• iOS bundle id: `com.mentala.app` (пока один; дополнительные bundle id добавим, когда реально появятся).
 • Совместимость CocoaPods/Xcode: в `ios/App/App.xcodeproj/project.pbxproj` должен быть `objectVersion = 77` (не `70`), иначе `pod install` падает на CocoaPods 1.16.2 с ошибкой `[Xcodeproj] Unable to find compatibility version string for object version 70`; скрипт `scripts/setup-capacitor-dev.sh` автоматически нормализует `70 -> 77` перед `cap sync`.
 • Sync-конвейер Capacitor централизован через скрипты: `pnpm cap:sync:device|emulator` включает `CAPACITOR_SERVER_URL` для dev, `pnpm cap:sync:prod` принудительно очищает `server.url` в runtime-конфигах Android/iOS (`scripts/fix-capacitor-config.js`) и валидирует prod-safe состояние (`scripts/verify-capacitor-config.js`), чтобы в релиз не попал локальный LAN-IP.
-• iOS Audio Session: в `ios/App/App/AppDelegate.swift` принудительно активируется `AVAudioSession` с категорией `.playback` (при launch и `applicationDidBecomeActive`) для стабильного звучания WebAudio loop-треков на реальных iPhone, включая сценарий с hardware silent switch.
+• iOS Audio Session: в `ios/App/App/AppDelegate.swift` принудительно активируется `AVAudioSession` с категорией `.playback` (при launch и `applicationDidBecomeActive`) для стабильного звучания WebAudio loop-треков на реальных iPhone, включая сценарий с hardware silent switch. При `routeChangeNotification` с причиной `categoryChange` переопределение на playback пропускается, чтобы не ломать speech recognition (плагин переключает на `.playAndRecord` для микрофона; иначе конфликт 0 Hz, error -50).
 • iOS background audio: в `ios/App/App/Info.plist` для `UIBackgroundModes` включён `audio` (вместе с `remote-notification`), чтобы медитация продолжала воспроизведение при блокировке экрана/сворачивании приложения.
 • Визуальный стеклянный слой (`.glass-deep`, `.glass-deep-bottom`) использует progressive enhancement: базовый плотный fallback (без `color-mix`) для старых iOS/WebView, затем `-webkit-backdrop-filter`/`backdrop-filter`, и только при поддержке `color-mix(in oklab, ...)` применяются целевые стили.
 • API-клиент в `app/plugins/api.ts` использует единую кроссплатформенную стратегию `baseURL`: на web берётся `NUXT_PUBLIC_API_SERVER_URL`; на native в dev сохраняется поведение с `window.location.origin`, но для iOS есть защита от custom scheme (`capacitor://...`) и fallback на `NUXT_PUBLIC_API_SERVER_URL` (иначе запросы уходят не на backend).
@@ -429,6 +429,43 @@ server/
 • При `direct charge = succeeded` подписка активируется сразу (`checkoutAction=activated`, `paymentMode=none`), при `canceled/failed` — выполняется fallback в обычный checkout (widget/redirect).
 • Для подписочного checkout включено безусловное сохранение метода оплаты: `save_payment_method=true` + `merchant_customer_id=<userId>`.
 • `paymentUrl` и `confirmationToken` не считаются подтверждением оплаты; факт оплаты подтверждается только серверной верификацией.
+
+• iOS Storefront / Apple IAP (гибридная схема оплаты по региону App Store):
+• Источник истины региона iOS: StoreKit `storefront country code` (не геолокация и не локаль устройства).
+• Нативный iOS слой предоставляет storefront через Capacitor plugin: `Storefront.getStorefrontCountryCode(): Promise<{ countryCode: string | null }>`.
+• На клиенте storefront кешируется на 24 часа; при свежем кеше StoreKit повторно не запрашивается.
+• Клиент синхронизирует storefront на backend: `POST /api/subscriptions/storefront`.
+• Backend хранит storefront в `users.billing_region_source`, `users.billing_storefront_country`, `users.billing_storefront_updated_at` и возвращает `billingProviderHint` в `GET /api/subscriptions/current`.
+• Rule of truth: storefront — входной сигнал; финальный выбор провайдера всегда по `billingProviderHint` от backend.
+• Правило выбора провайдера на iOS:
+• `storefrontCountry='RU'` → `billingProviderHint='yookassa'` (внешняя оплата как сейчас, во внешнем браузере после выбора тарифа).
+• иначе → `billingProviderHint='apple_iap'` (оплата через Apple In‑App Purchase).
+• Без storefront (ошибка/недоступно) используется безопасный дефолт `apple_iap`, чтобы не показывать external purchase «на всякий случай».
+
+• Apple IAP (StoreKit 2 → backend, iOS 15+):
+• Клиент (native iOS) использует **StoreKit 2** через Capacitor plugin для:
+• загрузки цен (StoreKit `displayPrice`, без хардкода),
+  • purchase/restore (`purchase()` + `AppStore.sync()` + чтение `Transaction.currentEntitlements`).
+• Runtime-инварианты клиента:
+  • поднимаем listener `Transaction.updates` при старте/логине и отправляем verified события на backend,
+  • `transaction.finish()` вызываем только после успешного `POST /api/subscriptions/apple/confirm` (`2xx`),
+  • при timeout/network/`5xx` confirm — `finish()` запрещён до retry-успеха, транзакция уходит в retry-очередь,
+  • блокируем повторный старт `purchase()` до завершения текущего (anti double-tap).
+• При покупке клиент получает **verified transaction** и отправляет на backend:
+  • `transactionId` + `signedTransactionInfo` (JWS, обязательно) + `appAccountToken` (рекомендуется),
+  • `POST /api/subscriptions/apple/confirm` с заголовком `Idempotency-Key`.
+• Сервер подтверждает транзакцию через **App Store Server API** (`/inApps/v1/transactions/{transactionId}`), использует возвращённый Apple `signedTransactionInfo` как authoritative source, валидирует `bundleId` по allowlist (`APPLE_IAP_BUNDLE_IDS`) и `productId` по локальному allowlist.
+• `originalTransactionId` всегда извлекается сервером из JWS/App Store Server API; client-body значение не считается источником истины.
+• Идемпотентность Apple-подписок: ключ цепочки `originalTransactionId + environment`, дедуп по `transactionId`.
+• Для защиты от replay на уровне БД нужен unique-инвариант (`transactionId` или `transactionId + environment`).
+• Upgrade/downgrade в subscription group обрабатываются по `originalTransactionId`: новая транзакция обновляет текущую подписку, а не создаёт вторую active.
+• Для reconciliation/истории сервер использует **App Store Server API** (нужны `APPLE_IAP_ISSUER_ID`, `APPLE_IAP_KEY_ID`, `APPLE_IAP_PRIVATE_KEY_BASE64`), включая daily reconcile job (`getTransactionHistory`).
+• MVP без полного ASN v2 покрытия допускается: статус подписки дополнительно подтягивается при активности пользователя (restore/sync из приложения + опциональный reconcile через Server API).
+• `POST /api/subscriptions/apple/notifications` реализован как ASN ingest: принимает `signedPayload` (JWS), делает дедуп по `notificationUUID`, пишет аудит и идемпотентно синхронизирует подписку по `signedTransactionInfo`.
+• В `user_subscriptions` сохраняются Apple поля (`apple_transaction_id`, `apple_original_transaction_id`, `apple_product_id`, `apple_environment`) и `payment_provider='apple_iap'`; запись выбирается как текущая по общему правилу `endDate desc`.
+• MVP safeguard (анти‑double charge): если активна YooKassa-подписка, UI блокирует запуск Apple IAP; если активна Apple-подписка, UI блокирует запуск YooKassa checkout (симметричная защита).
+• Paywall compliance: на экране подписки обязательны кликабельные ссылки Privacy Policy и Terms of Service (для прохождения App Review по auto-renewable subscriptions).
+• Для аудита и расследований используется отдельная таблица `apple_transactions` (transaction history + signed payload metadata) и `apple_notification_events` (дедуп/статусы ASN).
 
 • Trial-scheduled billing (оплата в конце trial):
 • В `users` добавлены поля планового биллинга trial: `billing_plan_id`, `billing_period`, `next_charge_at`, `billing_collection_status`, `grace_ends_at`, `billing_reminder_sent_at`, `payment_method_*`, `billing_locked_*`.
