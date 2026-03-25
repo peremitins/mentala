@@ -14,19 +14,7 @@ import {
 } from '@/server/infrastructure/db/schema';
 import { computeGenerationConfigHash } from '@/server/utils/notification-ai-config-hash';
 import { enqueueAiTextGenerationJob } from '@/server/application/notifications/queues/aiTextGeneration.queue';
-
-function resolveTone(value?: string | null) {
-  if (
-    value === 'delicate' ||
-    value === 'neutral' ||
-    value === 'uplifting' ||
-    value === 'resolute' ||
-    value === 'demanding'
-  ) {
-    return value;
-  }
-  return 'neutral';
-}
+import { resolveAssistantTone } from '@/shared/constants/assistantTone';
 
 export async function enqueueAiRegenerationForUser(params: {
   userId: number;
@@ -42,7 +30,9 @@ export async function enqueueAiRegenerationForUser(params: {
     .where(eq(userPreferences.userId, userId))
     .limit(1);
 
-  const tone = resolveTone(userPrefs?.tone as string | null | undefined);
+  const tone = resolveAssistantTone(
+    userPrefs?.tone as string | null | undefined
+  );
   const addressing = (userPrefs?.addressing as any) || 'informal';
 
   const [userProfile] = await db

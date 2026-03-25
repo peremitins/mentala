@@ -8,6 +8,7 @@ import {
   aiGeneratedNotificationTexts,
   aiMessages,
   aiSessions,
+  chatSessionMemories,
   chatSettings,
   dailyAdherence,
   habits,
@@ -26,6 +27,7 @@ import {
   subscriptionEvents,
   trialUsageTracking,
   therapySessions,
+  therapySessionMessages,
   therapyTopicsCustom,
   telegramAccounts,
   userDevices,
@@ -43,6 +45,7 @@ import {
   hashEmail,
   normalizeEmail,
 } from '@@/server/application/auth/verification';
+import { dispatchUserDeletionRequestedEvent } from '@/server/application/events/app-events.dispatchers';
 
 /**
  * 2-фазное удаление пользователя
@@ -75,6 +78,7 @@ export default defineEventHandler(async (event) => {
     .from(users)
     .where(eq(users.id, userId))
     .limit(1);
+  const userEmail = trialSnapshot[0]?.email ?? null;
 
   if (trialSnapshot.length && trialSnapshot[0].email) {
     const trialStartedAt = trialSnapshot[0].trialStartedAt;
@@ -158,10 +162,16 @@ export default defineEventHandler(async (event) => {
             .where(eq(therapyTopicsCustom.userId, userId)),
           tx.delete(userPreferences).where(eq(userPreferences.userId, userId)),
           tx.delete(chatSettings).where(eq(chatSettings.userId, userId)),
+          tx
+            .delete(chatSessionMemories)
+            .where(eq(chatSessionMemories.userId, userId)),
           tx.delete(aiSessions).where(eq(aiSessions.userId, userId)),
           tx
             .delete(sessionSummaries)
             .where(eq(sessionSummaries.userId, String(userId))),
+          tx
+            .delete(therapySessionMessages)
+            .where(eq(therapySessionMessages.userId, userId)),
           tx
             .delete(userResponseIds)
             .where(eq(userResponseIds.userId, String(userId))),
@@ -191,6 +201,12 @@ export default defineEventHandler(async (event) => {
       } catch (error) {
         console.error('[UserDeletion] Failed to delete user files:', error);
       }
+
+      dispatchUserDeletionRequestedEvent({
+        userId,
+        mode: 'immediate',
+        email: userEmail,
+      });
 
       setResponseStatus(event, 200);
       return {
@@ -257,6 +273,12 @@ export default defineEventHandler(async (event) => {
     } catch (error) {
       console.error('[UserDeletion] Failed to delete user files:', error);
     }
+
+    dispatchUserDeletionRequestedEvent({
+      userId,
+      mode: 'grace_period',
+      email: userEmail,
+    });
 
     // 6. Вернуть ответ
     setResponseStatus(event, 202);

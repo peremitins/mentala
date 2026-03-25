@@ -25,6 +25,7 @@ const THERAPY_TO_BREATH_GROUP_MAP: Partial<
   Record<TherapyTopicKey, BreathPracticeTag>
 > = {
   anxiety: 'anxiety',
+  phobias: 'anxiety',
   stress: 'focus',
   anger: 'focus',
 };

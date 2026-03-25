@@ -1,5 +1,5 @@
 {
-  "id": "d5090a0d-6613-4a0b-8601-137ba1b2b8f6",
+  "id": "7002b69b-bb09-4e1a-9dff-04a68ac00cf7",
   "prevId": "c274e4d3-458e-4a06-b611-994b846a2be4",
   "version": "7",
   "dialect": "postgresql",
@@ -839,6 +839,12 @@
         "last_name_greeting_at": {
           "name": "last_name_greeting_at",
           "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_therapy_focus": {
+          "name": "last_therapy_focus",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },
@@ -4121,40 +4127,9 @@
           "notNull": true,
           "default": "'0'"
         },
-        "payment_provider": {
-          "name": "payment_provider",
-          "type": "varchar(20)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'yookassa'"
-        },
         "yookassa_payment_id": {
           "name": "yookassa_payment_id",
           "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "apple_transaction_id": {
-          "name": "apple_transaction_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "apple_original_transaction_id": {
-          "name": "apple_original_transaction_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "apple_product_id": {
-          "name": "apple_product_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "apple_environment": {
-          "name": "apple_environment",
-          "type": "varchar(20)",
           "primaryKey": false,
           "notNull": false
         },
@@ -4286,13 +4261,6 @@
           "columns": [
             "yookassa_payment_id"
           ]
-        },
-        "uk_user_subscriptions_apple_transaction_id": {
-          "name": "uk_user_subscriptions_apple_transaction_id",
-          "nullsNotDistinct": false,
-          "columns": [
-            "apple_transaction_id"
-          ]
         }
       },
       "policies": {},
@@ -4418,24 +4386,6 @@
         "timezone": {
           "name": "timezone",
           "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "billing_region_source": {
-          "name": "billing_region_source",
-          "type": "varchar(20)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "billing_storefront_country": {
-          "name": "billing_storefront_country",
-          "type": "varchar(2)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "billing_storefront_updated_at": {
-          "name": "billing_storefront_updated_at",
-          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },

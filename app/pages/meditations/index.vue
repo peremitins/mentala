@@ -22,8 +22,11 @@
       >
         <div class="flex items-start justify-between gap-3">
           <p>
-            Полная библиотека медитаций доступна в
-            {{ getPlanBadgeLabel(meditationsAccess.requiredPlan) }}.
+            {{
+              t('PLANS.FULL_MEDITATIONS_LIBRARY_AVAILABLE', {
+                plans: getPlanBadgeLabel(meditationsAccess.requiredPlan),
+              })
+            }}
           </p>
           <button
             type="button"
@@ -140,6 +143,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { formatInTimeZone } from 'date-fns-tz';
 import PageHeader from '@/app/components/PageHeader.vue';
@@ -166,6 +170,7 @@ import {
   DialogTitle,
 } from '@/app/components/ui/dialog';
 import { useEntitlements } from '@/app/composables/useEntitlements';
+import { getLocalizedRequiredPlanLabel } from '@/app/utils/planI18n';
 
 const route = useRoute();
 const router = useRouter();
@@ -173,6 +178,7 @@ const meditationsStore = useMeditationsStore();
 const loaders = useLoadersStore();
 const { currentTrack, setQueue } = useMeditationPlayer();
 const { getFeatureAccess } = useEntitlements();
+const { t } = useI18n();
 
 const wasSkeletonShown = ref(false);
 const paywallOpen = ref(false);
@@ -499,6 +505,6 @@ function getPlanBadgeEmoji(plan: string) {
 }
 
 function getPlanBadgeLabel(plan: string) {
-  return plan === 'premium' ? 'Premium' : 'PRO и Premium';
+  return getLocalizedRequiredPlanLabel(plan, t);
 }
 </script>

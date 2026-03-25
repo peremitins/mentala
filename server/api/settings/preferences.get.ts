@@ -3,6 +3,11 @@ import { userPreferences } from '@/server/infrastructure/db/schema';
 import { db } from '@/server/infrastructure/db/client';
 import type { UserPreferencesDto } from '@/shared/dto/notifications';
 import { getSessionUser } from '@/server/application/auth/session';
+import {
+  DEFAULT_ASSISTANT_TONE,
+  isAssistantToneWithUnknown,
+} from '@/shared/constants/assistantTone';
+import { resolveOnboardingReasons } from '@/shared/dto/onboarding';
 
 /**
  * GET /api/settings/preferences
@@ -30,21 +35,24 @@ export default defineEventHandler(
     if (!prefs) {
       return {
         addressing: 'informal',
-        tone: 'neutral',
+        tone: DEFAULT_ASSISTANT_TONE,
         meditationTimerMinutes: null,
+        onboardingReasons: [],
       };
     }
 
+    const tone = isAssistantToneWithUnknown(prefs.tone)
+      ? prefs.tone
+      : DEFAULT_ASSISTANT_TONE;
+
     return {
       addressing: prefs.addressing as 'informal' | 'formal',
-      tone: prefs.tone as
-        | 'delicate'
-        | 'neutral'
-        | 'uplifting'
-        | 'resolute'
-        | 'demanding'
-        | 'unknown',
+      tone,
       meditationTimerMinutes: prefs.meditationTimerMinutes ?? null,
+      onboardingReasons: resolveOnboardingReasons({
+        reasons: prefs.onboardingReasons,
+        reason: prefs.onboardingReason,
+      }),
     };
   }
 );

@@ -1,0 +1,1 @@
+ALTER TABLE "chat_settings" ALTER COLUMN "assistant_voice" SET DEFAULT 'echo';

@@ -11,6 +11,8 @@ import {
 } from '@/server/application/auth/cookie-names';
 import { normalizeEmail } from '@/server/application/auth/verification';
 import { scheduleNotificationSlotsAfterLogin } from '@/server/application/notifications/login-slots.service';
+import { getDefaultUserSceneSettings } from '@/server/utils/sceneSettings';
+import { dispatchUserRegisteredEvent } from '@/server/application/events/app-events.dispatchers';
 
 function verifyTelegram(initData: Record<string, string>, botToken: string) {
   const { hash, ...data } = initData;
@@ -73,6 +75,7 @@ export default defineEventHandler(async (event) => {
     .where(eq(telegramAccounts.telegramId, telegramId))
     .limit(1);
   let userId: number;
+  let isNewUser = false;
   if (existing.length) {
     userId = existing[0].userId;
     const currentUser = await db
@@ -126,9 +129,11 @@ export default defineEventHandler(async (event) => {
         locale: locale ?? null,
         emailVerifiedAt: null,
         passwordHash: null,
+        sceneSettings: getDefaultUserSceneSettings(),
       })
       .returning();
     userId = u.id;
+    isNewUser = true;
     await db
       .insert(telegramAccounts)
       .values({ userId, telegramId, username, firstName, lastName, photoUrl });
@@ -159,5 +164,11 @@ export default defineEventHandler(async (event) => {
   await createSession(event, userId, locale);
   // Проверяем слоты уведомлений в фоне после создания сессии
   scheduleNotificationSlotsAfterLogin(userId);
+  if (isNewUser) {
+    dispatchUserRegisteredEvent({
+      userId,
+      method: 'telegram',
+    });
+  }
   return { user: { id: userId, username, firstName, lastName } };
 });

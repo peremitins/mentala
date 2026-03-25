@@ -453,6 +453,8 @@
       <DialogContent
         overlay-class="z-[190] bg-black/70 backdrop-blur-sm"
         class="z-[200] !w-[min(96vw,560px)] !max-w-[560px] !bg-transparent !border-0 !shadow-none !p-0 !max-h-[92dvh] !overflow-y-auto [&>button]:z-[220] [&>button]:opacity-100 [&>button]:text-slate-700 [&>button]:right-2.5 [&>button]:top-2.5 [&>button]:focus:ring-0 [&>button]:focus:ring-offset-0"
+        @interact-outside.prevent
+        @focus-outside.prevent
       >
         <DialogTitle class="sr-only">Оплата подписки</DialogTitle>
         <DialogDescription class="sr-only">
@@ -479,6 +481,7 @@ import { Capacitor } from '@capacitor/core';
 import { useNow } from '@vueuse/core';
 import { nanoid } from 'nanoid';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { useAPI } from '@/app/composables/useAPI';
 import { useEntitlements } from '@/app/composables/useEntitlements';
@@ -495,6 +498,10 @@ import {
   resolveAppleIapProductId,
   type AppleIapProductId,
 } from '@/shared/constants/appleIap';
+import {
+  getLocalizedPlanName,
+  getLocalizedTrialPlanLabel,
+} from '@/app/utils/planI18n';
 import {
   formatTrialCountdown,
   getTrialCountdown,
@@ -591,6 +598,7 @@ interface BindPaymentMethodResponse {
 const subscriptionStore = useSubscriptionStore();
 const authStore = useAuthStore();
 const loadersStore = useLoadersStore();
+const { t } = useI18n();
 const { refreshEntitlements } = useEntitlements();
 const route = useRoute();
 const router = useRouter();
@@ -873,16 +881,12 @@ function getPlanDisplayName(name: string) {
   if (name === 'basic') {
     // Если Trial активен, показываем как "Пробный период"
     if (trialActive.value) {
-      if (trialTimeLeftLabel.value) {
-        return `Пробный период · ${trialTimeLeftLabel.value} осталось`;
-      }
-      return 'Пробный период';
+      return getLocalizedTrialPlanLabel(t, trialTimeLeftLabel.value);
     }
-    return 'Basic';
+    return getLocalizedPlanName('basic', t);
   }
-  if (name === 'pro') return 'PRO';
-  if (name === 'premium') return 'Premium';
-  return name;
+
+  return getLocalizedPlanName(name, t);
 }
 
 function getPlanDisplayNameById(planId: string) {
@@ -896,10 +900,7 @@ function getPlanDisplayNameById(planId: string) {
 function getCurrentStatusPlanLabel(): string {
   // В trial у пользователя остается Premium-доступ, даже если выбрано будущее списание PRO.
   if (trialActive.value && currentSubscription.value?.planId === 'basic') {
-    if (trialTimeLeftLabel.value) {
-      return `Пробный период · ${trialTimeLeftLabel.value} осталось`;
-    }
-    return 'Пробный период';
+    return getLocalizedTrialPlanLabel(t, trialTimeLeftLabel.value);
   }
 
   const effectivePlanId =
@@ -2121,11 +2122,8 @@ async function startCheckout(): Promise<boolean> {
     );
   } catch (error: any) {
     console.error('Checkout error:', error);
-    useToast(
-      'Ошибка при оформлении подписки',
-      error?.message || 'Неизвестная ошибка',
-      'error'
-    );
+    // Тост уже показывает глобальный api.ts onResponseError с message из ответа сервера.
+    // Не дублируем, иначе будут два уведомления.
     return false;
   } finally {
     processing.value = false;

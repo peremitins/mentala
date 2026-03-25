@@ -14,16 +14,22 @@ const REFERENCE_FILES = [
 const IMAGE_EXT_RE = /\.(webp|png|jpe?g)$/i;
 const HASH_RE = /\.[a-f0-9]{8}(?:-portrait\d*)?\.(webp|png|jpe?g)$/i;
 
-/** Старые пути → новые (для обновления БД, если в ней остались пути до re-hash) */
+/** Старые пути → новые (для обновления БД и ссылок в seed/sceneSelectionCatalog) */
 const LEGACY_MIGRATIONS = {
   '/meditations/covers/ocean-slow.fd27232b.webp':
-    '/meditations/covers/ocean-slow.b4b7c127.webp',
+    '/meditations/covers/ocean-slow.d9647490.webp',
+  '/meditations/covers/ocean-slow.b4b7c127.webp':
+    '/meditations/covers/ocean-slow.d9647490.webp',
   '/meditations/covers/rain-night.6c73e019.webp':
     '/meditations/covers/rain-night.9468982c.webp',
+  '/meditations/covers/rain-night.e9a5fa50.webp':
+    '/meditations/covers/rain-night.9468982c.webp',
+  '/meditations/backgrounds/delta-waves-portrait1.webp':
+    '/meditations/backgrounds/delta-waves.20b7c825-portrait.webp',
   '/meditations/backgrounds/ocean-slow.08de5010.webp':
-    '/meditations/backgrounds/ocean-slow.574b17af.webp',
+    '/meditations/backgrounds/ocean-slow.ed61a3eb.webp',
   '/meditations/backgrounds/ocean-slow.08de5010-portrait.webp':
-    '/meditations/backgrounds/ocean-slow.574b17af-portrait.webp',
+    '/meditations/backgrounds/ocean-slow.ed61a3eb-portrait.webp',
   '/meditations/backgrounds/rain-night.405ab09f.webp':
     '/meditations/backgrounds/rain-night.00d147c2.webp',
   '/meditations/backgrounds/rain-night.405ab09f-portrait.webp':
@@ -298,7 +304,7 @@ async function main() {
   Object.assign(mapping, LEGACY_MIGRATIONS);
 
   await fs.writeFile(MAP_PATH, JSON.stringify(mapping, null, 2), 'utf8');
-  await updateReferences(newMappings);
+  await updateReferences(mapping);
 
   const changed = Object.keys(newMappings).length;
   if (changed > 0) {

@@ -14,20 +14,8 @@ import {
   therapyTopicsCustom,
   notificationPreferences,
 } from '@/server/infrastructure/db/schema';
-import type { NotificationKind, Tone } from '@/shared/dto/notifications';
-
-function resolveTone(value?: string | null): Tone {
-  if (
-    value === 'delicate' ||
-    value === 'neutral' ||
-    value === 'uplifting' ||
-    value === 'resolute' ||
-    value === 'demanding'
-  ) {
-    return value;
-  }
-  return 'neutral';
-}
+import type { NotificationKind } from '@/shared/dto/notifications';
+import { resolveAssistantTone } from '@/shared/constants/assistantTone';
 import {
   toLocalTime,
   toUTC,
@@ -56,16 +44,20 @@ import {
   type AiNotificationText,
 } from './ai-generation.service';
 import { enqueueAiTextGenerationJob } from './queues/aiTextGeneration.queue';
-import { computeGenerationConfigHash } from '@/server/utils/notification-ai-config-hash';
 import { computeDayOfYear } from './notification-date.utils';
 import { and, eq, sql } from 'drizzle-orm';
 import { pickNotificationImage } from './notification-images.service';
 import { getCustomNotificationSourceAccessByKind } from './notification-source-access.service';
+import { resolveTemplateTherapyTopic } from './notification-prompt-helpers';
+import { buildAiTextConfigHashCandidates } from './notification-ai-hash.helpers';
 import type {
   NotificationPayload,
   NotificationSubtype,
-  NotificationNavigation,
 } from '@/shared/dto/notifications';
+import {
+  buildLegacySuggestedChipActionPayload,
+  type AppNavigationTarget,
+} from '@/shared/navigation';
 import {
   DEFAULT_NOTIFICATION_TIME_RANGE_END,
   DEFAULT_NOTIFICATION_TIME_RANGE_START,
@@ -76,8 +68,9 @@ import {
   slotsScalingConfig,
 } from './slots-scaling.config';
 import {
-  buildDeepLinkFromNavigation,
   resolveNavigationFromActionHint,
+  resolveNavigationTargetFromActionHint,
+  buildDeepLinkFromTarget,
 } from './breath-navigation.utils';
 import {
   applyFlexibleSlotJitter,
@@ -146,26 +139,27 @@ type RegenTransactionResult = {
   lockAcquireMs: number;
 };
 
-function buildActionFromNavigation(navigation: NotificationNavigation): {
+function buildActionFromTarget(target: AppNavigationTarget): {
   action: string;
   params?: Record<string, string>;
 } {
-  switch (navigation.type) {
-    case 'meditation_track':
-      return {
-        action: 'open_meditation_track',
-        params: { trackId: navigation.trackId },
-      };
-    case 'breath_practices':
-      return { action: 'open_breath_practices' };
-    case 'breath_practice':
-      return {
-        action: 'open_breath_practice',
-        params: { practiceId: navigation.slug },
-      };
-    default:
-      return { action: 'open_home' };
+  const compat = buildLegacySuggestedChipActionPayload(target);
+  if (!compat) {
+    return { action: 'open_home' };
   }
+
+  const params = compat.params
+    ? Object.fromEntries(
+        Object.entries(compat.params).filter(
+          ([, value]) => typeof value === 'string' && value.trim().length > 0
+        )
+      )
+    : undefined;
+
+  return {
+    action: compat.action,
+    params,
+  };
 }
 
 function hasPaidPlanForImages(planId: string | null | undefined): boolean {
@@ -1400,17 +1394,10 @@ export async function orchestrateAllSlotsForUser(
             entityDescription = customTopic.description;
           }
         } else {
-          // Готовая тема - получаем из каталога
-          const { findTopicByKey } = await import('@/app/lib/therapyCatalog');
-          const catalogTopic = findTopicByKey(source.entityKey);
-          if (catalogTopic) {
-            entityName = catalogTopic.name;
-            entityDescription = catalogTopic.description;
-          } else {
-            // Fallback: используем ключ как имя, чтобы AI-пулы совпадали с генерацией
-            entityName = source.entityKey;
-            entityDescription = null;
-          }
+          // Для системных therapy-тем используем тот же resolver, что и генератор AI.
+          const templateTopic = resolveTemplateTherapyTopic(source.entityKey);
+          entityName = templateTopic.entityName;
+          entityDescription = templateTopic.entityDescription;
         }
       }
 
@@ -1487,20 +1474,9 @@ export async function orchestrateAllSlotsForUser(
       let aiTextsAvailable = false;
       if (textSource === 'ai' && entityName) {
         // ВАЖНО: Используем tone из userPreferences, а не из preference.meta
-        const tone = resolveTone(
+        const tone = resolveAssistantTone(
           globalPrefs?.tone as string | null | undefined
         );
-
-        const hashEntityName =
-          source.kind === 'therapy' &&
-          !source.isCustomEntity &&
-          source.entityKey
-            ? source.entityKey
-            : entityName;
-        const hashEntityDescription =
-          source.kind === 'therapy' && !source.isCustomEntity
-            ? null
-            : entityDescription || null;
 
         // ВАЖНО: Для хеша используем исходный subtype из preference (если 'mixed' - оставляем 'mixed')
         // actualSubtype используется только для выбора шаблонных текстов, но не для хеша
@@ -1514,10 +1490,12 @@ export async function orchestrateAllSlotsForUser(
             | 'mixed'
             | null) ?? null;
 
-        // Вычисляем configHash с исходным subtype (не actualSubtype)
-        configHash = computeGenerationConfigHash({
-          entityName: hashEntityName,
-          entityDescription: hashEntityDescription,
+        const hashCandidates = buildAiTextConfigHashCandidates({
+          kind: source.kind,
+          isCustomEntity: source.isCustomEntity,
+          entityKey: source.entityKey,
+          entityName,
+          entityDescription,
           tone,
           addressing: addressing as 'informal' | 'formal',
           directness: source.preference.directness as
@@ -1525,19 +1503,33 @@ export async function orchestrateAllSlotsForUser(
             | 'moderate'
             | 'hard',
           subtype: subtypeForHash,
-          textSource: 'ai',
-          kind: source.kind,
           habitIntent: source.kind === 'habits' ? intent : null,
           userGender,
           customPromptNotification:
             source.preference.customPromptNotification ?? null,
         });
 
-        const aiTextRecord = await loadAiGeneratedTextsWithId(
-          userId,
-          source.preference.id,
-          configHash
-        );
+        configHash = hashCandidates[0] ?? null;
+
+        let aiTextRecord: Awaited<
+          ReturnType<typeof loadAiGeneratedTextsWithId>
+        > | null = null;
+        let matchedConfigHash: string | null = null;
+
+        for (const hashCandidate of hashCandidates) {
+          const candidateRecord = await loadAiGeneratedTextsWithId(
+            userId,
+            source.preference.id,
+            hashCandidate
+          );
+
+          if (candidateRecord?.texts?.length) {
+            aiTextRecord = candidateRecord;
+            matchedConfigHash = hashCandidate;
+            break;
+          }
+        }
+
         if (
           aiTextRecord &&
           aiTextRecord.texts &&
@@ -1554,10 +1546,19 @@ export async function orchestrateAllSlotsForUser(
               `[GlobalOrchestration] Loaded ${usedAiTextIndicesFromDb.size} used text indices and ${usedAiTextHashesFromDb.size} used text hashes from DB`
             );
           }
+          if (
+            matchedConfigHash &&
+            matchedConfigHash !== configHash &&
+            DEBUG_NOTIFICATIONS
+          ) {
+            console.log(
+              `[GlobalOrchestration] Using legacy AI config hash for source ${source.kind}:${source.entityKey || 'null'}: ${matchedConfigHash.substring(0, 8)}...`
+            );
+          }
         } else {
           // AI-тексты не найдены или пустые
           console.warn(
-            `[GlobalOrchestration] ⚠️ AI texts not found or empty for source ${source.kind}:${source.entityKey || 'null'}, configHash: ${configHash?.substring(0, 8)}...`
+            `[GlobalOrchestration] ⚠️ AI texts not found or empty for source ${source.kind}:${source.entityKey || 'null'}, configHash: ${configHash?.substring(0, 8)}..., candidates=${hashCandidates.length}`
           );
         }
       }
@@ -1679,9 +1680,13 @@ export async function orchestrateAllSlotsForUser(
             })
           : null;
 
+        const navigationTarget = resolveNavigationTargetFromActionHint(
+          actionHint,
+          text
+        );
         const navigation = resolveNavigationFromActionHint(actionHint, text);
-        const deepLink = buildDeepLinkFromNavigation(navigation);
-        const actionMeta = buildActionFromNavigation(navigation);
+        const deepLink = buildDeepLinkFromTarget(navigationTarget);
+        const actionMeta = buildActionFromTarget(navigationTarget);
 
         // Создаём payload
         const payload: NotificationPayload = {
@@ -1691,6 +1696,7 @@ export async function orchestrateAllSlotsForUser(
           action: 'open',
           deepLink,
           navigation,
+          navigationTarget,
           image: imageUrl || undefined,
           data: {
             kind: source.kind,

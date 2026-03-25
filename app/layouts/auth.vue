@@ -22,7 +22,7 @@ const isIos = computed(() => platform.value === 'ios');
 
 onMounted(async () => {
   // На экранах авторизации звук должен быть выключен полностью.
-  await sceneAudio.stop(false);
+  await sceneAudio.resetRuntimeState();
   await meditationPlayer.stop(false);
 });
 </script>

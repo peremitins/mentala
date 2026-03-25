@@ -1,0 +1,2 @@
+ALTER TABLE "therapy_sessions" ADD COLUMN "client_session_id" varchar(120);--> statement-breakpoint
+CREATE INDEX "idx_therapy_sessions_user_client_session" ON "therapy_sessions" USING btree ("user_id","client_session_id");

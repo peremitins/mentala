@@ -1,4 +1,6 @@
 import type { ChatEntryContext } from '@/shared/dto';
+import type { OnboardingReasons } from '@/shared/dto/onboarding';
+import type { Addressing } from '@/shared/dto/notifications';
 
 export interface LoggerPort {
   info: (msg: string, meta?: unknown) => void;
@@ -15,6 +17,7 @@ export interface LlmProviderPort {
     model?: string;
     options?: {
       sessionId?: string;
+      therapySessionId?: number;
       temperature?: number;
       maxOutputTokens?: number; // Для Responses API
       scenario?: 'chat' | 'notifications' | 'chips'; // Сценарий использования
@@ -23,6 +26,11 @@ export interface LlmProviderPort {
       user_name?: string;
       user_gender?: string;
       user_timezone?: string;
+      addressing?: Addressing;
+      toneKey?: string;
+      toneLabel?: string;
+      toneDescription?: string;
+      onboardingReasons?: OnboardingReasons;
       userId?: number | string;
       isFirstSession?: boolean;
       userPrompt?: string;
@@ -38,6 +46,7 @@ export interface LlmProviderPort {
     model?: string;
     options?: {
       sessionId?: string;
+      therapySessionId?: number;
       temperature?: number;
       maxOutputTokens?: number; // Для Responses API
       scenario?: 'chat' | 'notifications' | 'chips'; // Сценарий использования
@@ -46,6 +55,11 @@ export interface LlmProviderPort {
       user_name?: string;
       user_gender?: string;
       user_timezone?: string;
+      addressing?: Addressing;
+      toneKey?: string;
+      toneLabel?: string;
+      toneDescription?: string;
+      onboardingReasons?: OnboardingReasons;
       userId?: number | string;
       isFirstSession?: boolean;
       userPrompt?: string;

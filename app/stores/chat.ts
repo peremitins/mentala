@@ -4,6 +4,7 @@ import { nanoid } from 'nanoid';
 import { useRuntimeConfig } from 'nuxt/app';
 import { getCsrfTokenForHeader } from '@/app/utils/csrf';
 import {
+  ChatModeHandoffResponseDto,
   ChatResponseDto,
   ChatStreamChunkDto,
   type ChatEntryContext,
@@ -37,6 +38,11 @@ export type ChatStoreMessage = {
   content: string;
   // Терапевтическая сессия, в рамках которой сгенерировано сообщение.
   therapySessionId: number | null;
+  // Временные сообщения живут только на текущем экране и не сохраняются на сервере.
+  transient?: boolean;
+  source?: 'chat' | 'realtime';
+  feedbackDisabled?: boolean;
+  realtimeTurnId?: string | null;
 };
 
 export type ChatMessageFeedbackState = {
@@ -71,6 +77,20 @@ export const useChatStore = defineStore('chat', {
     lastStartSessionError: null as string | null,
   }),
   actions: {
+    resetTherapySessionState(sessionIdToClear?: number | null) {
+      if (
+        typeof sessionIdToClear === 'number' &&
+        this.therapySessionId !== sessionIdToClear
+      ) {
+        return;
+      }
+
+      this.therapySessionId = null;
+      this.lastActivityAt = null;
+      this.lastPingAt = null;
+      this.clearIdleTimeout();
+      this.isEndingSession = false;
+    },
     startSession(sessionId?: string) {
       this.sessionId = sessionId || nanoid();
     },
@@ -91,12 +111,19 @@ export const useChatStore = defineStore('chat', {
         return;
       }
 
+      if (!this.sessionId) {
+        this.startSession();
+      }
+
       try {
         const { $api } = useNuxtApp();
         const response = await $api<{ sessionId: number; startedAt: string }>(
           '/api/therapy/session/start',
           {
             method: 'POST',
+            body: {
+              chatSessionId: this.sessionId || undefined,
+            },
           }
         );
 
@@ -174,12 +201,38 @@ export const useChatStore = defineStore('chat', {
       } finally {
         // Очищаем только если это та же сессия
         if (this.therapySessionId === sessionIdToEnd) {
-          this.therapySessionId = null;
-          this.lastActivityAt = null;
-          this.lastPingAt = null;
+          this.resetTherapySessionState(sessionIdToEnd);
         }
-        this.clearIdleTimeout();
         this.isEndingSession = false;
+      }
+    },
+    async handoffTextSessionToRealtimeVoice() {
+      if (!this.therapySessionId || this.isEndingSession) {
+        return true;
+      }
+
+      const sourceTherapySessionId = this.therapySessionId;
+
+      try {
+        const { $api } = useNuxtApp();
+        const response = await $api('/api/session/handoff', {
+          method: 'POST',
+          body: {
+            sourceMode: 'text',
+            targetMode: 'realtime_voice',
+            sourceTherapySessionId,
+          },
+        });
+
+        ChatModeHandoffResponseDto.parse(response);
+        this.resetTherapySessionState(sourceTherapySessionId);
+        return true;
+      } catch (error) {
+        console.error(
+          '[Chat Store] Failed to handoff text session to realtime voice:',
+          error
+        );
+        return false;
       }
     },
     /**
@@ -281,14 +334,121 @@ export const useChatStore = defineStore('chat', {
     },
     _createMessage(
       role: ChatStoreMessage['role'],
-      content: string
+      content: string,
+      options?: Partial<
+        Omit<ChatStoreMessage, 'id' | 'role' | 'content' | 'therapySessionId'>
+      > & {
+        therapySessionId?: number | null;
+      }
     ): ChatStoreMessage {
       return {
         id: nanoid(),
         role,
         content,
-        therapySessionId: this.therapySessionId ?? null,
+        therapySessionId:
+          options?.therapySessionId ?? this.therapySessionId ?? null,
+        transient: options?.transient === true,
+        source: options?.source || 'chat',
+        feedbackDisabled: options?.feedbackDisabled === true,
+        realtimeTurnId:
+          typeof options?.realtimeTurnId === 'string'
+            ? options.realtimeTurnId
+            : null,
       };
+    },
+    /**
+     * Создаёт runtime-сообщение с точными метаданными.
+     * Используется адаптерами realtime и другими потоковыми сценариями.
+     */
+    addRuntimeMessage(params: {
+      role: ChatStoreMessage['role'];
+      content?: string;
+      therapySessionId?: number | null;
+      transient?: boolean;
+      source?: 'chat' | 'realtime';
+      feedbackDisabled?: boolean;
+      realtimeTurnId?: string | null;
+      id?: string | null;
+    }): string {
+      const message = this._createMessage(params.role, params.content || '', {
+        therapySessionId: params.therapySessionId,
+        transient: params.transient,
+        source: params.source,
+        feedbackDisabled: params.feedbackDisabled,
+        realtimeTurnId: params.realtimeTurnId,
+      });
+
+      if (typeof params.id === 'string' && params.id.trim().length > 0) {
+        message.id = params.id.trim();
+      }
+
+      this.messages.push(message);
+      return message.id;
+    },
+    findMessageIndexById(messageId: string): number {
+      return this.messages.findIndex((message) => message.id === messageId);
+    },
+    appendMessageContent(messageId: string, delta: string) {
+      if (!delta) return;
+      const idx = this.findMessageIndexById(messageId);
+      if (idx < 0) return;
+
+      const message = this.messages[idx];
+      if (!message) return;
+      message.content += delta;
+    },
+    replaceMessageContent(messageId: string, content: string) {
+      const idx = this.findMessageIndexById(messageId);
+      if (idx < 0) return;
+
+      const message = this.messages[idx];
+      if (!message) return;
+      message.content = content;
+    },
+    patchMessage(
+      messageId: string,
+      patch: Partial<
+        Omit<ChatStoreMessage, 'id' | 'role' | 'content' | 'therapySessionId'>
+      > & {
+        content?: string;
+        therapySessionId?: number | null;
+      }
+    ) {
+      const idx = this.findMessageIndexById(messageId);
+      if (idx < 0) return;
+
+      const message = this.messages[idx];
+      if (!message) return;
+
+      if (typeof patch.content === 'string') {
+        message.content = patch.content;
+      }
+      if (
+        typeof patch.therapySessionId === 'number' ||
+        patch.therapySessionId === null
+      ) {
+        message.therapySessionId = patch.therapySessionId;
+      }
+      if (typeof patch.transient === 'boolean') {
+        message.transient = patch.transient;
+      }
+      if (patch.source === 'chat' || patch.source === 'realtime') {
+        message.source = patch.source;
+      }
+      if (typeof patch.feedbackDisabled === 'boolean') {
+        message.feedbackDisabled = patch.feedbackDisabled;
+      }
+      if (
+        typeof patch.realtimeTurnId === 'string' ||
+        patch.realtimeTurnId === null
+      ) {
+        message.realtimeTurnId = patch.realtimeTurnId;
+      }
+    },
+    removeMessage(messageId: string) {
+      const idx = this.findMessageIndexById(messageId);
+      if (idx < 0) return;
+      this.messages.splice(idx, 1);
     },
     /**
      * Подготавливает параметры для API запроса
@@ -323,19 +483,35 @@ export const useChatStore = defineStore('chat', {
           role: message.role,
           content: message.content,
           therapySessionId: nextTherapySessionId,
+          transient: message.transient === true,
+          source: message.source === 'realtime' ? 'realtime' : 'chat',
+          feedbackDisabled: message.feedbackDisabled === true,
+          realtimeTurnId:
+            typeof message?.realtimeTurnId === 'string'
+              ? message.realtimeTurnId
+              : null,
         } satisfies ChatStoreMessage;
       });
     },
     /**
      * Преобразует сообщения стора в API-пейлоад без client-id.
      */
-    _toApiMessages(
-      messages: ChatStoreMessage[] = this.messages
-    ): ChatApiMessage[] {
-      return messages.map((message) => ({
-        role: message.role,
-        content: message.content,
-      }));
+    _toApiMessages(messages?: ChatStoreMessage[]): ChatApiMessage[] {
+      const sourceMessages = messages ?? this.messages;
+      const activeTherapySessionId = this.therapySessionId;
+      const scopedMessages =
+        typeof activeTherapySessionId === 'number'
+          ? sourceMessages.filter(
+              (message) => message.therapySessionId === activeTherapySessionId
+            )
+          : sourceMessages;
+
+      return scopedMessages
+        .filter((message) => message.transient !== true)
+        .map((message) => ({
+          role: message.role,
+          content: message.content,
+        }));
     },
     /**
      * Останавливает текущий chat stream запрос
@@ -699,7 +875,8 @@ export const useChatStore = defineStore('chat', {
       this.ensureMessageIds();
       this.userText = '';
       this.clearSuggestedChips();
-      this.messages.push(this._createMessage('user', text));
+      const userMessage = this._createMessage('user', text);
+      this.messages.push(userMessage);
 
       // Начинаем therapy сессию при отправке первого сообщения
       if (!this.therapySessionId) {
@@ -714,6 +891,10 @@ export const useChatStore = defineStore('chat', {
           );
           return { ok: false } as any;
         }
+
+        this.patchMessage(userMessage.id, {
+          therapySessionId: this.therapySessionId,
+        });
       } else {
         // Обновляем активность при отправке сообщения
         this.updateActivity();
@@ -847,24 +1028,7 @@ export const useChatStore = defineStore('chat', {
       return await this.sendMessage(trimmed);
     },
     async finishAndSave(model?: string) {
-      const { $api } = useNuxtApp();
-      if (!this.sessionId) return;
-
-      try {
-        await $api('/api/session/finish', {
-          method: 'POST',
-          body: {
-            sessionId: this.sessionId,
-            messages: this._toApiMessages(),
-            model,
-          },
-        });
-      } catch (error) {
-        console.error(
-          '[Chat Store] finishAndSave: failed to save session:',
-          error
-        );
-      }
+      void model;
 
       // Завершаем therapy сессию перед завершением чата
       if (this.therapySessionId) {

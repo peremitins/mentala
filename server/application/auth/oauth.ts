@@ -15,12 +15,14 @@ import {
 } from '@/server/application/auth/oauth-linking';
 import { normalizeEmail } from '@/server/application/auth/verification';
 import { getClientIp } from '@/server/utils/ip';
+import { getDefaultUserSceneSettings } from '@/server/utils/sceneSettings';
 import {
   OAUTH_STATE_COOKIE_NAME,
   OAUTH_REDIRECT_COOKIE_NAME,
   LANG_COOKIE_NAME,
   getCookieName,
 } from './cookie-names';
+import { dispatchUserRegisteredEvent } from '@/server/application/events/app-events.dispatchers';
 
 const isProd = process.env.NODE_ENV === 'production';
 
@@ -294,7 +296,7 @@ export async function upsertUserWithOAuth(
         name: profile.name ?? null,
         avatarUrl: profile.avatarUrl ?? null,
         locale: profile.locale ?? null,
-        sceneSettings: { volume: 25 },
+        sceneSettings: getDefaultUserSceneSettings(),
         ...buildLegalConsent(event),
       })
       .returning();
@@ -335,6 +337,14 @@ export async function upsertUserWithOAuth(
   }
 
   await createSession(event, userId!, profile.locale ?? undefined);
+
+  if (isNewUser) {
+    dispatchUserRegisteredEvent({
+      userId: userId!,
+      method: provider,
+    });
+  }
+
   return { status: 'linked', userId: userId!, isNewUser };
 }
 

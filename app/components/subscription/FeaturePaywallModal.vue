@@ -33,8 +33,13 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { navigateTo } from '#app';
 import { Button } from '@/app/components/ui/button';
+import {
+  getLocalizedPlanName,
+  getLocalizedRequiredPlanLabel,
+} from '@/app/utils/planI18n';
 import {
   Dialog,
   DialogContent,
@@ -54,31 +59,41 @@ type FeaturePaywall = {
   lockIcon: LockIcon;
 };
 
+const { t } = useI18n();
+
 function normalizePaywallText(text: string, requiredPlan: PlanId): string {
   if (!text) return text;
+
+  const premiumLabel = getLocalizedPlanName('premium', t);
+  const proLabel = getLocalizedPlanName('pro', t);
+  const proAndPremiumLabel = t('PLANS.PRO_AND_PREMIUM');
+  const proOrPremiumLabel = t('PLANS.PRO_OR_PREMIUM');
 
   if (requiredPlan === 'pro') {
     return (
       text
         .replace(
           /в\s+PRO(?!\s+и\s+Premium|\s+или\s+Premium)\b/gi,
-          'в PRO и Premium'
+          `в ${proAndPremiumLabel}`
         )
-        .replace(/только\s+PRO\b/gi, 'PRO и Premium')
-        .replace(/на\s+PRO(?!\s+и\s+Premium)\b/gi, 'на PRO и Premium')
-        .replace(/PRO\s+и\s+выше/gi, 'PRO и Premium')
-        .replace(/Подключи\s+PRO\s+и\s+Premium/gi, 'Подключи PRO или Premium')
+        .replace(/только\s+PRO\b/gi, proAndPremiumLabel)
+        .replace(/на\s+PRO(?!\s+и\s+Premium)\b/gi, `на ${proAndPremiumLabel}`)
+        .replace(/PRO\s+и\s+выше/gi, proAndPremiumLabel)
+        .replace(
+          /Подключи\s+PRO\s+и\s+Premium/gi,
+          `Подключи ${proOrPremiumLabel}`
+        )
         .replace(
           /Подключи\s+PRO(?!\s+или\s+Premium|\s+и\s+Premium)\b/gi,
-          'Подключи PRO или Premium'
+          `Подключи ${proOrPremiumLabel}`
         )
         .replace(/Перейти\s+на\s+PRO\b/gi, 'Перейти на тариф')
         .replace(/Выбрать\s+PRO\b/gi, 'Выбрать тариф')
         .replace(/Открыть\s+PRO\b/gi, 'Выбрать тариф')
-        .replace(/расширенных тарифах/gi, 'PRO и Premium')
-        .replace(/платных тарифах/gi, 'PRO и Premium')
-        .replace(/по подписке/gi, 'в PRO и Premium')
-        .replace(/расширенный тариф/gi, 'PRO')
+        .replace(/расширенных тарифах/gi, proAndPremiumLabel)
+        .replace(/платных тарифах/gi, proAndPremiumLabel)
+        .replace(/по подписке/gi, `в ${proAndPremiumLabel}`)
+        .replace(/расширенный тариф/gi, proLabel)
         .replace(/Открыть доступ/gi, 'Выбрать тариф')
         // Защитная дедупликация, если текст уже пришёл в расширенном виде.
         .replace(/(PRO\s+и\s+Premium)(\s+и\s+Premium)+/gi, '$1')
@@ -88,8 +103,9 @@ function normalizePaywallText(text: string, requiredPlan: PlanId): string {
 
   if (requiredPlan === 'premium') {
     return text
-      .replace(/PRO\s*и\s*Premium/gi, 'Premium')
-      .replace(/PRO\s*или\s*Premium/gi, 'Premium');
+      .replace(/PRO\s*и\s*Premium/gi, premiumLabel)
+      .replace(/PRO\s*или\s*Premium/gi, premiumLabel)
+      .replace(/\bPremium\b/gi, premiumLabel);
   }
 
   return text;
@@ -140,12 +156,18 @@ const iconType = computed<LockIcon>(() => {
 
 const badgeLabel = computed(() => {
   if (requiredPlanResolved.value === 'premium') {
-    return 'Premium';
+    return getLocalizedPlanName('premium', t);
   }
   if (requiredPlanResolved.value === 'pro') {
-    return 'Доступно в PRO и Premium';
+    return t('PLANS.AVAILABLE_IN', {
+      plans: getLocalizedRequiredPlanLabel(requiredPlanResolved.value, t),
+    });
   }
-  return iconType.value === 'premium' ? 'Premium' : 'Доступно в PRO и Premium';
+  return iconType.value === 'premium'
+    ? getLocalizedPlanName('premium', t)
+    : t('PLANS.AVAILABLE_IN', {
+        plans: getLocalizedRequiredPlanLabel('pro', t),
+      });
 });
 
 const badgeEmoji = computed(() => {
@@ -162,7 +184,7 @@ const paywallDescription = computed(() => {
       requiredPlanResolved.value
     );
   }
-  return 'Подключи подходящий тариф, чтобы открыть эту возможность.';
+  return t('PLANS.UNLOCK_FEATURE');
 });
 
 const ctaText = computed(() => {
@@ -172,7 +194,7 @@ const ctaText = computed(() => {
       requiredPlanResolved.value
     );
   }
-  return 'Выбрать тариф';
+  return t('PLANS.SELECT_PLAN');
 });
 
 function onOpenChange(value: boolean) {
