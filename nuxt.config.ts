@@ -170,6 +170,19 @@ export default defineNuxtConfig({
     yookassaShopId: process.env.NUXT_YOOKASSA_SHOP_ID,
     yookassaSecretKey: process.env.NUXT_YOOKASSA_SECRET_KEY,
     yookassaTestMode: process.env.NUXT_YOOKASSA_TEST_MODE === 'true',
+    // Apple IAP (StoreKit 2 + App Store Server API) server-only настройки.
+    // ВАЖНО: приватные ключи не должны попадать в runtimeConfig.public.
+    appleIapBundleIds:
+      process.env.APPLE_IAP_BUNDLE_IDS ||
+      process.env.NUXT_APPLE_IAP_BUNDLE_IDS ||
+      process.env.NUXT_APPLE_IAP_BUNDLE_ID,
+    appleIapIssuerId:
+      process.env.APPLE_IAP_ISSUER_ID || process.env.NUXT_APPLE_IAP_ISSUER_ID,
+    appleIapKeyId:
+      process.env.APPLE_IAP_KEY_ID || process.env.NUXT_APPLE_IAP_KEY_ID,
+    appleIapPrivateKeyBase64:
+      process.env.APPLE_IAP_PRIVATE_KEY_BASE64 ||
+      process.env.NUXT_APPLE_IAP_PRIVATE_KEY_BASE64,
     public: {
       // Если не задано, будет пустая строка = относительные пути
       apiBase: process.env.NUXT_PUBLIC_API_SERVER_URL || '',

@@ -498,6 +498,13 @@
       "when": 1774011754037,
       "tag": "0074_left_northstar",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1774425797398,
+      "tag": "0075_nifty_swarm",
+      "breakpoints": true
     }
   ]
 }

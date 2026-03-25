@@ -8,13 +8,39 @@
 
     <div class="space-y-2 pb-[100px]">
       <div
-        v-if="isNativeIos"
-        class="glass-deep rounded-lg border border-border p-4"
+        v-if="isIosAppleIapFlow"
+        class="glass-deep rounded-lg border border-border p-4 space-y-3"
       >
-        <p class="text-sm font-medium">Управление подпиской на iOS</p>
-        <p class="text-xs text-foreground mt-1">
-          Оформление и изменение тарифа выполняются во внешнем браузере. В
-          приложении подписка синхронизируется автоматически после оплаты.
+        <div
+          v-if="shouldBlockAppleIapPurchase"
+          class="rounded-md border border-amber-400/30 bg-amber-400/10 p-3 text-xs text-foreground/90"
+        >
+          У вас уже есть активная подписка. Чтобы избежать двойного списания,
+          оформление через App Store временно недоступно.
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            :disabled="processing"
+            class="inline-flex items-center justify-center rounded-md border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-primary-ui/10 disabled:opacity-60 disabled:cursor-not-allowed"
+            @click="handleRestorePurchases"
+          >
+            Восстановить покупки
+          </button>
+          <button
+            type="button"
+            :disabled="processing"
+            class="inline-flex items-center justify-center rounded-md border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-primary-ui/10 disabled:opacity-60 disabled:cursor-not-allowed"
+            @click="handleManageAppleSubscriptions"
+          >
+            Управление подпиской в App Store
+          </button>
+        </div>
+
+        <p class="text-[11px] leading-snug text-foreground/80">
+          Подписка автоматически продлевается, если не отменена минимум за 24
+          часа до окончания текущего периода.
         </p>
       </div>
 
@@ -112,7 +138,7 @@
                   {{ formatDate(currentSubscription.endDate) }}.
                 </p>
                 <button
-                  v-else
+                  v-else-if="canCancelCurrentSubscription"
                   type="button"
                   :disabled="processing"
                   class="inline-flex items-center justify-center rounded-md border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-primary-ui/10 disabled:opacity-60 disabled:cursor-not-allowed"
@@ -211,7 +237,7 @@
       </div>
 
       <div
-        v-if="!isNativeIos"
+        v-if="!isNativeIos && !isCurrentSubscriptionApple"
         class="glass-deep rounded-lg border border-border p-4 space-y-3"
       >
         <p class="text-sm font-medium">Способ оплаты</p>
@@ -258,28 +284,27 @@
         </template>
       </div>
 
-      <!-- Карточки тарифов -->
       <div
-        v-if="isNativeIos"
-        class="glass-deep rounded-lg border border-border p-4 space-y-3"
+        v-if="shouldShowAppleIapPricesError"
+        class="glass-deep rounded-lg border border-destructive/50 p-4 space-y-3"
       >
-        <p class="text-sm text-foreground">
-          На iOS управление тарифом доступно в веб-версии Ментала.
+        <p class="text-sm font-medium text-foreground">
+          Не удалось загрузить цены
         </p>
+
         <button
           type="button"
           :disabled="processing"
-          class="relative inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed"
-          @click="openIosManagementFromPage"
+          class="inline-flex items-center justify-center rounded-md border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-primary-ui/10 disabled:opacity-60 disabled:cursor-not-allowed"
+          @click="handleReloadAppleIapProducts"
         >
-          <ButtonLoader v-if="processing" />
-          <span :class="processing ? 'invisible' : ''">
-            Управление подпиской
-          </span>
+          Повторить загрузку цен
         </button>
       </div>
+
+      <!-- Карточки тарифов -->
       <div
-        v-else-if="subscriptionStore.loading.plans"
+        v-if="subscriptionStore.loading.plans || isAppleIapPricesLoading || isIosBillingFlowPending"
         class="grid grid-cols-1 md:grid-cols-3 gap-2"
       >
         <Skeleton type="plan-card" :count="4" rounded-size="lg" />
@@ -288,18 +313,18 @@
         <PlanCard
           v-for="(plan, index) in subscriptionStore.visiblePlans"
           :key="plan.id"
-          z
           :plan="plan"
           :billing-period="getBillingPeriod(plan.id)"
           :is-selected="selectedPlanId === plan.id"
           :is-current="isCurrentPlan(plan.id)"
           :is-scheduled="isScheduledPlan(plan.id)"
+          :price-label="resolvePlanPriceLabel(plan)"
+          :show-year-discount="!isIosAppleIapFlow"
           :trial-active="
             plan.name === 'basic' ? subscriptionStore.trialActive : false
           "
           :style="`animation-delay: ${0.3 + index * 0.1}s`"
           class=""
-          @select="selectPlan(plan)"
           @update:billing-period="(period) => setBillingPeriod(plan.id, period)"
           @confirm-change="handlePlanChangeConfirm"
         />
@@ -371,6 +396,54 @@
       </AlertDialogContent>
     </AlertDialog>
 
+    <!-- Модалка блокировки Apple IAP при активной подписке через сайт (анти‑double charge) -->
+    <AlertDialog
+      :open="showAppleIapBlockedDialog"
+      @update:open="showAppleIapBlockedDialog = $event"
+    >
+      <AlertDialogContent class="glass-deep">
+        <AlertDialogHeader>
+          <AlertDialogTitle
+            >Покупка через App Store недоступна</AlertDialogTitle
+          >
+          <AlertDialogDescription>
+            {{ appleIapBlockedDialogDescription }}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel @click="showAppleIapBlockedDialog = false">
+            Понятно
+          </AlertDialogCancel>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
+    <!-- Модалка блокировки оплаты через сайт при активной подписке App Store (анти‑double charge) -->
+    <AlertDialog
+      :open="showYookassaBlockedDialog"
+      @update:open="showYookassaBlockedDialog = $event"
+    >
+      <AlertDialogContent class="glass-deep">
+        <AlertDialogHeader>
+          <AlertDialogTitle>Оплата через сайт недоступна</AlertDialogTitle>
+          <AlertDialogDescription>
+            {{ yookassaBlockedDialogDescription }}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel @click="showYookassaBlockedDialog = false">
+            Понятно
+          </AlertDialogCancel>
+          <AlertDialogAction
+            type="button"
+            @click="openExternalBrowser(APPLE_SUBSCRIPTIONS_MANAGE_URL)"
+          >
+            Управление в App Store
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
     <!-- Модалка checkout в custom-режиме (YooKassa modal: false) -->
     <Dialog
       :open="isCheckoutWidgetDialogOpen"
@@ -413,12 +486,18 @@ import { useRoute, useRouter } from 'vue-router';
 import { useAPI } from '@/app/composables/useAPI';
 import { useEntitlements } from '@/app/composables/useEntitlements';
 import { useExternalFlowAppUrl } from '@/app/composables/useExternalFlowAppUrl';
+import { useAppleIap } from '@/app/composables/useAppleIap';
 import { usePlatform } from '@/app/composables/usePlatform';
 import { useToast } from '@/app/composables/useToast';
+import { getIosStorefrontCountryCode } from '@/app/lib/iosStorefront';
 import { runSubscriptionShortPolling } from '@/app/lib/subscriptionPolling';
 import { useAuthStore } from '@/app/stores/auth';
 import { useLoadersStore } from '@/app/stores/loaders';
 import { useSubscriptionStore } from '@/app/stores/subscription';
+import {
+  resolveAppleIapProductId,
+  type AppleIapProductId,
+} from '@/shared/constants/appleIap';
 import {
   getLocalizedPlanName,
   getLocalizedTrialPlanLabel,
@@ -525,15 +604,36 @@ const route = useRoute();
 const router = useRouter();
 const { platform } = usePlatform();
 const externalFlowAppUrl = useExternalFlowAppUrl();
+const appleIap = useAppleIap();
 const { $yooKassaWidget } = useNuxtApp();
 const YOOKASSA_WIDGET_CONTAINER_ID = 'yookassa-widget-container';
+const APPLE_SUBSCRIPTIONS_MANAGE_URL =
+  'https://apps.apple.com/account/subscriptions';
 const now = useNow({ interval: 60_000 });
+const legalLocale = computed(() => {
+  const value = String(authStore.user?.locale || 'ru')
+    .trim()
+    .toLowerCase();
+  return value.startsWith('en') ? 'en' : 'ru';
+});
+const termsOfServiceUrl = computed(
+  () => `/legal/terms-of-service-${legalLocale.value}.html`
+);
+const privacyPolicyUrl = computed(
+  () => `/legal/privacy-policy-${legalLocale.value}.html`
+);
 
 // Computed для удобства доступа
 const plans = computed(() => subscriptionStore.plans);
 const currentSubscription = computed(
   () => subscriptionStore.currentSubscription
 );
+const billingProviderHint = computed(
+  () => subscriptionStore.subscriptionData?.billingProviderHint || null
+);
+const isCurrentSubscriptionApple = computed(() => {
+  return currentSubscription.value?.paymentProvider === 'apple_iap';
+});
 const trialActive = computed(() => subscriptionStore.trialActive);
 const trialEndsAt = computed(
   () => subscriptionStore.subscriptionData?.trialEndsAt || null
@@ -655,6 +755,103 @@ const isNativeIos = computed(
 const isNativeAndroid = computed(
   () => platform.value === 'android' && Capacitor.isNativePlatform()
 );
+// iOS payment flow по storefront:
+// - RU -> YooKassa (внешний переход)
+// - остальные -> Apple IAP
+// - если storefront неизвестен -> Apple IAP (безопасный дефолт)
+// ВАЖНО: пока subscriptionData не загружена, оба flow === false,
+// чтобы не рендерить flow-specific UI до определения billingProviderHint.
+const isIosYookassaFlow = computed(() => {
+  if (!isNativeIos.value || !subscriptionStore.subscriptionData) return false;
+  return billingProviderHint.value === 'yookassa';
+});
+const isIosAppleIapFlow = computed(() => {
+  if (!isNativeIos.value || !subscriptionStore.subscriptionData) return false;
+  return billingProviderHint.value !== 'yookassa';
+});
+const isIosBillingFlowPending = computed(() => {
+  return isNativeIos.value && !subscriptionStore.subscriptionData;
+});
+const isAppleIapPricesLoading = computed(() => {
+  return isIosAppleIapFlow.value && appleIap.loadingProducts.value;
+});
+const hasAppleIapPrices = computed(() => {
+  return Object.keys(appleIap.products.value || {}).length > 0;
+});
+const appleIapProductsLoadAttempted = ref(false);
+const appleIapPricesErrorMessage = ref<string | null>(null);
+
+function resolveUserFacingErrorMessage(error: any): string | null {
+  const candidates = [
+    error?.data?.error?.message,
+    error?.data?.message,
+    error?.response?._data?.error?.message,
+    error?.response?._data?.message,
+    error?.message,
+  ];
+
+  for (const candidate of candidates) {
+    const text = typeof candidate === 'string' ? candidate.trim() : '';
+    if (text) return text;
+  }
+
+  return null;
+}
+const shouldShowAppleIapPricesError = computed(() => {
+  return (
+    isIosAppleIapFlow.value &&
+    appleIapProductsLoadAttempted.value &&
+    !isAppleIapPricesLoading.value &&
+    !hasAppleIapPrices.value
+  );
+});
+const showAppleIapBlockedDialog = ref(false);
+const shouldBlockAppleIapPurchase = computed(() => {
+  // MVP-правило: не даём купить через Apple IAP, если уже есть активная подписка,
+  // оформленная через YooKassa (иначе почти гарантирован "double charge").
+  return Boolean(
+    isIosAppleIapFlow.value &&
+      currentSubscription.value &&
+      currentSubscription.value.paymentStatus === 'active' &&
+      currentSubscription.value.plan?.name !== 'basic' &&
+      currentSubscription.value.paymentProvider === 'yookassa'
+  );
+});
+const appleIapBlockedDialogDescription = computed(() => {
+  if (!currentSubscription.value) {
+    return 'У вас уже есть активная подписка, оплаченная через внешнюю страницу в браузере. Чтобы избежать двойного списания, покупка через App Store временно недоступна.';
+  }
+
+  const planLabel = getPlanDisplayName(currentSubscription.value.plan?.name);
+  const endsAt = formatDate(currentSubscription.value.endDate);
+
+  return `Сейчас у вас активна подписка «${planLabel}» (до ${endsAt}), оплаченная через внешнюю страницу в браузере. Чтобы избежать двойного списания, покупка через App Store временно недоступна. Дождитесь окончания периода или отмените автопродление в управлении подпиской, после чего сможете оформить подписку через App Store.`;
+});
+const showYookassaBlockedDialog = ref(false);
+const shouldBlockYookassaCheckout = computed(() => {
+  // Симметричное правило MVP: не даём оформить/изменить подписку через сайт,
+  // если источник истины — App Store (иначе получим параллельные подписки).
+  return Boolean(
+    !isNativeIos.value &&
+      currentSubscription.value &&
+      currentSubscription.value.paymentStatus === 'active' &&
+      currentSubscription.value.plan?.name !== 'basic' &&
+      currentSubscription.value.paymentProvider === 'apple_iap'
+  );
+});
+const yookassaBlockedDialogDescription = computed(() => {
+  if (!currentSubscription.value) {
+    return 'У вас уже активна подписка, оформленная в App Store. Чтобы избежать двойного списания, оплата через сайт временно недоступна.';
+  }
+
+  const planLabel = getPlanDisplayName(currentSubscription.value.plan?.name);
+  const endsAt = formatDate(currentSubscription.value.endDate);
+
+  return `Сейчас у вас активна подписка «${planLabel}» (до ${endsAt}), оформленная в App Store. Чтобы избежать двойного списания, оплата через сайт временно недоступна. Управляйте подпиской в App Store или дождитесь окончания периода.`;
+});
+const canCancelCurrentSubscription = computed(() => {
+  return !isCurrentSubscriptionApple.value;
+});
 
 let widgetInstance: YooKassaWidgetInstance | null = null;
 let activePollingPromise: Promise<void> | null = null;
@@ -771,6 +968,31 @@ function setBillingPeriod(planId: string, period: 'month' | 'year') {
   }
 }
 
+function resolvePlanPriceLabel(plan: Plan): string | null | undefined {
+  // Для web/android/RU-flow цены считаем по basePrice (рубли).
+  if (!isIosAppleIapFlow.value) {
+    return undefined;
+  }
+
+  if (plan.name !== 'pro' && plan.name !== 'premium') {
+    return undefined;
+  }
+
+  const billingPeriod = getBillingPeriod(plan.id);
+  const productId = resolveAppleIapProductId({
+    planId: plan.name,
+    billingPeriod,
+  });
+
+  if (!productId) {
+    return null;
+  }
+
+  const pricing = appleIap.products.value[productId];
+  const price = String(pricing?.price || '').trim();
+  return price || null;
+}
+
 function isCurrentPlan(planId: string): boolean {
   if (!currentSubscription.value) return false;
 
@@ -799,6 +1021,28 @@ function selectPlan(plan: Plan) {
 }
 
 function handlePlanChangeConfirm(plan: Plan) {
+  // На iOS действие должно происходить после явного выбора тарифа и нажатия "Выбрать":
+  // - RU storefront -> внешний переход (YooKassa)
+  // - остальной мир -> Apple IAP
+  if (isIosYookassaFlow.value) {
+    void startIosExternalCheckout(plan);
+    return;
+  }
+
+  if (isIosAppleIapFlow.value) {
+    if (shouldBlockAppleIapPurchase.value) {
+      showAppleIapBlockedDialog.value = true;
+      return;
+    }
+    void startAppleIapPurchase(plan);
+    return;
+  }
+
+  // Web/Android: оставляем текущий flow (confirm modal + checkout).
+  if (shouldBlockYookassaCheckout.value) {
+    showYookassaBlockedDialog.value = true;
+    return;
+  }
   selectPlan(plan);
 }
 
@@ -1076,27 +1320,176 @@ async function openExternalSubscriptionFlow(
   );
 }
 
-async function openIosManagementFromPage() {
-  if (!isNativeIos.value) return;
+async function startIosExternalCheckout(plan: Plan) {
+  if (!isNativeIos.value || !isIosYookassaFlow.value) return;
+  if (processing.value) return;
 
-  const selected = selectedPlan.value;
-  const fallbackPlanId =
-    selected?.id || currentSubscription.value?.planId || 'premium';
-  const fallbackPeriod = selected?.id
-    ? getBillingPeriod(selected.id)
-    : currentSubscription.value?.billingPeriod || 'month';
+  const billingPeriod = getBillingPeriod(plan.id);
 
   processing.value = true;
   try {
-    await openExternalSubscriptionFlow(
-      fallbackPlanId,
-      fallbackPeriod === 'year' ? 'year' : 'month'
+    selectedPlanId.value = plan.id;
+    await openExternalSubscriptionFlow(plan.id, billingPeriod);
+  } catch (error: any) {
+    console.error('Failed to start external checkout flow:', error);
+    useToast(
+      'Не удалось открыть оплату',
+      error?.message || 'Попробуйте еще раз.',
+      'error'
+    );
+  } finally {
+    processing.value = false;
+  }
+}
+
+async function startAppleIapPurchase(plan: Plan) {
+  if (!isNativeIos.value || !isIosAppleIapFlow.value) return;
+  if (processing.value) return;
+  if (shouldBlockAppleIapPurchase.value) {
+    showAppleIapBlockedDialog.value = true;
+    return;
+  }
+
+  // Смена на Basic для Apple IAP — это отмена подписки, её делают в App Store.
+  if (plan.name === 'basic') {
+    useToast(
+      'Отмена подписки',
+      'Отмена подписки выполняется в App Store.',
+      'info'
+    );
+    await handleManageAppleSubscriptions();
+    return;
+  }
+
+  const billingPeriod = getBillingPeriod(plan.id);
+  if (plan.name !== 'pro' && plan.name !== 'premium') {
+    useToast(
+      'Не удалось начать покупку',
+      'Apple IAP доступен только для платных тарифов Pro/Premium.',
+      'error'
+    );
+    return;
+  }
+
+  const productId = resolveAppleIapProductId({
+    planId: plan.name,
+    billingPeriod,
+  });
+
+  if (!productId) {
+    useToast(
+      'Не удалось начать покупку',
+      'Не найден productId для выбранного тарифа.',
+      'error'
+    );
+    return;
+  }
+
+  processing.value = true;
+  try {
+    selectedPlanId.value = plan.id;
+
+    const response = await appleIap.purchase(productId as AppleIapProductId);
+
+    await subscriptionStore.refreshSubscription();
+    await refreshEntitlements().catch(() => {
+      // Ошибки entitlement-refresh не должны ломать покупку.
+    });
+
+    if (response.status === 'active') {
+      useToast('Подписка активирована', 'Спасибо! Доступ обновлён.', 'success');
+    } else {
+      useToast(
+        'Покупка не подтверждена',
+        'Если подписка уже оформлена, нажмите «Восстановить покупки».',
+        'info'
+      );
+    }
+  } catch (error: any) {
+    console.error('Apple IAP purchase failed:', error);
+    useToast(
+      'Не удалось оформить подписку',
+      error?.message || 'Попробуйте еще раз.',
+      'error'
+    );
+  } finally {
+    processing.value = false;
+  }
+}
+
+async function handleRestorePurchases() {
+  if (!isNativeIos.value || !isIosAppleIapFlow.value) return;
+  if (processing.value) return;
+
+  processing.value = true;
+  try {
+    const response = await appleIap.restorePurchases();
+    await subscriptionStore.refreshSubscription();
+    await refreshEntitlements().catch(() => {
+      // Ошибки entitlement-refresh не должны ломать restore.
+    });
+
+    if (response.status === 'active') {
+      useToast(
+        'Покупки восстановлены',
+        'Подписка синхронизирована.',
+        'success'
+      );
+    } else {
+      useToast(
+        'Подписок не найдено',
+        'Если вы уверены, что подписка есть, попробуйте еще раз позже.',
+        'info'
+      );
+    }
+  } catch (error: any) {
+    console.error('Restore purchases failed:', error);
+    useToast(
+      'Не удалось восстановить покупки',
+      error?.message || 'Попробуйте еще раз.',
+      'error'
+    );
+  } finally {
+    processing.value = false;
+  }
+}
+
+async function handleManageAppleSubscriptions() {
+  if (!isNativeIos.value) return;
+  if (processing.value) return;
+
+  processing.value = true;
+  try {
+    await appleIap.openManageSubscriptions();
+  } catch {
+    // Fallback: если плагин недоступен/не смог открыть системный экран.
+    await openExternalBrowser('https://apps.apple.com/account/subscriptions');
+  } finally {
+    processing.value = false;
+  }
+}
+
+async function handleReloadAppleIapProducts() {
+  if (!isNativeIos.value || !isIosAppleIapFlow.value) return;
+  if (processing.value) return;
+
+  processing.value = true;
+  try {
+    appleIapProductsLoadAttempted.value = true;
+    await appleIap.loadProducts();
+    appleIapPricesErrorMessage.value = null;
+    useToast(
+      'Цены обновлены',
+      'Данные App Store успешно загружены.',
+      'success'
     );
   } catch (error: any) {
-    console.error('Failed to open iOS external management flow:', error);
+    console.warn('[Subscription] Failed to reload Apple IAP products:', error);
+    const message = resolveUserFacingErrorMessage(error);
+    appleIapPricesErrorMessage.value = message;
     useToast(
-      'Не удалось открыть веб-версию',
-      error?.message || 'Попробуйте еще раз.',
+      'Не удалось загрузить цены App Store',
+      message || 'Проверьте интернет и попробуйте снова.',
       'error'
     );
   } finally {
@@ -1738,6 +2131,26 @@ async function startCheckout(): Promise<boolean> {
 }
 
 onMounted(async () => {
+  // iOS: получаем storefrontCountryCode (StoreKit) и синхронизируем на backend.
+  // Это определяет payment-flow (RU -> YooKassa, остальной мир -> Apple IAP).
+  if (isNativeIos.value) {
+    try {
+      // На paywall запрашиваем storefront принудительно, чтобы не зависеть от старого кэша.
+      const storefrontCountryCode = await getIosStorefrontCountryCode({
+        forceRefresh: true,
+      });
+      await useAPI('/api/subscriptions/storefront', {
+        method: 'POST',
+        body: {
+          storefrontCountryCode,
+        },
+      });
+    } catch (error) {
+      console.warn('[Subscription] Failed to sync iOS storefront:', error);
+      // Без storefront по умолчанию включится Apple IAP (WW-flow), это безопаснее.
+    }
+  }
+
   if (!isNativeIos.value && !isNativeAndroid.value && !isCompactMobileWeb()) {
     // Предзагрузка скрипта ускоряет первый показ виджета.
     void $yooKassaWidget.ensureLoaded().catch((error) => {
@@ -1754,6 +2167,47 @@ onMounted(async () => {
     subscriptionStore.fetchPlans(),
     subscriptionStore.fetchCurrentSubscription(shouldForceSubscriptionRefresh),
   ]);
+
+  // Для Apple IAP подтягиваем продукты и локализованные цены из StoreKit.
+  if (isIosAppleIapFlow.value) {
+    appleIapProductsLoadAttempted.value = true;
+    await appleIap.loadProducts().catch((error) => {
+      const message = resolveUserFacingErrorMessage(error);
+      console.warn('[Subscription] Failed to load Apple IAP products:', {
+        message,
+        error,
+      });
+      appleIapPricesErrorMessage.value = message;
+      useToast(
+        'Не удалось загрузить цены App Store',
+        message || 'Проверьте интернет и попробуйте снова.',
+        'error'
+      );
+    });
+
+    // MVP без ASN v2: делаем receipt-sync при заходе на экран подписки,
+    // чтобы подтягивать продления/отмены/рефанды, пока пользователь не обновил приложение.
+    try {
+      const result = await appleIap.syncReceipt();
+      if (result) {
+        try {
+          await subscriptionStore.refreshSubscription();
+        } catch {
+          // ignore
+        }
+        try {
+          await refreshEntitlements();
+        } catch {
+          // ignore
+        }
+      }
+    } catch (error) {
+      console.warn('[Subscription] Apple receipt sync failed:', {
+        message: resolveUserFacingErrorMessage(error),
+        error,
+      });
+    }
+  }
 
   // По умолчанию выделяем текущий активный тариф
   if (currentSubscription.value) {

@@ -36,13 +36,13 @@
 - На iOS требуется включить Push Notifications capability и добавить обработчики в `AppDelegate.swift`.
 - Silent/data‑only push на iOS в `@capacitor/push-notifications` не поддерживается.
 - Изображения в push на iOS требуют Notification Service Extension.
-- Требование по версии: **iOS 14+** (Capacitor 7).
+- Требование по версии: **iOS 15+** (у нас StoreKit 2 only; Capacitor 7 поддерживает iOS 14+, но проект сознательно поднимает минимум до 15).
 
 ## 4. Минимальные зависимости и доступы
 
 - macOS.
 - Xcode + CocoaPods.
-- iPhone с iOS 14+ (реальное устройство) для push.
+- iPhone с iOS 15+ (реальное устройство) для push.
 - Apple Developer Program (для APNs ключей и включения Push Notifications capability).
 - Доступ к Firebase Console проекта.
 
@@ -155,7 +155,7 @@ pnpm cap:sync:device
 
 7. В Xcode выбрать Team и устройство, запустить приложение.
 
-8. При первом запуске iOS 14+ попросит доступ к Local Network — **разрешить**. Если отказали, включить в Settings → Privacy & Security → Local Network.
+8. При первом запуске iOS 15+ попросит доступ к Local Network — **разрешить**. Если отказали, включить в Settings → Privacy & Security → Local Network.
 
 9. ATS для dev‑HTTP. В `Info.plist` добавить исключение на локальный IP. В проде это исключение убрать и перейти на HTTPS.
 
@@ -347,7 +347,7 @@ func application(_ application: UIApplication, didFailToRegisterForRemoteNotific
 2. Пуши не приходят. Убедись, что на сервер ушёл FCM token (а не APNs token). Проверь, что APNs key загружен в Firebase.
 3. Изображения не показываются. Скорее всего нет Notification Service Extension.
 4. Dev‑сервер недоступен. Проверь `CAPACITOR_SERVER_URL`, наличие IP в `DEV_ALLOWED_ORIGINS`, и ATS ограничения.
-5. Не запускается на iOS 13. Capacitor v7 официально поддерживает iOS 14+.
+5. Не запускается на iOS 14 и ниже. В Mentala минимальная версия iOS поднята до **15+** (StoreKit 2 only). Capacitor v7 официально поддерживает iOS 14+, но это уже ниже нашего минимума.
 6. Dev‑сервер виден в браузере, но не в приложении. Проверь доступ Local Network в настройках iOS.
 7. Пуш пришёл не в то окружение. Проверь, что backend запущен в нужном `MENTALA_DB_ENV`, а в iOS проекте используется `GoogleService-Info.plist` для `com.mentala.app`.
 8. Google Login на iOS «ничего не делает». Проверь:
