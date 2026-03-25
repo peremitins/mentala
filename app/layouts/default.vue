@@ -61,9 +61,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, watch } from 'vue';
+import { computed, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { useMediaQuery, useWindowSize } from '@vueuse/core';
 import BottomNav from '@/app/components/BottomNav.vue';
 import MiniMeditationPlayer from '@/app/components/meditations/MiniMeditationPlayer.vue';
 import { useMeditationPlayer } from '@/app/composables/useMeditationPlayer';
@@ -77,6 +76,8 @@ import { resolveMediaUrl } from '@/app/utils/media';
 import { useAuthStore } from '@/app/stores/auth';
 import { usePlatform } from '@/app/composables/usePlatform';
 import { Capacitor } from '@capacitor/core';
+import { useViewportOrientation } from '@/app/composables/useViewportOrientation';
+import { pickOrientationMediaPath } from '@/app/utils/orientationMedia';
 
 const {
   currentTrack,
@@ -88,14 +89,7 @@ const {
   stop,
 } = useMeditationPlayer();
 const meditationsStore = useMeditationsStore();
-const isPortraitQuery = useMediaQuery('(orientation: portrait)');
-const { width, height } = useWindowSize();
-const isPortraitMode = computed(() => {
-  if (height.value && width.value) {
-    return height.value >= width.value;
-  }
-  return isPortraitQuery.value;
-});
+const { isPortraitMode } = useViewportOrientation();
 
 const route = useRoute();
 const auth = useAuthStore();
@@ -119,8 +113,15 @@ const isSosTechniqueActive = computed(
     )
 );
 const canPlaySceneAudio = computed(() => {
-  // Во время logout фон не должен стартовать заново.
-  return auth.isLoggedIn && !auth.isLoggingOut;
+  const onboardingCompleted = auth.user?.onboarding?.welcome === true;
+  // Фоновые сцены доступны только внутри основного приложения:
+  // не во время logout/login-перехода и не до завершения welcome-онбординга.
+  return (
+    auth.isLoggedIn &&
+    !auth.isLoggingOut &&
+    !auth.loading &&
+    onboardingCompleted
+  );
 });
 
 const detailTrackId = computed(() => {
@@ -141,34 +142,6 @@ const routeTrack = computed(() => {
   return meditationsStore.byId(id) || null;
 });
 
-function buildVariants(path?: string | null) {
-  if (!path) return [];
-  const dotIndex = path.lastIndexOf('.');
-  if (dotIndex === -1) return [path];
-  const name = path.slice(0, dotIndex);
-  const ext = path.slice(dotIndex);
-  // Поддерживаем только портретные варианты:
-  // 1) суффикс -portrait (приоритет)
-  // 2) префикс portrait-
-  const suffixedPortrait = `${name}-portrait${ext}`;
-  const prefixedPortrait = name.replace(/\/([^/]+)$/, '/portrait-$1') + ext;
-  const ordered = [suffixedPortrait, prefixedPortrait, path];
-  return Array.from(new Set(ordered.filter(Boolean)));
-}
-
-function orientationVariants(path?: string | null, portraitFirst = false) {
-  const variants = buildVariants(path);
-  if (!variants.length) return [];
-  const [portrait1, portrait2, base] = [
-    variants[0],
-    variants[1],
-    variants[2] || variants[variants.length - 1],
-  ];
-  return portraitFirst
-    ? [portrait1, portrait2, base].filter(Boolean)
-    : [base, portrait1, portrait2].filter(Boolean);
-}
-
 const detailBackground = computed(() => {
   const track =
     routeTrack.value ||
@@ -177,12 +150,9 @@ const detailBackground = computed(() => {
 
   if (!track) return '';
 
-  const ordered = orientationVariants(
-    track.backgroundPath || '',
-    isPortraitMode.value
-  );
-
-  const chosen = ordered.find(Boolean);
+  const chosen = pickOrientationMediaPath(track.backgroundPath || '', {
+    portraitFirst: isPortraitMode.value,
+  });
   return resolveMediaUrl(chosen || '');
 });
 
@@ -192,29 +162,37 @@ const currentScene = computed(
 
 const sceneBackground = computed(() => {
   if (!currentScene.value) return '';
-  const ordered = orientationVariants(
-    currentScene.value.backgroundPath || '',
-    isPortraitMode.value
-  );
-  const chosen = ordered.find(Boolean);
+  const chosen = pickOrientationMediaPath(currentScene.value.backgroundPath, {
+    portraitFirst: isPortraitMode.value,
+  });
   return resolveMediaUrl(chosen || '');
 });
 
 const showSceneBackground = computed(() => {
-  return (
-    !isMeditationDetail.value &&
-    !isBreathPracticePage.value &&
-    Boolean(sceneBackground.value)
-  );
+  return !isMeditationDetail.value && Boolean(sceneBackground.value);
 });
 
 const isMeditationAudioActive = computed(
   () => isPlaying.value || isBuffering.value
 );
-const isBreathPracticePage = computed(() => {
+const breathPracticeSlug = computed(() => {
   const path = route.path || '';
-  // На любых дыхательных практиках фон сцены всегда глушится.
-  return path.startsWith('/breath-practices/');
+  if (!path.startsWith('/breath-practices/')) return null;
+
+  const raw = route.params.slug;
+  const slug = Array.isArray(raw) ? raw[0] : raw;
+  if (typeof slug !== 'string') return null;
+
+  const normalized = slug.trim();
+  return normalized.length > 0 ? normalized : null;
+});
+
+const isBreathPracticePlayerPage = computed(() => {
+  // Визуально scene background теперь используется везде,
+  // а route-проверка нужна только для приглушения audio сцены на реальном плеере.
+  return Boolean(
+    breathPracticeSlug.value && breathPracticeSlug.value !== 'custom'
+  );
 });
 
 const shouldMuteSceneAudio = computed(() => {
@@ -224,7 +202,7 @@ const shouldMuteSceneAudio = computed(() => {
   // иначе после stop() сцена не возобновляется.
   return (
     isMeditationAudioActive.value ||
-    isBreathPracticePage.value ||
+    isBreathPracticePlayerPage.value ||
     isSosTechniqueActive.value
   );
 });
@@ -253,64 +231,13 @@ function openDetail() {
   void navigateTo({ path: '/meditations', query: nextQuery });
 }
 
-let sceneKickstartCleanup: (() => void) | null = null;
-
-function bindFirstGestureSceneKickstart() {
-  if (typeof window === 'undefined') return;
-  if (sceneKickstartCleanup) return;
-
-  const handler = () => {
-    void (async () => {
-      if (!canPlaySceneAudio.value) return;
-      if (shouldMuteSceneAudio.value) return;
-      if (sceneSettings.volume <= 0) return;
-      const scene = currentScene.value;
-      if (!scene?.audioPath) return;
-      try {
-        await sceneAudio.kickstart(scene);
-      } catch (error) {
-        console.warn(
-          '[SceneAudio] Не удалось выполнить first-gesture kickstart:',
-          error
-        );
-      } finally {
-        // Снимаем listener только после первой реальной попытки старта сцены.
-        sceneKickstartCleanup?.();
-      }
-    })();
-  };
-
-  // Регистрируем типичные mobile/desktop жесты и держим их,
-  // пока сцена не получит первую попытку старта.
-  window.addEventListener('pointerdown', handler, {
-    passive: true,
-  });
-  window.addEventListener('touchstart', handler, { passive: true });
-  window.addEventListener('click', handler, { passive: true });
-
-  sceneKickstartCleanup = () => {
-    window.removeEventListener('pointerdown', handler);
-    window.removeEventListener('touchstart', handler);
-    window.removeEventListener('click', handler);
-    sceneKickstartCleanup = null;
-  };
-}
-
-onMounted(async () => {
-  await sceneSettings.ensureLoaded();
-  sceneAudio.setVolume(sceneSettings.volume / 100);
-  sceneAudio.setBackgroundPlayMinutes(sceneSettings.backgroundPlayMinutes);
-  bindFirstGestureSceneKickstart();
-  await syncSceneAudioState();
-});
-
-onBeforeUnmount(() => {
-  sceneKickstartCleanup?.();
-});
+let sceneAudioHydrationRunId = 0;
+let sceneAudioHydrated = false;
 
 watch(
   () => sceneSettings.volume,
   (value) => {
+    if (!sceneSettings.loaded) return;
     sceneAudio.setVolume(value / 100);
   }
 );
@@ -318,11 +245,25 @@ watch(
 watch(
   () => sceneSettings.backgroundPlayMinutes,
   (value) => {
+    if (!sceneSettings.loaded) return;
     sceneAudio.setBackgroundPlayMinutes(value);
   }
 );
 
 let syncSceneAudioRunId = 0;
+
+async function hydrateSceneAudioFromSettings() {
+  const runId = ++sceneAudioHydrationRunId;
+  await sceneSettings.ensureLoaded();
+  if (runId !== sceneAudioHydrationRunId) return;
+  await sceneAudio.hydrateFromSettings({
+    scene: currentScene.value,
+    volume: sceneSettings.volume / 100,
+    backgroundPlayMinutes: sceneSettings.backgroundPlayMinutes,
+  });
+  if (runId !== sceneAudioHydrationRunId) return;
+  sceneAudioHydrated = true;
+}
 
 /** Флаг: переход с mute на unmute (остановка медитации). Нужен для задержки на Android. */
 async function syncSceneAudioState(options?: {
@@ -336,7 +277,9 @@ async function syncSceneAudioState(options?: {
     await sceneAudio.stop(false);
     return;
   }
-  await sceneSettings.ensureLoaded();
+  if (!sceneAudioHydrated) {
+    await hydrateSceneAudioFromSettings();
+  }
   if (runId !== syncSceneAudioRunId) return;
   if (!currentScene.value) return;
   // Обновляем текущую сцену, чтобы не было рассинхрона при смене.

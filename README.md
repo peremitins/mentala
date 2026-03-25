@@ -99,3 +99,17 @@ MIGRATE_PROD_CONFIRM=YES pnpm db:baseline -- --env=production
 - Для dev используется `.env.development`, для local prod — `.env.production`, на сервере prod — `.env`.
 - В env-файле должен быть указан `MENTALA_DB_ENV=development|production`.
 - Для контейнеров миграций на проде нужен доступ к `.env` (например, через `DRIZZLE_ENV_FILE=/app/.env` и volume).
+
+## Шаблоны уведомлений
+
+После правок в `app/lib/notificationTemplates.ts` нужно синхронизировать шаблоны в БД:
+
+```bash
+# Dev
+pnpm db:sync-notification-templates
+
+# Prod
+pnpm db:sync-notification-templates -- --env=production
+```
+
+Скрипт очищает таблицы `notification_texts` и `notification_text_presets` и заполняет их заново из TS-файла.

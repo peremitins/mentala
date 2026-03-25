@@ -75,7 +75,7 @@
           </Button>
 
           <Button class="sm:hidden" size="sm" @click="openPrimaryCTA">
-            {{ t('LANDING.HEADER.CTA_MOBILE') }}
+            {{ primaryCtaTextMobile }}
           </Button>
         </div>
       </div>
@@ -1211,8 +1211,8 @@ const pricingPlans = computed<PricingPlan[]>(() => [
     id: 'pro',
     title: String(t('LANDING.PRICING.PLANS.PRO.TITLE')),
     subtitle: String(t('LANDING.PRICING.PLANS.PRO.SUBTITLE')),
-    monthlyPrice: 349,
-    yearlyPrice: Math.round(349 * 12 * 0.8),
+    monthlyPrice: 399,
+    yearlyPrice: Math.round(399 * 12 * 0.8),
     features: [
       String(t('LANDING.PRICING.PLANS.PRO.FEATURES.FEATURE_1')),
       String(t('LANDING.PRICING.PLANS.PRO.FEATURES.FEATURE_2')),
@@ -1226,8 +1226,8 @@ const pricingPlans = computed<PricingPlan[]>(() => [
     id: 'premium',
     title: String(t('LANDING.PRICING.PLANS.PREMIUM.TITLE')),
     subtitle: String(t('LANDING.PRICING.PLANS.PREMIUM.SUBTITLE')),
-    monthlyPrice: 649,
-    yearlyPrice: Math.round(649 * 12 * 0.8),
+    monthlyPrice: 899,
+    yearlyPrice: Math.round(899 * 12 * 0.8),
     features: [
       String(t('LANDING.PRICING.PLANS.PREMIUM.FEATURES.FEATURE_1')),
       String(t('LANDING.PRICING.PLANS.PREMIUM.FEATURES.FEATURE_2')),
@@ -1235,6 +1235,7 @@ const pricingPlans = computed<PricingPlan[]>(() => [
       String(t('LANDING.PRICING.PLANS.PREMIUM.FEATURES.FEATURE_4')),
       String(t('LANDING.PRICING.PLANS.PREMIUM.FEATURES.FEATURE_5')),
       String(t('LANDING.PRICING.PLANS.PREMIUM.FEATURES.FEATURE_6')),
+      String(t('LANDING.PRICING.PLANS.PREMIUM.FEATURES.FEATURE_7')),
     ],
   },
 ]);
@@ -1313,6 +1314,12 @@ const primaryCtaText = computed(() =>
   isReleased.value
     ? String(t('LANDING.HERO.PRIMARY_CTA_RELEASED'))
     : String(t('LANDING.HERO.PRIMARY_CTA_EARLY_ACCESS'))
+);
+
+const primaryCtaTextMobile = computed(() =>
+  isReleased.value
+    ? String(t('LANDING.HERO.PRIMARY_CTA_RELEASED'))
+    : String(t('LANDING.HEADER.CTA_MOBILE'))
 );
 
 const pricingCtaText = computed(() =>

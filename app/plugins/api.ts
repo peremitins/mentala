@@ -3,6 +3,11 @@ import { Capacitor } from '@capacitor/core';
 import { getActivePinia } from 'pinia';
 
 import { useToast } from '#imports';
+import {
+  resolveClientPlatformHeader,
+  resolveClientTimezone,
+  resolveRuntimeApiBaseUrl,
+} from '@/app/utils/runtime-api';
 
 /**
  * Получает CSRF токен из cookie (только для web)
@@ -73,23 +78,17 @@ export default defineNuxtPlugin(() => {
 
   const isCapacitor = Capacitor.isNativePlatform();
   const platform = Capacitor.getPlatform();
-  const isHttpOrigin = (origin: string) => /^https?:\/\//i.test(origin);
-
-  // apiBase: пустой для Web и Capacitor dev, полный URL для Capacitor prod
-  const apiBase = (config.public as any).apiBase || '';
   const isDev =
     (config.public as any).isDev === true ||
     (!import.meta.env?.PROD && import.meta.env?.MODE !== 'production');
   const appOrigin = typeof window !== 'undefined' ? window.location.origin : '';
-
-  // В dev на native используем appOrigin (как раньше), но на iOS не допускаем custom-схемы
-  // вроде capacitor://localhost для API-запросов.
-  const shouldUseOriginAsApiBase =
-    isCapacitor && isDev && appOrigin && apiBase && apiBase !== appOrigin
-      ? !(platform === 'ios' && !isHttpOrigin(appOrigin))
-      : false;
-
-  const baseURL = shouldUseOriginAsApiBase ? appOrigin : apiBase || '';
+  const baseURL = resolveRuntimeApiBaseUrl({
+    apiBase: (config.public as any).apiBase,
+    isDev,
+    appOrigin,
+    isCapacitor,
+    platform,
+  });
 
   const SESSION_TOKEN_KEY = 'mentai.session.token';
 
@@ -111,31 +110,7 @@ export default defineNuxtPlugin(() => {
         // - iOS Safari 10+ (2016)
         // - Android Chrome/WebView (современные версии)
         // - Все современные браузеры (Desktop и Mobile)
-        let timezone: string;
-        try {
-          // Проверяем доступность Intl API
-          if (
-            typeof Intl !== 'undefined' &&
-            Intl.DateTimeFormat &&
-            typeof Intl.DateTimeFormat === 'function'
-          ) {
-            const resolved = Intl.DateTimeFormat().resolvedOptions();
-            if (resolved.timeZone && typeof resolved.timeZone === 'string') {
-              timezone = resolved.timeZone;
-            } else {
-              throw new Error('timeZone not available in resolvedOptions');
-            }
-          } else {
-            throw new Error('Intl.DateTimeFormat not available');
-          }
-        } catch (error) {
-          // Fallback если Intl API недоступен (очень редко, только на очень старых устройствах)
-          console.warn(
-            '[API] Failed to get timezone from Intl API, using Europe/Moscow:',
-            error
-          );
-          timezone = 'Europe/Moscow';
-        }
+        const timezone = resolveClientTimezone();
 
         const headers = options.headers as
           | Record<string, string>
@@ -143,12 +118,7 @@ export default defineNuxtPlugin(() => {
           | undefined;
 
         // Определяем платформу для передачи на сервер
-        const platformHeader =
-          platform === 'ios'
-            ? 'ios'
-            : platform === 'android'
-              ? 'android'
-              : 'web';
+        const platformHeader = resolveClientPlatformHeader(platform);
 
         // Получаем CSRF токен для web (только для state-changing операций)
         const method = options.method?.toUpperCase() || 'GET';

@@ -3,10 +3,71 @@ import rawBody from 'fastify-raw-body';
 import { randomUUID } from 'node:crypto';
 import { config } from './config.js';
 import { verifyRelaySignature } from './auth.js';
-import { openaiResponsesRequest, openaiResponsesStream } from './openai.js';
+import {
+  openaiRealtimeCall,
+  openaiResponsesRequest,
+  openaiResponsesStream,
+} from './openai.js';
 import { proxySse } from './sse.js';
-import type { RelayPurpose } from './types.js';
+import type { RelayPurpose, RelayRealtimeCallBody } from './types.js';
 import { extractDiagnosticHeaders, readBodyBuffer } from './utils.js';
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+function parseRealtimeCallBody(body: unknown): RelayRealtimeCallBody {
+  if (!isRecord(body)) {
+    throw Object.assign(
+      new Error('Realtime relay body must be a JSON object'),
+      {
+        statusCode: 400,
+      }
+    );
+  }
+
+  const rawSdp = body.sdp;
+  const sdp = typeof rawSdp === 'string' ? rawSdp : '';
+  if (!sdp.trim()) {
+    throw Object.assign(new Error('Realtime SDP offer is required'), {
+      statusCode: 400,
+    });
+  }
+
+  const rawSession = body.session;
+  if (
+    rawSession !== undefined &&
+    rawSession !== null &&
+    !isRecord(rawSession)
+  ) {
+    throw Object.assign(
+      new Error('Realtime session config must be an object or null'),
+      {
+        statusCode: 400,
+      }
+    );
+  }
+
+  const rawClientSecret = body.clientSecret;
+  if (
+    rawClientSecret !== undefined &&
+    rawClientSecret !== null &&
+    typeof rawClientSecret !== 'string'
+  ) {
+    throw Object.assign(new Error('Realtime clientSecret must be a string'), {
+      statusCode: 400,
+    });
+  }
+
+  return {
+    sdp,
+    session: isRecord(rawSession) ? rawSession : null,
+    clientSecret:
+      typeof rawClientSecret === 'string' && rawClientSecret.trim().length > 0
+        ? rawClientSecret.trim()
+        : null,
+  };
+}
 
 export async function buildServer() {
   const app = Fastify({
@@ -24,7 +85,7 @@ export async function buildServer() {
     global: false,
     encoding: false,
     runFirst: true,
-    routes: ['/v1/responses'],
+    routes: ['/v1/responses', '/v1/realtime/calls'],
   });
 
   app.get('/health', async () => ({ ok: true }));
@@ -139,6 +200,85 @@ export async function buildServer() {
         },
         'relay_responses_stream'
       );
+    }
+  });
+
+  app.post('/v1/realtime/calls', async (req, reply) => {
+    const rawBody = (req as typeof req & { rawBody?: Buffer }).rawBody;
+    if (!rawBody) {
+      throw Object.assign(new Error('Raw body is required'), {
+        statusCode: 400,
+      });
+    }
+
+    verifyRelaySignature({
+      req,
+      rawBody,
+      method: 'POST',
+      path: '/v1/realtime/calls',
+    });
+
+    const purpose = (req.headers['x-purpose'] as string) || 'realtime_call';
+    const requestId = (req.headers['x-request-id'] as string) || randomUUID();
+    const parsedBody = parseRealtimeCallBody(req.body);
+    const t0 = Date.now();
+
+    try {
+      const result = await openaiRealtimeCall(parsedBody);
+      const dt = Date.now() - t0;
+      const openaiRequestId =
+        result.headers.get('openai-request-id') ||
+        result.headers.get('x-request-id');
+
+      app.log.info(
+        {
+          purpose: purpose as RelayPurpose,
+          requestId,
+          status: result.statusCode,
+          ms: dt,
+          hasSessionConfig: Boolean(parsedBody.session),
+        },
+        'relay_realtime_call'
+      );
+
+      reply.code(result.statusCode);
+      reply.header('X-Relay-Request-Id', requestId);
+      if (openaiRequestId) {
+        reply.header('openai-request-id', openaiRequestId);
+      }
+      reply.header('content-type', 'application/sdp');
+      return reply.send(result.answerSdp);
+    } catch (error: any) {
+      const dt = Date.now() - t0;
+      const statusCode = Number(error?.statusCode || 502);
+      const errorMessage = String(
+        error?.message || 'Realtime relay request failed'
+      );
+      const openaiRequestId = String(
+        error?.diagnosticHeaders?.openaiRequestId || ''
+      ).trim();
+
+      app.log.warn(
+        {
+          purpose: purpose as RelayPurpose,
+          requestId,
+          status: statusCode,
+          ms: dt,
+          hasSessionConfig: Boolean(parsedBody.session),
+          message: errorMessage,
+        },
+        'relay_realtime_call_error'
+      );
+
+      reply.code(statusCode);
+      reply.header('X-Relay-Request-Id', requestId);
+      if (openaiRequestId) {
+        reply.header('openai-request-id', openaiRequestId);
+      }
+
+      return reply.send({
+        message: errorMessage,
+      });
     }
   });
 

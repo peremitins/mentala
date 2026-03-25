@@ -1,6 +1,6 @@
 {
-  "id": "be7e8b00-42cb-4e90-8d68-a0990b8152cd",
-  "prevId": "d5090a0d-6613-4a0b-8601-137ba1b2b8f6",
+  "id": "94ab1444-0472-4a85-ab1c-22a54b9383cf",
+  "prevId": "7002b69b-bb09-4e1a-9dff-04a68ac00cf7",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -300,296 +300,6 @@
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.apple_notification_events": {
-      "name": "apple_notification_events",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "notification_uuid": {
-          "name": "notification_uuid",
-          "type": "varchar(64)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "notification_type": {
-          "name": "notification_type",
-          "type": "varchar(80)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "notification_subtype": {
-          "name": "notification_subtype",
-          "type": "varchar(80)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "transaction_id": {
-          "name": "transaction_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "original_transaction_id": {
-          "name": "original_transaction_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "processing_status": {
-          "name": "processing_status",
-          "type": "varchar(20)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'received'"
-        },
-        "signed_payload": {
-          "name": "signed_payload",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "last_error": {
-          "name": "last_error",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "idx_apple_notification_events_created": {
-          "name": "idx_apple_notification_events_created",
-          "columns": [
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "apple_notification_events_user_id_users_id_fk": {
-          "name": "apple_notification_events_user_id_users_id_fk",
-          "tableFrom": "apple_notification_events",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "uk_apple_notification_events_notification_uuid": {
-          "name": "uk_apple_notification_events_notification_uuid",
-          "nullsNotDistinct": false,
-          "columns": [
-            "notification_uuid"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.apple_transactions": {
-      "name": "apple_transactions",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "original_transaction_id": {
-          "name": "original_transaction_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "transaction_id": {
-          "name": "transaction_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "product_id": {
-          "name": "product_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "environment": {
-          "name": "environment",
-          "type": "varchar(20)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "purchase_date": {
-          "name": "purchase_date",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "expires_date": {
-          "name": "expires_date",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "revocation_date": {
-          "name": "revocation_date",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "storefront": {
-          "name": "storefront",
-          "type": "varchar(2)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "app_account_token": {
-          "name": "app_account_token",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "signed_payload": {
-          "name": "signed_payload",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "idx_apple_transactions_original_env": {
-          "name": "idx_apple_transactions_original_env",
-          "columns": [
-            {
-              "expression": "original_transaction_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "environment",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_apple_transactions_user_created": {
-          "name": "idx_apple_transactions_user_created",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "apple_transactions_user_id_users_id_fk": {
-          "name": "apple_transactions_user_id_users_id_fk",
-          "tableFrom": "apple_transactions",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "uk_apple_transactions_transaction_id": {
-          "name": "uk_apple_transactions_transaction_id",
-          "nullsNotDistinct": false,
-          "columns": [
-            "transaction_id"
-          ]
-        }
-      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -1132,6 +842,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "last_therapy_focus": {
+          "name": "last_therapy_focus",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -1652,6 +1368,99 @@
         }
       },
       "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.gratitude_diary_entries": {
+      "name": "gratitude_diary_entries",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigserial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "text": {
+          "name": "text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "mood": {
+          "name": "mood",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tags": {
+          "name": "tags",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "ARRAY[]::text[]"
+        },
+        "photo_url": {
+          "name": "photo_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "input_method": {
+          "name": "input_method",
+          "type": "varchar(12)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'text'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_gratitude_diary_entries_user_created": {
+          "name": "idx_gratitude_diary_entries_user_created",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
@@ -4411,40 +4220,9 @@
           "notNull": true,
           "default": "'0'"
         },
-        "payment_provider": {
-          "name": "payment_provider",
-          "type": "varchar(20)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'yookassa'"
-        },
         "yookassa_payment_id": {
           "name": "yookassa_payment_id",
           "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "apple_transaction_id": {
-          "name": "apple_transaction_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "apple_original_transaction_id": {
-          "name": "apple_original_transaction_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "apple_product_id": {
-          "name": "apple_product_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "apple_environment": {
-          "name": "apple_environment",
-          "type": "varchar(20)",
           "primaryKey": false,
           "notNull": false
         },
@@ -4576,13 +4354,6 @@
           "columns": [
             "yookassa_payment_id"
           ]
-        },
-        "uk_user_subscriptions_apple_transaction_id": {
-          "name": "uk_user_subscriptions_apple_transaction_id",
-          "nullsNotDistinct": false,
-          "columns": [
-            "apple_transaction_id"
-          ]
         }
       },
       "policies": {},
@@ -4708,24 +4479,6 @@
         "timezone": {
           "name": "timezone",
           "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "billing_region_source": {
-          "name": "billing_region_source",
-          "type": "varchar(20)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "billing_storefront_country": {
-          "name": "billing_storefront_country",
-          "type": "varchar(2)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "billing_storefront_updated_at": {
-          "name": "billing_storefront_updated_at",
-          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },

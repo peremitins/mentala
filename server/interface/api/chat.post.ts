@@ -10,9 +10,13 @@ import {
   ChatResponseDto,
   type SuggestedChip,
 } from '@/shared/dto';
+import { resolveOnboardingReasons } from '@/shared/dto/onboarding';
 import { getSessionUserWithRole } from '@/server/utils/require-role';
 import { db } from '@/server/infrastructure/db/client';
-import { therapySessions } from '@/server/infrastructure/db/schema';
+import {
+  therapySessions,
+  userPreferences,
+} from '@/server/infrastructure/db/schema';
 import { eq, and, isNull } from 'drizzle-orm';
 import {
   getAiUsageGate,
@@ -30,6 +34,17 @@ import {
   buildCrisisGuidance,
   mergeDeveloperPrompts,
 } from '@/server/application/chat/crisis-protocol.service';
+import {
+  buildPhobiasDeveloperPrompt,
+  isPhobiasEntryContext,
+  resolveLastTherapyFocusUpdate,
+  resolvePhobiasConversationState,
+  type PhobiasConversationState,
+} from '@/server/application/chat/phobias-entry.service';
+import { trackPhobiasEvent } from '@/server/application/chat/phobias-analytics.service';
+import { readChatSettings, writeChatSettings } from '@/server/utils/storage';
+import { getAssistantToneMeta } from '@/shared/constants/assistantTone';
+import { resolveAddressing } from '@/shared/utils/addressing';
 
 export default defineEventHandler(async (event) => {
   try {
@@ -50,6 +65,22 @@ export default defineEventHandler(async (event) => {
       typeof (sessionResult as any)?.timezone === 'string'
         ? String((sessionResult as any).timezone)
         : undefined;
+    const [prefs] = await db
+      .select({
+        addressing: userPreferences.addressing,
+        tone: userPreferences.tone,
+        onboardingReason: userPreferences.onboardingReason,
+        onboardingReasons: userPreferences.onboardingReasons,
+      })
+      .from(userPreferences)
+      .where(eq(userPreferences.userId, uid))
+      .limit(1);
+    const toneMeta = getAssistantToneMeta(prefs?.tone);
+    const addressing = resolveAddressing(prefs?.addressing);
+    const onboardingReasons = resolveOnboardingReasons({
+      reasons: prefs?.onboardingReasons,
+      reason: prefs?.onboardingReason,
+    });
 
     // Требуем валидный therapySessionId, чтобы нельзя было обойти биллинг прямыми вызовами /api/chat
     const therapySessionId =
@@ -162,9 +193,25 @@ export default defineEventHandler(async (event) => {
     const crisisGuidance = buildCrisisGuidance({
       messages: parsed.messages,
       userLocale: parsed.user_locale,
+      addressing,
     });
-    const effectiveUserPrompt = mergeDeveloperPrompts(
+    let phobiasState: PhobiasConversationState | null = null;
+    if (isPhobiasEntryContext(parsed.entryContext)) {
+      const settings = await readChatSettings(String(uid));
+      phobiasState = resolvePhobiasConversationState({
+        entryContext: parsed.entryContext,
+        messages: parsed.messages,
+        lastTherapyFocus: settings.lastTherapyFocus,
+      });
+    }
+
+    const phobiasPrompt = buildPhobiasDeveloperPrompt(phobiasState);
+    const promptWithPhobias = mergeDeveloperPrompts(
       parsed.userPrompt,
+      phobiasPrompt
+    );
+    const effectiveUserPrompt = mergeDeveloperPrompts(
+      promptWithPhobias,
       crisisGuidance.guidance
     );
 
@@ -176,15 +223,30 @@ export default defineEventHandler(async (event) => {
       });
     }
 
+    if (
+      phobiasState?.mode === 'welcome_selector' ||
+      phobiasState?.mode === 'welcome_resume_selector'
+    ) {
+      trackPhobiasEvent('phobias_selector_shown', {
+        mode: phobiasState.mode,
+        hasLastFocus: Boolean(phobiasState.validLastTherapyFocus),
+      });
+    }
+
     const commonOptions = {
       sessionId: parsed.sessionId,
+      therapySessionId,
       lang: parsed.lang,
       user_locale: parsed.user_locale,
       user_name: userName,
       user_gender: userGender,
       user_timezone: userTimezone,
+      addressing,
+      toneKey: toneMeta.value,
+      toneLabel: toneMeta.label,
+      toneDescription: toneMeta.description,
+      onboardingReasons,
       userId: uid, // серверный стабильный uid
-      isFirstSession: undefined, // рассчитывается в других местах при стриминге
       userPrompt: effectiveUserPrompt,
       entryContext: parsed.entryContext ?? undefined, // Преобразуем null в undefined
     };
@@ -247,6 +309,7 @@ export default defineEventHandler(async (event) => {
           userId: uid,
           therapySessionId,
           entryContext: parsed.entryContext,
+          onboardingReasons,
         });
       } catch (chipsError) {
         // Не ломаем основной ответ, если чипы не сгенерировались.
@@ -254,6 +317,44 @@ export default defineEventHandler(async (event) => {
         return [] as SuggestedChip[];
       }
     })();
+
+    const phobiasFocusUpdate = resolveLastTherapyFocusUpdate({
+      state: phobiasState,
+    });
+    if (phobiasFocusUpdate) {
+      try {
+        await writeChatSettings(String(uid), {
+          lastTherapyFocus: phobiasFocusUpdate.nextFocus,
+        });
+
+        if (phobiasFocusUpdate.action === 'resumed') {
+          trackPhobiasEvent('phobias_focus_resumed', {
+            subtopicKey: phobiasFocusUpdate.nextFocus.subtopicKey,
+            subtopicLabel: phobiasFocusUpdate.nextFocus.subtopicLabel,
+          });
+        } else {
+          trackPhobiasEvent('phobias_focus_selected', {
+            subtopicKey: phobiasFocusUpdate.nextFocus.subtopicKey,
+            subtopicLabel: phobiasFocusUpdate.nextFocus.subtopicLabel,
+          });
+
+          if (phobiasFocusUpdate.changed) {
+            trackPhobiasEvent('phobias_focus_changed', {
+              subtopicKey: phobiasFocusUpdate.nextFocus.subtopicKey,
+              subtopicLabel: phobiasFocusUpdate.nextFocus.subtopicLabel,
+            });
+          }
+        }
+
+        trackPhobiasEvent('phobias_session_started', {
+          subtopicKey: phobiasFocusUpdate.nextFocus.subtopicKey,
+          subtopicLabel: phobiasFocusUpdate.nextFocus.subtopicLabel,
+          action: phobiasFocusUpdate.action,
+        });
+      } catch (error) {
+        console.error('[Chat API] Failed to persist phobias focus:', error);
+      }
+    }
 
     const response = ChatResponseDto.parse({
       message: { role: 'assistant', content: result.content },

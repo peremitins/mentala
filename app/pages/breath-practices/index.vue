@@ -40,15 +40,11 @@
           </div>
         </div>
 
-        <div
+        <HorizontalScroller
           v-if="customManageAccess.available && customItems.length"
-          class="relative"
+          aria-label="Лента пользовательских дыхательных практик"
         >
-          <div
-            class="flex gap-4 overflow-x-auto pb-4 pl-4 pr-6 no-scrollbar"
-            data-lenis-prevent
-            style="touch-action: pan-y pan-x"
-          >
+          <template #default>
             <BreathPracticeCard
               v-for="item in customItems"
               :key="item.practice.slug"
@@ -59,8 +55,8 @@
               @open="openPracticeInGroup('custom', $event)"
               @delete="handleDeletePractice"
             />
-          </div>
-        </div>
+          </template>
+        </HorizontalScroller>
 
         <div
           v-else-if="customManageAccess.available"
@@ -114,8 +110,11 @@
                 Создать свою практику
               </p>
               <p class="text-xs text-foreground/80">
-                Эта функция доступна в
-                {{ getPlanBadgeLabel(customCreateAccess.requiredPlan) }}
+                {{
+                  t('PLANS.FEATURE_AVAILABLE_IN', {
+                    plans: getPlanBadgeLabel(customCreateAccess.requiredPlan),
+                  })
+                }}
               </p>
             </div>
             <span
@@ -199,6 +198,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import PageHeader from '@/app/components/PageHeader.vue';
 import IconPlus from '~icons/lucide/plus';
@@ -212,6 +212,7 @@ import BreathPracticeSection, {
   type BreathPracticeCardItem,
 } from '@/app/components/breath-practices/BreathPracticeSection.vue';
 import BreathPracticeCard from '@/app/components/breath-practices/BreathPracticeCard.vue';
+import HorizontalScroller from '@/app/components/ui/HorizontalScroller.vue';
 import { useBreathPracticesStore } from '@/app/stores/breathPractices';
 import {
   Dialog,
@@ -224,11 +225,13 @@ import ConfirmModal from '@/app/components/ui/ConfirmModal.vue';
 import FeaturePaywallModal from '@/app/components/subscription/FeaturePaywallModal.vue';
 import { useToast } from '@/app/composables/useToast';
 import { useEntitlements } from '@/app/composables/useEntitlements';
+import { getLocalizedRequiredPlanLabel } from '@/app/utils/planI18n';
 
 const store = useBreathPracticesStore();
 const route = useRoute();
 const router = useRouter();
 const { getFeatureAccess } = useEntitlements();
+const { t } = useI18n();
 
 // Подбираем акцентный градиент под характер практики.
 const TAG_GRADIENTS: Record<BreathPracticeTag, string> = {
@@ -396,7 +399,7 @@ function getPlanBadgeEmoji(plan: string) {
 }
 
 function getPlanBadgeLabel(plan: string) {
-  return plan === 'premium' ? 'Premium' : 'PRO и Premium';
+  return getLocalizedRequiredPlanLabel(plan, t);
 }
 
 function handleDeletePractice(id: string) {

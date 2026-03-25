@@ -137,6 +137,12 @@
       </StateBlock>
     </div>
 
+    <PushPermissionDeniedDialog
+      :open="pushPermissionGate.showPushDeniedModal.value"
+      @update:open="pushPermissionGate.setPushDeniedModalOpen"
+      @open-settings="handleOpenPushSystemSettings"
+    />
+
     <FeaturePaywallModal
       v-model:open="paywallOpen"
       :feature-key="paywallFeatureKey"
@@ -154,10 +160,12 @@ import NotificationsSummaryCard from '@/app/components/notifications/Notificatio
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/shadcn/input';
 import InputComponent from '@/app/components/ui/shadcn/input/Input.vue';
+import PushPermissionDeniedDialog from '@/app/components/notifications/PushPermissionDeniedDialog.vue';
 import IconMessageCircle from '~icons/lucide/message-circle';
 import IconLeaf from '~icons/lucide/leaf';
 import IconWind from '~icons/lucide/wind';
 import { useNotificationsSettings } from '@/app/composables/useNotificationsSettings';
+import { usePushPermissionGate } from '@/app/composables/usePushPermissionGate';
 import { useChatStore } from '@/app/stores/chat';
 import { useLoadersStore } from '@/app/stores/loaders';
 import { useToast } from '@/app/composables/useToast';
@@ -170,29 +178,35 @@ import type {
 } from '@/shared/dto/notifications';
 import type { ChatEntryContext } from '@/shared/dto';
 import { useEntryChat } from '@/app/composables/useEntryChat';
+import { getAddressingCopy } from '@/app/lib/addressingCopy';
 import { onClickOutside } from '@vueuse/core';
+import { useAuthStore } from '@/app/stores/auth';
 import { useTherapyTopicsStore } from '@/app/stores/therapyTopics';
 import { mapTherapyToMeditationTopic } from '@/app/lib/meditations';
 import { mapTherapyToBreathGroup } from '@/app/lib/practiceActions';
-import {
-  BREATH_PRACTICES,
-  type BreathPracticeTag,
-} from '@/app/lib/breathPracticesCatalog';
+import type { BreathPracticeTag } from '@/app/lib/breathPracticesCatalog';
 import FeaturePaywallModal from '@/app/components/subscription/FeaturePaywallModal.vue';
 import {
   extractFeaturePlanRequiredError,
   useEntitlements,
 } from '@/app/composables/useEntitlements';
+import { useTherapyAnalytics } from '@/app/composables/useTherapyAnalytics';
+import { useAppNavigation } from '@/app/composables/useAppNavigation';
+import { resolveAddressing } from '@/shared/utils/addressing';
 
 const route = useRoute();
 const chat = useChatStore();
+const auth = useAuthStore();
 const { startEntryChat } = useEntryChat();
+const { navigateToTarget } = useAppNavigation();
 const loaders = useLoadersStore();
 const therapyTopicsStore = useTherapyTopicsStore();
 const { getFeatureAccess, refreshEntitlements } = useEntitlements();
+const { trackTopicOpen } = useTherapyAnalytics();
 const { fetchNotificationPreferences, updateNotificationPreferences } =
   useNotificationsSettings();
 const { $api } = useNuxtApp();
+const pushPermissionGate = usePushPermissionGate();
 
 const entityKey = computed(() => String(route.params.key || ''));
 const catalogTopic = computed(() =>
@@ -230,6 +244,7 @@ const customTherapyAccess = computed(() =>
 const paywallAccess = computed(() =>
   paywallFeatureKey.value ? getFeatureAccess(paywallFeatureKey.value) : null
 );
+const addressing = computed(() => resolveAddressing(auth.user?.addressing));
 
 const isEditingTitle = ref(false);
 const titleDraft = ref('');
@@ -246,7 +261,7 @@ const entityName = computed(() => {
 const entityDescription = computed(
   () =>
     entityData.value?.description ||
-    'Выберите фокус и получайте поддержку, когда вам нужна опора.'
+    getAddressingCopy('therapyDetailDescription', addressing.value)
 );
 const entityEmoji = computed(() => entityData.value?.emoji || '💬');
 
@@ -300,36 +315,31 @@ function getPlanBadgeEmoji(plan: string) {
 
 async function goToMeditations() {
   if (!meditationTopicKey.value) return;
-
-  if (!meditationsAccess.value.available) {
-    openPaywall('meditations.library.full');
-    return;
-  }
-
-  await navigateTo(`/meditations?topic=${meditationTopicKey.value}`);
+  await navigateToTarget(
+    {
+      type: 'meditation_collection',
+      topicKey: meditationTopicKey.value,
+    },
+    {
+      source: 'therapy_page',
+      entryPoint: 'therapy_meditation_cta',
+    }
+  );
 }
 
 async function goToBreathPractices() {
   const groupKey = breathGroupKey.value;
   if (!groupKey) return;
-
-  if (!breathCatalogAccess.value.available) {
-    openPaywall('breath.catalog.full');
-    return;
-  }
-
-  const firstPractice = BREATH_PRACTICES.find((practice) =>
-    practice.tags.includes(groupKey)
+  await navigateToTarget(
+    {
+      type: 'breath_practice_group',
+      groupKey,
+    },
+    {
+      source: 'therapy_page',
+      entryPoint: 'therapy_breath_cta',
+    }
   );
-  if (!firstPractice) {
-    useToast('Подборка дыхательных практик пока недоступна');
-    return;
-  }
-
-  await navigateTo({
-    path: `/breath-practices/${firstPractice.slug}`,
-    query: { group: groupKey },
-  });
 }
 
 function startEditTitle() {
@@ -440,6 +450,21 @@ async function loadPreference() {
   }
 }
 
+async function updateNotificationsPreference(enabled: boolean) {
+  try {
+    const data = await updateNotificationPreferences('therapy', {
+      enabled,
+      entityKey: entityKey.value,
+    });
+    if (data) preference.value = data;
+  } catch (error: any) {
+    console.error('[TherapyDetail] Toggle notifications failed:', error);
+    notificationError.value =
+      error?.message || 'Не удалось обновить настройки уведомлений';
+    throw error;
+  }
+}
+
 /** Обновление включено/выключено уведомлений по переключателю на карточке */
 async function onToggleNotifications(enabled: boolean) {
   if (!entityKey.value) return;
@@ -451,18 +476,31 @@ async function onToggleNotifications(enabled: boolean) {
   notificationError.value = null;
   prefToggleLoading.value = true;
   try {
-    const data = await updateNotificationPreferences('therapy', {
-      enabled,
-      entityKey: entityKey.value,
-    });
-    if (data) preference.value = data;
-  } catch (error: any) {
-    console.error('[TherapyDetail] Toggle notifications failed:', error);
-    notificationError.value =
-      error?.message || 'Не удалось обновить настройки уведомлений';
+    if (enabled) {
+      const canEnable = await pushPermissionGate.ensureAppPushEnabled({
+        onGrantedFromSettings: async () => {
+          prefToggleLoading.value = true;
+          try {
+            await updateNotificationsPreference(true);
+          } finally {
+            prefToggleLoading.value = false;
+          }
+        },
+      });
+
+      if (!canEnable) {
+        return;
+      }
+    }
+
+    await updateNotificationsPreference(enabled);
   } finally {
     prefToggleLoading.value = false;
   }
+}
+
+async function handleOpenPushSystemSettings() {
+  await pushPermissionGate.openSystemSettings();
 }
 
 const entryContext = computed<ChatEntryContext>(() => ({
@@ -507,4 +545,13 @@ const refresh = async () => {
 
 onMounted(refresh);
 watch(() => route.params.key, refresh);
+watch(
+  entityKey,
+  (nextKey, previousKey) => {
+    if (nextKey === 'phobias' && nextKey !== previousKey) {
+      trackTopicOpen(nextKey);
+    }
+  },
+  { immediate: true }
+);
 </script>

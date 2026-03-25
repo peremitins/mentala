@@ -25,11 +25,18 @@ import type {
   Tone,
   Addressing,
   Directness,
-  HabitSubtype,
   NotificationSubtype,
   NotificationActionHint,
 } from '@/shared/dto/notifications';
 import { MAX_NOTIFICATION_TEXT_LENGTH } from '@/shared/dto/notifications';
+import {
+  getAssistantToneMeta,
+  resolveAssistantTone,
+} from '@/shared/constants/assistantTone';
+import {
+  buildTherapyNotificationSubtypeInstructions,
+  resolveTemplateTherapyTopic,
+} from './notification-prompt-helpers';
 
 // Константы для генерации текстов уведомлений
 const DEFAULT_TEXT_COUNT =
@@ -157,6 +164,39 @@ const BREATHING_HINT_MARKERS = [
   /пранаям/iu,
   /pranayama/iu,
 ];
+
+const GRATITUDE_DIARY_HINT_MARKERS = [
+  /дневник.*благодарн/iu,
+  /благодарн.*дневник/iu,
+  /gratitude.*diary/iu,
+  /запиши.*благодарн/iu,
+  /практик.*благодарн/iu,
+];
+
+const GROUNDING_HINT_MARKERS = [
+  /заземлен/iu,
+  /5\s*[-–—‑,]\s*4\s*[-–—‑,]\s*3\s*[-–—‑,]\s*2\s*[-–—‑,]\s*1/iu,
+  /ground/iu,
+  /техник.*5.*4.*3.*2.*1/iu,
+];
+
+const TENSION_RELEASE_HINT_MARKERS = [
+  /напряжен.*в\s*тел/iu,
+  /снять\s*напряжен/iu,
+  /расслаб.*мышц/iu,
+  /мышечн.*релакс/iu,
+  /прогрессивн.*расслабл/iu,
+  /tension.*release/iu,
+  /muscle.*relax/iu,
+];
+
+const THOUGHT_DUMP_HINT_MARKERS = [
+  /выгрузк.*мысл/iu,
+  /выгрузи.*мысл/iu,
+  /разгруз.*голов/iu,
+  /thought.*dump/iu,
+  /brain.*dump/iu,
+];
 type ImageTag =
   | 'harm_organs'
   | 'harm_appearance'
@@ -188,7 +228,7 @@ interface GenerateNotificationTextsParams {
   kind: 'habits' | 'therapy';
   entityKey: string; // ID для кастомных сущностей, ключ шаблона для шаблонных
   directness: Directness;
-  subtype?: HabitSubtype | null;
+  subtype?: NotificationSubtype | null;
   textSource: 'ai'; // Только для AI-генерации (не может быть 'templates')
   count?: number; // количество текстов для генерации (по умолчанию 50)
   provider?: 'openai' | 'deepseek' | 'yandex';
@@ -209,19 +249,6 @@ interface GenerationResult {
   model: string;
   tokensUsed: number;
   costUsd: number;
-}
-
-function resolveTone(value?: string | null): Tone {
-  if (
-    value === 'delicate' ||
-    value === 'neutral' ||
-    value === 'uplifting' ||
-    value === 'resolute' ||
-    value === 'demanding'
-  ) {
-    return value;
-  }
-  return 'neutral';
 }
 
 function normalizeCustomPromptNotification(
@@ -547,6 +574,18 @@ function normalizeActionHint(value: unknown): NotificationActionHint {
   ) {
     return 'meditation';
   }
+  if (normalized === 'gratitude_diary' || normalized === 'gratitude') {
+    return 'gratitude_diary';
+  }
+  if (normalized === 'grounding' || normalized === 'ground') {
+    return 'grounding';
+  }
+  if (normalized === 'tension_release' || normalized === 'tension') {
+    return 'tension_release';
+  }
+  if (normalized === 'thought_dump' || normalized === 'thought_unload') {
+    return 'thought_dump';
+  }
   return 'none';
 }
 
@@ -555,7 +594,22 @@ function inferActionHintFromText(
   imageTag: ImageTag | null
 ): NotificationActionHint {
   // Бэкап-эвристика: если actionHint не пришёл от модели, определяем по смысловым маркерам.
+  // Специфичные разделы проверяем первыми — они приоритетнее общих (дыхание/медитация).
   const raw = stripEmojiPrefix(text).toLowerCase();
+
+  if (GRATITUDE_DIARY_HINT_MARKERS.some((p) => p.test(raw))) {
+    return 'gratitude_diary';
+  }
+  if (GROUNDING_HINT_MARKERS.some((p) => p.test(raw))) {
+    return 'grounding';
+  }
+  if (TENSION_RELEASE_HINT_MARKERS.some((p) => p.test(raw))) {
+    return 'tension_release';
+  }
+  if (THOUGHT_DUMP_HINT_MARKERS.some((p) => p.test(raw))) {
+    return 'thought_dump';
+  }
+
   const hasMeditation = MEDITATION_HINT_MARKERS.some((pattern) =>
     pattern.test(raw)
   );
@@ -1268,14 +1322,21 @@ export async function generateNotificationTexts(
         `[AI Generation] Found custom therapy topic: id=${topic.id}, name=${topic.name}, entityKey param=${params.entityKey}`
       );
     } else {
-      // Тема не найдена в БД - предполагаем, что это готовый шаблон
-      // (для терапии нет каталога, как для привычек, поэтому просто используем entityKey)
+      // Для системных тем терапии используем каталог, чтобы промпт видел
+      // читаемое название и описание вместо сырого entityKey.
+      const templateTopic = resolveTemplateTherapyTopic(params.entityKey);
       isCustomTherapy = false;
-      entityName = params.entityKey;
-      entityDescription = null;
-      console.log(
-        `[AI Generation] Template therapy topic: entityKey=${params.entityKey} (using as name)`
-      );
+      entityName = templateTopic.entityName;
+      entityDescription = templateTopic.entityDescription;
+      if (templateTopic.foundInCatalog) {
+        console.log(
+          `[AI Generation] Template therapy topic found in catalog: entityKey=${params.entityKey}, name=${templateTopic.entityName}`
+        );
+      } else {
+        console.log(
+          `[AI Generation] Template therapy topic not found in catalog: entityKey=${params.entityKey} (using key as name)`
+        );
+      }
     }
   }
 
@@ -1294,7 +1355,9 @@ export async function generateNotificationTexts(
     .where(eq(userPreferences.userId, params.userId))
     .limit(1);
 
-  const tone = resolveTone(userPrefs?.tone as string | null | undefined);
+  const tone = resolveAssistantTone(
+    userPrefs?.tone as string | null | undefined
+  );
   const addressing: Addressing =
     (userPrefs?.addressing as Addressing) || 'informal';
 
@@ -1623,7 +1686,7 @@ function buildNotificationSystemPrompt(params: {
   addressing: Addressing;
   userGender?: 'male' | 'female' | null;
   directness: Directness;
-  subtype?: HabitSubtype | null;
+  subtype?: NotificationSubtype | null;
   kind: 'habits' | 'therapy';
   habitIntent?: 'quit' | 'build' | null; // Intent привычки: отказ (quit) или приобретение (build)
   imageTagPolicy: ImageTagPolicy;
@@ -1638,15 +1701,7 @@ function buildNotificationSystemPrompt(params: {
       : params.userGender === 'female'
         ? 'женский'
         : null;
-
-  const toneMap: Record<Tone, string> = {
-    delicate: 'деликатный, мягкий',
-    neutral: 'нейтральный',
-    uplifting: 'поддерживающий, вдохновляющий',
-    resolute: 'решительный, мотивационный',
-    demanding: 'требовательный, директивный',
-    unknown: 'нейтральный',
-  };
+  const toneMeta = getAssistantToneMeta(params.tone);
 
   const directnessMap: Record<Directness, string> = {
     soft: 'Мягкий',
@@ -1654,7 +1709,7 @@ function buildNotificationSystemPrompt(params: {
     hard: 'Жесткий',
   };
 
-  const subtypeMap: Record<HabitSubtype, string> = {
+  const subtypeMap: Record<NotificationSubtype, string> = {
     reminder: 'Напоминание о действии',
     informational: 'Полезные факты',
     motivational: 'Поддержка и мотивация',
@@ -1819,14 +1874,11 @@ ${params.description ? '- Используй описание как основ�
         break;
     }
   } else if (params.kind === 'therapy') {
-    const therapyContext = params.description
-      ? `- Все тексты должны быть релевантны теме из описания выше. Используй описание как основу.`
-      : `- Все тексты должны быть релевантны этой теме поддержки.`;
-
-    subtypeInstructions =
-      params.subtype === 'motivational'
-        ? `${therapyContext}\n- Поддержка и мотивация в контексте этой темы`
-        : therapyContext;
+    subtypeInstructions = buildTherapyNotificationSubtypeInstructions({
+      entityKey: params.entityKey,
+      description: params.description,
+      subtype: params.subtype,
+    });
   }
 
   return `Ты помощник для генерации текстов уведомлений для мобильного приложения Mentala.
@@ -1837,7 +1889,9 @@ ${params.description ? '- Используй описание как основ�
 - Пол пользователя: ${genderLabel || 'не указан'}
 
 Стиль:
-- Тон: ${toneMap[params.tone]}
+- Ключ tone: ${toneMeta.value}
+- Название tone: ${toneMeta.label}
+- Описание tone: ${toneMeta.description}
 - Обращение: ${params.addressing === 'formal' ? 'на вы' : 'на ты'}
 - Прямота: ${directnessMap[params.directness]}
 ${params.subtype ? `- Фокус уведомления: ${subtypeMap[params.subtype]}` : ''}
@@ -1856,7 +1910,7 @@ ${
     ? `- Все тексты должны быть релевантны сути привычки. Название "${params.entityName}" используй только как внутренний контекст.
 - НЕ пиши фразы вида «привычка "${params.entityName}"», «делать "${params.entityName}"» и не ставь название в кавычки.
 - Если название звучит естественно как действие или состояние (например, "пить воду"), можно использовать его в тексте, но без кавычек и без слова "привычка".`
-    : `- Для терапии: фокус на поддержке и рефлексии. Название темы "${params.entityName}" используй только как контекст, избегай странных фраз с названием в кавычках.
+    : `- Для терапии: фокус на поддержке, рефлексии и мягких практических шагах, если это соответствует subtype. Название темы "${params.entityName}" используй только как контекст, избегай странных фраз с названием в кавычках.
 - Если название звучит как нормальное состояние ("тревога", "усталость"), можно использовать его естественно.`
 }
 ${subtypeInstructions}
@@ -2066,7 +2120,7 @@ export async function refillTextPool(
   entityKey: string,
   configHash: string,
   directness: Directness,
-  subtype: HabitSubtype | null,
+  subtype: NotificationSubtype | null,
   textSource: 'ai',
   habitIntent?: 'quit' | 'build' | null, // Intent привычки, переданный явно
   customPromptNotification?: string | null
@@ -2196,7 +2250,9 @@ export async function refillTextPool(
         entityName = topic.name;
         entityDescription = topic.description;
       } else {
-        entityName = entityKey;
+        const templateTopic = resolveTemplateTherapyTopic(entityKey);
+        entityName = templateTopic.entityName;
+        entityDescription = templateTopic.entityDescription;
       }
     }
 
@@ -2211,7 +2267,9 @@ export async function refillTextPool(
       .where(eq(userPreferences.userId, userId))
       .limit(1);
 
-    const tone = resolveTone(userPrefs?.tone as string | null | undefined);
+    const tone = resolveAssistantTone(
+      userPrefs?.tone as string | null | undefined
+    );
     const addressing: Addressing =
       (userPrefs?.addressing as Addressing) || 'informal';
 

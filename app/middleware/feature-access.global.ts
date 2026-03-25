@@ -1,50 +1,34 @@
+import { abortNavigation, navigateTo } from '#app';
 import { useEntitlements } from '@/app/composables/useEntitlements';
+import {
+  buildBlockedNavigationFallbackRoute,
+  resolveAppNavigationTargetFromRoute,
+  resolveNavigationFeatureKey,
+} from '@/app/lib/navigation';
 import { useAuthStore } from '@/app/stores/auth';
-import { HABITS_CATALOG } from '@/app/lib/habitsCatalog';
-import { THERAPY_TOPICS } from '@/app/lib/therapyCatalog';
+import { useAppNavigationStore } from '@/app/stores/appNavigation';
 
-const BASIC_FREE_BREATH_SLUGS = new Set(['4-7-8', 'box-breathing']);
-const CATALOG_HABIT_KEYS = new Set(
-  HABITS_CATALOG.map((habit) => habit.habitKey)
-);
-const CATALOG_THERAPY_KEYS = new Set(THERAPY_TOPICS.map((topic) => topic.key));
-
-function normalizeParam(value: unknown): string | null {
-  if (Array.isArray(value)) {
-    const first = value[0];
-    return typeof first === 'string' && first.trim() ? first.trim() : null;
-  }
-
-  return typeof value === 'string' && value.trim() ? value.trim() : null;
-}
-
-export default defineNuxtRouteMiddleware(async (to) => {
+export default defineNuxtRouteMiddleware(async (to, from) => {
   if (process.server) return;
 
-  const path = to.path;
-  const isMeditationsRoute =
-    path === '/meditations' || path.startsWith('/meditations/');
-  const isBreathRoute =
-    path === '/breath-practices' || path.startsWith('/breath-practices/');
-  const isHabitsRoute = path === '/habits' || path.startsWith('/habits/');
-  const isTherapyRoute = path === '/therapy' || path.startsWith('/therapy/');
+  const target = resolveAppNavigationTargetFromRoute(to);
+  if (!target) {
+    return;
+  }
 
-  // Применяем guard только к маршрутам с тарифными ограничениями.
-  if (
-    !isMeditationsRoute &&
-    !isBreathRoute &&
-    !isHabitsRoute &&
-    !isTherapyRoute
-  ) {
+  const featureKey = resolveNavigationFeatureKey(target);
+  if (!featureKey) {
     return;
   }
 
   const auth = useAuthStore();
-  if (!auth.user || !auth.isLoggedIn) return;
+  if (!auth.user || !auth.isLoggedIn) {
+    return;
+  }
 
   const { getFeatureAccess, refreshEntitlements } = useEntitlements();
   try {
-    // Обновляем snapshot доступов перед проверкой маршрута.
+    // Перед route-проверкой подтягиваем свежий snapshot доступов.
     await refreshEntitlements();
   } catch (error) {
     console.warn(
@@ -53,68 +37,31 @@ export default defineNuxtRouteMiddleware(async (to) => {
     );
   }
 
-  if (isMeditationsRoute) {
-    const meditationsAccess = getFeatureAccess('meditations.library.full');
-    if (!meditationsAccess.available && path !== '/') {
-      return navigateTo('/', { replace: true });
-    }
+  const access = getFeatureAccess(featureKey);
+  if (access.available) {
     return;
   }
 
-  if (isHabitsRoute) {
-    const habitParam = normalizeParam(to.params.id);
-    // /habits (без id) всегда доступен.
-    if (!habitParam) return;
+  const navigationStore = useAppNavigationStore();
+  navigationStore.openPaywall(featureKey, {
+    target,
+    source: 'route_guard',
+    entryPoint: 'feature_access.global',
+    sourceMeta: {
+      blockedPath: to.fullPath,
+    },
+  });
 
-    // Системные привычки не закрываем по premium-фиче custom.
-    if (CATALOG_HABIT_KEYS.has(habitParam)) return;
+  const hasPreviousRoute =
+    typeof from.fullPath === 'string' &&
+    from.fullPath.length > 0 &&
+    from.fullPath !== to.fullPath;
 
-    const customHabitsAccess = getFeatureAccess('habits.custom.create');
-    if (!customHabitsAccess.available && path !== '/') {
-      return navigateTo('/', { replace: true });
-    }
-    return;
+  if (hasPreviousRoute) {
+    return abortNavigation();
   }
 
-  if (isTherapyRoute) {
-    const therapyParam = normalizeParam(to.params.key);
-    // /therapy (без key) всегда доступен.
-    if (!therapyParam) return;
-
-    // Каталогные темы терапии не закрываем по premium-фиче custom.
-    if (CATALOG_THERAPY_KEYS.has(therapyParam)) return;
-
-    const customTherapyAccess = getFeatureAccess('therapy.custom.create');
-    if (!customTherapyAccess.available && path !== '/') {
-      return navigateTo('/', { replace: true });
-    }
-    return;
-  }
-
-  const slug = normalizeParam(to.params.slug);
-  // Каталог дыхания оставляем доступным: там есть free-контент и paywall-кнопки.
-  if (!slug) return;
-
-  if (slug === 'custom') {
-    const customCreateAccess = getFeatureAccess('breath.custom.create');
-    if (!customCreateAccess.available && path !== '/') {
-      return navigateTo('/', { replace: true });
-    }
-    return;
-  }
-
-  if (slug.startsWith('custom-')) {
-    const customManageAccess = getFeatureAccess('breath.custom.manage');
-    if (!customManageAccess.available && path !== '/') {
-      return navigateTo('/', { replace: true });
-    }
-    return;
-  }
-
-  if (BASIC_FREE_BREATH_SLUGS.has(slug)) return;
-
-  const fullCatalogAccess = getFeatureAccess('breath.catalog.full');
-  if (!fullCatalogAccess.available && path !== '/') {
-    return navigateTo('/', { replace: true });
-  }
+  return navigateTo(buildBlockedNavigationFallbackRoute(target), {
+    replace: true,
+  });
 });

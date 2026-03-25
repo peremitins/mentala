@@ -1,10 +1,18 @@
 import { defineStore } from 'pinia';
 import { useLoadersStore } from '@/app/stores/loaders';
+import { DEFAULT_ASSISTANT_VOICE_ID } from '@/shared/constants/assistantVoiceCatalog';
+import {
+  ChatSettingsPatchDto,
+  ChatSettingsResponseDto,
+  type ChatSettingsStateDto,
+} from '@/shared/dto';
 
 export const useChatSettingsStore = defineStore('chatSettings', {
   state: () => ({
     // Голос/озвучка ответа ассистента
     voice: false,
+    // Выбранный голос ассистента для TTS и Realtime.
+    assistantVoice: DEFAULT_ASSISTANT_VOICE_ID,
     // Визуальный аватар (видео)
     avatar: true,
     // Оптимизация контекста (previous_response_id)
@@ -19,10 +27,11 @@ export const useChatSettingsStore = defineStore('chatSettings', {
         const data = await useAPI('/api/settings/chat', {
           method: 'GET',
         });
+        const parsed = ChatSettingsResponseDto.parse(data);
 
-        if (data?.settings) {
+        if (parsed.settings) {
           this.$patch({
-            ...data.settings,
+            ...parsed.settings,
           });
         }
 
@@ -32,20 +41,25 @@ export const useChatSettingsStore = defineStore('chatSettings', {
         throw error;
       }
     },
-    async updateChatSettings(payload: Record<string, any>, withLoader = true) {
+    async updateChatSettings(
+      payload: Partial<ChatSettingsStateDto>,
+      withLoader = true
+    ) {
       const loaders = useLoadersStore();
       if (withLoader) {
         loaders.showLoader();
       }
       try {
+        const parsedPayload = ChatSettingsPatchDto.parse(payload);
         const data = await useAPI('/api/settings/chat', {
           method: 'PATCH',
-          body: payload,
+          body: parsedPayload,
         });
+        const parsed = ChatSettingsResponseDto.parse(data);
 
-        if (data?.settings) {
+        if (parsed.settings) {
           this.$patch({
-            ...data.settings,
+            ...parsed.settings,
           });
         }
 

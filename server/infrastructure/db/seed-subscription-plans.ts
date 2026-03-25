@@ -45,7 +45,7 @@ const plans = [
   {
     id: 'pro',
     name: 'pro',
-    basePrice: '349',
+    basePrice: '399',
     weeklyMinutesLimit: 100,
     avatarEnabled: false,
     isVisibleInUI: true,
@@ -54,7 +54,7 @@ const plans = [
   {
     id: 'premium',
     name: 'premium',
-    basePrice: '649',
+    basePrice: '899',
     weeklyMinutesLimit: 100,
     avatarEnabled: false,
     isVisibleInUI: true,

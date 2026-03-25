@@ -18,7 +18,9 @@ import { useMeditationPlayer } from '@/app/composables/useMeditationPlayer';
 import { useSceneAudio } from '@/app/composables/useSceneAudio';
 import { getErrorDiagnosticsLog } from '@/app/utils/errorDiagnostics';
 import { AuthRegisterResponseDto } from '@/shared/dto/auth';
-import type { UserBilling } from '@/shared/dto/user';
+import type { UserBilling, UserMeDto } from '@/shared/dto/user';
+
+type AuthUser = NonNullable<UserMeDto['user']>;
 
 const SESSION_TOKEN_KEY = 'mentai.session.token';
 const GOOGLE_WEB_CLIENT_ID_REGEX = /\.apps\.googleusercontent\.com$/i;
@@ -110,29 +112,7 @@ function mapGoogleLoginError(error: any): string {
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
-    user: null as {
-      id: number;
-      email: string;
-      name: string;
-      gender?: 'male' | 'female' | null;
-      ageRange?: 'under_30' | '30_45' | '45_plus' | 'unknown' | null;
-      onboarding?: { welcome: boolean };
-      locale?: string;
-      role?: string;
-      isBlocked?: boolean;
-      emailVerifiedAt?: string | null;
-      hasPassword?: boolean;
-      marketingConsent?: boolean;
-      pushNotificationsEnabled?: boolean;
-      // Настройки фоновой сцены приложения (страница Scene Selection).
-      sceneSettings?: {
-        sceneId?: string | null;
-        volume?: number | null;
-        backgroundPlayMinutes?: number | null;
-        animateBackground?: boolean | null;
-      };
-      billing?: UserBilling;
-    } | null,
+    user: null as AuthUser | null,
     loading: false,
     isLoggedIn: false,
     // Флаг, чтобы безопасно блокировать фоновые эффекты во время logout.
@@ -621,8 +601,8 @@ export const useAuthStore = defineStore('auth', {
 
         // 4. Гарантированно выключаем фон и медитации перед logout.
         const { stop: stopMeditation } = useMeditationPlayer();
-        const { stop: stopSceneAudio } = useSceneAudio();
-        await stopSceneAudio(false);
+        const { resetRuntimeState: resetSceneAudioRuntime } = useSceneAudio();
+        await resetSceneAudioRuntime();
         await stopMeditation(false);
       } catch (err) {
         console.error('[Auth Store] Ошибка остановки активных запросов:', err);

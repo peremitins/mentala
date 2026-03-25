@@ -29,26 +29,13 @@ import type {
   Addressing,
   Directness,
   HabitSubtype,
-  Tone,
 } from '@/shared/dto/notifications';
 import { ensureAiNotificationAccessConsistency } from '@/server/application/notifications/notification-source-access.service';
 import {
   resolveSlotsRegenerationReasonFromAiReason,
   shouldRegenerateSlotsAfterAiGeneration,
 } from '@/server/application/notifications/ai-slot-regeneration-reason.utils';
-
-function resolveTone(value?: string | null): Tone {
-  if (
-    value === 'delicate' ||
-    value === 'neutral' ||
-    value === 'uplifting' ||
-    value === 'resolute' ||
-    value === 'demanding'
-  ) {
-    return value;
-  }
-  return 'neutral';
-}
+import { resolveAssistantTone } from '@/shared/constants/assistantTone';
 
 function isRetryableQueueError(error: any): boolean {
   const status =
@@ -88,7 +75,9 @@ async function computeCurrentConfigHash(params: {
     .where(eq(userPreferences.userId, userId))
     .limit(1);
 
-  const tone = resolveTone(userPrefs?.tone as string | null | undefined);
+  const tone = resolveAssistantTone(
+    userPrefs?.tone as string | null | undefined
+  );
   const addressing: Addressing =
     (userPrefs?.addressing as Addressing) || 'informal';
 

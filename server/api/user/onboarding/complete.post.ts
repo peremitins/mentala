@@ -4,8 +4,13 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/server/infrastructure/db/client';
 import { users, userPreferences } from '@/server/infrastructure/db/schema';
 import { getSessionUser } from '@/server/application/auth/session';
-import { OnboardingCompleteRequestDto } from '@/shared/dto/onboarding';
+import {
+  OnboardingCompleteRequestDto,
+  areOnboardingReasonListsEqual,
+  resolveOnboardingReasons,
+} from '@/shared/dto/onboarding';
 import { enqueueAiRegenerationForUser } from '@/server/application/notifications/ai-text-regeneration.service';
+import { DEFAULT_ASSISTANT_TONE } from '@/shared/constants/assistantTone';
 
 export default defineEventHandler(async (event) => {
   const sessionResult = await getSessionUser(event);
@@ -37,10 +42,23 @@ export default defineEventHandler(async (event) => {
   const gender = parsed.data.gender;
   const ageRange = parsed.data.ageRange ?? 'unknown';
   const tone = parsed.data.tone ?? 'unknown';
+  const storedTone = tone === 'unknown' ? DEFAULT_ASSISTANT_TONE : tone;
+  const onboardingReasons = resolveOnboardingReasons({
+    reasons: parsed.data.reasons,
+    reason: parsed.data.reason,
+  });
   const userId = Number(sessionResult.user.id);
+
+  if (onboardingReasons.length === 0) {
+    throw createError({
+      statusCode: 400,
+      message: 'At least one onboarding reason is required',
+    });
+  }
 
   let toneChanged = false;
   let genderChanged = false;
+  let onboardingReasonsChanged = false;
 
   await db.transaction(async (tx) => {
     const [current] = await tx
@@ -78,29 +96,46 @@ export default defineEventHandler(async (event) => {
       .limit(1);
 
     if (prefs) {
-      if (prefs.tone !== tone) {
+      if (prefs.tone !== storedTone) {
         toneChanged = true;
+      }
+      if (
+        !areOnboardingReasonListsEqual(
+          resolveOnboardingReasons({
+            reasons: prefs.onboardingReasons,
+            reason: prefs.onboardingReason,
+          }),
+          onboardingReasons
+        )
+      ) {
+        onboardingReasonsChanged = true;
       }
       await tx
         .update(userPreferences)
         .set({
-          tone,
+          tone: storedTone,
+          onboardingReason: onboardingReasons[0] ?? null,
+          onboardingReasons,
           updatedAt: new Date(),
         })
         .where(eq(userPreferences.userId, userId));
     } else {
-      // Если prefs не было, считаем тон изменившимся (чтобы при наличии AI настроек обновить пул)
+      // Если prefs не было, считаем персонализацию изменившейся,
+      // чтобы при наличии AI настроек обновить пул.
       toneChanged = true;
+      onboardingReasonsChanged = true;
       await tx.insert(userPreferences).values({
         id: nanoid(),
         userId,
         addressing: 'informal',
-        tone,
+        tone: storedTone,
+        onboardingReason: onboardingReasons[0] ?? null,
+        onboardingReasons,
       });
     }
   });
 
-  if (toneChanged || genderChanged) {
+  if (toneChanged || genderChanged || onboardingReasonsChanged) {
     // Запускаем асинхронно, чтобы не блокировать ответ онбординга
     void enqueueAiRegenerationForUser({
       userId,

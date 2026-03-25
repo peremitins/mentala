@@ -129,6 +129,39 @@ const DEFAULT_FEATURE_ACCESS_POLICIES: FeatureAccessPolicy[] = [
     paywallTargetPlan: 'premium',
   },
   {
+    featureKey: 'gratitude.diary.full',
+    requiredPlan: 'pro',
+    trialUnlocked: true,
+    lockIcon: 'pro',
+    paywallTitle: 'Дневник благодарности в PRO и Premium',
+    paywallDescription:
+      'Открой дневник благодарности на тарифе PRO или Premium, чтобы вести записи, сохранять streak и возвращаться к своим опорам.',
+    paywallCtaText: 'Выбрать тариф',
+    paywallTargetPlan: 'pro',
+  },
+  {
+    featureKey: 'gratitude.worksheet.customize',
+    requiredPlan: 'premium',
+    trialUnlocked: true,
+    lockIcon: 'premium',
+    paywallTitle: 'Кастомный шаблон дневника в Premium',
+    paywallDescription:
+      'Редактирование личного шаблона записи в дневнике благодарности доступно на тарифе Premium.',
+    paywallCtaText: 'Открыть Premium',
+    paywallTargetPlan: 'premium',
+  },
+  {
+    featureKey: 'gratitude.photo.upload',
+    requiredPlan: 'premium',
+    trialUnlocked: true,
+    lockIcon: 'premium',
+    paywallTitle: 'Фото в записях дневника в Premium',
+    paywallDescription:
+      'Добавление фото к записям в дневнике благодарности доступно на тарифе Premium.',
+    paywallCtaText: 'Открыть Premium',
+    paywallTargetPlan: 'premium',
+  },
+  {
     featureKey: 'sos.chat_handoff',
     requiredPlan: 'pro',
     trialUnlocked: true,
@@ -149,6 +182,17 @@ const DEFAULT_FEATURE_ACCESS_POLICIES: FeatureAccessPolicy[] = [
       'Подключи PRO или Premium, чтобы общаться с ассистентом в чате.',
     paywallCtaText: 'Выбрать тариф',
     paywallTargetPlan: 'pro',
+  },
+  {
+    featureKey: 'chat.realtime_voice',
+    requiredPlan: 'premium',
+    trialUnlocked: true,
+    lockIcon: 'premium',
+    paywallTitle: 'Realtime voice доступен в Premium',
+    paywallDescription:
+      'Подключи Premium, чтобы вести живой голосовой диалог с ассистентом в реальном времени.',
+    paywallCtaText: 'Открыть Premium',
+    paywallTargetPlan: 'premium',
   },
   {
     featureKey: 'notifications.text_source_ai',

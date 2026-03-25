@@ -18,6 +18,7 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { sql, type SQL } from 'drizzle-orm';
+import { DEFAULT_ASSISTANT_VOICE_ID } from '../../../shared/constants/assistantVoiceCatalog';
 
 // Roles table (must be defined before users references it)
 export const roles = pgTable('roles', {
@@ -257,14 +258,57 @@ export const aiMessages = pgTable('ai_messages', {
 });
 
 // Encrypted session summaries (AES-GCM: iv+tag base64, ct base64)
-export const sessionSummaries = pgTable('session_summaries', {
-  id: serial('id').primaryKey(),
-  userId: text('user_id').notNull(),
-  sessionId: text('session_id').notNull(),
-  model: text('model').notNull(),
-  summaryIv: text('summary_iv').notNull(),
-  summaryCt: text('summary_ct').notNull(),
+export const sessionSummaries = pgTable(
+  'session_summaries',
+  {
+    id: serial('id').primaryKey(),
+    userId: text('user_id').notNull(),
+    sessionId: text('session_id').notNull(),
+    therapySessionId: integer('therapy_session_id').references(
+      () => therapySessions.id,
+      {
+        onDelete: 'cascade',
+      }
+    ),
+    model: text('model').notNull(),
+    summaryKind: varchar('summary_kind', { length: 32 })
+      .notNull()
+      .default('handoff'),
+    schemaVersion: integer('schema_version').notNull().default(1),
+    summaryIv: text('summary_iv').notNull(),
+    summaryCt: text('summary_ct').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    therapySessionUnique: uniqueIndex(
+      'uk_session_summaries_therapy_session_id'
+    ).on(table.therapySessionId),
+    userCreatedIdx: index('idx_session_summaries_user_created_at').on(
+      table.userId,
+      table.createdAt
+    ),
+  })
+);
+
+// Encrypted durable user memory profile (AES-GCM: iv+tag base64, ct base64)
+export const userMemoryProfiles = pgTable('user_memory_profiles', {
+  userId: integer('user_id')
+    .primaryKey()
+    .references(() => users.id, {
+      onDelete: 'cascade',
+    }),
+  schemaVersion: integer('schema_version').notNull().default(1),
+  memoryIv: text('memory_iv').notNull(),
+  memoryCt: text('memory_ct').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
     .defaultNow()
     .notNull(),
 });
@@ -386,6 +430,126 @@ export const userPrompts = pgTable('user_prompts', {
     .defaultNow()
     .notNull(),
 });
+
+// === Gratitude Diary ===
+export const gratitudeDiaryEntries = pgTable(
+  'gratitude_diary_entries',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    userId: integer('user_id').notNull(),
+    text: text('text').notNull(),
+    mood: varchar('mood', { length: 20 }),
+    tags: text('tags')
+      .array()
+      .notNull()
+      .default(sql`ARRAY[]::text[]`),
+    photoUrl: text('photo_url'),
+    // Ключ объекта в Object Storage: user-uploads/gratitude-diary/{userId}/{ts}-{uuid}.webp
+    // Публичный URL строится динамически: ${CDN_BASE}/${photoStorageKey}.
+    // Поле null для legacy-записей с локальными URL (/uploads/...).
+    photoStorageKey: text('photo_storage_key'),
+    // Текст вопроса-подсказки, который был активен при создании записи
+    promptText: text('prompt_text'),
+    inputMethod: varchar('input_method', { length: 12 })
+      .notNull()
+      .default('text'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    userCreatedIdx: index('idx_gratitude_diary_entries_user_created').on(
+      table.userId,
+      table.createdAt
+    ),
+  })
+);
+
+export const gratitudeDiaryWorksheetTemplates = pgTable(
+  'gratitude_diary_worksheet_templates',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    userId: integer('user_id').notNull(),
+    // Храним персональный шаблон целиком, чтобы поддержать произвольные формулировки и эмодзи.
+    items: jsonb('items')
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    userUniqueIdx: uniqueIndex(
+      'uk_gratitude_diary_worksheet_templates_user'
+    ).on(table.userId),
+    userUpdatedIdx: index('idx_gratitude_diary_worksheet_templates_user').on(
+      table.userId,
+      table.updatedAt
+    ),
+  })
+);
+
+// Избранные промпты пользователя в дневнике благодарности.
+// Два типа: 'catalog' — ссылка на системный промпт, 'custom' — пользовательский текст.
+export const gratitudeDiaryFavoritePrompts = pgTable(
+  'gratitude_diary_favorite_prompts',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    userId: integer('user_id').notNull(),
+    // 'catalog' — ссылка на системный промпт из catalog.ts, 'custom' — пользовательский текст
+    promptType: varchar('prompt_type', { length: 10 }).notNull(),
+    // Для catalog: id промпта из каталога (например 'self-1', 'health-3')
+    catalogPromptId: varchar('catalog_prompt_id', { length: 64 }),
+    // Для custom: текст промпта (ограничен 220 символами на уровне БД)
+    customText: varchar('custom_text', { length: 220 }),
+    // Порядок отображения (для будущего ручного перетаскивания, сейчас сортируем по created_at)
+    sortOrder: integer('sort_order').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    // Индекс для быстрой выборки избранных пользователя, сортировка по created_at DESC
+    userCreatedIdx: index('idx_gratitude_favorite_user_created').on(
+      table.userId,
+      table.createdAt
+    ),
+    // Partial unique index: один каталожный промпт в избранном одного пользователя
+    userCatalogUniqueIdx: uniqueIndex('uk_gratitude_favorite_user_catalog')
+      .on(table.userId, table.catalogPromptId)
+      .where(sql`${table.catalogPromptId} IS NOT NULL`),
+    // Partial unique index: дедупликация кастомных промптов по тексту
+    // Защищает от двойной миграции (если пользователь открыл 2 вкладки одновременно)
+    userCustomTextUniqueIdx: uniqueIndex(
+      'uk_gratitude_favorite_user_custom_text'
+    )
+      .on(table.userId, table.customText)
+      .where(sql`${table.customText} IS NOT NULL`),
+    // Тип промпта ограничен допустимыми значениями
+    promptTypeCheck: check(
+      'chk_gratitude_favorite_prompt_type',
+      sql`${table.promptType} IN ('catalog', 'custom')`
+    ),
+    // Консистентность полиморфных записей:
+    // catalog → catalog_prompt_id NOT NULL, custom_text IS NULL
+    // custom → custom_text NOT NULL, catalog_prompt_id IS NULL
+    typeConsistencyCheck: check(
+      'chk_gratitude_favorite_type_consistency',
+      sql`(${table.promptType} = 'catalog' AND ${table.catalogPromptId} IS NOT NULL AND ${table.customText} IS NULL)
+          OR
+          (${table.promptType} = 'custom' AND ${table.customText} IS NOT NULL AND ${table.catalogPromptId} IS NULL)`
+    ),
+  })
+);
 
 // === Welcome Prompts ===
 // Стартовые промпты для приветствия ассистента на welcome-экране
@@ -514,7 +678,14 @@ export const userPreferences = pgTable('user_preferences', {
   addressing: varchar('addressing', { length: 20 })
     .notNull()
     .default('informal'), // 'informal' | 'formal'
-  tone: varchar('tone', { length: 20 }).notNull().default('neutral'), // 'delicate' | 'neutral' | 'uplifting' | 'resolute' | 'demanding'
+  tone: varchar('tone', { length: 20 }).notNull().default('balanced'), // 'gentle' | 'balanced' | 'uplifting' | 'direct' | 'unknown'
+  // Legacy single-select колонка. Держим до полного rollout массива причин.
+  onboardingReason: varchar('onboarding_reason', { length: 40 }),
+  // Контекст welcome-онбординга для персонализации рекомендаций и общения.
+  onboardingReasons: text('onboarding_reasons')
+    .array()
+    .notNull()
+    .default(sql`ARRAY[]::text[]`),
   meditationTimerMinutes: integer('meditation_timer_minutes'),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
@@ -528,6 +699,9 @@ export const userPreferences = pgTable('user_preferences', {
 export const chatSettings = pgTable('chat_settings', {
   userId: integer('user_id').primaryKey().notNull(),
   voice: boolean('voice').notNull().default(true),
+  assistantVoice: varchar('assistant_voice', { length: 80 })
+    .notNull()
+    .default(DEFAULT_ASSISTANT_VOICE_ID),
   avatar: boolean('avatar').notNull().default(true),
   enablePreviousResponseId: boolean('enable_previous_response_id')
     .notNull()
@@ -539,6 +713,19 @@ export const chatSettings = pgTable('chat_settings', {
   lastNameGreetingAt: timestamp('last_name_greeting_at', {
     withTimezone: true,
   }),
+  // Последний подтвержденный фокус внутри темы "Страхи".
+  lastTherapyFocus: jsonb('last_therapy_focus').$type<{
+    topicId: 'phobias';
+    subtopicKey:
+      | 'public_speaking'
+      | 'heights'
+      | 'confined_spaces'
+      | 'social_fear'
+      | 'other_specific';
+    subtopicLabel: string;
+    confirmedByUser: true;
+    updatedAt: string;
+  } | null>(),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull(),
@@ -1063,6 +1250,7 @@ export const therapySessions = pgTable(
     userId: integer('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
+    clientSessionId: varchar('client_session_id', { length: 120 }),
     startedAt: timestamp('started_at', { withTimezone: true }).notNull(), // когда отправлено первое сообщение
     lastActivityAt: timestamp('last_activity_at', { withTimezone: true }), // последняя активность в сессии
     endedAt: timestamp('ended_at', { withTimezone: true }), // когда сессия завершена
@@ -1079,6 +1267,174 @@ export const therapySessions = pgTable(
     userStartedIdx: index('idx_therapy_sessions_user_started').on(
       table.userId,
       table.startedAt
+    ),
+    // Ускоряет переиспользование/закрытие session по client chatSessionId.
+    userClientSessionIdx: index('idx_therapy_sessions_user_client_session').on(
+      table.userId,
+      table.clientSessionId
+    ),
+  })
+);
+
+// Техническая память активной текстовой therapySession.
+// Здесь живет session-scoped previous_response_id и compact-state текущей цепочки.
+export const chatSessionMemories = pgTable(
+  'chat_session_memories',
+  {
+    therapySessionId: integer('therapy_session_id')
+      .primaryKey()
+      .references(() => therapySessions.id, { onDelete: 'cascade' }),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    previousResponseId: text('previous_response_id'),
+    previousResponseExpiresAt: timestamp('previous_response_expires_at', {
+      withTimezone: true,
+    }),
+    runtimeCompactSchemaVersion: integer('runtime_compact_schema_version'),
+    runtimeCompactIv: text('runtime_compact_iv'),
+    runtimeCompactCt: text('runtime_compact_ct'),
+    runtimeCompactCursorMessageId: integer('runtime_compact_cursor_message_id'),
+    chainTurnCount: integer('chain_turn_count').default(0).notNull(),
+    pendingSoftCompaction: boolean('pending_soft_compaction')
+      .default(false)
+      .notNull(),
+    lastObservedInputTokens: integer('last_observed_input_tokens'),
+    lastObservedOutputTokens: integer('last_observed_output_tokens'),
+    lastObservedTotalTokens: integer('last_observed_total_tokens'),
+    lastObservedAt: timestamp('last_observed_at', { withTimezone: true }),
+    lastCompactedAt: timestamp('last_compacted_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    userUpdatedIdx: index('idx_chat_session_memories_user_updated_at').on(
+      table.userId,
+      table.updatedAt
+    ),
+  })
+);
+
+// Временный transcript активной text-session.
+// Сообщения нужны только для runtime compaction и session-end summary, затем очищаются.
+export const therapySessionMessages = pgTable(
+  'therapy_session_messages',
+  {
+    id: serial('id').primaryKey(),
+    therapySessionId: integer('therapy_session_id')
+      .notNull()
+      .references(() => therapySessions.id, { onDelete: 'cascade' }),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    turnIndex: integer('turn_index').notNull(),
+    role: varchar('role', { length: 20 }).notNull(),
+    contentIv: text('content_iv').notNull(),
+    contentCt: text('content_ct').notNull(),
+    tokenCount: integer('token_count'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    sessionTurnIdx: index('idx_therapy_session_messages_session_turn').on(
+      table.therapySessionId,
+      table.turnIndex,
+      table.id
+    ),
+    userCreatedIdx: index('idx_therapy_session_messages_user_created_at').on(
+      table.userId,
+      table.createdAt
+    ),
+  })
+);
+
+export const realtimeVoiceSessions = pgTable(
+  'realtime_voice_sessions',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    therapySessionId: integer('therapy_session_id')
+      .notNull()
+      .references(() => therapySessions.id, { onDelete: 'cascade' }),
+    chatSessionId: varchar('chat_session_id', { length: 120 }),
+    status: varchar('status', { length: 20 }).notNull().default('created'),
+    endReason: varchar('end_reason', { length: 40 }),
+    provider: varchar('provider', { length: 40 }).notNull().default('openai'),
+    providerModel: varchar('provider_model', { length: 120 }).notNull(),
+    providerVoice: varchar('provider_voice', { length: 80 }).notNull(),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
+    lastActivityAt: timestamp('last_activity_at', { withTimezone: true }),
+    endedAt: timestamp('ended_at', { withTimezone: true }),
+    durationSeconds: integer('duration_seconds').default(0).notNull(),
+    userTurnsCount: integer('user_turns_count').default(0).notNull(),
+    assistantTurnsCount: integer('assistant_turns_count').default(0).notNull(),
+    interruptCount: integer('interrupt_count').default(0).notNull(),
+    inputAudioSeconds: integer('input_audio_seconds').default(0).notNull(),
+    outputAudioSeconds: integer('output_audio_seconds').default(0).notNull(),
+    inputAudioTokens: integer('input_audio_tokens').default(0).notNull(),
+    outputAudioTokens: integer('output_audio_tokens').default(0).notNull(),
+    quotaPeriodKey: varchar('quota_period_key', { length: 80 }).notNull(),
+    errorCode: varchar('error_code', { length: 80 }),
+    errorMessage: text('error_message'),
+    clientPlatform: varchar('client_platform', { length: 20 })
+      .notNull()
+      .default('web'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    userStartedIdx: index('idx_realtime_voice_sessions_user_started').on(
+      table.userId,
+      table.startedAt
+    ),
+    userStatusIdx: index('idx_realtime_voice_sessions_user_status').on(
+      table.userId,
+      table.status,
+      table.startedAt
+    ),
+    therapySessionIdx: uniqueIndex(
+      'uk_realtime_voice_sessions_therapy_session'
+    ).on(table.therapySessionId),
+    quotaPeriodIdx: index('idx_realtime_voice_sessions_quota_period').on(
+      table.userId,
+      table.quotaPeriodKey
+    ),
+  })
+);
+
+export const realtimeVoiceSessionEvents = pgTable(
+  'realtime_voice_session_events',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    sessionId: varchar('session_id', { length: 64 })
+      .notNull()
+      .references(() => realtimeVoiceSessions.id, { onDelete: 'cascade' }),
+    eventId: varchar('event_id', { length: 120 }).notNull(),
+    type: varchar('type', { length: 40 }).notNull(),
+    occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
+    payloadJson: jsonb('payload_json').notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    uniqueSessionEvent: uniqueIndex(
+      'uk_realtime_voice_session_events_unique'
+    ).on(table.sessionId, table.eventId),
+    sessionOccurredIdx: index('idx_realtime_voice_session_events_occurred').on(
+      table.sessionId,
+      table.occurredAt
     ),
   })
 );
@@ -1163,6 +1519,46 @@ export const subscriptionEvents = pgTable('subscription_events', {
     .defaultNow()
     .notNull(),
 });
+
+// Лог доставок внутренних Telegram alerts.
+export const telegramAlertDeliveries = pgTable(
+  'telegram_alert_deliveries',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    eventType: varchar('event_type', { length: 80 }).notNull(),
+    dedupKey: varchar('dedup_key', { length: 255 }).notNull(),
+    targetChannel: varchar('target_channel', { length: 20 }).notNull(),
+    environment: varchar('environment', { length: 20 }).notNull(),
+    status: varchar('status', { length: 20 }).notNull().default('queued'),
+    source: varchar('source', { length: 100 }),
+    payload: jsonb('payload'),
+    eventCreatedAt: timestamp('event_created_at', { withTimezone: true }),
+    attempt: integer('attempt').default(0).notNull(),
+    errorMessage: text('error_message'),
+    providerResponseCode: integer('provider_response_code'),
+    providerRetryAfterSeconds: integer('provider_retry_after_seconds'),
+    telegramMessageId: text('telegram_message_id'),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    dedupKeyUnique: unique('uk_telegram_alert_deliveries_dedup_key').on(
+      table.dedupKey
+    ),
+    createdAtIdx: index('idx_telegram_alert_deliveries_created_at').on(
+      table.createdAt
+    ),
+    channelStatusIdx: index('idx_telegram_alert_deliveries_channel_status').on(
+      table.targetChannel,
+      table.status
+    ),
+  })
+);
 
 // Платежи от YooKassa (для проверки уникальности и идемпотентности)
 export const payments = pgTable(

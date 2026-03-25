@@ -1,9 +1,14 @@
 import { z } from 'zod';
+import { AppNavigationTargetDto } from '../navigation';
 export * from './auth';
 export * from './onboarding';
 export * from './meditations';
 export * from './user';
 export * from './landing';
+export * from './realtime';
+export * from './chat-settings';
+export * from './session-handoff';
+export * from '../navigation';
 
 const THOUGHT_DUMP_ENTRY_CONTEXT_MAX_CHARS = 2_500;
 
@@ -101,13 +106,26 @@ export const SuggestedChipActionEnum = z.enum([
   'open_meditations',
   'open_meditation_track',
   'open_meditations_collection',
+  'open_breath_practices',
+  'open_breath_practice',
   'open_sos',
+  'open_gratitude_diary',
+  'open_therapy',
+  'open_therapy_topic',
+  'open_habits',
+  'open_habit',
 ]);
 
 export const SuggestedChipActionParamsDto = z.object({
   trackId: z.string().optional(),
   collectionId: z.string().optional(),
+  practiceId: z.string().optional(),
+  groupKey: z
+    .enum(['popular', 'sleep', 'anxiety', 'focus', 'custom'])
+    .optional(),
   sosEntry: z.enum(['panic', 'tension', 'technique_picker']).optional(),
+  topicKey: z.string().optional(),
+  habitKey: z.string().optional(),
   source: z.enum(['chat']).optional(),
 });
 
@@ -118,18 +136,19 @@ export const SuggestedChipDto = z
     kind: SuggestedChipKindEnum.optional().default('text'),
     action: SuggestedChipActionEnum.optional(),
     params: SuggestedChipActionParamsDto.optional(),
+    target: AppNavigationTargetDto.optional(),
   })
   .superRefine((value, ctx) => {
-    if (value.kind === 'action' && !value.action) {
+    if (value.kind === 'action' && !value.action && !value.target) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'action is required for action chips',
+        message: 'action or target is required for action chips',
       });
     }
-    if (value.kind === 'text' && value.action) {
+    if (value.kind === 'text' && (value.action || value.target)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'action is not allowed for text chips',
+        message: 'action target is not allowed for text chips',
       });
     }
   });
@@ -321,6 +340,180 @@ export type PromptCreateDto = z.infer<typeof PromptCreateDto>;
 export type PromptUpdateDto = z.infer<typeof PromptUpdateDto>;
 export type PromptQueryDto = z.infer<typeof PromptQueryDto>;
 export type UserPromptDto = z.infer<typeof UserPromptDto>;
+
+// === Gratitude Diary DTO ===
+export const GratitudeDiaryMoodEnum = z.enum([
+  'great',
+  'good',
+  'okay',
+  'low',
+  'sad',
+]);
+export const GratitudeDiaryInputMethodEnum = z.enum(['text', 'voice', 'mixed']);
+export const GratitudeDiaryTagSchema = z.string().trim().min(1).max(32);
+
+function isValidDiaryEntryDate(value: string): boolean {
+  const [yearText = '', monthText = '', dayText = ''] = value.split('-');
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const candidate = new Date(Date.UTC(year, month - 1, day));
+
+  return (
+    Number.isInteger(year) &&
+    Number.isInteger(month) &&
+    Number.isInteger(day) &&
+    candidate.getUTCFullYear() === year &&
+    candidate.getUTCMonth() === month - 1 &&
+    candidate.getUTCDate() === day
+  );
+}
+
+export const GratitudeDiaryEntryDateSchema = z
+  .string()
+  .trim()
+  .refine((value) => /^\d{4}-\d{2}-\d{2}$/.test(value), 'Invalid entry date')
+  .refine(isValidDiaryEntryDate, 'Invalid entry date');
+
+export const GratitudeDiaryEntryCreateDto = z.object({
+  text: z.string().trim().min(1).max(2000),
+  mood: GratitudeDiaryMoodEnum.nullable(),
+  tags: z.array(GratitudeDiaryTagSchema).max(10).default([]),
+  entryDate: GratitudeDiaryEntryDateSchema,
+  // Принимаем абсолютные HTTPS-URL (CDN) и legacy относительные пути для обратной совместимости.
+  photoUrl: z
+    .string()
+    .trim()
+    .refine(
+      (value) =>
+        /^https?:\/\/.+/i.test(value) ||
+        /^\/uploads\/[a-z0-9/_\-.]+$/i.test(value),
+      'Invalid photo url'
+    )
+    .nullable(),
+  // Ключ объекта в Object Storage — хранится отдельно от URL для независимости от CDN.
+  // Для legacy-записей (локальные /uploads/...) поле отсутствует или null.
+  photoStorageKey: z.string().trim().min(1).max(500).nullable().optional(),
+  inputMethod: GratitudeDiaryInputMethodEnum.default('text'),
+  // Текст вопроса-подсказки, который был активен при записи
+  promptText: z.string().trim().max(500).nullable().optional(),
+});
+
+export const GratitudeDiaryEntryUpdateDto = GratitudeDiaryEntryCreateDto;
+
+export const GratitudeDiaryQueryDto = z.object({
+  search: z.string().trim().max(120).optional(),
+  promptId: z.string().trim().max(120).optional(),
+});
+
+export const GratitudeDiaryPhotoUploadDto = z.object({
+  fileName: z.string().trim().min(1).max(200),
+  mimeType: z.enum(['image/jpeg', 'image/png', 'image/webp']),
+  base64: z.string().trim().min(1),
+});
+
+/** DTO для удаления orphan-фото из Object Storage (загружено, но не сохранено в запись). */
+export const GratitudeDiaryDeletePhotoDto = z.object({
+  storageKey: z
+    .string()
+    .trim()
+    .min(1)
+    .max(300)
+    .refine(
+      (v) => /^user-uploads\/gratitude-diary\/\d+\//.test(v),
+      'Недопустимый storageKey'
+    ),
+});
+
+export const GratitudeDiaryWorksheetItemDto = z.object({
+  id: z.string().trim().max(60).optional(),
+  emoji: z.string().trim().max(16).optional(),
+  text: z.string().trim().max(180).optional(),
+});
+
+export const GratitudeDiaryWorksheetUpdateDto = z.object({
+  worksheet: z.array(GratitudeDiaryWorksheetItemDto).min(1).max(5),
+});
+
+export type GratitudeDiaryMood = z.infer<typeof GratitudeDiaryMoodEnum>;
+export type GratitudeDiaryInputMethod = z.infer<
+  typeof GratitudeDiaryInputMethodEnum
+>;
+export type GratitudeDiaryEntryDate = z.infer<
+  typeof GratitudeDiaryEntryDateSchema
+>;
+export type GratitudeDiaryEntryCreateDto = z.infer<
+  typeof GratitudeDiaryEntryCreateDto
+>;
+export type GratitudeDiaryEntryUpdateDto = z.infer<
+  typeof GratitudeDiaryEntryUpdateDto
+>;
+export type GratitudeDiaryQueryDto = z.infer<typeof GratitudeDiaryQueryDto>;
+export type GratitudeDiaryPhotoUploadDto = z.infer<
+  typeof GratitudeDiaryPhotoUploadDto
+>;
+export type GratitudeDiaryDeletePhotoDto = z.infer<
+  typeof GratitudeDiaryDeletePhotoDto
+>;
+export type GratitudeDiaryWorksheetItemDto = z.infer<
+  typeof GratitudeDiaryWorksheetItemDto
+>;
+export type GratitudeDiaryWorksheetUpdateDto = z.infer<
+  typeof GratitudeDiaryWorksheetUpdateDto
+>;
+
+// === Gratitude Diary Favorites DTO ===
+
+// DTO для создания: discriminatedUnion гарантирует что catalog и custom
+// содержат только валидные поля (без лишних данных).
+export const GratitudeDiaryFavoriteCreateDto = z.discriminatedUnion(
+  'promptType',
+  [
+    z.object({
+      promptType: z.literal('catalog'),
+      catalogPromptId: z.string().min(1).max(64),
+    }),
+    z.object({
+      promptType: z.literal('custom'),
+      customText: z.string().min(1).max(220).trim(),
+    }),
+  ]
+);
+
+export const GratitudeDiaryFavoriteUpdateDto = z.object({
+  customText: z.string().min(1).max(220).trim(),
+});
+
+// Батч-миграция из localStorage — принимает массивы старых данных
+export const GratitudeDiaryFavoriteMigrateDto = z.object({
+  catalogPromptIds: z.array(z.string().min(1).max(64)).max(200),
+  customPrompts: z
+    .array(z.object({ text: z.string().min(1).max(220).trim() }))
+    .max(50),
+});
+
+// Представление одного элемента избранного, как он возвращается из API
+export const GratitudeDiaryFavoriteItemDto = z.object({
+  id: z.number(),
+  promptType: z.enum(['catalog', 'custom']),
+  catalogPromptId: z.string().nullable(),
+  customText: z.string().nullable(),
+  sortOrder: z.number(),
+  createdAt: z.string(),
+});
+
+export type GratitudeDiaryFavoriteCreateDto = z.infer<
+  typeof GratitudeDiaryFavoriteCreateDto
+>;
+export type GratitudeDiaryFavoriteUpdateDto = z.infer<
+  typeof GratitudeDiaryFavoriteUpdateDto
+>;
+export type GratitudeDiaryFavoriteMigrateDto = z.infer<
+  typeof GratitudeDiaryFavoriteMigrateDto
+>;
+export type GratitudeDiaryFavoriteItemDto = z.infer<
+  typeof GratitudeDiaryFavoriteItemDto
+>;
 
 // === Prompts System Types (v3.0) ===
 export type TherapyApproach =

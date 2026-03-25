@@ -5,28 +5,34 @@
 
 // Загружаем переменные окружения ПЕРЕД импортом client
 import { config } from 'dotenv';
+import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { promises as fs } from 'node:fs';
 import { eq } from 'drizzle-orm';
 
+const cwd = process.cwd();
 const envFile =
   process.env.NODE_ENV === 'production' ? '.env' : '.env.development';
-const envPath = resolve(process.cwd(), envFile);
-const envResult = config({ path: envPath });
-if (envResult.error && envFile !== '.env') {
-  console.warn(`Warning: Could not load ${envFile}:`, envResult.error.message);
+config({ path: resolve(cwd, envFile) });
+
+// .env — опциональный override
+if (existsSync(resolve(cwd, '.env'))) {
+  config({ path: resolve(cwd, '.env') });
 }
 
-const defaultEnvResult = config({ path: resolve(process.cwd(), '.env') });
-if (defaultEnvResult.error) {
-  console.warn('Warning: Could not load .env:', defaultEnvResult.error.message);
+// Fallback: если NODE_ENV=production, но .env пуст — пробуем .env.development
+// (удобно для миграций с локальной машины, когда прод URL в .env.development)
+if (!process.env.NUXT_PRIVATE_DB_URL && existsSync(resolve(cwd, '.env.development'))) {
+  config({ path: resolve(cwd, '.env.development') });
 }
 
 if (!process.env.NUXT_PRIVATE_DB_URL) {
   console.error(
     '❌ Error: NUXT_PRIVATE_DB_URL is not set in environment variables'
   );
-  console.error('Please check your .env or .env.development file');
+  console.error(
+    'Add it to .env, .env.development or .env.production, or pass via env'
+  );
   process.exit(1);
 }
 

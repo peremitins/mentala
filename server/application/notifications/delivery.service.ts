@@ -22,6 +22,10 @@ import type { NotificationPayload } from '@/shared/dto/notifications';
 import { enqueueAiTextPoolRefillForAllActivePreferences } from '@/server/application/notifications/schedulers/aiTextPool.scheduler';
 import { startNotificationSlotsSchedulerLoop } from '@/server/application/notifications/schedulers/notificationSlots.scheduler';
 import { notificationDeliveryQueue } from '@/server/application/notifications/queues/notificationDelivery.queue';
+import {
+  dispatchIntegrationCriticalEvent,
+  dispatchPushDeliverySampleEvent,
+} from '@/server/application/events/app-events.dispatchers';
 import { getUserTimezone, toLocalTime } from './timezone.utils';
 import { resolveEntityKeyForSlots } from './entity-key.service';
 import { getCustomNotificationSourceAccessByKind } from './notification-source-access.service';
@@ -171,6 +175,13 @@ export function initializeFirebase(): void {
             '[FCM] Push notifications will NOT work. Set NUXT_FIREBASE_SERVICE_ACCOUNT_JSON environment variable.'
           );
           console.error('[FCM] See FIREBASE_SETUP.md for setup instructions');
+          dispatchIntegrationCriticalEvent({
+            source: 'notifications.firebase.initialize',
+            integration: 'firebase-admin',
+            error: new Error(
+              'NUXT_FIREBASE_SERVICE_ACCOUNT_JSON is not set in production'
+            ),
+          });
           // Не инициализируем firebaseApp, чтобы sendFCMNotification могла вернуть false
           return;
         } else {
@@ -225,6 +236,11 @@ export function initializeFirebase(): void {
       console.error(
         '[FCM] Push notifications will NOT work until Firebase is properly configured.'
       );
+      dispatchIntegrationCriticalEvent({
+        source: 'notifications.firebase.initialize',
+        integration: 'firebase-admin',
+        error,
+      });
     } else {
       console.error(
         '[FCM] Push notifications will use mock mode (development only)'
@@ -287,6 +303,11 @@ export async function sendFCMNotification(
       console.error(
         '[FCM] Notification was NOT sent. Set NUXT_FIREBASE_SERVICE_ACCOUNT_JSON environment variable.'
       );
+      dispatchIntegrationCriticalEvent({
+        source: 'notifications.fcm.send',
+        integration: 'firebase-admin',
+        error: new Error('Firebase is not initialized in production'),
+      });
       return 'failed';
     } else {
       // В development mock разрешаем только явным флагом.
@@ -355,6 +376,10 @@ export async function sendFCMNotification(
       } else if ('slug' in payload.navigation) {
         dataPayload.navId = payload.navigation.slug;
       }
+    }
+
+    if (payload.navigationTarget) {
+      dataPayload.navigationTarget = JSON.stringify(payload.navigationTarget);
     }
 
     // Добавляем дополнительные данные из payload.data
@@ -509,6 +534,14 @@ export async function sendFCMNotification(
       console.error(
         '[FCM] Authentication credential error. Check APNs credentials in Firebase Cloud Messaging (Key ID/Team ID/key status) and iOS App ID alignment for this environment.'
       );
+      dispatchIntegrationCriticalEvent({
+        source: 'notifications.fcm.send',
+        integration: 'firebase-admin',
+        error,
+        extra: {
+          platform: normalizedPlatform || null,
+        },
+      });
     }
 
     return 'failed';
@@ -590,6 +623,12 @@ export async function sendToUser(
   console.log(
     `[FCM] Delivery summary for user ${userId}: sent=${sentCount}, mock=${mockCount}, failed=${failedCount}, total=${devices.length}`
   );
+
+  dispatchPushDeliverySampleEvent({
+    source: 'notifications.fcm.sendToUser',
+    attempts: sentCount + failedCount,
+    failures: failedCount,
+  });
 
   return {
     deviceCount: devices.length,
