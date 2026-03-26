@@ -8,14 +8,13 @@
 import type { Job, Queue, Worker, QueueOptions, WorkerOptions } from 'bullmq';
 import { Queue as BullQueue, Worker as BullWorker } from 'bullmq';
 import IORedis from 'ioredis';
+import { isStaticGenerateProcess } from '@/server/utils/static-generate';
 
 // Конфигурация подключения к Redis
 const redisHost = process.env.REDIS_HOST || '127.0.0.1';
 const redisPort = Number(process.env.REDIS_PORT || 6379);
 const redisPassword = process.env.REDIS_PASSWORD || undefined;
-const isStaticBuild =
-  process.env.NITRO_PRESET === 'static' ||
-  process.env.npm_lifecycle_event === 'generate';
+const isStaticBuild = isStaticGenerateProcess();
 const isNotificationsWorkerEnabled =
   process.env.ENABLE_NOTIFICATIONS_WORKER !== 'false';
 const isBullMqDisabled = isStaticBuild || !isNotificationsWorkerEnabled;

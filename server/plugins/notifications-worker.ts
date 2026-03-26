@@ -9,13 +9,12 @@
  */
 
 import { startDeliveryWorker } from '@/server/application/notifications/delivery.service';
+import { isStaticGenerateProcess } from '@/server/utils/static-generate';
 
 export default defineNitroPlugin(() => {
   // В static generate фоновые планировщики не нужны:
   // они тянут Redis/таймеры и могут подвешивать сборку.
-  const isStaticBuild =
-    process.env.NITRO_PRESET === 'static' ||
-    process.env.npm_lifecycle_event === 'generate';
+  const isStaticBuild = isStaticGenerateProcess();
   const isWorkerEnabled = process.env.ENABLE_NOTIFICATIONS_WORKER !== 'false';
 
   if (!isWorkerEnabled || isStaticBuild) {
@@ -23,7 +22,7 @@ export default defineNitroPlugin(() => {
       isWorkerEnabled,
       isStaticBuild,
       NITRO_PRESET: process.env.NITRO_PRESET,
-      npmLifecycle: process.env.npm_lifecycle_event,
+      MENTALA_STATIC_GENERATE: process.env.MENTALA_STATIC_GENERATE,
     });
     return;
   }

@@ -31,11 +31,20 @@ export function createNativeEngine(): SpeechEngine {
 
     // Используем новые методы checkPermissions/requestPermissions вместо устаревших
     const perm = await SpeechRecognition.checkPermissions();
+    let permissionsJustGranted = false;
     if (perm.speechRecognition !== 'granted') {
       const reqResult = await SpeechRecognition.requestPermissions();
       if (reqResult.speechRecognition !== 'granted') {
         throw new Error('Microphone permission denied');
       }
+      permissionsJustGranted = true;
+    }
+
+    // После закрытия системного диалога разрешений iOS вызывает applicationDidBecomeActive,
+    // который пересоздаёт аудиосессию в .playback. Даём lifecycle-хэндлерам отработать,
+    // чтобы плагин мог корректно переключить на .playAndRecord.
+    if (permissionsJustGranted) {
+      await new Promise((r) => setTimeout(r, 600));
     }
 
     // Чистим старые слушатели перед добавлением новых

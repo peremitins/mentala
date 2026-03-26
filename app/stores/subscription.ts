@@ -60,6 +60,7 @@ interface SubscriptionResponse {
     weeklyMinutesLimit: number | null;
     fairUseGuardMinutesPerWeek: number | null;
   };
+  appleAppAccountToken?: string | null;
   subscription: Subscription | null;
   noActiveSubscription: boolean;
   paymentStatus?: string;

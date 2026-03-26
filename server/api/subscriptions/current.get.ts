@@ -24,6 +24,7 @@ import {
 import { syncPendingPaymentMethodBinding } from '@/server/application/subscriptions/payment-methods.service';
 import { runTrialBillingForUser } from '@/server/application/subscriptions/trial-billing-worker.service';
 import { runScheduledPlanChangeForUser } from '@/server/application/subscriptions/scheduled-plan-change.service';
+import { getOrCreateAppleAppAccountToken } from '@/server/application/subscriptions/apple-app-account-token.service';
 import { normalizeStorefrontCountryCode } from '@/shared/utils/storefront';
 
 interface ScheduledChangeResponse {
@@ -91,6 +92,7 @@ async function readCurrentUserBillingRow(userId: number) {
       billingRegionSource: users.billingRegionSource,
       billingStorefrontCountry: users.billingStorefrontCountry,
       billingStorefrontUpdatedAt: users.billingStorefrontUpdatedAt,
+      appleAppAccountToken: users.appleAppAccountToken,
     })
     .from(users)
     .where(eq(users.id, userId))
@@ -140,6 +142,7 @@ export default defineEventHandler(async (event) => {
       billingCollectionStatus: 'none',
       graceEndsAt: null,
       storefrontCountry: null,
+      appleAppAccountToken: null,
       billingProviderHint: resolveBillingProviderHint({
         platform: sourcePlatform,
         storefrontCountry: null,
@@ -515,6 +518,10 @@ export default defineEventHandler(async (event) => {
   const storefrontCountry = normalizeStorefrontCountry(
     userRecord.billingStorefrontCountry
   );
+  const appleAppAccountToken =
+    sourcePlatform === 'ios'
+      ? await getOrCreateAppleAppAccountToken(targetUserId)
+      : null;
 
   const response = {
     plan: currentEntitlementsPlan,
@@ -546,6 +553,7 @@ export default defineEventHandler(async (event) => {
     billingCollectionStatus,
     graceEndsAt: userRecord.graceEndsAt?.toISOString() || null,
     storefrontCountry,
+    appleAppAccountToken,
     billingProviderHint: resolveBillingProviderHint({
       platform: sourcePlatform,
       storefrontCountry,

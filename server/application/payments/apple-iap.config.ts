@@ -5,6 +5,12 @@ export type AppleIapRuntimeConfig = {
   issuerId: string;
   keyId: string;
   privateKeyBase64: string;
+  /**
+   * true, если credentials для Apple Server API полностью сконфигурированы.
+   * false только в dev-режиме — позволяет тестировать через Xcode StoreKit Configuration
+   * без реального обращения к Apple Server API.
+   */
+  serverApiAvailable: boolean;
 };
 
 function splitAllowedBundleIds(raw: unknown): string[] {
@@ -14,6 +20,10 @@ function splitAllowedBundleIds(raw: unknown): string[] {
     .split(/[\s,]+/g)
     .map((value) => value.trim())
     .filter(Boolean);
+}
+
+function isDev(): boolean {
+  return process.env.NODE_ENV !== 'production';
 }
 
 export function resolveAppleIapRuntimeConfig(
@@ -48,14 +58,18 @@ export function resolveAppleIapRuntimeConfig(
       ''
   ).trim();
 
-  if (!allowedBundleIds.length) {
+  // В dev-режиме допускаем отсутствие bundle IDs — используем wildcard для Xcode тестирования.
+  if (!allowedBundleIds.length && !isDev()) {
     throw createError({
       statusCode: 500,
       statusMessage: 'Apple IAP bundle allowlist is not configured',
     });
   }
 
-  if (!issuerId || !keyId || !privateKeyBase64) {
+  const serverApiAvailable = !!(issuerId && keyId && privateKeyBase64);
+
+  // В production credentials обязательны.
+  if (!serverApiAvailable && !isDev()) {
     throw createError({
       statusCode: 500,
       statusMessage:
@@ -68,5 +82,6 @@ export function resolveAppleIapRuntimeConfig(
     issuerId,
     keyId,
     privateKeyBase64,
+    serverApiAvailable,
   };
 }
