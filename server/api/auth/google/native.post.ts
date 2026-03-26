@@ -6,26 +6,59 @@ import { buildOAuthAuthResponse } from '@/server/application/auth/oauth-linking.
 
 const oauthClient = new OAuth2Client();
 
+function normalizeClientId(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function decodeGoogleTokenClaims(idToken: string): {
+  aud?: string | string[];
+  azp?: string;
+  iss?: string;
+} | null {
+  try {
+    const [, payloadPart] = idToken.split('.');
+    if (!payloadPart) {
+      return null;
+    }
+
+    const payload = JSON.parse(
+      Buffer.from(payloadPart, 'base64url').toString('utf8')
+    ) as {
+      aud?: string | string[];
+      azp?: string;
+      iss?: string;
+    };
+
+    return {
+      aud: payload.aud,
+      azp: payload.azp,
+      iss: payload.iss,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export default defineEventHandler(async (event) => {
   const body = GoogleNativeAuthDto.parse(await readBody(event as any));
   const cfg = useRuntimeConfig(event);
 
+  // Для server route сначала доверяем server-only runtime config.
+  // `cfg.public.*` в Nuxt может содержать build-time значение и отставать от env на живом production backend.
   const webClientId =
-    cfg.public.googleWebClientId ||
-    cfg.OAUTH_GOOGLE_CLIENT_ID ||
-    process.env.NUXT_OAUTH_GOOGLE_CLIENT_ID;
+    normalizeClientId(cfg.OAUTH_GOOGLE_CLIENT_ID) ||
+    normalizeClientId(process.env.NUXT_OAUTH_GOOGLE_CLIENT_ID) ||
+    normalizeClientId(cfg.public.googleWebClientId);
 
   const iosClientId =
-    cfg.public.googleIosClientId ||
-    process.env.NUXT_PUBLIC_GOOGLE_IOS_CLIENT_ID;
+    normalizeClientId(process.env.NUXT_PUBLIC_GOOGLE_IOS_CLIENT_ID) ||
+    normalizeClientId(cfg.public.googleIosClientId);
 
   const audiences = [
     ...new Set(
-      [webClientId, iosClientId]
-        .filter((value): value is string => {
-          return typeof value === 'string' && value.trim().length > 0;
-        })
-        .map((value) => value.trim())
+      [webClientId, iosClientId].filter((value): value is string => {
+        return value.length > 0;
+      })
     ),
   ];
 
@@ -58,7 +91,16 @@ export default defineEventHandler(async (event) => {
     });
     payload = ticket.getPayload();
   } catch (error: any) {
-    console.error('[Auth] Google ID token verification failed:', error);
+    const tokenClaims = decodeGoogleTokenClaims(body.idToken);
+
+    console.error('[Auth] Google ID token verification failed:', {
+      error: error instanceof Error ? error.message : String(error),
+      expectedAudiences: audiences,
+      tokenAud: tokenClaims?.aud ?? null,
+      tokenAzp: tokenClaims?.azp ?? null,
+      tokenIss: tokenClaims?.iss ?? null,
+    });
+
     throw createError({
       statusCode: 401,
       statusMessage: 'Неверный Google токен',

@@ -167,6 +167,7 @@ export default defineEventHandler(
         issuerId: runtime.issuerId,
         keyId: runtime.keyId,
         privateKeyBase64: runtime.privateKeyBase64,
+        serverApiAvailable: runtime.serverApiAvailable,
         source: 'asn_v2',
       });
 

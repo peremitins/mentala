@@ -69,6 +69,8 @@ export const users = pgTable(
     billingStorefrontUpdatedAt: timestamp('billing_storefront_updated_at', {
       withTimezone: true,
     }),
+    // Стабильный appAccountToken для привязки Apple IAP к аккаунту Mentala.
+    appleAppAccountToken: uuid('apple_app_account_token'),
     // Trial-scheduled биллинг (оплата в конце пробного периода).
     billingPlanId: varchar('billing_plan_id', { length: 50 }).references(
       () => subscriptionPlans.id,
@@ -166,6 +168,9 @@ export const users = pgTable(
       .notNull(),
   },
   (table) => ({
+    appleAppAccountTokenUnique: unique('uk_users_apple_app_account_token').on(
+      table.appleAppAccountToken
+    ),
     // Индекс ускоряет выборку кандидатов на billing reminder (24ч окно).
     // Partial условие держит индекс компактным и релевантным только для due-кейса.
     trialBillingReminderDueIdx: index('idx_users_trial_billing_reminder_due')

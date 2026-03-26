@@ -7,9 +7,13 @@ import { resolveSceneDefaultVolumePercent } from './shared/utils/sceneSettings';
 const sceneDefaultVolumePercent = resolveSceneDefaultVolumePercent(
   process.env.NUXT_PUBLIC_SCENE_DEFAULT_VOLUME_PERCENT
 );
+const buildDir = process.env.MENTALA_NUXT_BUILD_DIR || '.nuxt';
 
 export default defineNuxtConfig({
   ssr: false,
+  // Для mobile static/release сборок используем отдельный buildDir,
+  // чтобы dev-сервер не перетирал `.nuxt` и не ломал client.manifest.
+  buildDir,
   compatibilityDate: '2025-07-15',
   devtools: { enabled: false },
   srcDir: '',

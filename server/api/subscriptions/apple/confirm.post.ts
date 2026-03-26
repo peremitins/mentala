@@ -11,7 +11,7 @@ import { resolveAppleIapRuntimeConfig } from '@/server/application/payments/appl
 import { syncAppleIapTransactionForUser } from '@/server/application/subscriptions/apple-iap.service';
 
 const appleIapConfirmBodySchema = z.object({
-  transactionId: z.string().trim().min(6).max(128),
+  transactionId: z.string().trim().min(1).max(128),
   signedTransactionInfo: z.string().trim().min(20),
   appAccountToken: z.string().uuid().optional().nullable(),
   storefrontCountryCode: z
@@ -81,8 +81,6 @@ export default defineEventHandler(async (event) => {
     JSON.stringify({
       transactionId: parsedBody.data.transactionId,
       signedTransactionInfoHash: sha256(parsedBody.data.signedTransactionInfo),
-      appAccountToken: parsedBody.data.appAccountToken || null,
-      storefrontCountryCode: parsedBody.data.storefrontCountryCode || null,
     })
   );
 
@@ -129,6 +127,7 @@ export default defineEventHandler(async (event) => {
       issuerId: runtime.issuerId,
       keyId: runtime.keyId,
       privateKeyBase64: runtime.privateKeyBase64,
+      serverApiAvailable: runtime.serverApiAvailable,
       source: 'confirm',
     });
 
