@@ -19,6 +19,12 @@ import {
 } from '@/server/application/payments/apple-iap.client';
 
 type AppleIapSyncSource = 'confirm' | 'asn_v2' | 'manual_sync';
+type AppleIapOwnershipScope =
+  | 'global_original_transaction'
+  | 'xcode_app_account_token';
+
+const APPLE_IAP_OWNERSHIP_CONFLICT_STATUS_MESSAGE =
+  'This App Store subscription is already linked to another account';
 
 type AppleIapSyncResult =
   | {
@@ -102,7 +108,48 @@ async function ensureOriginalTransactionOwnership(params: {
   userId: number;
   originalTransactionId: string;
   environment: AppleIapEnvironment;
+  appAccountToken?: string | null;
+  scope: AppleIapOwnershipScope;
 }) {
+  const normalizedAppAccountToken = normalizeUuid(params.appAccountToken);
+
+  if (params.scope === 'xcode_app_account_token') {
+    // Xcode StoreKit Configuration часто отдаёт transaction/originalTransactionId = 0.
+    // Глобальная ownership-привязка по originalTransactionId в этом режиме создаёт
+    // ложные конфликты между локальными тестами, поэтому скопиваем привязку токеном аккаунта.
+    if (!normalizedAppAccountToken) {
+      return;
+    }
+
+    const transactionOwnerRows = await db
+      .select({
+        userId: appleTransactions.userId,
+      })
+      .from(appleTransactions)
+      .where(
+        and(
+          eq(
+            appleTransactions.originalTransactionId,
+            params.originalTransactionId
+          ),
+          eq(appleTransactions.environment, params.environment),
+          eq(appleTransactions.appAccountToken, normalizedAppAccountToken)
+        )
+      )
+      .orderBy(desc(appleTransactions.createdAt))
+      .limit(1);
+
+    const transactionOwner = transactionOwnerRows[0];
+    if (transactionOwner && transactionOwner.userId !== params.userId) {
+      throw createError({
+        statusCode: 409,
+        statusMessage: APPLE_IAP_OWNERSHIP_CONFLICT_STATUS_MESSAGE,
+      });
+    }
+
+    return;
+  }
+
   const transactionOwnerRows = await db
     .select({
       userId: appleTransactions.userId,
@@ -124,8 +171,7 @@ async function ensureOriginalTransactionOwnership(params: {
   if (transactionOwner && transactionOwner.userId !== params.userId) {
     throw createError({
       statusCode: 409,
-      statusMessage:
-        'This App Store subscription is already linked to another account',
+      statusMessage: APPLE_IAP_OWNERSHIP_CONFLICT_STATUS_MESSAGE,
     });
   }
 
@@ -150,8 +196,7 @@ async function ensureOriginalTransactionOwnership(params: {
   if (subscriptionOwner && subscriptionOwner.userId !== params.userId) {
     throw createError({
       statusCode: 409,
-      statusMessage:
-        'This App Store subscription is already linked to another account',
+      statusMessage: APPLE_IAP_OWNERSHIP_CONFLICT_STATUS_MESSAGE,
     });
   }
 }
@@ -395,6 +440,8 @@ export async function syncAppleIapTransactionForUser(params: {
   issuerId: string;
   keyId: string;
   privateKeyBase64: string;
+  /** Если false — Apple Server API недоступен (dev-режим без credentials). */
+  serverApiAvailable?: boolean;
   source?: AppleIapSyncSource;
   now?: Date;
 }): Promise<AppleIapSyncResult> {
@@ -413,29 +460,73 @@ export async function syncAppleIapTransactionForUser(params: {
     });
   }
 
-  const authoritative = await fetchAppleTransactionFromServerApi({
-    transactionId: params.transactionId,
-    signedTransactionInfo: params.signedTransactionInfo,
-    allowedBundleIds: params.allowedBundleIds,
-    issuerId: params.issuerId,
-    keyId: params.keyId,
-    privateKeyBase64: params.privateKeyBase64,
-    preferredEnvironment: clientTransaction.environment,
-  });
+  let transaction: AppleSignedTransactionInfo;
+  let resolvedSignedTransactionInfo: string;
 
-  const transaction = authoritative.transaction;
+  // Xcode StoreKit Configuration создаёт локальные транзакции, которых нет в Apple Server API.
+  // Детектируем по raw environment === "Xcode" и пропускаем верификацию.
+  const rawEnvironment = normalizeString(
+    clientTransaction.rawPayload.environment
+  ).toLowerCase();
+  const isXcodeLocalTransaction = rawEnvironment === 'xcode';
+  const resolvedAppAccountToken =
+    clientTransaction.appAccountToken || normalizeUuid(params.appAccountToken);
+
+  if (params.serverApiAvailable === false || isXcodeLocalTransaction) {
+    if (isXcodeLocalTransaction) {
+      console.warn(
+        `[Apple IAP] Xcode StoreKit Config: транзакция ${params.transactionId} локальная, пропускаем Apple Server API верификацию.`
+      );
+    } else {
+      console.warn(
+        `[Apple IAP] Dev-mode: пропускаем Apple Server API верификацию для транзакции ${params.transactionId}. ` +
+          'Настрой APPLE_IAP_ISSUER_ID / APPLE_IAP_KEY_ID / APPLE_IAP_PRIVATE_KEY_BASE64 для полного flow.'
+      );
+    }
+
+    // Валидируем bundleId против allowlist (если настроен).
+    if (
+      params.allowedBundleIds.length > 0 &&
+      !params.allowedBundleIds.includes(clientTransaction.bundleId)
+    ) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: `App bundleId "${clientTransaction.bundleId}" is not in APPLE_IAP_BUNDLE_IDS allowlist`,
+      });
+    }
+
+    transaction = clientTransaction;
+    resolvedSignedTransactionInfo = params.signedTransactionInfo;
+  } else {
+    const authoritative = await fetchAppleTransactionFromServerApi({
+      transactionId: params.transactionId,
+      signedTransactionInfo: params.signedTransactionInfo,
+      allowedBundleIds: params.allowedBundleIds,
+      issuerId: params.issuerId,
+      keyId: params.keyId,
+      privateKeyBase64: params.privateKeyBase64,
+      preferredEnvironment: clientTransaction.environment,
+    });
+
+    transaction = authoritative.transaction;
+    resolvedSignedTransactionInfo = authoritative.signedTransactionInfo;
+  }
 
   await ensureOriginalTransactionOwnership({
     userId: params.userId,
     originalTransactionId: transaction.originalTransactionId,
     environment: transaction.environment,
+    appAccountToken: transaction.appAccountToken || resolvedAppAccountToken,
+    scope: isXcodeLocalTransaction
+      ? 'xcode_app_account_token'
+      : 'global_original_transaction',
   });
 
   return await applyAppleTransactionForUser({
     userId: params.userId,
     transaction,
-    signedTransactionInfo: authoritative.signedTransactionInfo,
-    appAccountToken: params.appAccountToken ?? null,
+    signedTransactionInfo: resolvedSignedTransactionInfo,
+    appAccountToken: resolvedAppAccountToken,
     storefrontCountryCode: params.storefrontCountryCode ?? null,
     source,
     now,

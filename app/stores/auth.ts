@@ -98,7 +98,7 @@ function mapGoogleLoginError(error: any): string {
     text.includes('id token verification failed') ||
     (text.includes('/api/auth/google/native') && text.includes('401'))
   ) {
-    return 'Google токен отклонён сервером. Проверь, что `NUXT_OAUTH_GOOGLE_CLIENT_ID` одинаков на клиенте и сервере.';
+    return 'Google токен отклонён сервером. Проверь, что на клиенте и сервере совпадают `NUXT_OAUTH_GOOGLE_CLIENT_ID` и `NUXT_PUBLIC_GOOGLE_IOS_CLIENT_ID`, а mobile release bundle пересобран без stale Nuxt cache.';
   }
   if (isDeveloperError) {
     return 'Google отклонил вход (DEVELOPER_ERROR). Проверь SHA-1 (debug/release) и package name в Android OAuth client, а также что используется Web Client ID.';
