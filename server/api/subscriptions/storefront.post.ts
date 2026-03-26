@@ -52,12 +52,8 @@ export default defineEventHandler(async (event) => {
     rawStorefrontCountryCode
   );
 
-  if (rawStorefrontCountryCode !== null && !storefrontCountryCode) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'storefrontCountryCode must be a supported country code',
-    });
-  }
+  // Если пришёл неизвестный код (не конвертируется в alpha-2), сохраняем null.
+  // Это безопаснее чем 400: клиент может прислать новый alpha-3 код, которого нет в маппинге.
 
   await db
     .update(users)

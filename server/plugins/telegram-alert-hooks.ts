@@ -2,11 +2,10 @@ import {
   dispatchAppCriticalEvent,
   dispatchHttp5xxResponseEvent,
 } from '@/server/application/events/app-events.dispatchers';
+import { isStaticGenerateProcess } from '@/server/utils/static-generate';
 
 export default defineNitroPlugin((nitroApp) => {
-  const isStaticBuild =
-    process.env.NITRO_PRESET === 'static' ||
-    process.env.npm_lifecycle_event === 'generate';
+  const isStaticBuild = isStaticGenerateProcess();
 
   if (isStaticBuild) {
     console.log('[Telegram Alert Hooks] Skipped in static generate');

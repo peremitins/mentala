@@ -64,6 +64,17 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         do {
             let session = AVAudioSession.sharedInstance()
 
+            // Не перезаписываем категорию, если сейчас активна запись (speech recognition, микрофон).
+            // Иначе при закрытии системного диалога разрешений (didBecomeActive) сбрасываем .playAndRecord
+            // обратно в .playback — микрофон пропадает, и пользователь получает ошибку «режим недоступен».
+            let currentCategory = session.category
+            if currentCategory == .playAndRecord || currentCategory == .record {
+                #if DEBUG
+                print("[AudioSession] skipped (\(reason)): recording is active (category=\(currentCategory.rawValue))")
+                #endif
+                return
+            }
+
             // Playback: играет даже при hardware silent switch.
             // Добавляем bluetooth/airplay, чтобы не ломать маршруты вывода.
             try session.setCategory(.playback, mode: .default, options: [.allowBluetoothA2DP, .allowAirPlay])

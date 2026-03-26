@@ -1,9 +1,8 @@
 import { registerTelegramAppEventSubscribers } from '@/server/application/telegram/telegram-event-subscribers';
+import { isStaticGenerateProcess } from '@/server/utils/static-generate';
 
 export default defineNitroPlugin(() => {
-  const isStaticBuild =
-    process.env.NITRO_PRESET === 'static' ||
-    process.env.npm_lifecycle_event === 'generate';
+  const isStaticBuild = isStaticGenerateProcess();
 
   if (isStaticBuild) {
     return;

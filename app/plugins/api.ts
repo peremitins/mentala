@@ -278,7 +278,7 @@ export default defineNuxtPlugin(() => {
       throw error;
     },
 
-    async onResponseError({ response, request, error }) {
+    async onResponseError({ response, request, options, error }) {
       // Проверяем, не является ли это canceled запросом
       const isCanceled =
         error?.name === 'AbortError' ||
@@ -312,7 +312,9 @@ export default defineNuxtPlugin(() => {
         `${response?.status || 'Network'} ${response?.statusText || 'Request Error'}`;
 
       // Авто‑тост ошибок
-      useToast('Ошибка запроса', String(message), 'error');
+      if ((options as any)?.suppressErrorToast !== true) {
+        useToast('Ошибка запроса', String(message), 'error');
+      }
 
       if (response?.status === 401) {
         // Очищаем токен при 401 ошибке (неавторизован)
