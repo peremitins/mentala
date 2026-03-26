@@ -3,11 +3,10 @@ import {
   isDbConnectionError,
   resetDbPool,
 } from '@/server/infrastructure/db/client';
+import { isStaticGenerateProcess } from '@/server/utils/static-generate';
 
 export default defineNitroPlugin(() => {
-  const isStaticBuild =
-    process.env.NITRO_PRESET === 'static' ||
-    process.env.npm_lifecycle_event === 'generate';
+  const isStaticBuild = isStaticGenerateProcess();
   if (isStaticBuild) {
     console.log('[AuthCleanup] Skipped in static generate');
     return;

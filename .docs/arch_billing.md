@@ -57,6 +57,16 @@
 - Lock/paywall: иконка тарифа + `FeaturePaywallModal` при клике
 - Авто-fallback: без entitlement на AI-уведомления → сервер переводит в templates
 
+## Apple IAP client confirm
+- Клиент дедуплицирует `POST /api/subscriptions/apple/confirm` по `transactionId`, чтобы `purchase()` и `transactionUpdated` не создавали параллельные confirm-запросы.
+- `HTTP 409` с текстом `This App Store subscription is already linked to another account` считается терминальной бизнес-ошибкой: запись не попадает в retry-очередь, pending confirm удаляется, локальная транзакция finish() вызывается без повторных backend retry.
+- Retry-очередь остаётся только для временных ошибок сети/сервера.
+- `Idempotency-Key` для Apple confirm строится из `transactionId` и отпечатка `signedTransactionInfo`, поэтому разные local/sandbox payload не делят один ключ по голому `transactionId`.
+- Серверный `requestHash` для `/api/subscriptions/apple/confirm` учитывает только канонические поля транзакции (`transactionId` и `signedTransactionInfo`), а hint-поля вроде `storefrontCountryCode` и `appAccountToken` не создают ложный `409 conflict`.
+- `appAccountToken` для Apple IAP выдаётся сервером и стабилен на уровне аккаунта Mentala, поэтому один и тот же пользователь может использовать подписку на iPhone и iPad без расхождения токенов между устройствами.
+- Для `environment = Xcode` ownership-check не опирается на глобальный `originalTransactionId`, а скопивается `appAccountToken`, чтобы локальные StoreKit-тесты не конфликтовали из-за тестовых идентификаторов вроде `0`.
+- Клиент не генерирует `appAccountToken` локально и подавляет глобальный API toast для `/api/subscriptions/apple/confirm`, чтобы ownership-conflict показывался один раз в понятном виде.
+
 ## iOS External Auth Bridge
 - `POST /api/auth/external-session/create` → одноразовый transfer-token
 - `GET /auth/external-session/consume?token=...` → cookie-сессия + redirect

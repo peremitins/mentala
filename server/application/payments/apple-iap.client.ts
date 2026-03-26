@@ -28,10 +28,69 @@ function normalizeUuid(value: unknown): string | null {
     : null;
 }
 
+// Apple JWS storefront может содержать как alpha-2 (US), так и alpha-3 (USA) коды.
+// Нормализуем к alpha-2 для единообразия.
+const ALPHA3_TO_ALPHA2: Record<string, string> = {
+  RUS: 'RU',
+  USA: 'US',
+  GBR: 'GB',
+  DEU: 'DE',
+  FRA: 'FR',
+  JPN: 'JP',
+  CHN: 'CN',
+  KOR: 'KR',
+  BRA: 'BR',
+  IND: 'IN',
+  CAN: 'CA',
+  AUS: 'AU',
+  ITA: 'IT',
+  ESP: 'ES',
+  NLD: 'NL',
+  TUR: 'TR',
+  MEX: 'MX',
+  IDN: 'ID',
+  POL: 'PL',
+  SWE: 'SE',
+  NOR: 'NO',
+  DNK: 'DK',
+  FIN: 'FI',
+  AUT: 'AT',
+  CHE: 'CH',
+  BEL: 'BE',
+  PRT: 'PT',
+  CZE: 'CZ',
+  GRC: 'GR',
+  ISR: 'IL',
+  SGP: 'SG',
+  HKG: 'HK',
+  TWN: 'TW',
+  THA: 'TH',
+  MYS: 'MY',
+  PHL: 'PH',
+  VNM: 'VN',
+  ARE: 'AE',
+  SAU: 'SA',
+  EGY: 'EG',
+  ZAF: 'ZA',
+  NGA: 'NG',
+  COL: 'CO',
+  ARG: 'AR',
+  CHL: 'CL',
+  PER: 'PE',
+  UKR: 'UA',
+  ROU: 'RO',
+  HUN: 'HU',
+  KAZ: 'KZ',
+};
+
 function normalizeCountryCode(value: unknown): string | null {
   const text = normalizeString(value).toUpperCase();
   if (!text) return null;
-  return /^[A-Z]{2}$/.test(text) ? text : null;
+
+  if (/^[A-Z]{2}$/.test(text)) return text;
+  if (/^[A-Z]{3}$/.test(text)) return ALPHA3_TO_ALPHA2[text] ?? null;
+
+  return null;
 }
 
 function parseAppleTimestamp(value: unknown): Date | null {
@@ -110,7 +169,11 @@ function decodeJwsPayload(payloadJws: string): Record<string, unknown> {
 
 function normalizeEnvironment(value: unknown): AppleIapEnvironment {
   const text = normalizeString(value).toLowerCase();
-  return text.includes('sandbox') ? 'sandbox' : 'production';
+  // Xcode StoreKit Configuration использует environment "Xcode" — это локальный sandbox.
+  if (text.includes('sandbox') || text === 'xcode') {
+    return 'sandbox';
+  }
+  return 'production';
 }
 
 function normalizeBoolean(value: unknown): boolean {

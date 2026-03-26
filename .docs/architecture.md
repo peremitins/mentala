@@ -8,6 +8,15 @@
 - **AI**: OpenAI Responses API (чат), Realtime API (голос), GPT (уведомления)
 - **Платежи**: YooKassa (web/mobile), Apple StoreKit 2 (iOS IAP)
 
+## Mobile Build Pipeline
+- `pnpm cap:sync` / `pnpm cap:sync:prod` — release/TestFlight путь: Nuxt bundle собирается из `.env.production`
+- `pnpm cap:sync:device:standalone` — dev-режим для iPhone/Android без кабеля: bundle собирается из `.env.development`, API указывает на локальный LAN-сервер
+- Перед `cap sync` iOS Google OAuth URL scheme синхронизируется из `NUXT_PUBLIC_GOOGLE_IOS_CLIENT_ID`, чтобы Debug и Release не перетирали друг другу callback scheme
+- Mobile static/release сборки используют отдельный `buildDir`, чтобы активный `pnpm dev` не перетирал `.nuxt` и не ломал `client.manifest`
+- Static generate для mobile помечается флагом `MENTALA_STATIC_GENERATE=true`; подмена `npm_lifecycle_event` запрещена, потому что она может превратить release bundle в dev-style HTML и дать белый экран в WebView
+- Release-сборка валидирует обязательные mobile env (`NUXT_PUBLIC_API_SERVER_URL`, `NUXT_PRIVATE_API_BASE`, `NUXT_OAUTH_GOOGLE_CLIENT_ID`, `NUXT_PUBLIC_GOOGLE_IOS_CLIENT_ID`) и падает до публикации, если они не настроены
+- Для server route нельзя полагаться на `cfg.public.googleWebClientId` как на источник истины для Google OAuth: этот ключ может быть зафиксирован на build-time. В backend-проверках сначала использовать server-only runtime/env (`cfg.OAUTH_GOOGLE_CLIENT_ID`, `process.env.*`), и только потом public fallback
+
 ## Структура сервера
 ```
 server/

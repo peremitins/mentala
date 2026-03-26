@@ -1,6 +1,11 @@
-import { Capacitor, registerPlugin, type PluginListenerHandle } from '@capacitor/core';
+import {
+  Capacitor,
+  registerPlugin,
+  type PluginListenerHandle,
+} from '@capacitor/core';
 import { computed, ref } from 'vue';
 import { useAuthStore } from '@/app/stores/auth';
+import { useSubscriptionStore } from '@/app/stores/subscription';
 import {
   APPLE_IAP_PRODUCT_IDS,
   type AppleIapProductId,
@@ -64,7 +69,9 @@ type NativeProductsResponse = {
 };
 
 type AppleIapPlugin = {
-  getProducts(options: { productIds: string[] }): Promise<NativeProductsResponse>;
+  getProducts(options: {
+    productIds: string[];
+  }): Promise<NativeProductsResponse>;
   purchase(options: {
     productId: string;
     appAccountToken?: string;
@@ -96,35 +103,76 @@ const productsMapRef = ref<AppleIapProductsMap>({});
 const loadingProductsRef = ref(false);
 
 const PENDING_CONFIRMS_STORAGE_KEY = 'mentai.apple_iap.pending_confirms.v1';
-const APP_ACCOUNT_TOKEN_STORAGE_PREFIX = 'mentai.apple_iap.app_account_token';
 const MAX_RETRY_BACKOFF_MS = 6 * 60 * 60 * 1000; // 6 часов
 const PENDING_CONFIRM_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 дней
+const APPLE_IAP_OWNERSHIP_CONFLICT_RAW_MESSAGE =
+  'This App Store subscription is already linked to another account';
+const APPLE_IAP_OWNERSHIP_CONFLICT_USER_MESSAGE =
+  'Эта подписка App Store уже привязана к другому аккаунту Mentala. Войдите в аккаунт, на котором оформляли подписку, или восстановите покупки в нём.';
+const APPLE_IAP_APP_ACCOUNT_TOKEN_MISSING_MESSAGE =
+  'Не удалось получить Apple-токен для вашего аккаунта. Обновите экран подписки и попробуйте ещё раз.';
 
 let listenerInstallPromise: Promise<void> | null = null;
 let updatesListener: PluginListenerHandle | null = null;
 let pendingQueueDrainPromise: Promise<AppleIapConfirmResponse | null> | null =
   null;
 let pendingDrainTimer: ReturnType<typeof setTimeout> | null = null;
+// Держим один backend confirm на transactionId, чтобы purchase() и
+// transactionUpdated не стреляли параллельно в один и тот же endpoint.
+const inFlightConfirmRequests = new Map<
+  string,
+  Promise<AppleIapConfirmResponse>
+>();
 
 let apiClient: (<T = unknown>(url: string, options: any) => Promise<T>) | null =
   null;
 let authStore: ReturnType<typeof useAuthStore> | null = null;
+let subscriptionStore: ReturnType<typeof useSubscriptionStore> | null = null;
 
 function isNativeIos(): boolean {
   return Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'ios';
 }
 
-function buildIdempotencyKey(transactionId: string): string {
-  const base = `apple-iap:${String(transactionId || '').trim()}`;
-  if (base.length <= 128) return base;
-
+function hashCompactString(value: string): string {
   // Компактный детерминированный хеш, чтобы уложиться в лимит заголовка.
   let hash = 2166136261;
-  for (let i = 0; i < base.length; i += 1) {
-    hash ^= base.charCodeAt(i);
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i);
     hash = Math.imul(hash, 16777619);
   }
-  return `apple-iap:${(hash >>> 0).toString(36)}`;
+  return (hash >>> 0).toString(36);
+}
+
+function buildIdempotencyKey(
+  transaction: Pick<
+    NativeAppleTransaction,
+    'transactionId' | 'signedTransactionInfo'
+  >
+): string {
+  const transactionId = normalizeString(transaction.transactionId);
+  const signedTransactionFingerprint = hashCompactString(
+    normalizeString(transaction.signedTransactionInfo)
+  );
+  const base = `apple-iap:${transactionId}:${signedTransactionFingerprint}`;
+  if (base.length <= 128) return base;
+
+  return `apple-iap:${hashCompactString(base)}`;
+}
+
+function isLegacyAppleIapIdempotencyKey(value: string): boolean {
+  return /^apple-iap:[^:]+$/i.test(value);
+}
+
+function resolveAppleIapIdempotencyKey(params: {
+  transaction: NativeAppleTransaction;
+  storedKey?: string | null;
+}): string {
+  const storedKey = normalizeString(params.storedKey);
+  if (storedKey && !isLegacyAppleIapIdempotencyKey(storedKey)) {
+    return storedKey;
+  }
+
+  return buildIdempotencyKey(params.transaction);
 }
 
 function normalizeBillingPeriodIso(
@@ -169,8 +217,7 @@ function normalizeNativeTransaction(
   }
 
   const environmentRaw = normalizeString(value.environment).toLowerCase();
-  const environment =
-    environmentRaw === 'sandbox' ? 'sandbox' : 'production';
+  const environment = environmentRaw === 'sandbox' ? 'sandbox' : 'production';
 
   return {
     transactionId,
@@ -218,7 +265,23 @@ function normalizeProducts(
   return next;
 }
 
-function parseApiErrorMessage(error: any): string {
+function mapUserFacingAppleIapErrorMessage(message: string): string {
+  const normalizedMessage = normalizeString(message);
+  if (!normalizedMessage) {
+    return 'Не удалось подтвердить покупку на сервере';
+  }
+
+  if (
+    normalizedMessage === APPLE_IAP_OWNERSHIP_CONFLICT_RAW_MESSAGE ||
+    normalizedMessage === APPLE_IAP_OWNERSHIP_CONFLICT_USER_MESSAGE
+  ) {
+    return APPLE_IAP_OWNERSHIP_CONFLICT_USER_MESSAGE;
+  }
+
+  return normalizedMessage;
+}
+
+function extractApiErrorMessage(error: any): string {
   const candidates = [
     error?.data?.error?.message,
     error?.data?.message,
@@ -235,37 +298,68 @@ function parseApiErrorMessage(error: any): string {
   return 'Не удалось подтвердить покупку на сервере';
 }
 
-function createUuidV4Fallback(): string {
-  const template = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx';
-  return template.replace(/[xy]/g, (char) => {
-    const random = Math.floor(Math.random() * 16);
-    const value = char === 'x' ? random : (random & 0x3) | 0x8;
-    return value.toString(16);
-  });
+function parseApiErrorMessage(error: any): string {
+  return mapUserFacingAppleIapErrorMessage(extractApiErrorMessage(error));
 }
 
-function resolveAppAccountToken(userId: string | number | null | undefined): string | null {
-  if (typeof window === 'undefined') return null;
+function parseApiErrorStatusCode(error: any): number | null {
+  const candidates = [
+    error?.statusCode,
+    error?.response?.status,
+    error?.data?.statusCode,
+    error?.response?._data?.statusCode,
+  ];
 
-  const normalizedUserId = String(userId ?? '').trim();
-  if (!normalizedUserId) return null;
+  for (const candidate of candidates) {
+    const statusCode =
+      typeof candidate === 'number'
+        ? candidate
+        : Number.parseInt(String(candidate || '').trim(), 10);
+    if (Number.isFinite(statusCode) && statusCode > 0) {
+      return statusCode;
+    }
+  }
 
-  const storageKey = `${APP_ACCOUNT_TOKEN_STORAGE_PREFIX}:${normalizedUserId}`;
+  return null;
+}
+
+function isTerminalOwnershipConflictError(
+  error: any,
+  message?: string | null
+): boolean {
+  const statusCode = parseApiErrorStatusCode(error);
+  const rawMessage = normalizeString(extractApiErrorMessage(error));
+  const resolvedMessage = normalizeString(message || '');
+
+  return (
+    statusCode === 409 &&
+    (rawMessage === APPLE_IAP_OWNERSHIP_CONFLICT_RAW_MESSAGE ||
+      resolvedMessage === APPLE_IAP_OWNERSHIP_CONFLICT_RAW_MESSAGE ||
+      resolvedMessage === APPLE_IAP_OWNERSHIP_CONFLICT_USER_MESSAGE)
+  );
+}
+
+async function resolveServerAppAccountToken(params?: {
+  refreshIfMissing?: boolean;
+}): Promise<string | null> {
+  const currentToken = normalizeUuid(
+    subscriptionStore?.subscriptionData?.appleAppAccountToken
+  );
+  if (currentToken) {
+    return currentToken;
+  }
+
+  if (
+    !params?.refreshIfMissing ||
+    !subscriptionStore ||
+    !authStore?.isLoggedIn
+  ) {
+    return null;
+  }
 
   try {
-    const existing = normalizeUuid(localStorage.getItem(storageKey));
-    if (existing) return existing;
-
-    const generated =
-      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-        ? crypto.randomUUID()
-        : createUuidV4Fallback();
-
-    const normalizedGenerated = normalizeUuid(generated);
-    if (!normalizedGenerated) return null;
-
-    localStorage.setItem(storageKey, normalizedGenerated);
-    return normalizedGenerated;
+    const refreshed = await subscriptionStore.fetchCurrentSubscription(true);
+    return normalizeUuid(refreshed?.appleAppAccountToken);
   } catch {
     return null;
   }
@@ -288,8 +382,10 @@ function readPendingConfirmQueue(): PendingConfirmQueueItem[] {
       const transaction = normalizeNativeTransaction(item?.transaction);
       if (!transaction) continue;
 
-      const idempotencyKey = normalizeString(item?.idempotencyKey);
-      if (!idempotencyKey) continue;
+      const idempotencyKey = resolveAppleIapIdempotencyKey({
+        transaction,
+        storedKey: item?.idempotencyKey,
+      });
 
       const createdAt =
         typeof item?.createdAt === 'number' && Number.isFinite(item.createdAt)
@@ -303,14 +399,18 @@ function readPendingConfirmQueue(): PendingConfirmQueueItem[] {
         transaction,
         appAccountToken:
           normalizeUuid(item?.appAccountToken) || transaction.appAccountToken,
-        storefrontCountryCode: normalizeCountryCode(item?.storefrontCountryCode),
+        storefrontCountryCode: normalizeCountryCode(
+          item?.storefrontCountryCode
+        ),
         idempotencyKey,
         retryCount:
-          typeof item?.retryCount === 'number' && Number.isFinite(item.retryCount)
+          typeof item?.retryCount === 'number' &&
+          Number.isFinite(item.retryCount)
             ? Math.max(0, Math.floor(item.retryCount))
             : 0,
         nextRetryAt:
-          typeof item?.nextRetryAt === 'number' && Number.isFinite(item.nextRetryAt)
+          typeof item?.nextRetryAt === 'number' &&
+          Number.isFinite(item.nextRetryAt)
             ? Math.max(0, Math.floor(item.nextRetryAt))
             : 0,
         lastError: normalizeString(item?.lastError) || null,
@@ -343,6 +443,16 @@ function writePendingConfirmQueue(queue: PendingConfirmQueueItem[]) {
   }
 }
 
+function removePendingConfirm(transactionId: string) {
+  const normalizedTransactionId = normalizeString(transactionId);
+  if (!normalizedTransactionId) return;
+
+  const nextQueue = readPendingConfirmQueue().filter(
+    (item) => item.transaction.transactionId !== normalizedTransactionId
+  );
+  writePendingConfirmQueue(nextQueue);
+}
+
 function scheduleQueueDrain(delayMs: number) {
   if (typeof window === 'undefined') return;
 
@@ -350,10 +460,13 @@ function scheduleQueueDrain(delayMs: number) {
     clearTimeout(pendingDrainTimer);
   }
 
-  pendingDrainTimer = setTimeout(() => {
-    pendingDrainTimer = null;
-    void drainPendingConfirmQueue();
-  }, Math.max(100, delayMs));
+  pendingDrainTimer = setTimeout(
+    () => {
+      pendingDrainTimer = null;
+      void drainPendingConfirmQueue();
+    },
+    Math.max(100, delayMs)
+  );
 }
 
 function calculateNextRetryDelayMs(retryCount: number): number {
@@ -365,7 +478,8 @@ function calculateNextRetryDelayMs(retryCount: number): number {
 function enqueuePendingConfirm(item: PendingConfirmQueueItem) {
   const queue = readPendingConfirmQueue();
   const existingIndex = queue.findIndex(
-    (entry) => entry.transaction.transactionId === item.transaction.transactionId
+    (entry) =>
+      entry.transaction.transactionId === item.transaction.transactionId
   );
 
   if (existingIndex >= 0) {
@@ -373,7 +487,10 @@ function enqueuePendingConfirm(item: PendingConfirmQueueItem) {
       ...queue[existingIndex],
       ...item,
       retryCount: Math.min(queue[existingIndex]!.retryCount, item.retryCount),
-      nextRetryAt: Math.min(queue[existingIndex]!.nextRetryAt, item.nextRetryAt),
+      nextRetryAt: Math.min(
+        queue[existingIndex]!.nextRetryAt,
+        item.nextRetryAt
+      ),
     };
   } else {
     queue.push(item);
@@ -397,6 +514,7 @@ async function confirmOnBackend(params: {
     '/api/subscriptions/apple/confirm',
     {
       method: 'POST',
+      suppressErrorToast: true,
       headers: {
         'Idempotency-Key': params.idempotencyKey,
       },
@@ -408,6 +526,30 @@ async function confirmOnBackend(params: {
       },
     }
   );
+}
+
+async function confirmOnBackendDeduped(params: {
+  transaction: NativeAppleTransaction;
+  appAccountToken: string | null;
+  storefrontCountryCode: string | null;
+  idempotencyKey: string;
+}): Promise<AppleIapConfirmResponse> {
+  const transactionId = normalizeString(params.transaction.transactionId);
+  if (!transactionId) {
+    throw new Error('Apple transactionId is required');
+  }
+
+  const existingRequest = inFlightConfirmRequests.get(transactionId);
+  if (existingRequest) {
+    return await existingRequest;
+  }
+
+  const requestPromise = confirmOnBackend(params).finally(() => {
+    inFlightConfirmRequests.delete(transactionId);
+  });
+
+  inFlightConfirmRequests.set(transactionId, requestPromise);
+  return await requestPromise;
 }
 
 async function finishTransaction(transactionId: string) {
@@ -429,12 +571,13 @@ async function confirmTransactionWithPolicy(params: {
   idempotencyKey?: string;
   strict: boolean;
 }): Promise<AppleIapConfirmResponse | null> {
-  const idempotencyKey =
-    normalizeString(params.idempotencyKey) ||
-    buildIdempotencyKey(params.transaction.transactionId);
+  const idempotencyKey = resolveAppleIapIdempotencyKey({
+    transaction: params.transaction,
+    storedKey: params.idempotencyKey,
+  });
 
   try {
-    const response = await confirmOnBackend({
+    const response = await confirmOnBackendDeduped({
       transaction: params.transaction,
       appAccountToken: params.appAccountToken,
       storefrontCountryCode: params.storefrontCountryCode,
@@ -442,14 +585,23 @@ async function confirmTransactionWithPolicy(params: {
     });
 
     await finishTransaction(params.transaction.transactionId);
-
-    const queue = readPendingConfirmQueue().filter(
-      (item) => item.transaction.transactionId !== params.transaction.transactionId
-    );
-    writePendingConfirmQueue(queue);
+    removePendingConfirm(params.transaction.transactionId);
 
     return response;
   } catch (error) {
+    const errorMessage = parseApiErrorMessage(error);
+
+    if (isTerminalOwnershipConflictError(error, errorMessage)) {
+      removePendingConfirm(params.transaction.transactionId);
+      await finishTransaction(params.transaction.transactionId);
+
+      if (params.strict) {
+        throw new Error(errorMessage);
+      }
+
+      return null;
+    }
+
     enqueuePendingConfirm({
       transaction: params.transaction,
       appAccountToken: params.appAccountToken,
@@ -457,12 +609,12 @@ async function confirmTransactionWithPolicy(params: {
       idempotencyKey,
       retryCount: 1,
       nextRetryAt: Date.now() + calculateNextRetryDelayMs(1),
-      lastError: parseApiErrorMessage(error),
+      lastError: errorMessage,
       createdAt: Date.now(),
     });
 
     if (params.strict) {
-      throw new Error(parseApiErrorMessage(error));
+      throw new Error(errorMessage);
     }
 
     return null;
@@ -495,9 +647,14 @@ async function drainPendingConfirmQueue(): Promise<AppleIapConfirmResponse | nul
       }
 
       try {
-        const response = await confirmOnBackend({
+        const queueAppAccountToken =
+          item.appAccountToken ||
+          (await resolveServerAppAccountToken({
+            refreshIfMissing: false,
+          }));
+        const response = await confirmOnBackendDeduped({
           transaction: item.transaction,
-          appAccountToken: item.appAccountToken,
+          appAccountToken: queueAppAccountToken,
           storefrontCountryCode: item.storefrontCountryCode,
           idempotencyKey: item.idempotencyKey,
         });
@@ -505,12 +662,19 @@ async function drainPendingConfirmQueue(): Promise<AppleIapConfirmResponse | nul
         await finishTransaction(item.transaction.transactionId);
         latestSuccess = response;
       } catch (error) {
+        const errorMessage = parseApiErrorMessage(error);
+
+        if (isTerminalOwnershipConflictError(error, errorMessage)) {
+          await finishTransaction(item.transaction.transactionId);
+          continue;
+        }
+
         const retryCount = item.retryCount + 1;
         nextQueue.push({
           ...item,
           retryCount,
           nextRetryAt: Date.now() + calculateNextRetryDelayMs(retryCount),
-          lastError: parseApiErrorMessage(error),
+          lastError: errorMessage,
         });
       }
     }
@@ -550,7 +714,7 @@ async function ensureUpdatesListenerInstalled() {
               transaction,
               appAccountToken: transaction.appAccountToken,
               storefrontCountryCode: transaction.storefront,
-              idempotencyKey: buildIdempotencyKey(transaction.transactionId),
+              idempotencyKey: buildIdempotencyKey(transaction),
               retryCount: 0,
               nextRetryAt: Date.now(),
               lastError: 'user_not_logged_in',
@@ -559,12 +723,20 @@ async function ensureUpdatesListenerInstalled() {
             return;
           }
 
-          void confirmTransactionWithPolicy({
-            transaction,
-            appAccountToken: transaction.appAccountToken,
-            storefrontCountryCode: transaction.storefront,
-            strict: false,
-          });
+          void (async () => {
+            const listenerAppAccountToken =
+              transaction.appAccountToken ||
+              (await resolveServerAppAccountToken({
+                refreshIfMissing: false,
+              }));
+
+            await confirmTransactionWithPolicy({
+              transaction,
+              appAccountToken: listenerAppAccountToken,
+              storefrontCountryCode: transaction.storefront,
+              strict: false,
+            });
+          })();
         }
       );
     })().finally(() => {
@@ -584,17 +756,21 @@ function pickBestResponse(
   if (next.status === 'active' && current.status !== 'active') return next;
   if (next.status !== 'active' && current.status === 'active') return current;
 
-  const currentExpiresAt = current.expiresAt ? Date.parse(current.expiresAt) : 0;
+  const currentExpiresAt = current.expiresAt
+    ? Date.parse(current.expiresAt)
+    : 0;
   const nextExpiresAt = next.expiresAt ? Date.parse(next.expiresAt) : 0;
   return nextExpiresAt >= currentExpiresAt ? next : current;
 }
 
 export function useAppleIap() {
   const auth = useAuthStore();
+  const subscriptions = useSubscriptionStore();
   const nuxtApp = useNuxtApp();
 
   apiClient = nuxtApp.$api as any;
   authStore = auth;
+  subscriptionStore = subscriptions;
 
   const available = computed(() => {
     return isNativeIos();
@@ -639,11 +815,16 @@ export function useAppleIap() {
 
     await ensureUpdatesListenerInstalled();
 
-    const appAccountToken = resolveAppAccountToken(auth.user?.id);
+    const appAccountToken = await resolveServerAppAccountToken({
+      refreshIfMissing: true,
+    });
+    if (!appAccountToken) {
+      throw new Error(APPLE_IAP_APP_ACCOUNT_TOKEN_MISSING_MESSAGE);
+    }
 
     const purchaseResult = await AppleIap.purchase({
       productId,
-      appAccountToken: appAccountToken || undefined,
+      appAccountToken,
     });
 
     const transaction = normalizeNativeTransaction(purchaseResult?.transaction);
@@ -680,9 +861,9 @@ export function useAppleIap() {
 
     const response = await AppleIap.restore();
     const transactions = Array.isArray(response?.transactions)
-      ? response.transactions
+      ? (response.transactions
           .map((item) => normalizeNativeTransaction(item))
-          .filter(Boolean) as NativeAppleTransaction[]
+          .filter(Boolean) as NativeAppleTransaction[])
       : [];
 
     if (!transactions.length) {
@@ -695,7 +876,9 @@ export function useAppleIap() {
       };
     }
 
-    const appAccountToken = resolveAppAccountToken(auth.user?.id);
+    const appAccountToken = await resolveServerAppAccountToken({
+      refreshIfMissing: false,
+    });
     const storefrontCountryCode = await getIosStorefrontCountryCode();
     let latestResponse: AppleIapConfirmResponse | null = null;
 
@@ -729,12 +912,14 @@ export function useAppleIap() {
 
     const response = await AppleIap.getCurrentEntitlements();
     const transactions = Array.isArray(response?.transactions)
-      ? response.transactions
+      ? (response.transactions
           .map((item) => normalizeNativeTransaction(item))
-          .filter(Boolean) as NativeAppleTransaction[]
+          .filter(Boolean) as NativeAppleTransaction[])
       : [];
 
-    const appAccountToken = resolveAppAccountToken(auth.user?.id);
+    const appAccountToken = await resolveServerAppAccountToken({
+      refreshIfMissing: false,
+    });
     const storefrontCountryCode = await getIosStorefrontCountryCode();
     let latestResponse: AppleIapConfirmResponse | null = null;
 
