@@ -327,10 +327,24 @@ public class AppleIapPlugin: CAPPlugin, CAPBridgedPlugin {
         let storefrontRaw = payloadString(payload["storefront"])?.uppercased()
         let storefront: Any = {
             guard let storefrontRaw,
-                  storefrontRaw.range(of: "^[A-Z]{2}$", options: .regularExpression) != nil else {
+                  storefrontRaw.range(of: "^[A-Z]{2,3}$", options: .regularExpression) != nil else {
                 return NSNull()
             }
-            return storefrontRaw
+            // Apple JWS возвращает 3-буквенный код (RUS, USA, DEU).
+            // Нормализуем известные коды до 2-букв для единообразия с Storefront.current.
+            let alpha3ToAlpha2: [String: String] = [
+                "RUS": "RU", "USA": "US", "GBR": "GB", "DEU": "DE", "FRA": "FR",
+                "JPN": "JP", "CHN": "CN", "KOR": "KR", "BRA": "BR", "IND": "IN",
+                "CAN": "CA", "AUS": "AU", "ITA": "IT", "ESP": "ES", "NLD": "NL",
+                "TUR": "TR", "MEX": "MX", "IDN": "ID", "POL": "PL", "SWE": "SE",
+                "NOR": "NO", "DNK": "DK", "FIN": "FI", "AUT": "AT", "CHE": "CH",
+                "BEL": "BE", "PRT": "PT", "CZE": "CZ", "GRC": "GR", "ISR": "IL",
+                "SGP": "SG", "HKG": "HK", "TWN": "TW", "THA": "TH", "MYS": "MY",
+                "PHL": "PH", "VNM": "VN", "ARE": "AE", "SAU": "SA", "EGY": "EG",
+                "ZAF": "ZA", "NGA": "NG", "COL": "CO", "ARG": "AR", "CHL": "CL",
+                "PER": "PE", "UKR": "UA", "ROU": "RO", "HUN": "HU", "KAZ": "KZ",
+            ]
+            return alpha3ToAlpha2[storefrontRaw] ?? storefrontRaw
         }()
 
         let appAccountTokenFromPayload = payloadString(payload["appAccountToken"])?.lowercased()
