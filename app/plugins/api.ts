@@ -120,13 +120,14 @@ export default defineNuxtPlugin(() => {
         // Определяем платформу для передачи на сервер
         const platformHeader = resolveClientPlatformHeader(platform);
 
-        // Получаем CSRF токен для web (только для state-changing операций)
+        // Получаем CSRF токен для state-changing операций.
+        // На Capacitor основной механизм — X-Session-Token из localStorage,
+        // но CSRF нужен как fallback если localStorage-токен отсутствует.
         const method = options.method?.toUpperCase() || 'GET';
         const isStateChanging = ['POST', 'PUT', 'DELETE', 'PATCH'].includes(
           method
         );
-        const csrfToken =
-          !isCapacitor && isStateChanging ? getCSRFToken() : null;
+        const csrfToken = isStateChanging ? getCSRFToken() : null;
 
         // Отладочное логирование для CSRF токена (только в development)
         const isDev =
@@ -146,6 +147,19 @@ export default defineNuxtPlugin(() => {
           );
         }
 
+        // Диагностика: на Capacitor при отсутствии localStorage-токена логируем для отладки
+        if (isCapacitor && isStateChanging && !token && isDev) {
+          console.warn(
+            '[API] Capacitor: X-Session-Token отсутствует в localStorage, fallback на CSRF cookie',
+            {
+              method,
+              url: typeof request === 'string' ? request : String(request),
+              hasCsrfToken: !!csrfToken,
+              platform: platformHeader,
+            }
+          );
+        }
+
         // Отправляем X-Session-Token ТОЛЬКО для Capacitor
         // Для web полагаемся только на cookie (credentials: 'include')
         if (isCapacitor) {
@@ -154,6 +168,11 @@ export default defineNuxtPlugin(() => {
             headers.set('X-Timezone', timezone);
             headers.set('X-Platform', platformHeader);
             headers.set('Content-Type', 'application/json');
+            // Fallback: если localStorage-токен отсутствует (пересборка, очистка данных),
+            // но session cookie уцелел — сервер определит канал как cookie и потребует CSRF.
+            if (!token && csrfToken) {
+              headers.set('X-CSRF-Token', csrfToken);
+            }
           } else {
             const headersObj: Record<string, string> = {
               ...((headers as Record<string, string>) || {}),
@@ -162,6 +181,10 @@ export default defineNuxtPlugin(() => {
               'X-Platform': platformHeader,
             };
             if (token) headersObj['X-Session-Token'] = token;
+            // Fallback: CSRF-токен на случай отсутствия localStorage-сессии (аналогично realtime voice)
+            if (!token && csrfToken) {
+              headersObj['X-CSRF-Token'] = csrfToken;
+            }
             options.headers = headersObj as any;
           }
         } else {
@@ -255,7 +278,7 @@ export default defineNuxtPlugin(() => {
       throw error;
     },
 
-    async onResponseError({ response, request, error }) {
+    async onResponseError({ response, request, options, error }) {
       // Проверяем, не является ли это canceled запросом
       const isCanceled =
         error?.name === 'AbortError' ||
@@ -289,7 +312,9 @@ export default defineNuxtPlugin(() => {
         `${response?.status || 'Network'} ${response?.statusText || 'Request Error'}`;
 
       // Авто‑тост ошибок
-      useToast('Ошибка запроса', String(message), 'error');
+      if ((options as any)?.suppressErrorToast !== true) {
+        useToast('Ошибка запроса', String(message), 'error');
+      }
 
       if (response?.status === 401) {
         // Очищаем токен при 401 ошибке (неавторизован)

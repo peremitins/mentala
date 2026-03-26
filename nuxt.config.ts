@@ -7,9 +7,13 @@ import { resolveSceneDefaultVolumePercent } from './shared/utils/sceneSettings';
 const sceneDefaultVolumePercent = resolveSceneDefaultVolumePercent(
   process.env.NUXT_PUBLIC_SCENE_DEFAULT_VOLUME_PERCENT
 );
+const buildDir = process.env.MENTALA_NUXT_BUILD_DIR || '.nuxt';
 
 export default defineNuxtConfig({
   ssr: false,
+  // Для mobile static/release сборок используем отдельный buildDir,
+  // чтобы dev-сервер не перетирал `.nuxt` и не ломал client.manifest.
+  buildDir,
   compatibilityDate: '2025-07-15',
   devtools: { enabled: false },
   srcDir: '',
@@ -170,6 +174,19 @@ export default defineNuxtConfig({
     yookassaShopId: process.env.NUXT_YOOKASSA_SHOP_ID,
     yookassaSecretKey: process.env.NUXT_YOOKASSA_SECRET_KEY,
     yookassaTestMode: process.env.NUXT_YOOKASSA_TEST_MODE === 'true',
+    // Apple IAP (StoreKit 2 + App Store Server API) server-only настройки.
+    // ВАЖНО: приватные ключи не должны попадать в runtimeConfig.public.
+    appleIapBundleIds:
+      process.env.APPLE_IAP_BUNDLE_IDS ||
+      process.env.NUXT_APPLE_IAP_BUNDLE_IDS ||
+      process.env.NUXT_APPLE_IAP_BUNDLE_ID,
+    appleIapIssuerId:
+      process.env.APPLE_IAP_ISSUER_ID || process.env.NUXT_APPLE_IAP_ISSUER_ID,
+    appleIapKeyId:
+      process.env.APPLE_IAP_KEY_ID || process.env.NUXT_APPLE_IAP_KEY_ID,
+    appleIapPrivateKeyBase64:
+      process.env.APPLE_IAP_PRIVATE_KEY_BASE64 ||
+      process.env.NUXT_APPLE_IAP_PRIVATE_KEY_BASE64,
     public: {
       // Если не задано, будет пустая строка = относительные пути
       apiBase: process.env.NUXT_PUBLIC_API_SERVER_URL || '',

@@ -2,6 +2,7 @@
   "name": "nuxt-app",
   "type": "module",
   "private": true,
+  "packageManager": "pnpm@10.33.0",
   "scripts": {
     "build": "nuxt build",
     "dev": "./scripts/run-dev.sh",
@@ -17,6 +18,8 @@
     "dev:redis:check": "docker compose -f docker-compose.dev.yml exec -T redis redis-cli ping 2>/dev/null || redis-cli ping 2>/dev/null || echo '❌ Redis не запущен. Запусти: pnpm dev:redis:up или brew services start redis'",
     "dev:redis:stop-brew": "brew services stop redis 2>/dev/null || echo '⚠️  Redis не запущен через brew или brew недоступен'",
     "generate": "nuxt generate --dotenv .env.development",
+    "generate:dev": "nuxt generate --dotenv .env.development",
+    "generate:prod": "nuxt generate --dotenv .env.production",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
     "lint": "eslint .",
@@ -182,6 +185,9 @@
     "overrides": {
       "@internationalized/date": "3.9.0",
       "on-change": "6.0.2"
+    },
+    "patchedDependencies": {
+      "@capacitor-community/speech-recognition": "patches/@capacitor-community__speech-recognition.patch"
     }
   },
   "config": {

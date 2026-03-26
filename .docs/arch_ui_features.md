@@ -1,0 +1,56 @@
+# UI и фичи
+
+## Практики (хаб `/practices`)
+- Медитации, дыхательные практики, быстрая помощь, дневник благодарности
+- Дыхательные: каталог в `app/lib/breathPracticesCatalog.ts`, плеер `BreathPracticePlayer.vue` + `BreathOrb.vue`
+- Голосовые подсказки фаз из `public/breath/voice/{informal|formal}/*.mp3`
+- Кастомные практики: 1-30 сек фазы, 2-4 фазы, хранение в localStorage/Capacitor Preferences
+
+## Быстрая помощь (`/quick-help`)
+- 5 карточек: 5-4-3-2-1, Дыхание, Сброс напряжения, Выговориться, Выгрузка мыслей
+- Входы: PageHeader, хаб практик, chat suggested chips (`open_sos`)
+- Выгрузка мыслей: `/quick-help/thought-dump`, textarea + голосовой ввод, handoff в чат через `entryContext`
+
+## Медитации
+- Каталог `/meditations`, детальный плеер через query `trackId`
+- Таблицы: `meditation_tracks`, `meditation_favorites`
+- Web Audio API для loop-треков (бесшовный цикл), HTMLAudio fallback для non-loop
+- Native: `@capgo/native-audio` на mobile, foreground service на Android
+- Контекст очереди: перемотка вперёд/назад по выбранной секции
+- Медиафайлы версионируются по content-hash, CDN кэш бессрочный
+
+## Фоновая сцена (`/scene-selection`)
+- Фиксированный каталог в `app/lib/sceneSelectionCatalog.ts`
+- Настройки в `/api/user/me` → `sceneSettings`
+- Loop-сцены: WebAudio (бесшовный цикл), non-loop: HTMLAudio fallback
+- Глушение при активном медитационном аудио
+- `backgroundPlayMinutes`: 0 = стоп в background, N > 0 = стоп через N минут
+
+## Онбординг (`/onboarding`)
+- 5 шагов: имя, причина, возраст, пол, tone
+- `users`: `gender`, `age_range`, `onboarding` (jsonb)
+- `user_preferences.onboarding_reasons` — мультивыбор, порядок = приоритет
+- `tone`: gentle | balanced | uplifting | direct
+- Отдельный фоновый слой из `public/onboarding/welcome`
+
+## Дневник благодарности (`/practices/gratitude-diary`)
+- Overview (streak + история) и editor (вопрос + worksheet + composer)
+- Entitlement `gratitude.diary.full`, premium-ограничения для worksheet/photo
+- API: GET/POST/PATCH `/api/gratitude-diary/*`, upload-photo staged-flow
+- Избранные промпты: `gratitude_diary_favorite_prompts` (catalog + custom, лимит 50)
+- Streak: timezone-aware, по локальному дню пользователя
+- Фото: staged-flow (upload только при save, compensating cleanup при ошибке)
+
+## Лендинг (`apps/landing`)
+- Отдельная Nuxt-сборка для SEO, SSR + SWR
+- Домены: `mentala.app` (лендинг), `my.mentala.app` (продукт + API)
+- API: `/api/landing/config` (cache 60s), `/api/landing/lead` (rate-limit + honeypot)
+- Деплой: `pnpm landing:generate` → статика → rsync на сервер, Nginx + Traefik
+- CI/CD: deploy-prod.yml / deploy-dev.yml, атомарное переключение symlink
+
+## Компоненты и паттерны
+- `HorizontalScroller.vue` — горизонтальные ленты с drag, стрелками на desktop
+- `StateBlock` — idle/loading/empty/error
+- `ButtonLoader.vue` — спиннер внутри кнопки
+- Pinia stores: ui, user, chat
+- DTO: Zod, `shared/dto/index.ts`

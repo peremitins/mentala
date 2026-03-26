@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 # Скрипт для настройки Capacitor для разработки
 # Использование:
 #   ./scripts/setup-capacitor-dev.sh emulator          - для эмулятора
@@ -15,18 +16,40 @@ ANDROID_SERVER_URL=""
 IOS_SERVER_URL=""
 API_BASE_URL=""
 USE_ADB_REVERSE=false
+MOBILE_ENV_FILE=".env.development"
+MOBILE_BUILD_MODE="development"
+MOBILE_NUXT_BUILD_DIR=""
+
+clean_nuxt_static_build_cache() {
+  # Для static mobile сборок держим отдельный buildDir, чтобы не конфликтовать
+  # с параллельным `pnpm dev`. Чистим только mobile-артефакты, не трогая рабочий `.nuxt`.
+  rm -rf .output dist
+
+  if [ -n "$MOBILE_NUXT_BUILD_DIR" ]; then
+    rm -rf "$MOBILE_NUXT_BUILD_DIR" "node_modules/.cache/nuxt/$MOBILE_NUXT_BUILD_DIR"
+  fi
+}
 
 ensure_ios_project_object_version_compatible() {
   if [ ! -f "$IOS_PROJECT_FILE" ]; then
     return
   fi
 
-  # CocoaPods 1.16.2 (xcodeproj 1.27.0) не умеет objectVersion = 70.
-  # Для стабильного pod install держим совместимую версию проекта.
+  # Xcode 26 сохраняет App.xcodeproj с objectVersion = 70, а CocoaPods 1.16.2
+  # (xcodeproj 1.27.0) не умеет открывать такой формат. Для стабильного pod install
+  # держим совместимую версию проекта до тех пор, пока CocoaPods не добавит поддержку.
   if grep -q "objectVersion = 70;" "$IOS_PROJECT_FILE"; then
     echo "🔧 Исправление iOS project format для CocoaPods: 70 -> 77"
     perl -0pi -e 's/objectVersion = 70;/objectVersion = 77;/' "$IOS_PROJECT_FILE"
   fi
+}
+
+run_capacitor_sync() {
+  # Делаем copy/update раздельно, чтобы успеть нормализовать App.xcodeproj
+  # непосредственно перед pod install.
+  npx cap copy
+  ensure_ios_project_object_version_compatible
+  npx cap update
 }
 
 ensure_dev_server_is_available() {
@@ -194,6 +217,14 @@ elif [ "$DEVICE_TYPE" = "device" ]; then
     echo "🔧 Настройка для реального устройства: $SERVER_URL"
     echo "   ⚠️ Android-устройство не подключено по adb, поэтому secure localhost-маршрут для realtime voice сейчас недоступен."
   fi
+
+  # iOS: WKWebView не предоставляет navigator.mediaDevices на HTTP non-localhost origin.
+  # У iOS нет аналога adb reverse (iproxy туннелирует Mac→Device, а не Device→Mac).
+  # Поэтому в device-режиме iOS использует LAN IP — всё работает кроме Realtime Voice.
+  # Для Realtime Voice на iOS используй device-standalone (Capacitor раздаёт файлы локально = secure context).
+  echo "   ℹ️  iOS: Realtime Voice в device-режиме недоступен (WKWebView ограничение)."
+  echo "   Для Realtime Voice на iOS используй: pnpm cap:sync:device:standalone"
+
   echo "   Убедись, что dev-сервер запущен: pnpm dev"
 elif [ "$DEVICE_TYPE" = "device-standalone" ]; then
   # Для устройства без USB-кабеля — статический bundle + API по LAN IP.
@@ -208,6 +239,7 @@ elif [ "$DEVICE_TYPE" = "device-standalone" ]; then
   fi
 
   API_BASE_URL="http://${LOCAL_IP}:${DEV_SERVER_PORT}"
+  MOBILE_NUXT_BUILD_DIR=".nuxt-capacitor-standalone"
   echo "🔧 Настройка для устройства без кабеля: bundle + API ${API_BASE_URL}"
   echo "   Телефон и MacBook должны быть в одной Wi-Fi сети."
   echo "   Realtime Voice работает: Capacitor раздаёт файлы через http://localhost (secure context)."
@@ -216,7 +248,11 @@ elif [ "$DEVICE_TYPE" = "device-standalone" ]; then
 else
   # Production - без dev-сервера
   SERVER_URL=""
+  MOBILE_ENV_FILE=".env.production"
+  MOBILE_BUILD_MODE="release"
+  MOBILE_NUXT_BUILD_DIR=".nuxt-capacitor-release"
   echo "🔧 Настройка для production (без dev-сервера)"
+  echo "   Env: ${MOBILE_ENV_FILE}"
 fi
 
 # Экспортируем переменную для cap sync
@@ -225,11 +261,16 @@ export CAPACITOR_SERVER_URL="$SERVER_URL"
 # Поддерживаем совместимый формат iOS-проекта перед запуском cap sync.
 ensure_ios_project_object_version_compatible
 
+# Синхронизируем iOS OAuth-конфиг с тем env, из которого будет собран мобильный bundle.
+node scripts/sync-ios-oauth-config.js \
+  --env-file "$MOBILE_ENV_FILE" \
+  --mode "$MOBILE_BUILD_MODE"
+
 # Выполняем синхронизацию
 if [ "$DEVICE_TYPE" = "device" ]; then
   ensure_dev_server_is_available "http://127.0.0.1:${DEV_SERVER_PORT}"
   echo "📦 Синхронизация с dev-сервером..."
-  npx cap sync && \
+  run_capacitor_sync && \
     CAPACITOR_SERVER_URL="$SERVER_URL" \
     CAPACITOR_SERVER_URL_ANDROID="$ANDROID_SERVER_URL" \
     CAPACITOR_SERVER_URL_IOS="$IOS_SERVER_URL" \
@@ -241,18 +282,25 @@ if [ "$DEVICE_TYPE" = "device" ]; then
 elif [ "$DEVICE_TYPE" = "device-standalone" ]; then
   ensure_dev_server_is_available "http://127.0.0.1:${DEV_SERVER_PORT}"
   echo "📦 Сборка статического bundle для устройства без кабеля..."
-  NUXT_PUBLIC_API_SERVER_URL="$API_BASE_URL" pnpm run generate
-  npx cap sync && CAPACITOR_SERVER_URL="" node scripts/fix-capacitor-config.js
+  clean_nuxt_static_build_cache
+  MENTALA_STATIC_GENERATE=true \
+    MENTALA_NUXT_BUILD_DIR="$MOBILE_NUXT_BUILD_DIR" \
+    NUXT_PUBLIC_API_SERVER_URL="$API_BASE_URL" \
+    pnpm run generate:dev
+  run_capacitor_sync && CAPACITOR_SERVER_URL="" node scripts/fix-capacitor-config.js
   node scripts/verify-capacitor-config.js
   deploy_android_debug_build_to_connected_devices
 elif [ -n "$SERVER_URL" ]; then
   ensure_dev_server_is_available "http://127.0.0.1:${DEV_SERVER_PORT}"
   echo "📦 Синхронизация с dev-сервером..."
-  npx cap sync && CAPACITOR_SERVER_URL="$SERVER_URL" node scripts/fix-capacitor-config.js
+  run_capacitor_sync && CAPACITOR_SERVER_URL="$SERVER_URL" node scripts/fix-capacitor-config.js
 else
   echo "📦 Синхронизация со статическими файлами..."
-  pnpm run generate
-  npx cap sync && CAPACITOR_SERVER_URL="" node scripts/fix-capacitor-config.js
+  clean_nuxt_static_build_cache
+  MENTALA_STATIC_GENERATE=true \
+    MENTALA_NUXT_BUILD_DIR="$MOBILE_NUXT_BUILD_DIR" \
+    pnpm exec nuxt generate --dotenv "$MOBILE_ENV_FILE"
+  run_capacitor_sync && CAPACITOR_SERVER_URL="" node scripts/fix-capacitor-config.js
   node scripts/verify-capacitor-config.js
 fi
 
