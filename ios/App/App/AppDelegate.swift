@@ -217,6 +217,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
+        // Debug/TestFlight: mentala://debug/storefront?code=RU  → force RU flow
+        //                   mentala://debug/storefront?reset    → clear override
+        if handleStorefrontDebugURL(url) {
+            return true
+        }
+
         // Called when the app was launched with a url. Feel free to add additional processing here,
         // but if you want the App API to support tracking app url opens, make sure to keep this call
         #if canImport(GoogleSignIn)
@@ -226,6 +232,52 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         }
         #endif
         return ApplicationDelegateProxy.shared.application(app, open: url, options: options)
+    }
+
+    /// Обрабатывает URL-scheme override для storefront (TestFlight + DEBUG only).
+    /// mentala://debug/storefront?code=RU  — установить код страны
+    /// mentala://debug/storefront?reset    — сбросить override
+    @discardableResult
+    private func handleStorefrontDebugURL(_ url: URL) -> Bool {
+        // Только DEBUG и TestFlight сборки.
+        #if !DEBUG
+        let isTestFlight = Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt"
+        guard isTestFlight else { return false }
+        #endif
+
+        guard url.scheme?.lowercased() == "mentala",
+              url.host?.lowercased() == "debug",
+              url.path.lowercased() == "/storefront" else {
+            return false
+        }
+
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        let queryItems = components?.queryItems ?? []
+
+        if queryItems.contains(where: { $0.name == "reset" }) {
+            UserDefaults.standard.removeObject(forKey: StorefrontPlugin.storefrontOverrideKey)
+            showStorefrontOverrideAlert(message: "Storefront override сброшен. Будет использован реальный StoreKit.")
+            return true
+        }
+
+        if let codeItem = queryItems.first(where: { $0.name == "code" }),
+           let code = codeItem.value, !code.isEmpty {
+            let normalized = code.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+            UserDefaults.standard.set(normalized, forKey: StorefrontPlugin.storefrontOverrideKey)
+            showStorefrontOverrideAlert(message: "Storefront override установлен: \(normalized)")
+            return true
+        }
+
+        return false
+    }
+
+    private func showStorefrontOverrideAlert(message: String) {
+        DispatchQueue.main.async {
+            guard let rootVC = self.window?.rootViewController else { return }
+            let alert = UIAlertController(title: "Storefront Debug", message: message, preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "OK", style: .default))
+            rootVC.present(alert, animated: true)
+        }
     }
 
     func application(_ application: UIApplication, continue userActivity: NSUserActivity, restorationHandler: @escaping ([UIUserActivityRestoring]?) -> Void) -> Bool {
