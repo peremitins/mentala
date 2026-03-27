@@ -15,12 +15,7 @@ const config: CapacitorConfig = {
         androidScheme: 'http',
         cleartext: true,
       }
-    : {
-        // Production: используем статические файлы, но через HTTP схему
-        // чтобы избежать Mixed Content (API идёт по HTTP)
-        androidScheme: 'http',
-        cleartext: true,
-      },
+    : undefined,
   plugins: {
     SplashScreen: {
       launchShowDuration: 2000,
