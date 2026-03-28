@@ -25,8 +25,8 @@ describe('chat settings dto', () => {
     ).toThrow(/Unsupported assistant voice/i);
   });
 
-  it('использует echo как глобальный дефолтный голос', () => {
-    expect(DEFAULT_ASSISTANT_VOICE_ID).toBe('echo');
+  it('использует shimmer (Вера) как глобальный дефолтный голос', () => {
+    expect(DEFAULT_ASSISTANT_VOICE_ID).toBe('shimmer');
   });
 
   it('ставит shimmer первым в женском сегменте и локализует его как Вера', () => {

@@ -58,8 +58,8 @@ export default defineNuxtConfig({
         'width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover',
       // Полный набор favicon/apple-touch/android/ms как в основном приложении.
       link: [
-        { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' },
         { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
+        { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' },
         { rel: 'apple-touch-icon', sizes: '57x57', href: '/apple-icon-57x57.png' },
         { rel: 'apple-touch-icon', sizes: '60x60', href: '/apple-icon-60x60.png' },
         { rel: 'apple-touch-icon', sizes: '72x72', href: '/apple-icon-72x72.png' },
