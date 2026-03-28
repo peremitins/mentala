@@ -336,6 +336,11 @@
         </form>
       </DialogContent>
     </Dialog>
+    <MicPermissionDeniedDialog
+      :open="showMicDeniedModal"
+      @update:open="showMicDeniedModal = $event"
+      @open-settings="openMicSettings"
+    />
   </div>
 </template>
 
@@ -525,6 +530,8 @@ const {
   toggleListening: toggleMic,
   stopListening: stopMic,
   clearBaseText: clearVoiceBase,
+  showMicDeniedModal,
+  openMicSettings,
 } = useVoiceDictationInput({
   getValue: () => chat.userText,
   setValue: (value) => {
