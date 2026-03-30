@@ -14,6 +14,7 @@
 - `pnpm cap:sync` / `pnpm cap:sync:prod` — release/TestFlight путь: Nuxt bundle собирается из `.env.production`
 - `pnpm cap:sync:device:wireless` — live reload для iPhone/Android без USB: app грузится с dev-сервера по LAN из `.env.development`
 - Перед `cap sync` iOS Google OAuth URL scheme синхронизируется из `NUXT_PUBLIC_GOOGLE_IOS_CLIENT_ID`, чтобы Debug и Release не перетирали друг другу callback scheme
+- iOS Firebase-конфиг унифицирован: Debug и Release используют один `ios/App/App/Firebase/GoogleService-Info.plist` из `mentala-prod`; отдельные dev/prod plist удалены, чтобы исключить конфликт project number / app id
 - Mobile static/release сборки используют отдельный `buildDir`, чтобы активный `pnpm dev` не перетирал `.nuxt` и не ломал `client.manifest`
 - Static generate для mobile помечается флагом `MENTALA_STATIC_GENERATE=true`; подмена `npm_lifecycle_event` запрещена, потому что она может превратить release bundle в dev-style HTML и дать белый экран в WebView
 - После `nuxt generate` mobile release pipeline вычищает из bundle тяжёлые CDN-backed каталоги `meditations` и `notifications`: они не должны попадать в APK/IPA, потому что в рантайме резолвятся через `NUXT_PUBLIC_MEDIA_BASE_URL`
