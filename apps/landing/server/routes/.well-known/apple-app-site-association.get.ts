@@ -1,9 +1,8 @@
 import { setHeader } from 'h3';
-import { buildAppleAppSiteAssociation } from '../../../shared/well-known/app-links';
+import { buildAppleAppSiteAssociation } from '../../../../../shared/well-known/app-links';
 
 /**
- * Universal Links association file (iOS).
- * Важно: endpoint должен быть публично доступен без редиректов и auth.
+ * Для landing файл должен оказаться в статическом экспорте без редиректов и auth.
  */
 export default defineEventHandler(async (event) => {
   setHeader(event, 'Content-Type', 'application/json; charset=utf-8');
