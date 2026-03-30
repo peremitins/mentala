@@ -224,6 +224,11 @@ export default defineNuxtConfig({
     },
   },
   nitro: {
+    typescript: {
+      tsConfig: {
+        include: ['../server/routes/.well-known/**/*'],
+      },
+    },
     prerender: {
       crawlLinks: false,
       // routes: [], // Пустой массив = не prerender ничего (не требует БД)
