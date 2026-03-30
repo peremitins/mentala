@@ -6,6 +6,7 @@
   "scripts": {
     "build": "nuxt build",
     "dev": "./scripts/run-dev.sh",
+    "assets:android": "node scripts/generate-android-assets.mjs",
     "assets:ios": "node scripts/generate-ios-assets.mjs",
     "landing:dev": "nuxt dev apps/landing --dotenv .env.development --host localhost --port 3001",
     "landing:dev:network": "nuxt dev apps/landing --dotenv .env.development --host 0.0.0.0 --port 3001",
