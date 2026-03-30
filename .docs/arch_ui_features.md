@@ -4,6 +4,7 @@
 - Медитации, дыхательные практики, быстрая помощь, дневник благодарности
 - Дыхательные: каталог в `app/lib/breathPracticesCatalog.ts`, плеер `BreathPracticePlayer.vue` + `BreathOrb.vue`
 - Голосовые подсказки фаз из `public/breath/voice/{informal|formal}/*.mp3`
+- На mobile/web голосовые фазы дыхания идут через `Howler` с `html5: true` и unlock-retry: это основной защитный путь для Android WebView
 - Кастомные практики: 1-30 сек фазы, 2-4 фазы, хранение в localStorage/Capacitor Preferences
 
 ## Быстрая помощь (`/quick-help`)
@@ -18,6 +19,7 @@
 - Native: `@capgo/native-audio` на mobile, foreground service на Android
 - Контекст очереди: перемотка вперёд/назад по выбранной секции
 - Медиафайлы версионируются по content-hash, CDN кэш бессрочный
+- В mobile release локальный каталог `public/meditations` не бандлится: аудио/обложки/фоны должны загружаться с `mediaBaseUrl` (`https://media.mentala.app` в production)
 
 ## Фоновая сцена (`/scene-selection`)
 - Фиксированный каталог в `app/lib/sceneSelectionCatalog.ts`
