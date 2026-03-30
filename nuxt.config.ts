@@ -7,9 +7,13 @@ import { resolveSceneDefaultVolumePercent } from './shared/utils/sceneSettings';
 const sceneDefaultVolumePercent = resolveSceneDefaultVolumePercent(
   process.env.NUXT_PUBLIC_SCENE_DEFAULT_VOLUME_PERCENT
 );
+const buildDir = process.env.MENTALA_NUXT_BUILD_DIR || '.nuxt';
 
 export default defineNuxtConfig({
   ssr: false,
+  // Для mobile static/release сборок используем отдельный buildDir,
+  // чтобы dev-сервер не перетирал `.nuxt` и не ломал client.manifest.
+  buildDir,
   compatibilityDate: '2025-07-15',
   devtools: { enabled: false },
   srcDir: '',
@@ -80,6 +84,16 @@ export default defineNuxtConfig({
         },
         {
           rel: 'icon',
+          type: 'image/svg+xml',
+          href: '/favicon.svg',
+        },
+        {
+          rel: 'icon',
+          type: 'image/x-icon',
+          href: '/favicon.ico',
+        },
+        {
+          rel: 'icon',
           type: 'image/png',
           sizes: '192x192',
           href: '/android-icon-192x192.png',
@@ -134,24 +148,24 @@ export default defineNuxtConfig({
     OAUTH_VK_CLIENT_ID: process.env.NUXT_OAUTH_VK_CLIENT_ID,
     OAUTH_VK_CLIENT_SECRET: process.env.NUXT_OAUTH_VK_CLIENT_SECRET,
     TELEGRAM_BOT_TOKEN: process.env.NUXT_TELEGRAM_BOT_TOKEN,
-    TELEGRAM_ALERTS_BOT_TOKEN: process.env.TELEGRAM_ALERTS_BOT_TOKEN,
-    TELEGRAM_ALERTS_CHAT_ID: process.env.TELEGRAM_ALERTS_CHAT_ID,
-    TELEGRAM_REPORTS_TIMEZONE: process.env.TELEGRAM_REPORTS_TIMEZONE,
-    TELEGRAM_DAILY_REPORT_HOUR: process.env.TELEGRAM_DAILY_REPORT_HOUR,
+    TELEGRAM_ALERTS_BOT_TOKEN: process.env.NUXT_TELEGRAM_ALERTS_BOT_TOKEN,
+    TELEGRAM_ALERTS_CHAT_ID: process.env.NUXT_TELEGRAM_ALERTS_CHAT_ID,
+    TELEGRAM_REPORTS_TIMEZONE: process.env.NUXT_TELEGRAM_REPORTS_TIMEZONE,
+    TELEGRAM_DAILY_REPORT_HOUR: process.env.NUXT_TELEGRAM_DAILY_REPORT_HOUR,
     TELEGRAM_REGISTRATION_MILESTONES:
-      process.env.TELEGRAM_REGISTRATION_MILESTONES,
-    TELEGRAM_ALERTS_ENV_LABEL: process.env.TELEGRAM_ALERTS_ENV_LABEL,
-    TELEGRAM_API_TIMEOUT_MS: process.env.TELEGRAM_API_TIMEOUT_MS,
+      process.env.NUXT_TELEGRAM_REGISTRATION_MILESTONES,
+    TELEGRAM_ALERTS_ENV_LABEL: process.env.NUXT_TELEGRAM_ALERTS_ENV_LABEL,
+    TELEGRAM_API_TIMEOUT_MS: process.env.NUXT_TELEGRAM_API_TIMEOUT_MS,
     TELEGRAM_HTTP_5XX_SPIKE_THRESHOLD:
-      process.env.TELEGRAM_HTTP_5XX_SPIKE_THRESHOLD,
+      process.env.NUXT_TELEGRAM_HTTP_5XX_SPIKE_THRESHOLD,
     TELEGRAM_HTTP_5XX_SPIKE_WINDOW_MINUTES:
-      process.env.TELEGRAM_HTTP_5XX_SPIKE_WINDOW_MINUTES,
+      process.env.NUXT_TELEGRAM_HTTP_5XX_SPIKE_WINDOW_MINUTES,
     TELEGRAM_PUSH_DEGRADATION_ERROR_RATE_PERCENT:
-      process.env.TELEGRAM_PUSH_DEGRADATION_ERROR_RATE_PERCENT,
+      process.env.NUXT_TELEGRAM_PUSH_DEGRADATION_ERROR_RATE_PERCENT,
     TELEGRAM_PUSH_DEGRADATION_MIN_ATTEMPTS:
-      process.env.TELEGRAM_PUSH_DEGRADATION_MIN_ATTEMPTS,
+      process.env.NUXT_TELEGRAM_PUSH_DEGRADATION_MIN_ATTEMPTS,
     TELEGRAM_PUSH_DEGRADATION_WINDOW_MINUTES:
-      process.env.TELEGRAM_PUSH_DEGRADATION_WINDOW_MINUTES,
+      process.env.NUXT_TELEGRAM_PUSH_DEGRADATION_WINDOW_MINUTES,
     telegramLeadsChatId: process.env.NUXT_TELEGRAM_LEADS_CHAT_ID,
     landingLeadsEmailTo: process.env.NUXT_LANDING_LEADS_EMAIL_TO,
     FIREBASE_SERVICE_ACCOUNT_JSON:
@@ -170,6 +184,19 @@ export default defineNuxtConfig({
     yookassaShopId: process.env.NUXT_YOOKASSA_SHOP_ID,
     yookassaSecretKey: process.env.NUXT_YOOKASSA_SECRET_KEY,
     yookassaTestMode: process.env.NUXT_YOOKASSA_TEST_MODE === 'true',
+    // Apple IAP (StoreKit 2 + App Store Server API) server-only настройки.
+    // ВАЖНО: приватные ключи не должны попадать в runtimeConfig.public.
+    appleIapBundleIds:
+      process.env.APPLE_IAP_BUNDLE_IDS ||
+      process.env.NUXT_APPLE_IAP_BUNDLE_IDS ||
+      process.env.NUXT_APPLE_IAP_BUNDLE_ID,
+    appleIapIssuerId:
+      process.env.APPLE_IAP_ISSUER_ID || process.env.NUXT_APPLE_IAP_ISSUER_ID,
+    appleIapKeyId:
+      process.env.APPLE_IAP_KEY_ID || process.env.NUXT_APPLE_IAP_KEY_ID,
+    appleIapPrivateKeyBase64:
+      process.env.APPLE_IAP_PRIVATE_KEY_BASE64 ||
+      process.env.NUXT_APPLE_IAP_PRIVATE_KEY_BASE64,
     public: {
       // Если не задано, будет пустая строка = относительные пути
       apiBase: process.env.NUXT_PUBLIC_API_SERVER_URL || '',
@@ -191,9 +218,17 @@ export default defineNuxtConfig({
         process.env.NUXT_FEATURE_NATIVE_MEDITATION_AUDIO_ENABLED !== 'false',
       // Дефолтная громкость фоновой сцены для новых пользователей задаётся через env.
       sceneDefaultVolumePercent,
+      yandexMetrikaId: process.env.NUXT_PUBLIC_YANDEX_METRIKA_ID || '',
+      yandexMetrikaDisabled:
+        process.env.NUXT_PUBLIC_YANDEX_METRIKA_DISABLED === 'true',
     },
   },
   nitro: {
+    typescript: {
+      tsConfig: {
+        include: ['../server/routes/.well-known/**/*'],
+      },
+    },
     prerender: {
       crawlLinks: false,
       // routes: [], // Пустой массив = не prerender ничего (не требует БД)

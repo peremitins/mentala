@@ -4,13 +4,12 @@
  * @version BullMQ 5.x (без QueueScheduler)
  */
 import { dispatchAppCriticalEvent } from '@/server/application/events/app-events.dispatchers';
+import { isStaticGenerateProcess } from '@/server/utils/static-generate';
 
 export default defineNitroPlugin(async () => {
   // В static generate воркеры не должны стартовать:
   // они не нужны для prerender и требуют Redis.
-  const isStaticBuild =
-    process.env.NITRO_PRESET === 'static' ||
-    process.env.npm_lifecycle_event === 'generate';
+  const isStaticBuild = isStaticGenerateProcess();
   const isWorkerEnabled = process.env.ENABLE_NOTIFICATIONS_WORKER !== 'false';
 
   if (!isWorkerEnabled || isStaticBuild) {
@@ -18,7 +17,7 @@ export default defineNitroPlugin(async () => {
       isWorkerEnabled,
       isStaticBuild,
       NITRO_PRESET: process.env.NITRO_PRESET,
-      npmLifecycle: process.env.npm_lifecycle_event,
+      MENTALA_STATIC_GENERATE: process.env.MENTALA_STATIC_GENERATE,
     });
     return;
   }

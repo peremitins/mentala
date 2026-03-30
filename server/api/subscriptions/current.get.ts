@@ -1,5 +1,5 @@
 import { getSessionUser } from '@/server/application/auth/session';
-import { setHeader, getQuery, createError } from 'h3';
+import { setHeader, getQuery, createError, getHeader } from 'h3';
 import { db } from '@/server/infrastructure/db/client';
 import {
   subscriptionEvents,
@@ -24,11 +24,41 @@ import {
 import { syncPendingPaymentMethodBinding } from '@/server/application/subscriptions/payment-methods.service';
 import { runTrialBillingForUser } from '@/server/application/subscriptions/trial-billing-worker.service';
 import { runScheduledPlanChangeForUser } from '@/server/application/subscriptions/scheduled-plan-change.service';
+import { getOrCreateAppleAppAccountToken } from '@/server/application/subscriptions/apple-app-account-token.service';
+import { normalizeStorefrontCountryCode } from '@/shared/utils/storefront';
 
 interface ScheduledChangeResponse {
   planId: string;
   billingPeriod: 'month' | 'year';
   effectiveAt: string;
+}
+
+type SourcePlatform = 'web' | 'ios' | 'android';
+
+function resolveSourcePlatform(event: any): SourcePlatform {
+  const platformHeader = String(getHeader(event, 'x-platform') || '')
+    .trim()
+    .toLowerCase();
+  if (platformHeader === 'ios') return 'ios';
+  if (platformHeader === 'android') return 'android';
+  return 'web';
+}
+
+function normalizeStorefrontCountry(value: unknown): string | null {
+  return normalizeStorefrontCountryCode(value);
+}
+
+function resolveBillingProviderHint(params: {
+  platform: SourcePlatform;
+  storefrontCountry: string | null;
+}): 'yookassa' | 'apple_iap' {
+  // Разводим payment-flow только на iOS. На остальных платформах пока используется YooKassa.
+  if (params.platform !== 'ios') {
+    return 'yookassa';
+  }
+
+  // Безопасное поведение: если storefront не получили — по умолчанию WW-flow (Apple IAP).
+  return params.storefrontCountry === 'RU' ? 'yookassa' : 'apple_iap';
 }
 
 async function readCurrentUserBillingRow(userId: number) {
@@ -59,6 +89,10 @@ async function readCurrentUserBillingRow(userId: number) {
       paymentMethodBindingStatus: users.paymentMethodBindingStatus,
       billingCollectionStatus: users.billingCollectionStatus,
       graceEndsAt: users.graceEndsAt,
+      billingRegionSource: users.billingRegionSource,
+      billingStorefrontCountry: users.billingStorefrontCountry,
+      billingStorefrontUpdatedAt: users.billingStorefrontUpdatedAt,
+      appleAppAccountToken: users.appleAppAccountToken,
     })
     .from(users)
     .where(eq(users.id, userId))
@@ -91,6 +125,7 @@ function buildScheduledChange(params: {
  * Поддерживает query-параметр ?userId=123 только для admin/support.
  */
 export default defineEventHandler(async (event) => {
+  const sourcePlatform = resolveSourcePlatform(event);
   const sessionResult = await getSessionUser(event);
   if (!sessionResult?.user?.id) {
     setHeader(event, 'Cache-Control', 'private, no-store');
@@ -106,6 +141,12 @@ export default defineEventHandler(async (event) => {
       paymentMethod: null,
       billingCollectionStatus: 'none',
       graceEndsAt: null,
+      storefrontCountry: null,
+      appleAppAccountToken: null,
+      billingProviderHint: resolveBillingProviderHint({
+        platform: sourcePlatform,
+        storefrontCountry: null,
+      }),
       features: {
         ai: false,
         avatar: false,
@@ -458,6 +499,7 @@ export default defineEventHandler(async (event) => {
         startDate: activeSubscription.subscription.startDate,
         endDate: activeSubscription.subscription.endDate,
         paymentStatus: activeSubscription.subscription.paymentStatus,
+        paymentProvider: activeSubscription.subscription.paymentProvider,
         autoRenew: activeSubscription.subscription.autoRenew,
         sourcePlatform: activeSubscription.subscription.sourcePlatform,
         billingPeriod: activeSubscription.subscription.billingPeriod,
@@ -472,6 +514,14 @@ export default defineEventHandler(async (event) => {
         },
       }
     : null;
+
+  const storefrontCountry = normalizeStorefrontCountry(
+    userRecord.billingStorefrontCountry
+  );
+  const appleAppAccountToken =
+    sourcePlatform === 'ios'
+      ? await getOrCreateAppleAppAccountToken(targetUserId)
+      : null;
 
   const response = {
     plan: currentEntitlementsPlan,
@@ -502,6 +552,12 @@ export default defineEventHandler(async (event) => {
         : null,
     billingCollectionStatus,
     graceEndsAt: userRecord.graceEndsAt?.toISOString() || null,
+    storefrontCountry,
+    appleAppAccountToken,
+    billingProviderHint: resolveBillingProviderHint({
+      platform: sourcePlatform,
+      storefrontCountry,
+    }),
     features,
     subscription: subscriptionDto,
     user: {

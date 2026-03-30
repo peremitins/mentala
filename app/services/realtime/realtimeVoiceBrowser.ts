@@ -1,3 +1,5 @@
+import { Capacitor } from '@capacitor/core';
+
 type LegacyGetUserMedia = (
   constraints: MediaStreamConstraints,
   onSuccess: (stream: MediaStream) => void,
@@ -89,10 +91,15 @@ export function getRealtimeVoiceSupport(): RealtimeVoiceSupportSnapshot {
     window.location.origin.trim().length > 0
       ? window.location.origin
       : null;
+  // На нативных платформах Capacitor (iOS/Android) доступ к микрофону
+  // контролируется на уровне ОС (Info.plist / AndroidManifest),
+  // а не браузерным secure context. HTTP origin по LAN IP — штатный
+  // режим для iOS dev (нет аналога adb reverse).
+  const isNativePlatform = Capacitor.isNativePlatform();
   const isSecureContextValue =
     (typeof window.isSecureContext === 'boolean'
       ? window.isSecureContext
-      : false) || isTrustedRealtimeVoiceOrigin(origin);
+      : false) || isTrustedRealtimeVoiceOrigin(origin) || isNativePlatform;
 
   return {
     hasPeerConnection,

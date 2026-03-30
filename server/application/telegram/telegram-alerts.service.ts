@@ -25,6 +25,7 @@ import {
   normalizeTelegramAlertErrorDetails,
 } from './telegram-alert.utils';
 import { resolveTelegramAlertUserEmail } from './telegram-alert-user-context';
+import { isStaticGenerateProcess } from '@/server/utils/static-generate';
 import type {
   TelegramAlertEnvelope,
   TelegramUserRegistrationMethod,
@@ -74,9 +75,7 @@ export function buildTelegramAlertEvent<
 }
 
 export function isTelegramAlertsQueueAvailable(): boolean {
-  const isStaticBuild =
-    process.env.NITRO_PRESET === 'static' ||
-    process.env.npm_lifecycle_event === 'generate';
+  const isStaticBuild = isStaticGenerateProcess();
   const notificationsEnabled =
     process.env.ENABLE_NOTIFICATIONS_WORKER !== 'false';
 

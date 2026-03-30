@@ -7,10 +7,10 @@ const markUncertain = vi.fn(async () => undefined);
 
 vi.mock('#imports', () => ({
   useRuntimeConfig: () => ({
-    TELEGRAM_ALERTS_BOT_TOKEN: 'test-bot-token',
-    TELEGRAM_ALERTS_CHAT_ID: '-100000000001',
+    NUXT_TELEGRAM_ALERTS_BOT_TOKEN: 'test-bot-token',
+    NUXT_TELEGRAM_ALERTS_CHAT_ID: '-100000000001',
     TELEGRAM_REPORTS_TIMEZONE: 'Europe/Moscow',
-    TELEGRAM_ALERTS_ENV_LABEL: 'test',
+    NUXT_TELEGRAM_ALERTS_ENV_LABEL: 'test',
     TELEGRAM_API_TIMEOUT_MS: '5000',
     TELEGRAM_HTTP_5XX_SPIKE_THRESHOLD: '20',
     TELEGRAM_HTTP_5XX_SPIKE_WINDOW_MINUTES: '5',

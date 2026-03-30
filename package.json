@@ -2,9 +2,12 @@
   "name": "nuxt-app",
   "type": "module",
   "private": true,
+  "packageManager": "pnpm@10.33.0",
   "scripts": {
     "build": "nuxt build",
     "dev": "./scripts/run-dev.sh",
+    "assets:android": "node scripts/generate-android-assets.mjs",
+    "assets:ios": "node scripts/generate-ios-assets.mjs",
     "landing:dev": "nuxt dev apps/landing --dotenv .env.development --host localhost --port 3001",
     "landing:dev:network": "nuxt dev apps/landing --dotenv .env.development --host 0.0.0.0 --port 3001",
     "landing:build": "nuxt build apps/landing",
@@ -17,6 +20,8 @@
     "dev:redis:check": "docker compose -f docker-compose.dev.yml exec -T redis redis-cli ping 2>/dev/null || redis-cli ping 2>/dev/null || echo '❌ Redis не запущен. Запусти: pnpm dev:redis:up или brew services start redis'",
     "dev:redis:stop-brew": "brew services stop redis 2>/dev/null || echo '⚠️  Redis не запущен через brew или brew недоступен'",
     "generate": "nuxt generate --dotenv .env.development",
+    "generate:dev": "nuxt generate --dotenv .env.development",
+    "generate:prod": "nuxt generate --dotenv .env.production",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
     "lint": "eslint .",
@@ -42,7 +47,7 @@
     "cap:sync:prod": "./scripts/setup-capacitor-dev.sh",
     "cap:sync:emulator": "./scripts/setup-capacitor-dev.sh emulator",
     "cap:sync:device": "./scripts/setup-capacitor-dev.sh device",
-    "cap:sync:device:standalone": "./scripts/setup-capacitor-dev.sh device-standalone",
+    "cap:sync:device:wireless": "./scripts/setup-capacitor-dev.sh device-wireless",
     "cap:verify:prod": "node scripts/verify-capacitor-config.js",
     "cap:open:android": "npx cap open android",
     "build:mobile": "pnpm run cap:sync:prod && pnpm run cap:verify:prod",
@@ -182,6 +187,9 @@
     "overrides": {
       "@internationalized/date": "3.9.0",
       "on-change": "6.0.2"
+    },
+    "patchedDependencies": {
+      "@capacitor-community/speech-recognition": "patches/@capacitor-community__speech-recognition.patch"
     }
   },
   "config": {

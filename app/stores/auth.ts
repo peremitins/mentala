@@ -98,7 +98,7 @@ function mapGoogleLoginError(error: any): string {
     text.includes('id token verification failed') ||
     (text.includes('/api/auth/google/native') && text.includes('401'))
   ) {
-    return 'Google токен отклонён сервером. Проверь, что `NUXT_OAUTH_GOOGLE_CLIENT_ID` одинаков на клиенте и сервере.';
+    return 'Google токен отклонён сервером. Проверь, что на клиенте и сервере совпадают `NUXT_OAUTH_GOOGLE_CLIENT_ID` и `NUXT_PUBLIC_GOOGLE_IOS_CLIENT_ID`, а mobile release bundle пересобран без stale Nuxt cache.';
   }
   if (isDeveloperError) {
     return 'Google отклонил вход (DEVELOPER_ERROR). Проверь SHA-1 (debug/release) и package name в Android OAuth client, а также что используется Web Client ID.';
@@ -108,6 +108,17 @@ function mapGoogleLoginError(error: any): string {
   }
   if (rawMessage) return rawMessage;
   return 'Не удалось войти через Google';
+}
+
+function maskGoogleClientId(value: string): string {
+  const normalized = value.trim();
+  if (!normalized) return '<empty>';
+
+  const prefix =
+    normalized.split('.apps.googleusercontent.com')[0] || normalized;
+  if (prefix.length <= 10) return prefix;
+
+  return `${prefix.slice(0, 6)}...${prefix.slice(-6)}`;
 }
 
 export const useAuthStore = defineStore('auth', {
@@ -239,8 +250,8 @@ export const useAuthStore = defineStore('auth', {
           '[Auth][Google] Native init:',
           JSON.stringify({
             platform,
-            hasWebClientId: !!webClientId,
-            hasIosClientId: !!iosClientId,
+            webClientId: maskGoogleClientId(webClientId),
+            iosClientId: maskGoogleClientId(iosClientId),
           })
         );
 
@@ -256,11 +267,24 @@ export const useAuthStore = defineStore('auth', {
             );
           }
           googleConfig.iOSClientId = iosClientId;
-          // На iOS серверный client id нужен для корректного server authorization.
-          googleConfig.iOSServerClientId = webClientId;
+          // iOSServerClientId НЕ задаём: он включает веб-OAuth flow (ASWebAuthenticationSession),
+          // что вызывает consent-экраны Google. Наш сервер использует только idToken,
+          // serverAuthCode не нужен.
         }
 
         await SocialLogin.initialize({ google: googleConfig });
+
+        if (platform === 'ios') {
+          // Очищаем keychain перед входом, чтобы избежать stale-сессии от предыдущей
+          // сборки (dev/TestFlight/prod) с другим iOSClientId. Без iOSServerClientId
+          // повторный вход использует нативный picker — consent-экраны не появляются.
+          try {
+            await SocialLogin.logout({ provider: 'google' });
+          } catch {
+            // Если активной сессии нет — игнорируем.
+          }
+        }
+
         const loginResponse: any = await SocialLogin.login({
           provider: 'google',
           options: {

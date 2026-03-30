@@ -39,6 +39,10 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Нужно для записи голоса при использовании голосового ввода.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Нужно для распознавания вашей речи в текст при голосовом вводе.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>
@@ -55,21 +59,17 @@
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
-		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Нужно для распознавания вашей речи в текст при голосовом вводе.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Нужно для записи голоса при использовании голосового ввода.</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>
