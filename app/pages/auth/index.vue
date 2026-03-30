@@ -520,6 +520,13 @@ async function submit() {
       return;
     }
 
+    const payload = e?.data || e?.response?._data || {};
+    const message =
+      payload?.message ||
+      payload?.statusMessage ||
+      (e instanceof Error ? e.message : '') ||
+      'Не удалось войти. Проверь подключение и попробуй ещё раз.';
+    useToast('Ошибка входа', String(message), 'error');
     console.error('[Auth] Signin error:', getErrorDiagnosticsLog(e));
   } finally {
     loading.value = false;
