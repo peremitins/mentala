@@ -7,7 +7,7 @@
     ></div>
     <NuxtLoadingIndicator />
     <NuxtLayout>
-      <div class="h-full flex flex-col z-0">
+      <div class="h-full flex flex-col z-0 justify-center">
         <KeepAlive>
           <NuxtPage />
         </KeepAlive>

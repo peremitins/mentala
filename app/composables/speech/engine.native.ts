@@ -33,9 +33,34 @@ export function createNativeEngine(): SpeechEngine {
     const perm = await SpeechRecognition.checkPermissions();
     let permissionsJustGranted = false;
     if (perm.speechRecognition !== 'granted') {
-      const reqResult = await SpeechRecognition.requestPermissions();
+      // Если уже denied — не вызываем requestPermissions (на iOS это no-op, диалог не появится).
+      // Бросаем PERMISSION_DENIED — юзеру нужно идти в настройки.
+      if (perm.speechRecognition === 'denied') {
+        const err = new Error('Microphone permission denied') as Error & {
+          code: string;
+        };
+        err.code = 'PERMISSION_DENIED';
+        throw err;
+      }
+      // Статус prompt — показываем системный диалог. Если юзер отказал первый раз,
+      // бросаем PERMISSION_DENIED_FIRST: не беспокоим модалом, просто молча фейлим.
+      let reqResult: { speechRecognition: string };
+      try {
+        reqResult = await SpeechRecognition.requestPermissions();
+      } catch {
+        // requestPermissions() сам бросил — расцениваем как отказ
+        const err = new Error('Microphone permission denied') as Error & {
+          code: string;
+        };
+        err.code = 'PERMISSION_DENIED_FIRST';
+        throw err;
+      }
       if (reqResult.speechRecognition !== 'granted') {
-        throw new Error('Microphone permission denied');
+        const err = new Error('Microphone permission denied') as Error & {
+          code: string;
+        };
+        err.code = 'PERMISSION_DENIED_FIRST';
+        throw err;
       }
       permissionsJustGranted = true;
     }

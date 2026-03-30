@@ -1,8 +1,8 @@
 <template>
-  <div class="min-h-dvh">
+  <div class="w-full">
     <NeuralBg />
     <div
-      class="container mx-auto px-4 py-4 flex items-center justify-center min-h-dvh relative z-10"
+      class="container mx-auto px-4 py-4 flex items-center justify-center relative z-10"
     >
       <div class="w-full max-w-md">
         <div class="glass-deep p-6">

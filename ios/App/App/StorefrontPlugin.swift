@@ -1,10 +1,12 @@
 import Foundation
 import Capacitor
 import StoreKit
+import os.log
 
 // Плагин для получения Storefront (регион App Store аккаунта пользователя).
-// Приоритет: StoreKit 2 → StoreKit 1 → locale устройства (fallback для регионов,
-// где Apple заблокировал in-app purchases и Storefront.current возвращает nil).
+// Приоритет: UserDefaults override → StoreKit 2 → StoreKit 1 → locale устройства.
+// UserDefaults override доступен в TestFlight и DEBUG — устанавливается через URL scheme
+// mentala://debug/storefront?code=RU (сбросить: mentala://debug/storefront?reset)
 @objc(StorefrontPlugin)
 public class StorefrontPlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "StorefrontPlugin"
@@ -31,24 +33,45 @@ public class StorefrontPlugin: CAPPlugin, CAPBridgedPlugin {
         "PER": "PE", "UKR": "UA", "ROU": "RO", "HUN": "HU", "KAZ": "KZ",
     ]
 
-    @objc func getStorefrontCountryCode(_ call: CAPPluginCall) {
-        #if DEBUG
-        // Dev-only override: позволяет тестировать RU/WW flow без смены Apple ID региона.
-        let overrideRaw = (ProcessInfo.processInfo.environment["MENTALA_STOREFRONT_OVERRIDE"] ?? "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .uppercased()
-        if !overrideRaw.isEmpty {
-            if overrideRaw == "NONE" || overrideRaw == "NULL" || overrideRaw == "UNKNOWN" {
-                call.resolve(["countryCode": NSNull()])
-                return
-            }
+    // Ключ UserDefaults для override storefront (доступен в TestFlight и DEBUG).
+    // Устанавливается через URL scheme: mentala://debug/storefront?code=RU
+    // Сбрасывается через: mentala://debug/storefront?reset
+    static let storefrontOverrideKey = "mentala.debug.storefront_override"
 
-            if overrideRaw.range(of: #"^[A-Z]{2,3}$"#, options: .regularExpression) != nil {
-                call.resolve(["countryCode": normalizeCountryCode(overrideRaw)])
-                return
+    // Определяем TestFlight: sandboxReceipt присутствует только в TestFlight-сборках.
+    private var isTestFlightBuild: Bool {
+        Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt"
+    }
+
+    @objc func getStorefrontCountryCode(_ call: CAPPluginCall) {
+        let log = OSLog(subsystem: Bundle.main.bundleIdentifier ?? "mentala", category: "Storefront")
+
+        // Override через UserDefaults — доступен в DEBUG и TestFlight (не в App Store production).
+        // Приоритет выше StoreKit, чтобы можно было тестировать RU/WW flow на любом устройстве.
+        #if DEBUG
+        let allowOverride = true
+        #else
+        let allowOverride = isTestFlightBuild
+        #endif
+
+        if allowOverride {
+            let overrideRaw = (UserDefaults.standard.string(forKey: StorefrontPlugin.storefrontOverrideKey) ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .uppercased()
+            if !overrideRaw.isEmpty {
+                if overrideRaw == "NONE" || overrideRaw == "NULL" || overrideRaw == "UNKNOWN" {
+                    os_log("[Storefront] UserDefaults override → null", log: log, type: .debug)
+                    call.resolve(["countryCode": NSNull()])
+                    return
+                }
+                if overrideRaw.range(of: #"^[A-Z]{2,3}$"#, options: .regularExpression) != nil {
+                    let normalized = normalizeCountryCode(overrideRaw)
+                    os_log("[Storefront] UserDefaults override → %{public}@", log: log, type: .debug, normalized)
+                    call.resolve(["countryCode": normalized])
+                    return
+                }
             }
         }
-        #endif
 
         if #available(iOS 15.0, *) {
             Task { [weak self] in
@@ -60,14 +83,18 @@ public class StorefrontPlugin: CAPPlugin, CAPBridgedPlugin {
                 // 1. StoreKit 2 storefront (основной источник).
                 if let storefront = await Storefront.current {
                     let normalized = self.normalizeCountryCode(storefront.countryCode)
+                    os_log("[Storefront] SK2 countryCode=%{public}@ normalized=%{public}@", log: log, type: .info, storefront.countryCode, normalized)
                     if !normalized.isEmpty {
                         call.resolve(["countryCode": normalized])
                         return
                     }
+                } else {
+                    os_log("[Storefront] SK2 Storefront.current=nil", log: log, type: .info)
                 }
 
                 // 2. StoreKit 1 fallback.
                 let sk1Fallback = self.resolveStorefrontFromSkPaymentQueue()
+                os_log("[Storefront] SK1 fallback=%{public}@", log: log, type: .info, sk1Fallback.isEmpty ? "nil" : sk1Fallback)
                 if !sk1Fallback.isEmpty {
                     call.resolve(["countryCode": sk1Fallback])
                     return
@@ -77,11 +104,13 @@ public class StorefrontPlugin: CAPPlugin, CAPBridgedPlugin {
                 // Используется когда Apple заблокировал StoreKit для региона (например, Россия).
                 // Не идеально (locale ≠ App Store регион), но лучше чем nil.
                 let localeFallback = self.resolveRegionFromDeviceLocale()
+                os_log("[Storefront] locale fallback=%{public}@", log: log, type: .info, localeFallback.isEmpty ? "nil" : localeFallback)
                 if !localeFallback.isEmpty {
                     call.resolve(["countryCode": localeFallback])
                     return
                 }
 
+                os_log("[Storefront] all sources returned nil", log: log, type: .error)
                 call.resolve(["countryCode": NSNull()])
             }
             return
@@ -89,17 +118,20 @@ public class StorefrontPlugin: CAPPlugin, CAPBridgedPlugin {
 
         // iOS 13-14 path.
         let fallback = resolveStorefrontFromSkPaymentQueue()
+        os_log("[Storefront] iOS13 SK1=%{public}@", log: log, type: .info, fallback.isEmpty ? "nil" : fallback)
         if !fallback.isEmpty {
             call.resolve(["countryCode": fallback])
             return
         }
 
         let localeFallback = resolveRegionFromDeviceLocale()
+        os_log("[Storefront] iOS13 locale=%{public}@", log: log, type: .info, localeFallback.isEmpty ? "nil" : localeFallback)
         if !localeFallback.isEmpty {
             call.resolve(["countryCode": localeFallback])
             return
         }
 
+        os_log("[Storefront] iOS13 all sources nil", log: log, type: .error)
         call.resolve(["countryCode": NSNull()])
     }
 
