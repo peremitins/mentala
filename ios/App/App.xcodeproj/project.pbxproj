@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		2FAD9763203C412B000D30F8 /* config.xml in Resources */ = {isa = PBXBuildFile; fileRef = 2FAD9762203C412B000D30F8 /* config.xml */; };
+		90A1F00230A1F00100AD9A6D /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 90A1F00130A1F00100AD9A6D /* GoogleService-Info.plist */; };
 		50379B232058CBB4000EE86E /* capacitor.config.json in Resources */ = {isa = PBXBuildFile; fileRef = 50379B222058CBB4000EE86E /* capacitor.config.json */; };
 		504EC3081FED79650016851F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 504EC3071FED79650016851F /* AppDelegate.swift */; };
 		504EC30D1FED79650016851F /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30B1FED79650016851F /* Main.storyboard */; };
@@ -65,8 +66,7 @@
 		7B8B2DB4C7E24FC394BFC07F /* AppleIapPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleIapPlugin.swift; sourceTree = "<group>"; };
 		83A4CA7636EFA2099045582F /* StorefrontPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorefrontPlugin.swift; sourceTree = "<group>"; };
 		9059E53B2F4C43D000AD9A6D /* MentalaNotificationService.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MentalaNotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-		9059E5622F4C58E200AD9A6D /* GoogleService-Info-Dev.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info-Dev.plist"; sourceTree = "<group>"; };
-		9059E5632F4C58E200AD9A6D /* GoogleService-Info-Prod.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info-Prod.plist"; sourceTree = "<group>"; };
+		90A1F00130A1F00100AD9A6D /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		9074347F2F5997F200A40EF7 /* Mentala.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = Mentala.storekit; sourceTree = "<group>"; };
 		907BDF242F4B1C0B008D03B3 /* App.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
 		AF277DCFFFF123FFC6DF26C7 /* Pods_App.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_App.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -172,8 +172,7 @@
 		9059E5642F4C58E200AD9A6D /* Firebase */ = {
 			isa = PBXGroup;
 			children = (
-				9059E5622F4C58E200AD9A6D /* GoogleService-Info-Dev.plist */,
-				9059E5632F4C58E200AD9A6D /* GoogleService-Info-Prod.plist */,
+				90A1F00130A1F00100AD9A6D /* GoogleService-Info.plist */,
 			);
 			path = Firebase;
 			sourceTree = "<group>";
@@ -191,7 +190,6 @@
 				504EC3021FED79650016851F /* Resources */,
 				9592DBEFFC6D2A0C8D5DEB22 /* [CP] Embed Pods Frameworks */,
 				9059E5432F4C43D000AD9A6D /* Embed Foundation Extensions */,
-				9059E5672F4C597D00AD9A6D /* ShellScript */,
 			);
 			buildRules = (
 			);
@@ -269,6 +267,7 @@
 			files = (
 				504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */,
 				50B271D11FEDC1A000F3C39B /* public in Resources */,
+				90A1F00230A1F00100AD9A6D /* GoogleService-Info.plist in Resources */,
 				907434812F5997F200A40EF7 /* Mentala.storekit in Resources */,
 				504EC30F1FED79650016851F /* Assets.xcassets in Resources */,
 				50379B232058CBB4000EE86E /* capacitor.config.json in Resources */,
@@ -327,24 +326,6 @@
 			shellPath = /bin/sh;
 			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
 			showEnvVarsInLog = 0;
-		};
-		9059E5672F4C597D00AD9A6D /* ShellScript */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-			);
-			outputFileListPaths = (
-			);
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "# Type a script or drag a script file from your workspace to insert its path.\nset -euo pipefail\n\nFIREBASE_DIR=\"${PROJECT_DIR}/App/Firebase\"\n\nDEV_PLIST=\"${FIREBASE_DIR}/GoogleService-Info-Dev.plist\"\nPROD_PLIST=\"${FIREBASE_DIR}/GoogleService-Info-Prod.plist\"\n\nif [ \"${CONFIGURATION}\" = \"Debug\" ]; then\n  SRC_PLIST=\"${DEV_PLIST}\"\nelse\n  SRC_PLIST=\"${PROD_PLIST}\"\nfi\n\nDST_PLIST=\"${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/GoogleService-Info.plist\"\n\necho \"[Firebase] CONFIGURATION=${CONFIGURATION}\"\necho \"[Firebase] Copying ${SRC_PLIST} -> ${DST_PLIST}\"\n\nif [ ! -f \"${SRC_PLIST}\" ]; then\n  echo \"[Firebase] ERROR: plist not found: ${SRC_PLIST}\"\n  exit 1\nfi\n\n/bin/cp -f \"${SRC_PLIST}\" \"${DST_PLIST}\"\n";
 		};
 		9592DBEFFC6D2A0C8D5DEB22 /* [CP] Embed Pods Frameworks */ = {
 			isa = PBXShellScriptBuildPhase;
