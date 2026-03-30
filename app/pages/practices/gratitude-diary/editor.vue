@@ -726,6 +726,11 @@
       :required-plan="paywallAccess?.requiredPlan ?? null"
       :paywall="paywallAccess?.paywall ?? null"
     />
+    <MicPermissionDeniedDialog
+      :open="showMicDeniedModal"
+      @update:open="showMicDeniedModal = $event"
+      @open-settings="openMicSettings"
+    />
   </div>
 </template>
 
@@ -1078,6 +1083,8 @@ const {
   isListening,
   toggleListening: toggleMic,
   stopListening,
+  showMicDeniedModal,
+  openMicSettings,
 } = useVoiceDictationInput({
   getValue: () => entryText.value,
   setValue: (value) => {

@@ -84,6 +84,16 @@ export default defineNuxtConfig({
         },
         {
           rel: 'icon',
+          type: 'image/svg+xml',
+          href: '/favicon.svg',
+        },
+        {
+          rel: 'icon',
+          type: 'image/x-icon',
+          href: '/favicon.ico',
+        },
+        {
+          rel: 'icon',
           type: 'image/png',
           sizes: '192x192',
           href: '/android-icon-192x192.png',
@@ -214,6 +224,11 @@ export default defineNuxtConfig({
     },
   },
   nitro: {
+    typescript: {
+      tsConfig: {
+        include: ['../server/routes/.well-known/**/*'],
+      },
+    },
     prerender: {
       crawlLinks: false,
       // routes: [], // Пустой массив = не prerender ничего (не требует БД)
