@@ -6,6 +6,7 @@
 - Bundle ID: `com.mentala.app`
 - Токены: только FCM (через `@capacitor-community/fcm`), APNs token не используется сервером
 - Firebase: один проект на Android + iOS (сервер поддерживает только один `NUXT_FIREBASE_SERVICE_ACCOUNT_JSON`)
+- iOS использует один `GoogleService-Info.plist` из `mentala-prod` для Debug и Release, чтобы исключить drift между Firebase-проектами
 - Разделение dev/prod: серверный `MENTALA_DB_ENV`/`NODE_ENV` → поле `app_env` в `user_devices`
 
 ## Bootstrap (Capacitor v7)
@@ -50,8 +51,8 @@ pnpm cap:sync:device      # определит LAN-IP, выставит CAPACITO
 ### Настройка
 
 1. **Apple Developer Portal**: создать App ID `com.mentala.app` с Push capability, выпустить APNs key (p8)
-2. **Firebase Console**: добавить iOS-приложение `com.mentala.app`, загрузить APNs key в Cloud Messaging, скачать `GoogleService-Info.plist`
-3. **Xcode**: добавить `GoogleService-Info.plist` в target, включить Push Notifications + Background Modes → Remote notifications
+2. **Firebase Console**: добавить iOS-приложение `com.mentala.app`, загрузить APNs key в Cloud Messaging, скачать `GoogleService-Info.plist` из `mentala-prod`
+3. **Xcode**: `GoogleService-Info.plist` уже лежит в `ios/App/App/Firebase/GoogleService-Info.plist` и подключён в target как обычный ресурс; при обновлении просто замените этот файл
 4. **Entitlements**: `Debug` должен использовать `App.entitlements` с `aps-environment=development`, а `Release/TestFlight` — `AppRelease.entitlements` с `aps-environment=production`
 
 Подробности: [Firebase iOS setup](https://firebase.google.com/docs/cloud-messaging/ios/first-message)
@@ -151,7 +152,7 @@ Email должен быть **не зарегистрирован** ни в ка
 |----------|---------|
 | Нет токена | Capabilities, AppDelegate methods, GoogleService-Info.plist в target |
 | Пуши не приходят | Убедиться что отправлен FCM token (не APNs), APNs key загружен в Firebase |
-| Локальная iOS-сборка получает push, а TestFlight нет | Проверить release entitlements (`aps-environment=production`), что release-архив не подписан как development, и что APNs production credentials загружены именно в Firebase project из `GoogleService-Info-Prod.plist` |
+| Локальная iOS-сборка получает push, а TestFlight нет | Проверить release entitlements (`aps-environment=production`), что release-архив не подписан как development, и что APNs production credentials загружены в тот же Firebase project, что и `ios/App/App/Firebase/GoogleService-Info.plist` |
 | Нет картинок в пушах | Notification Service Extension не добавлен |
 | Dev-сервер недоступен | `CAPACITOR_SERVER_URL`, `DEV_ALLOWED_ORIGINS`, ATS, Local Network permission |
 | Не работает на iOS 14 | Минимум iOS 15+ (StoreKit 2) |
