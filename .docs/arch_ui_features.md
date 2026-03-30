@@ -54,3 +54,17 @@
 - `ButtonLoader.vue` — спиннер внутри кнопки
 - Pinia stores: ui, user, chat
 - DTO: Zod, `shared/dto/index.ts`
+
+## Бренд-ассеты
+- Web/favicon мастер с rounded-card подложкой: `public/app-icon-web-master.svg`
+- Продакшен favicon для web и landing: `public/favicon.svg`
+- Apple-safe мастер для native iOS/AppIcon: `public/app-icon-native-master.svg` (квадратный фон, без прозрачности и без преднарисованных скруглений)
+- `apps/landing/public/favicon.svg` синхронизировать с `public/favicon.svg`
+- Web PNG/ICO/apple-touch/android/ms/manifest family генерировать из rounded-card мастера с прозрачным фоном вне скруглённой карточки
+- Native iOS/AppIcon генерировать отдельно из Apple-safe мастера без предскругления
+- Native Android launcher icon и splash генерировать отдельно из Apple-safe мастера: launcher через adaptive icon layers, splash — как отдельный тёмный launch screen со знаком бренда
+- Native iOS single-size AppIcon: `ios/App/App/Assets.xcassets/AppIcon.appiconset/favicon_ios.png`
+- Native iOS launch splash: `ios/App/App/Assets.xcassets/Splash.imageset/splash-2732x2732*.png`
+- iOS native-ассеты пересобирать командой `pnpm assets:ios`: `AppIcon` берётся из полного Apple-safe мастера, а splash собирается из того же мастера, но только со знаком бренда без фоновой карточки
+- Для `SplashScreen` в Capacitor не включать spinner и не держать искусственно длинный показ: визуал должен быть чистым и без ощущения дефолтного Capacitor
+- Android native-ассеты пересобирать командой `pnpm assets:android`: adaptive icon собирается из светлого брендового background layer + foreground знака, а splash заменяет дефолтный Capacitor во всех `drawable*`

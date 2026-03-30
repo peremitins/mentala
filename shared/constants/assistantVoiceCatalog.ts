@@ -147,7 +147,7 @@ export const ASSISTANT_VOICE_CATALOG: readonly AssistantVoiceCatalogItem[] = [
   },
 ] as const;
 
-export const DEFAULT_ASSISTANT_VOICE_ID = 'echo';
+export const DEFAULT_ASSISTANT_VOICE_ID = 'shimmer';
 
 export function normalizeAssistantVoiceLocale(
   locale?: string | null

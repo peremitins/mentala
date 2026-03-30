@@ -110,6 +110,17 @@ function mapGoogleLoginError(error: any): string {
   return 'Не удалось войти через Google';
 }
 
+function maskGoogleClientId(value: string): string {
+  const normalized = value.trim();
+  if (!normalized) return '<empty>';
+
+  const prefix =
+    normalized.split('.apps.googleusercontent.com')[0] || normalized;
+  if (prefix.length <= 10) return prefix;
+
+  return `${prefix.slice(0, 6)}...${prefix.slice(-6)}`;
+}
+
 export const useAuthStore = defineStore('auth', {
   state: () => ({
     user: null as AuthUser | null,
@@ -239,8 +250,8 @@ export const useAuthStore = defineStore('auth', {
           '[Auth][Google] Native init:',
           JSON.stringify({
             platform,
-            hasWebClientId: !!webClientId,
-            hasIosClientId: !!iosClientId,
+            webClientId: maskGoogleClientId(webClientId),
+            iosClientId: maskGoogleClientId(iosClientId),
           })
         );
 
@@ -256,11 +267,24 @@ export const useAuthStore = defineStore('auth', {
             );
           }
           googleConfig.iOSClientId = iosClientId;
-          // На iOS серверный client id нужен для корректного server authorization.
-          googleConfig.iOSServerClientId = webClientId;
+          // iOSServerClientId НЕ задаём: он включает веб-OAuth flow (ASWebAuthenticationSession),
+          // что вызывает consent-экраны Google. Наш сервер использует только idToken,
+          // serverAuthCode не нужен.
         }
 
         await SocialLogin.initialize({ google: googleConfig });
+
+        if (platform === 'ios') {
+          // Очищаем keychain перед входом, чтобы избежать stale-сессии от предыдущей
+          // сборки (dev/TestFlight/prod) с другим iOSClientId. Без iOSServerClientId
+          // повторный вход использует нативный picker — consent-экраны не появляются.
+          try {
+            await SocialLogin.logout({ provider: 'google' });
+          } catch {
+            // Если активной сессии нет — игнорируем.
+          }
+        }
+
         const loginResponse: any = await SocialLogin.login({
           provider: 'google',
           options: {
