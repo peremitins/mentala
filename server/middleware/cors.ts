@@ -1,4 +1,5 @@
 import { defineEventHandler } from 'h3';
+import { NATIVE_APP_ORIGINS } from '@/server/utils/native-origins';
 
 const isProd = process.env.NODE_ENV === 'production';
 
@@ -14,7 +15,7 @@ function parseOrigins(envValue?: string): string[] {
 }
 
 function getAllowedOrigins(): string[] {
-  const base = new Set<string>(['capacitor://localhost', 'ionic://localhost']);
+  const base = new Set<string>(NATIVE_APP_ORIGINS);
 
   if (isProd) {
     const fromEnv = process.env.PUBLIC_APP_ORIGIN
