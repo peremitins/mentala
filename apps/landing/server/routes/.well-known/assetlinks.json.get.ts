@@ -1,9 +1,9 @@
 import { setHeader } from 'h3';
-import { buildAndroidAssetLinks } from '../../../shared/well-known/app-links';
+import { buildAndroidAssetLinks } from '../../../../../shared/well-known/app-links';
 
 /**
- * Android App Links association file.
- * Перед релизом обязательно заполнить ANDROID_APP_LINK_SHA256_FINGERPRINTS.
+ * Для landing endpoint генерируется на этапе `nuxt generate`,
+ * поэтому env должны попасть в CI до статического экспорта.
  */
 export default defineEventHandler(async (event) => {
   setHeader(event, 'Content-Type', 'application/json; charset=utf-8');
