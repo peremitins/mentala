@@ -12,6 +12,10 @@ IOS_PROJECT_FILE="ios/App/App.xcodeproj/project.pbxproj"
 SERVER_URL=""
 DEV_SERVER_PORT="3000"
 ANDROID_DEBUG_APK_PATH="android/app/build/outputs/apk/debug/app-debug.apk"
+ANDROID_PUBLIC_ASSETS_DIR="android/app/src/main/assets/public"
+IOS_PUBLIC_ASSETS_DIR="ios/App/App/public"
+GENERATED_PUBLIC_DIR=".output/public"
+LEGACY_GENERATE_DIR="dist"
 ANDROID_SERVER_URL=""
 IOS_SERVER_URL=""
 API_BASE_URL=""
@@ -19,6 +23,15 @@ USE_ADB_REVERSE=false
 MOBILE_ENV_FILE=".env.development"
 MOBILE_BUILD_MODE="development"
 MOBILE_NUXT_BUILD_DIR=""
+MOBILE_RELEASE_EXCLUDED_PUBLIC_DIRS_RAW="${MENTALA_MOBILE_RELEASE_EXCLUDE_PUBLIC_DIRS:-meditations notifications}"
+
+read_release_excluded_public_dirs() {
+  # Возвращаем по одной директории на строку, чтобы pruning корректно
+  # отрабатывал для списка вида "meditations notifications" или "a,b:c".
+  printf '%s' "$MOBILE_RELEASE_EXCLUDED_PUBLIC_DIRS_RAW" |
+    tr ',: ' '\n\n\n' |
+    awk 'NF'
+}
 
 clean_nuxt_static_build_cache() {
   # Для static mobile сборок держим отдельный buildDir, чтобы не конфликтовать
@@ -28,6 +41,58 @@ clean_nuxt_static_build_cache() {
   if [ -n "$MOBILE_NUXT_BUILD_DIR" ]; then
     rm -rf "$MOBILE_NUXT_BUILD_DIR" "node_modules/.cache/nuxt/$MOBILE_NUXT_BUILD_DIR"
   fi
+}
+
+prune_mobile_release_generated_assets() {
+  if [ "$MOBILE_BUILD_MODE" != "release" ]; then
+    return
+  fi
+
+  # Для mobile release не тащим в bundle тяжёлые ассеты, которые и так
+  # резолвятся через CDN/mediaBaseUrl в рантайме.
+  local base_dir=""
+  local asset_dir=""
+  local normalized_asset_dir=""
+
+  for base_dir in "$GENERATED_PUBLIC_DIR" "$LEGACY_GENERATE_DIR"; do
+    [ -d "$base_dir" ] || continue
+
+    while IFS= read -r asset_dir; do
+      normalized_asset_dir="$(printf '%s' "$asset_dir" | xargs)"
+      [ -n "$normalized_asset_dir" ] || continue
+
+      if [ -e "$base_dir/$normalized_asset_dir" ]; then
+        echo "🧹 Удаляю CDN-backed ассет из mobile release bundle: $base_dir/$normalized_asset_dir"
+        rm -rf "$base_dir/$normalized_asset_dir"
+      fi
+    done < <(read_release_excluded_public_dirs)
+  done
+}
+
+prune_mobile_release_native_assets() {
+  if [ "$MOBILE_BUILD_MODE" != "release" ]; then
+    return
+  fi
+
+  # cap copy не обязан удалять stale-файлы в native проектах, поэтому после
+  # sync повторно чистим каталоги в Android/iOS public bundle.
+  local base_dir=""
+  local asset_dir=""
+  local normalized_asset_dir=""
+
+  for base_dir in "$ANDROID_PUBLIC_ASSETS_DIR" "$IOS_PUBLIC_ASSETS_DIR"; do
+    [ -d "$base_dir" ] || continue
+
+    while IFS= read -r asset_dir; do
+      normalized_asset_dir="$(printf '%s' "$asset_dir" | xargs)"
+      [ -n "$normalized_asset_dir" ] || continue
+
+      if [ -e "$base_dir/$normalized_asset_dir" ]; then
+        echo "🧹 Удаляю stale ассет из native bundle: $base_dir/$normalized_asset_dir"
+        rm -rf "$base_dir/$normalized_asset_dir"
+      fi
+    done < <(read_release_excluded_public_dirs)
+  done
 }
 
 ensure_ios_project_object_version_compatible() {
@@ -304,7 +369,9 @@ else
   MENTALA_STATIC_GENERATE=true \
     MENTALA_NUXT_BUILD_DIR="$MOBILE_NUXT_BUILD_DIR" \
     pnpm exec nuxt generate --dotenv "$MOBILE_ENV_FILE"
+  prune_mobile_release_generated_assets
   run_capacitor_sync && CAPACITOR_SERVER_URL="" node scripts/fix-capacitor-config.js
+  prune_mobile_release_native_assets
   node scripts/verify-capacitor-config.js \
     --env-file "$MOBILE_ENV_FILE" \
     --mode "$MOBILE_BUILD_MODE"
