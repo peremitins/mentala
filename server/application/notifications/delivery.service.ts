@@ -220,10 +220,19 @@ export function initializeFirebase(): void {
         credentials = JSON.parse(fileContent);
       }
 
+      const projectId =
+        typeof credentials?.project_id === 'string' &&
+        credentials.project_id.trim()
+          ? credentials.project_id.trim()
+          : undefined;
+
       firebaseApp = admin.initializeApp({
         credential: admin.credential.cert(credentials),
+        ...(projectId ? { projectId } : {}),
       });
-      console.log('[FCM] ✅ Firebase Admin SDK initialized successfully');
+      console.log('[FCM] ✅ Firebase Admin SDK initialized successfully', {
+        projectId: projectId || null,
+      });
     }
   } catch (error) {
     const isProduction = process.env.NODE_ENV === 'production';
@@ -291,6 +300,9 @@ export async function sendFCMNotification(
   payload: NotificationPayload,
   platform?: string | null
 ): Promise<NotificationSendResult> {
+  const normalizedPlatform = String(platform || '').toLowerCase();
+  const firebaseProjectId = resolveFirebaseProjectId();
+
   // Если Firebase не инициализирован
   if (!firebaseApp) {
     const isProduction = process.env.NODE_ENV === 'production';
@@ -331,7 +343,6 @@ export async function sendFCMNotification(
   }
 
   try {
-    const normalizedPlatform = String(platform || '').toLowerCase();
     const isAndroid = normalizedPlatform === 'android';
     const imageValidation =
       payload.image && payload.image.trim()
@@ -479,7 +490,7 @@ export async function sendFCMNotification(
       imageUrl: validatedImageUrl,
       hasMutableContent: Boolean(validatedImageUrl && !isAndroid),
       hasApnsImageField: Boolean(validatedImageUrl && !isAndroid),
-      firebaseProjectId: resolveFirebaseProjectId(),
+      firebaseProjectId,
     });
 
     const response = await admin.messaging().send(message);
@@ -510,6 +521,8 @@ export async function sendFCMNotification(
       errorMessage.includes('missing required authentication credential');
 
     console.error('[FCM] send error details:', {
+      platform: normalizedPlatform || null,
+      firebaseProjectId,
       tokenPrefix: token.substring(0, 20),
       errorCode,
       errorInfoCode,
