@@ -32,6 +32,19 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         "slotId"
     ]
 
+    // Короткий fingerprint токена/ключей нужен для локальной диагностики,
+    // но не должен светить полное значение в логах.
+    private func shortHexToken(_ data: Data, prefixLength: Int = 24) -> String {
+        let hex = data.map { String(format: "%02x", $0) }.joined()
+        return String(hex.prefix(prefixLength))
+    }
+
+    private func summarizePushPayloadKeys(_ userInfo: [AnyHashable: Any]) -> [String] {
+        return userInfo.keys
+            .map { String(describing: $0) }
+            .sorted()
+    }
+
     private func persistPushLaunchPayload(_ userInfo: [AnyHashable: Any], reason: String) {
         var payload: [String: Any] = [:]
         for (key, value) in userInfo {
@@ -206,6 +219,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
      * Без этого Capacitor PushNotifications и FCM-плагин на iOS не получат токен.
      */
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        #if DEBUG
+        print("[PushNative] APNs registration success, tokenPrefix=\(shortHexToken(deviceToken))")
+        #endif
         NotificationCenter.default.post(name: .capacitorDidRegisterForRemoteNotifications, object: deviceToken)
     }
 
@@ -213,6 +229,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
      * Пробрасываем ошибку регистрации remote notifications в Capacitor.
      */
     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        #if DEBUG
+        print("[PushNative] APNs registration failed: \(error.localizedDescription)")
+        #endif
         NotificationCenter.default.post(name: .capacitorDidFailToRegisterForRemoteNotifications, object: error)
     }
 
@@ -290,6 +309,20 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     func application(_ application: UIApplication,
                      didReceiveRemoteNotification userInfo: [AnyHashable: Any],
                      fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+        #if DEBUG
+        let stateLabel: String
+        switch application.applicationState {
+        case .active:
+            stateLabel = "active"
+        case .inactive:
+            stateLabel = "inactive"
+        case .background:
+            stateLabel = "background"
+        @unknown default:
+            stateLabel = "unknown"
+        }
+        print("[PushNative] didReceiveRemoteNotification state=\(stateLabel) keys=\(summarizePushPayloadKeys(userInfo))")
+        #endif
         persistPushLaunchPayload(userInfo, reason: "didReceiveRemoteNotification")
 
         // Forward to Capacitor. This proxy method does not accept a fetchCompletionHandler.
