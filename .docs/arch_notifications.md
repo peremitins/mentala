@@ -36,6 +36,9 @@
 - `messaging/authentication-error` / `third-party-auth-error` на iOS обычно означает проблему с APNs credentials в Firebase project (APNs key не загружен, инвалиден или не соответствует Team ID / Bundle ID)
 - `/api/notifications/register-token` обязан быть идемпотентным по `user_devices.token`, потому что один и тот же токен может параллельно зарегистрироваться из push-плагина, auth-store и экрана настроек
 - Невалидные токены (invalid-registration-token и др.) автоудаляются из `user_devices`
+- На iOS нельзя полагаться только на первый `registration` event: после reinstall/первого старта FCM token может дообновиться позже APNs-регистрации, поэтому клиент повторно синхронизирует актуальный FCM token при старте приложения, логине и возврате в active
+- Для локальной iOS-диагностики ориентируемся на короткие префиксы APNs/FCM token в логах `AppDelegate` и `push-notifications.client.ts`; это позволяет сопоставить текущий девайс с серверным `Sending to device: ios (...)`
+- Xcode app console не гарантирует видимость логов `UNNotificationServiceExtension` и системной доставки, поэтому для проверки rich push и фоновой доставки полезнее смотреть device logs через macOS Console.app / Xcode Devices
 
 ## Изображения
 - Runtime-подбор: `rules + score` с порогом `MATCH_SCORE_THRESHOLD=0.65`
