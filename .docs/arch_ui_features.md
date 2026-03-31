@@ -35,6 +35,13 @@
 - `tone`: gentle | balanced | uplifting | direct
 - Отдельный фоновый слой из `public/onboarding/welcome`
 
+## Аутентификация (`/auth`)
+- Для входа поле e-mail размечается как `autocomplete="username"`, пароль — `autocomplete="current-password"`
+- Для регистрации поле имени размечается как `autocomplete="name"`, e-mail — `autocomplete="email"`, пароль — `autocomplete="new-password"`
+- У auth-полей должны быть стабильные `id`/`name`, отключённые `autocapitalize`/`spellcheck` для e-mail и валидные `type="email"` / `type="password"`
+- В Capacitor native-сборках поведение password manager зависит не только от HTML, но и от origin WebView: если приложение загружено с `server.url`, `http://localhost` или `capacitor://localhost`, iOS Keychain / Android credential sharing могут не связать форму с production-доменом сайта
+- Для Android-связки сайта и приложения `/.well-known/assetlinks.json` должен содержать не только `delegate_permission/common.handle_all_urls`, но и `delegate_permission/common.get_login_creds`
+
 ## Дневник благодарности (`/practices/gratitude-diary`)
 - Overview (streak + история) и editor (вопрос + worksheet + composer)
 - Entitlement `gratitude.diary.full`, premium-ограничения для worksheet/photo
