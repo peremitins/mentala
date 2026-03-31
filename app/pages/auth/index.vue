@@ -131,39 +131,67 @@
                 </TabsList>
               </Tabs>
 
-              <form class="space-y-4" @submit.prevent="submit">
+              <form
+                class="space-y-4"
+                method="post"
+                autocomplete="on"
+                @submit.prevent="submit"
+              >
                 <template v-if="mode === 'signup'">
                   <div>
-                    <label class="block text-sm mb-1 text-foreground"
-                      >Имя</label
+                    <label
+                      class="block text-sm mb-1 text-foreground"
+                      for="auth-name"
                     >
+                      Имя
+                    </label>
                     <Input
+                      id="auth-name"
                       v-model="name"
+                      name="name"
                       type="text"
+                      autocomplete="name"
                       :show-clear-button="false"
                     />
                   </div>
                 </template>
 
                 <div>
-                  <label class="block text-sm mb-1 text-foreground"
-                    >Email</label
+                  <label
+                    class="block text-sm mb-1 text-foreground"
+                    for="auth-email"
                   >
+                    Email
+                  </label>
                   <Input
+                    id="auth-email"
                     v-model="email"
+                    name="email"
                     type="email"
+                    inputmode="email"
+                    :autocomplete="mode === 'signin' ? 'username' : 'email'"
+                    autocapitalize="none"
+                    spellcheck="false"
                     required
                     :show-clear-button="false"
                   />
                 </div>
 
                 <div>
-                  <label class="block text-sm mb-1 text-foreground"
-                    >Пароль</label
+                  <label
+                    class="block text-sm mb-1 text-foreground"
+                    for="auth-password"
                   >
+                    Пароль
+                  </label>
                   <Input
+                    id="auth-password"
                     v-model="password"
+                    name="password"
                     type="password"
+                    :autocomplete="
+                      mode === 'signin' ? 'current-password' : 'new-password'
+                    "
                     required
                     minlength="8"
                     :show-clear-button="false"
@@ -480,7 +508,7 @@ async function submit() {
     return;
   }
   if (mode.value === 'signup' && !agree.value) {
-    // Без согласия с документами регистрацию не продолжаем
+    // Без согласия с документами регистрацию не продолжаем.
     useToast('Нужно согласие', 'Подтвердите условия и политику', 'warning');
     return;
   }
@@ -499,7 +527,7 @@ async function submit() {
         password: password.value,
         name: name.value || undefined,
         locale: locale.value,
-        // Передаем согласия на документы и маркетинг
+        // Передаем согласия на документы и маркетинг.
         acceptTerms: agree.value,
         acceptPrivacy: agree.value,
         marketingConsent: marketingConsent.value,
@@ -510,7 +538,7 @@ async function submit() {
     if (mode.value === 'signup') {
       const statusCode = e?.statusCode || e?.response?.status || 500;
       if (statusCode === 400) {
-        // Ошибка валидации — не переходим в шаг подтверждения
+        // Ошибка валидации — не переходим в шаг подтверждения.
         return;
       }
       const retryAfter = getRetryAfterFromError(e);
