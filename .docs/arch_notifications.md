@@ -29,6 +29,7 @@
 ## Push (FCM)
 - **Android**: data-only сообщения, `MentalaMessagingService` строит системное уведомление. Один обработчик `MESSAGING_EVENT`
 - **iOS**: FCM token через `@capacitor-community/fcm`, APNs только для диагностики. Rich-image через `MentalaNotificationService` (UNNotificationServiceExtension)
+- Foreground-показ на iOS идёт штатно через `PushNotifications.presentationOptions` и системный `UNUserNotificationCenterDelegate` из Capacitor
 - Debug и Release на iOS должны быть разведены по APNs-среде: debug/local использует `aps-environment=development`, release/TestFlight — `aps-environment=production`
 - Разделение окружений: `user_devices.app_env` = серверное окружение
 - Server `firebase-admin` и мобильные `google-services.json` / `GoogleService-Info.plist` должны смотреть в один и тот же Firebase project; иначе получаем `SenderId mismatch` и автоматическую чистку токена
