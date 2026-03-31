@@ -31,6 +31,7 @@
 - **iOS**: FCM token через `@capacitor-community/fcm`, APNs только для диагностики. Rich-image через `MentalaNotificationService` (UNNotificationServiceExtension)
 - Debug и Release на iOS должны быть разведены по APNs-среде: debug/local использует `aps-environment=development`, release/TestFlight — `aps-environment=production`
 - Разделение окружений: `user_devices.app_env` = серверное окружение
+- `/api/notifications/register-token` обязан быть идемпотентным по `user_devices.token`, потому что один и тот же токен может параллельно зарегистрироваться из push-плагина, auth-store и экрана настроек
 - Невалидные токены (invalid-registration-token и др.) автоудаляются из `user_devices`
 
 ## Изображения
