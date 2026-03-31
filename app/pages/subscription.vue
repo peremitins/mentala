@@ -200,9 +200,6 @@
           Первое списание: {{ formatDate(nextChargeAt) }}
         </p>
         <p class="text-xs text-foreground/80">
-          Мы напомним за 24 часа до списания.
-        </p>
-        <p class="text-xs text-foreground/80">
           Вы сможете отменить до {{ formatDate(nextChargeAt) }}
         </p>
         <button
@@ -304,7 +301,11 @@
 
       <!-- Карточки тарифов -->
       <div
-        v-if="subscriptionStore.loading.plans || isAppleIapPricesLoading || isIosBillingFlowPending"
+        v-if="
+          subscriptionStore.loading.plans ||
+          isAppleIapPricesLoading ||
+          isIosBillingFlowPending
+        "
         class="grid grid-cols-1 md:grid-cols-3 gap-2"
       >
         <Skeleton type="plan-card" :count="4" rounded-size="lg" />
@@ -610,18 +611,6 @@ const YOOKASSA_WIDGET_CONTAINER_ID = 'yookassa-widget-container';
 const APPLE_SUBSCRIPTIONS_MANAGE_URL =
   'https://apps.apple.com/account/subscriptions';
 const now = useNow({ interval: 60_000 });
-const legalLocale = computed(() => {
-  const value = String(authStore.user?.locale || 'ru')
-    .trim()
-    .toLowerCase();
-  return value.startsWith('en') ? 'en' : 'ru';
-});
-const termsOfServiceUrl = computed(
-  () => `/legal/terms-of-service-${legalLocale.value}.html`
-);
-const privacyPolicyUrl = computed(
-  () => `/legal/privacy-policy-${legalLocale.value}.html`
-);
 
 // Computed для удобства доступа
 const plans = computed(() => subscriptionStore.plans);
