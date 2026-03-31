@@ -47,6 +47,14 @@ export default defineNuxtPlugin({
     const IOS_FCM_TOKEN_MAX_ATTEMPTS = 6;
     const IOS_FCM_TOKEN_RETRY_DELAY_MS = 1200;
 
+    // В логах храним только короткий префикс токена, чтобы можно было
+    // сопоставить устройство с серверной отправкой без утечки полного значения.
+    function maskToken(value?: string | null, prefixLength = 24): string {
+      const normalized = typeof value === 'string' ? value.trim() : '';
+      if (!normalized) return 'empty';
+      return `${normalized.slice(0, prefixLength)}...`;
+    }
+
     const wait = (ms: number) =>
       new Promise<void>((resolve) => {
         setTimeout(resolve, ms);
@@ -82,6 +90,96 @@ export default defineNuxtPlugin({
         }
       }
       return null;
+    }
+
+    async function registerTokenOnServer(
+      token: string,
+      platformHeader: 'ios' | 'android',
+      reason: string
+    ): Promise<void> {
+      const sessionToken =
+        typeof window !== 'undefined'
+          ? window.localStorage.getItem('mentai.session.token')
+          : null;
+
+      if (!sessionToken) {
+        console.log('[PushPlugin] Skip token registration: no session token', {
+          platform: platformHeader,
+          reason,
+        });
+        return;
+      }
+
+      await nuxtApp.$api('/api/notifications/register-token', {
+        method: 'POST',
+        body: {
+          token,
+          platform: platformHeader,
+        },
+      });
+
+      console.log('[PushPlugin] Token registered on server:', {
+        platform: platformHeader,
+        tokenPrefix: maskToken(token),
+        reason,
+      });
+    }
+
+    async function syncCurrentNativeToken(
+      reason: string,
+      options?: { forceServerSync?: boolean }
+    ): Promise<void> {
+      const forceServerSync = options?.forceServerSync === true;
+      const platformHeader: 'ios' | 'android' = isIos ? 'ios' : 'android';
+
+      let currentToken: string | null = null;
+
+      if (isIos) {
+        currentToken = await resolveFcmTokenWithRetry();
+      } else if (typeof window !== 'undefined') {
+        currentToken = window.localStorage.getItem(PUSH_TOKEN_STORAGE_KEY);
+      }
+
+      const normalizedToken =
+        typeof currentToken === 'string' ? currentToken.trim() : '';
+      if (!normalizedToken) {
+        console.warn('[PushPlugin] Native token sync skipped: token is empty', {
+          platform: platformHeader,
+          reason,
+        });
+        return;
+      }
+
+      const previousToken =
+        typeof window !== 'undefined'
+          ? window.localStorage.getItem(PUSH_TOKEN_STORAGE_KEY)?.trim() || ''
+          : '';
+
+      const tokenChanged = previousToken !== normalizedToken;
+
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(PUSH_TOKEN_STORAGE_KEY, normalizedToken);
+      }
+
+      if (!tokenChanged && !forceServerSync) {
+        console.log('[PushPlugin] Native token sync: token unchanged', {
+          platform: platformHeader,
+          tokenPrefix: maskToken(normalizedToken),
+          reason,
+        });
+        return;
+      }
+
+      try {
+        await registerTokenOnServer(normalizedToken, platformHeader, reason);
+      } catch (error) {
+        console.error('[PushPlugin] Failed to sync native token on server:', {
+          platform: platformHeader,
+          tokenPrefix: maskToken(normalizedToken),
+          reason,
+          error,
+        });
+      }
     }
 
     // Сохраняем отложенную навигацию, чтобы не потерять тап на холодном старте.
@@ -957,7 +1055,10 @@ export default defineNuxtPlugin({
       // Успешная регистрация токена
       PushNotifications.addListener('registration', async (token) => {
         const apnsToken = token.value;
-        console.log('[PushPlugin] Registration success, token:', apnsToken);
+        console.log('[PushPlugin] Registration success (APNs/native token):', {
+          platform,
+          tokenPrefix: maskToken(apnsToken),
+        });
 
         let effectiveToken = apnsToken;
         if (isIos) {
@@ -973,7 +1074,10 @@ export default defineNuxtPlugin({
             return;
           }
           effectiveToken = fcmToken;
-          console.log('[PushPlugin] FCM token resolved for iOS');
+          console.log('[PushPlugin] FCM token resolved for iOS:', {
+            apnsTokenPrefix: maskToken(apnsToken),
+            fcmTokenPrefix: maskToken(fcmToken),
+          });
         }
 
         if (!effectiveToken) {
@@ -991,27 +1095,12 @@ export default defineNuxtPlugin({
 
         // Регистрируем на сервере (только если есть сессия)
         try {
-          const sessionToken =
-            typeof window !== 'undefined'
-              ? window.localStorage.getItem('mentai.session.token')
-              : null;
-          if (!sessionToken) {
-            console.log(
-              '[PushPlugin] Skip token registration: no session token yet'
-            );
-            return;
-          }
-
           const platformHeader: 'ios' | 'android' = isIos ? 'ios' : 'android';
-
-          await nuxtApp.$api('/api/notifications/register-token', {
-            method: 'POST',
-            body: {
-              token: effectiveToken,
-              platform: platformHeader,
-            },
-          });
-          console.log('[PushPlugin] Token registered on server');
+          await registerTokenOnServer(
+            effectiveToken,
+            platformHeader,
+            'registration_event'
+          );
         } catch (error) {
           console.error(
             '[PushPlugin] Failed to register token on server:',
@@ -1130,6 +1219,16 @@ export default defineNuxtPlugin({
 
         console.log('[PushPlugin] Permission granted, registering push');
         await PushNotifications.register();
+
+        // Для iOS FCM token может стабилизироваться не в тот же тик, что APNs registration.
+        // Поэтому повторно синхронизируем актуальный token после старта.
+        if (isIos) {
+          setTimeout(() => {
+            void syncCurrentNativeToken('post_register_delayed_sync', {
+              forceServerSync: true,
+            });
+          }, 10_000);
+        }
       } catch (error: any) {
         // Проверяем, что это ошибка инициализации Firebase
         const errorMessage = error?.message || '';
@@ -1153,6 +1252,14 @@ export default defineNuxtPlugin({
       );
       setTimeout(initNotifications, 3000);
 
+      // Даже если registration event был до входа в аккаунт или токен успел обновиться позже,
+      // при старте ещё раз выравниваем текущее native token состояние с backend.
+      setTimeout(() => {
+        void syncCurrentNativeToken('app_mounted_delayed_sync', {
+          forceServerSync: false,
+        });
+      }, 12_000);
+
       // Восстанавливаем launch-переход из Android intent (холодный старт),
       // затем пробуем pending-навигацию из JS-очереди.
       void consumeNativeLaunchNavigation();
@@ -1174,6 +1281,9 @@ export default defineNuxtPlugin({
             if (!isActive) return;
             void consumeNativeLaunchNavigation();
             void flushPendingNavigation();
+            void syncCurrentNativeToken('app_became_active', {
+              forceServerSync: false,
+            });
             void (async () => {
               const value = await readStoredValue(DENIED_PENDING_SYNC_KEY);
               if (value === '1') {
@@ -1211,6 +1321,9 @@ export default defineNuxtPlugin({
       (loggedIn) => {
         if (!loggedIn) return;
         void syncPushDeniedOnLogin();
+        void syncCurrentNativeToken('login_sync', {
+          forceServerSync: true,
+        });
         void flushPendingNavigation();
       },
       { immediate: true }
