@@ -1,4 +1,3 @@
-import { eq } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { userDevices } from '@/server/infrastructure/db/schema';
 import { db } from '@/server/infrastructure/db/client';
@@ -72,59 +71,43 @@ export default defineEventHandler(async (event): Promise<UserDeviceDto> => {
     });
   }
 
-  // Проверяем, существует ли этот токен
-  const [existing] = await db
-    .select()
-    .from(userDevices)
-    .where(eq(userDevices.token, body.token))
-    .limit(1);
+  const now = new Date();
 
-  if (existing) {
-    // Обновляем lastSeen и userId (на случай если устройство перешло к другому пользователю)
-    const [updated] = await db
-      .update(userDevices)
-      .set({
+  // Регистрация токена должна быть идемпотентной:
+  // один и тот же FCM token может прилететь почти одновременно из push-плагина,
+  // auth store и экрана настроек. `select -> insert` здесь гоняется и периодически
+  // падает по unique(token), поэтому используем atomic upsert.
+  const [device] = await db
+    .insert(userDevices)
+    .values({
+      id: nanoid(),
+      userId,
+      token: body.token,
+      platform: body.platform,
+      appEnv,
+      lastSeen: now,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: userDevices.token,
+      set: {
         userId,
         platform: body.platform,
         appEnv,
-        lastSeen: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(userDevices.token, body.token))
-      .returning();
+        lastSeen: now,
+        updatedAt: now,
+      },
+    })
+    .returning();
 
-    return {
-      id: updated.id,
-      userId: updated.userId,
-      token: updated.token,
-      platform: updated.platform as 'ios' | 'android' | 'web',
-      appEnv: updated.appEnv as 'dev' | 'prod',
-      lastSeen: updated.lastSeen?.toISOString() ?? null,
-      createdAt: updated.createdAt.toISOString(),
-      updatedAt: updated.updatedAt.toISOString(),
-    };
-  } else {
-    // Создаём новую запись
-    const [created] = await db
-      .insert(userDevices)
-      .values({
-        id: nanoid(),
-        userId,
-        token: body.token,
-        platform: body.platform,
-        appEnv,
-      })
-      .returning();
-
-    return {
-      id: created.id,
-      userId: created.userId,
-      token: created.token,
-      platform: created.platform as 'ios' | 'android' | 'web',
-      appEnv: created.appEnv as 'dev' | 'prod',
-      lastSeen: created.lastSeen?.toISOString() ?? null,
-      createdAt: created.createdAt.toISOString(),
-      updatedAt: created.updatedAt.toISOString(),
-    };
-  }
+  return {
+    id: device.id,
+    userId: device.userId,
+    token: device.token,
+    platform: device.platform as 'ios' | 'android' | 'web',
+    appEnv: device.appEnv as 'dev' | 'prod',
+    lastSeen: device.lastSeen?.toISOString() ?? null,
+    createdAt: device.createdAt.toISOString(),
+    updatedAt: device.updatedAt.toISOString(),
+  };
 });
