@@ -8,6 +8,11 @@ const config: CapacitorConfig = {
   appId: 'com.mentala.app',
   appName: 'Ментала',
   webDir: '.output/public',
+  ios: {
+    // Явно оставляем нативную маршрутизацию уведомлений включённой.
+    // Это нужно и для foreground-показа, и для корректного action/tap flow.
+    handleApplicationNotifications: true,
+  },
   server: isDevServer
     ? {
         // Dev-сервер: загружаем приложение с dev-сервера
@@ -39,6 +44,7 @@ const config: CapacitorConfig = {
       androidOverlaysWebView: false,
     },
     PushNotifications: {
+      // Используем стандартный native foreground-показ Capacitor/iOS.
       presentationOptions: ['badge', 'sound', 'alert'],
     },
     LocalNotifications: {
