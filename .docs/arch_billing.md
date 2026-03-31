@@ -38,7 +38,7 @@
 - Поля в `users`: `billing_plan_id`, `billing_period`, `next_charge_at`, `billing_collection_status`, `grace_ends_at`
 - Worker `trial-billing-worker.ts`: списание при `next_charge_at`, early-window 5 мин до дедлайна
 - Retry policy: 0h/+6h/+24h, перевод в `past_due` + grace 48h, откат в Basic после grace
-- Reminder за 24h: push + email (если есть), антидублирование через `billing_reminder_sent_at`
+- Предварительные напоминания о будущем списании не отправляются
 
 ## YooKassa webhook
 
