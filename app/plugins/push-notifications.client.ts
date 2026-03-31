@@ -531,7 +531,7 @@ export default defineNuxtPlugin({
 
     function resolveMessageId(
       payload: Record<string, any>,
-      action: { notification?: { id?: string | number } }
+      action?: { notification?: { id?: string | number } }
     ): string | null {
       const raw =
         payload?.['google.message_id'] ??
@@ -541,6 +541,131 @@ export default defineNuxtPlugin({
       if (raw === null || raw === undefined) return null;
       const value = String(raw).trim();
       return value ? value : null;
+    }
+
+    function normalizeNotificationPayload(
+      notification?: Record<string, any> | null
+    ): Record<string, any> {
+      if (!notification || typeof notification !== 'object') {
+        return {};
+      }
+
+      const root = { ...notification };
+      const data =
+        notification.data && typeof notification.data === 'object'
+          ? notification.data
+          : null;
+      const extra =
+        notification.extra && typeof notification.extra === 'object'
+          ? notification.extra
+          : null;
+
+      return {
+        ...root,
+        ...(data ?? {}),
+        ...(extra ?? {}),
+      };
+    }
+
+    async function handleNotificationAction(args: {
+      actionId?: string | null;
+      notification?: Record<string, any> | null;
+      payload?: Record<string, any> | null;
+      messageId?: string | null;
+    }): Promise<void> {
+      const notification = args.notification ?? undefined;
+      const payload =
+        args.payload ?? normalizeNotificationPayload(notification);
+      const actionId = args.actionId || '';
+      const isTap = isTapAction(actionId);
+      const navigation = resolveNavigation(payload);
+      const messageId =
+        args.messageId ?? resolveMessageId(payload, { notification });
+
+      if (payload?.slotId) {
+        let actionType: InteractionAction = 'dismissed';
+
+        if (isTap) {
+          actionType = 'open';
+        } else if (actionId === 'yes') {
+          actionType = 'yes';
+        } else if (actionId === 'no') {
+          actionType = 'no';
+        } else if (actionId === 'later' || actionId.startsWith('snooze:')) {
+          actionType = 'later';
+
+          if (actionId.startsWith('snooze:')) {
+            const duration = actionId.replace('snooze:', '') as
+              | '15m'
+              | '1h'
+              | '4h'
+              | 'tomorrow';
+            try {
+              await nuxtApp.$api('/api/notifications/snooze', {
+                method: 'POST',
+                body: {
+                  kind: payload.kind || 'therapy',
+                  duration,
+                  entityKey: payload.entityKey || null,
+                },
+              });
+              console.log('[PushPlugin] Notification snoozed:', duration);
+            } catch (error) {
+              console.error('[PushPlugin] Failed to snooze:', error);
+            }
+          }
+        }
+
+        try {
+          await nuxtApp.$api('/api/notifications/interaction', {
+            method: 'POST',
+            body: {
+              slotId: payload.slotId,
+              action: actionType,
+              at: new Date().toISOString(),
+              meta: {
+                platform,
+                actionId,
+                navigationType: navigation?.type ?? null,
+                navigationId: resolveNavigationId(navigation),
+              },
+            },
+          });
+          console.log('[PushPlugin] Interaction tracked:', actionType);
+        } catch (error) {
+          console.error('[PushPlugin] Failed to track interaction:', error);
+        }
+      }
+
+      if (!isTap) return;
+
+      try {
+        await meditationPlayer.registerUserGesture();
+      } catch (error) {
+        console.warn(
+          '[PushPlugin] Failed to register gesture for meditation audio:',
+          error
+        );
+      }
+
+      const navigationTarget = resolveNavigationTarget(payload);
+      const deepLink =
+        typeof payload?.deepLink === 'string' && payload.deepLink.trim()
+          ? payload.deepLink.trim()
+          : null;
+      const actionPath = resolveActionTargetPath(payload);
+      const targetPath =
+        (navigationTarget ? buildAppNavigationPath(navigationTarget) : null) ||
+        deepLink ||
+        actionPath ||
+        (navigation ? buildPathFromNavigation(navigation) : '/');
+
+      if (!deepLink && !actionPath && !navigation) {
+        void logMissingNavigation(payload);
+      }
+
+      await enqueueNavigation(targetPath, messageId, navigationTarget);
+      await flushPendingNavigation();
     }
 
     async function consumeNativeLaunchNavigation(): Promise<void> {
@@ -901,13 +1026,12 @@ export default defineNuxtPlugin({
       });
 
       // Push получен в активном приложении.
-      // На Android системное уведомление уже построено нативным сервисом,
-      // здесь оставляем только клиентскую реакцию (логика/UI/аналитика).
+      // На Android системное уведомление уже строится нативным FCM-сервисом.
+      // На iOS полагаемся на штатный native foreground-показ Capacitor.
       PushNotifications.addListener(
         'pushNotificationReceived',
         (notification) => {
           console.log('[PushPlugin] Notification received:', notification);
-          // При необходимости здесь можно обновить UI без локального дубля.
         }
       );
 
@@ -922,111 +1046,17 @@ export default defineNuxtPlugin({
           );
 
           const { notification } = action;
-          const data = notification.data as Record<string, any> | undefined;
-          // На разных платформах данные могут оказаться в root, а не в data.
-          // Собираем единый payload с приоритетом data.
-          const payload = {
-            ...(notification as Record<string, any>),
-            ...(data ?? {}),
-          } as Record<string, any>;
-          const actionId = action.actionId || '';
-          const isTap = isTapAction(actionId);
-          const navigation = resolveNavigation(payload);
+          const payload = normalizeNotificationPayload(
+            notification as Record<string, any>
+          );
           const messageId = resolveMessageId(payload, action);
 
-          // Трекинг взаимодействия
-          if (payload?.slotId) {
-            let actionType: InteractionAction = 'dismissed';
-
-            // Определяем тип действия
-            if (isTap) {
-              actionType = 'open';
-            } else if (actionId === 'yes') {
-              actionType = 'yes';
-            } else if (actionId === 'no') {
-              actionType = 'no';
-            } else if (actionId === 'later' || actionId.startsWith('snooze:')) {
-              actionType = 'later';
-
-              // Если это snooze — отправляем запрос на отложение
-              const duration = actionId.replace('snooze:', '') as
-                | '15m'
-                | '1h'
-                | '4h'
-                | 'tomorrow';
-              try {
-                const nuxtApp = useNuxtApp();
-                await nuxtApp.$api('/api/notifications/snooze', {
-                  method: 'POST',
-                  body: {
-                    kind: payload.kind || 'therapy',
-                    duration,
-                    entityKey: payload.entityKey || null,
-                  },
-                });
-                console.log('[PushPlugin] Notification snoozed:', duration);
-              } catch (error) {
-                console.error('[PushPlugin] Failed to snooze:', error);
-              }
-            }
-
-            // Отправляем трекинг взаимодействия
-            try {
-              const nuxtApp = useNuxtApp();
-              await nuxtApp.$api('/api/notifications/interaction', {
-                method: 'POST',
-                body: {
-                  slotId: payload.slotId,
-                  action: actionType,
-                  at: new Date().toISOString(),
-                  meta: {
-                    platform,
-                    actionId,
-                    navigationType: navigation?.type ?? null,
-                    navigationId: resolveNavigationId(navigation),
-                  },
-                },
-              });
-              console.log('[PushPlugin] Interaction tracked:', actionType);
-            } catch (error) {
-              console.error('[PushPlugin] Failed to track interaction:', error);
-            }
-          }
-
-          // Навигация выполняется только при системном тапе.
-          if (isTap) {
-            // Для старта медитации из push заранее фиксируем пользовательское намерение
-            // и пытаемся разблокировать аудио-контекст до роутинга.
-            try {
-              await meditationPlayer.registerUserGesture();
-            } catch (error) {
-              console.warn(
-                '[PushPlugin] Failed to register gesture for meditation audio:',
-                error
-              );
-            }
-
-            const navigationTarget = resolveNavigationTarget(payload);
-            const deepLink =
-              typeof payload?.deepLink === 'string' && payload.deepLink.trim()
-                ? payload.deepLink.trim()
-                : null;
-            const actionPath = resolveActionTargetPath(payload);
-            const targetPath =
-              (navigationTarget
-                ? buildAppNavigationPath(navigationTarget)
-                : null) ||
-              deepLink ||
-              actionPath ||
-              (navigation ? buildPathFromNavigation(navigation) : '/');
-
-            if (!deepLink && !actionPath && !navigation) {
-              void logMissingNavigation(payload);
-            }
-
-            await enqueueNavigation(targetPath, messageId, navigationTarget);
-            await flushPendingNavigation();
-          }
+          await handleNotificationAction({
+            actionId: action.actionId,
+            notification: notification as Record<string, any>,
+            payload,
+            messageId,
+          });
         }
       );
     } catch (error) {
@@ -1144,9 +1174,12 @@ export default defineNuxtPlugin({
             if (!isActive) return;
             void consumeNativeLaunchNavigation();
             void flushPendingNavigation();
-            void readStoredValue(DENIED_PENDING_SYNC_KEY).then((v) => {
-              if (v === '1') void trySyncDeniedToServer();
-            });
+            void (async () => {
+              const value = await readStoredValue(DENIED_PENDING_SYNC_KEY);
+              if (value === '1') {
+                await trySyncDeniedToServer();
+              }
+            })();
           });
         })
         .catch((error) => {
