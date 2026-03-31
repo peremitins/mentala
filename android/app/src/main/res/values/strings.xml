@@ -4,6 +4,7 @@
     <string name="title_activity_main">Ментала</string>
     <string name="package_name">com.mentala.app</string>
     <string name="custom_url_scheme">mentala</string>
+    <string name="asset_statements" translatable="false">[{\"include\":\"https://my.mentala.app/.well-known/assetlinks.json\"}]</string>
     <string name="default_notification_channel_id">mentai_high</string>
     <string name="audio_fg_channel_name">Ментала Audio</string>
     <string name="audio_fg_channel_description">Воспроизведение медитаций в фоне</string>
