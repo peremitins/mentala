@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-1 relative overflow-hidden p-2">
+  <div class="glass-deep flex flex-1 relative overflow-hidden p-5">
     <section
       class="flex-auto"
       :style="{ borderRadius: `calc(var(--radius-lg))` }"
@@ -14,10 +14,7 @@
           </div>
           <div v-else-if="error" class="text-destructive p-2">{{ error }}</div>
           <div v-else>
-            <div
-              v-if="!users.length"
-              class="opacity-70 p-2 text-foreground"
-            >
+            <div v-if="!users.length" class="opacity-70 p-2 text-foreground">
               Пока нет пользователей
             </div>
             <div class="w-full gap-3 space-y-3">

@@ -54,7 +54,8 @@ type FeatureAccessPolicy = {
   paywallTargetPlan: PaywallTargetPlan;
 };
 
-const SERVICE_ROLES = new Set(['admin', 'moderator', 'support']);
+const SERVICE_ROLES = new Set(['admin', 'moderator']);
+const PREMIUM_EQUIVALENT_ROLES = new Set(['support']);
 const PLAN_RANK: Record<PlanId, number> = {
   basic: 0,
   pro: 1,
@@ -220,6 +221,10 @@ const DEFAULT_FEATURE_ACCESS_POLICIES: FeatureAccessPolicy[] = [
 
 function isServiceRole(userRole?: string): boolean {
   return Boolean(userRole && SERVICE_ROLES.has(userRole));
+}
+
+function isPremiumEquivalentRole(userRole?: string): boolean {
+  return Boolean(userRole && PREMIUM_EQUIVALENT_ROLES.has(userRole));
 }
 
 function normalizePlanId(planId?: string | null): PlanId {
@@ -411,7 +416,7 @@ export async function getBillingSnapshot(
     .limit(1);
 
   const active = activeSubscription[0];
-  const planId = normalizePlanId(
+  const resolvedPlanId = normalizePlanId(
     resolveCurrentEntitlementsPlan({
       now,
       trialActive,
@@ -423,6 +428,10 @@ export async function getBillingSnapshot(
       activePaidPlanId: active?.subscription?.planId || null,
     })
   );
+  // support-роль видим как Premium для review/QA, но без service-role bypass.
+  const planId = isPremiumEquivalentRole(effectiveUserRole)
+    ? 'premium'
+    : resolvedPlanId;
 
   const features = await getFeatures(
     {
