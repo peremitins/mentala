@@ -9,7 +9,8 @@ import {
 
 export type AiChatMode = 'disabled' | 'limited' | 'unlimited_fair_use';
 
-const SERVICE_ROLES = new Set(['admin', 'moderator', 'support']);
+const SERVICE_ROLES = new Set(['admin', 'moderator']);
+const PREMIUM_EQUIVALENT_ROLES = new Set(['support']);
 
 type UserSubscriptionRef = {
   planId: string;
@@ -17,6 +18,22 @@ type UserSubscriptionRef = {
 
 function isServiceRole(userRole?: string): boolean {
   return Boolean(userRole && SERVICE_ROLES.has(userRole));
+}
+
+function isPremiumEquivalentRole(userRole?: string): boolean {
+  return Boolean(userRole && PREMIUM_EQUIVALENT_ROLES.has(userRole));
+}
+
+function getEffectiveSubscription(
+  subscription: UserSubscriptionRef,
+  userRole?: string
+): UserSubscriptionRef {
+  if (subscription) return subscription;
+  // review/support-роль должна вести себя как Premium без админских прав.
+  if (isPremiumEquivalentRole(userRole)) {
+    return { planId: 'premium' };
+  }
+  return null;
 }
 
 /**
@@ -41,20 +58,25 @@ export function getAiChatMode(
     return 'unlimited_fair_use';
   }
 
-  if (!subscription) {
+  const effectiveSubscription = getEffectiveSubscription(
+    subscription,
+    userRole
+  );
+
+  if (!effectiveSubscription) {
     return 'disabled';
   }
 
   // Trial для Basic трактуем как Premium-level доступ.
-  if (subscription.planId === 'basic') {
+  if (effectiveSubscription.planId === 'basic') {
     return isTrialActive(user) ? 'unlimited_fair_use' : 'disabled';
   }
 
-  if (subscription.planId === 'pro') {
+  if (effectiveSubscription.planId === 'pro') {
     return 'limited';
   }
 
-  if (subscription.planId === 'premium') {
+  if (effectiveSubscription.planId === 'premium') {
     return 'unlimited_fair_use';
   }
 
@@ -88,15 +110,23 @@ export function hasAiNotificationsAccess(
     return true;
   }
 
-  if (!subscription) {
+  const effectiveSubscription = getEffectiveSubscription(
+    subscription,
+    userRole
+  );
+
+  if (!effectiveSubscription) {
     return false;
   }
 
-  if (subscription.planId === 'pro' || subscription.planId === 'premium') {
+  if (
+    effectiveSubscription.planId === 'pro' ||
+    effectiveSubscription.planId === 'premium'
+  ) {
     return true;
   }
 
-  if (subscription.planId === 'basic' && isTrialActive(user)) {
+  if (effectiveSubscription.planId === 'basic' && isTrialActive(user)) {
     return true;
   }
 
@@ -146,6 +176,10 @@ function getWeeklyMinutesLimitForFeatures(
   userRole?: string
 ): number | null {
   const mode = getAiChatMode(user, subscription, userRole);
+  const effectiveSubscription = getEffectiveSubscription(
+    subscription,
+    userRole
+  );
 
   if (mode === 'disabled') {
     return 0;
@@ -155,7 +189,7 @@ function getWeeklyMinutesLimitForFeatures(
     return null;
   }
 
-  if (subscription?.planId === 'pro') {
+  if (effectiveSubscription?.planId === 'pro') {
     return plan?.weeklyMinutesLimit || PRO_WEEKLY_MINUTES_LIMIT;
   }
 

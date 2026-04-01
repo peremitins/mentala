@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-1 relative overflow-hidden p-2">
+  <div class="glass-deep flex flex-1 relative overflow-hidden p-5">
     <section
       class="flex-auto"
       :style="{ borderRadius: `calc(var(--radius-lg))` }"
@@ -44,6 +44,17 @@
           placeholder="Подтверждение пароля"
           :show-clear-button="false"
         />
+        <label
+          class="flex items-center gap-3 rounded-xl border border-border px-3 py-3"
+        >
+          <Checkbox v-model:checked="emailVerified" />
+          <div class="space-y-1">
+            <p class="text-sm font-medium text-foreground">Email подтвержден</p>
+            <p class="text-xs text-muted-foreground">
+              Для review-аккаунтов можно включить вручную без почтового кода.
+            </p>
+          </div>
+        </label>
         <div class="flex items-center gap-2">
           <Button type="submit" variant="outline" :disabled="saving">
             Сохранить
@@ -64,6 +75,7 @@ definePageMeta({
 });
 import { Input } from '@/app/components/ui/shadcn/input';
 import { Button } from '@/app/components/ui/button';
+import { Checkbox } from '@/app/components/ui/shadcn/checkbox';
 import {
   Select,
   SelectContent,
@@ -79,6 +91,7 @@ const name = ref('');
 const roleId = ref('user');
 const password = ref('');
 const confirm = ref('');
+const emailVerified = ref(false);
 const saving = ref(false);
 const error = ref('');
 const userName = ref('');
@@ -91,12 +104,14 @@ onMounted(async () => {
         email: string | null;
         name: string | null;
         roleId?: string | null;
+        emailVerifiedAt?: string | null;
       };
     }>(`/api/users/${id.value}`);
     email.value = res.item.email || '';
     name.value = res.item.name || '';
     userName.value = res.item.name || '';
     roleId.value = res.item.roleId || 'user';
+    emailVerified.value = Boolean(res.item.emailVerifiedAt);
   } catch (e: any) {
     error.value = e?.data?.message || e?.message || 'Ошибка загрузки';
   }
@@ -125,6 +140,7 @@ async function onSubmit() {
         name: name.value.trim() || undefined,
         roleId: roleId.value,
         password: password.value || undefined,
+        emailVerified: emailVerified.value,
       },
     });
 

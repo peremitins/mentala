@@ -65,6 +65,7 @@
 - Bootstrap: `GET /api/user/me` → `billing` (plan/trial/aiChatMode/entitlements)
 - Lock/paywall: иконка тарифа + `FeaturePaywallModal` при клике
 - Авто-fallback: без entitlement на AI-уведомления → сервер переводит в templates
+- `roleId=support` трактуется как premium-equivalent доступ для review/QA: полный доступ к premium-фичам без покупки, но без административного доступа к чужим данным
 
 ## Apple IAP client confirm
 

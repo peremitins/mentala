@@ -52,8 +52,9 @@ export async function canViewUser(
 ): Promise<boolean> {
   const viewerRole = await getUserRole(viewerId);
 
-  // Админ, модератор и support могут просматривать любых пользователей
-  if (['admin', 'moderator', 'support'].includes(viewerRole)) {
+  // Админ и модератор могут просматривать любых пользователей.
+  // support не даём доступ к чужим данным: это review/premium-like роль, а не полуадмин.
+  if (['admin', 'moderator'].includes(viewerRole)) {
     return true;
   }
 
@@ -95,4 +96,3 @@ export async function isUserBlocked(userId: number): Promise<boolean> {
 
   return user[0].isBlocked || false;
 }
-

@@ -2,7 +2,10 @@ import { defineEventHandler, getRouterParam, createError } from 'h3';
 import { db } from '../../infrastructure/db/client';
 import { users } from '../../infrastructure/db/schema';
 import { eq } from 'drizzle-orm';
-import { getSessionUserWithRole, requireCanViewUser } from '@/server/utils/require-role';
+import {
+  getSessionUserWithRole,
+  requireCanViewUser,
+} from '@/server/utils/require-role';
 
 export default defineEventHandler(async (event) => {
   const user = await getSessionUserWithRole(event);
@@ -25,6 +28,7 @@ export default defineEventHandler(async (event) => {
       name: users.name,
       locale: users.locale,
       roleId: users.roleId,
+      emailVerifiedAt: users.emailVerifiedAt,
       isBlocked: users.isBlocked,
       createdAt: users.createdAt,
       updatedAt: users.updatedAt,
