@@ -11,6 +11,7 @@ import {
   extractPaymentMethodPresentation,
   getYooKassaPayment,
   getYooKassaPaymentMethod,
+  getYooKassaRefund,
 } from '@/server/application/payments/yookassa.client';
 import {
   isTrialBillingPeriod,
@@ -349,6 +350,170 @@ export default defineEventHandler(async (event) => {
         })
         .where(eq(users.id, targetUser.id));
     }
+
+    return { received: true };
+  }
+
+  // ─── Обработка возвратов (refund.succeeded) ───────────────────────
+  if (eventType === 'refund.succeeded') {
+    let refund: any;
+    try {
+      refund = await getYooKassaRefund({
+        shopId,
+        secretKey,
+        refundId: objectId,
+      });
+    } catch (error: any) {
+      const status = error?.response?.status || error?.status;
+      if (status === 401 || status === 403 || status === 404) {
+        return { received: true };
+      }
+
+      dispatchBillingWebhookErrorEvent({
+        paymentId: objectId,
+        statusCode: status ? Number(status) : 502,
+        errorMessage:
+          error?.message || 'Failed to verify refund status via API',
+      });
+
+      throw createError({
+        statusCode: 502,
+        statusMessage: 'Failed to verify refund status',
+      });
+    }
+
+    if (refund.status !== 'succeeded') {
+      return { received: true };
+    }
+
+    const refundPaymentId = String(refund.payment_id || '').trim();
+    const refundAmount = Number(refund.amount?.value || 0);
+    const refundCurrency = String(refund.amount?.currency || 'RUB');
+
+    if (!refundPaymentId) {
+      event.context.logger?.warn(
+        { refundId: objectId },
+        'YooKassa refund webhook missing payment_id'
+      );
+      return { received: true };
+    }
+
+    // Ищем подписку, связанную с оригинальным платежом.
+    const subByPayment = await db
+      .select()
+      .from(userSubscriptions)
+      .where(eq(userSubscriptions.yookassaPaymentId, refundPaymentId))
+      .limit(1);
+
+    const refundSub = subByPayment[0] ?? null;
+
+    if (!refundSub) {
+      event.context.logger?.warn(
+        { refundId: objectId, paymentId: refundPaymentId },
+        'YooKassa refund: no subscription found for payment (ignoring)'
+      );
+      return { received: true };
+    }
+
+    // Подписка уже отменена/истекла — дубль или повторный вебхук.
+    if (
+      refundSub.paymentStatus !== 'active' &&
+      refundSub.paymentStatus !== 'pending'
+    ) {
+      event.context.logger?.info(
+        {
+          refundId: objectId,
+          subscriptionId: refundSub.id,
+          currentStatus: refundSub.paymentStatus,
+        },
+        'YooKassa refund: subscription already not active (ignoring)'
+      );
+
+      await db.insert(subscriptionEvents).values({
+        userId: refundSub.userId,
+        eventType: 'refund_received',
+        planId: refundSub.planId,
+        metadata: {
+          refundId: objectId,
+          paymentId: refundPaymentId,
+          refundAmount: refundAmount,
+          refundCurrency: refundCurrency,
+          subscriptionId: refundSub.id,
+          subscriptionAlreadyInactive: true,
+        },
+      });
+
+      return { received: true };
+    }
+
+    // Аннулируем подписку и откатываем юзера на Basic.
+    await db.transaction(async (tx) => {
+      await tx
+        .update(userSubscriptions)
+        .set({
+          paymentStatus: 'expired',
+          autoRenew: false,
+          updatedAt: now,
+        })
+        .where(eq(userSubscriptions.id, refundSub.id));
+
+      // Сбрасываем billing-поля юзера (trial-scheduled, grace и т.д.).
+      await tx
+        .update(users)
+        .set({
+          billingPlanId: null,
+          billingPeriod: null,
+          nextChargeAt: null,
+          billingCollectionStatus: 'none',
+          graceEndsAt: null,
+          billingReminderSentAt: null,
+          billingLockedAt: null,
+          billingLockedBy: null,
+          updatedAt: now,
+        })
+        .where(eq(users.id, refundSub.userId));
+
+      await tx.insert(subscriptionEvents).values({
+        userId: refundSub.userId,
+        eventType: 'refund_received',
+        planId: refundSub.planId,
+        metadata: {
+          refundId: objectId,
+          paymentId: refundPaymentId,
+          refundAmount: refundAmount,
+          refundCurrency: refundCurrency,
+          subscriptionId: refundSub.id,
+        },
+      });
+    });
+
+    event.context.logger?.info(
+      {
+        refundId: objectId,
+        paymentId: refundPaymentId,
+        userId: refundSub.userId,
+        subscriptionId: refundSub.id,
+        planId: refundSub.planId,
+        refundAmount,
+      },
+      'YooKassa refund processed: subscription expired, user downgraded to basic'
+    );
+
+    dispatchBillingPlanChangedIfNeeded({
+      userId: refundSub.userId,
+      source: 'payments.yookassa.webhook.refund',
+      previous: {
+        subscriptionId: refundSub.id,
+        planId: refundSub.planId,
+        billingPeriod: refundSub.billingPeriod,
+      },
+      next: {
+        planId: 'basic',
+      },
+      paymentId: refundPaymentId,
+      effectiveAt: now,
+      occurredAt: now,
+    });
 
     return { received: true };
   }
