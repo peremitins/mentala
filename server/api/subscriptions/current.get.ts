@@ -122,7 +122,7 @@ function buildScheduledChange(params: {
 /**
  * GET /api/subscriptions/current
  * Текущее состояние подписки/триала/billing для UI.
- * Поддерживает query-параметр ?userId=123 только для admin/support.
+ * Поддерживает query-параметр ?userId=123 только для admin.
  */
 export default defineEventHandler(async (event) => {
   const sourcePlatform = resolveSourcePlatform(event);
@@ -170,11 +170,11 @@ export default defineEventHandler(async (event) => {
       requestedUserId !== sessionResult.user.id
     ) {
       const viewer = await getSessionUserWithRole(event);
-      if (!viewer || !['admin', 'support'].includes(viewer.role)) {
+      if (!viewer || viewer.role !== 'admin') {
         throw createError({
           statusCode: 403,
           statusMessage:
-            'Forbidden: Only admin and support can view other users subscriptions',
+            'Forbidden: Only admin can view other users subscriptions',
         });
       }
       targetUserId = requestedUserId;
