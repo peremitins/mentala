@@ -56,6 +56,8 @@
 - API: `/api/landing/config` (cache 60s), `/api/landing/lead` (rate-limit + honeypot)
 - Деплой: `pnpm landing:generate` → статика → rsync на сервер, Nginx + Traefik
 - CI/CD: deploy-prod.yml / deploy-dev.yml, атомарное переключение symlink
+- В секции `Приватность и безопасность` есть короткий публичный disclosure про Google Sign-In: только базовые данные аккаунта для входа, без доступа к Gmail/Drive/Calendar
+- FAQ на лендинге рендерится полностью закрытым по умолчанию; раскрытие только по явному клику пользователя
 
 ## Компоненты и паттерны
 - `HorizontalScroller.vue` — горизонтальные ленты с drag, стрелками на desktop

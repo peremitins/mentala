@@ -42,7 +42,7 @@
         </ul>
 
         <p>
-          Вы можете настроить частоту и тон уведомлений так, чтобы они
+          Вы можете настроить частоту и тон напоминаний так, чтобы они
           поддерживали вас, а не создавали давление.
         </p>
       </div>
@@ -72,7 +72,6 @@ import { Button } from '@/app/components/ui/button';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/app/components/ui/dialog';
