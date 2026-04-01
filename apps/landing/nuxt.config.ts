@@ -43,6 +43,9 @@ export default defineNuxtConfig({
     // В production (при nuxt build) — гибридный SSR + SWR. При nuxt generate эти правила не меняют статический экспорт.
     '/': { swr: process.env.NODE_ENV === 'development' ? 0 : 120 },
     '/support': { swr: process.env.NODE_ENV === 'development' ? 0 : 120 },
+    '/account-deletion': {
+      swr: process.env.NODE_ENV === 'development' ? 0 : 120,
+    },
   },
   // Статический экспорт (nuxt generate): предрендер только маршрута / и статичных файлов из public/
   nitro: {
@@ -56,6 +59,7 @@ export default defineNuxtConfig({
       routes: [
         '/',
         '/support',
+        '/account-deletion',
         '/.well-known/apple-app-site-association',
         '/.well-known/assetlinks.json',
       ],
@@ -171,8 +175,7 @@ export default defineNuxtConfig({
         process.env.NUXT_PUBLIC_API_SERVER_URL || 'http://localhost:3000',
       appAuthUrl:
         process.env.NUXT_PUBLIC_APP_AUTH_URL || 'https://my.mentala.app/auth',
-      landingSiteUrl:
-        process.env.NUXT_PUBLIC_LANDING_SITE_URL || 'https://mentala.app',
+      landingSiteUrl: process.env.NUXT_PUBLIC_LANDING_SITE_URL || '',
       /** ID счётчика Яндекс.Метрики. Задаётся через NUXT_PUBLIC_YANDEX_METRIKA_ID (на проде — в CI). */
       yandexMetrikaId: process.env.NUXT_PUBLIC_YANDEX_METRIKA_ID || '',
     },
