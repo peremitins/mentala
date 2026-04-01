@@ -465,13 +465,6 @@ async function loadTrack(nextId: string) {
     error.value = null;
     acknowledgeSession();
     track.value = await meditationsStore.fetchTrack(trimmedId);
-    if (
-      track.value &&
-      !(isActive.value && (isPlaying.value || isBuffering.value))
-    ) {
-      // Автостарт при входе на страницу, если трек ещё не играет.
-      void play(track.value, preferredTimerMinutes.value);
-    }
   } catch (err: any) {
     error.value = err?.message || 'Не удалось загрузить медитацию';
   }

@@ -1,4 +1,10 @@
-import { defineEventHandler, getRouterParam, readBody, createError, getHeader } from 'h3';
+import {
+  defineEventHandler,
+  getRouterParam,
+  readBody,
+  createError,
+  getHeader,
+} from 'h3';
 import { db } from '../../infrastructure/db/client';
 import { users } from '../../infrastructure/db/schema';
 import { eq } from 'drizzle-orm';
@@ -7,10 +13,14 @@ import {
   rotateSessionId,
   revokeAllUserSessions,
 } from '@/server/application/auth/session';
-import { getSessionUserWithRole, requireCanEditUser } from '@/server/utils/require-role';
+import {
+  getSessionUserWithRole,
+  requireCanEditUser,
+} from '@/server/utils/require-role';
 import { enqueueAiRegenerationForUser } from '@/server/application/notifications/ai-text-regeneration.service';
 
 export default defineEventHandler(async (event) => {
+  const validRoles = new Set(['admin', 'user', 'moderator', 'support']);
   const user = await getSessionUserWithRole(event);
   if (!user) {
     throw createError({ statusCode: 401, statusMessage: 'Unauthorized' });
@@ -29,6 +39,7 @@ export default defineEventHandler(async (event) => {
     locale?: 'ru' | 'en';
     password?: string;
     roleId?: string; // Только для админов
+    emailVerified?: boolean; // Только для админов
     isBlocked?: boolean; // Запрещено - использовать отдельный endpoint
   }>(event);
 
@@ -36,7 +47,8 @@ export default defineEventHandler(async (event) => {
   if (body?.isBlocked !== undefined) {
     throw createError({
       statusCode: 400,
-      statusMessage: 'Use PATCH /api/moderator/users/[id]/block for blocking/unblocking users',
+      statusMessage:
+        'Use PATCH /api/moderator/users/[id]/block for blocking/unblocking users',
     });
   }
 
@@ -61,6 +73,13 @@ export default defineEventHandler(async (event) => {
     throw createError({
       statusCode: 400,
       statusMessage: 'Invalid locale',
+    });
+  }
+
+  if (body?.roleId !== undefined && !validRoles.has(body.roleId)) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Invalid roleId',
     });
   }
 
@@ -127,6 +146,16 @@ export default defineEventHandler(async (event) => {
     patch.roleId = body.roleId;
   }
 
+  if (body?.emailVerified !== undefined) {
+    if (user.role !== 'admin') {
+      throw createError({
+        statusCode: 403,
+        statusMessage: 'Forbidden: Only admin can change email verification',
+      });
+    }
+    patch.emailVerifiedAt = body.emailVerified ? new Date() : null;
+  }
+
   if (!Object.keys(patch).length) {
     throw createError({ statusCode: 400, statusMessage: 'Nothing to update' });
   }
@@ -143,6 +172,7 @@ export default defineEventHandler(async (event) => {
 
   // Убираем passwordHash из ответа
   const { passwordHash, ...safeUser } = updated[0];
+  void passwordHash;
 
   const genderChanged =
     body?.gender !== undefined && body.gender !== currentUser?.gender;
@@ -168,14 +198,12 @@ export default defineEventHandler(async (event) => {
 
     if (isSelf) {
       // Пользователь меняет свой пароль - ротируем его сессию
-      const newSid = await rotateSessionId(
-        event,
-        id,
-        user.locale || undefined
-      );
+      const newSid = await rotateSessionId(event, id, user.locale || undefined);
 
       // Для native платформ возвращаем новый sessionToken
-      const platform = String(getHeader(event, 'x-platform') || '').toLowerCase();
+      const platform = String(
+        getHeader(event, 'x-platform') || ''
+      ).toLowerCase();
       const isNative = platform === 'ios' || platform === 'android';
 
       return {

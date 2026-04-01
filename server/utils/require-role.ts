@@ -4,7 +4,11 @@
 
 import { createError } from 'h3';
 import { getSessionUser } from '@/server/application/auth/session';
-import { getUserRole, canViewUser, canEditUser } from '@/server/application/auth/roles';
+import {
+  getUserRole,
+  canViewUser,
+  canEditUser,
+} from '@/server/application/auth/roles';
 import type { UserRole } from '@/server/application/auth/roles';
 
 /**
@@ -67,7 +71,7 @@ export async function getSessionUserWithRole(event: any) {
 /**
  * Проверить, что пользователь может получить доступ к данным другого пользователя
  * Правила:
- * - admin, moderator, support: могут просматривать любых пользователей
+ * - admin, moderator: могут просматривать любых пользователей
  * - user: может просматривать только себя
  */
 export async function requireCanViewUser(
@@ -122,4 +126,3 @@ export async function requireCanEditUser(
     });
   }
 }
-

@@ -61,7 +61,8 @@ async function runSeed() {
     {
       id: 'support',
       name: 'Служба поддержки',
-      description: 'Может просматривать данные и подписки пользователей',
+      description:
+        'Review/QA роль с premium-доступом без административных прав',
       isSystem: true,
     },
   ];
@@ -101,4 +102,3 @@ runSeed()
     console.error('❌ Seed failed:', error);
     process.exit(1);
   });
-
