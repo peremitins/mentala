@@ -10,6 +10,7 @@ import type {
 import {
   buildAppNavigationPath,
   parseAppNavigationTarget,
+  resolveGuaranteedTargetFromNotificationContext,
   resolveTargetFromLegacyNotificationNavigation,
   resolveTargetFromLegacySuggestedChipAction,
   type AppNavigationTarget,
@@ -223,6 +224,12 @@ export default defineNuxtPlugin({
       return true;
     }
 
+    function readPayloadString(value: unknown): string | null {
+      if (typeof value !== 'string') return null;
+      const trimmed = value.trim();
+      return trimmed ? trimmed : null;
+    }
+
     function normalizeNavigation(raw: unknown): NotificationNavigation | null {
       if (!raw || typeof raw !== 'object') return null;
       const type =
@@ -253,6 +260,10 @@ export default defineNuxtPlugin({
             ? String((raw as { slug?: unknown }).slug).trim()
             : '';
         return slug ? { type: 'breath_practice', slug } : null;
+      }
+
+      if (type === 'gratitude_diary') {
+        return { type: 'gratitude_diary' };
       }
 
       return null;
@@ -299,13 +310,36 @@ export default defineNuxtPlugin({
         return { type: 'breath_practice', slug: navId };
       }
 
+      if (navType === 'gratitude_diary') {
+        return { type: 'gratitude_diary' };
+      }
+
       return null;
+    }
+
+    function resolveGuaranteedPayloadTarget(
+      payload?: Record<string, any>
+    ): AppNavigationTarget | null {
+      if (!payload) return null;
+
+      return resolveGuaranteedTargetFromNotificationContext({
+        title: readPayloadString(payload.title),
+        entityKey: readPayloadString(payload.entityKey),
+        entityDisplayName: readPayloadString(payload.entityDisplayName),
+      });
     }
 
     function resolveNavigationTarget(
       payload?: Record<string, any>
     ): AppNavigationTarget | null {
       if (!payload) return null;
+
+      // Для уведомлений дневника благодарности контекст темы важнее
+      // устаревшего navigationTarget=home в уже сохранённых слотах.
+      const guaranteedTarget = resolveGuaranteedPayloadTarget(payload);
+      if (guaranteedTarget) {
+        return guaranteedTarget;
+      }
 
       if (
         typeof payload.navigationTarget === 'string' &&
@@ -385,12 +419,6 @@ export default defineNuxtPlugin({
       if (!rawAction) return null;
       const action = rawAction.toLowerCase();
 
-      const readString = (value: unknown): string | null => {
-        if (typeof value !== 'string') return null;
-        const trimmed = value.trim();
-        return trimmed ? trimmed : null;
-      };
-
       if (
         action === 'open_meditations' ||
         action === 'open_meditations_collection'
@@ -400,9 +428,9 @@ export default defineNuxtPlugin({
 
       if (action === 'open_meditation_track') {
         const trackId =
-          readString(payload.trackId) ||
-          readString(payload.navId) ||
-          readString(payload.actionParams?.trackId);
+          readPayloadString(payload.trackId) ||
+          readPayloadString(payload.navId) ||
+          readPayloadString(payload.actionParams?.trackId);
         return trackId
           ? `/meditations?trackId=${encodeURIComponent(trackId)}`
           : '/meditations';
@@ -414,10 +442,10 @@ export default defineNuxtPlugin({
 
       if (action === 'open_breath_practice') {
         const practiceId =
-          readString(payload.practiceId) ||
-          readString(payload.slug) ||
-          readString(payload.navId) ||
-          readString(payload.actionParams?.practiceId);
+          readPayloadString(payload.practiceId) ||
+          readPayloadString(payload.slug) ||
+          readPayloadString(payload.navId) ||
+          readPayloadString(payload.actionParams?.practiceId);
         return practiceId
           ? `/breath-practices/${encodeURIComponent(practiceId)}`
           : '/breath-practices';
@@ -437,8 +465,8 @@ export default defineNuxtPlugin({
 
       if (action === 'open_therapy_topic') {
         const topicKey =
-          readString(payload.topicKey) ||
-          readString(payload.actionParams?.topicKey);
+          readPayloadString(payload.topicKey) ||
+          readPayloadString(payload.actionParams?.topicKey);
         return topicKey
           ? `/therapy/${encodeURIComponent(topicKey)}`
           : '/therapy';
@@ -450,15 +478,15 @@ export default defineNuxtPlugin({
 
       if (action === 'open_habit') {
         const habitKey =
-          readString(payload.habitKey) ||
-          readString(payload.actionParams?.habitKey);
+          readPayloadString(payload.habitKey) ||
+          readPayloadString(payload.actionParams?.habitKey);
         return habitKey ? `/habits/${encodeURIComponent(habitKey)}` : '/habits';
       }
 
       if (action === 'open_sos') {
         const entry =
-          readString(payload.sosEntry) ||
-          readString(payload.actionParams?.sosEntry);
+          readPayloadString(payload.sosEntry) ||
+          readPayloadString(payload.actionParams?.sosEntry);
         return entry
           ? `/quick-help?entry=${encodeURIComponent(entry)}`
           : '/quick-help';
@@ -498,21 +526,9 @@ export default defineNuxtPlugin({
     function buildPathFromNavigation(
       navigation: NotificationNavigation
     ): string {
-      // Приводим navigation к пути внутри приложения.
-      switch (navigation.type) {
-        case 'meditation_track':
-          return `/meditations?trackId=${encodeURIComponent(
-            navigation.trackId
-          )}`;
-        case 'breath_practice':
-          return `/breath-practices/${encodeURIComponent(
-            navigation.slug
-          )}${navigation.slug === 'box-breathing' ? '?group=popular' : ''}`;
-        case 'breath_practices':
-          return '/breath-practices';
-        default:
-          return '/';
-      }
+      return buildAppNavigationPath(
+        resolveTargetFromLegacyNotificationNavigation(navigation)
+      );
     }
 
     function normalizeTargetPath(value: string): string {

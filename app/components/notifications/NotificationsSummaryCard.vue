@@ -3,7 +3,7 @@
     <div class="flex items-start justify-between gap-3">
       <div>
         <p class="text-xs uppercase tracking-[0.2em] text-foreground">
-          Уведомления
+          Напоминания
         </p>
         <p class="text-lg font-semibold text-foreground">
           {{ statusLabel }}
@@ -57,7 +57,7 @@
           </p>
         </div>
         <p v-else class="text-sm text-foreground">
-          Уведомления ещё не настроены.
+          Напоминания ещё не настроены.
         </p>
       </template>
     </div>
@@ -69,7 +69,7 @@
       :disabled="loading"
       @click="$emit('edit')"
     >
-      Настройки уведомлений
+      Настройки напоминаний
       <IconChevronRight class="h-5 w-5 text-muted-foreground" />
     </Button>
 

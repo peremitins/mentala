@@ -27,7 +27,7 @@
     <ConfirmModal
       ref="deleteModalRef"
       title="Удалить привычку?"
-      subtitle="Настройка уведомлений и расписание будут удалены. Это действие необратимо."
+      subtitle="Настройки напоминаний и расписание будут удалены. Это действие необратимо."
       confirm-label="Удалить"
       cancel-label="Отмена"
       @confirm="confirmDeleteHabit"
