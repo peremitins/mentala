@@ -9,6 +9,17 @@
 - **AI**: OpenAI Responses API (чат), Realtime API (голос), GPT (уведомления)
 - **Платежи**: YooKassa (web/mobile), Apple StoreKit 2 (iOS IAP)
 
+## Публичный landing
+
+- Публичный сайт `mentala.app` живёт в `apps/landing` как отдельное Nuxt-приложение
+- Ключевые публичные маршруты лендинга: `/`, `/support`, `/account-deletion`
+- Страница `/account-deletion` используется как публичный URL для store-review и объясняет:
+  - как запросить удаление аккаунта;
+  - какие данные удаляются в Mentala;
+  - какие данные могут храниться ограниченный срок
+- Внутренние ссылки лендинга должны оставаться относительными (`/support`, `/account-deletion`), чтобы local dev и preview не уводили пользователя на production-домен
+- Абсолютный origin для canonical/og на лендинге берётся из `NUXT_PUBLIC_LANDING_SITE_URL`, а при отсутствии переменной в local dev вычисляется из текущего request origin
+
 ## Mobile Build Pipeline
 
 - `pnpm cap:sync` / `pnpm cap:sync:prod` — release/TestFlight путь: Nuxt bundle собирается из `.env.production`
