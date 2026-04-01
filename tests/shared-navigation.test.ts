@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildAppNavigationPath,
+  buildLegacyNotificationNavigation,
   buildLegacySuggestedChipActionPayload,
+  resolveGuaranteedTargetFromNotificationContext,
+  resolveTargetFromLegacyNotificationNavigation,
   resolveTargetFromLegacySuggestedChipAction,
 } from '../shared/navigation/index';
 
@@ -53,5 +56,33 @@ describe('shared navigation', () => {
     });
 
     expect(path).toBe('/breath-practices/long-exhale-4-6?group=anxiety');
+  });
+
+  it('распознаёт дневник благодарности по контексту уведомления', () => {
+    const target = resolveGuaranteedTargetFromNotificationContext({
+      title: 'Дневник благодарности',
+      entityKey: 'gratitude',
+    });
+
+    expect(target).toEqual({
+      type: 'gratitude_diary',
+    });
+  });
+
+  it('конвертирует gratitude diary через legacy navigation без потери маршрута', () => {
+    const navigation = buildLegacyNotificationNavigation({
+      type: 'gratitude_diary',
+    });
+
+    expect(navigation).toEqual({
+      type: 'gratitude_diary',
+    });
+    expect(
+      resolveTargetFromLegacyNotificationNavigation({
+        type: 'gratitude_diary',
+      })
+    ).toEqual({
+      type: 'gratitude_diary',
+    });
   });
 });
