@@ -35,6 +35,11 @@ shared/dto/        # Zod-схемы (общие с бэком)
 - Capacitor plugins для нативных функций, VueUse для кросс-браузерных
 - Async/await везде, не .then()/.catch()
 
+## Mobile build notes
+- `@capgo/capacitor-social-login` для текущего стека должен оставаться на ветке `7.x`, потому что `8.x` требует `@capacitor/core >= 8`
+- Для Android используется локальный pnpm patch `patches/@capgo__capacitor-social-login@7.20.0.patch`, который устраняет конфликт `androidx.browser` vs `androidbrowserhelper`
+- Перед обновлением social-login до `8.x` сначала нужно мигрировать весь Capacitor-стек проекта на `8.x`, иначе Android build снова сломается на разрешении зависимостей
+
 ## Качество
 - LCP < 2.5s, TTI < 3s
 - ESLint + Prettier, Husky + lint-staged

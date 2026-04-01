@@ -39,7 +39,7 @@ include ':capacitor-status-bar'
 project(':capacitor-status-bar').projectDir = new File('../node_modules/.pnpm/@capacitor+status-bar@7.0.3_@capacitor+core@7.4.3/node_modules/@capacitor/status-bar/android')
 
 include ':capgo-capacitor-social-login'
-project(':capgo-capacitor-social-login').projectDir = new File('../node_modules/.pnpm/@capgo+capacitor-social-login@8.2.5_@capacitor+core@7.4.3/node_modules/@capgo/capacitor-social-login/android')
+project(':capgo-capacitor-social-login').projectDir = new File('../node_modules/.pnpm/@capgo+capacitor-social-login@7.20.0_patch_hash=494f63e7b7f9e31eb1bfe9f162a2ac49a717948_09f6fb5a1db32fd44b4bf5e71e6fb80f/node_modules/@capgo/capacitor-social-login/android')
 
 include ':capgo-native-audio'
 project(':capgo-native-audio').projectDir = new File('../node_modules/.pnpm/@capgo+native-audio@7.11.2_@capacitor+core@7.4.3/node_modules/@capgo/native-audio/android')

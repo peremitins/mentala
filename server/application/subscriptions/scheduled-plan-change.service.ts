@@ -11,6 +11,7 @@ import {
 import {
   createYooKassaPayment,
   extractPaymentMethodPresentation,
+  buildYooKassaReceipt,
 } from '@/server/application/payments/yookassa.client';
 import {
   expireOutdatedActiveSubscriptions,
@@ -138,6 +139,7 @@ async function applyScheduledPlanChangeForUser(params: {
   const userRows = await db
     .select({
       id: users.id,
+      email: users.email,
       trialEndedAt: users.trialEndedAt,
       scheduledPlanId: users.scheduledPlanId,
       scheduledBillingPeriod: users.scheduledBillingPeriod,
@@ -405,12 +407,14 @@ async function applyScheduledPlanChangeForUser(params: {
 
   let payment;
   try {
+    const planChangeDescription = `Подписка Ментала ${scheduledPlanId === 'premium' ? 'Premium' : 'PRO'} (${scheduledBillingPeriod === 'year' ? 'год' : 'месяц'})`;
+
     payment = await createYooKassaPayment({
       shopId,
       secretKey,
       idempotenceKey: yookassaIdempotenceKey,
       amount: checkoutAmount,
-      description: `Ментала scheduled plan change ${scheduledPlanId} (${scheduledBillingPeriod})`,
+      description: planChangeDescription,
       metadata: {
         userId: String(userId),
         subscriptionId: String(pendingSubscription.id),
@@ -421,6 +425,13 @@ async function applyScheduledPlanChangeForUser(params: {
       },
       paymentMode: 'recurring',
       paymentMethodId: user.paymentMethodId,
+      receipt: user.email
+        ? buildYooKassaReceipt({
+            email: user.email,
+            amount: checkoutAmount,
+            description: planChangeDescription,
+          })
+        : undefined,
     });
   } catch (error) {
     // Если платеж не создан — откатываем subscription в canceled и возвращаем schedule.

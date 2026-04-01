@@ -75,7 +75,7 @@
     "@capacitor/push-notifications": "^7.0.3",
     "@capacitor/splash-screen": "^7.0.3",
     "@capacitor/status-bar": "^7.0.3",
-    "@capgo/capacitor-social-login": "^8.2.5",
+    "@capgo/capacitor-social-login": "7.20.0",
     "@capgo/native-audio": "7.11.2",
     "@iconify-json/lucide": "^1.2.68",
     "@internationalized/date": "3.9.0",
@@ -190,7 +190,8 @@
       "on-change": "6.0.2"
     },
     "patchedDependencies": {
-      "@capacitor-community/speech-recognition": "patches/@capacitor-community__speech-recognition.patch"
+      "@capacitor-community/speech-recognition": "patches/@capacitor-community__speech-recognition.patch",
+      "@capgo/capacitor-social-login@7.20.0": "patches/@capgo__capacitor-social-login@7.20.0.patch"
     }
   },
   "config": {
