@@ -123,11 +123,26 @@
                 }}
               </p>
             </article>
+
+            <article class="support-card">
+              <h2 class="support-card-title">
+                {{ t('SUPPORT.ACCOUNT_DELETION.TITLE') }}
+              </h2>
+              <p class="support-card-text">
+                {{ t('SUPPORT.ACCOUNT_DELETION.DESCRIPTION') }}
+              </p>
+              <a :href="accountDeletionUrl" class="support-email-btn">
+                {{ t('SUPPORT.ACCOUNT_DELETION.CTA') }}
+              </a>
+            </article>
           </div>
 
           <article class="support-card">
             <h2 class="support-card-title">{{ t('SUPPORT.LEGAL.TITLE') }}</h2>
             <div class="support-links">
+              <a :href="accountDeletionUrl">
+                {{ t('SUPPORT.LEGAL.DELETE_ACCOUNT') }}
+              </a>
               <a
                 :href="privacyPolicyUrl"
                 target="_blank"
@@ -171,6 +186,7 @@
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRuntimeConfig } from 'nuxt/app';
+import { useLandingSiteUrl } from '../composables/useLandingSiteUrl';
 import { useLandingLocale } from '../composables/useLandingLocale';
 import type { SupportedLocale } from '../composables/useLandingLocale';
 import LanguageSelect from '../components/ui/LanguageSelect.vue';
@@ -201,18 +217,15 @@ const privacyPolicyUrl = computed(
 const termsOfServiceUrl = computed(
   () => `${webAppUrl.value}/legal/terms-of-service-${legalLocale.value}.html`
 );
+const siteUrl = useLandingSiteUrl();
+const accountDeletionUrl = computed(
+  () => `/account-deletion?lang=${selectedLocale.value}`
+);
+const homeUrl = computed(() => `/?lang=${selectedLocale.value}`);
 
 async function onLocaleChange(nextLocale: SupportedLocale) {
   await switchLocale(nextLocale);
 }
-
-const siteUrl = computed(() =>
-  String(runtimeConfig.public.landingSiteUrl || 'https://mentala.app').replace(
-    /\/$/,
-    ''
-  )
-);
-const homeUrl = computed(() => `${siteUrl.value}/`);
 const supportUrl = computed(() => `${siteUrl.value}/support`);
 
 useSeoMeta({
