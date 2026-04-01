@@ -30,6 +30,12 @@ export default {
       EMAIL_LABEL: 'Support email',
       CTA: 'Email support',
     },
+    ACCOUNT_DELETION: {
+      TITLE: 'Account deletion',
+      DESCRIPTION:
+        'Open the public page with account deletion instructions and a summary of how related data is handled.',
+      CTA: 'Open instructions',
+    },
     SLA: {
       TITLE: 'Response time',
       VALUE: 'We typically respond within 48 hours.',
@@ -56,6 +62,7 @@ export default {
     },
     LEGAL: {
       TITLE: 'Legal documents',
+      DELETE_ACCOUNT: 'Account deletion',
       PRIVACY: 'Privacy Policy',
       TERMS: 'Terms of Service',
     },
@@ -339,6 +346,7 @@ export default {
       COPYRIGHT: '{year} Mentala',
       SUPPORT_ARIA: 'Write to {email}',
       SUPPORT_LINK: 'Support',
+      DELETE_ACCOUNT_LINK: 'Account deletion',
       PRIVACY_LINK: 'Privacy Policy',
       TERMS_LINK: 'Terms of Service',
     },
@@ -394,6 +402,58 @@ export default {
       ORGANIZATION_NAME: 'Mentala',
       WEBSITE_NAME: 'Mentala',
       WEBPAGE_NAME: 'Mentala — psychological support 24/7',
+    },
+  },
+  ACCOUNT_DELETION: {
+    META: {
+      TITLE: 'Mentala Account Deletion',
+      DESCRIPTION:
+        'How to request Mentala account deletion, which data is deleted, and which data may be retained for a limited period.',
+    },
+    BADGE: 'Account deletion',
+    TITLE: 'How to request Mentala account deletion',
+    SUBTITLE:
+      'This page explains how to delete your Mentala account and what happens to your data after the request.',
+    HOME_LINK: 'Back to home',
+    SUPPORT_LINK: 'Support',
+    REQUEST: {
+      KICKER: 'How to request deletion',
+      TITLE: 'Choose the option that works for you',
+      IN_APP: {
+        TITLE: 'Inside the app',
+        TEXT: 'Open Mentala, go to Settings, and choose “Delete account.”',
+      },
+      EMAIL: {
+        TITLE: 'If you cannot sign in',
+        TEXT: 'Email {email} from the address linked to your account and state that you want your account and related data deleted.',
+      },
+      CONFIRMATION:
+        'To protect the account, we may ask you to confirm control over the email address used during registration.',
+    },
+    DELETE: {
+      KICKER: 'What is deleted',
+      TITLE: 'Data deleted in Mentala',
+      ITEMS: {
+        ITEM_1: 'account profile and sign-in data',
+        ITEM_2: 'AI chats and related session data',
+        ITEM_3: 'habits, topics, settings, reminders, and device tokens',
+        ITEM_4:
+          'internal subscription data and other user data stored inside Mentala',
+      },
+    },
+    RETAINED: {
+      KICKER: 'What may be retained',
+      TITLE: 'Data kept for a limited period',
+      ITEMS: {
+        ITEM_1:
+          'Data held by app stores or payment providers outside Mentala is deleted according to the rules of the relevant platform, not through Mentala.',
+      },
+    },
+    CONTACT: {
+      KICKER: 'Need help',
+      TITLE: 'If you want to check the status of your request',
+      TEXT: 'If you cannot access your account or want to confirm that the deletion request was received, contact us.',
+      CTA: 'Email support',
     },
   },
 };

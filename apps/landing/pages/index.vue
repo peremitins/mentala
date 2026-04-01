@@ -660,6 +660,12 @@
               </a>
               <a
                 class="rounded-lg px-3 py-2 hover:bg-white/10"
+                :href="accountDeletionUrl"
+              >
+                {{ t('LANDING.FOOTER.DELETE_ACCOUNT_LINK') }}
+              </a>
+              <a
+                class="rounded-lg px-3 py-2 hover:bg-white/10"
                 :href="privacyPolicyUrl"
                 target="_blank"
                 rel="noopener noreferrer"
@@ -917,6 +923,7 @@ import { Input } from '../components/ui/shadcn/input';
 import { useLandingConfig } from '../composables/useLandingConfig';
 import { useLandingAnalytics } from '../composables/useLandingAnalytics';
 import { useLandingLocale } from '../composables/useLandingLocale';
+import { useLandingSiteUrl } from '../composables/useLandingSiteUrl';
 import type { SupportedLocale } from '../composables/useLandingLocale';
 
 type FeatureStep = {
@@ -965,6 +972,7 @@ const runtimeConfig = useRuntimeConfig();
 const route = useRoute();
 const { locale, selectedLocale, switchLocale, brandLogoSrc, brandLogoAlt } =
   useLandingLocale();
+const siteUrl = useLandingSiteUrl();
 const reducedMotion = usePreferredReducedMotion();
 
 const { data: landingConfig } = await useLandingConfig();
@@ -984,6 +992,9 @@ const privacyPolicyUrl = computed(
 );
 const termsOfServiceUrl = computed(
   () => `${webAppUrl.value}/legal/terms-of-service-${legalLocale.value}.html`
+);
+const accountDeletionUrl = computed(
+  () => `/account-deletion?lang=${selectedLocale.value}`
 );
 const billingPeriod = ref<'month' | 'year'>('month');
 const waitlistOpen = ref(false);
@@ -1344,13 +1355,6 @@ function getYearlySavings(plan: PricingPlan): number {
   const savings = plan.monthlyPrice * 12 - plan.yearlyPrice;
   return savings > 0 ? savings : 0;
 }
-
-const siteUrl = computed(() =>
-  String(runtimeConfig.public.landingSiteUrl || 'https://mentala.app').replace(
-    /\/$/,
-    ''
-  )
-);
 
 const canonicalUrl = computed(() => `${siteUrl.value}/`);
 const localizedHomeUrl = computed(
