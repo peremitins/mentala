@@ -68,8 +68,8 @@ import {
   slotsScalingConfig,
 } from './slots-scaling.config';
 import {
-  resolveNavigationFromActionHint,
-  resolveNavigationTargetFromActionHint,
+  resolveNotificationNavigation,
+  resolveNotificationTarget,
   buildDeepLinkFromTarget,
 } from './breath-navigation.utils';
 import {
@@ -1680,11 +1680,20 @@ export async function orchestrateAllSlotsForUser(
             })
           : null;
 
-        const navigationTarget = resolveNavigationTargetFromActionHint(
+        const navigationTarget = resolveNotificationTarget({
           actionHint,
-          text
-        );
-        const navigation = resolveNavigationFromActionHint(actionHint, text);
+          notificationText: text,
+          title: entityName,
+          entityKey: source.normalizedEntityKey,
+          entityDisplayName: source.preference.entityKey,
+        });
+        const navigation = resolveNotificationNavigation({
+          actionHint,
+          notificationText: text,
+          title: entityName,
+          entityKey: source.normalizedEntityKey,
+          entityDisplayName: source.preference.entityKey,
+        });
         const deepLink = buildDeepLinkFromTarget(navigationTarget);
         const actionMeta = buildActionFromTarget(navigationTarget);
 

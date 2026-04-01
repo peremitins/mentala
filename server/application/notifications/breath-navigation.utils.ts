@@ -5,6 +5,8 @@ import type {
 import {
   buildAppNavigationPath,
   buildLegacyNotificationNavigation,
+  resolveGuaranteedTargetFromNotificationContext,
+  resolveTargetFromLegacyNotificationNavigation,
   type AppNavigationTarget,
 } from '../../../shared/navigation';
 
@@ -38,6 +40,14 @@ const BOX_BREATHING_TEXT_MARKERS = [
   /square\s*breath/iu,
 ];
 
+export type NotificationRoutingContext = {
+  actionHint?: NotificationActionHint | null;
+  notificationText?: string | null;
+  title?: string | null;
+  entityKey?: string | null;
+  entityDisplayName?: string | null;
+};
+
 /**
  * Определяет slug дыхательной практики по тексту уведомления.
  * AI может упомянуть любую технику (4-7-8, 4-4-4-4, 4-6 и т.д.) — редирект на соответствующую.
@@ -68,6 +78,34 @@ export function resolveNavigationFromActionHint(
     actionHint,
     notificationText
   );
+  return buildLegacyNotificationNavigation(target) ?? { type: 'home' };
+}
+
+export function resolveNotificationTarget(
+  params: NotificationRoutingContext
+): AppNavigationTarget {
+  // Для некоторых тем actionHint ненадёжен, поэтому сначала фиксируем
+  // target по стабильному контексту уведомления.
+  const guaranteedTarget = resolveGuaranteedTargetFromNotificationContext({
+    title: params.title,
+    entityKey: params.entityKey,
+    entityDisplayName: params.entityDisplayName,
+  });
+
+  if (guaranteedTarget) {
+    return guaranteedTarget;
+  }
+
+  return resolveNavigationTargetFromActionHint(
+    params.actionHint,
+    params.notificationText
+  );
+}
+
+export function resolveNotificationNavigation(
+  params: NotificationRoutingContext
+): NotificationNavigation {
+  const target = resolveNotificationTarget(params);
   return buildLegacyNotificationNavigation(target) ?? { type: 'home' };
 }
 
@@ -121,27 +159,7 @@ export function resolveNavigationTargetFromActionHint(
 export function buildDeepLinkFromNavigation(
   navigation: NotificationNavigation
 ): string {
-  const target: AppNavigationTarget =
-    navigation.type === 'home'
-      ? { type: 'home' }
-      : navigation.type === 'meditation_track'
-        ? {
-            type: 'meditation_track',
-            trackId: navigation.trackId,
-          }
-        : navigation.type === 'breath_practices'
-          ? { type: 'breath_practices_list' }
-          : {
-              type: 'breath_practice',
-              slug: navigation.slug,
-              groupKey:
-                navigation.slug === '4-7-8'
-                  ? 'sleep'
-                  : navigation.slug === DEFAULT_BREATH_PRACTICE_SLUG
-                    ? 'popular'
-                    : undefined,
-            };
-
+  const target = resolveTargetFromLegacyNotificationNavigation(navigation);
   return buildAppNavigationPath(target);
 }
 

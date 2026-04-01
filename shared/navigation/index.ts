@@ -255,6 +255,9 @@ export const LegacyNotificationNavigationDto = z.discriminatedUnion('type', [
     type: z.literal('breath_practice'),
     slug: z.string().trim().min(1).max(160),
   }),
+  z.object({
+    type: z.literal('gratitude_diary'),
+  }),
 ]);
 
 export type AppNavigationTarget = z.infer<typeof AppNavigationTargetDto>;
@@ -278,6 +281,22 @@ export type QuickHelpEntry = z.infer<typeof QuickHelpEntryEnum>;
 export type AppNavigationRouteLocation = {
   path: string;
   query?: Record<string, string | undefined>;
+};
+
+const GRATITUDE_DIARY_NOTIFICATION_ENTITY_KEYS = new Set([
+  'gratitude',
+  'gratitude_diary',
+]);
+
+const GRATITUDE_DIARY_NOTIFICATION_TITLE_MARKERS = [
+  /дневник\s+благодарности/iu,
+  /gratitude\s+diary/iu,
+];
+
+export type NotificationContextTargetParams = {
+  title?: string | null;
+  entityKey?: string | null;
+  entityDisplayName?: string | null;
 };
 
 export type LegacySuggestedChipAction =
@@ -323,6 +342,51 @@ function cleanupQuery(
   );
   if (!nextEntries.length) return undefined;
   return Object.fromEntries(nextEntries);
+}
+
+function normalizeNotificationContextText(value?: string | null): string {
+  if (typeof value !== 'string') return '';
+  return value.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function normalizeNotificationContextKey(value?: string | null): string {
+  return normalizeNotificationContextText(value).replace(/[\s-]+/g, '_');
+}
+
+export function isGratitudeDiaryNotificationContext(
+  params: NotificationContextTargetParams
+): boolean {
+  const entityCandidates = [params.entityKey, params.entityDisplayName].map(
+    (value) => normalizeNotificationContextKey(value)
+  );
+
+  if (
+    entityCandidates.some((value) =>
+      GRATITUDE_DIARY_NOTIFICATION_ENTITY_KEYS.has(value)
+    )
+  ) {
+    return true;
+  }
+
+  const titleCandidates = [params.title, params.entityDisplayName].map(
+    (value) => normalizeNotificationContextText(value)
+  );
+
+  return titleCandidates.some((value) =>
+    GRATITUDE_DIARY_NOTIFICATION_TITLE_MARKERS.some((pattern) =>
+      pattern.test(value)
+    )
+  );
+}
+
+export function resolveGuaranteedTargetFromNotificationContext(
+  params: NotificationContextTargetParams
+): AppNavigationTarget | null {
+  if (isGratitudeDiaryNotificationContext(params)) {
+    return { type: 'gratitude_diary' };
+  }
+
+  return null;
 }
 
 export function parseAppNavigationTarget(
@@ -661,7 +725,15 @@ export function resolveTargetFromLegacyNotificationNavigation(
       return {
         type: 'breath_practice',
         slug: navigation.slug,
+        groupKey:
+          navigation.slug === '4-7-8'
+            ? 'sleep'
+            : navigation.slug === 'box-breathing'
+              ? 'popular'
+              : undefined,
       };
+    case 'gratitude_diary':
+      return { type: 'gratitude_diary' };
     default:
       return { type: 'home' };
   }
@@ -687,6 +759,8 @@ export function buildLegacyNotificationNavigation(
       };
     case 'breath_practice_group':
       return { type: 'breath_practices' };
+    case 'gratitude_diary':
+      return { type: 'gratitude_diary' };
     default:
       return null;
   }
