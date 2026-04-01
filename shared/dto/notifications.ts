@@ -1,3 +1,10 @@
+import type { AssistantToneWithUnknown } from '../constants/assistantTone';
+import type { OnboardingReasons } from './onboarding';
+import type {
+  AppNavigationTarget,
+  LegacyNotificationNavigation,
+} from '../navigation';
+
 /**
  * Shared DTOs для системы уведомлений
  * Используется на клиенте и сервере
@@ -13,13 +20,7 @@ export const MAX_CUSTOM_PROMPT_NOTIFICATION_LENGTH = 400;
 export type NotificationKind = 'therapy' | 'habits';
 export type NotificationTextSource = 'default' | 'user';
 export type Addressing = 'informal' | 'formal';
-export type Tone =
-  | 'delicate'
-  | 'neutral'
-  | 'uplifting'
-  | 'resolute'
-  | 'demanding'
-  | 'unknown';
+export type Tone = AssistantToneWithUnknown;
 export type Directness = 'soft' | 'moderate' | 'hard';
 export type Platform = 'ios' | 'android' | 'web';
 export type SlotStatus = 'planned' | 'sent' | 'skipped' | 'failed';
@@ -50,14 +51,17 @@ export type NotificationSubtype =
   | 'motivational'
   | 'mixed';
 
-export type NotificationActionHint = 'none' | 'meditation' | 'breathing';
+export type NotificationActionHint =
+  | 'none'
+  | 'meditation'
+  | 'breathing'
+  | 'gratitude_diary'
+  | 'grounding'
+  | 'tension_release'
+  | 'thought_dump';
 export type AppEnv = 'dev' | 'prod';
 
-export type NotificationNavigation =
-  | { type: 'home' }
-  | { type: 'meditation_track'; trackId: string }
-  | { type: 'breath_practices' }
-  | { type: 'breath_practice'; slug: string };
+export type NotificationNavigation = LegacyNotificationNavigation;
 
 // Обратная совместимость
 export type HabitSubtype = NotificationSubtype;
@@ -70,12 +74,14 @@ export interface UserPreferencesDto {
   addressing: Addressing;
   tone: Tone;
   meditationTimerMinutes?: number | null;
+  onboardingReasons?: OnboardingReasons;
 }
 
 export interface UpdateUserPreferencesDto {
   addressing?: Addressing;
   tone?: Tone;
   meditationTimerMinutes?: number | null;
+  onboardingReasons?: OnboardingReasons | null;
 }
 
 // ==========================================
@@ -302,6 +308,7 @@ export interface NotificationPayload {
   action: string; // 'open' | 'snooze:15m' | 'snooze:1h' | ...
   deepLink?: string;
   navigation?: NotificationNavigation;
+  navigationTarget?: AppNavigationTarget;
   data?: Record<string, any>;
 }
 

@@ -3,6 +3,11 @@ import { Capacitor } from '@capacitor/core';
 import { getActivePinia } from 'pinia';
 
 import { useToast } from '#imports';
+import {
+  resolveClientPlatformHeader,
+  resolveClientTimezone,
+  resolveRuntimeApiBaseUrl,
+} from '@/app/utils/runtime-api';
 
 /**
  * Получает CSRF токен из cookie (только для web)
@@ -73,23 +78,17 @@ export default defineNuxtPlugin(() => {
 
   const isCapacitor = Capacitor.isNativePlatform();
   const platform = Capacitor.getPlatform();
-  const isHttpOrigin = (origin: string) => /^https?:\/\//i.test(origin);
-
-  // apiBase: пустой для Web и Capacitor dev, полный URL для Capacitor prod
-  const apiBase = (config.public as any).apiBase || '';
   const isDev =
     (config.public as any).isDev === true ||
     (!import.meta.env?.PROD && import.meta.env?.MODE !== 'production');
   const appOrigin = typeof window !== 'undefined' ? window.location.origin : '';
-
-  // В dev на native используем appOrigin (как раньше), но на iOS не допускаем custom-схемы
-  // вроде capacitor://localhost для API-запросов.
-  const shouldUseOriginAsApiBase =
-    isCapacitor && isDev && appOrigin && apiBase && apiBase !== appOrigin
-      ? !(platform === 'ios' && !isHttpOrigin(appOrigin))
-      : false;
-
-  const baseURL = shouldUseOriginAsApiBase ? appOrigin : apiBase || '';
+  const baseURL = resolveRuntimeApiBaseUrl({
+    apiBase: (config.public as any).apiBase,
+    isDev,
+    appOrigin,
+    isCapacitor,
+    platform,
+  });
 
   const SESSION_TOKEN_KEY = 'mentai.session.token';
 
@@ -111,31 +110,7 @@ export default defineNuxtPlugin(() => {
         // - iOS Safari 10+ (2016)
         // - Android Chrome/WebView (современные версии)
         // - Все современные браузеры (Desktop и Mobile)
-        let timezone: string;
-        try {
-          // Проверяем доступность Intl API
-          if (
-            typeof Intl !== 'undefined' &&
-            Intl.DateTimeFormat &&
-            typeof Intl.DateTimeFormat === 'function'
-          ) {
-            const resolved = Intl.DateTimeFormat().resolvedOptions();
-            if (resolved.timeZone && typeof resolved.timeZone === 'string') {
-              timezone = resolved.timeZone;
-            } else {
-              throw new Error('timeZone not available in resolvedOptions');
-            }
-          } else {
-            throw new Error('Intl.DateTimeFormat not available');
-          }
-        } catch (error) {
-          // Fallback если Intl API недоступен (очень редко, только на очень старых устройствах)
-          console.warn(
-            '[API] Failed to get timezone from Intl API, using Europe/Moscow:',
-            error
-          );
-          timezone = 'Europe/Moscow';
-        }
+        const timezone = resolveClientTimezone();
 
         const headers = options.headers as
           | Record<string, string>
@@ -143,20 +118,16 @@ export default defineNuxtPlugin(() => {
           | undefined;
 
         // Определяем платформу для передачи на сервер
-        const platformHeader =
-          platform === 'ios'
-            ? 'ios'
-            : platform === 'android'
-              ? 'android'
-              : 'web';
+        const platformHeader = resolveClientPlatformHeader(platform);
 
-        // Получаем CSRF токен для web (только для state-changing операций)
+        // Получаем CSRF токен для state-changing операций.
+        // На Capacitor основной механизм — X-Session-Token из localStorage,
+        // но CSRF нужен как fallback если localStorage-токен отсутствует.
         const method = options.method?.toUpperCase() || 'GET';
         const isStateChanging = ['POST', 'PUT', 'DELETE', 'PATCH'].includes(
           method
         );
-        const csrfToken =
-          !isCapacitor && isStateChanging ? getCSRFToken() : null;
+        const csrfToken = isStateChanging ? getCSRFToken() : null;
 
         // Отладочное логирование для CSRF токена (только в development)
         const isDev =
@@ -176,6 +147,19 @@ export default defineNuxtPlugin(() => {
           );
         }
 
+        // Диагностика: на Capacitor при отсутствии localStorage-токена логируем для отладки
+        if (isCapacitor && isStateChanging && !token && isDev) {
+          console.warn(
+            '[API] Capacitor: X-Session-Token отсутствует в localStorage, fallback на CSRF cookie',
+            {
+              method,
+              url: typeof request === 'string' ? request : String(request),
+              hasCsrfToken: !!csrfToken,
+              platform: platformHeader,
+            }
+          );
+        }
+
         // Отправляем X-Session-Token ТОЛЬКО для Capacitor
         // Для web полагаемся только на cookie (credentials: 'include')
         if (isCapacitor) {
@@ -184,6 +168,11 @@ export default defineNuxtPlugin(() => {
             headers.set('X-Timezone', timezone);
             headers.set('X-Platform', platformHeader);
             headers.set('Content-Type', 'application/json');
+            // Fallback: если localStorage-токен отсутствует (пересборка, очистка данных),
+            // но session cookie уцелел — сервер определит канал как cookie и потребует CSRF.
+            if (!token && csrfToken) {
+              headers.set('X-CSRF-Token', csrfToken);
+            }
           } else {
             const headersObj: Record<string, string> = {
               ...((headers as Record<string, string>) || {}),
@@ -192,6 +181,10 @@ export default defineNuxtPlugin(() => {
               'X-Platform': platformHeader,
             };
             if (token) headersObj['X-Session-Token'] = token;
+            // Fallback: CSRF-токен на случай отсутствия localStorage-сессии (аналогично realtime voice)
+            if (!token && csrfToken) {
+              headersObj['X-CSRF-Token'] = csrfToken;
+            }
             options.headers = headersObj as any;
           }
         } else {
@@ -285,7 +278,7 @@ export default defineNuxtPlugin(() => {
       throw error;
     },
 
-    async onResponseError({ response, request, error }) {
+    async onResponseError({ response, request, options, error }) {
       // Проверяем, не является ли это canceled запросом
       const isCanceled =
         error?.name === 'AbortError' ||
@@ -319,7 +312,9 @@ export default defineNuxtPlugin(() => {
         `${response?.status || 'Network'} ${response?.statusText || 'Request Error'}`;
 
       // Авто‑тост ошибок
-      useToast('Ошибка запроса', String(message), 'error');
+      if ((options as any)?.suppressErrorToast !== true) {
+        useToast('Ошибка запроса', String(message), 'error');
+      }
 
       if (response?.status === 401) {
         // Очищаем токен при 401 ошибке (неавторизован)

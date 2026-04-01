@@ -8,7 +8,7 @@
     ]"
   >
     <div class="flex items-start justify-between gap-2">
-      <h3 class="text-lg font-semibold">
+      <h3 class="text-lg font-semibold whitespace-nowrap">
         {{ getPlanName() }}
         {{ plan.name === 'premium' ? '💎' : plan.name === 'pro' ? '⭐' : '' }}
       </h3>
@@ -57,13 +57,26 @@
         @click.stop="handlePeriodChange('year')"
       >
         Год
-        <span class="text-green-400 ml-0.5">(-20%)</span>
+        <span
+          v-if="props.showYearDiscount !== false"
+          class="text-green-400 ml-0.5"
+        >
+          (-20%)
+        </span>
       </button>
     </div>
 
     <div class="space-y-1">
       <div class="flex items-end gap-2 flex-wrap">
-        <p class="text-3xl font-bold">{{ getPrice() }} ₽</p>
+        <div v-if="isPricePending" class="h-9 w-24 bg-skeleton rounded-md" />
+        <p v-else class="text-3xl font-bold">
+          <template v-if="customPriceLabel">
+            {{ customPriceLabel }}
+          </template>
+          <template v-else>
+            {{ getPrice() }} {{ plan.name !== 'basic' ? '₽' : '' }}
+          </template>
+        </p>
 
         <span
           v-if="shouldShowSavingsBadge"
@@ -110,7 +123,7 @@
             ? 'bg-primary text-primary-foreground hover:opacity-90'
             : 'bg-primary-ui/10 text-primary-ui hover:bg-primary-ui/20',
       ]"
-      :disabled="isCurrent"
+      :disabled="isCurrent || isPricePending"
       @click.stop="handleButtonClick"
     >
       {{ getButtonLabel() }}
@@ -119,6 +132,9 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
+import { getLocalizedPlanName } from '@/app/utils/planI18n';
+
 interface Plan {
   id: string;
   name: string;
@@ -148,6 +164,11 @@ const props = defineProps<{
   isCurrent: boolean;
   isScheduled?: boolean;
   trialActive?: boolean;
+  // Для Apple IAP цены нельзя хардкодить. Если priceLabel === null, считаем, что цена еще грузится.
+  // Если priceLabel === string, показываем ее как есть (например "$9.99" или "€5.99").
+  priceLabel?: string | null;
+  // Скидка -20% релевантна только для рублёвых тарифов (YooKassa).
+  showYearDiscount?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -155,6 +176,7 @@ const emit = defineEmits<{
   'update:billingPeriod': [value: 'month' | 'year'];
   'confirm-change': [plan: Plan];
 }>();
+const { t } = useI18n();
 
 function handlePeriodChange(period: 'month' | 'year') {
   emit('update:billingPeriod', period);
@@ -167,10 +189,7 @@ function handleButtonClick() {
 }
 
 function getPlanName() {
-  if (props.plan.name === 'basic') return 'Basic';
-  if (props.plan.name === 'pro') return 'PRO';
-  if (props.plan.name === 'premium') return 'Premium';
-  return props.plan.name;
+  return getLocalizedPlanName(props.plan.name, t);
 }
 
 function getPrice() {
@@ -181,6 +200,23 @@ function getPrice() {
       : props.plan.basePrice; // Месячная цена
   return price.toLocaleString('ru-RU');
 }
+
+const customPriceLabel = computed(() => {
+  if (props.plan.name === 'basic') {
+    return null;
+  }
+
+  if (typeof props.priceLabel !== 'string') {
+    return null;
+  }
+
+  const text = props.priceLabel.trim();
+  return text ? text : null;
+});
+
+const isPricePending = computed(() => {
+  return props.plan.name !== 'basic' && props.priceLabel === null;
+});
 
 const savingsValue = computed(() => {
   // Экономия = 12 месяцев по базовой цене минус цена за год со скидкой.
@@ -195,6 +231,7 @@ const savingsValue = computed(() => {
 
 const shouldShowSavingsBadge = computed(() => {
   return (
+    props.showYearDiscount !== false &&
     props.plan.name !== 'basic' &&
     props.billingPeriod === 'year' &&
     savingsValue.value > 0
@@ -238,7 +275,11 @@ function getFeatures() {
     if (props.trialActive) {
       // Trial-период на базе Basic.
       features.push({ label: 'Пробный период 7 дней' });
-      features.push({ label: 'Полный доступ к функциям Premium' });
+      features.push({
+        label: t('PLANS.FULL_ACCESS_TO_FEATURES', {
+          plan: getLocalizedPlanName('premium', t),
+        }),
+      });
       features.push({ label: 'Безлимитные ИИ-сессии' });
     } else {
       features.push({
@@ -252,7 +293,11 @@ function getFeatures() {
       });
     }
   } else if (props.plan.name === 'pro') {
-    features.push({ label: 'Всё из Basic' });
+    features.push({
+      label: t('PLANS.ALL_FROM', {
+        plan: getLocalizedPlanName('basic', t),
+      }),
+    });
     features.push({ label: 'ИИ-сессии для регулярной поддержки' });
     features.push({ label: 'До 100 минут в неделю' });
     features.push({ label: 'Полная библиотека медитаций' });
@@ -262,8 +307,13 @@ function getFeatures() {
       tooltip: imageReminderTooltip,
     });
   } else if (props.plan.name === 'premium') {
-    features.push({ label: 'Всё из PRO' });
+    features.push({
+      label: t('PLANS.ALL_FROM', {
+        plan: getLocalizedPlanName('pro', t),
+      }),
+    });
     features.push({ label: 'Безлимитные ИИ-сессии' });
+    features.push({ label: 'Голосовой диалог с ИИ в реальном времени' });
     features.push({
       label: 'Персональный стиль ИИ-напоминаний',
       tooltip: personalAiStyleTooltip,

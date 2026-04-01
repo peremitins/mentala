@@ -1,13 +1,13 @@
 <template>
-  <div class="min-h-dvh">
+  <div class="w-full">
     <NeuralBg />
     <div
-      class="container mx-auto px-4 py-8 flex items-center justify-center min-h-dvh relative z-10"
+      class="container mx-auto px-4 py-8 flex items-center justify-center relative z-10"
     >
       <div class="w-full max-w-md">
         <div class="glass-deep p-6">
           <div class="text-center mb-6">
-            <div class="text-2xl font-semibold text-foreground">Mentala</div>
+            <div class="text-2xl font-semibold text-foreground">Ментала</div>
             <div class="text-sm text-foreground">Новый пароль</div>
           </div>
 
@@ -86,9 +86,12 @@
                   <button
                     type="submit"
                     :disabled="loading"
-                    class="w-full py-2.5 rounded-xl bg-primary text-primary-foreground hover:opacity-90 active:opacity-80 transition font-medium disabled:opacity-60 disabled:cursor-not-allowed"
+                    class="relative w-full py-2.5 rounded-xl bg-primary text-primary-foreground hover:opacity-90 active:opacity-80 transition font-medium disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    {{ loading ? '...' : 'Изменить пароль' }}
+                    <ButtonLoader v-if="loading" />
+                    <span :class="loading ? 'invisible' : ''">
+                      Изменить пароль
+                    </span>
                   </button>
                 </div>
               </form>
@@ -105,6 +108,7 @@ import { ref, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { useAuthStore } from '@/app/stores/auth';
 import NeuralBg from '@/app/components/ui/bg-neural/NeuralBg.vue';
+import ButtonLoader from '@/app/components/ui/ButtonLoader.vue';
 import { Input } from '@/app/components/ui/shadcn/input';
 import { useToast } from '@/app/composables/useToast';
 

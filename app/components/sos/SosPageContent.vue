@@ -1,15 +1,15 @@
 <template>
-  <div class="glass-deep min-h-0 flex-1 p-5 overflow-auto">
+  <div class="flex items-center justify-center min-h-0 flex-1 overflow-auto">
     <section
       v-if="step === 'select'"
-      class="flex min-h-full flex-col items-center justify-center space-y-4 py-2"
+      class="flex flex-col items-center justify-center space-y-4 w-full"
     >
       <div class="w-full space-y-2">
         <button
           v-for="card in quickHelpCards"
           :key="card.id"
           type="button"
-          class="glass-border w-full rounded-xl p-4 text-left transition hover:border-white/30"
+          class="glass-deep w-full rounded-xl p-4 text-left transition hover:border-white/30"
           @click="handleQuickHelpCardClick(card)"
         >
           <div class="flex items-start justify-between gap-3">
@@ -36,7 +36,7 @@
 
     <section
       v-else-if="step === 'panic-grounding'"
-      class="flex min-h-full flex-col items-center justify-center space-y-4 py-2"
+      class="glass-deep p-5 flex flex-col items-center justify-center space-y-4 w-full"
     >
       <div class="space-y-1 text-center">
         <p class="text-sm text-foreground/70">5-4-3-2-1</p>
@@ -90,7 +90,7 @@
 
     <section
       v-else-if="step === 'panic-breathing' && panicBreathingPractice"
-      class="relative h-full"
+      class="relative h-full w-full"
     >
       <BreathPracticePlayer
         :practice="panicBreathingPractice"
@@ -106,9 +106,14 @@
       />
     </section>
 
-    <section v-else-if="step === 'tension-practice'" class="relative h-full">
+    <section
+      v-else-if="step === 'tension-practice'"
+      class="relative h-full w-full"
+    >
       <div class="flex h-full flex-col justify-between space-y-2">
-        <div class="flex flex-col items-center gap-2 text-center">
+        <div
+          class="glass-deep p-5 flex flex-col items-center gap-2 text-center"
+        >
           <p
             class="text-sm font-semibold text-foreground min-h-[40px] px-[5vw]"
           >
@@ -187,7 +192,7 @@
 
     <section
       v-else-if="step === 'finish'"
-      class="flex min-h-full flex-col items-center justify-center space-y-4"
+      class="glass-deep p-5 flex flex-col items-center justify-center space-y-4 w-full"
     >
       <div class="space-y-1 text-center">
         <p class="text-sm text-foreground/70">Практика завершена</p>

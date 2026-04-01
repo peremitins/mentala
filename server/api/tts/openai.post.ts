@@ -1,7 +1,12 @@
 import { defineEventHandler, readBody, setHeader, createError } from 'h3';
 import { $fetch } from 'ofetch';
+import { getUserAssistantPersona } from '@/server/application/chat/assistant-persona.service';
 import { getSessionUser } from '@/server/application/auth/session';
 import { FEATURE_TTS_ENABLED } from '@/server/config/features';
+import {
+  isAssistantVoiceSelectable,
+  resolveAssistantVoiceId,
+} from '@/shared/constants/assistantVoiceCatalog';
 
 export default defineEventHandler(async (event) => {
   if (!FEATURE_TTS_ENABLED) {
@@ -34,7 +39,18 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: 'Text is required' });
 
   const model = body?.model || 'tts-1-hd';
-  const voice = body?.voice || 'sage';
+  const assistantPersona = await getUserAssistantPersona(sessionResult.user.id);
+  const requestedVoice = String(body?.voice || '').trim();
+  if (requestedVoice && !isAssistantVoiceSelectable(requestedVoice)) {
+    throw createError({
+      statusCode: 400,
+      message: 'Unsupported assistant voice',
+    });
+  }
+
+  const voice = requestedVoice
+    ? resolveAssistantVoiceId(requestedVoice)
+    : assistantPersona.voice;
   const format = body?.format || 'mp3';
 
   try {

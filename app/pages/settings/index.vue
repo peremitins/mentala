@@ -92,6 +92,22 @@
               </div>
               <IconChevronRight class="h-4 w-4 text-muted-foreground" />
             </NuxtLink>
+
+            <Separator class="w-auto mx-4" />
+
+            <NuxtLink
+              to="/settings/assistant"
+              class="px-4 py-3"
+              :class="rowClass()"
+            >
+              <div class="">
+                <p class="text-sm font-medium">Голос ассистента</p>
+                <p class="text-xs text-muted-foreground">
+                  {{ assistantVoiceSummary }}
+                </p>
+              </div>
+              <IconChevronRight class="h-4 w-4 text-muted-foreground" />
+            </NuxtLink>
           </div>
         </div>
 
@@ -108,7 +124,7 @@
               <div class="">
                 <p class="text-sm font-medium">Push-уведомления</p>
                 <p class="text-xs text-muted-foreground">
-                  Напоминания и сообщения от Mentala
+                  Напоминания и сообщения
                 </p>
               </div>
               <Switch
@@ -126,7 +142,7 @@
               <div class="">
                 <p class="text-sm font-medium">Маркетинговые сообщения</p>
                 <p class="text-xs text-muted-foreground">
-                  Новости, обновления и предложения Mentala
+                  Новости, обновления и предложения
                 </p>
               </div>
               <Switch
@@ -163,15 +179,30 @@
           <p
             class="text-xs font-semibold text-muted-foreground tracking-wide pt-4 pb-1 px-4"
           >
+            ПОДДЕРЖКА
+          </p>
+          <div class="">
+            <NuxtLink to="/support" class="px-4 py-3" :class="rowClass()">
+              <div class="">
+                <p class="text-sm font-medium">Поддержка</p>
+                <p class="text-xs text-muted-foreground">
+                  Вопросы, отмена подписки и возвраты
+                </p>
+              </div>
+              <IconChevronRight class="h-4 w-4 text-muted-foreground" />
+            </NuxtLink>
+          </div>
+        </div>
+
+        <div class="glass-deep">
+          <p
+            class="text-xs font-semibold text-muted-foreground tracking-wide pt-4 pb-1 px-4"
+          >
             ДОКУМЕНТЫ
           </p>
           <div class="">
             <!-- Ссылки на каноничные HTML-документы из public/legal -->
-            <a
-              href="/legal/terms-of-service.html"
-              class="px-4 py-3"
-              :class="rowClass()"
-            >
+            <a :href="termsOfServiceUrl" class="px-4 py-3" :class="rowClass()">
               <div class="">
                 <p class="text-sm font-medium">Условия использования</p>
               </div>
@@ -180,11 +211,7 @@
 
             <Separator class="w-auto mx-4" />
 
-            <a
-              href="/legal/privacy-policy.html"
-              class="px-4 py-3"
-              :class="rowClass()"
-            >
+            <a :href="privacyPolicyUrl" class="px-4 py-3" :class="rowClass()">
               <div class="">
                 <p class="text-sm font-medium">Политика конфиденциальности</p>
               </div>
@@ -193,7 +220,7 @@
           </div>
         </div>
 
-        <div class="glass-deep">
+        <div v-if="isAdmin" class="glass-deep">
           <p
             class="text-xs font-semibold text-muted-foreground tracking-wide pt-4 pb-1 px-4"
           >
@@ -216,26 +243,11 @@
           </div>
         </div>
 
-        <!-- Модалки Push-уведомлений -->
-        <Dialog v-model:open="showPushDeniedModal" :modal="true">
-          <DialogContent class="glass-deep max-w-sm">
-            <DialogHeader>
-              <DialogTitle>Уведомления отключены</DialogTitle>
-              <DialogDescription>
-                Уведомления отключены в системных настройках. Разрешите их,
-                чтобы получать напоминания.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button variant="outline" @click="showPushDeniedModal = false">
-                Отмена
-              </Button>
-              <Button class="mb-2" @click="handleOpenSystemSettings">
-                Открыть настройки
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <PushPermissionDeniedDialog
+          :open="pushPermissionGate.showPushDeniedModal.value"
+          @update:open="pushPermissionGate.setPushDeniedModalOpen"
+          @open-settings="handleOpenPushSystemSettings"
+        />
 
         <Dialog v-model:open="showPushDisableConfirmModal" :modal="true">
           <DialogContent class="glass-deep max-w-sm">
@@ -293,11 +305,17 @@
                     Отмена
                   </AlertDialogCancel>
                   <AlertDialogAction
-                    :class="buttonVariants({ variant: 'destructive' })"
+                    :class="[
+                      buttonVariants({ variant: 'destructive' }),
+                      'relative',
+                    ]"
                     :disabled="isDeleting"
                     @click="handleDeleteAccount"
                   >
-                    {{ isDeleting ? 'Удаление...' : 'Да, удалить аккаунт' }}
+                    <ButtonLoader v-if="isDeleting" />
+                    <span :class="isDeleting ? 'invisible' : ''">
+                      Да, удалить аккаунт
+                    </span>
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
@@ -321,13 +339,16 @@
 import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useAuthStore } from '@/app/stores/auth';
+import { useChatSettingsStore } from '@/app/stores/chatSettings';
 import { useNotificationsSettings } from '@/app/composables/useNotificationsSettings';
 import { useCopyToClipboard } from '@/app/composables/useCopyToClipboard';
 import { useToast } from '@/app/composables/useToast';
-import { usePushSettings } from '@/app/composables/usePushSettings';
+import { usePushPermissionGate } from '@/app/composables/usePushPermissionGate';
 import { useSettingsAnalytics } from '@/app/composables/useSettingsAnalytics';
 import SubscriptionBlock from '@/app/components/settings/SubscriptionBlock.vue';
 import Skeleton from '@/app/components/ui/Skeleton.vue';
+import ButtonLoader from '@/app/components/ui/ButtonLoader.vue';
+import PushPermissionDeniedDialog from '@/app/components/notifications/PushPermissionDeniedDialog.vue';
 import { Switch } from '@/app/components/ui/shadcn/switch';
 import {
   Dialog,
@@ -352,12 +373,20 @@ import {
 import { buttonVariants } from '@/app/components/ui/button';
 import type {
   Addressing,
-  Tone,
   UserPreferencesDto,
 } from '@/shared/dto/notifications';
+import {
+  DEFAULT_ASSISTANT_TONE,
+  getAssistantToneLabel,
+} from '@/shared/constants/assistantTone';
+import {
+  getAssistantVoicePresentation,
+  resolveAssistantVoiceCatalogItem,
+} from '@/shared/constants/assistantVoiceCatalog';
 import IconChevronRight from '~icons/lucide/chevron-right';
 
 const auth = useAuthStore();
+const chatSettings = useChatSettingsStore();
 const { fetchGlobalPreferences } = useNotificationsSettings();
 const { copy } = useCopyToClipboard();
 const { locale } = useI18n();
@@ -369,10 +398,10 @@ const showDeleteDialog = ref(false);
 const isDeleting = ref(false);
 const marketingConsent = ref(false);
 const marketingConsentLoading = ref(false);
-const showPushDeniedModal = ref(false);
 const showPushDisableConfirmModal = ref(false);
 
-const pushSettings = usePushSettings();
+const pushPermissionGate = usePushPermissionGate();
+const pushSettings = pushPermissionGate.pushSettings;
 const settingsAnalytics = useSettingsAnalytics();
 
 /** Состояние свитчера Push берём из composable */
@@ -401,15 +430,6 @@ const userInitials = computed(() => {
   return letters.toUpperCase();
 });
 
-const toneLabels: Record<Tone, string> = {
-  delicate: 'Деликатный',
-  neutral: 'Нейтральный',
-  uplifting: 'Воодушевляющий',
-  resolute: 'Решительный',
-  demanding: 'Требовательный',
-  unknown: 'Нейтральный',
-};
-
 const addressingLabel = computed(() => {
   const value = preferences.value?.addressing as Addressing | undefined;
   if (value === 'formal') return 'На "вы"';
@@ -420,7 +440,25 @@ const addressingLabel = computed(() => {
 const toneLabel = computed(() => {
   if (!preferences.value) return '—';
   const value = preferences.value.tone;
-  return toneLabels[value] || 'Нейтральный';
+  return value === 'unknown'
+    ? getAssistantToneLabel(DEFAULT_ASSISTANT_TONE)
+    : getAssistantToneLabel(value);
+});
+
+const assistantVoiceSummary = computed(() => {
+  const fallbackVoice = auth.user?.assistantSettings?.voice;
+  const currentVoice = chatSettings.assistantVoice || fallbackVoice;
+  const meta = resolveAssistantVoiceCatalogItem(currentVoice);
+  const presentation = getAssistantVoicePresentation(
+    meta,
+    auth.user?.locale || locale.value
+  );
+  if (!meta) {
+    return '—';
+  }
+
+  const genderLabel = meta.gender === 'female' ? 'Женский' : 'Мужской';
+  return `${genderLabel} • ${presentation.label}`;
 });
 
 const localeLabel = computed(() => {
@@ -429,6 +467,18 @@ const localeLabel = computed(() => {
   if (value === 'en') return 'English';
   return value.toUpperCase();
 });
+
+const legalLocale = computed(() => {
+  const value = (auth.user?.locale || locale.value || 'ru').toString();
+  return value.toLowerCase().startsWith('en') ? 'en' : 'ru';
+});
+
+const termsOfServiceUrl = computed(
+  () => `/legal/terms-of-service-${legalLocale.value}.html`
+);
+const privacyPolicyUrl = computed(
+  () => `/legal/privacy-policy-${legalLocale.value}.html`
+);
 
 const rowBaseClass =
   'group flex w-full items-center justify-between gap-3  text-left text-sm text-foreground transition-all duration-200 hover:bg-white/10 scroll-mt-24';
@@ -456,7 +506,14 @@ onMounted(async () => {
 
   loadingPreferences.value = true;
   try {
-    preferences.value = await fetchGlobalPreferences();
+    const [loadedPreferences] = await Promise.all([
+      fetchGlobalPreferences(),
+      chatSettings.getChatSettings().catch((error) => {
+        console.error('Не удалось загрузить chat settings:', error);
+        return null;
+      }),
+    ]);
+    preferences.value = loadedPreferences;
   } catch (error) {
     console.error('Не удалось загрузить настройки ассистента:', error);
   } finally {
@@ -499,24 +556,12 @@ async function handlePushToggle(checked: boolean) {
   if (!isPushNative.value) return;
 
   if (checked) {
-    const statusRef = pushSettings.pushPermissionStatus;
-    const status =
-      typeof statusRef?.value !== 'undefined' ? statusRef.value : null;
-    if (status === 'denied') {
-      showPushDeniedModal.value = true;
-      settingsAnalytics.trackPushToggle(true, 'denied');
-      return;
-    }
-
-    const enabled = await pushSettings.enablePushInApp();
+    const enabled = await pushPermissionGate.ensureAppPushEnabled();
     const permission = pushSettings.pushPermissionStatus?.value ?? 'denied';
     settingsAnalytics.trackPushToggle(
       enabled,
       permission === 'granted' ? 'granted' : 'denied'
     );
-    if (!enabled && permission === 'denied') {
-      showPushDeniedModal.value = true;
-    }
   } else {
     showPushDisableConfirmModal.value = true;
   }
@@ -530,40 +575,9 @@ async function confirmDisablePush() {
 }
 
 /** Открыть системные настройки и обновить UI при возврате (best practice: re-check permission) */
-async function handleOpenSystemSettings() {
+async function handleOpenPushSystemSettings() {
   settingsAnalytics.trackOpenSystemSettings();
-  showPushDeniedModal.value = false;
-
-  const refreshOnReturn = async () => {
-    await new Promise((r) => setTimeout(r, 500));
-    await pushSettings.refreshPermissionStatus();
-    const status = pushSettings.pushPermissionStatus?.value ?? null;
-    if (status === 'granted') {
-      await pushSettings.enablePushInApp();
-    }
-  };
-
-  if (typeof document !== 'undefined') {
-    const handler = () => {
-      if (document.visibilityState === 'visible') {
-        document.removeEventListener('visibilitychange', handler);
-        void refreshOnReturn();
-      }
-    };
-    document.addEventListener('visibilitychange', handler);
-  }
-
-  if (isPushNative.value) {
-    const { App } = await import('@capacitor/app');
-    const listener = await App.addListener('appStateChange', ({ isActive }) => {
-      if (isActive) {
-        listener.remove();
-        void refreshOnReturn();
-      }
-    });
-  }
-
-  await pushSettings.openAppSettings();
+  await pushPermissionGate.openSystemSettings();
 }
 
 async function copyUserId() {

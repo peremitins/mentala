@@ -3,7 +3,7 @@
     role="button"
     tabindex="0"
     :aria-label="`Открыть медитацию ${displayTitle}`"
-    class="group relative flex w-[78vw] min-w-[210px] max-w-[240px] sm:w-52 cursor-pointer flex-col overflow-hidden rounded-xl text-left transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-ui/60"
+    class="group relative flex w-[78vw] min-w-[210px] max-w-[240px] sm:w-52 cursor-inherit flex-col overflow-hidden rounded-xl text-left transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-ui/60"
     @click="emit('open', track.id)"
     @keydown="handleCardKeydown"
   >
@@ -43,6 +43,7 @@
         </div>
         <button
           type="button"
+          data-no-drag-scroll
           class="absolute right-2 top-2 z-20 rounded-full bg-black/55 p-2 text-white transition hover:bg-black/70"
           :aria-label="`Добавить ${displayTitle} в избранное`"
           @click.stop="emit('favorite', track.id)"

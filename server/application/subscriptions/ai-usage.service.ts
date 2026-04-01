@@ -14,6 +14,7 @@ import {
   normalizeBillingCollectionStatus,
   resolveCurrentEntitlementsPlan,
 } from './trial-billing.service';
+import { resolveAiUsagePeriodStartedAt } from './usage-window.service';
 
 export type AiUsageGateStatus = 'ok' | 'no_ai_access' | 'weekly_limit_reached';
 
@@ -100,6 +101,7 @@ export async function getAiUsageGate(
       billingPlanId: users.billingPlanId,
       billingCollectionStatus: users.billingCollectionStatus,
       graceEndsAt: users.graceEndsAt,
+      nextChargeAt: users.nextChargeAt,
     })
     .from(users)
     .where(eq(users.id, userId))
@@ -190,7 +192,22 @@ export async function getAiUsageGate(
     aiChatMode === 'unlimited_fair_use'
       ? features.fairUseGuardMinutesPerWeek || 0
       : features.weeklyMinutesLimit || 0;
-  const usage = await getUsageForCurrentWeek(userId, timezone);
+  const usagePeriodStartedAt = resolveAiUsagePeriodStartedAt({
+    trialActive,
+    currentEntitlementsPlan: entitlementsPlanId,
+    activePaidSubscription: sub
+      ? {
+          planId: sub.planId,
+          startDate: sub.startDate,
+        }
+      : null,
+    billingPlanId: user?.billingPlanId ?? null,
+    billingCollectionStatus: user?.billingCollectionStatus ?? null,
+    nextChargeAt: user?.nextChargeAt ?? null,
+  });
+  const usage = await getUsageForCurrentWeek(userId, timezone, {
+    periodStartedAt: usagePeriodStartedAt,
+  });
   const usedMinutes = usage.usedMinutes;
 
   const allowOverdraft = aiChatMode === 'limited';

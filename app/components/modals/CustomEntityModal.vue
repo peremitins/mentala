@@ -115,9 +115,10 @@
             type="submit"
             variant="default"
             :disabled="isSubmitDisabled"
-            class="w-full"
+            class="relative w-full"
           >
-            {{ loading ? 'Создаём...' : submitLabel }}
+            <ButtonLoader v-if="loading" />
+            <span :class="loading ? 'invisible' : ''">{{ submitLabel }}</span>
           </Button>
           <Button
             type="button"
@@ -142,6 +143,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/app/components/ui/dialog';
+import ButtonLoader from '@/app/components/ui/ButtonLoader.vue';
 import { Input } from '@/app/components/ui/shadcn/input';
 import TextareaResize from '@/app/components/ui/TextareaResize.vue';
 import { Button } from '@/app/components/ui/button';
@@ -153,11 +155,14 @@ import type {
   TherapyTopicDto,
 } from '@/shared/dto/notifications';
 import { MAX_CUSTOM_PROMPT_NOTIFICATION_LENGTH } from '@/shared/dto/notifications';
+import { useAuthStore } from '@/app/stores/auth';
 import { useUserHabitsStore } from '@/app/stores/userHabits';
 import { useTherapyTopicsStore } from '@/app/stores/therapyTopics';
 import { useForm, useField } from 'vee-validate';
 import { toTypedSchema } from '@vee-validate/zod';
 import { z } from 'zod';
+import { getAddressingCopy } from '@/app/lib/addressingCopy';
+import { resolveAddressing } from '@/shared/utils/addressing';
 
 const props = withDefaults(
   defineProps<{
@@ -184,6 +189,8 @@ const emit = defineEmits<{
 
 const userHabitsStore = useUserHabitsStore();
 const therapyTopicsStore = useTherapyTopicsStore();
+const auth = useAuthStore();
+const addressing = computed(() => resolveAddressing(auth.user?.addressing));
 
 const formSchema = computed(() =>
   toTypedSchema(
@@ -246,8 +253,8 @@ const headerSubtitle = computed(
   () =>
     props.headerSubtitle ??
     (props.mentaiMode === 'habits'
-      ? 'Настройте свою привычку: выберите цель, добавьте описание и сохраните'
-      : 'Создайте тему под свои запросы: название, описание и эмодзи')
+      ? getAddressingCopy('customHabitSubtitle', addressing.value)
+      : getAddressingCopy('customTherapySubtitle', addressing.value))
 );
 
 const submitLabel = computed(() => props.submitLabel ?? 'Создать');
@@ -265,7 +272,7 @@ const namePlaceholder = computed(
 const descriptionPlaceholder = computed(
   () =>
     props.descriptionPlaceholder ??
-    'Опишите чуть подробнее. Так ИИ сможет создавать более точные и полезные уведомления.'
+    getAddressingCopy('customEntityDescriptionPlaceholder', addressing.value)
 );
 
 const emojiPlaceholder = computed(

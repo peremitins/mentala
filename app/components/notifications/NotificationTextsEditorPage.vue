@@ -20,51 +20,47 @@
       <!-- Фильтры -->
       <section class="space-y-3">
         <!-- Фокус уведомлений -->
-        <div class="glass-deep p-3 space-y-2">
-          <label class="text-sm font-semibold text-foreground">
+        <div v-if="hasSubtypeOptions" class="glass-deep p-3 space-y-2">
+          <label class="text-sm font-semibold text-foreground flex">
             Фокус уведомлений
           </label>
-          <div class="rounded-2xl border border-white/10 bg-background/20 p-2">
-            <ToggleGroup
-              :model-value="selectedSubtype || ''"
-              type="single"
-              class="inline-flex w-full gap-2 overflow-auto no-scrollbar"
-              @update:model-value="handleSubtypeChange"
+          <ToggleGroup
+            :model-value="selectedSubtype || ''"
+            type="single"
+            class="inline-flex w-full gap-2 overflow-auto no-scrollbar"
+            @update:model-value="handleSubtypeChange"
+          >
+            <ToggleGroupItem
+              v-for="option in subtypeOptions"
+              :key="option.value"
+              :value="option.value"
+              class="flex-1 rounded-lg px-2 py-2 text-xs xs:text-sm whitespace-nowrap font-medium transition-all"
             >
-              <ToggleGroupItem
-                v-for="option in subtypeOptions"
-                :key="option.value"
-                :value="option.value"
-                class="flex-1 rounded-lg px-2 py-2 text-xs xs:text-sm whitespace-nowrap font-medium transition-all"
-              >
-                {{ option.icon }} {{ option.label }}
-              </ToggleGroupItem>
-            </ToggleGroup>
-          </div>
+              {{ option.icon }} {{ option.label }}
+            </ToggleGroupItem>
+          </ToggleGroup>
         </div>
 
         <!-- Стиль уведомлений -->
         <div class="glass-deep p-3 space-y-2">
-          <label class="text-sm font-semibold text-foreground">
+          <label class="text-sm font-semibold text-foreground flex">
             Стиль уведомлений
           </label>
-          <div class="rounded-2xl border border-white/10 bg-background/20 p-2">
-            <ToggleGroup
-              :model-value="selectedDirectness"
-              type="single"
-              class="inline-flex w-full gap-2 overflow-auto no-scrollbar"
-              @update:model-value="handleDirectnessChange"
+          <ToggleGroup
+            :model-value="selectedDirectness"
+            type="single"
+            class="inline-flex w-full gap-2 overflow-auto no-scrollbar"
+            @update:model-value="handleDirectnessChange"
+          >
+            <ToggleGroupItem
+              v-for="option in DIRECTNESS_OPTIONS"
+              :key="option.value"
+              :value="option.value"
+              class="flex-1 rounded-lg px-2 py-2 text-xs xs:text-sm whitespace-nowrap font-medium transition-all"
             >
-              <ToggleGroupItem
-                v-for="option in DIRECTNESS_OPTIONS"
-                :key="option.value"
-                :value="option.value"
-                class="flex-1 rounded-lg px-2 py-2 text-xs xs:text-sm whitespace-nowrap font-medium transition-all"
-              >
-                {{ option.icon }} {{ option.label }}
-              </ToggleGroupItem>
-            </ToggleGroup>
-          </div>
+              {{ option.icon }} {{ option.label }}
+            </ToggleGroupItem>
+          </ToggleGroup>
         </div>
       </section>
 
@@ -75,7 +71,7 @@
       <div v-else class="glass-deep p-3">
         <TransitionGroup name="list" tag="div" class="space-y-3">
           <div
-            v-for="(text, index) in localTexts"
+            v-for="text in localTexts"
             :key="text.id || text.tempId"
             :data-text-id="text.id || text.tempId"
             class="rounded-2xl border border-white/10 bg-background/20 p-3 transition-all shadow-sm relative overflow-hidden list-item hover:border-white/30 hover:-translate-y-0.5"
@@ -153,7 +149,7 @@
               :data-text-id="text.id || text.tempId"
               class="relative"
             >
-              <span
+              <!-- <span
                 class="absolute text-[10px] right-[5px] top-[-12px]"
                 :class="{
                   'text-destructive':
@@ -163,11 +159,22 @@
                 }"
               >
                 {{ editModel?.length }}/{{ MAX_NOTIFICATION_TEXT_LENGTH }}
-              </span>
+              </span> -->
+              <div
+                class="pointer-events-none absolute left-2 bottom-2 rounded-full border border-white/15 bg-black/30 px-2 py-0.5 text-[11px] font-medium z-1"
+                :class="{
+                  'text-destructive':
+                    editModel?.length > MAX_NOTIFICATION_TEXT_LENGTH,
+                  'text-foreground/70':
+                    editModel?.length <= MAX_NOTIFICATION_TEXT_LENGTH,
+                }"
+              >
+                {{ editModel?.length }}/{{ MAX_NOTIFICATION_TEXT_LENGTH }}
+              </div>
               <TextareaResize
                 ref="textareaRef"
                 v-model="editModel"
-                class="w-full min-h-[80px] rounded-2xl border border-white/10 bg-background/40 px-3 py-2 text-sm text-foreground/90 resize-none focus:outline-none focus:ring-2 focus:ring-primary-ui/40 focus:ring-offset-2"
+                class="w-full min-h-[80px] rounded-2xl border border-white/10 bg-background/40 px-3 py-2 pb-[40px] text-sm text-foreground/90 resize-none focus:outline-none focus:ring-2 focus:ring-primary-ui/40 focus:ring-offset-2"
                 :max-length="MAX_NOTIFICATION_TEXT_LENGTH"
               />
             </div>
@@ -199,7 +206,7 @@
       </section>
 
       <!-- Восстановление дефолтных -->
-      <section class="glass-deep p-3 space-y-3">
+      <section v-if="showDefaultsResetBlock" class="glass-deep p-3 space-y-3">
         <div class="rounded-2xl border border-white/10 bg-background/20 p-3">
           <div class="flex items-center gap-2">
             <Checkbox id="keepUserTexts" v-model:checked="keepUserTexts" />
@@ -238,29 +245,20 @@
     </section>
 
     <!-- Липкая панель сохранения -->
-    <div class="sticky bottom-[88px] z-40">
-      <div class="glass-deep p-2">
-        <button
-          class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors w-full hover:bg-primary/90 disabled:opacity-70 disabled:cursor-not-allowed"
-          :disabled="!hasChanges || saving"
-          @click="handleSave"
+    <div class="sticky bottom-[98px] z-40">
+      <Button
+        type="button"
+        class="relative w-full"
+        size="lg"
+        :disabled="!hasChanges || saving"
+        @click="handleSave"
+      >
+        <ButtonLoader v-if="saving" />
+        <span
+          class="inline-flex items-center justify-center gap-2"
+          :class="saving ? 'invisible' : ''"
         >
           <svg
-            v-if="saving"
-            class="h-4 w-4 animate-spin"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-            />
-          </svg>
-          <svg
-            v-else
             class="h-4 w-4"
             fill="none"
             stroke="currentColor"
@@ -273,10 +271,9 @@
               d="M5 13l4 4L19 7"
             />
           </svg>
-          <span v-if="saving">Сохранение...</span>
-          <span v-else>Сохранить изменения ({{ changesCount }})</span>
-        </button>
-      </div>
+          <span>Сохранить изменения ({{ changesCount }})</span>
+        </span>
+      </Button>
     </div>
 
     <!-- Модалка подтверждения сброса -->
@@ -306,6 +303,8 @@ import { useNotificationTexts } from '@/app/composables/useNotificationTexts';
 import PageHeader from '@/app/components/PageHeader.vue';
 import TextareaResize from '@/app/components/ui/TextareaResize.vue';
 import ConfirmModal from '@/app/components/ui/ConfirmModal.vue';
+import ButtonLoader from '@/app/components/ui/ButtonLoader.vue';
+import { Button } from '@/app/components/ui/button';
 import Skeleton from '@/app/components/ui/Skeleton.vue';
 import { Checkbox } from '@/app/components/ui/shadcn/checkbox';
 import { useToast } from '@/app/composables/useToast';
@@ -314,7 +313,6 @@ import { THERAPY_TOPICS } from '@/app/lib/therapyCatalog';
 import ToggleGroup from '@/app/components/ui/toggle-group/ToggleGroup.vue';
 import ToggleGroupItem from '@/app/components/ui/toggle-group/ToggleGroupItem.vue';
 import {
-  SUBTYPE_OPTIONS,
   SUBTYPE_OPTIONS_BUILD_WITHOUT_MIXED,
   SUBTYPE_OPTIONS_QUIT_WITHOUT_MIXED,
   SUBTYPE_OPTIONS_WITHOUT_MIXED,
@@ -360,10 +358,18 @@ const subtypeOptions = computed(() => {
     : SUBTYPE_OPTIONS_BUILD_WITHOUT_MIXED;
 });
 
-// Количество отфильтрованных текстов
-const filteredTextsCount = computed(() => {
-  return localTexts.value.length;
+// Для кастомных сущностей скрываем блок восстановления дефолтных текстов
+const isCustomEntity = computed(() => {
+  if (props.kind === 'habits') {
+    return !findHabitByKey(props.entityKey);
+  }
+
+  return !THERAPY_TOPICS.some((topic) => topic.key === props.entityKey);
 });
+
+// Блок с вариантами фокуса показываем только если есть хотя бы один вариант
+const hasSubtypeOptions = computed(() => subtypeOptions.value.length > 0);
+const showDefaultsResetBlock = computed(() => !isCustomEntity.value);
 
 // Локальная модель с флагами изменений
 interface LocalText extends NotificationText {
@@ -606,7 +612,7 @@ function finishEdit() {
 }
 
 // Click outside для закрытия редактирования
-watch(editingId, (newId, oldId) => {
+watch(editingId, (newId) => {
   // Останавливаем предыдущий обработчик
   if (clickOutsideStop) {
     clickOutsideStop();

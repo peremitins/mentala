@@ -22,12 +22,8 @@
       </Button>
     </div>
 
-    <div class="relative">
-      <div
-        class="flex gap-4 overflow-x-auto pb-4 pl-4 pr-6 no-scrollbar"
-        data-lenis-prevent
-        style="touch-action: pan-y pan-x"
-      >
+    <HorizontalScroller :aria-label="`Лента медитаций раздела ${title}`">
+      <template #default>
         <MeditationCard
           v-for="track in tracks"
           :key="track.id"
@@ -38,14 +34,15 @@
           @open="emit('open', $event)"
           @favorite="emit('favorite', $event)"
         />
-      </div>
-    </div>
+      </template>
+    </HorizontalScroller>
   </section>
 </template>
 
 <script setup lang="ts">
 import { Button } from '@/app/components/ui/button';
 import MeditationCard from '@/app/components/meditations/MeditationCard.vue';
+import HorizontalScroller from '@/app/components/ui/HorizontalScroller.vue';
 import { MEDITATION_TOPICS } from '@/shared/constants/meditations';
 import { MEDITATION_TOPIC_GRADIENTS } from '@/app/lib/meditations';
 import type {

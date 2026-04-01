@@ -39,7 +39,7 @@ export function buildSlotsGenerationJobId(
   userId: number,
   cycleId: number
 ): string {
-  return `slotsgen:${userId}:${cycleId}`;
+  return `slotsgen-${userId}-${cycleId}`;
 }
 
 export async function isSlotsGenerationJobActive(

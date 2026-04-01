@@ -5,6 +5,12 @@ import Capacitor
 import GoogleSignIn
 #endif
 
+// Some Capacitor versions do not expose a typed Notification.Name for remote notifications.
+// Define it locally to keep the integration compiling and consistent.
+extension Notification.Name {
+    static let capacitorDidReceiveRemoteNotification = Notification.Name("CapacitorDidReceiveRemoteNotification")
+}
+
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
 
@@ -57,6 +63,17 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     private func configurePlaybackAudioSession(reason: String) {
         do {
             let session = AVAudioSession.sharedInstance()
+
+            // Не перезаписываем категорию, если сейчас активна запись (speech recognition, микрофон).
+            // Иначе при закрытии системного диалога разрешений (didBecomeActive) сбрасываем .playAndRecord
+            // обратно в .playback — микрофон пропадает, и пользователь получает ошибку «режим недоступен».
+            let currentCategory = session.category
+            if currentCategory == .playAndRecord || currentCategory == .record {
+                #if DEBUG
+                print("[AudioSession] skipped (\(reason)): recording is active (category=\(currentCategory.rawValue))")
+                #endif
+                return
+            }
 
             // Playback: играет даже при hardware silent switch.
             // Добавляем bluetooth/airplay, чтобы не ломать маршруты вывода.
@@ -128,17 +145,18 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             queue: .main
         ) { [weak self] notification in
             guard let self = self else { return }
+            let reasonValue = (notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt) ?? 0
             #if DEBUG
-            if let userInfo = notification.userInfo,
-               let reasonValue = userInfo[AVAudioSessionRouteChangeReasonKey] as? UInt,
-               let reason = AVAudioSession.RouteChangeReason(rawValue: reasonValue) {
-                print("[AudioSession] route changed: \(reason)")
-            } else {
-                print("[AudioSession] route changed")
-            }
+            print("[AudioSession] route changed: \(reasonValue)")
             #endif
 
-            // После смены маршрута иногда «падает» WebAudio звук в фоне.
+            // Не переопределяем на playback при categoryChange (rawValue 3) — speech recognition ставит playAndRecord,
+            // иначе получаем конфликт: 0 Hz, error -50, IsFormatSampleRateAndChannelCountValid.
+            if reasonValue == AVAudioSession.RouteChangeReason.categoryChange.rawValue {
+                return
+            }
+
+            // После смены маршрута (наушники, bluetooth и т.д.) иногда «падает» WebAudio звук в фоне.
             self.configurePlaybackAudioSession(reason: "routeChange")
         }
     }
@@ -199,6 +217,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
+        // Debug/TestFlight: mentala://debug/storefront?code=RU  → force RU flow
+        //                   mentala://debug/storefront?reset    → clear override
+        if handleStorefrontDebugURL(url) {
+            return true
+        }
+
         // Called when the app was launched with a url. Feel free to add additional processing here,
         // but if you want the App API to support tracking app url opens, make sure to keep this call
         #if canImport(GoogleSignIn)
@@ -208,6 +232,52 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         }
         #endif
         return ApplicationDelegateProxy.shared.application(app, open: url, options: options)
+    }
+
+    /// Обрабатывает URL-scheme override для storefront (TestFlight + DEBUG only).
+    /// mentala://debug/storefront?code=RU  — установить код страны
+    /// mentala://debug/storefront?reset    — сбросить override
+    @discardableResult
+    private func handleStorefrontDebugURL(_ url: URL) -> Bool {
+        // Только DEBUG и TestFlight сборки.
+        #if !DEBUG
+        let isTestFlight = Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt"
+        guard isTestFlight else { return false }
+        #endif
+
+        guard url.scheme?.lowercased() == "mentala",
+              url.host?.lowercased() == "debug",
+              url.path.lowercased() == "/storefront" else {
+            return false
+        }
+
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        let queryItems = components?.queryItems ?? []
+
+        if queryItems.contains(where: { $0.name == "reset" }) {
+            UserDefaults.standard.removeObject(forKey: StorefrontPlugin.storefrontOverrideKey)
+            showStorefrontOverrideAlert(message: "Storefront override сброшен. Будет использован реальный StoreKit.")
+            return true
+        }
+
+        if let codeItem = queryItems.first(where: { $0.name == "code" }),
+           let code = codeItem.value, !code.isEmpty {
+            let normalized = code.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+            UserDefaults.standard.set(normalized, forKey: StorefrontPlugin.storefrontOverrideKey)
+            showStorefrontOverrideAlert(message: "Storefront override установлен: \(normalized)")
+            return true
+        }
+
+        return false
+    }
+
+    private func showStorefrontOverrideAlert(message: String) {
+        DispatchQueue.main.async {
+            guard let rootVC = self.window?.rootViewController else { return }
+            let alert = UIAlertController(title: "Storefront Debug", message: message, preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "OK", style: .default))
+            rootVC.present(alert, animated: true)
+        }
     }
 
     func application(_ application: UIApplication, continue userActivity: NSUserActivity, restorationHandler: @escaping ([UIUserActivityRestoring]?) -> Void) -> Bool {
@@ -221,9 +291,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
                      didReceiveRemoteNotification userInfo: [AnyHashable: Any],
                      fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
         persistPushLaunchPayload(userInfo, reason: "didReceiveRemoteNotification")
-        _ = ApplicationDelegateProxy.shared.application(application,
-                                                        didReceiveRemoteNotification: userInfo,
-                                                        fetchCompletionHandler: completionHandler)
+
+        // Forward to Capacitor. This proxy method does not accept a fetchCompletionHandler.
+        NotificationCenter.default.post(name: .capacitorDidReceiveRemoteNotification, object: userInfo)
+
+        // Always finish the background fetch callback.
+        completionHandler(.newData)
     }
 
 }

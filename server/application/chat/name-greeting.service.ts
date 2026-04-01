@@ -1,12 +1,18 @@
 import { and, eq, isNull, lt, or } from 'drizzle-orm';
-import { db } from '@/server/infrastructure/db/client';
-import { chatSettings } from '@/server/infrastructure/db/schema';
-import type { ChatEntryContext } from '@/shared/dto';
-import type { Gender } from '@/shared/dto/onboarding';
+import { db } from '../../infrastructure/db/client';
+import { chatSettings } from '../../infrastructure/db/schema';
+import { DEFAULT_ASSISTANT_VOICE_ID } from '../../../shared/constants/assistantVoiceCatalog';
+import type { ChatEntryContext } from '../../../shared/dto';
+import type { Gender } from '../../../shared/dto/onboarding';
+import type { Addressing } from '../../../shared/dto/notifications';
 import {
   getStartOfLocalDayUtc,
   isValidTimezone,
-} from '@/server/application/notifications/timezone.utils';
+} from '../notifications/timezone.utils';
+import {
+  pickAddressingText,
+  resolveAddressing,
+} from '../../../shared/utils/addressing';
 
 const STOP_WORDS = new Set([
   'user',
@@ -63,28 +69,73 @@ const lastOpeningIndexByContext = new Map<string, number>();
 
 // Нейтральные стартовые фразы используем только для входа в чат с главной.
 const HOME_ALTERNATIVE_OPENINGS = [
-  'Чем могу помочь прямо сейчас?',
-  'Продолжим разговор или начнём новую тему?',
-  'Что сейчас важнее всего для тебя?',
-  'С чего тебе удобнее начать: с ситуации, мыслей или ощущений в теле?',
+  {
+    informal: 'Чем могу помочь прямо сейчас?',
+    formal: 'Чем могу помочь прямо сейчас?',
+  },
+  {
+    informal: 'Продолжим разговор или начнём новую тему?',
+    formal: 'Продолжим разговор или начнём новую тему?',
+  },
+  {
+    informal: 'Что сейчас важнее всего для тебя?',
+    formal: 'Что сейчас важнее всего для вас?',
+  },
+  {
+    informal:
+      'С чего тебе удобнее начать: с ситуации, мыслей или ощущений в теле?',
+    formal:
+      'С чего вам удобнее начать: с ситуации, мыслей или ощущений в теле?',
+  },
 ];
 
 const THERAPY_FALLBACK_OPENINGS = [
-  'Давай разберём эту тему. Что сейчас в ней самое тяжёлое?',
-  'Начнём с главного: что в этой теме сейчас самое острое?',
-  'С чего тебе важнее начать прямо сейчас?',
+  {
+    informal: 'Давай разберём эту тему. Что сейчас в ней самое тяжёлое?',
+    formal: 'Давайте разберём эту тему. Что сейчас в ней самое тяжёлое?',
+  },
+  {
+    informal: 'Начнём с главного: что в этой теме сейчас самое острое?',
+    formal: 'Начнём с главного: что в этой теме сейчас самое острое?',
+  },
+  {
+    informal: 'С чего тебе важнее начать прямо сейчас?',
+    formal: 'С чего вам важнее начать прямо сейчас?',
+  },
 ];
 
 const HABIT_BUILD_FALLBACK_OPENINGS = [
-  'Давай разберём эту привычку. Что сейчас мешает делать её регулярно?',
-  'Что уже получается, а где чаще всего стопор?',
-  'Хочешь, найдём самый маленький шаг, который реально сделать сегодня?',
+  {
+    informal:
+      'Давай разберём эту привычку. Что сейчас мешает делать её регулярно?',
+    formal:
+      'Давайте разберём эту привычку. Что сейчас мешает делать её регулярно?',
+  },
+  {
+    informal: 'Что уже получается, а где чаще всего стопор?',
+    formal: 'Что уже получается, а где чаще всего возникает стопор?',
+  },
+  {
+    informal:
+      'Хочешь, найдём самый маленький шаг, который реально сделать сегодня?',
+    formal:
+      'Хотите, найдём самый маленький шаг, который реально сделать сегодня?',
+  },
 ];
 
 const HABIT_QUIT_FALLBACK_OPENINGS = [
-  'Что обычно запускает желание вернуться к ней?',
-  'Какой момент дня для тебя самый сложный?',
-  'Давай выберем один ближайший триггер и разберём его по шагам.',
+  {
+    informal: 'Что обычно запускает желание вернуться к ней?',
+    formal: 'Что обычно запускает желание вернуться к ней?',
+  },
+  {
+    informal: 'Какой момент дня для тебя самый сложный?',
+    formal: 'Какой момент дня для вас самый сложный?',
+  },
+  {
+    informal: 'Давай выберем один ближайший триггер и разберём его по шагам.',
+    formal: 'Давайте выберем один ближайший триггер и разберём его по шагам.',
+  },
 ];
 
 // Варианты фразы по полу. Если пол не задан — используем нейтральную версию,
@@ -93,6 +144,11 @@ type GenderedText = {
   neutral: string;
   male?: string;
   female?: string;
+};
+
+type AddressedGenderedText = {
+  informal: GenderedText;
+  formal: GenderedText;
 };
 
 function pickGenderedText(text: GenderedText, gender: Gender | null): string {
@@ -105,43 +161,104 @@ function pickGenderedText(text: GenderedText, gender: Gender | null): string {
   return text.neutral;
 }
 
-const SOS_OPENINGS: Record<'panic' | 'tension' | 'vent', GenderedText[]> = {
+function pickAddressedGenderedText(
+  text: AddressedGenderedText,
+  gender: Gender | null,
+  addressing: Addressing
+): string {
+  return pickGenderedText(text[resolveAddressing(addressing)], gender);
+}
+
+const SOS_OPENINGS: Record<
+  'panic' | 'tension' | 'vent',
+  AddressedGenderedText[]
+> = {
   panic: [
     {
-      neutral: 'Спасибо, что ты здесь. Что сейчас пугает сильнее всего?',
-      male: 'Спасибо, что написал. Что сейчас пугает сильнее всего?',
-      female: 'Спасибо, что написала. Что сейчас пугает сильнее всего?',
+      informal: {
+        neutral: 'Спасибо, что ты здесь. Что сейчас пугает сильнее всего?',
+        male: 'Спасибо, что написал. Что сейчас пугает сильнее всего?',
+        female: 'Спасибо, что написала. Что сейчас пугает сильнее всего?',
+      },
+      formal: {
+        neutral: 'Спасибо, что вы здесь. Что сейчас пугает сильнее всего?',
+        male: 'Спасибо, что написали. Что сейчас пугает сильнее всего?',
+        female: 'Спасибо, что написали. Что сейчас пугает сильнее всего?',
+      },
     },
     {
-      neutral:
-        'Я рядом. Давай на минуту замедлимся: что происходит прямо сейчас?',
+      informal: {
+        neutral:
+          'Я рядом. Давай на минуту замедлимся: что происходит прямо сейчас?',
+      },
+      formal: {
+        neutral:
+          'Я рядом. Давайте на минуту замедлимся: что происходит прямо сейчас?',
+      },
     },
     {
-      neutral:
-        'Что сейчас сильнее всего: ощущения в теле, мысли или сама ситуация?',
+      informal: {
+        neutral:
+          'Что сейчас сильнее всего: ощущения в теле, мысли или сама ситуация?',
+      },
+      formal: {
+        neutral:
+          'Что сейчас сильнее всего: ощущения в теле, мысли или сама ситуация?',
+      },
     },
   ],
   tension: [
     {
-      neutral: 'Я рядом. Где в теле сейчас больше всего напряжения?',
+      informal: {
+        neutral: 'Я рядом. Где в теле сейчас больше всего напряжения?',
+      },
+      formal: {
+        neutral: 'Я рядом. Где в теле сейчас больше всего напряжения?',
+      },
     },
     {
-      neutral: 'Что сейчас сильнее всего держит тебя в напряжении?',
+      informal: {
+        neutral: 'Что сейчас сильнее всего держит тебя в напряжении?',
+      },
+      formal: {
+        neutral: 'Что сейчас сильнее всего держит вас в напряжении?',
+      },
     },
     {
-      neutral: 'Если выбрать одно: что прямо сейчас хочется отпустить?',
+      informal: {
+        neutral: 'Если выбрать одно: что прямо сейчас хочется отпустить?',
+      },
+      formal: {
+        neutral: 'Если выбрать одно: что прямо сейчас хочется отпустить?',
+      },
     },
   ],
   vent: [
     {
-      neutral: 'Я слушаю. С чего хочешь начать?',
+      informal: {
+        neutral: 'Я слушаю. С чего хочешь начать?',
+      },
+      formal: {
+        neutral: 'Я слушаю. С чего хотите начать?',
+      },
     },
     {
-      neutral:
-        'Можно выговориться как есть. Что сейчас тяжелее всего держать внутри?',
+      informal: {
+        neutral:
+          'Можно выговориться как есть. Что сейчас тяжелее всего держать внутри?',
+      },
+      formal: {
+        neutral:
+          'Можно выговориться как есть. Что сейчас тяжелее всего держать внутри?',
+      },
     },
     {
-      neutral: 'Расскажи, что происходит. Что сейчас давит сильнее всего?',
+      informal: {
+        neutral: 'Расскажи, что происходит. Что сейчас давит сильнее всего?',
+      },
+      formal: {
+        neutral: 'Расскажите, что происходит. Что сейчас давит сильнее всего?',
+      },
     },
   ],
 };
@@ -211,25 +328,38 @@ function pickRandomIndexExcludingPrevious(
 }
 
 function buildTherapyOpenings(
-  context: Extract<ChatEntryContext, { type: 'therapy_topic' }>
+  context: Extract<ChatEntryContext, { type: 'therapy_topic' }>,
+  addressing: Addressing
 ): string[] {
   const topicLabel =
     normalizeContextLabel(context.topic_name) ||
     normalizeContextLabel(context.topic_description);
 
   if (!topicLabel) {
-    return THERAPY_FALLBACK_OPENINGS;
+    return THERAPY_FALLBACK_OPENINGS.map((text) =>
+      pickAddressingText(addressing, text)
+    );
   }
 
   return [
-    `Давай поговорим о теме «${topicLabel}». Что сейчас в ней самое тяжёлое?`,
-    `Про «${topicLabel}». Что больше всего беспокоит прямо сейчас?`,
-    `С чего начнём в теме «${topicLabel}»: с ситуации, мыслей или ощущений в теле?`,
+    pickAddressingText(addressing, {
+      informal: `Давай поговорим о теме «${topicLabel}». Что сейчас в ней самое тяжёлое?`,
+      formal: `Давайте поговорим о теме «${topicLabel}». Что сейчас в ней самое тяжёлое?`,
+    }),
+    pickAddressingText(addressing, {
+      informal: `Про «${topicLabel}». Что больше всего беспокоит прямо сейчас?`,
+      formal: `Про «${topicLabel}». Что больше всего беспокоит прямо сейчас?`,
+    }),
+    pickAddressingText(addressing, {
+      informal: `С чего начнём в теме «${topicLabel}»: с ситуации, мыслей или ощущений в теле?`,
+      formal: `С чего начнём в теме «${topicLabel}»: с ситуации, мыслей или ощущений в теле?`,
+    }),
   ];
 }
 
 function buildHabitOpenings(
-  context: Extract<ChatEntryContext, { type: 'habit' }>
+  context: Extract<ChatEntryContext, { type: 'habit' }>,
+  addressing: Addressing
 ): string[] {
   const habitLabel =
     normalizeContextLabel(context.habit_name) ||
@@ -241,54 +371,87 @@ function buildHabitOpenings(
     : HABIT_BUILD_FALLBACK_OPENINGS;
 
   if (!habitLabel) {
-    return fallbackOpenings;
+    return fallbackOpenings.map((text) => pickAddressingText(addressing, text));
   }
 
   if (isQuit) {
     return [
-      `Давай разберём привычку «${habitLabel}». В какие моменты она включается чаще всего?`,
-      `Про «${habitLabel}». Что обычно запускает желание вернуться к ней?`,
-      `Хочешь, соберём план на один ближайший сложный момент?`,
+      pickAddressingText(addressing, {
+        informal: `Давай разберём привычку «${habitLabel}». В какие моменты она включается чаще всего?`,
+        formal: `Давайте разберём привычку «${habitLabel}». В какие моменты она включается чаще всего?`,
+      }),
+      pickAddressingText(addressing, {
+        informal: `Про «${habitLabel}». Что обычно запускает желание вернуться к ней?`,
+        formal: `Про «${habitLabel}». Что обычно запускает желание вернуться к ней?`,
+      }),
+      pickAddressingText(addressing, {
+        informal: 'Хочешь, соберём план на один ближайший сложный момент?',
+        formal: 'Хотите, соберём план на один ближайший сложный момент?',
+      }),
     ];
   }
 
   return [
-    `Давай разберём привычку «${habitLabel}». Что сейчас мешает делать её регулярно?`,
-    `Про «${habitLabel}». Что уже получается, а где чаще всего стопор?`,
-    `Хочешь, найдём самый маленький шаг по «${habitLabel}», который реально сделать сегодня?`,
+    pickAddressingText(addressing, {
+      informal: `Давай разберём привычку «${habitLabel}». Что сейчас мешает делать её регулярно?`,
+      formal: `Давайте разберём привычку «${habitLabel}». Что сейчас мешает делать её регулярно?`,
+    }),
+    pickAddressingText(addressing, {
+      informal: `Про «${habitLabel}». Что уже получается, а где чаще всего стопор?`,
+      formal: `Про «${habitLabel}». Что уже получается, а где чаще всего возникает стопор?`,
+    }),
+    pickAddressingText(addressing, {
+      informal: `Хочешь, найдём самый маленький шаг по «${habitLabel}», который реально сделать сегодня?`,
+      formal: `Хотите, найдём самый маленький шаг по «${habitLabel}», который реально сделать сегодня?`,
+    }),
   ];
 }
 
 function buildSosOpenings(
   context: Extract<ChatEntryContext, { type: 'sos' }>,
-  userGender: Gender | null
+  userGender: Gender | null,
+  addressing: Addressing
 ): string[] {
   if (!context.after_practice) {
     return SOS_OPENINGS[context.sos_entry].map((text) =>
-      pickGenderedText(text, userGender)
+      pickAddressedGenderedText(text, userGender, addressing)
     );
   }
 
   if (context.sos_entry === 'panic') {
     return [
-      'Что сейчас остаётся самым тревожным?',
-      'Что тебе важно проговорить прямо сейчас, чтобы стало спокойнее?',
+      pickAddressingText(addressing, {
+        informal: 'Что сейчас остаётся самым тревожным?',
+        formal: 'Что сейчас остаётся самым тревожным?',
+      }),
+      pickAddressingText(addressing, {
+        informal:
+          'Что тебе важно проговорить прямо сейчас, чтобы стало спокойнее?',
+        formal:
+          'Что вам важно проговорить прямо сейчас, чтобы стало спокойнее?',
+      }),
     ];
   }
 
   if (context.sos_entry === 'tension') {
     return [
-      'Что сейчас держит в напряжении: мысли, ситуация или тело?',
-      'Что поможет снизить напряжение в ближайшие 10 минут?',
+      pickAddressingText(addressing, {
+        informal: 'Что сейчас держит в напряжении: мысли, ситуация или тело?',
+        formal: 'Что сейчас держит в напряжении: мысли, ситуация или тело?',
+      }),
+      pickAddressingText(addressing, {
+        informal: 'Что поможет снизить напряжение в ближайшие 10 минут?',
+        formal: 'Что поможет снизить напряжение в ближайшие 10 минут?',
+      }),
     ];
   }
 
-  return SOS_OPENINGS.vent.map((text) => pickGenderedText(text, userGender));
+  return SOS_OPENINGS.vent.map((text) =>
+    pickAddressedGenderedText(text, userGender, addressing)
+  );
 }
 
-function buildThoughtDumpOpenings(
-  _context: Extract<ChatEntryContext, { type: 'thought_dump' }>
-): string[] {
+function buildThoughtDumpOpenings(): string[] {
   // Для входа после «Выгрузки мыслей» не используем фиксированные стартовые фразы.
   // Считаем, что достаточно переданного контекста, а первую реплику сформирует LLM.
   return [];
@@ -296,30 +459,35 @@ function buildThoughtDumpOpenings(
 
 function resolveAlternativeOpenings(
   entryContext: ChatEntryContext | null | undefined,
-  userGender: Gender | null
+  userGender: Gender | null,
+  addressing: Addressing
 ): string[] {
   // При входе из конкретного раздела старт должен сразу отражать выбранный контекст.
   if (!entryContext) {
-    return HOME_ALTERNATIVE_OPENINGS;
+    return HOME_ALTERNATIVE_OPENINGS.map((text) =>
+      pickAddressingText(addressing, text)
+    );
   }
 
   if (entryContext.type === 'therapy_topic') {
-    return buildTherapyOpenings(entryContext);
+    return buildTherapyOpenings(entryContext, addressing);
   }
 
   if (entryContext.type === 'habit') {
-    return buildHabitOpenings(entryContext);
+    return buildHabitOpenings(entryContext, addressing);
   }
 
   if (entryContext.type === 'thought_dump') {
-    return buildThoughtDumpOpenings(entryContext);
+    return buildThoughtDumpOpenings();
   }
 
   if (entryContext.type === 'sos') {
-    return buildSosOpenings(entryContext, userGender);
+    return buildSosOpenings(entryContext, userGender, addressing);
   }
 
-  return HOME_ALTERNATIVE_OPENINGS;
+  return HOME_ALTERNATIVE_OPENINGS.map((text) =>
+    pickAddressingText(addressing, text)
+  );
 }
 
 function looksLikeSurname(token: string): boolean {
@@ -403,14 +571,17 @@ export function resolveUserTimezone(rawTimezone?: string | null): string {
 export function pickAlternativeOpening(params: {
   userId: number;
   timezone: string;
+  addressing?: Addressing;
   sessionId?: string | null;
   entryContext?: ChatEntryContext | null;
   userGender?: Gender | null;
   now?: Date;
 }): string {
+  const resolvedAddressing = resolveAddressing(params.addressing);
   const openings = resolveAlternativeOpenings(
     params.entryContext,
-    params.userGender ?? null
+    params.userGender ?? null,
+    resolvedAddressing
   );
   const contextKey = resolveContextSeedKey(params.entryContext);
   const cacheKey = `${params.userId}:${contextKey}`;
@@ -427,7 +598,13 @@ export function pickAlternativeOpening(params: {
     lastOpeningIndexByContext.clear();
   }
 
-  return openings[index] || openings[0] || HOME_ALTERNATIVE_OPENINGS[0];
+  // Возвращаем уже адресованный текст, а не сырой объект из константы.
+  const fallbackOpening = pickAddressingText(
+    resolvedAddressing,
+    HOME_ALTERNATIVE_OPENINGS[0]!
+  );
+
+  return openings[index] ?? openings[0] ?? fallbackOpening;
 }
 
 /**
@@ -466,6 +643,7 @@ export async function reserveDailyGreeting(params: {
       userId: params.userId,
       // Синхронизируем значения с DEFAULT_SETTINGS из storage.ts
       voice: true,
+      assistantVoice: DEFAULT_ASSISTANT_VOICE_ID,
       avatar: false,
       enablePreviousResponseId: true,
       enableSummary: true,
@@ -514,6 +692,7 @@ export async function reserveDailyNameGreeting(params: {
       userId: params.userId,
       // Синхронизируем значения с DEFAULT_SETTINGS из storage.ts
       voice: true,
+      assistantVoice: DEFAULT_ASSISTANT_VOICE_ID,
       avatar: false,
       enablePreviousResponseId: true,
       enableSummary: true,

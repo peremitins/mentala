@@ -1,12 +1,16 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Mentala</string>
-    <string name="title_activity_main">Mentala</string>
+    <string name="app_name">Ментала</string>
+    <string name="title_activity_main">Ментала</string>
     <string name="package_name">com.mentala.app</string>
     <string name="custom_url_scheme">mentala</string>
     <string name="default_notification_channel_id">mentai_high</string>
-    <string name="audio_fg_channel_name">Mentala Audio</string>
+    <string name="audio_fg_channel_name">Ментала Audio</string>
     <string name="audio_fg_channel_description">Воспроизведение медитаций в фоне</string>
-    <string name="audio_fg_default_title">Mentala</string>
+    <string name="audio_fg_default_title">Ментала</string>
     <string name="audio_fg_default_subtitle">Идёт воспроизведение медитации</string>
+    <string name="realtime_voice_fg_channel_name">Ментала Realtime Voice</string>
+    <string name="realtime_voice_fg_channel_description">Активный голосовой диалог в фоне</string>
+    <string name="realtime_voice_fg_default_title">Ментала</string>
+    <string name="realtime_voice_fg_default_subtitle">Идёт голосовой разговор</string>
 </resources>

@@ -1,5 +1,9 @@
 import { defineStore } from 'pinia';
 import { useAPI } from '@/app/composables/useAPI';
+import {
+  buildUsageCacheContextKey,
+  hasSubscriptionStateTransitionPassed,
+} from '@/app/utils/subscription-cache';
 
 interface Plan {
   id: string;
@@ -12,10 +16,13 @@ interface Plan {
 interface Subscription {
   id: number;
   planId: string;
+  startDate: string;
   endDate: string;
   paymentStatus: string;
+  paymentProvider?: 'yookassa' | 'apple_iap';
   autoRenew?: boolean;
   billingPeriod?: 'month' | 'year';
+  sourcePlatform?: 'web' | 'ios' | 'android';
   plan: {
     id: string;
     name: string;
@@ -29,6 +36,8 @@ interface SubscriptionResponse {
   trialActive: boolean;
   trialEndsAt: string | null;
   currentEntitlementsPlan?: 'basic' | 'pro' | 'premium';
+  storefrontCountry?: string | null;
+  billingProviderHint?: 'yookassa' | 'apple_iap';
   billingPlan?: 'pro' | 'premium' | null;
   billingPeriod?: 'month' | 'year' | null;
   nextChargeAt?: string | null;
@@ -51,6 +60,7 @@ interface SubscriptionResponse {
     weeklyMinutesLimit: number | null;
     fairUseGuardMinutesPerWeek: number | null;
   };
+  appleAppAccountToken?: string | null;
   subscription: Subscription | null;
   noActiveSubscription: boolean;
   paymentStatus?: string;
@@ -71,6 +81,12 @@ interface Usage {
   weeklyLimit: number;
   overdraftUsed: number;
   availableMinutes: number;
+  realtimeVoice: {
+    limitSeconds: number;
+    usedSeconds: number;
+    remainingSeconds: number;
+    resetsAt: string;
+  } | null;
 }
 
 export const useSubscriptionStore = defineStore('subscription', {
@@ -135,6 +151,16 @@ export const useSubscriptionStore = defineStore('subscription', {
     shouldRefetch(key: 'plans' | 'subscription' | 'usage'): boolean {
       const lastFetched = this.lastFetched[key];
       if (!lastFetched) return true;
+
+      // Для подписки и usage нельзя полагаться только на TTL:
+      // часть переходов наступает ровно по времени (конец trial, scheduled apply).
+      if (
+        key !== 'plans' &&
+        hasSubscriptionStateTransitionPassed(this.subscriptionData)
+      ) {
+        return true;
+      }
+
       return Date.now() - lastFetched > this.cacheTimeout;
     },
 
@@ -181,6 +207,9 @@ export const useSubscriptionStore = defineStore('subscription', {
 
       this.loading.subscription = true;
       try {
+        const previousUsageContextKey = buildUsageCacheContextKey(
+          this.subscriptionData
+        );
         const query = force ? { _ts: Date.now() } : undefined;
         const response = await useAPI<SubscriptionResponse>(
           '/api/subscriptions/current',
@@ -194,6 +223,24 @@ export const useSubscriptionStore = defineStore('subscription', {
         this.subscriptionData = data;
         this.currentSubscription = data?.subscription || null;
         this.lastFetched.subscription = Date.now();
+
+        const nextUsageContextKey = buildUsageCacheContextKey(data);
+        if (previousUsageContextKey !== nextUsageContextKey) {
+          // При смене access-period usage нужно запрашивать заново,
+          // иначе фронт может показать минуты из предыдущего тарифа/trial.
+          this.usage = null;
+          this.lastFetched.usage = null;
+
+          if (!this.loading.usage) {
+            await this.fetchUsage(true).catch((error) => {
+              console.warn(
+                '[SubscriptionStore] Failed to refresh usage after subscription transition:',
+                error
+              );
+            });
+          }
+        }
+
         return this.subscriptionData;
       } catch (error) {
         console.error('Failed to fetch subscription:', error);

@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>Mentala</string>
+	<string>Ментала</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -23,7 +23,7 @@
 		<dict>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.googleusercontent.apps.297759732158-6b1afa1flba6rfbmr6r9ca2rummtb1vn</string>
+				<string>com.googleusercontent.apps.799016331120-29mvf7m9e8587g898ksmhkm0etpvgujb</string>
 			</array>
 		</dict>
 		<dict>
@@ -39,6 +39,10 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Нужно для записи голоса при использовании голосового ввода.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Нужно для распознавания вашей речи в текст при голосовом вводе.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>
@@ -55,21 +59,17 @@
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
-		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Нужно для распознавания вашей речи в текст при голосовом вводе.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Нужно для записи голоса при использовании голосового ввода.</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>

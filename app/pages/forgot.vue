@@ -1,13 +1,13 @@
 <template>
-  <div class="min-h-dvh">
+  <div class="w-full">
     <NeuralBg />
     <div
-      class="container mx-auto px-4 py-8 flex items-center justify-center min-h-dvh relative z-10"
+      class="container mx-auto px-4 py-8 flex items-center justify-center relative z-10"
     >
       <div class="w-full max-w-md">
         <div class="glass-deep p-6">
           <div class="text-center mb-6">
-            <div class="text-2xl font-semibold text-foreground">Mentala</div>
+            <div class="text-2xl font-semibold text-foreground">Ментала</div>
             <div class="text-sm text-foreground">Восстановление пароля</div>
           </div>
 
@@ -34,9 +34,12 @@
                 <button
                   type="submit"
                   :disabled="loading"
-                  class="w-full mt-4 py-2.5 rounded-xl bg-primary text-primary-foreground hover:opacity-90 active:opacity-80 transition font-medium disabled:opacity-60 disabled:cursor-not-allowed"
+                  class="relative w-full mt-4 py-2.5 rounded-xl bg-primary text-primary-foreground hover:opacity-90 active:opacity-80 transition font-medium disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  {{ loading ? '...' : 'Получить письмо' }}
+                  <ButtonLoader v-if="loading" />
+                  <span :class="loading ? 'invisible' : ''">
+                    Получить письмо
+                  </span>
                 </button>
               </form>
 
@@ -89,6 +92,7 @@ import { ref, computed } from 'vue';
 import { useCountdown } from '@vueuse/core';
 import { useAuthStore } from '@/app/stores/auth';
 import NeuralBg from '@/app/components/ui/bg-neural/NeuralBg.vue';
+import ButtonLoader from '@/app/components/ui/ButtonLoader.vue';
 import { Input } from '@/app/components/ui/shadcn/input';
 import { useToast } from '@/app/composables/useToast';
 
@@ -106,7 +110,7 @@ const maskedEmail = ref('');
 const isRateLimited = ref(false);
 const retryAfter = ref(0);
 
-const { remaining, start, reset } = useCountdown(0);
+const { start, reset } = useCountdown(0);
 
 const formattedRetryAfter = computed(() => {
   const minutes = Math.floor(retryAfter.value / 60);

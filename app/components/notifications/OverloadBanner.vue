@@ -19,7 +19,13 @@
           class="text-sm font-semibold"
           :class="isOver ? 'text-destructive' : 'text-foreground'"
         >
-          {{ pluralize(totalPerDay) }}: {{ totalPerDay }}
+          {{
+            t(
+              'NOTIFICATIONS.BANNER.TOTAL_PER_DAY',
+              { n: totalPerDay },
+              totalPerDay
+            )
+          }}
         </div>
         <!-- Основной текст с плавной сменой -->
         <div class="relative">
@@ -30,8 +36,8 @@
           >
             {{
               isOver
-                ? t('notifications.banner.over')
-                : t('notifications.banner.tip')
+                ? t('NOTIFICATIONS.BANNER.OVER')
+                : t('NOTIFICATIONS.BANNER.TIP', { threshold: props.threshold })
             }}
           </span>
         </div>
@@ -48,14 +54,8 @@ interface Props {
   threshold?: number;
 }
 
-const props = withDefaults(defineProps<Props>(), { threshold: 10 });
+const props = withDefaults(defineProps<Props>(), { threshold: 20 });
 const { t } = useI18n();
 
 const isOver = computed(() => props.totalPerDay > props.threshold);
-
-function pluralize(count: number): string {
-  if (count === 1) return 'уведомление в день';
-  if (count >= 2 && count <= 4) return 'Всего уведомлений в день';
-  return 'Всего уведомлений в день';
-}
 </script>

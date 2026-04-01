@@ -1,15 +1,18 @@
 <template>
-  <div class="min-h-dvh">
+  <div class="w-full">
     <NeuralBg />
     <div
-      class="container mx-auto px-4 py-4 flex items-center justify-center min-h-dvh relative z-10"
+      class="container mx-auto px-4 py-4 flex items-center justify-center relative z-10"
     >
       <div class="w-full max-w-md">
         <div class="glass-deep p-6">
           <div
             class="flex w-[150px] h-auto items-center justify-center mb-6 mx-auto"
           >
-            <BrandLogo class="signin__form-brand-logo-img" />
+            <component
+              :is="brandLogoComponent"
+              class="signin__form-brand-logo-img"
+            />
           </div>
           <div class="text-center mb-6">
             <!-- <div class="text-2xl font-semibold text-foreground">Mentala</div> -->
@@ -90,10 +93,11 @@
               <button
                 type="button"
                 :disabled="loading"
-                class="w-full py-2.5 rounded-xl bg-primary text-primary-foreground hover:opacity-90 active:opacity-80 transition font-medium disabled:opacity-60 disabled:cursor-not-allowed"
+                class="relative w-full py-2.5 rounded-xl bg-primary text-primary-foreground hover:opacity-90 active:opacity-80 transition font-medium disabled:opacity-60 disabled:cursor-not-allowed"
                 @click="confirmCode"
               >
-                {{ loading ? '...' : 'Подтвердить' }}
+                <ButtonLoader v-if="loading" />
+                <span :class="loading ? 'invisible' : ''">Подтвердить</span>
               </button>
 
               <div class="grid grid-cols-2 gap-2">
@@ -186,14 +190,14 @@
                         >Я принимаю
                         <!-- Ссылки на каноничные HTML-документы из public/legal -->
                         <a
-                          href="/legal/terms-of-service.html"
+                          :href="termsOfServiceUrl"
                           class="underline text-primary-ui hover:text-primary-ui/80"
                         >
                           Условия использования
                         </a>
                         и
                         <a
-                          href="/legal/privacy-policy.html"
+                          :href="privacyPolicyUrl"
                           class="underline text-primary-ui hover:text-primary-ui/80"
                         >
                           Политику конфиденциальности
@@ -209,7 +213,7 @@
                       v-model:checked="marketingConsent"
                     />
                     <label for="marketing-consent" class="cursor-pointer">
-                      <span> Хочу получать новости и предложения Mentala </span>
+                      <span> Хочу получать новости и предложения Ментала </span>
                     </label>
                   </div>
                 </div>
@@ -217,15 +221,12 @@
                 <button
                   type="submit"
                   :disabled="loading || (mode === 'signup' && !agree)"
-                  class="w-full py-2.5 rounded-xl bg-primary text-primary-foreground hover:opacity-90 active:opacity-80 transition font-medium disabled:opacity-60 disabled:cursor-not-allowed"
+                  class="relative w-full py-2.5 rounded-xl bg-primary text-primary-foreground hover:opacity-90 active:opacity-80 transition font-medium disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  {{
-                    loading
-                      ? '...'
-                      : mode === 'signin'
-                        ? 'Войти'
-                        : 'Создать аккаунт'
-                  }}
+                  <ButtonLoader v-if="loading" />
+                  <span :class="loading ? 'invisible' : ''">
+                    {{ mode === 'signin' ? 'Войти' : 'Создать аккаунт' }}
+                  </span>
                 </button>
               </form>
 
@@ -242,10 +243,16 @@
               <div class="grid grid-cols-1 gap-2">
                 <!-- 1️⃣ Google -->
                 <button
+                  type="button"
+                  :disabled="loading || oauthLoading"
                   @click="loginWithGoogle"
-                  class="h-10 rounded-xl bg-white/80 hover:bg-white text-black flex items-center justify-center"
+                  class="relative h-10 rounded-xl bg-white/80 hover:bg-white text-black flex items-center justify-center disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  <GoogleIcon class="w-full h-5" />
+                  <ButtonLoader v-if="oauthLoading" />
+                  <GoogleIcon
+                    class="w-full h-5"
+                    :class="oauthLoading ? 'invisible' : ''"
+                  />
                 </button>
 
                 <!-- 7️⃣ VK -->
@@ -279,31 +286,20 @@
         </div>
 
         <p class="mt-4 text-center text-xs text-muted-foreground">
-          <template v-if="mode === 'signin'">
+          <template v-if="mode === 'signin' || mode === 'signup'">
             Входя в аккаунт, вы подтверждаете согласие с
             <a
-              href="/legal/terms-of-service.html"
+              :href="termsOfServiceUrl"
               class="underline text-primary-ui hover:text-primary-ui/80"
             >
               Условиями использования
             </a>
             и
             <a
-              href="/legal/privacy-policy.html"
+              :href="privacyPolicyUrl"
               class="underline text-primary-ui hover:text-primary-ui/80"
             >
               Политикой конфиденциальности
-            </a>
-            .
-          </template>
-          <template v-else>
-            Защита данных: end-to-end для приватных чатов, ключи разделены
-            (zero-trust). Подробнее в
-            <a
-              href="/legal/privacy-policy.html"
-              class="underline text-primary-ui hover:text-primary-ui/80"
-            >
-              политике
             </a>
             .
           </template>
@@ -319,7 +315,9 @@ import { useCountdown } from '@vueuse/core';
 import { useAuthStore } from '@/app/stores/auth';
 import GoogleIcon from '~icons/logos/google-icon';
 import NeuralBg from '@/app/components/ui/bg-neural/NeuralBg.vue';
-import BrandLogo from '@/app/assets/images/logo.svg';
+import BrandLogoEn from '@/app/assets/images/logo_en.svg';
+import BrandLogoRu from '@/app/assets/images/logo_ru.svg';
+import ButtonLoader from '@/app/components/ui/ButtonLoader.vue';
 import { Input } from '@/app/components/ui/shadcn/input';
 import { Checkbox } from '@/app/components/ui/shadcn/checkbox';
 import { Tabs, TabsList, TabsTrigger } from '@/app/components/ui/shadcn/tabs';
@@ -341,6 +339,7 @@ const name = ref('');
 const agree = ref(false);
 const marketingConsent = ref(false);
 const loading = ref(false);
+const oauthLoading = ref(false);
 
 const verificationEmail = ref('');
 const verificationCode = ref('');
@@ -359,6 +358,23 @@ const langCookie = useCookie<string | null>('mentai.lang', {
   path: '/',
 });
 const locale = computed(() => langCookie.value || 'ru');
+const legalLocale = computed(() => {
+  const normalizedLocale = String(locale.value || 'ru').toLowerCase();
+  return normalizedLocale.startsWith('en') ? 'en' : 'ru';
+});
+
+const termsOfServiceUrl = computed(
+  () => `/legal/terms-of-service-${legalLocale.value}.html`
+);
+const privacyPolicyUrl = computed(
+  () => `/legal/privacy-policy-${legalLocale.value}.html`
+);
+
+const brandLogoComponent = computed(() => {
+  // Логотип выбирается по текущей локали интерфейса.
+  const normalizedLocale = String(locale.value || 'ru').toLowerCase();
+  return normalizedLocale.startsWith('ru') ? BrandLogoRu : BrandLogoEn;
+});
 
 function startResendTimer(seconds = 60) {
   reset(seconds);
@@ -453,7 +469,7 @@ function startVerificationFlow(options?: {
   startResendTimer(60);
   useToast(
     'Проверьте почту',
-    'Мы отправили письмо с кодом подтверждения.\nЕсли вы уже использовали Mentala ранее, вы сможете войти или восстановить доступ',
+    'Мы отправили письмо с кодом подтверждения.\nЕсли вы уже использовали Ментала ранее, вы сможете войти или восстановить доступ',
     'info'
   );
 }
@@ -504,6 +520,13 @@ async function submit() {
       return;
     }
 
+    const payload = e?.data || e?.response?._data || {};
+    const message =
+      payload?.message ||
+      payload?.statusMessage ||
+      (e instanceof Error ? e.message : '') ||
+      'Не удалось войти. Проверь подключение и попробуй ещё раз.';
+    useToast('Ошибка входа', String(message), 'error');
     console.error('[Auth] Signin error:', getErrorDiagnosticsLog(e));
   } finally {
     loading.value = false;
@@ -555,7 +578,7 @@ async function resendCode() {
       isRateLimited.value = false;
       useToast(
         'Проверьте почту',
-        'Мы отправили письмо с кодом подтверждения.\nЕсли вы уже использовали Mentala ранее, вы сможете войти или восстановить доступ',
+        'Мы отправили письмо с кодом подтверждения.\nЕсли вы уже использовали Ментала ранее, вы сможете войти или восстановить доступ',
         'info'
       );
     }
@@ -566,6 +589,7 @@ async function resendCode() {
 
 async function loginWithGoogle() {
   try {
+    oauthLoading.value = true;
     await auth.loginWithGoogle(locale.value);
   } catch (e: any) {
     const message =
@@ -574,6 +598,8 @@ async function loginWithGoogle() {
         : 'Не удалось войти через Google';
     useToast('Ошибка входа через Google', message, 'error');
     console.error('[Auth] Google login error:', getErrorDiagnosticsLog(e));
+  } finally {
+    oauthLoading.value = false;
   }
 }
 

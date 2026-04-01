@@ -20,11 +20,7 @@
         </div>
 
         <div class="relative z-10 space-y-3">
-          <div
-            class="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-white/10"
-          >
-            <IconHeartPulse class="h-5 w-5 text-foreground" />
-          </div>
+          <IconHeartPulse class="h-5 w-5 text-foreground" />
           <div class="space-y-1">
             <h2 class="text-lg font-semibold text-foreground">
               Быстрая помощь
@@ -93,7 +89,12 @@
           <div class="space-y-1">
             <h2 class="text-lg font-semibold text-foreground">Медитации</h2>
             <p class="text-sm text-foreground/80">
-              Открой библиотеку медитаций в PRO и Premium
+              {{
+                getLockedFeatureLabel(
+                  'meditations',
+                  meditationsAccess.requiredPlan
+                )
+              }}
             </p>
           </div>
         </div>
@@ -127,6 +128,79 @@
           </div>
         </div>
       </NuxtLink>
+
+      <NuxtLink
+        v-if="gratitudeDiaryAccess.available"
+        to="/practices/gratitude-diary"
+        class="glass-deep p-5 group relative overflow-hidden transition hover:-translate-y-1 animate-slide-up"
+        style="animation-delay: 0.15s; animation-fill-mode: both"
+      >
+        <div
+          class="pointer-events-none absolute inset-0 transition group-hover:opacity-100"
+        >
+          <div
+            class="tile-orb absolute -right-14 -top-10 h-40 w-40 rounded-full bg-gradient-to-br from-fuchsia-400/35 via-pink-400/20 to-transparent blur-2xl"
+          />
+          <div
+            class="tile-orb tile-orb--delay absolute -left-10 bottom-0 h-32 w-32 rounded-full bg-gradient-to-br from-violet-500/30 via-rose-500/20 to-transparent blur-2xl"
+          />
+        </div>
+
+        <div class="relative z-10 space-y-3">
+          <span class="text-3xl">📔</span>
+          <div class="space-y-1">
+            <h2 class="text-lg font-semibold text-foreground">
+              Дневник благодарности
+            </h2>
+            <p class="text-sm text-foreground/80">
+              Короткие записи, промпты и streak для ежедневной опоры
+            </p>
+          </div>
+        </div>
+      </NuxtLink>
+
+      <button
+        v-else
+        type="button"
+        class="glass-deep p-5 group relative overflow-hidden text-left transition hover:-translate-y-1 animate-slide-up"
+        style="animation-delay: 0.15s; animation-fill-mode: both"
+        @click="openPaywall('gratitude.diary.full')"
+      >
+        <div
+          class="pointer-events-none absolute inset-0 transition group-hover:opacity-100"
+        >
+          <div
+            class="tile-orb absolute -right-14 -top-10 h-40 w-40 rounded-full bg-gradient-to-br from-fuchsia-400/35 via-pink-400/20 to-transparent blur-2xl"
+          />
+          <div
+            class="tile-orb tile-orb--delay absolute -left-10 bottom-0 h-32 w-32 rounded-full bg-gradient-to-br from-violet-500/30 via-rose-500/20 to-transparent blur-2xl"
+          />
+        </div>
+        <div
+          class="absolute right-3 top-3 inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/25 bg-black/30 text-sm leading-none"
+        >
+          <span aria-hidden="true">{{
+            getPlanBadgeEmoji(gratitudeDiaryAccess.requiredPlan)
+          }}</span>
+        </div>
+
+        <div class="relative z-10 space-y-3">
+          <span class="text-3xl">📔</span>
+          <div class="space-y-1">
+            <h2 class="text-lg font-semibold text-foreground">
+              Дневник благодарности
+            </h2>
+            <p class="text-sm text-foreground/80">
+              {{
+                getLockedFeatureLabel(
+                  'gratitude',
+                  gratitudeDiaryAccess.requiredPlan
+                )
+              }}
+            </p>
+          </div>
+        </div>
+      </button>
     </div>
 
     <FeaturePaywallModal
@@ -140,18 +214,24 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import IconHeartPulse from '~icons/lucide/heart-pulse';
 import PageHeader from '@/app/components/PageHeader.vue';
 import FeaturePaywallModal from '@/app/components/subscription/FeaturePaywallModal.vue';
 import { useEntitlements } from '@/app/composables/useEntitlements';
+import { getLocalizedRequiredPlanLabel } from '@/app/utils/planI18n';
 
 const { getFeatureAccess } = useEntitlements();
+const { t } = useI18n();
 
 const paywallOpen = ref(false);
 const paywallFeatureKey = ref<string | null>(null);
 
 const meditationsAccess = computed(() =>
   getFeatureAccess('meditations.library.full')
+);
+const gratitudeDiaryAccess = computed(() =>
+  getFeatureAccess('gratitude.diary.full')
 );
 const paywallAccess = computed(() =>
   paywallFeatureKey.value ? getFeatureAccess(paywallFeatureKey.value) : null
@@ -164,6 +244,17 @@ function openPaywall(featureKey: string) {
 
 function getPlanBadgeEmoji(plan: string) {
   return plan === 'premium' ? '💎' : '⭐';
+}
+
+function getLockedFeatureLabel(
+  type: 'meditations' | 'gratitude',
+  plan: string
+) {
+  const plans = getLocalizedRequiredPlanLabel(plan, t);
+
+  return type === 'meditations'
+    ? t('PLANS.MEDITATIONS_LIBRARY_UNLOCK', { plans })
+    : t('PLANS.GRATITUDE_DIARY_UNLOCK', { plans });
 }
 </script>
 

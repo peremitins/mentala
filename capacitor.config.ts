@@ -6,7 +6,7 @@ const isDevServer = process.env.CAPACITOR_SERVER_URL;
 
 const config: CapacitorConfig = {
   appId: 'com.mentala.app',
-  appName: 'Mentala',
+  appName: 'Ментала',
   webDir: '.output/public',
   server: isDevServer
     ? {
@@ -15,20 +15,16 @@ const config: CapacitorConfig = {
         androidScheme: 'http',
         cleartext: true,
       }
-    : {
-        // Production: используем статические файлы, но через HTTP схему
-        // чтобы избежать Mixed Content (API идёт по HTTP)
-        androidScheme: 'http',
-        cleartext: true,
-      },
+    : undefined,
   plugins: {
     SplashScreen: {
-      launchShowDuration: 2000,
+      launchShowDuration: 500,
       launchAutoHide: true,
-      backgroundColor: '#000000',
+      launchFadeOutDuration: 200,
+      backgroundColor: '#090B12',
       androidSplashResourceName: 'splash',
       androidScaleType: 'CENTER_CROP',
-      showSpinner: true,
+      showSpinner: false,
       androidSpinnerStyle: 'large',
       spinnerColor: '#999999',
       splashFullScreen: true,

@@ -15,6 +15,8 @@ import {
   normalizeBillingCollectionStatus,
   resolveCurrentEntitlementsPlan,
 } from '@/server/application/subscriptions/trial-billing.service';
+import { resolveAiUsagePeriodStartedAt } from '@/server/application/subscriptions/usage-window.service';
+import { getRealtimeVoiceQuotaSnapshot } from '@/server/application/realtime/realtime-voice-quota.service';
 
 /**
  * GET /api/subscriptions/usage
@@ -39,6 +41,7 @@ export default defineEventHandler(async (event) => {
       billingPlanId: users.billingPlanId,
       billingCollectionStatus: users.billingCollectionStatus,
       graceEndsAt: users.graceEndsAt,
+      nextChargeAt: users.nextChargeAt,
     })
     .from(users)
     .where(eq(users.id, sessionResult.user.id))
@@ -73,11 +76,13 @@ export default defineEventHandler(async (event) => {
   // Получаем единые фичи доступа, чтобы usage не расходился с gate в chat endpoints.
   let weeklyLimit = 0;
   let aiChatMode: 'disabled' | 'limited' | 'unlimited_fair_use' = 'disabled';
+  let currentEntitlementsPlan: 'basic' | 'pro' | 'premium' = 'basic';
+  let trialActive = false;
 
   if (userRecord) {
     const activeSub = activeSubscription[0];
-    const trialActive = isTrialActiveAt(userRecord.trialEndedAt, now);
-    const entitlementsPlanId = resolveCurrentEntitlementsPlan({
+    trialActive = isTrialActiveAt(userRecord.trialEndedAt, now);
+    currentEntitlementsPlan = resolveCurrentEntitlementsPlan({
       now,
       trialActive,
       billingPlanId: userRecord.billingPlanId,
@@ -93,12 +98,12 @@ export default defineEventHandler(async (event) => {
         weeklyMinutesLimit: subscriptionPlans.weeklyMinutesLimit,
       })
       .from(subscriptionPlans)
-      .where(eq(subscriptionPlans.id, entitlementsPlanId))
+      .where(eq(subscriptionPlans.id, currentEntitlementsPlan))
       .limit(1);
 
     const features = await getFeatures(
       userRecord,
-      { planId: entitlementsPlanId },
+      { planId: currentEntitlementsPlan },
       entitlementsPlanRows[0] ?? null,
       userRecord.roleId || undefined
     );
@@ -111,7 +116,28 @@ export default defineEventHandler(async (event) => {
   }
 
   // Получаем использование
-  const usage = await getUsageForCurrentWeek(sessionResult.user.id, timezone);
+  const usagePeriodStartedAt = resolveAiUsagePeriodStartedAt({
+    trialActive,
+    currentEntitlementsPlan,
+    activePaidSubscription: activeSubscription[0]
+      ? {
+          planId: activeSubscription[0].subscription.planId,
+          startDate: activeSubscription[0].subscription.startDate,
+        }
+      : null,
+    billingPlanId: userRecord?.billingPlanId ?? null,
+    billingCollectionStatus: userRecord?.billingCollectionStatus ?? null,
+    nextChargeAt: userRecord?.nextChargeAt ?? null,
+  });
+  const [usage, realtimeVoiceQuota] = await Promise.all([
+    getUsageForCurrentWeek(sessionResult.user.id, timezone, {
+      periodStartedAt: usagePeriodStartedAt,
+    }),
+    getRealtimeVoiceQuotaSnapshot({
+      userId: sessionResult.user.id,
+      now,
+    }),
+  ]);
 
   // Вычисляем дополнительные поля
   let availableMinutes: number;
@@ -144,5 +170,11 @@ export default defineEventHandler(async (event) => {
     weeklyLimit,
     availableMinutes,
     overdraftUsed,
+    realtimeVoice: {
+      limitSeconds: realtimeVoiceQuota.limitSeconds,
+      usedSeconds: realtimeVoiceQuota.usedSeconds,
+      remainingSeconds: realtimeVoiceQuota.remainingSeconds,
+      resetsAt: realtimeVoiceQuota.resetsAt.toISOString(),
+    },
   };
 });

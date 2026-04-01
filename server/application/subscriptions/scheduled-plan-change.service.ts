@@ -21,6 +21,12 @@ import {
   type BillingPeriod,
 } from '@/server/application/subscriptions/price-calculator';
 import { activateUserPaymentMethod } from './payment-methods.service';
+import {
+  dispatchBillingCriticalEvent,
+  dispatchBillingPurchaseFailedEvent,
+  dispatchBillingPurchaseSuccessEvent,
+} from '@/server/application/events/app-events.dispatchers';
+import { dispatchBillingPlanChangedIfNeeded } from '@/server/application/events/billing-events.helpers';
 
 type ScheduledBillingPeriod = BillingPeriod;
 type ScheduledApplyStatus = 'noop' | 'success' | 'processing' | 'failed';
@@ -57,6 +63,57 @@ function buildScheduledChangeIdempotenceKey(params: {
       'utf8'
     )
     .digest('hex');
+}
+
+function describeScheduledPlanChangeFailure(reason: string): string {
+  switch (reason) {
+    case 'payment_method_not_bound':
+      return 'Scheduled plan change failed: payment method is not bound';
+    case 'target_plan_not_found':
+      return 'Scheduled plan change failed: target plan is not configured';
+    case 'payment_create_failed':
+      return 'Scheduled plan change failed: payment creation failed';
+    case 'payment_id_missing':
+      return 'Scheduled plan change failed: provider payment id is missing';
+    case 'amount_currency_mismatch':
+      return 'Scheduled plan change failed: provider amount or currency mismatch';
+    default:
+      return `Scheduled plan change failed: ${reason}`;
+  }
+}
+
+function dispatchScheduledPlanChangeCriticalEvent(params: {
+  userId: number;
+  workerId: string;
+  scheduledPlanId: string;
+  scheduledBillingPeriod: ScheduledBillingPeriod;
+  scheduledChangeAt: Date;
+  scheduledFromSubscriptionId?: number | null;
+  reason: string;
+  error?: unknown;
+  subscriptionId?: number | null;
+  paymentId?: string | null;
+  context?: Record<string, unknown>;
+}): void {
+  dispatchBillingCriticalEvent({
+    source: 'subscriptions.scheduled-plan-change',
+    operation: 'apply_scheduled_plan_change',
+    reason: params.reason,
+    userId: params.userId,
+    subscriptionId: params.subscriptionId ?? null,
+    paymentId: params.paymentId ?? null,
+    planId: params.scheduledPlanId,
+    billingPeriod: params.scheduledBillingPeriod,
+    error:
+      params.error ??
+      new Error(describeScheduledPlanChangeFailure(params.reason)),
+    context: {
+      workerId: params.workerId,
+      scheduledChangeAt: params.scheduledChangeAt.toISOString(),
+      scheduledFromSubscriptionId: params.scheduledFromSubscriptionId ?? null,
+      ...params.context,
+    },
+  });
 }
 
 /**
@@ -123,6 +180,18 @@ async function applyScheduledPlanChangeForUser(params: {
   const scheduledBillingPeriod = user.scheduledBillingPeriod;
   const scheduledChangeAt = user.scheduledChangeAt;
   const scheduledFromSubscriptionId = user.scheduledFromSubscriptionId;
+  const scheduledFromSubscriptionRows = scheduledFromSubscriptionId
+    ? await db
+        .select({
+          id: userSubscriptions.id,
+          planId: userSubscriptions.planId,
+          billingPeriod: userSubscriptions.billingPeriod,
+        })
+        .from(userSubscriptions)
+        .where(eq(userSubscriptions.id, scheduledFromSubscriptionId))
+        .limit(1)
+    : [];
+  const previousPlanSnapshot = scheduledFromSubscriptionRows[0] ?? null;
   const periodStart = scheduledChangeAt;
   const periodEnd = new Date(
     periodStart.getTime() +
@@ -199,6 +268,26 @@ async function applyScheduledPlanChangeForUser(params: {
       },
     });
 
+    dispatchBillingPlanChangedIfNeeded({
+      userId,
+      source: 'subscriptions.scheduled-plan-change',
+      previous: previousPlanSnapshot
+        ? {
+            subscriptionId: previousPlanSnapshot.id,
+            planId: previousPlanSnapshot.planId,
+            billingPeriod: previousPlanSnapshot.billingPeriod,
+          }
+        : null,
+      next: {
+        subscriptionId: newSubscription.id,
+        planId: 'basic',
+        billingPeriod: 'month',
+      },
+      paymentId: null,
+      effectiveAt: scheduledChangeAt,
+      occurredAt: now,
+    });
+
     return { status: 'success' };
   }
 
@@ -215,6 +304,16 @@ async function applyScheduledPlanChangeForUser(params: {
         effectiveAt: scheduledChangeAt.toISOString(),
         fromSubscriptionId: scheduledFromSubscriptionId,
       },
+    });
+
+    dispatchScheduledPlanChangeCriticalEvent({
+      userId,
+      workerId,
+      scheduledPlanId,
+      scheduledBillingPeriod,
+      scheduledChangeAt,
+      scheduledFromSubscriptionId,
+      reason: 'payment_method_not_bound',
     });
 
     return { status: 'failed', reason: 'payment_method_not_bound' };
@@ -242,6 +341,16 @@ async function applyScheduledPlanChangeForUser(params: {
         effectiveAt: scheduledChangeAt.toISOString(),
         fromSubscriptionId: scheduledFromSubscriptionId,
       },
+    });
+
+    dispatchScheduledPlanChangeCriticalEvent({
+      userId,
+      workerId,
+      scheduledPlanId,
+      scheduledBillingPeriod,
+      scheduledChangeAt,
+      scheduledFromSubscriptionId,
+      reason: 'target_plan_not_found',
     });
 
     return { status: 'failed', reason: 'target_plan_not_found' };
@@ -301,7 +410,7 @@ async function applyScheduledPlanChangeForUser(params: {
       secretKey,
       idempotenceKey: yookassaIdempotenceKey,
       amount: checkoutAmount,
-      description: `Mentala scheduled plan change ${scheduledPlanId} (${scheduledBillingPeriod})`,
+      description: `Ментала scheduled plan change ${scheduledPlanId} (${scheduledBillingPeriod})`,
       metadata: {
         userId: String(userId),
         subscriptionId: String(pendingSubscription.id),
@@ -313,7 +422,7 @@ async function applyScheduledPlanChangeForUser(params: {
       paymentMode: 'recurring',
       paymentMethodId: user.paymentMethodId,
     });
-  } catch {
+  } catch (error) {
     // Если платеж не создан — откатываем subscription в canceled и возвращаем schedule.
     await db.transaction(async (tx) => {
       await tx
@@ -352,6 +461,18 @@ async function applyScheduledPlanChangeForUser(params: {
       });
     });
 
+    dispatchScheduledPlanChangeCriticalEvent({
+      userId,
+      workerId,
+      scheduledPlanId,
+      scheduledBillingPeriod,
+      scheduledChangeAt,
+      scheduledFromSubscriptionId,
+      reason: 'payment_create_failed',
+      error,
+      subscriptionId: pendingSubscription.id,
+    });
+
     return { status: 'failed', reason: 'payment_create_failed' };
   }
 
@@ -377,6 +498,17 @@ async function applyScheduledPlanChangeForUser(params: {
         billingPeriod: scheduledBillingPeriod,
         effectiveAt: scheduledChangeAt.toISOString(),
       },
+    });
+
+    dispatchScheduledPlanChangeCriticalEvent({
+      userId,
+      workerId,
+      scheduledPlanId,
+      scheduledBillingPeriod,
+      scheduledChangeAt,
+      scheduledFromSubscriptionId,
+      reason: 'payment_id_missing',
+      subscriptionId: pendingSubscription.id,
     });
 
     return { status: 'failed', reason: 'payment_id_missing' };
@@ -460,6 +592,24 @@ async function applyScheduledPlanChangeForUser(params: {
             actualCurrency: paymentCurrency,
           },
         });
+      });
+
+      dispatchScheduledPlanChangeCriticalEvent({
+        userId,
+        workerId,
+        scheduledPlanId,
+        scheduledBillingPeriod,
+        scheduledChangeAt,
+        scheduledFromSubscriptionId,
+        reason: 'amount_currency_mismatch',
+        subscriptionId: pendingSubscription.id,
+        paymentId,
+        context: {
+          expectedAmount: checkoutAmount,
+          actualAmount: paymentAmount,
+          expectedCurrency: 'RUB',
+          actualCurrency: paymentCurrency,
+        },
       });
 
       return { status: 'failed', reason: 'amount_currency_mismatch' };
@@ -559,6 +709,37 @@ async function applyScheduledPlanChangeForUser(params: {
       });
     });
 
+    dispatchBillingPurchaseSuccessEvent({
+      userId,
+      subscriptionId: pendingSubscription.id,
+      paymentId,
+      planId: scheduledPlanId,
+      billingPeriod: scheduledBillingPeriod,
+      amount: paymentAmount,
+      currency: paymentCurrency,
+      source: 'subscriptions.scheduled-plan-change',
+    });
+
+    dispatchBillingPlanChangedIfNeeded({
+      userId,
+      source: 'subscriptions.scheduled-plan-change',
+      previous: previousPlanSnapshot
+        ? {
+            subscriptionId: previousPlanSnapshot.id,
+            planId: previousPlanSnapshot.planId,
+            billingPeriod: previousPlanSnapshot.billingPeriod,
+          }
+        : null,
+      next: {
+        subscriptionId: pendingSubscription.id,
+        planId: scheduledPlanId,
+        billingPeriod: scheduledBillingPeriod,
+      },
+      paymentId,
+      effectiveAt: scheduledChangeAt,
+      occurredAt: now,
+    });
+
     return { status: 'success' };
   }
 
@@ -586,6 +767,16 @@ async function applyScheduledPlanChangeForUser(params: {
           effectiveAt: scheduledChangeAt.toISOString(),
         },
       });
+    });
+
+    dispatchBillingPurchaseFailedEvent({
+      userId,
+      subscriptionId: pendingSubscription.id,
+      paymentId,
+      planId: scheduledPlanId,
+      billingPeriod: scheduledBillingPeriod,
+      source: 'subscriptions.scheduled-plan-change',
+      reason: 'provider_canceled',
     });
 
     return { status: 'failed', reason: 'provider_canceled' };
@@ -658,6 +849,16 @@ export async function runScheduledPlanChangeWorker(params: {
         userId: user.id,
         workerId: params.workerId,
         error,
+      });
+      dispatchBillingCriticalEvent({
+        source: 'subscriptions.scheduled-plan-change.worker',
+        operation: 'run_scheduled_plan_change_worker',
+        reason: 'apply_failed_unhandled',
+        userId: user.id,
+        error,
+        context: {
+          workerId: params.workerId,
+        },
       });
     }
   }

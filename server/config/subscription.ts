@@ -33,8 +33,8 @@ export const DEFAULT_WEEKLY_MINUTES_LIMIT = PRO_WEEKLY_MINUTES_LIMIT;
 
 // Таймаут бездействия для чата (в миллисекундах)
 // Используется для автоматического завершения сессий при отсутствии активности
-// 2 минуты = 120000 мс
-export const CHAT_IDLE_TIMEOUT_MS = 2 * 60 * 1000;
+// 15 минут = 900000 мс
+export const CHAT_IDLE_TIMEOUT_MS = 15 * 60 * 1000;
 
 // Длительность trial в часах (дефолт: 7 дней).
 export const TRIAL_DURATION_HOURS = readPositiveIntFromEnv(
@@ -49,6 +49,33 @@ export const TRIAL_BILLING_EARLY_CHARGE_MINUTES = readPositiveIntFromEnv(
 );
 export const TRIAL_BILLING_EARLY_CHARGE_MS =
   TRIAL_BILLING_EARLY_CHARGE_MINUTES * 60 * 1000;
+
+// Размер батча пользователей для отправки reminder за 24 часа до списания.
+export const TRIAL_BILLING_REMINDER_BATCH_SIZE = readPositiveIntFromEnv(
+  process.env.TRIAL_BILLING_REMINDER_BATCH_SIZE,
+  200
+);
+
+// Максимум батчей reminder за один tick воркера.
+export const TRIAL_BILLING_REMINDER_MAX_BATCHES_PER_TICK =
+  readPositiveIntFromEnv(
+    process.env.TRIAL_BILLING_REMINDER_MAX_BATCHES_PER_TICK,
+    8
+  );
+
+// Параллелизм отправки reminder в рамках одного батча.
+export const TRIAL_BILLING_REMINDER_CONCURRENCY = readPositiveIntFromEnv(
+  process.env.TRIAL_BILLING_REMINDER_CONCURRENCY,
+  20
+);
+
+// TTL lock для reminder-claim (в минутах), чтобы избежать дублей между инстансами.
+export const TRIAL_BILLING_REMINDER_LOCK_TTL_MINUTES = readPositiveIntFromEnv(
+  process.env.TRIAL_BILLING_REMINDER_LOCK_TTL_MINUTES,
+  30
+);
+export const TRIAL_BILLING_REMINDER_LOCK_TTL_MS =
+  TRIAL_BILLING_REMINDER_LOCK_TTL_MINUTES * 60 * 1000;
 
 // TTL одноразового external-session токена для возврата из YooKassa во внешний браузер.
 // Нужен длиннее обычного browser handoff, потому что пользователь может провести

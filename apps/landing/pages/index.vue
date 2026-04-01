@@ -14,9 +14,9 @@
             @click="scrollToSection('hero')"
           >
             <img
-              src="/logo.svg"
+              :src="brandLogoSrc"
               loading="lazy"
-              alt="Mentai"
+              :alt="brandLogoAlt"
               class="w-[130px] h-10"
             />
           </button>
@@ -27,42 +27,42 @@
               class="rounded-lg px-3 py-2 hover:bg-white/10 hover:text-white transition"
               @click="scrollToSection('features')"
             >
-              Возможности
+              {{ t('LANDING.HEADER.NAV.FEATURES') }}
             </button>
             <button
               type="button"
               class="rounded-lg px-3 py-2 hover:bg-white/10 hover:text-white transition"
               @click="scrollToSection('scenarios')"
             >
-              Сценарии
+              {{ t('LANDING.HEADER.NAV.SCENARIOS') }}
             </button>
             <button
               type="button"
               class="rounded-lg px-3 py-2 hover:bg-white/10 hover:text-white transition"
               @click="scrollToSection('how-it-works')"
             >
-              Как работает
+              {{ t('LANDING.HEADER.NAV.HOW_IT_WORKS') }}
             </button>
             <button
               type="button"
               class="rounded-lg px-3 py-2 hover:bg-white/10 hover:text-white transition"
               @click="scrollToSection('landing-pricing')"
             >
-              Тарифы
+              {{ t('LANDING.HEADER.NAV.PRICING') }}
             </button>
             <button
               type="button"
               class="rounded-lg px-3 py-2 hover:bg-white/10 hover:text-white transition"
               @click="scrollToSection('privacy')"
             >
-              Приватность
+              {{ t('LANDING.HEADER.NAV.PRIVACY') }}
             </button>
             <button
               type="button"
               class="rounded-lg px-3 py-2 hover:bg-white/10 hover:text-white transition"
               @click="scrollToSection('faq')"
             >
-              Вопросы
+              {{ t('LANDING.HEADER.NAV.FAQ') }}
             </button>
           </nav>
 
@@ -75,7 +75,7 @@
           </Button>
 
           <Button class="sm:hidden" size="sm" @click="openPrimaryCTA">
-            Получить доступ
+            {{ primaryCtaTextMobile }}
           </Button>
         </div>
       </div>
@@ -87,19 +87,20 @@
           class="landing-container grid lg:grid-cols-2 gap-6 sm:gap-8 items-center"
         >
           <div class="space-y-6 order-2 lg:order-1">
-            <Badge variant="accent" class="reveal-item"
-              >Спокойствие и ясность в кармане</Badge
-            >
+            <Badge variant="accent" class="reveal-item">
+              {{ t('LANDING.HERO.BADGE') }}
+            </Badge>
 
             <h1
               class="reveal-item font-display text-2xl lg:text-4xl leading-[1.06] font-extrabold tracking-tight"
             >
-              ИИ-помощник для поддержки, практик и привычек.<br />В любое время.
+              {{ t('LANDING.HERO.TITLE_LINE_1') }}<br />{{
+                t('LANDING.HERO.TITLE_LINE_2')
+              }}
             </h1>
 
             <p class="reveal-item text-base sm:text-lg text-white/80 max-w-2xl">
-              Помогает выговориться, выдохнуть и настроить здоровый ритм жизни.
-              Без осуждения и записи на прием.
+              {{ t('LANDING.HERO.DESCRIPTION') }}
             </p>
 
             <div class="reveal-item flex flex-wrap items-center gap-3">
@@ -111,7 +112,7 @@
                 class="h-11 px-2 text-sm font-semibold text-white/80 underline-offset-4 transition hover:text-white hover:underline"
                 @click="scrollToSection('features')"
               >
-                Посмотреть возможности
+                {{ t('LANDING.HERO.SECONDARY_CTA') }}
               </button>
             </div>
           </div>
@@ -136,7 +137,7 @@
             >
               <img
                 src="/landing/features/hero_bg.jpg"
-                alt="Пользователи Mentala в повседневных сценариях"
+                :alt="t('LANDING.HERO.IMAGE_ALT')"
                 class="hero-media-image"
                 loading="lazy"
                 fetchpriority="high"
@@ -160,10 +161,10 @@
         <div class="landing-container">
           <div class="max-w-2xl space-y-4 mb-5">
             <h2 class="font-display text-3xl sm:text-4xl font-bold reveal-item">
-              Возможности Mentala
+              {{ t('LANDING.FEATURES.TITLE') }}
             </h2>
             <p class="text-white/75 reveal-item">
-              От быстрой помощи при тревоге до устойчивых изменений в привычках.
+              {{ t('LANDING.FEATURES.DESCRIPTION') }}
             </p>
           </div>
         </div>
@@ -206,10 +207,7 @@
             <div
               class="reveal-item glass-panel rounded-xl px-5 py-4 text-xs sm:text-sm text-white/80 border-white/25 max-w-3xl mx-auto !mt-[10px] text-center"
             >
-              Mentala создана для психологической поддержки и самопомощи. Это не
-              медицинская услуга и не замена врачу или психотерапевту. Если вы
-              чувствуете, что вам нужна профессиональная помощь, пожалуйста, не
-              откладывайте визит к квалифицированному специалисту.
+              {{ t('LANDING.DISCLAIMER') }}
             </div>
           </div>
 
@@ -271,10 +269,10 @@
         <div class="landing-container">
           <div class="mb-5 space-y-3">
             <h2 class="font-display text-3xl sm:text-4xl font-bold reveal-item">
-              Сценарии
+              {{ t('LANDING.SCENARIOS.TITLE') }}
             </h2>
             <p class="text-white/75 reveal-item">
-              Как Mentala помогает в повседневной жизни.
+              {{ t('LANDING.SCENARIOS.DESCRIPTION') }}
             </p>
           </div>
 
@@ -302,7 +300,7 @@
           >
             <SwiperSlide
               v-for="item in scenarios"
-              :key="item.title"
+              :key="item.id"
               class="h-auto"
             >
               <article
@@ -321,10 +319,10 @@
         <div class="landing-container">
           <div class="mb-5 space-y-3">
             <h2 class="font-display text-3xl sm:text-4xl font-bold reveal-item">
-              Как это работает
+              {{ t('LANDING.HOW_IT_WORKS.TITLE') }}
             </h2>
             <p class="text-white/75 reveal-item">
-              Три шага, чтобы превратить короткую поддержку в устойчивый ритм.
+              {{ t('LANDING.HOW_IT_WORKS.DESCRIPTION') }}
             </p>
           </div>
 
@@ -350,14 +348,13 @@
         <div class="landing-container">
           <div class="mb-5 space-y-3">
             <Badge variant="accent" class="reveal-item">
-              Дополняет, не заменяет
+              {{ t('LANDING.WHY.BADGE') }}
             </Badge>
             <h2 class="font-display text-3xl sm:text-4xl font-bold reveal-item">
-              Чем Mentala удобна в реальной жизни
+              {{ t('LANDING.WHY.TITLE') }}
             </h2>
             <p class="text-white/75 reveal-item">
-              Mentala не заменяет специалиста. Она делает поддержку доступной в
-              моменты, когда она нужна.
+              {{ t('LANDING.WHY.DESCRIPTION') }}
             </p>
           </div>
 
@@ -368,7 +365,7 @@
               class="reveal-item glass-panel min-w-0 rounded-2xl p-5 sm:p-6 flex flex-col"
             >
               <h3 class="font-display text-xl sm:text-2xl font-bold mb-4">
-                Mentala
+                {{ t('LANDING.WHY.MENTALA_TITLE') }}
               </h3>
               <ul
                 class="space-y-3 text-sm text-white/80 leading-relaxed flex-1"
@@ -390,7 +387,9 @@
                         placement: 'top',
                       }"
                       class="ml-1 inline-flex h-4 w-4 shrink-0 align-middle items-center justify-center rounded-full border border-white/25 bg-white/5 text-[10px] font-semibold text-white/70 hover:bg-white/10 hover:text-white !cursor-default"
-                      :aria-label="`Подробнее: ${point.text}`"
+                      :aria-label="
+                        t('LANDING.WHY.TOOLTIP_ARIA', { point: point.text })
+                      "
                     >
                       ?
                     </button>
@@ -403,7 +402,7 @@
               class="reveal-item glass-panel min-w-0 rounded-2xl p-5 sm:p-6 flex flex-col border-white/15"
             >
               <h3 class="font-display text-xl sm:text-2xl font-bold mb-4">
-                Консультация со специалистом
+                {{ t('LANDING.WHY.CONSULTATION_TITLE') }}
               </h3>
               <ul
                 class="space-y-3 text-sm text-white/80 leading-relaxed flex-1"
@@ -423,8 +422,7 @@
           <p
             class="reveal-item mt-5 text-center text-xs sm:text-sm text-white/65 leading-relaxed max-w-2xl mx-auto"
           >
-            При тяжёлом состоянии и рисках для здоровья обращайтесь к врачу или
-            психотерапевту.
+            {{ t('LANDING.WHY.DISCLAIMER') }}
           </p>
         </div>
       </section>
@@ -433,11 +431,10 @@
         <div class="landing-container">
           <div class="mb-5 space-y-3">
             <h2 class="font-display text-3xl sm:text-4xl font-bold reveal-item">
-              Тарифы
+              {{ t('LANDING.PRICING.TITLE') }}
             </h2>
             <p class="text-white/75 reveal-item">
-              Выберите формат подписки: месяц или год. При оплате за год скидка
-              20%.
+              {{ t('LANDING.PRICING.DESCRIPTION') }}
             </p>
           </div>
 
@@ -454,7 +451,7 @@
               "
               @click="billingPeriod = 'month'"
             >
-              Месяц
+              {{ t('LANDING.PRICING.TAB_MONTH') }}
             </button>
             <button
               type="button"
@@ -466,7 +463,7 @@
               "
               @click="billingPeriod = 'year'"
             >
-              Год (-20%)
+              {{ t('LANDING.PRICING.TAB_YEAR') }}
             </button>
           </div>
 
@@ -490,8 +487,8 @@
                   <p class="font-display text-4xl font-extrabold">
                     {{
                       billingPeriod === 'month'
-                        ? plan.monthlyPrice.toLocaleString('ru-RU')
-                        : plan.yearlyPrice.toLocaleString('ru-RU')
+                        ? plan.monthlyPrice.toLocaleString(numberFormatLocale)
+                        : plan.yearlyPrice.toLocaleString(numberFormatLocale)
                     }}
                     ₽
                   </p>
@@ -505,16 +502,19 @@
                     variant="accent"
                     class="translate-y-[-3px]"
                   >
-                    Экономия:
-                    {{ getYearlySavings(plan).toLocaleString('ru-RU') }} ₽
+                    {{ t('LANDING.PRICING.SAVINGS_LABEL') }}
+                    {{
+                      getYearlySavings(plan).toLocaleString(numberFormatLocale)
+                    }}
+                    ₽
                   </Badge>
                 </div>
 
                 <p class="text-sm text-white/70">
                   {{
                     billingPeriod === 'year' && plan.monthlyPrice > 0
-                      ? 'в год'
-                      : 'в месяц'
+                      ? t('LANDING.PRICING.PERIOD_YEAR')
+                      : t('LANDING.PRICING.PERIOD_MONTH')
                   }}
                 </p>
               </div>
@@ -535,7 +535,7 @@
                 variant="secondary"
                 @click="openPrimaryCTA"
               >
-                {{ isReleased ? 'Выбрать и начать' : 'Получить ранний доступ' }}
+                {{ pricingCtaText }}
               </Button>
             </article>
           </div>
@@ -543,22 +543,19 @@
       </section>
 
       <section
-        class="reveal-item glass-panel rounded-xl px-5 py-4 text-xs sm:text-sm text-white/80 border-white/25 max-w-3xl mx-auto mt-20 sm:mt-28 text-center"
+        class="landing-container reveal-item glass-panel rounded-xl px-5 py-4 text-xs sm:text-sm text-white/80 border-white/25 max-w-3xl mx-auto !mt-20 sm:mt-28 text-center"
       >
-        Mentala создана для психологической поддержки и самопомощи. Это не
-        медицинская услуга и не замена врачу или психотерапевту. Если вы
-        чувствуете, что вам нужна профессиональная помощь, пожалуйста, не
-        откладывайте визит к квалифицированному специалисту.
+        {{ t('LANDING.DISCLAIMER') }}
       </section>
 
       <section id="privacy" class="scroll-mt-header mt-20 lg:mt-28">
         <div class="landing-container">
           <div class="max-w-2xl space-y-3 sm:space-y-4">
-            <Badge variant="accent" class="reveal-item"
-              >Гарантия приватности</Badge
-            >
+            <Badge variant="accent" class="reveal-item">
+              {{ t('LANDING.PRIVACY.BADGE') }}
+            </Badge>
             <h2 class="font-display text-3xl sm:text-4xl font-bold reveal-item">
-              Приватность и безопасность
+              {{ t('LANDING.PRIVACY.TITLE') }}
             </h2>
           </div>
 
@@ -595,13 +592,13 @@
           <h2
             class="font-display text-3xl sm:text-4xl font-bold mb-7 reveal-item"
           >
-            Часто задаваемые вопросы
+            {{ t('LANDING.FAQ.TITLE') }}
           </h2>
 
           <div class="space-y-3">
             <article
               v-for="(item, index) in faq"
-              :key="item.question"
+              :key="item.id"
               class="reveal-item glass-panel rounded-2xl p-5"
             >
               <button
@@ -642,41 +639,59 @@
               class="flex px-3 py-2 gap-3 items-center justify-center text-sm text-white/75"
             >
               <p class="flex text-xs text-white/55 leading-0">
-                © {{ new Date().getFullYear() }} Mentala
+                © {{ t('LANDING.FOOTER.COPYRIGHT', { year: currentYear }) }}
               </p>
               <a
-                href="mailto:hello@mentala.app"
+                href="mailto:support@mentala.app"
                 class="hover:text-white/95 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent rounded"
-                aria-label="Написать на hello@mentala.app"
+                :aria-label="
+                  t('LANDING.FOOTER.SUPPORT_ARIA', { email: supportEmail })
+                "
               >
-                hello@mentala.app
+                support@mentala.app
               </a>
             </div>
 
             <div
               class="flex flex-wrap items-center justify-center gap-1 lg:gap-3 text-sm"
             >
-              <a
-                class="rounded-lg px-3 py-2 hover:bg-white/10"
-                href="https://my.mentala.app/legal/privacy-policy.html"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Политика конфиденциальности
+              <a class="rounded-lg px-3 py-2 hover:bg-white/10" href="/support">
+                {{ t('LANDING.FOOTER.SUPPORT_LINK') }}
               </a>
               <a
                 class="rounded-lg px-3 py-2 hover:bg-white/10"
-                href="https://my.mentala.app/legal/terms-of-service.html"
+                :href="privacyPolicyUrl"
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                Условия использования
+                {{ t('LANDING.FOOTER.PRIVACY_LINK') }}
+              </a>
+              <a
+                class="rounded-lg px-3 py-2 hover:bg-white/10"
+                :href="termsOfServiceUrl"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {{ t('LANDING.FOOTER.TERMS_LINK') }}
               </a>
             </div>
           </div>
         </div>
       </footer>
     </main>
+
+    <div
+      class="fixed right-3 z-[85] w-[74px] sm:right-4"
+      style="bottom: max(0.75rem, env(safe-area-inset-bottom))"
+    >
+      <LanguageSelect
+        :label="t('SUPPORT.LANGUAGE.LABEL')"
+        :ru-label="t('SUPPORT.LANGUAGE.RU')"
+        :en-label="t('SUPPORT.LANGUAGE.EN')"
+        :model-value="selectedLocale"
+        @update:model-value="onLocaleChange"
+      />
+    </div>
 
     <Transition
       enter-active-class="transition duration-250 ease-out"
@@ -693,7 +708,7 @@
         <button
           class="absolute inset-0 bg-black/70 backdrop-blur-sm"
           type="button"
-          aria-label="Закрыть"
+          :aria-label="t('LANDING.WAITLIST.CLOSE_ARIA')"
           @click="closeWaitlist"
         />
 
@@ -703,40 +718,42 @@
           <button
             class="absolute right-4 top-4 rounded-lg px-2 py-1 text-white/70 hover:bg-white/10 hover:text-white"
             type="button"
-            aria-label="Закрыть"
+            :aria-label="t('LANDING.WAITLIST.CLOSE_ARIA')"
             @click="closeWaitlist"
           >
             ✕
           </button>
 
           <h3 class="font-display text-2xl font-bold mb-2">
-            Ранний доступ к Mentala
+            {{ t('LANDING.WAITLIST.TITLE') }}
           </h3>
           <p class="text-sm text-white/72 mb-6">
-            Оставьте контакт — сообщим о запуске и пришлём доступ.
+            {{ t('LANDING.WAITLIST.SUBTITLE') }}
           </p>
 
           <form class="space-y-4" @submit.prevent="submitLead">
             <div class="space-y-1.5">
-              <label class="text-xs text-white/70" for="lead-name">Имя</label>
+              <label class="text-xs text-white/70" for="lead-name">
+                {{ t('LANDING.WAITLIST.NAME_LABEL') }}
+              </label>
               <Input
                 id="lead-name"
                 v-model="leadForm.name"
-                placeholder="Ваше имя"
+                :placeholder="t('LANDING.WAITLIST.NAME_PLACEHOLDER')"
                 autocomplete="name"
                 required
               />
             </div>
 
             <div class="space-y-1.5">
-              <label class="text-xs text-white/70" for="lead-email"
-                >Email</label
-              >
+              <label class="text-xs text-white/70" for="lead-email">
+                {{ t('LANDING.WAITLIST.EMAIL_LABEL') }}
+              </label>
               <Input
                 id="lead-email"
                 v-model="leadForm.email"
                 type="email"
-                placeholder="example@mail.ru"
+                :placeholder="t('LANDING.WAITLIST.EMAIL_PLACEHOLDER')"
                 autocomplete="email"
                 required
               />
@@ -744,7 +761,7 @@
 
             <div class="space-y-1.5">
               <label class="text-xs text-white/70" for="lead-goal">
-                Цели (можно несколько)
+                {{ t('LANDING.WAITLIST.GOALS_LABEL') }}
               </label>
 
               <div ref="goalDropdownRef" class="relative">
@@ -786,7 +803,7 @@
                   v-if="goalDropdownOpen"
                   class="absolute z-50 mt-2 w-full rounded-xl border border-white/15 bg-[#0b1222] p-2 shadow-[0_18px_60px_rgba(0,0,0,0.55)]"
                   role="listbox"
-                  aria-label="Выбор целей"
+                  :aria-label="t('LANDING.WAITLIST.GOALS_LIST_ARIA')"
                   @keydown.esc.stop.prevent="goalDropdownOpen = false"
                 >
                   <div class="max-h-56 overflow-auto">
@@ -816,15 +833,22 @@
               aria-hidden="true"
             />
 
-            <Button type="submit" class="w-full" :disabled="submittingLead">
-              {{ submittingLead ? 'Отправляем...' : 'Получить ранний доступ' }}
+            <Button
+              type="submit"
+              class="relative w-full"
+              :disabled="submittingLead"
+            >
+              <ButtonLoader v-if="submittingLead" />
+              <span :class="submittingLead ? 'invisible' : ''">
+                {{ t('LANDING.WAITLIST.SUBMIT') }}
+              </span>
             </Button>
 
             <p
               v-if="submitStatus === 'duplicate'"
               class="text-sm text-white/75"
             >
-              Этот email уже в списке. Мы напишем при запуске.
+              {{ t('LANDING.WAITLIST.DUPLICATE') }}
             </p>
             <p
               v-else-if="submitStatus === 'error'"
@@ -853,7 +877,7 @@
         <button
           class="absolute inset-0 bg-black/70 backdrop-blur-sm"
           type="button"
-          aria-label="Закрыть"
+          :aria-label="t('LANDING.SUCCESS_MODAL.CLOSE_ARIA')"
           @click="successModalOpen = false"
         />
         <div
@@ -866,10 +890,10 @@
             id="success-modal-title"
             class="text-center text-base text-white mb-5"
           >
-            Спасибо, вы в списке раннего доступа.
+            {{ t('LANDING.SUCCESS_MODAL.TITLE') }}
           </p>
           <Button class="w-full" @click="successModalOpen = false">
-            Отлично
+            {{ t('LANDING.SUCCESS_MODAL.ACTION') }}
           </Button>
         </div>
       </div>
@@ -884,11 +908,16 @@ import { onClickOutside, usePreferredReducedMotion } from '@vueuse/core';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { useRuntimeConfig } from 'nuxt/app';
+import { useI18n } from 'vue-i18n';
 import { Badge } from '../components/ui/shadcn/badge';
 import { Button } from '../components/ui/shadcn/button';
+import ButtonLoader from '../components/ui/ButtonLoader.vue';
+import LanguageSelect from '../components/ui/LanguageSelect.vue';
 import { Input } from '../components/ui/shadcn/input';
 import { useLandingConfig } from '../composables/useLandingConfig';
 import { useLandingAnalytics } from '../composables/useLandingAnalytics';
+import { useLandingLocale } from '../composables/useLandingLocale';
+import type { SupportedLocale } from '../composables/useLandingLocale';
 
 type FeatureStep = {
   key: string;
@@ -899,6 +928,7 @@ type FeatureStep = {
 };
 
 type ScenarioCard = {
+  id: string;
   title: string;
   text: string;
   emoji: string;
@@ -914,6 +944,7 @@ type PricingPlan = {
 };
 
 type FaqItem = {
+  id: string;
   question: string;
   answer: string;
 };
@@ -924,14 +955,36 @@ type PrivacyCard = {
   title: string;
   text: string;
 };
+type ComparisonPoint = {
+  text: string;
+  tooltip?: string;
+};
 
+const { t } = useI18n();
 const runtimeConfig = useRuntimeConfig();
 const route = useRoute();
+const { locale, selectedLocale, switchLocale, brandLogoSrc, brandLogoAlt } =
+  useLandingLocale();
 const reducedMotion = usePreferredReducedMotion();
 
 const { data: landingConfig } = await useLandingConfig();
 const { reachGoal, trackScrollDepth } = useLandingAnalytics();
 
+const supportEmail = 'support@mentala.app';
+const webAppUrl = computed(() =>
+  String(runtimeConfig.public.appAuthUrl || 'https://my.mentala.app/auth')
+    .replace(/\/auth\/?$/, '')
+    .replace(/\/$/, '')
+);
+const legalLocale = computed(() =>
+  String(locale.value).toLowerCase().startsWith('en') ? 'en' : 'ru'
+);
+const privacyPolicyUrl = computed(
+  () => `${webAppUrl.value}/legal/privacy-policy-${legalLocale.value}.html`
+);
+const termsOfServiceUrl = computed(
+  () => `${webAppUrl.value}/legal/terms-of-service-${legalLocale.value}.html`
+);
 const billingPeriod = ref<'month' | 'year'>('month');
 const waitlistOpen = ref(false);
 /** Маленькая модалка «Успех» после отправки лида */
@@ -961,245 +1014,293 @@ const leadForm = reactive<{
 
 const goalDropdownOpen = ref(false);
 const goalDropdownRef = ref<HTMLElement | null>(null);
+const currentYear = new Date().getFullYear();
+const numberFormatLocale = computed(() =>
+  locale.value === 'ru' ? 'ru-RU' : 'en-US'
+);
 
 const selectedGoalsText = computed(() => {
   if (!leadForm.goalKeys.length) {
-    return 'Выберите цели (необязательно)';
+    return String(t('LANDING.WAITLIST.GOALS_PLACEHOLDER'));
   }
 
-  const selected = goalOptions
+  const selected = goalOptions.value
     .filter((option) => leadForm.goalKeys.includes(option.value))
     .map((option) => option.label);
 
   return selected.length
     ? selected.join(', ')
-    : 'Выберите цели (необязательно)';
+    : String(t('LANDING.WAITLIST.GOALS_PLACEHOLDER'));
 });
 
 onClickOutside(goalDropdownRef, () => {
   goalDropdownOpen.value = false;
 });
 
-const featureSteps: FeatureStep[] = [
+const featureSteps = computed<FeatureStep[]>(() => [
   {
     key: 'chat',
-    title: 'ИИ-ассистент',
-    description:
-      'Разбирает состояние в диалоге и предлагает короткие практики, которые можно сделать сразу.',
-    chips: ['Диалог', 'Разбор мыслей', 'Всегда рядом'],
+    title: String(t('LANDING.FEATURES.STEPS.CHAT.TITLE')),
+    description: String(t('LANDING.FEATURES.STEPS.CHAT.DESCRIPTION')),
+    chips: [
+      String(t('LANDING.FEATURES.STEPS.CHAT.CHIPS.CHIP_1')),
+      String(t('LANDING.FEATURES.STEPS.CHAT.CHIPS.CHIP_2')),
+      String(t('LANDING.FEATURES.STEPS.CHAT.CHIPS.CHIP_3')),
+    ],
     image: '/landing/features/chat.webp',
   },
   {
     key: 'therapy',
-    title: 'Темы терапии',
-    description:
-      'Тревога, стресс, отношения, самооценка и другие темы, выбираете то, что актуально, и начинаете разговор без лишних шагов.',
-    chips: ['Тревога', 'Стресс', 'Отношения', 'и другие'],
+    title: String(t('LANDING.FEATURES.STEPS.THERAPY.TITLE')),
+    description: String(t('LANDING.FEATURES.STEPS.THERAPY.DESCRIPTION')),
+    chips: [
+      String(t('LANDING.FEATURES.STEPS.THERAPY.CHIPS.CHIP_1')),
+      String(t('LANDING.FEATURES.STEPS.THERAPY.CHIPS.CHIP_2')),
+      String(t('LANDING.FEATURES.STEPS.THERAPY.CHIPS.CHIP_3')),
+      String(t('LANDING.FEATURES.STEPS.THERAPY.CHIPS.CHIP_4')),
+    ],
     image: '/landing/features/therapy.webp',
   },
   {
     key: 'habits',
-    title: 'Привычки',
-    description:
-      'Выбирайте готовые привычки или создавайте свои. Настраивайте напоминания под себя и закрепляйте полезные действия шаг за шагом.',
-    chips: ['Напоминания', 'Свой ритм', 'Любые привычки'],
+    title: String(t('LANDING.FEATURES.STEPS.HABITS.TITLE')),
+    description: String(t('LANDING.FEATURES.STEPS.HABITS.DESCRIPTION')),
+    chips: [
+      String(t('LANDING.FEATURES.STEPS.HABITS.CHIPS.CHIP_1')),
+      String(t('LANDING.FEATURES.STEPS.HABITS.CHIPS.CHIP_2')),
+      String(t('LANDING.FEATURES.STEPS.HABITS.CHIPS.CHIP_3')),
+    ],
     image: '/landing/features/habits.webp',
   },
   {
     key: 'meditations',
-    title: 'Медитации',
-    description:
-      'Подборки медитаций и звуков для сна, восстановления и концентрации в течение дня.',
-    chips: ['Сон', 'Фокус', 'Восстановление'],
+    title: String(t('LANDING.FEATURES.STEPS.MEDITATIONS.TITLE')),
+    description: String(t('LANDING.FEATURES.STEPS.MEDITATIONS.DESCRIPTION')),
+    chips: [
+      String(t('LANDING.FEATURES.STEPS.MEDITATIONS.CHIPS.CHIP_1')),
+      String(t('LANDING.FEATURES.STEPS.MEDITATIONS.CHIPS.CHIP_2')),
+      String(t('LANDING.FEATURES.STEPS.MEDITATIONS.CHIPS.CHIP_3')),
+    ],
     image: '/landing/features/meditations.webp',
   },
   {
     key: 'breathing',
-    title: 'Дыхательные практики',
-    description:
-      'Короткие дыхательные протоколы с понятным ритмом помогают быстро снизить напряжение и вернуть устойчивость.',
-    chips: ['4-4-4-4', '4-7-8', '4-6', 'и другие'],
+    title: String(t('LANDING.FEATURES.STEPS.BREATHING.TITLE')),
+    description: String(t('LANDING.FEATURES.STEPS.BREATHING.DESCRIPTION')),
+    chips: [
+      String(t('LANDING.FEATURES.STEPS.BREATHING.CHIPS.CHIP_1')),
+      String(t('LANDING.FEATURES.STEPS.BREATHING.CHIPS.CHIP_2')),
+      String(t('LANDING.FEATURES.STEPS.BREATHING.CHIPS.CHIP_3')),
+      String(t('LANDING.FEATURES.STEPS.BREATHING.CHIPS.CHIP_4')),
+    ],
     image: '/landing/features/breathing.webp',
   },
-];
+]);
 
-const scenarios: ScenarioCard[] = [
+const scenarios = computed<ScenarioCard[]>(() => [
   {
-    title: 'Мне тревожно прямо сейчас',
-    text: 'Открываете чат или SOS-практику, чтобы быстро вернуть ощущение контроля и выдохнуть.',
-    emoji: '😮‍💨',
+    id: 'anxiety-now',
+    title: String(t('LANDING.SCENARIOS.ITEMS.ANXIETY_NOW.TITLE')),
+    text: String(t('LANDING.SCENARIOS.ITEMS.ANXIETY_NOW.TEXT')),
+    emoji: String(t('LANDING.SCENARIOS.ITEMS.ANXIETY_NOW.EMOJI')),
   },
   {
-    title: 'Хочу быстрее уснуть',
-    text: 'Включаете медитации и дыхательные техники, чтобы расслабиться и уснуть быстрее.',
-    emoji: '🌙',
+    id: 'sleep-faster',
+    title: String(t('LANDING.SCENARIOS.ITEMS.SLEEP_FASTER.TITLE')),
+    text: String(t('LANDING.SCENARIOS.ITEMS.SLEEP_FASTER.TEXT')),
+    emoji: String(t('LANDING.SCENARIOS.ITEMS.SLEEP_FASTER.EMOJI')),
   },
   {
-    title: 'Хочу пить больше воды',
-    text: 'Выбирайте готовую тему, настраивайте напоминания и двигайтесь к цели в своём темпе.',
-    emoji: '💧',
+    id: 'drink-more-water',
+    title: String(t('LANDING.SCENARIOS.ITEMS.DRINK_MORE_WATER.TITLE')),
+    text: String(t('LANDING.SCENARIOS.ITEMS.DRINK_MORE_WATER.TEXT')),
+    emoji: String(t('LANDING.SCENARIOS.ITEMS.DRINK_MORE_WATER.EMOJI')),
   },
   {
-    title: 'Чувствую выгорание',
-    text: 'Получайте ежедневную поддержку и восстанавливающие практики.',
-    emoji: '🔥',
+    id: 'burnout',
+    title: String(t('LANDING.SCENARIOS.ITEMS.BURNOUT.TITLE')),
+    text: String(t('LANDING.SCENARIOS.ITEMS.BURNOUT.TEXT')),
+    emoji: String(t('LANDING.SCENARIOS.ITEMS.BURNOUT.EMOJI')),
   },
   {
-    title: 'Нужна дыхательная пауза',
-    text: 'Запускайте дыхательный протокол на 1–3 минуты, чтобы сбросить напряжение и перезагрузиться.',
-    emoji: '🫁',
+    id: 'breathing-pause',
+    title: String(t('LANDING.SCENARIOS.ITEMS.BREATHING_PAUSE.TITLE')),
+    text: String(t('LANDING.SCENARIOS.ITEMS.BREATHING_PAUSE.TEXT')),
+    emoji: String(t('LANDING.SCENARIOS.ITEMS.BREATHING_PAUSE.EMOJI')),
   },
-];
+]);
 
-const howItWorks = [
+const howItWorks = computed(() => [
   {
-    step: '01',
-    title: 'Выбираете тему или привычку',
-    text: 'Начинаете с того, что актуально прямо сейчас: тревога, сон, привычка, стресс.',
+    step: String(t('LANDING.HOW_IT_WORKS.STEPS.STEP_1.NUMBER')),
+    title: String(t('LANDING.HOW_IT_WORKS.STEPS.STEP_1.TITLE')),
+    text: String(t('LANDING.HOW_IT_WORKS.STEPS.STEP_1.TEXT')),
   },
   {
-    step: '02',
-    title: 'Получаете поддержку и практику',
-    text: 'ИИ-чат, практики, медитации и дыхание работают вместе, чтобы быстро вернуть Вам равновесие.',
+    step: String(t('LANDING.HOW_IT_WORKS.STEPS.STEP_2.NUMBER')),
+    title: String(t('LANDING.HOW_IT_WORKS.STEPS.STEP_2.TITLE')),
+    text: String(t('LANDING.HOW_IT_WORKS.STEPS.STEP_2.TEXT')),
   },
   {
-    step: '03',
-    title: 'Делаете это привычкой',
-    text: 'Повторяете практики и настраиваете напоминания для поддержки в течение всего дня.',
+    step: String(t('LANDING.HOW_IT_WORKS.STEPS.STEP_3.NUMBER')),
+    title: String(t('LANDING.HOW_IT_WORKS.STEPS.STEP_3.TITLE')),
+    text: String(t('LANDING.HOW_IT_WORKS.STEPS.STEP_3.TEXT')),
   },
-];
+]);
 
 // Сравнение «по-другому»: Mentala и очная консультация (без противопоставления «лучше/хуже»).
 // tooltip опционален: иконка «?» и v-tooltip (floating-vue) только у пунктов с tooltip.
-type ComparisonPoint = { text: string; tooltip?: string };
-
-const comparisonMentalaPoints: ComparisonPoint[] = [
+const comparisonMentalaPoints = computed<ComparisonPoint[]>(() => [
   {
-    text: 'Доступность в моменте',
-    tooltip:
-      'В отличие от сессий с психологом, к которым нужно готовиться и записываться заранее, ассистент всегда в вашем кармане. Помощь приходит именно тогда, когда она вам нужна: ночью, в дороге или перед важной встречей.',
+    text: String(t('LANDING.WHY.MENTALA_POINTS.POINT_1.TEXT')),
+    tooltip: String(t('LANDING.WHY.MENTALA_POINTS.POINT_1.TOOLTIP')),
   },
   {
-    text: 'Экономия времени и ресурсов',
-    tooltip:
-      'Курс годовой поддержки в Mentala стоит дешевле, чем одна консультация у квалифицированного специалиста. Вы получаете ежедневную опору без необходимости тратить время на дорогу и поиск «своего» терапевта.',
+    text: String(t('LANDING.WHY.MENTALA_POINTS.POINT_2.TEXT')),
+    tooltip: String(t('LANDING.WHY.MENTALA_POINTS.POINT_2.TOOLTIP')),
   },
   {
-    text: 'Анонимность и отсутствие суждений',
-    tooltip:
-      'Многим сложно начать терапию из-за страха осуждения или неловкости. В Mentala вы можете быть максимально честны: ИИ не оценивает, не критикует и гарантирует конфиденциальность ваших мыслей.',
+    text: String(t('LANDING.WHY.MENTALA_POINTS.POINT_3.TEXT')),
+    tooltip: String(t('LANDING.WHY.MENTALA_POINTS.POINT_3.TOOLTIP')),
   },
   {
-    text: 'Комплексный подход в одном месте',
-    tooltip:
-      'Вам не нужно искать разные приложения для ИИ-чата, медитаций, дыхательных практик, привычек. Всё собрано в единую систему, которая адаптируется под ваши потребности.',
+    text: String(t('LANDING.WHY.MENTALA_POINTS.POINT_4.TEXT')),
+    tooltip: String(t('LANDING.WHY.MENTALA_POINTS.POINT_4.TOOLTIP')),
   },
-];
+]);
 
 // Без тултипов — иконка «?» не показывается.
-const comparisonConsultationPoints: ComparisonPoint[] = [
-  { text: 'Глубокая работа с причинами и динамикой.' },
-  { text: 'Диагностика и лечение в медицинских случаях.' },
-  { text: 'Подходит при тяжёлых состояниях и кризисах.' },
-  { text: 'Индивидуальный план от специалиста.' },
-];
+const comparisonConsultationPoints = computed<ComparisonPoint[]>(() => [
+  { text: String(t('LANDING.WHY.CONSULTATION_POINTS.POINT_1')) },
+  { text: String(t('LANDING.WHY.CONSULTATION_POINTS.POINT_2')) },
+  { text: String(t('LANDING.WHY.CONSULTATION_POINTS.POINT_3')) },
+  { text: String(t('LANDING.WHY.CONSULTATION_POINTS.POINT_4')) },
+]);
 
 // Контент секции приватности в коротком формате, чтобы блок оставался ёмким и читаемым.
-const privacyCards: PrivacyCard[] = [
+const privacyCards = computed<PrivacyCard[]>(() => [
   {
-    id: 'private-dialogs',
-    icon: '🔐',
-    title: 'Личное остаётся личным',
-    text: 'Ваш диалог с ИИ-ассистентом конфиденциален: данные не привязываются к публичному профилю и не используются для рекламы.',
+    id: String(t('LANDING.PRIVACY.CARDS.PRIVATE_DIALOGS.ID')),
+    icon: String(t('LANDING.PRIVACY.CARDS.PRIVATE_DIALOGS.ICON')),
+    title: String(t('LANDING.PRIVACY.CARDS.PRIVATE_DIALOGS.TITLE')),
+    text: String(t('LANDING.PRIVACY.CARDS.PRIVATE_DIALOGS.TEXT')),
   },
   {
-    id: 'data-protection',
-    icon: '🛡️',
-    title: 'Данные под защитой',
-    text: 'Передаем данные по защищенному соединению. Доступ к информации строго ограничен.',
+    id: String(t('LANDING.PRIVACY.CARDS.DATA_PROTECTION.ID')),
+    icon: String(t('LANDING.PRIVACY.CARDS.DATA_PROTECTION.ICON')),
+    title: String(t('LANDING.PRIVACY.CARDS.DATA_PROTECTION.TITLE')),
+    text: String(t('LANDING.PRIVACY.CARDS.DATA_PROTECTION.TEXT')),
   },
-];
+]);
 
-const pricingPlans: PricingPlan[] = [
+const pricingPlans = computed<PricingPlan[]>(() => [
   {
     id: 'basic',
-    title: 'Basic',
-    subtitle: 'Старт без оплаты',
+    title: String(t('LANDING.PRICING.PLANS.BASIC.TITLE')),
+    subtitle: String(t('LANDING.PRICING.PLANS.BASIC.SUBTITLE')),
     monthlyPrice: 0,
     yearlyPrice: 0,
     features: [
-      'SOS-техники для быстрой стабилизации',
-      'Базовые дыхательные практики',
-      'Стандартные напоминания',
-      'Пробный период: 7 дней Premium для новых пользователей',
+      String(t('LANDING.PRICING.PLANS.BASIC.FEATURES.FEATURE_1')),
+      String(t('LANDING.PRICING.PLANS.BASIC.FEATURES.FEATURE_2')),
+      String(t('LANDING.PRICING.PLANS.BASIC.FEATURES.FEATURE_3')),
+      String(t('LANDING.PRICING.PLANS.BASIC.FEATURES.FEATURE_4')),
     ],
   },
   {
     id: 'pro',
-    title: 'PRO',
-    subtitle: 'Для регулярной поддержки',
-    monthlyPrice: 349,
-    yearlyPrice: Math.round(349 * 12 * 0.8),
+    title: String(t('LANDING.PRICING.PLANS.PRO.TITLE')),
+    subtitle: String(t('LANDING.PRICING.PLANS.PRO.SUBTITLE')),
+    monthlyPrice: 399,
+    yearlyPrice: Math.round(399 * 12 * 0.8),
     features: [
-      'Все из Basic',
-      'ИИ-сессии для регулярной поддержки',
-      'До 100 минут ИИ-сессий в неделю',
-      'Полная библиотека медитаций',
-      'Доступ ко всем дыхательным практикам',
-      'ИИ-напоминания с изображениями',
+      String(t('LANDING.PRICING.PLANS.PRO.FEATURES.FEATURE_1')),
+      String(t('LANDING.PRICING.PLANS.PRO.FEATURES.FEATURE_2')),
+      String(t('LANDING.PRICING.PLANS.PRO.FEATURES.FEATURE_3')),
+      String(t('LANDING.PRICING.PLANS.PRO.FEATURES.FEATURE_4')),
+      String(t('LANDING.PRICING.PLANS.PRO.FEATURES.FEATURE_5')),
+      String(t('LANDING.PRICING.PLANS.PRO.FEATURES.FEATURE_6')),
     ],
   },
   {
     id: 'premium',
-    title: 'Premium',
-    subtitle: 'Максимальная персонализация',
-    monthlyPrice: 649,
-    yearlyPrice: Math.round(649 * 12 * 0.8),
+    title: String(t('LANDING.PRICING.PLANS.PREMIUM.TITLE')),
+    subtitle: String(t('LANDING.PRICING.PLANS.PREMIUM.SUBTITLE')),
+    monthlyPrice: 899,
+    yearlyPrice: Math.round(899 * 12 * 0.8),
     features: [
-      'Все из PRO',
-      'Безлимитные ИИ-сессии',
-      'Персональный стиль ИИ-напоминаний',
-      'Создание и управление своими практиками',
-      'Создание своих привычек и личной терапии',
-      'Приоритетная поддержка',
+      String(t('LANDING.PRICING.PLANS.PREMIUM.FEATURES.FEATURE_1')),
+      String(t('LANDING.PRICING.PLANS.PREMIUM.FEATURES.FEATURE_2')),
+      String(t('LANDING.PRICING.PLANS.PREMIUM.FEATURES.FEATURE_3')),
+      String(t('LANDING.PRICING.PLANS.PREMIUM.FEATURES.FEATURE_4')),
+      String(t('LANDING.PRICING.PLANS.PREMIUM.FEATURES.FEATURE_5')),
+      String(t('LANDING.PRICING.PLANS.PREMIUM.FEATURES.FEATURE_6')),
+      String(t('LANDING.PRICING.PLANS.PREMIUM.FEATURES.FEATURE_7')),
     ],
   },
-];
+]);
 
-const faq: FaqItem[] = [
+const faq = computed<FaqItem[]>(() => [
   {
-    question: 'Может ли Mentala заменить психолога или психотерапевта?',
-    answer:
-      'Нет. Mentala, это приложение для самопомощи и психологической поддержки, но оно не заменяет врача или психотерапевта. Mentala не ставит диагнозы и не назначает лечение. Если состояние ухудшается или нужна помощь специалиста, обратитесь к квалифицированному врачу или психотерапевту.',
+    id: 'faq-1',
+    question: String(t('LANDING.FAQ.ITEMS.ITEM_1.QUESTION')),
+    answer: String(t('LANDING.FAQ.ITEMS.ITEM_1.ANSWER')),
   },
   {
-    question: 'Как работает приватность?',
-    answer:
-      'Ваша безопасность для нас в приоритете. Все данные анонимны и передаются по защищенным каналам. Мы не привязываем историю общения с ИИ к Вашей личности и не передаем ее третьим лицам.',
+    id: 'faq-2',
+    question: String(t('LANDING.FAQ.ITEMS.ITEM_2.QUESTION')),
+    answer: String(t('LANDING.FAQ.ITEMS.ITEM_2.ANSWER')),
   },
   {
-    question: 'Нужна ли подписка сразу?',
-    answer:
-      'Нет, Вы можете начать с бесплатного тарифа Basic. Для новых пользователей мы также предоставляем 7 дней пробного периода Premium-доступа, чтобы Вы могли оценить все возможности приложения перед принятием решения',
+    id: 'faq-3',
+    question: String(t('LANDING.FAQ.ITEMS.ITEM_3.QUESTION')),
+    answer: String(t('LANDING.FAQ.ITEMS.ITEM_3.ANSWER')),
   },
   {
-    question: 'Как ИИ-ассистент подбирает ответы и практики?',
-    answer:
-      'Ассистент опирается на Ваш запрос и контекст диалога. Он предлагает практики, которые можно выполнить сразу: дыхательные техники, медитации или шаги по привычкам. Вы сами выбираете, что Вам подходит, и всегда можете уточнить запрос, если нужна другая форма поддержки',
+    id: 'faq-4',
+    question: String(t('LANDING.FAQ.ITEMS.ITEM_4.QUESTION')),
+    answer: String(t('LANDING.FAQ.ITEMS.ITEM_4.ANSWER')),
   },
-];
+]);
 
-const goalOptions = [
-  { value: 'reduce_anxiety', label: 'Снизить тревожность' },
-  { value: 'sleep_better', label: 'Улучшить сон' },
-  { value: 'reduce_stress', label: 'Снизить стресс и выгорание' },
-  { value: 'quit_smoking', label: 'Бросить курить' },
-  { value: 'reduce_alcohol', label: 'Сократить алкоголь' },
-  { value: 'reduce_caffeine', label: 'Сократить кофеин' },
-  { value: 'build_habits', label: 'Развить полезные привычки' },
-  { value: 'try_ai_support', label: 'Попробовать ИИ-поддержку' },
-  { value: 'other', label: 'Другое' },
-];
+const goalOptions = computed(() => [
+  {
+    value: 'reduce_anxiety',
+    label: String(t('LANDING.WAITLIST.GOAL_OPTIONS.REDUCE_ANXIETY')),
+  },
+  {
+    value: 'sleep_better',
+    label: String(t('LANDING.WAITLIST.GOAL_OPTIONS.SLEEP_BETTER')),
+  },
+  {
+    value: 'reduce_stress',
+    label: String(t('LANDING.WAITLIST.GOAL_OPTIONS.REDUCE_STRESS')),
+  },
+  {
+    value: 'quit_smoking',
+    label: String(t('LANDING.WAITLIST.GOAL_OPTIONS.QUIT_SMOKING')),
+  },
+  {
+    value: 'reduce_alcohol',
+    label: String(t('LANDING.WAITLIST.GOAL_OPTIONS.REDUCE_ALCOHOL')),
+  },
+  {
+    value: 'reduce_caffeine',
+    label: String(t('LANDING.WAITLIST.GOAL_OPTIONS.REDUCE_CAFFEINE')),
+  },
+  {
+    value: 'build_habits',
+    label: String(t('LANDING.WAITLIST.GOAL_OPTIONS.BUILD_HABITS')),
+  },
+  {
+    value: 'try_ai_support',
+    label: String(t('LANDING.WAITLIST.GOAL_OPTIONS.TRY_AI_SUPPORT')),
+  },
+  {
+    value: 'other',
+    label: String(t('LANDING.WAITLIST.GOAL_OPTIONS.OTHER')),
+  },
+]);
 
 const swiperModules = [Autoplay, Pagination, A11y];
 
@@ -1210,11 +1311,25 @@ const ctaUrl = computed(
 const isReducedMotion = computed(() => reducedMotion.value === 'reduce');
 
 const primaryCtaText = computed(() =>
-  isReleased.value ? 'Войти и начать' : 'Получить ранний доступ'
+  isReleased.value
+    ? String(t('LANDING.HERO.PRIMARY_CTA_RELEASED'))
+    : String(t('LANDING.HERO.PRIMARY_CTA_EARLY_ACCESS'))
+);
+
+const primaryCtaTextMobile = computed(() =>
+  isReleased.value
+    ? String(t('LANDING.HERO.PRIMARY_CTA_RELEASED'))
+    : String(t('LANDING.HEADER.CTA_MOBILE'))
+);
+
+const pricingCtaText = computed(() =>
+  isReleased.value
+    ? String(t('LANDING.PRICING.CTA_RELEASED'))
+    : String(t('LANDING.PRICING.CTA_EARLY_ACCESS'))
 );
 
 const activeFeature = computed<FeatureStep>(
-  () => featureSteps[activeFeatureIndex.value] ?? featureSteps[0]!
+  () => featureSteps.value[activeFeatureIndex.value] ?? featureSteps.value[0]!
 );
 
 function getYearlySavings(plan: PricingPlan): number {
@@ -1232,6 +1347,9 @@ const siteUrl = computed(() =>
 );
 
 const canonicalUrl = computed(() => `${siteUrl.value}/`);
+const localizedHomeUrl = computed(
+  () => `${canonicalUrl.value}?lang=${locale.value}`
+);
 const ogImageUrl = computed(
   () => new URL('/landing/features/hero_bg.jpg', canonicalUrl.value).href
 );
@@ -1249,7 +1367,10 @@ function setFeatureRef(index: number, element: Element | null) {
 
 function setActiveFeature(index: number) {
   // Единая точка смены шага: текстовая карточка и скрин телефона всегда синхронны.
-  const normalizedIndex = Math.max(0, Math.min(featureSteps.length - 1, index));
+  const normalizedIndex = Math.max(
+    0,
+    Math.min(featureSteps.value.length - 1, index)
+  );
   if (activeFeatureIndex.value !== normalizedIndex) {
     activeFeatureIndex.value = normalizedIndex;
   }
@@ -1281,6 +1402,10 @@ function openPrimaryCTA() {
   }
   reachGoal('landing_cta_click');
   waitlistOpen.value = true;
+}
+
+async function onLocaleChange(nextLocale: SupportedLocale) {
+  await switchLocale(nextLocale);
 }
 
 function closeWaitlist() {
@@ -1338,7 +1463,9 @@ async function submitLead() {
       message: error?.data?.message || error?.message || 'unknown',
     });
     submitErrorText.value =
-      error?.data?.message || error?.message || 'Не удалось отправить форму.';
+      error?.data?.message ||
+      error?.message ||
+      String(t('LANDING.WAITLIST.ERROR_DEFAULT'));
   } finally {
     submittingLead.value = false;
   }
@@ -1448,44 +1575,49 @@ onBeforeUnmount(() => {
 });
 
 useSeoMeta({
-  title: 'Mentala — психологическая поддержка 24/7',
-  description:
-    'ИИ‑чат поддержки, дыхательные практики, медитации и привычки — в одном приложении. Начните бесплатно (Basic) или попробуйте Premium на 7 дней.',
+  title: () => String(t('LANDING.SEO.HOME.TITLE')),
+  description: () => String(t('LANDING.SEO.HOME.DESCRIPTION')),
   robots:
     'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1',
-  ogTitle: 'Mentala — психологическая поддержка 24/7',
-  ogDescription:
-    'ИИ‑чат, медитации, дыхание, SOS‑практики и персональные напоминания. Начните бесплатно или попробуйте Premium на 7 дней.',
+  ogTitle: () => String(t('LANDING.SEO.HOME.OG_TITLE')),
+  ogDescription: () => String(t('LANDING.SEO.HOME.OG_DESCRIPTION')),
   ogType: 'website',
-  ogUrl: canonicalUrl.value,
-  ogSiteName: 'Mentala',
-  ogLocale: 'ru_RU',
-  ogImage: ogImageUrl.value,
-  ogImageAlt: 'Mentala — психологическая поддержка 24/7',
+  ogUrl: () => localizedHomeUrl.value,
+  ogSiteName: () => String(t('LANDING.SEO.HOME.SITE_NAME')),
+  ogLocale: () => (locale.value === 'ru' ? 'ru_RU' : 'en_US'),
+  ogImage: () => ogImageUrl.value,
+  ogImageAlt: () => String(t('LANDING.SEO.HOME.OG_IMAGE_ALT')),
   twitterCard: 'summary_large_image',
-  twitterTitle: 'Mentala — психологическая поддержка 24/7',
-  twitterDescription:
-    'ИИ‑чат, медитации, дыхательные практики и привычки. Начните бесплатно или попробуйте Premium на 7 дней.',
-  twitterImage: ogImageUrl.value,
+  twitterTitle: () => String(t('LANDING.SEO.HOME.TWITTER_TITLE')),
+  twitterDescription: () => String(t('LANDING.SEO.HOME.TWITTER_DESCRIPTION')),
+  twitterImage: () => ogImageUrl.value,
 });
 
-useHead({
-  link: [{ rel: 'canonical', href: canonicalUrl.value }],
+useHead(() => ({
+  htmlAttrs: {
+    lang: locale.value,
+  },
+  link: [
+    { rel: 'canonical', href: canonicalUrl.value },
+    { rel: 'alternate', hreflang: 'ru', href: `${canonicalUrl.value}?lang=ru` },
+    { rel: 'alternate', hreflang: 'en', href: `${canonicalUrl.value}?lang=en` },
+    { rel: 'alternate', hreflang: 'x-default', href: canonicalUrl.value },
+  ],
   script: [
     {
       type: 'application/ld+json',
       textContent: JSON.stringify({
         '@context': 'https://schema.org',
         '@type': 'Organization',
-        name: 'Mentala',
+        name: String(t('LANDING.STRUCTURED_DATA.ORGANIZATION_NAME')),
         url: canonicalUrl.value,
-        logo: new URL('/logo.svg', canonicalUrl.value).href,
+        logo: new URL(brandLogoSrc.value, canonicalUrl.value).href,
         contactPoint: [
           {
             '@type': 'ContactPoint',
             contactType: 'customer support',
-            email: 'hello@mentala.app',
-            availableLanguage: ['ru'],
+            email: supportEmail,
+            availableLanguage: ['ru', 'en'],
           },
         ],
       }),
@@ -1495,9 +1627,9 @@ useHead({
       textContent: JSON.stringify({
         '@context': 'https://schema.org',
         '@type': 'WebSite',
-        name: 'Mentala',
+        name: String(t('LANDING.STRUCTURED_DATA.WEBSITE_NAME')),
         url: canonicalUrl.value,
-        inLanguage: 'ru',
+        inLanguage: locale.value,
       }),
     },
     {
@@ -1505,9 +1637,9 @@ useHead({
       textContent: JSON.stringify({
         '@context': 'https://schema.org',
         '@type': 'WebPage',
-        name: 'Mentala — психологическая поддержка 24/7',
-        url: canonicalUrl.value,
-        inLanguage: 'ru',
+        name: String(t('LANDING.STRUCTURED_DATA.WEBPAGE_NAME')),
+        url: localizedHomeUrl.value,
+        inLanguage: locale.value,
         primaryImageOfPage: ogImageUrl.value,
         isPartOf: {
           '@type': 'WebSite',
@@ -1520,8 +1652,8 @@ useHead({
       textContent: JSON.stringify({
         '@context': 'https://schema.org',
         '@type': 'FAQPage',
-        inLanguage: 'ru',
-        mainEntity: faq.map((item) => ({
+        inLanguage: locale.value,
+        mainEntity: faq.value.map((item) => ({
           '@type': 'Question',
           name: item.question,
           acceptedAnswer: {
@@ -1532,5 +1664,5 @@ useHead({
       }),
     },
   ],
-});
+}));
 </script>

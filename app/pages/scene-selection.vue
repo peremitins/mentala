@@ -133,7 +133,7 @@
       </section>
 
       <section class="space-y-3 mt-6">
-        <div class="px-1">
+        <div class="glass-deep p-4">
           <p class="text-xs uppercase tracking-[0.08em] text-foreground/60">
             Сцены
           </p>
@@ -175,7 +175,7 @@
               </div>
               <template v-else>
                 <img
-                  :src="resolveMediaUrl(scene.backgroundPath)"
+                  :src="resolveScenePreviewBackground(scene.backgroundPath)"
                   :alt="scene.title"
                   class="h-28 w-full object-cover transition duration-500 group-hover:scale-[1.03]"
                   loading="lazy"
@@ -213,12 +213,14 @@ import { useSceneSettingsStore } from '@/app/stores/sceneSettings';
 import { useUiSettingsStore } from '@/app/stores/uiSettings';
 import { useAuthStore } from '@/app/stores/auth';
 import { useSceneAudio } from '@/app/composables/useSceneAudio';
+import { useViewportOrientation } from '@/app/composables/useViewportOrientation';
 import {
   DEFAULT_SCENE_ID,
   SCENE_TRACKS,
   findSceneTrack,
 } from '@/app/lib/sceneSelectionCatalog';
 import { resolveMediaUrl } from '@/app/utils/media';
+import { pickOrientationMediaPath } from '@/app/utils/orientationMedia';
 import IconVolume2 from '~icons/lucide/volume-2';
 import IconVolumeX from '~icons/lucide/volume-x';
 import IconCheck from '~icons/lucide/check';
@@ -231,6 +233,7 @@ const sceneSettings = useSceneSettingsStore();
 const uiSettings = useUiSettingsStore();
 const auth = useAuthStore();
 const sceneAudio = useSceneAudio();
+const { isPortraitMode } = useViewportOrientation();
 
 const router = useRouter();
 
@@ -306,6 +309,14 @@ function isSelected(id: string) {
 function isPlaceholderScene(id: string) {
   // Отдельный тип карточки только для "Стандартного фона".
   return id === 'default';
+}
+
+function resolveScenePreviewBackground(path?: string | null) {
+  const chosen = pickOrientationMediaPath(path, {
+    portraitFirst: isPortraitMode.value,
+  });
+
+  return resolveMediaUrl(chosen || '');
 }
 
 async function kickstartSceneAudio(sceneId?: string) {

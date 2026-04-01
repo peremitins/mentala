@@ -1,4 +1,5 @@
 import { getHeader } from 'h3';
+import { NATIVE_APP_ORIGINS } from '@/server/utils/native-origins';
 
 const isProd = process.env.NODE_ENV === 'production';
 
@@ -18,15 +19,20 @@ function parseOrigins(envValue?: string): string[] {
  */
 function getAllowedOrigins(): string[] {
   if (isProd) {
+    const base = new Set<string>(NATIVE_APP_ORIGINS);
     // В production: брать из env, не захардкодивать
     const publicAppOrigin = process.env.PUBLIC_APP_ORIGIN;
     if (publicAppOrigin) {
-      return [publicAppOrigin];
+      base.add(normalizeOrigin(publicAppOrigin));
+      return [...base];
     }
 
     const allowedOrigins = process.env.ALLOWED_ORIGINS;
     if (allowedOrigins) {
-      return parseOrigins(allowedOrigins);
+      for (const origin of parseOrigins(allowedOrigins)) {
+        base.add(origin);
+      }
+      return [...base];
     }
 
     throw new Error(
@@ -36,6 +42,8 @@ function getAllowedOrigins(): string[] {
     // В development: whitelist из env
     const devOrigins = parseOrigins(process.env.DEV_ALLOWED_ORIGINS);
     const defaults = [
+      'http://localhost',
+      'http://127.0.0.1',
       'http://localhost:3000',
       'http://127.0.0.1:3000',
       'http://localhost:3001',

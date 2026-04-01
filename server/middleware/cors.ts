@@ -1,4 +1,5 @@
 import { defineEventHandler } from 'h3';
+import { NATIVE_APP_ORIGINS } from '@/server/utils/native-origins';
 
 const isProd = process.env.NODE_ENV === 'production';
 
@@ -14,7 +15,7 @@ function parseOrigins(envValue?: string): string[] {
 }
 
 function getAllowedOrigins(): string[] {
-  const base = new Set<string>(['capacitor://localhost', 'ionic://localhost']);
+  const base = new Set<string>(NATIVE_APP_ORIGINS);
 
   if (isProd) {
     const fromEnv = process.env.PUBLIC_APP_ORIGIN
@@ -34,6 +35,8 @@ function getAllowedOrigins(): string[] {
   const fromEnv = parseOrigins(process.env.DEV_ALLOWED_ORIGINS);
   // В dev всегда разрешаем стандартные локальные origins для web-приложения и лендинга.
   const defaults = [
+    'http://localhost',
+    'http://127.0.0.1',
     'http://localhost:3000',
     'http://127.0.0.1:3000',
     'http://localhost:3001',
@@ -48,7 +51,7 @@ function getAllowedOrigins(): string[] {
 const allowedOrigins = new Set(getAllowedOrigins());
 
 const allowHeaders =
-  'Content-Type, Authorization, X-Requested-With, X-Session-Token, X-Timezone, X-Platform, X-App-Env, X-CSRF-Token';
+  'Content-Type, Authorization, X-Requested-With, X-Session-Token, X-Timezone, X-Platform, X-App-Env, X-CSRF-Token, Idempotency-Key';
 
 export default defineEventHandler((event) => {
   const req = event.node.req;

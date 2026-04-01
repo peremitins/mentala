@@ -155,7 +155,11 @@
             </h3>
             <p class="text-xs text-foreground">Дни, время и частота отправки</p>
           </div>
-          <Switch v-model:checked="enabled" :loading="loading" />
+          <Switch
+            :checked="enabled"
+            :loading="loading || enabledToggleLoading"
+            @update:checked="handleEnabledToggle"
+          />
         </div>
 
         <div class="space-y-4">
@@ -484,16 +488,16 @@
       </section>
 
       <!-- Карточка сохранения -->
-      <section class="glass-deep p-3">
-        <button
-          type="button"
-          class="rounded-lg px-4 py-3 text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 w-full"
-          :disabled="isSaveDisabled"
-          @click="saveSettings"
-        >
-          {{ loading ? 'Сохранение...' : 'Сохранить' }}
-        </button>
-      </section>
+      <Button
+        type="button"
+        class="relative w-full"
+        size="lg"
+        :disabled="isSaveDisabled"
+        @click="saveSettings"
+      >
+        <ButtonLoader v-if="loading" />
+        <span :class="loading ? 'invisible' : ''">Сохранить</span>
+      </Button>
 
       <FeaturePaywallModal
         v-model:open="paywallOpen"
@@ -501,12 +505,19 @@
         :required-plan="paywallAccess?.requiredPlan || null"
         :paywall="paywallAccess?.paywall || null"
       />
+
+      <PushPermissionDeniedDialog
+        :open="pushPermissionGate.showPushDeniedModal.value"
+        @update:open="pushPermissionGate.setPushDeniedModalOpen"
+        @open-settings="handleOpenPushSystemSettings"
+      />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { onClickOutside } from '@vueuse/core';
 import { SliderRange, SliderRoot, SliderThumb, SliderTrack } from 'radix-vue';
 import { useToast } from '@/app/composables/useToast';
@@ -517,6 +528,7 @@ import TimePicker from '@/app/components/TimePicker.vue';
 import { useTimeSlotControls } from '@/app/composables/useTimeSlotControls';
 import FeaturePaywallModal from '@/app/components/subscription/FeaturePaywallModal.vue';
 import { useEntitlements } from '@/app/composables/useEntitlements';
+import { usePushPermissionGate } from '@/app/composables/usePushPermissionGate';
 import {
   SUBTYPE_OPTIONS,
   SUBTYPE_OPTIONS_BUILD,
@@ -525,9 +537,12 @@ import {
 } from '@/app/constants/select-options';
 import ToggleGroup from '@/app/components/ui/toggle-group/ToggleGroup.vue';
 import ToggleGroupItem from '@/app/components/ui/toggle-group/ToggleGroupItem.vue';
+import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/shadcn/input';
 import InputComponent from '@/app/components/ui/shadcn/input/Input.vue';
 import TextareaResize from '@/app/components/ui/TextareaResize.vue';
+import ButtonLoader from '@/app/components/ui/ButtonLoader.vue';
+import PushPermissionDeniedDialog from '@/app/components/notifications/PushPermissionDeniedDialog.vue';
 import { Switch } from '@/app/components/ui/shadcn/switch';
 import { useNotificationsStore } from '@/app/stores/notifications';
 import { useUserHabitsStore } from '@/app/stores/userHabits';
@@ -541,11 +556,12 @@ import type {
   Directness,
   NotificationSubtype,
   NotificationPreferencesDto,
-  Tone,
   UpdateNotificationPreferencesDto,
   UserPreferencesDto,
 } from '@/shared/dto/notifications';
 import { MAX_CUSTOM_PROMPT_NOTIFICATION_LENGTH } from '@/shared/dto/notifications';
+import { getDefaultNotificationTextSource } from '@/shared/utils/notificationTextSource';
+import { getLocalizedRequiredPlanLabel } from '@/app/utils/planI18n';
 
 const props = defineProps<{
   mentaiMode: 'habits' | 'therapy';
@@ -553,6 +569,7 @@ const props = defineProps<{
 }>();
 
 const router = useRouter();
+const { t } = useI18n();
 
 // Навигация к редактору текстов с передачей фильтров
 function goToTextsEditor() {
@@ -584,7 +601,7 @@ function getPlanBadgeEmoji(plan: string) {
 }
 
 function getPlanBadgeLabel(plan: string) {
-  return plan === 'premium' ? 'Premium' : 'PRO и Premium';
+  return getLocalizedRequiredPlanLabel(plan, t);
 }
 
 function onTextSourceChange(value: string | string[] | undefined) {
@@ -688,6 +705,7 @@ const notificationsStore = useNotificationsStore();
 const userHabitsStore = useUserHabitsStore();
 const therapyTopicsStore = useTherapyTopicsStore();
 const { getFeatureAccess, refreshEntitlements } = useEntitlements();
+const pushPermissionGate = usePushPermissionGate();
 
 const paywallOpen = ref(false);
 const paywallFeatureKey = ref<string | null>(null);
@@ -703,6 +721,9 @@ const paywallAccess = computed(() =>
 );
 
 const canUseAiTextSource = computed(() => aiTextSourceAccess.value.available);
+const defaultTextSource = computed(() =>
+  getDefaultNotificationTextSource(canUseAiTextSource.value)
+);
 
 const enabled = ref(false);
 const timesPerDay = ref(3);
@@ -720,8 +741,8 @@ const activeDays = ref<number[]>([0, 1, 2, 3, 4, 5, 6]);
 const timeRange = ref({ start: 540, end: 1350 });
 const customSlotTimes = ref<(number | null)[]>([]);
 const loading = ref(false);
+const enabledToggleLoading = ref(false);
 const addressing = ref<Addressing>('informal');
-const tone = ref<Tone>('neutral');
 const textSource = ref<'templates' | 'ai'>('templates');
 const customPromptNotification = ref('');
 const customPromptNotificationLength = computed(
@@ -1180,8 +1201,6 @@ onMounted(async () => {
     }
     if (globalPrefs) {
       addressing.value = globalPrefs.addressing;
-      tone.value =
-        globalPrefs.tone === 'unknown' ? 'neutral' : globalPrefs.tone;
     }
 
     const prefsUrl = isHabits.value
@@ -1212,7 +1231,7 @@ onMounted(async () => {
         await forceTemplatesTextSourceForCurrentEntity();
       }
     } else {
-      textSource.value = 'templates';
+      textSource.value = defaultTextSource.value;
       customPromptNotification.value = '';
     }
     initialStateSignature.value = computeStateSignature();
@@ -1224,6 +1243,34 @@ onMounted(async () => {
     }
   }
 });
+
+async function handleEnabledToggle(nextEnabled: boolean) {
+  if (loading.value || enabledToggleLoading.value) {
+    return;
+  }
+
+  if (!nextEnabled) {
+    enabled.value = false;
+    return;
+  }
+
+  enabledToggleLoading.value = true;
+  try {
+    const canEnable = await pushPermissionGate.ensureAppPushEnabled({
+      onGrantedFromSettings: async () => {
+        enabled.value = true;
+      },
+    });
+
+    enabled.value = canEnable;
+  } finally {
+    enabledToggleLoading.value = false;
+  }
+}
+
+async function handleOpenPushSystemSettings() {
+  await pushPermissionGate.openSystemSettings();
+}
 
 async function saveSettings() {
   // Разрешаем сохранять настройки без текстов

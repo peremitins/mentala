@@ -1,0 +1,72 @@
+# UI и фичи
+
+## Практики (хаб `/practices`)
+- Медитации, дыхательные практики, быстрая помощь, дневник благодарности
+- Дыхательные: каталог в `app/lib/breathPracticesCatalog.ts`, плеер `BreathPracticePlayer.vue` + `BreathOrb.vue`
+- Голосовые подсказки фаз из `public/breath/voice/{informal|formal}/*.mp3`
+- На mobile/web голосовые фазы дыхания идут через `Howler` с `html5: true` и unlock-retry: это основной защитный путь для Android WebView
+- Кастомные практики: 1-30 сек фазы, 2-4 фазы, хранение в localStorage/Capacitor Preferences
+
+## Быстрая помощь (`/quick-help`)
+- 5 карточек: 5-4-3-2-1, Дыхание, Сброс напряжения, Выговориться, Выгрузка мыслей
+- Входы: PageHeader, хаб практик, chat suggested chips (`open_sos`)
+- Выгрузка мыслей: `/quick-help/thought-dump`, textarea + голосовой ввод, handoff в чат через `entryContext`
+
+## Медитации
+- Каталог `/meditations`, детальный плеер через query `trackId`
+- Таблицы: `meditation_tracks`, `meditation_favorites`
+- Web Audio API для loop-треков (бесшовный цикл), HTMLAudio fallback для non-loop
+- Native: `@capgo/native-audio` на mobile, foreground service на Android
+- Контекст очереди: перемотка вперёд/назад по выбранной секции
+- Медиафайлы версионируются по content-hash, CDN кэш бессрочный
+- В mobile release локальный каталог `public/meditations` не бандлится: аудио/обложки/фоны должны загружаться с `mediaBaseUrl` (`https://media.mentala.app` в production)
+
+## Фоновая сцена (`/scene-selection`)
+- Фиксированный каталог в `app/lib/sceneSelectionCatalog.ts`
+- Настройки в `/api/user/me` → `sceneSettings`
+- Loop-сцены: WebAudio (бесшовный цикл), non-loop: HTMLAudio fallback
+- Глушение при активном медитационном аудио
+- `backgroundPlayMinutes`: 0 = стоп в background, N > 0 = стоп через N минут
+
+## Онбординг (`/onboarding`)
+- 5 шагов: имя, причина, возраст, пол, tone
+- `users`: `gender`, `age_range`, `onboarding` (jsonb)
+- `user_preferences.onboarding_reasons` — мультивыбор, порядок = приоритет
+- `tone`: gentle | balanced | uplifting | direct
+- Отдельный фоновый слой из `public/onboarding/welcome`
+
+## Дневник благодарности (`/practices/gratitude-diary`)
+- Overview (streak + история) и editor (вопрос + worksheet + composer)
+- Entitlement `gratitude.diary.full`, premium-ограничения для worksheet/photo
+- API: GET/POST/PATCH `/api/gratitude-diary/*`, upload-photo staged-flow
+- Избранные промпты: `gratitude_diary_favorite_prompts` (catalog + custom, лимит 50)
+- Streak: timezone-aware, по локальному дню пользователя
+- Фото: staged-flow (upload только при save, compensating cleanup при ошибке)
+
+## Лендинг (`apps/landing`)
+- Отдельная Nuxt-сборка для SEO, SSR + SWR
+- Домены: `mentala.app` (лендинг), `my.mentala.app` (продукт + API)
+- API: `/api/landing/config` (cache 60s), `/api/landing/lead` (rate-limit + honeypot)
+- Деплой: `pnpm landing:generate` → статика → rsync на сервер, Nginx + Traefik
+- CI/CD: deploy-prod.yml / deploy-dev.yml, атомарное переключение symlink
+
+## Компоненты и паттерны
+- `HorizontalScroller.vue` — горизонтальные ленты с drag, стрелками на desktop
+- `StateBlock` — idle/loading/empty/error
+- `ButtonLoader.vue` — спиннер внутри кнопки
+- Pinia stores: ui, user, chat
+- DTO: Zod, `shared/dto/index.ts`
+
+## Бренд-ассеты
+- Web/favicon мастер с rounded-card подложкой: `public/app-icon-web-master.svg`
+- Продакшен favicon для web и landing: `public/favicon.svg`
+- Apple-safe мастер для native iOS/AppIcon: `public/app-icon-native-master.svg` (квадратный фон, без прозрачности и без преднарисованных скруглений)
+- `apps/landing/public/favicon.svg` синхронизировать с `public/favicon.svg`
+- Web PNG/ICO/apple-touch/android/ms/manifest family генерировать из rounded-card мастера с прозрачным фоном вне скруглённой карточки
+- Native iOS/AppIcon генерировать отдельно из Apple-safe мастера без предскругления
+- Native Android launcher icon и splash генерировать отдельно из Apple-safe мастера: launcher через adaptive icon layers, splash — как отдельный тёмный launch screen со знаком бренда
+- Native iOS single-size AppIcon: `ios/App/App/Assets.xcassets/AppIcon.appiconset/favicon_ios.png`
+- Native iOS launch splash: `ios/App/App/Assets.xcassets/Splash.imageset/splash-2732x2732*.png`
+- iOS native-ассеты пересобирать командой `pnpm assets:ios`: `AppIcon` берётся из полного Apple-safe мастера, а splash собирается из того же мастера, но только со знаком бренда без фоновой карточки
+- Для `SplashScreen` в Capacitor не включать spinner и не держать искусственно длинный показ: визуал должен быть чистым и без ощущения дефолтного Capacitor
+- Android native-ассеты пересобирать командой `pnpm assets:android`: adaptive icon собирается из светлого брендового background layer + foreground знака, а splash заменяет дефолтный Capacitor во всех `drawable*`

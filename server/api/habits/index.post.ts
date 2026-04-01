@@ -12,6 +12,7 @@ import {
   getFeatureAccessOrDefault,
   toFeaturePlanRequiredPayload,
 } from '@/server/application/subscriptions/entitlements.service';
+import { getDefaultNotificationTextSource } from '@/shared/utils/notificationTextSource';
 
 /**
  * POST /api/habits
@@ -30,6 +31,10 @@ export default defineEventHandler(async (event): Promise<HabitDto> => {
   const featureKey = 'habits.custom.create';
   const billing = await getBillingSnapshot(userId, sessionUser.role);
   const access = getFeatureAccessOrDefault(billing, featureKey);
+  const aiTextSourceAccess = getFeatureAccessOrDefault(
+    billing,
+    'notifications.text_source_ai'
+  );
   if (!access.available) {
     throw createError({
       statusCode: 402,
@@ -102,7 +107,11 @@ export default defineEventHandler(async (event): Promise<HabitDto> => {
         timeRangeStart: 540, // 09:00
         timeRangeEnd: 1350, // 22:30
         meta: {
-          textSource: 'templates', // По умолчанию templates (ручные тексты для кастомных)
+          // Для новых preferences используем тот же entitlement-aware дефолт,
+          // что и в основном экране настроек уведомлений.
+          textSource: getDefaultNotificationTextSource(
+            aiTextSourceAccess.available
+          ),
         },
       });
       console.log(

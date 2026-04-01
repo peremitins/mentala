@@ -13,6 +13,7 @@ export const THERAPY_TO_MEDITATION_TOPIC_MAP: Partial<
   Record<TherapyTopicKey, MeditationTopicKey>
 > = {
   anxiety: 'anxiety',
+  phobias: 'anxiety',
   stress: 'stress',
   anger: 'stress',
 };

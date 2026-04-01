@@ -1,13 +1,13 @@
 <template>
-  <div class="min-h-dvh">
+  <div class="w-full">
     <NeuralBg />
     <div
-      class="container mx-auto px-4 py-8 flex items-center justify-center min-h-dvh relative z-10"
+      class="container mx-auto px-4 py-8 flex items-center justify-center relative z-10"
     >
       <div class="w-full max-w-md">
         <div class="glass-deep p-6">
           <div class="text-center mb-6">
-            <div class="text-2xl font-semibold text-foreground">Mentala</div>
+            <div class="text-2xl font-semibold text-foreground">Ментала</div>
             <div class="text-sm text-foreground">привязка аккаунта</div>
           </div>
 
@@ -49,10 +49,11 @@
                 <button
                   type="button"
                   :disabled="loading"
-                  class="w-full py-2.5 rounded-xl bg-primary text-primary-foreground hover:opacity-90 active:opacity-80 transition font-medium disabled:opacity-60 disabled:cursor-not-allowed"
+                  class="relative w-full py-2.5 rounded-xl bg-primary text-primary-foreground hover:opacity-90 active:opacity-80 transition font-medium disabled:opacity-60 disabled:cursor-not-allowed"
                   @click="confirmPassword"
                 >
-                  {{ loading ? '...' : 'Подтвердить' }}
+                  <ButtonLoader v-if="loading" />
+                  <span :class="loading ? 'invisible' : ''">Подтвердить</span>
                 </button>
               </TabsContent>
 
@@ -93,10 +94,13 @@
                 <button
                   type="button"
                   :disabled="loading"
-                  class="w-full py-2.5 rounded-xl bg-primary text-primary-foreground hover:opacity-90 active:opacity-80 transition font-medium disabled:opacity-60 disabled:cursor-not-allowed"
+                  class="relative w-full py-2.5 rounded-xl bg-primary text-primary-foreground hover:opacity-90 active:opacity-80 transition font-medium disabled:opacity-60 disabled:cursor-not-allowed"
                   @click="confirmCode"
                 >
-                  {{ loading ? '...' : 'Подтвердить код' }}
+                  <ButtonLoader v-if="loading" />
+                  <span :class="loading ? 'invisible' : ''">
+                    Подтвердить код
+                  </span>
                 </button>
               </TabsContent>
             </Tabs>
@@ -120,6 +124,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useCountdown } from '@vueuse/core';
 import { useAuthStore } from '@/app/stores/auth';
 import NeuralBg from '@/app/components/ui/bg-neural/NeuralBg.vue';
+import ButtonLoader from '@/app/components/ui/ButtonLoader.vue';
 import { Input } from '@/app/components/ui/shadcn/input';
 import {
   Tabs,
@@ -182,7 +187,7 @@ async function confirmPassword() {
       password: password.value,
     });
     await navigateTo(backUrl.value || '/');
-  } catch (e: any) {
+  } catch {
     // Ошибка уже показана глобальным обработчиком API
   } finally {
     loading.value = false;
@@ -199,7 +204,7 @@ async function sendCode() {
     const retryAfter = response?.retryAfter ? Number(response.retryAfter) : 60;
     startResendTimer(Number.isFinite(retryAfter) ? retryAfter : 60);
     useToast('Код отправлен', 'Проверьте почту');
-  } catch (e: any) {
+  } catch {
     // Ошибка уже показана глобальным обработчиком API
   } finally {
     loading.value = false;
@@ -215,7 +220,7 @@ async function confirmCode() {
 
   try {
     loading.value = true;
-    const response = await auth.linkOAuthVerifyCode({
+    await auth.linkOAuthVerifyCode({
       linkingToken: linkingToken.value,
       code: clean,
     });

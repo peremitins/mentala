@@ -4,6 +4,8 @@ import { deepseekProvider } from '../infrastructure/llm/deepseek';
 import { yandexProvider } from '../infrastructure/llm/yandex';
 import { config } from '../config';
 import type { ChatEntryContext } from '@/shared/dto';
+import type { OnboardingReasons } from '@/shared/dto/onboarding';
+import type { Addressing } from '@/shared/dto/notifications';
 
 const providers: Record<LlmProviderPort['id'], LlmProviderPort> = {
   openai: openaiProvider,
@@ -25,6 +27,7 @@ export async function chatViaProvider(params: {
   }>;
   options?: {
     sessionId?: string;
+    therapySessionId?: number;
     temperature?: number;
     maxOutputTokens?: number; // Для Responses API
     scenario?: 'chat' | 'notifications' | 'chips'; // Сценарий использования
@@ -33,6 +36,11 @@ export async function chatViaProvider(params: {
     user_name?: string;
     user_gender?: string;
     user_timezone?: string;
+    addressing?: Addressing;
+    toneKey?: string;
+    toneLabel?: string;
+    toneDescription?: string;
+    onboardingReasons?: OnboardingReasons;
     userId?: number | string;
     isFirstSession?: boolean;
     userPrompt?: string;
@@ -136,6 +144,7 @@ export function chatStreamViaProvider(params: {
   messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
   options?: {
     sessionId?: string;
+    therapySessionId?: number;
     temperature?: number;
     maxOutputTokens?: number; // Для Responses API
     scenario?: 'chat' | 'notifications' | 'chips'; // Сценарий использования
@@ -144,6 +153,11 @@ export function chatStreamViaProvider(params: {
     user_name?: string;
     user_gender?: string;
     user_timezone?: string;
+    addressing?: Addressing;
+    toneKey?: string;
+    toneLabel?: string;
+    toneDescription?: string;
+    onboardingReasons?: OnboardingReasons;
     userId?: number | string;
     isFirstSession?: boolean;
     userPrompt?: string;

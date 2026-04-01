@@ -8,11 +8,12 @@ type RelayPurpose =
   | 'chips'
   | 'finish_session'
   | 'notification'
+  | 'realtime_call'
   | 'other';
 
 type RelayRequestParams = {
   path: string;
-  body?: Record<string, unknown>;
+  body?: unknown;
   purpose: RelayPurpose;
   timeoutMs?: number;
   requestId?: string;
@@ -21,6 +22,10 @@ type RelayRequestParams = {
 type RelayStreamResult = {
   stream: AsyncIterable<string>;
   responseIdPromise: Promise<string | undefined>;
+  completionPromise: Promise<{
+    responseId?: string;
+    response?: Record<string, unknown> | null;
+  }>;
 };
 
 const RELAY_DEFAULT_TIMEOUT_MS = 60_000;
@@ -110,6 +115,24 @@ function signRequest(params: {
   };
 }
 
+function buildRelayRequest(params: RelayRequestParams) {
+  const { relayUrl } = requireRelayEnv();
+  const rawBody = JSON.stringify(params.body ?? {});
+  const { headers } = signRequest({
+    method: 'POST',
+    path: params.path,
+    rawBody,
+    purpose: params.purpose,
+    requestId: params.requestId,
+  });
+
+  return {
+    relayUrl,
+    rawBody,
+    headers,
+  };
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object');
 }
@@ -118,15 +141,17 @@ function getString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
-function normalizeRelayError(
-  err: unknown,
-  fallbackMessage: string
-): never {
+function normalizeRelayError(err: unknown, fallbackMessage: string): never {
   const errorRecord = isRecord(err) ? err : {};
   const responseRecord = isRecord(errorRecord.response)
     ? errorRecord.response
     : {};
-  const dataRecord = isRecord(errorRecord.data) ? errorRecord.data : {};
+  const responseData = responseRecord._data;
+  const errorDataSource =
+    errorRecord.data !== undefined ? errorRecord.data : responseData;
+  const dataRecord = isRecord(errorDataSource) ? errorDataSource : {};
+  const dataText =
+    typeof errorDataSource === 'string' ? errorDataSource : undefined;
   const errorData = isRecord(dataRecord.error) ? dataRecord.error : {};
   const status =
     (responseRecord.status as number | undefined) ||
@@ -136,6 +161,7 @@ function normalizeRelayError(
   const message =
     getString(errorData.message) ||
     getString(dataRecord.message) ||
+    dataText ||
     getString(errorRecord.message);
   throw createError({
     statusCode: status,
@@ -146,15 +172,7 @@ function normalizeRelayError(
 export async function relayResponsesRequest<T = any>(
   params: RelayRequestParams
 ): Promise<T> {
-  const { relayUrl } = requireRelayEnv();
-  const rawBody = JSON.stringify(params.body || {});
-  const { headers } = signRequest({
-    method: 'POST',
-    path: params.path,
-    rawBody,
-    purpose: params.purpose,
-    requestId: params.requestId,
-  });
+  const { relayUrl, rawBody, headers } = buildRelayRequest(params);
 
   try {
     return await $fetch<T>(`${relayUrl}${params.path}`, {
@@ -165,6 +183,38 @@ export async function relayResponsesRequest<T = any>(
     });
   } catch (err: unknown) {
     normalizeRelayError(err, 'Relay request failed');
+  }
+}
+
+export async function relayRealtimeCall(params: {
+  sdp: string;
+  session?: Record<string, unknown> | null;
+  clientSecret?: string | null;
+  timeoutMs?: number;
+  requestId?: string;
+}) {
+  const { relayUrl, rawBody, headers } = buildRelayRequest({
+    path: '/v1/realtime/calls',
+    body: {
+      sdp: params.sdp,
+      session: params.session ?? null,
+      clientSecret: params.clientSecret ?? null,
+    },
+    purpose: 'realtime_call',
+    timeoutMs: params.timeoutMs,
+    requestId: params.requestId,
+  });
+
+  try {
+    return await $fetch<string>(`${relayUrl}/v1/realtime/calls`, {
+      method: 'POST',
+      headers,
+      timeout: params.timeoutMs ?? RELAY_DEFAULT_TIMEOUT_MS,
+      responseType: 'text',
+      body: rawBody,
+    });
+  } catch (err: unknown) {
+    normalizeRelayError(err, 'Relay realtime call failed');
   }
 }
 
@@ -181,9 +231,7 @@ function createDeferred<T>(): Deferred<T> {
   return { promise, resolve };
 }
 
-function toAsyncIterable(
-  source: unknown
-): AsyncIterable<Buffer | string> {
+function toAsyncIterable(source: unknown): AsyncIterable<Buffer | string> {
   if (
     source &&
     typeof (source as AsyncIterable<unknown>)[Symbol.asyncIterator] ===
@@ -192,8 +240,9 @@ function toAsyncIterable(
     return source as AsyncIterable<Buffer | string>;
   }
 
-  const reader = (source as ReadableStream<Uint8Array> | undefined)
-    ?.getReader?.();
+  const reader = (
+    source as ReadableStream<Uint8Array> | undefined
+  )?.getReader?.();
   if (reader) {
     return (async function* () {
       while (true) {
@@ -221,7 +270,9 @@ async function* iterateSseData(
   for await (const chunk of stream) {
     // Используем TextDecoder, чтобы корректно обрабатывать UTF-8 на границах чанков.
     const chunkText =
-      typeof chunk === 'string' ? chunk : decoder.decode(chunk, { stream: true });
+      typeof chunk === 'string'
+        ? chunk
+        : decoder.decode(chunk, { stream: true });
     buffer += chunkText;
     buffer = buffer.replace(/\r\n/g, '\n');
 
@@ -259,15 +310,7 @@ async function* iterateSseData(
 export async function relayResponsesStream(
   params: RelayRequestParams
 ): Promise<RelayStreamResult> {
-  const { relayUrl } = requireRelayEnv();
-  const rawBody = JSON.stringify(params.body || {});
-  const { headers } = signRequest({
-    method: 'POST',
-    path: params.path,
-    rawBody,
-    purpose: params.purpose,
-    requestId: params.requestId,
-  });
+  const { relayUrl, rawBody, headers } = buildRelayRequest(params);
 
   try {
     const resp = await $fetch.raw(`${relayUrl}${params.path}`, {
@@ -280,10 +323,15 @@ export async function relayResponsesStream(
 
     const stream = toAsyncIterable(resp._data);
     const responseIdDeferred = createDeferred<string | undefined>();
+    const completionDeferred = createDeferred<{
+      responseId?: string;
+      response?: Record<string, unknown> | null;
+    }>();
 
     const deltaStream = (async function* () {
       let responseId: string | undefined;
       let candidateResponseId: string | undefined;
+      let completedResponse: Record<string, unknown> | null = null;
       try {
         for await (const data of iterateSseData(stream)) {
           if (data === '[DONE]') break;
@@ -323,6 +371,9 @@ export async function relayResponsesStream(
           ) {
             responseId =
               responseIdFromResponse || candidateResponseId || responseId;
+            if (Object.keys(responseObj).length > 0) {
+              completedResponse = responseObj;
+            }
           }
 
           if (eventType === 'error' || eventType === 'response.error') {
@@ -337,12 +388,17 @@ export async function relayResponsesStream(
         }
       } finally {
         responseIdDeferred.resolve(responseId);
+        completionDeferred.resolve({
+          responseId,
+          response: completedResponse,
+        });
       }
     })();
 
     return {
       stream: deltaStream,
       responseIdPromise: responseIdDeferred.promise,
+      completionPromise: completionDeferred.promise,
     };
   } catch (err: unknown) {
     normalizeRelayError(err, 'Relay stream failed');

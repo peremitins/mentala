@@ -44,6 +44,11 @@ import {
 import { resolveExternalFlowAppUrl } from '@/server/application/auth/oauth-redirect';
 import { buildExternalSessionConsumeReturnUrl } from '@/server/application/auth/external-session-return-url';
 import { PAYMENT_RETURN_EXTERNAL_SESSION_TTL_SECONDS } from '@/server/config/subscription';
+import {
+  dispatchBillingCheckoutErrorEvent,
+  dispatchBillingPurchaseSuccessEvent,
+} from '@/server/application/events/app-events.dispatchers';
+import { dispatchBillingPlanChangedIfNeeded } from '@/server/application/events/billing-events.helpers';
 
 type SourcePlatform = 'web' | 'ios' | 'android';
 type CheckoutStatus = 'pending' | 'active';
@@ -212,8 +217,10 @@ export default defineEventHandler(async (event) => {
   const billingPeriodTyped = billingPeriod as BillingPeriod;
   const externalFlow = requestedExternalFlow === true;
   const sourcePlatform = resolveSourcePlatform(event);
+  // На native iOS/Android проводим checkout только через redirect-flow:
+  // embedded widget в мобильных WebView нестабилен для 3DS и может закрываться.
   const paymentMode: 'widget' | 'redirect' =
-    sourcePlatform === 'ios'
+    sourcePlatform === 'ios' || sourcePlatform === 'android'
       ? 'redirect'
       : requestedPaymentMode === 'redirect'
         ? 'redirect'
@@ -288,6 +295,20 @@ export default defineEventHandler(async (event) => {
       userId,
       now,
     });
+
+    // MVP: запрещаем параллельные подписки. Если активная подписка в App Store —
+    // не даём запускать checkout через сайт (YooKassa), чтобы не получить double charge.
+    if (
+      currentActive &&
+      currentActive.subscription.paymentProvider === 'apple_iap' &&
+      currentActive.plan.name !== 'basic'
+    ) {
+      throw createError({
+        statusCode: 409,
+        statusMessage:
+          'Active subscription is managed by App Store. Checkout via site is disabled to avoid double charge.',
+      });
+    }
 
     const currentSnapshot: ActiveSubscriptionSnapshot | null = currentActive
       ? {
@@ -899,6 +920,26 @@ export default defineEventHandler(async (event) => {
         return activatedResponse;
       });
 
+      dispatchBillingPlanChangedIfNeeded({
+        userId,
+        source: 'subscriptions.start-checkout:policy_activation',
+        previous: currentActive
+          ? {
+              subscriptionId: currentActive.subscription.id,
+              planId: currentActive.subscription.planId,
+              billingPeriod: currentActive.subscription.billingPeriod,
+            }
+          : null,
+        next: {
+          subscriptionId: response.subscriptionId,
+          planId,
+          billingPeriod: billingPeriodTyped,
+        },
+        paymentId: null,
+        effectiveAt: now,
+        occurredAt: now,
+      });
+
       return response;
     }
 
@@ -932,7 +973,7 @@ export default defineEventHandler(async (event) => {
         secretKey,
         idempotenceKey: savedMethodIdempotenceKey,
         amount: decision.toPay,
-        description: `Mentala subscription ${planId} (${billingPeriodTyped})`,
+        description: `Ментала subscription ${planId} (${billingPeriodTyped})`,
         metadata: {
           userId: String(userId),
           planId,
@@ -1142,6 +1183,37 @@ export default defineEventHandler(async (event) => {
           return activatedResponse;
         });
 
+        dispatchBillingPurchaseSuccessEvent({
+          userId,
+          subscriptionId: response.subscriptionId,
+          paymentId: savedMethodPaymentId,
+          planId,
+          billingPeriod: billingPeriodTyped,
+          amount: savedMethodAmount,
+          currency: savedMethodCurrency,
+          source: 'subscriptions.start-checkout:saved_method',
+        });
+
+        dispatchBillingPlanChangedIfNeeded({
+          userId,
+          source: 'subscriptions.start-checkout:saved_method',
+          previous: currentActive
+            ? {
+                subscriptionId: currentActive.subscription.id,
+                planId: currentActive.subscription.planId,
+                billingPeriod: currentActive.subscription.billingPeriod,
+              }
+            : null,
+          next: {
+            subscriptionId: response.subscriptionId,
+            planId,
+            billingPeriod: billingPeriodTyped,
+          },
+          paymentId: savedMethodPaymentId,
+          effectiveAt: now,
+          occurredAt: now,
+        });
+
         return response;
       }
 
@@ -1260,7 +1332,7 @@ export default defineEventHandler(async (event) => {
       secretKey,
       idempotenceKey: yookassaIdempotenceKey,
       amount: decision.toPay,
-      description: `Mentala subscription ${planId} (${billingPeriodTyped})`,
+      description: `Ментала subscription ${planId} (${billingPeriodTyped})`,
       metadata: {
         userId: String(userId),
         subscriptionId: String(pendingSubscription.id),
@@ -1389,6 +1461,94 @@ export default defineEventHandler(async (event) => {
     }
 
     await abortIdempotentRequest({ recordId: idempotencyRecordId });
+
+    const statusCode =
+      typeof (error as any)?.statusCode === 'number'
+        ? Number((error as any).statusCode)
+        : typeof (error as any)?.status === 'number'
+          ? Number((error as any).status)
+          : null;
+
+    const errorMessage =
+      (error as any)?.statusMessage ||
+      (error as any)?.message ||
+      'start_checkout_failed';
+
+    if (!statusCode || statusCode >= 500) {
+      dispatchBillingCheckoutErrorEvent({
+        userId,
+        planId,
+        billingPeriod: billingPeriodTyped,
+        statusCode,
+        errorMessage,
+      });
+    }
+
+    // Ошибки от YooKassa ($fetch) приходят с statusCode 4xx/5xx и пробрасываются как «unhandled».
+    // H3 маскирует message в «Server Error», но сохраняет statusCode — клиент получает 403 + "Server Error".
+    // Нормализуем: upstream-ошибки платёжного провайдера → 502 с понятным сообщением.
+    // Наши createError: 400, 401, 404, 409, 500, 502. 403 и др. 4xx — от YooKassa.
+    const our4xxCodes = [400, 401, 404, 409];
+    const isUpstreamApiError =
+      statusCode !== null &&
+      statusCode >= 400 &&
+      statusCode < 500 &&
+      !our4xxCodes.includes(statusCode);
+
+    if (isUpstreamApiError) {
+      const err = error as any;
+      const yookassaBody =
+        err?.data ?? err?.response?._data ?? err?.response?.data ?? null;
+      const yookassaCode =
+        typeof yookassaBody?.code === 'string' ? yookassaBody.code : null;
+      const yookassaDesc =
+        typeof yookassaBody?.description === 'string'
+          ? yookassaBody.description
+          : null;
+      const isTestKey = String(config.yookassaSecretKey || '').startsWith(
+        'test_'
+      );
+
+      // Данные для обращения в поддержку ЮKassa — копируй этот блок целиком
+      const supportPayload = {
+        timestamp: new Date().toISOString(),
+        source: 'start-checkout',
+        shopId: config.yookassaShopId || '(пусто)',
+        isTestKey,
+        httpStatus: statusCode,
+        yookassaResponse: yookassaBody ?? null,
+        yookassaCode: yookassaCode ?? '(нет в ответе)',
+        yookassaDescription: yookassaDesc ?? '(нет в ответе)',
+        requestId: getHeader(event, 'x-request-id') || null,
+      };
+      console.error(
+        '[YooKassa] Ошибка для поддержки ЮKassa (скопируй в тикет):\n' +
+          JSON.stringify(supportPayload, null, 2)
+      );
+
+      event.context.logger?.warn(
+        {
+          userId,
+          planId,
+          upstreamStatus: statusCode,
+          upstreamMessage: errorMessage,
+          yookassaCode,
+          yookassaDesc,
+          yookassaBody: yookassaBody ?? null,
+          isTestKey,
+          shopIdPrefix: config.yookassaShopId
+            ? String(config.yookassaShopId).slice(0, 4) + '***'
+            : 'empty',
+        },
+        'YooKassa upstream error in start-checkout (403=недостаточно прав, проверь активацию магазина и return_url домен)'
+      );
+      throw createError({
+        statusCode: 502,
+        statusMessage: 'Payment provider temporarily unavailable',
+        message: 'Платёжный провайдер временно недоступен. Попробуйте позже.',
+      });
+    }
+
     throw error;
   }
 });
