@@ -184,6 +184,33 @@ export async function createYooKassaPayment(params: {
   }
 }
 
+export interface YooKassaRefundResponse {
+  id: string;
+  status: string;
+  amount: YooKassaPaymentAmount;
+  payment_id: string;
+  created_at?: string;
+  description?: string;
+  metadata?: Record<string, string>;
+}
+
+export async function getYooKassaRefund(params: {
+  shopId: string;
+  secretKey: string;
+  refundId: string;
+}): Promise<YooKassaRefundResponse> {
+  return await $fetch<YooKassaRefundResponse>(
+    `https://api.yookassa.ru/v3/refunds/${params.refundId}`,
+    {
+      method: 'GET',
+      timeout: 10_000,
+      headers: {
+        Authorization: getAuthHeader(params.shopId, params.secretKey),
+      },
+    }
+  );
+}
+
 export async function getYooKassaPayment(params: {
   shopId: string;
   secretKey: string;
