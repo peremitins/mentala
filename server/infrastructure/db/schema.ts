@@ -113,6 +113,9 @@ export const users = pgTable(
       .default('none')
       .notNull(), // 'none' | 'scheduled' | 'past_due'
     graceEndsAt: timestamp('grace_ends_at', { withTimezone: true }),
+    // Legacy-поле от старого pre-charge reminder flow.
+    // Отправка напоминаний о будущем списании выключена, но колонку пока сохраняем
+    // для обратной совместимости без отдельной миграции.
     billingReminderSentAt: timestamp('billing_reminder_sent_at', {
       withTimezone: true,
     }),
@@ -171,8 +174,8 @@ export const users = pgTable(
     appleAppAccountTokenUnique: unique('uk_users_apple_app_account_token').on(
       table.appleAppAccountToken
     ),
-    // Индекс ускоряет выборку кандидатов на billing reminder (24ч окно).
-    // Partial условие держит индекс компактным и релевантным только для due-кейса.
+    // Legacy-индекс от старого reminder flow.
+    // Пока не удаляем его из схемы БД в этом таске, чтобы не тянуть миграцию.
     trialBillingReminderDueIdx: index('idx_users_trial_billing_reminder_due')
       .on(table.nextChargeAt, table.id)
       .where(

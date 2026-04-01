@@ -10,6 +10,7 @@ import type {
 import {
   buildAppNavigationPath,
   parseAppNavigationTarget,
+  resolveGuaranteedTargetFromNotificationContext,
   resolveTargetFromLegacyNotificationNavigation,
   resolveTargetFromLegacySuggestedChipAction,
   type AppNavigationTarget,
@@ -47,6 +48,14 @@ export default defineNuxtPlugin({
     const IOS_FCM_TOKEN_MAX_ATTEMPTS = 6;
     const IOS_FCM_TOKEN_RETRY_DELAY_MS = 1200;
 
+    // В логах храним только короткий префикс токена, чтобы можно было
+    // сопоставить устройство с серверной отправкой без утечки полного значения.
+    function maskToken(value?: string | null, prefixLength = 24): string {
+      const normalized = typeof value === 'string' ? value.trim() : '';
+      if (!normalized) return 'empty';
+      return `${normalized.slice(0, prefixLength)}...`;
+    }
+
     const wait = (ms: number) =>
       new Promise<void>((resolve) => {
         setTimeout(resolve, ms);
@@ -82,6 +91,96 @@ export default defineNuxtPlugin({
         }
       }
       return null;
+    }
+
+    async function registerTokenOnServer(
+      token: string,
+      platformHeader: 'ios' | 'android',
+      reason: string
+    ): Promise<void> {
+      const sessionToken =
+        typeof window !== 'undefined'
+          ? window.localStorage.getItem('mentai.session.token')
+          : null;
+
+      if (!sessionToken) {
+        console.log('[PushPlugin] Skip token registration: no session token', {
+          platform: platformHeader,
+          reason,
+        });
+        return;
+      }
+
+      await nuxtApp.$api('/api/notifications/register-token', {
+        method: 'POST',
+        body: {
+          token,
+          platform: platformHeader,
+        },
+      });
+
+      console.log('[PushPlugin] Token registered on server:', {
+        platform: platformHeader,
+        tokenPrefix: maskToken(token),
+        reason,
+      });
+    }
+
+    async function syncCurrentNativeToken(
+      reason: string,
+      options?: { forceServerSync?: boolean }
+    ): Promise<void> {
+      const forceServerSync = options?.forceServerSync === true;
+      const platformHeader: 'ios' | 'android' = isIos ? 'ios' : 'android';
+
+      let currentToken: string | null = null;
+
+      if (isIos) {
+        currentToken = await resolveFcmTokenWithRetry();
+      } else if (typeof window !== 'undefined') {
+        currentToken = window.localStorage.getItem(PUSH_TOKEN_STORAGE_KEY);
+      }
+
+      const normalizedToken =
+        typeof currentToken === 'string' ? currentToken.trim() : '';
+      if (!normalizedToken) {
+        console.warn('[PushPlugin] Native token sync skipped: token is empty', {
+          platform: platformHeader,
+          reason,
+        });
+        return;
+      }
+
+      const previousToken =
+        typeof window !== 'undefined'
+          ? window.localStorage.getItem(PUSH_TOKEN_STORAGE_KEY)?.trim() || ''
+          : '';
+
+      const tokenChanged = previousToken !== normalizedToken;
+
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(PUSH_TOKEN_STORAGE_KEY, normalizedToken);
+      }
+
+      if (!tokenChanged && !forceServerSync) {
+        console.log('[PushPlugin] Native token sync: token unchanged', {
+          platform: platformHeader,
+          tokenPrefix: maskToken(normalizedToken),
+          reason,
+        });
+        return;
+      }
+
+      try {
+        await registerTokenOnServer(normalizedToken, platformHeader, reason);
+      } catch (error) {
+        console.error('[PushPlugin] Failed to sync native token on server:', {
+          platform: platformHeader,
+          tokenPrefix: maskToken(normalizedToken),
+          reason,
+          error,
+        });
+      }
     }
 
     // Сохраняем отложенную навигацию, чтобы не потерять тап на холодном старте.
@@ -125,6 +224,12 @@ export default defineNuxtPlugin({
       return true;
     }
 
+    function readPayloadString(value: unknown): string | null {
+      if (typeof value !== 'string') return null;
+      const trimmed = value.trim();
+      return trimmed ? trimmed : null;
+    }
+
     function normalizeNavigation(raw: unknown): NotificationNavigation | null {
       if (!raw || typeof raw !== 'object') return null;
       const type =
@@ -155,6 +260,10 @@ export default defineNuxtPlugin({
             ? String((raw as { slug?: unknown }).slug).trim()
             : '';
         return slug ? { type: 'breath_practice', slug } : null;
+      }
+
+      if (type === 'gratitude_diary') {
+        return { type: 'gratitude_diary' };
       }
 
       return null;
@@ -201,13 +310,36 @@ export default defineNuxtPlugin({
         return { type: 'breath_practice', slug: navId };
       }
 
+      if (navType === 'gratitude_diary') {
+        return { type: 'gratitude_diary' };
+      }
+
       return null;
+    }
+
+    function resolveGuaranteedPayloadTarget(
+      payload?: Record<string, any>
+    ): AppNavigationTarget | null {
+      if (!payload) return null;
+
+      return resolveGuaranteedTargetFromNotificationContext({
+        title: readPayloadString(payload.title),
+        entityKey: readPayloadString(payload.entityKey),
+        entityDisplayName: readPayloadString(payload.entityDisplayName),
+      });
     }
 
     function resolveNavigationTarget(
       payload?: Record<string, any>
     ): AppNavigationTarget | null {
       if (!payload) return null;
+
+      // Для уведомлений дневника благодарности контекст темы важнее
+      // устаревшего navigationTarget=home в уже сохранённых слотах.
+      const guaranteedTarget = resolveGuaranteedPayloadTarget(payload);
+      if (guaranteedTarget) {
+        return guaranteedTarget;
+      }
 
       if (
         typeof payload.navigationTarget === 'string' &&
@@ -287,12 +419,6 @@ export default defineNuxtPlugin({
       if (!rawAction) return null;
       const action = rawAction.toLowerCase();
 
-      const readString = (value: unknown): string | null => {
-        if (typeof value !== 'string') return null;
-        const trimmed = value.trim();
-        return trimmed ? trimmed : null;
-      };
-
       if (
         action === 'open_meditations' ||
         action === 'open_meditations_collection'
@@ -302,9 +428,9 @@ export default defineNuxtPlugin({
 
       if (action === 'open_meditation_track') {
         const trackId =
-          readString(payload.trackId) ||
-          readString(payload.navId) ||
-          readString(payload.actionParams?.trackId);
+          readPayloadString(payload.trackId) ||
+          readPayloadString(payload.navId) ||
+          readPayloadString(payload.actionParams?.trackId);
         return trackId
           ? `/meditations?trackId=${encodeURIComponent(trackId)}`
           : '/meditations';
@@ -316,10 +442,10 @@ export default defineNuxtPlugin({
 
       if (action === 'open_breath_practice') {
         const practiceId =
-          readString(payload.practiceId) ||
-          readString(payload.slug) ||
-          readString(payload.navId) ||
-          readString(payload.actionParams?.practiceId);
+          readPayloadString(payload.practiceId) ||
+          readPayloadString(payload.slug) ||
+          readPayloadString(payload.navId) ||
+          readPayloadString(payload.actionParams?.practiceId);
         return practiceId
           ? `/breath-practices/${encodeURIComponent(practiceId)}`
           : '/breath-practices';
@@ -339,8 +465,8 @@ export default defineNuxtPlugin({
 
       if (action === 'open_therapy_topic') {
         const topicKey =
-          readString(payload.topicKey) ||
-          readString(payload.actionParams?.topicKey);
+          readPayloadString(payload.topicKey) ||
+          readPayloadString(payload.actionParams?.topicKey);
         return topicKey
           ? `/therapy/${encodeURIComponent(topicKey)}`
           : '/therapy';
@@ -352,15 +478,15 @@ export default defineNuxtPlugin({
 
       if (action === 'open_habit') {
         const habitKey =
-          readString(payload.habitKey) ||
-          readString(payload.actionParams?.habitKey);
+          readPayloadString(payload.habitKey) ||
+          readPayloadString(payload.actionParams?.habitKey);
         return habitKey ? `/habits/${encodeURIComponent(habitKey)}` : '/habits';
       }
 
       if (action === 'open_sos') {
         const entry =
-          readString(payload.sosEntry) ||
-          readString(payload.actionParams?.sosEntry);
+          readPayloadString(payload.sosEntry) ||
+          readPayloadString(payload.actionParams?.sosEntry);
         return entry
           ? `/quick-help?entry=${encodeURIComponent(entry)}`
           : '/quick-help';
@@ -400,21 +526,9 @@ export default defineNuxtPlugin({
     function buildPathFromNavigation(
       navigation: NotificationNavigation
     ): string {
-      // Приводим navigation к пути внутри приложения.
-      switch (navigation.type) {
-        case 'meditation_track':
-          return `/meditations?trackId=${encodeURIComponent(
-            navigation.trackId
-          )}`;
-        case 'breath_practice':
-          return `/breath-practices/${encodeURIComponent(
-            navigation.slug
-          )}${navigation.slug === 'box-breathing' ? '?group=popular' : ''}`;
-        case 'breath_practices':
-          return '/breath-practices';
-        default:
-          return '/';
-      }
+      return buildAppNavigationPath(
+        resolveTargetFromLegacyNotificationNavigation(navigation)
+      );
     }
 
     function normalizeTargetPath(value: string): string {
@@ -531,7 +645,7 @@ export default defineNuxtPlugin({
 
     function resolveMessageId(
       payload: Record<string, any>,
-      action: { notification?: { id?: string | number } }
+      action?: { notification?: { id?: string | number } }
     ): string | null {
       const raw =
         payload?.['google.message_id'] ??
@@ -541,6 +655,131 @@ export default defineNuxtPlugin({
       if (raw === null || raw === undefined) return null;
       const value = String(raw).trim();
       return value ? value : null;
+    }
+
+    function normalizeNotificationPayload(
+      notification?: Record<string, any> | null
+    ): Record<string, any> {
+      if (!notification || typeof notification !== 'object') {
+        return {};
+      }
+
+      const root = { ...notification };
+      const data =
+        notification.data && typeof notification.data === 'object'
+          ? notification.data
+          : null;
+      const extra =
+        notification.extra && typeof notification.extra === 'object'
+          ? notification.extra
+          : null;
+
+      return {
+        ...root,
+        ...(data ?? {}),
+        ...(extra ?? {}),
+      };
+    }
+
+    async function handleNotificationAction(args: {
+      actionId?: string | null;
+      notification?: Record<string, any> | null;
+      payload?: Record<string, any> | null;
+      messageId?: string | null;
+    }): Promise<void> {
+      const notification = args.notification ?? undefined;
+      const payload =
+        args.payload ?? normalizeNotificationPayload(notification);
+      const actionId = args.actionId || '';
+      const isTap = isTapAction(actionId);
+      const navigation = resolveNavigation(payload);
+      const messageId =
+        args.messageId ?? resolveMessageId(payload, { notification });
+
+      if (payload?.slotId) {
+        let actionType: InteractionAction = 'dismissed';
+
+        if (isTap) {
+          actionType = 'open';
+        } else if (actionId === 'yes') {
+          actionType = 'yes';
+        } else if (actionId === 'no') {
+          actionType = 'no';
+        } else if (actionId === 'later' || actionId.startsWith('snooze:')) {
+          actionType = 'later';
+
+          if (actionId.startsWith('snooze:')) {
+            const duration = actionId.replace('snooze:', '') as
+              | '15m'
+              | '1h'
+              | '4h'
+              | 'tomorrow';
+            try {
+              await nuxtApp.$api('/api/notifications/snooze', {
+                method: 'POST',
+                body: {
+                  kind: payload.kind || 'therapy',
+                  duration,
+                  entityKey: payload.entityKey || null,
+                },
+              });
+              console.log('[PushPlugin] Notification snoozed:', duration);
+            } catch (error) {
+              console.error('[PushPlugin] Failed to snooze:', error);
+            }
+          }
+        }
+
+        try {
+          await nuxtApp.$api('/api/notifications/interaction', {
+            method: 'POST',
+            body: {
+              slotId: payload.slotId,
+              action: actionType,
+              at: new Date().toISOString(),
+              meta: {
+                platform,
+                actionId,
+                navigationType: navigation?.type ?? null,
+                navigationId: resolveNavigationId(navigation),
+              },
+            },
+          });
+          console.log('[PushPlugin] Interaction tracked:', actionType);
+        } catch (error) {
+          console.error('[PushPlugin] Failed to track interaction:', error);
+        }
+      }
+
+      if (!isTap) return;
+
+      try {
+        await meditationPlayer.registerUserGesture();
+      } catch (error) {
+        console.warn(
+          '[PushPlugin] Failed to register gesture for meditation audio:',
+          error
+        );
+      }
+
+      const navigationTarget = resolveNavigationTarget(payload);
+      const deepLink =
+        typeof payload?.deepLink === 'string' && payload.deepLink.trim()
+          ? payload.deepLink.trim()
+          : null;
+      const actionPath = resolveActionTargetPath(payload);
+      const targetPath =
+        (navigationTarget ? buildAppNavigationPath(navigationTarget) : null) ||
+        deepLink ||
+        actionPath ||
+        (navigation ? buildPathFromNavigation(navigation) : '/');
+
+      if (!deepLink && !actionPath && !navigation) {
+        void logMissingNavigation(payload);
+      }
+
+      await enqueueNavigation(targetPath, messageId, navigationTarget);
+      await flushPendingNavigation();
     }
 
     async function consumeNativeLaunchNavigation(): Promise<void> {
@@ -832,7 +1071,10 @@ export default defineNuxtPlugin({
       // Успешная регистрация токена
       PushNotifications.addListener('registration', async (token) => {
         const apnsToken = token.value;
-        console.log('[PushPlugin] Registration success, token:', apnsToken);
+        console.log('[PushPlugin] Registration success (APNs/native token):', {
+          platform,
+          tokenPrefix: maskToken(apnsToken),
+        });
 
         let effectiveToken = apnsToken;
         if (isIos) {
@@ -848,7 +1090,10 @@ export default defineNuxtPlugin({
             return;
           }
           effectiveToken = fcmToken;
-          console.log('[PushPlugin] FCM token resolved for iOS');
+          console.log('[PushPlugin] FCM token resolved for iOS:', {
+            apnsTokenPrefix: maskToken(apnsToken),
+            fcmTokenPrefix: maskToken(fcmToken),
+          });
         }
 
         if (!effectiveToken) {
@@ -866,27 +1111,12 @@ export default defineNuxtPlugin({
 
         // Регистрируем на сервере (только если есть сессия)
         try {
-          const sessionToken =
-            typeof window !== 'undefined'
-              ? window.localStorage.getItem('mentai.session.token')
-              : null;
-          if (!sessionToken) {
-            console.log(
-              '[PushPlugin] Skip token registration: no session token yet'
-            );
-            return;
-          }
-
           const platformHeader: 'ios' | 'android' = isIos ? 'ios' : 'android';
-
-          await nuxtApp.$api('/api/notifications/register-token', {
-            method: 'POST',
-            body: {
-              token: effectiveToken,
-              platform: platformHeader,
-            },
-          });
-          console.log('[PushPlugin] Token registered on server');
+          await registerTokenOnServer(
+            effectiveToken,
+            platformHeader,
+            'registration_event'
+          );
         } catch (error) {
           console.error(
             '[PushPlugin] Failed to register token on server:',
@@ -901,13 +1131,12 @@ export default defineNuxtPlugin({
       });
 
       // Push получен в активном приложении.
-      // На Android системное уведомление уже построено нативным сервисом,
-      // здесь оставляем только клиентскую реакцию (логика/UI/аналитика).
+      // На Android системное уведомление уже строится нативным FCM-сервисом.
+      // На iOS полагаемся на штатный native foreground-показ Capacitor.
       PushNotifications.addListener(
         'pushNotificationReceived',
         (notification) => {
           console.log('[PushPlugin] Notification received:', notification);
-          // При необходимости здесь можно обновить UI без локального дубля.
         }
       );
 
@@ -922,111 +1151,17 @@ export default defineNuxtPlugin({
           );
 
           const { notification } = action;
-          const data = notification.data as Record<string, any> | undefined;
-          // На разных платформах данные могут оказаться в root, а не в data.
-          // Собираем единый payload с приоритетом data.
-          const payload = {
-            ...(notification as Record<string, any>),
-            ...(data ?? {}),
-          } as Record<string, any>;
-          const actionId = action.actionId || '';
-          const isTap = isTapAction(actionId);
-          const navigation = resolveNavigation(payload);
+          const payload = normalizeNotificationPayload(
+            notification as Record<string, any>
+          );
           const messageId = resolveMessageId(payload, action);
 
-          // Трекинг взаимодействия
-          if (payload?.slotId) {
-            let actionType: InteractionAction = 'dismissed';
-
-            // Определяем тип действия
-            if (isTap) {
-              actionType = 'open';
-            } else if (actionId === 'yes') {
-              actionType = 'yes';
-            } else if (actionId === 'no') {
-              actionType = 'no';
-            } else if (actionId === 'later' || actionId.startsWith('snooze:')) {
-              actionType = 'later';
-
-              // Если это snooze — отправляем запрос на отложение
-              const duration = actionId.replace('snooze:', '') as
-                | '15m'
-                | '1h'
-                | '4h'
-                | 'tomorrow';
-              try {
-                const nuxtApp = useNuxtApp();
-                await nuxtApp.$api('/api/notifications/snooze', {
-                  method: 'POST',
-                  body: {
-                    kind: payload.kind || 'therapy',
-                    duration,
-                    entityKey: payload.entityKey || null,
-                  },
-                });
-                console.log('[PushPlugin] Notification snoozed:', duration);
-              } catch (error) {
-                console.error('[PushPlugin] Failed to snooze:', error);
-              }
-            }
-
-            // Отправляем трекинг взаимодействия
-            try {
-              const nuxtApp = useNuxtApp();
-              await nuxtApp.$api('/api/notifications/interaction', {
-                method: 'POST',
-                body: {
-                  slotId: payload.slotId,
-                  action: actionType,
-                  at: new Date().toISOString(),
-                  meta: {
-                    platform,
-                    actionId,
-                    navigationType: navigation?.type ?? null,
-                    navigationId: resolveNavigationId(navigation),
-                  },
-                },
-              });
-              console.log('[PushPlugin] Interaction tracked:', actionType);
-            } catch (error) {
-              console.error('[PushPlugin] Failed to track interaction:', error);
-            }
-          }
-
-          // Навигация выполняется только при системном тапе.
-          if (isTap) {
-            // Для старта медитации из push заранее фиксируем пользовательское намерение
-            // и пытаемся разблокировать аудио-контекст до роутинга.
-            try {
-              await meditationPlayer.registerUserGesture();
-            } catch (error) {
-              console.warn(
-                '[PushPlugin] Failed to register gesture for meditation audio:',
-                error
-              );
-            }
-
-            const navigationTarget = resolveNavigationTarget(payload);
-            const deepLink =
-              typeof payload?.deepLink === 'string' && payload.deepLink.trim()
-                ? payload.deepLink.trim()
-                : null;
-            const actionPath = resolveActionTargetPath(payload);
-            const targetPath =
-              (navigationTarget
-                ? buildAppNavigationPath(navigationTarget)
-                : null) ||
-              deepLink ||
-              actionPath ||
-              (navigation ? buildPathFromNavigation(navigation) : '/');
-
-            if (!deepLink && !actionPath && !navigation) {
-              void logMissingNavigation(payload);
-            }
-
-            await enqueueNavigation(targetPath, messageId, navigationTarget);
-            await flushPendingNavigation();
-          }
+          await handleNotificationAction({
+            actionId: action.actionId,
+            notification: notification as Record<string, any>,
+            payload,
+            messageId,
+          });
         }
       );
     } catch (error) {
@@ -1100,6 +1235,16 @@ export default defineNuxtPlugin({
 
         console.log('[PushPlugin] Permission granted, registering push');
         await PushNotifications.register();
+
+        // Для iOS FCM token может стабилизироваться не в тот же тик, что APNs registration.
+        // Поэтому повторно синхронизируем актуальный token после старта.
+        if (isIos) {
+          setTimeout(() => {
+            void syncCurrentNativeToken('post_register_delayed_sync', {
+              forceServerSync: true,
+            });
+          }, 10_000);
+        }
       } catch (error: any) {
         // Проверяем, что это ошибка инициализации Firebase
         const errorMessage = error?.message || '';
@@ -1123,6 +1268,14 @@ export default defineNuxtPlugin({
       );
       setTimeout(initNotifications, 3000);
 
+      // Даже если registration event был до входа в аккаунт или токен успел обновиться позже,
+      // при старте ещё раз выравниваем текущее native token состояние с backend.
+      setTimeout(() => {
+        void syncCurrentNativeToken('app_mounted_delayed_sync', {
+          forceServerSync: false,
+        });
+      }, 12_000);
+
       // Восстанавливаем launch-переход из Android intent (холодный старт),
       // затем пробуем pending-навигацию из JS-очереди.
       void consumeNativeLaunchNavigation();
@@ -1144,9 +1297,15 @@ export default defineNuxtPlugin({
             if (!isActive) return;
             void consumeNativeLaunchNavigation();
             void flushPendingNavigation();
-            void readStoredValue(DENIED_PENDING_SYNC_KEY).then((v) => {
-              if (v === '1') void trySyncDeniedToServer();
+            void syncCurrentNativeToken('app_became_active', {
+              forceServerSync: false,
             });
+            void (async () => {
+              const value = await readStoredValue(DENIED_PENDING_SYNC_KEY);
+              if (value === '1') {
+                await trySyncDeniedToServer();
+              }
+            })();
           });
         })
         .catch((error) => {
@@ -1178,6 +1337,9 @@ export default defineNuxtPlugin({
       (loggedIn) => {
         if (!loggedIn) return;
         void syncPushDeniedOnLogin();
+        void syncCurrentNativeToken('login_sync', {
+          forceServerSync: true,
+        });
         void flushPendingNavigation();
       },
       { immediate: true }
