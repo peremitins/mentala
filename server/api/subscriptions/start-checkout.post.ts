@@ -29,6 +29,7 @@ import {
   createYooKassaPayment,
   createYooKassaPaymentMethodBinding,
   extractPaymentMethodPresentation,
+  buildYooKassaReceipt,
 } from '@/server/application/payments/yookassa.client';
 import {
   isTrialActiveAt,
@@ -335,6 +336,7 @@ export default defineEventHandler(async (event) => {
     const userRows = await db
       .select({
         id: users.id,
+        email: users.email,
         trialEndedAt: users.trialEndedAt,
         billingPlanId: users.billingPlanId,
         billingPeriod: users.billingPeriod,
@@ -968,12 +970,14 @@ export default defineEventHandler(async (event) => {
         )
         .digest('hex');
 
+      const savedMethodDescription = `Подписка Ментала ${planId === 'premium' ? 'Premium' : 'PRO'} (${billingPeriodTyped === 'year' ? 'год' : 'месяц'})`;
+
       const savedMethodPayment = await createYooKassaPayment({
         shopId,
         secretKey,
         idempotenceKey: savedMethodIdempotenceKey,
         amount: decision.toPay,
-        description: `Ментала subscription ${planId} (${billingPeriodTyped})`,
+        description: savedMethodDescription,
         metadata: {
           userId: String(userId),
           planId,
@@ -982,6 +986,13 @@ export default defineEventHandler(async (event) => {
         },
         paymentMode: 'recurring',
         paymentMethodId: savedPaymentMethodId,
+        receipt: userRow?.email
+          ? buildYooKassaReceipt({
+              email: userRow.email,
+              amount: decision.toPay,
+              description: savedMethodDescription,
+            })
+          : undefined,
       });
 
       const savedMethodPaymentId = String(savedMethodPayment.id || '').trim();
@@ -1327,12 +1338,14 @@ export default defineEventHandler(async (event) => {
       });
     }
 
+    const checkoutDescription = `Подписка Ментала ${planId === 'premium' ? 'Premium' : 'PRO'} (${billingPeriodTyped === 'year' ? 'год' : 'месяц'})`;
+
     const yookassaPayment = await createYooKassaPayment({
       shopId,
       secretKey,
       idempotenceKey: yookassaIdempotenceKey,
       amount: decision.toPay,
-      description: `Ментала subscription ${planId} (${billingPeriodTyped})`,
+      description: checkoutDescription,
       metadata: {
         userId: String(userId),
         subscriptionId: String(pendingSubscription.id),
@@ -1343,6 +1356,13 @@ export default defineEventHandler(async (event) => {
       savePaymentMethod: true,
       merchantCustomerId: String(userId),
       returnUrl,
+      receipt: userRow?.email
+        ? buildYooKassaReceipt({
+            email: userRow.email,
+            amount: decision.toPay,
+            description: checkoutDescription,
+          })
+        : undefined,
     });
 
     yookassaPaymentCreated = true;
