@@ -16,6 +16,7 @@ import {
 import {
   createYooKassaPayment,
   extractPaymentMethodPresentation,
+  buildYooKassaReceipt,
 } from '@/server/application/payments/yookassa.client';
 import {
   markTrialChargeFailure,
@@ -42,6 +43,7 @@ export default defineEventHandler(async (event) => {
   const userRows = await db
     .select({
       id: users.id,
+      email: users.email,
       billingPlanId: users.billingPlanId,
       billingPeriod: users.billingPeriod,
       nextChargeAt: users.nextChargeAt,
@@ -181,14 +183,23 @@ export default defineEventHandler(async (event) => {
     }
 
     const attemptOrdinal = Number(existingAttempt?.attemptCount || 0) + 1;
+    const retryDescription = `Подписка Ментала ${user.billingPlanId === 'premium' ? 'Premium' : 'PRO'} (${user.billingPeriod === 'year' ? 'год' : 'месяц'})`;
+
     const payment = await createYooKassaPayment({
       shopId,
       secretKey,
       idempotenceKey: `${chargeAttemptKey}:manual:${attemptOrdinal}`,
       amount: chargeAmount,
-      description: `Ментала manual retry ${user.billingPlanId} (${user.billingPeriod})`,
+      description: retryDescription,
       paymentMode: 'recurring',
       paymentMethodId: user.paymentMethodId,
+      receipt: user.email
+        ? buildYooKassaReceipt({
+            email: user.email,
+            amount: chargeAmount,
+            description: retryDescription,
+          })
+        : undefined,
       metadata: {
         chargeType: 'trial_scheduled',
         chargeAttemptKey,

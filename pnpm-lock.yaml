@@ -12,6 +12,9 @@ patchedDependencies:
   '@capacitor-community/speech-recognition':
     hash: 1b6c30bb5e45c4977eb929caea60a4ef071738786f4749fbb3eecf9a08cb3d3d
     path: patches/@capacitor-community__speech-recognition.patch
+  '@capgo/capacitor-social-login@7.20.0':
+    hash: 494f63e7b7f9e31eb1bfe9f162a2ac49a7179480cc7c75ac130ec34c5e53b838
+    path: patches/@capgo__capacitor-social-login@7.20.0.patch
 
 importers:
 
@@ -69,8 +72,8 @@ importers:
         specifier: ^7.0.3
         version: 7.0.3(@capacitor/core@7.4.3)
       '@capgo/capacitor-social-login':
-        specifier: ^8.2.5
-        version: 8.2.5(@capacitor/core@7.4.3)
+        specifier: 7.20.0
+        version: 7.20.0(patch_hash=494f63e7b7f9e31eb1bfe9f162a2ac49a7179480cc7c75ac130ec34c5e53b838)(@capacitor/core@7.4.3)
       '@capgo/native-audio':
         specifier: 7.11.2
         version: 7.11.2(@capacitor/core@7.4.3)
@@ -794,10 +797,10 @@ packages:
   '@capacitor/synapse@1.0.4':
     resolution: {integrity: sha512-/C1FUo8/OkKuAT4nCIu/34ny9siNHr9qtFezu4kxm6GY1wNFxrCFWjfYx5C1tUhVGz3fxBABegupkpjXvjCHrw==}
 
-  '@capgo/capacitor-social-login@8.2.5':
-    resolution: {integrity: sha512-0ulzswVTnUtLDoEXOxMvRmKWQ5FPBdlGVfnaS8c3FtczZlzHowFYZ1WJXx8bBkKU3szmEmIWpkUxil34Xeb3iQ==}
+  '@capgo/capacitor-social-login@7.20.0':
+    resolution: {integrity: sha512-rHlEALFUonLe4sDG+qybDowh2/XDiHJ4DK9pShe1aPTGSrmA5j7kz8VbHYGqgof5xdyeC7pAY3+8PASTW+qGKg==}
     peerDependencies:
-      '@capacitor/core': '>=8.0.0'
+      '@capacitor/core': '>=7.0.0'
 
   '@capgo/native-audio@7.11.2':
     resolution: {integrity: sha512-/V4NIeo9BN5o5QEYQkPpeyZWQ/XKxBV8xNweMepviD7nugePKKCFa9Iy5ETJCybh/sV7mnbk6bMNcKcp+ohNPQ==}
@@ -11068,7 +11071,7 @@ snapshots:
 
   '@capacitor/synapse@1.0.4': {}
 
-  '@capgo/capacitor-social-login@8.2.5(@capacitor/core@7.4.3)':
+  '@capgo/capacitor-social-login@7.20.0(patch_hash=494f63e7b7f9e31eb1bfe9f162a2ac49a7179480cc7c75ac130ec34c5e53b838)(@capacitor/core@7.4.3)':
     dependencies:
       '@capacitor/core': 7.4.3
 

@@ -20,6 +20,7 @@ import {
 import {
   createYooKassaPayment,
   extractPaymentMethodPresentation,
+  buildYooKassaReceipt,
 } from '@/server/application/payments/yookassa.client';
 import { TRIAL_BILLING_EARLY_CHARGE_MS } from '@/server/config/subscription';
 
@@ -107,6 +108,7 @@ async function processChargeBatch(params: {
   const dueUsers = await db
     .select({
       id: users.id,
+      email: users.email,
       billingPlanId: users.billingPlanId,
       billingPeriod: users.billingPeriod,
       nextChargeAt: users.nextChargeAt,
@@ -284,14 +286,23 @@ async function processChargeBatch(params: {
         billingPeriod: user.billingPeriod,
       });
 
+      const chargeDescription = `Подписка Ментала ${user.billingPlanId === 'premium' ? 'Premium' : 'PRO'} (${user.billingPeriod === 'year' ? 'год' : 'месяц'})`;
+
       const payment = await createYooKassaPayment({
         shopId: params.shopId,
         secretKey: params.secretKey,
         idempotenceKey: chargeAttemptKey,
         amount: chargeAmount,
-        description: `Ментала trial charge ${user.billingPlanId} (${user.billingPeriod})`,
+        description: chargeDescription,
         paymentMode: 'recurring',
         paymentMethodId: user.paymentMethodId,
+        receipt: user.email
+          ? buildYooKassaReceipt({
+              email: user.email,
+              amount: chargeAmount,
+              description: chargeDescription,
+            })
+          : undefined,
         metadata: {
           chargeType: 'trial_scheduled',
           chargeAttemptKey,
@@ -381,8 +392,57 @@ async function processChargeBatch(params: {
             .where(eq(users.id, user.id));
         });
       }
-    } catch (error) {
-      // Освобождаем lock, чтобы следующая итерация могла повторить попытку.
+    } catch (error: any) {
+      // Логируем тело ответа от провайдера (ofetch кладёт его в error.data).
+      const providerResponseBody = error?.data ?? error?.response?._data ?? null;
+      const httpStatus = error?.statusCode ?? error?.status ?? null;
+
+      console.error('[TrialBillingWorker] scheduled charge failed', {
+        userId: user.id,
+        chargeAttemptKey,
+        httpStatus,
+        providerResponseBody,
+        error,
+      });
+
+      // Для клиентских ошибок (4xx) повторять бессмысленно —
+      // помечаем попытку как failed и переводим юзера в past_due с grace.
+      const isClientError =
+        typeof httpStatus === 'number' && httpStatus >= 400 && httpStatus < 500;
+
+      if (isClientError) {
+        try {
+          await markTrialChargeFailure({
+            userId: user.id,
+            paymentId: null,
+            billingPlanId: user.billingPlanId!,
+            billingPeriod: user.billingPeriod!,
+            chargeAttemptKey,
+            attemptMode: 'automatic',
+            failureReason: `provider_http_${httpStatus}`,
+            scheduledChargeAt: user.nextChargeAt!,
+            now: params.now,
+          });
+        } catch (failureError) {
+          console.error(
+            '[TrialBillingWorker] markTrialChargeFailure also failed',
+            { userId: user.id, failureError }
+          );
+        }
+      } else {
+        // Для серверных/сетевых ошибок — снимаем lock с charge attempt,
+        // чтобы следующая итерация повторила попытку, но без бесконечного цикла.
+        await db
+          .update(billingChargeAttempts)
+          .set({
+            lockAt: null,
+            lockBy: null,
+            updatedAt: params.now,
+          })
+          .where(eq(billingChargeAttempts.chargeAttemptKey, chargeAttemptKey));
+      }
+
+      // Освобождаем lock юзера в любом случае.
       await db
         .update(users)
         .set({
@@ -391,12 +451,6 @@ async function processChargeBatch(params: {
           updatedAt: params.now,
         })
         .where(eq(users.id, user.id));
-
-      console.error('[TrialBillingWorker] scheduled charge failed', {
-        userId: user.id,
-        chargeAttemptKey,
-        error,
-      });
     }
   }
 }
