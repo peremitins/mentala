@@ -23,7 +23,7 @@ def capacitor_pods
   pod 'CapacitorPushNotifications', :path => '../../node_modules/.pnpm/@capacitor+push-notifications@7.0.3_@capacitor+core@7.4.3/node_modules/@capacitor/push-notifications'
   pod 'CapacitorSplashScreen', :path => '../../node_modules/.pnpm/@capacitor+splash-screen@7.0.3_@capacitor+core@7.4.3/node_modules/@capacitor/splash-screen'
   pod 'CapacitorStatusBar', :path => '../../node_modules/.pnpm/@capacitor+status-bar@7.0.3_@capacitor+core@7.4.3/node_modules/@capacitor/status-bar'
-  pod 'CapgoCapacitorSocialLogin', :path => '../../node_modules/.pnpm/@capgo+capacitor-social-login@8.2.5_@capacitor+core@7.4.3/node_modules/@capgo/capacitor-social-login'
+  pod 'CapgoCapacitorSocialLogin', :path => '../../node_modules/.pnpm/@capgo+capacitor-social-login@7.20.0_patch_hash=494f63e7b7f9e31eb1bfe9f162a2ac49a717948_09f6fb5a1db32fd44b4bf5e71e6fb80f/node_modules/@capgo/capacitor-social-login'
   pod 'CapgoNativeAudio', :path => '../../node_modules/.pnpm/@capgo+native-audio@7.11.2_@capacitor+core@7.4.3/node_modules/@capgo/native-audio'
   pod 'CapacitorNativeSettings', :path => '../../node_modules/.pnpm/capacitor-native-settings@7.0.2_@capacitor+core@7.4.3/node_modules/capacitor-native-settings'
 end
