@@ -303,6 +303,12 @@ export default {
           TITLE: 'Данные под защитой',
           TEXT: 'Передаем данные по защищенному соединению. Доступ к информации строго ограничен.',
         },
+        GOOGLE_SIGN_IN: {
+          ID: 'google-sign-in',
+          ICON: '🔑',
+          TITLE: 'Вход через Google',
+          TEXT: 'Для входа нужны только email и профиль. Gmail, Drive, Calendar и другие данные Google не запрашиваем.',
+        },
       },
     },
     FAQ: {

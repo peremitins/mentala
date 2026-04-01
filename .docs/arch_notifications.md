@@ -55,6 +55,7 @@
 - Приоритет: deepLink → data.action → navigation → `/`
 - Client: очередь с TTL, дедупликация по messageId, retry до router.isReady()
 - `actionHint` определяет цель (breathing → slug техники, meditation → trackId)
+- Для темы `Дневник благодарности` target/deepLink форсируется по `title`/`entityKey=gratitude`, даже если `actionHint` отсутствует или в старом payload записан `home`
 
 ## Unified Navigation v1
 - `AppNavigationTarget` в `shared/navigation/index.ts` — канонический контракт
