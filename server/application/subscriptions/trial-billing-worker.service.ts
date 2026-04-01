@@ -9,6 +9,7 @@ import {
 import { calculatePlanPrice } from './price-calculator';
 import {
   buildChargeAttemptKey,
+  buildProviderIdempotenceKey,
   isTrialBillingPeriod,
   isTrialBillingPlanId,
 } from './trial-billing.service';
@@ -175,6 +176,7 @@ async function processChargeBatch(params: {
       const existingAttemptRows = await db
         .select({
           status: billingChargeAttempts.status,
+          attemptCount: billingChargeAttempts.attemptCount,
           nextAutoRetryAt: billingChargeAttempts.nextAutoRetryAt,
           providerPaymentId: billingChargeAttempts.providerPaymentId,
           lockAt: billingChargeAttempts.lockAt,
@@ -287,11 +289,16 @@ async function processChargeBatch(params: {
       });
 
       const chargeDescription = `Подписка Ментала ${user.billingPlanId === 'premium' ? 'Premium' : 'PRO'} (${user.billingPeriod === 'year' ? 'год' : 'месяц'})`;
+      const attemptOrdinal = Number(existingAttempt?.attemptCount || 0) + 1;
 
       const payment = await createYooKassaPayment({
         shopId: params.shopId,
         secretKey: params.secretKey,
-        idempotenceKey: chargeAttemptKey,
+        idempotenceKey: buildProviderIdempotenceKey({
+          chargeAttemptKey,
+          attemptMode: 'automatic',
+          attemptOrdinal,
+        }),
         amount: chargeAmount,
         description: chargeDescription,
         paymentMode: 'recurring',
