@@ -10,6 +10,7 @@ import {
 } from '@/server/infrastructure/db/schema';
 import {
   buildChargeAttemptKey,
+  buildProviderIdempotenceKey,
   isTrialBillingPeriod,
   isTrialBillingPlanId,
 } from '@/server/application/subscriptions/trial-billing.service';
@@ -188,7 +189,11 @@ export default defineEventHandler(async (event) => {
     const payment = await createYooKassaPayment({
       shopId,
       secretKey,
-      idempotenceKey: `${chargeAttemptKey}:manual:${attemptOrdinal}`,
+      idempotenceKey: buildProviderIdempotenceKey({
+        chargeAttemptKey,
+        attemptMode: 'manual',
+        attemptOrdinal,
+      }),
       amount: chargeAmount,
       description: retryDescription,
       paymentMode: 'recurring',

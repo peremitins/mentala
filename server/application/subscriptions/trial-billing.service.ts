@@ -122,6 +122,19 @@ export function buildChargeAttemptKey(params: {
 }
 
 /**
+ * Уникальный idempotence key для YooKassa (макс. 64 символа).
+ * Каждая попытка (auto/manual) получает свой ключ.
+ */
+export function buildProviderIdempotenceKey(params: {
+  chargeAttemptKey: string;
+  attemptMode: 'automatic' | 'manual';
+  attemptOrdinal: number;
+}): string {
+  const raw = `${params.chargeAttemptKey}:${params.attemptMode}:${params.attemptOrdinal}`;
+  return createHash('sha256').update(raw, 'utf8').digest('hex');
+}
+
+/**
  * Расписание автоматических попыток в рамках grace period 48ч: 0h, +6h, +24h.
  */
 export function resolveNextAutoRetryAt(params: {
