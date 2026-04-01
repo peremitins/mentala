@@ -55,6 +55,16 @@ const config: CapacitorConfig = {
       // HLS не используем для текущих медитаций, чтобы не увеличивать APK лишними зависимостями.
       hls: false,
     },
+    SocialLogin: {
+      // Используем только Google-логин; Facebook, Apple и Twitter отключены,
+      // чтобы не тянуть лишние SDK (в т.ч. Facebook → AD_ID permission).
+      providers: {
+        google: true,
+        facebook: false,
+        apple: false,
+        twitter: false,
+      },
+    },
   },
 };
 
