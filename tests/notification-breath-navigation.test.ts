@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildDeepLinkFromNavigation,
+  resolveNotificationNavigation,
+  resolveNotificationTarget,
   resolveNavigationFromActionHint,
   resolveNavigationTargetFromActionHint,
 } from '../server/application/notifications/breath-navigation.utils';
@@ -112,5 +114,33 @@ describe('notification breath navigation', () => {
       slug: '4-7-8',
       groupKey: 'sleep',
     });
+  });
+
+  it('форсирует gratitude target по теме, даже если actionHint отсутствует', () => {
+    const target = resolveNotificationTarget({
+      actionHint: 'none',
+      notificationText: 'Запиши одну вещь, которая поддержала тебя сегодня.',
+      title: 'Дневник благодарности',
+      entityKey: 'gratitude',
+    });
+
+    expect(target).toEqual({
+      type: 'gratitude_diary',
+    });
+  });
+
+  it('строит legacy navigation и deepLink для gratitude diary', () => {
+    const navigation = resolveNotificationNavigation({
+      actionHint: 'none',
+      notificationText: 'Запиши одну вещь, которая поддержала тебя сегодня.',
+      title: 'Дневник благодарности',
+      entityKey: 'gratitude',
+    });
+    const deepLink = buildDeepLinkFromNavigation(navigation);
+
+    expect(navigation).toEqual({
+      type: 'gratitude_diary',
+    });
+    expect(deepLink).toBe('/practices/gratitude-diary');
   });
 });

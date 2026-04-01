@@ -484,7 +484,7 @@ async function loadPreference() {
   } catch (error: any) {
     console.error('[HabitDetail] Preference load failed:', error);
     notificationError.value =
-      error?.message || 'Не удалось загрузить настройки уведомлений';
+      error?.message || 'Не удалось загрузить настройки напоминаний';
   } finally {
     prefLoading.value = false;
   }
@@ -500,7 +500,7 @@ async function updateNotificationsPreference(enabled: boolean) {
   } catch (error: any) {
     console.error('[HabitDetail] Toggle notifications failed:', error);
     notificationError.value =
-      error?.message || 'Не удалось обновить настройки уведомлений';
+      error?.message || 'Не удалось обновить настройки напоминаний';
     throw error;
   }
 }

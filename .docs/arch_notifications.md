@@ -1,5 +1,9 @@
 # Уведомления
 
+## Терминология в UI
+- В пользовательском интерфейсе привычек и терапии используем термин `напоминания`, когда речь идёт о поддерживающих сообщениях и их расписании.
+- Термин `уведомления` оставляем для системного уровня: push-разрешений ОС, delivery-механики, FCM/APNs и внутренних технических сущностей.
+
 ## Настройки (`notification_preferences`)
 - `active_days`, `time_range_start/end`, `custom_slot_times` (до 5), `entity_key`
 - `text_source_normalized`: templates | ai
@@ -51,6 +55,7 @@
 - Приоритет: deepLink → data.action → navigation → `/`
 - Client: очередь с TTL, дедупликация по messageId, retry до router.isReady()
 - `actionHint` определяет цель (breathing → slug техники, meditation → trackId)
+- Для темы `Дневник благодарности` target/deepLink форсируется по `title`/`entityKey=gratitude`, даже если `actionHint` отсутствует или в старом payload записан `home`
 
 ## Unified Navigation v1
 - `AppNavigationTarget` в `shared/navigation/index.ts` — канонический контракт
