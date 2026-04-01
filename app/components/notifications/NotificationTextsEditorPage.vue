@@ -1,7 +1,7 @@
 <template>
   <div class="space-y-2 h-full overflow-y-auto rounded-lg">
     <PageHeader
-      title="Тексты уведомлений"
+      title="Тексты напоминаний"
       :show-back-button="true"
       @go-back="goBack"
     />
@@ -10,7 +10,7 @@
       <!-- Заголовок с информацией -->
       <!-- <section class="glass-deep p-4 space-y-1">
         <h2 class="text-base font-semibold text-foreground">
-          {{ entityName }} — Тексты уведомлений
+          {{ entityName }} — Тексты напоминаний
         </h2>
         <p class="text-sm text-foreground/80">
           {{ filteredTextsCount }} текстов • Источник: Шаблоны + ваши
@@ -19,10 +19,10 @@
 
       <!-- Фильтры -->
       <section class="space-y-3">
-        <!-- Фокус уведомлений -->
+        <!-- Фокус напоминаний -->
         <div v-if="hasSubtypeOptions" class="glass-deep p-3 space-y-2">
           <label class="text-sm font-semibold text-foreground flex">
-            Фокус уведомлений
+            Фокус напоминаний
           </label>
           <ToggleGroup
             :model-value="selectedSubtype || ''"
@@ -41,10 +41,10 @@
           </ToggleGroup>
         </div>
 
-        <!-- Стиль уведомлений -->
+        <!-- Стиль напоминаний -->
         <div class="glass-deep p-3 space-y-2">
           <label class="text-sm font-semibold text-foreground flex">
-            Стиль уведомлений
+            Стиль напоминаний
           </label>
           <ToggleGroup
             :model-value="selectedDirectness"
