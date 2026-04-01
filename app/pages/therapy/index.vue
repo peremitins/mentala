@@ -26,7 +26,7 @@
     <ConfirmModal
       ref="deleteModalRef"
       title="Удалить тему?"
-      subtitle="Расписание уведомлений по этой теме будет удалено. Продолжить?"
+      subtitle="Расписание напоминаний по этой теме будет удалено. Продолжить?"
       confirm-label="Удалить"
       cancel-label="Отмена"
       @confirm="confirmDeleteTopic"
