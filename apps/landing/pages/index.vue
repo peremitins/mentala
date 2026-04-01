@@ -559,11 +559,11 @@
             </h2>
           </div>
 
-          <div class="mt-6 grid gap-4 sm:grid-cols-2">
+          <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <article
               v-for="item in privacyCards"
               :key="item.id"
-              class="reveal-item glass-panel rounded-2xl p-5 sm:p-6"
+              class="reveal-item glass-panel rounded-2xl p-5 sm:p-6 h-full"
             >
               <div class="flex items-start gap-3.5">
                 <div
@@ -993,7 +993,7 @@ const submittingLead = ref(false);
 const submitStatus = ref<'idle' | 'created' | 'duplicate' | 'error'>('idle');
 const submitErrorText = ref('');
 const activeFeatureIndex = ref(0);
-const faqOpenIndex = ref<number | null>(0);
+const faqOpenIndex = ref<number | null>(null);
 
 const featureRefs = ref<Array<HTMLElement | null>>([]);
 const featurePhoneRef = ref<HTMLElement | null>(null);
@@ -1190,6 +1190,12 @@ const privacyCards = computed<PrivacyCard[]>(() => [
     icon: String(t('LANDING.PRIVACY.CARDS.DATA_PROTECTION.ICON')),
     title: String(t('LANDING.PRIVACY.CARDS.DATA_PROTECTION.TITLE')),
     text: String(t('LANDING.PRIVACY.CARDS.DATA_PROTECTION.TEXT')),
+  },
+  {
+    id: String(t('LANDING.PRIVACY.CARDS.GOOGLE_SIGN_IN.ID')),
+    icon: String(t('LANDING.PRIVACY.CARDS.GOOGLE_SIGN_IN.ICON')),
+    title: String(t('LANDING.PRIVACY.CARDS.GOOGLE_SIGN_IN.TITLE')),
+    text: String(t('LANDING.PRIVACY.CARDS.GOOGLE_SIGN_IN.TEXT')),
   },
 ]);
 

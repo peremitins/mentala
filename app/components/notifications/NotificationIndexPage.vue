@@ -91,8 +91,8 @@
                       class="flex items-center justify-center rounded-full p-1 text-foreground/80"
                       :title="
                         item.notificationsEnabled
-                          ? 'Уведомления включены'
-                          : 'Уведомления выключены'
+                          ? 'Напоминания включены'
+                          : 'Напоминания выключены'
                       "
                     >
                       <IconBell

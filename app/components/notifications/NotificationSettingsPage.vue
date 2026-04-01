@@ -143,12 +143,12 @@
         </p>
       </section>
 
-      <!-- Карточка расписания уведомлений -->
+      <!-- Карточка расписания напоминаний -->
       <section class="glass-deep p-3 space-y-4">
         <div class="flex items-center justify-between">
           <div class="space-y-1">
             <h3 class="text-sm font-semibold">
-              {{ 'Уведомления' }}
+              {{ 'Напоминания' }}
               <span class="text-xs font-normal">
                 ({{ enabled ? 'включены' : 'выключены' }})
               </span>
@@ -184,7 +184,7 @@
                 :max="5"
                 :step="1"
                 class="relative flex w-full touch-none select-none items-center py-3"
-                aria-label="Частота уведомлений"
+                aria-label="Частота напоминаний"
               >
                 <SliderTrack
                   class="relative h-2 w-full grow rounded-full bg-primary-ui/20"
@@ -260,7 +260,7 @@
                 class="flex items-center justify-between text-[11px] text-foreground"
               >
                 <span>
-                  Точное время уведомлений: по умолчанию равномерно, но можно
+                  Точное время напоминаний: по умолчанию равномерно, но можно
                   задать своё.
                 </span>
                 <button
@@ -279,17 +279,17 @@
         </div>
       </section>
 
-      <!-- Карточка контента уведомлений -->
+      <!-- Карточка контента напоминаний -->
       <section class="space-y-3">
         <div class="glass-deep p-3">
           <div class="space-y-2 mb-2">
             <div class="flex items-center justify-between">
               <div>
                 <p class="text-sm font-semibold text-foreground">
-                  Фокус уведомлений
+                  Фокус напоминаний
                 </p>
                 <!-- <p class="text-xs text-foreground">
-                  Выберите фокус и тип уведомлений
+                  Выберите фокус и тип напоминаний
                 </p> -->
               </div>
             </div>
@@ -335,16 +335,16 @@
           </div>
         </div>
 
-        <!-- Стиль уведомлений -->
+        <!-- Стиль напоминаний -->
         <div class="glass-deep p-3">
           <div class="space-y-2 mb-2">
             <div class="flex items-center justify-between">
               <div>
                 <p class="text-sm font-semibold text-foreground">
-                  Стиль уведомлений
+                  Стиль напоминаний
                 </p>
                 <!-- <p class="text-xs text-foreground">
-                  Выберите стиль общения в уведомлениях
+                  Выберите стиль общения в напоминаниях
                 </p> -->
               </div>
             </div>
@@ -390,7 +390,7 @@
           </div>
         </div>
 
-        <!-- Способ создания уведомлений  -->
+        <!-- Способ создания напоминаний  -->
         <div class="glass-deep p-3">
           <div class="space-y-2 mb-2">
             <div class="flex items-center justify-between">
@@ -399,7 +399,7 @@
                   Способ создания
                 </p>
                 <!-- <p class="text-xs text-foreground">
-                  Выберите способ создания текстов уведомлений
+                  Выберите способ создания текстов напоминаний
                 </p> -->
               </div>
             </div>
@@ -445,7 +445,7 @@
                   Использование шаблонов
                 </p>
                 <p class="text-xs text-foreground mt-1">
-                  Тексты уведомлений будут браться из готовых шаблонов с учетом
+                  Тексты напоминаний будут браться из готовых шаблонов с учетом
                   всех параметров настроек (фокус, стиль, обращение).
                 </p>
               </div>
@@ -464,7 +464,7 @@
                   Генерация через ИИ
                 </p>
                 <p class="text-xs text-foreground mt-1">
-                  Тексты уведомлений будут генерироваться ИИ с учетом всех
+                  Тексты напоминаний будут генерироваться ИИ с учетом всех
                   параметров настроек (фокус, стиль, обращение).
                 </p>
               </div>
@@ -481,7 +481,7 @@
               class="btn btn-outline w-full"
               @click="goToTextsEditor"
             >
-              🔧 Управлять текстами уведомлений
+              🔧 Управлять текстами напоминаний
             </button>
           </div>
         </div>
@@ -1012,10 +1012,10 @@ const directnessOptions = computed(() => {
         break;
       case 'mixed':
         descriptions = {
-          soft: 'Мягкий, деликатный тон в сочетании разных типов уведомлений',
+          soft: 'Мягкий, деликатный тон в сочетании разных типов напоминаний',
           moderate:
-            'Сдержанный, нейтральный тон в сочетании разных типов уведомлений',
-          hard: 'Прямой, решительный тон в сочетании разных типов уведомлений',
+            'Сдержанный, нейтральный тон в сочетании разных типов напоминаний',
+          hard: 'Прямой, решительный тон в сочетании разных типов напоминаний',
         };
         break;
     }
@@ -1488,7 +1488,7 @@ function goBack() {
 
 const descriptionPlaceholder = computed(
   () =>
-    'Добавьте детали, чтобы ИИ мог создавать более персональные и точные уведомления'
+    'Добавьте детали, чтобы ИИ мог создавать более персональные и точные напоминания'
 );
 
 const descriptionText = computed(() => {

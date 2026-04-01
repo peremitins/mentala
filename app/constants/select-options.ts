@@ -32,7 +32,7 @@ export const SUBTYPE_OPTIONS = [
   {
     label: 'Смешанные',
     icon: '🔀',
-    title: 'Смешанные уведомления',
+    title: 'Смешанные напоминания',
     value: 'mixed',
     description:
       'Чередование разных типов сообщений, которые создают естественный поток и не перегружают одним форматом',
@@ -67,7 +67,7 @@ export const TEXT_SOURCE_OPTIONS = [
   {
     label: 'Шаблоны',
     value: 'templates',
-    description: 'Использовать готовые тексты уведомлений',
+    description: 'Использовать готовые тексты напоминаний',
   },
   {
     label: 'ИИ',
