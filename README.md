@@ -100,6 +100,48 @@ MIGRATE_PROD_CONFIRM=YES pnpm db:baseline -- --env=production
 - В env-файле должен быть указан `MENTALA_DB_ENV=development|production`.
 - Для контейнеров миграций на проде нужен доступ к `.env` (например, через `DRIZZLE_ENV_FILE=/app/.env` и volume).
 
+## Redis
+
+Локальная разработка:
+
+- локальный Redis может работать без пароля, если он слушает только `127.0.0.1`;
+- для этого проекта локальный Docker Redis поднимается именно в таком режиме.
+
+Production:
+
+- `REDIS_PASSWORD` обязателен;
+- `REDIS_HOST` должен указывать на Redis внутри docker compose сети, обычно `redis`;
+- `REDIS_PORT` по умолчанию `6379`.
+
+Пример server-side env для `/opt/mentala/prod/.env`:
+
+```bash
+REDIS_HOST=redis
+REDIS_PORT=6379
+REDIS_PASSWORD=replace_me
+```
+
+Пример `redis` сервиса в `/opt/mentala/prod/docker-compose.yml`:
+
+```yaml
+  redis:
+    image: redis:7-alpine
+    container_name: mentala-redis-prod
+    command:
+      - sh
+      - -c
+      - redis-server --appendonly yes --requirepass "$REDIS_PASSWORD"
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=$REDIS_PASSWORD redis-cli ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+```
+
+`web` контейнер должен читать тот же `REDIS_PASSWORD` через свой `env_file: .env`.
+
 ## Шаблоны уведомлений
 
 После правок в `app/lib/notificationTemplates.ts` нужно синхронизировать шаблоны в БД:
