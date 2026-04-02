@@ -155,7 +155,6 @@ export default defineEventHandler(
     const { canUseAiNotifications } =
       await ensureAiNotificationAccessConsistency({
         userId,
-        trialEndedAt: (sessionResult.user as any)?.trialEndedAt ?? null,
         userRole: (sessionResult.user as any)?.roleId ?? null,
       });
 
@@ -455,6 +454,12 @@ export default defineEventHandler(
             }
           : {}),
       };
+
+      // Если юзер явно задаёт textSource — очищаем маркер автодаунгрейда,
+      // чтобы автовосстановление при оплате не перезаписало осознанный выбор.
+      if (normalizedRequestedTextSource !== undefined) {
+        delete (finalMeta as any).textSourceBeforeAutoDowngrade;
+      }
 
       // Убеждаемся, что meta не пустой объект (если есть хотя бы одно поле)
       const hasMetaFields = finalMeta.textSource !== undefined;

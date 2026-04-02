@@ -159,7 +159,6 @@ export function startNotificationSlotsWorker() {
       // доставку и не запускать новые AI-генерации.
       await ensureAiNotificationAccessConsistency({
         userId,
-        trialEndedAt: user.trialEndedAt,
         userRole: user.roleId,
       });
 
