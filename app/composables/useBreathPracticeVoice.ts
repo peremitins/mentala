@@ -4,6 +4,7 @@ import {
   type BreathVoiceAddressing,
   type BreathVoiceKey,
 } from '@/app/lib/breathPracticeVoiceAudio';
+import { getBreathPracticeHowlerModule } from '@/app/lib/breathPracticeHowler';
 import { isDocumentAvailable } from '@/app/utils/document';
 
 type HowlConstructor = typeof import('howler').Howl;
@@ -12,9 +13,9 @@ export function useBreathPracticeVoice() {
   const soundCache = new Map<string, Howl>();
   const preloaded = new Set<string>();
   const preloadInFlight = new Map<string, Promise<void>>();
-  let howlConstructorPromise: Promise<HowlConstructor> | null = null;
   let currentSound: Howl | null = null;
   let currentSoundId: number | null = null;
+  let cacheVersion = 0;
 
   function canUseAudio() {
     return (
@@ -29,11 +30,8 @@ export function useBreathPracticeVoice() {
   async function getHowlConstructor(): Promise<HowlConstructor | null> {
     if (!canUseAudio()) return null;
 
-    if (!howlConstructorPromise) {
-      howlConstructorPromise = import('howler').then(({ Howl }) => Howl);
-    }
-
-    return howlConstructorPromise;
+    const module = await getBreathPracticeHowlerModule();
+    return module?.Howl ?? null;
   }
 
   function createSound(
@@ -71,16 +69,18 @@ export function useBreathPracticeVoice() {
 
   async function getOrCreateSound(
     phase: BreathVoiceKey,
-    addressing: BreathVoiceAddressing
+    addressing: BreathVoiceAddressing,
+    version = cacheVersion
   ): Promise<Howl | null> {
     if (!canUseAudio()) return null;
+    if (version !== cacheVersion) return null;
 
     const key = cacheKey(phase, addressing);
     const cached = soundCache.get(key);
     if (cached) return cached;
 
     const HowlCtor = await getHowlConstructor();
-    if (!HowlCtor) return null;
+    if (!HowlCtor || version !== cacheVersion) return null;
 
     const src = BREATH_PRACTICE_VOICE_AUDIO[addressing][phase];
     const sound = createSound(HowlCtor, src, key);
@@ -90,8 +90,11 @@ export function useBreathPracticeVoice() {
 
   async function preloadClip(
     phase: BreathVoiceKey,
-    addressing: BreathVoiceAddressing
+    addressing: BreathVoiceAddressing,
+    version = cacheVersion
   ) {
+    if (version !== cacheVersion) return;
+
     const key = cacheKey(phase, addressing);
     if (preloaded.has(key)) return;
 
@@ -102,17 +105,22 @@ export function useBreathPracticeVoice() {
     }
 
     const preloadTask = (async () => {
-      const sound = await getOrCreateSound(phase, addressing);
+      const sound = await getOrCreateSound(phase, addressing, version);
       if (!sound) return;
+      if (version !== cacheVersion) return;
 
       if (sound.state() === 'loaded') {
-        preloaded.add(key);
+        if (version === cacheVersion) {
+          preloaded.add(key);
+        }
         return;
       }
 
       await new Promise<void>((resolve) => {
         const handleLoad = () => {
-          preloaded.add(key);
+          if (version === cacheVersion) {
+            preloaded.add(key);
+          }
           resolve();
         };
         const handleLoadError = () => {
@@ -138,11 +146,12 @@ export function useBreathPracticeVoice() {
 
   async function prepare(addressing: BreathVoiceAddressing) {
     if (!canUseAudio()) return;
+    const version = cacheVersion;
     const phases = Object.keys(
       BREATH_PRACTICE_VOICE_AUDIO[addressing]
     ) as BreathVoiceKey[];
     await Promise.allSettled(
-      phases.map((phase) => preloadClip(phase, addressing))
+      phases.map((phase) => preloadClip(phase, addressing, version))
     );
   }
 
@@ -168,8 +177,10 @@ export function useBreathPracticeVoice() {
     addressing: BreathVoiceAddressing
   ) {
     if (!canUseAudio()) return;
-    const sound = await getOrCreateSound(phase, addressing);
+    const version = cacheVersion;
+    const sound = await getOrCreateSound(phase, addressing, version);
     if (!sound) return;
+    if (version !== cacheVersion) return;
 
     stop();
     currentSound = sound;
@@ -183,9 +194,27 @@ export function useBreathPracticeVoice() {
     }
   }
 
+  function release() {
+    cacheVersion += 1;
+    stop();
+    preloaded.clear();
+    preloadInFlight.clear();
+
+    for (const sound of soundCache.values()) {
+      try {
+        sound.unload();
+      } catch (error) {
+        console.error('[BreathVoice] Failed to unload sound:', error);
+      }
+    }
+
+    soundCache.clear();
+  }
+
   return {
     prepare,
     play,
     stop,
+    release,
   };
 }

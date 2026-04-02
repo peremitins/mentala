@@ -5,6 +5,8 @@
 - Дыхательные: каталог в `app/lib/breathPracticesCatalog.ts`, плеер `BreathPracticePlayer.vue` + `BreathOrb.vue`
 - Голосовые подсказки фаз из `public/breath/voice/{informal|formal}/*.mp3`
 - На mobile/web голосовые фазы дыхания идут через `Howler` с `html5: true` и unlock-retry: это основной защитный путь для Android WebView
+- Voice/cue для дыхательных практик обязаны делать `unload()` при выключении канала и `unmount`, иначе в Android WebView быстро истощается глобальный `Howler.html5PoolSize` и отдельные фазы начинают пропадать
+- Если голос или cue включают во время уже идущей практики, плеер сразу синхронизирует текущую фазу, а не ждёт следующий переход
 - Кастомные практики: 1-30 сек фазы, 2-4 фазы, хранение в localStorage/Capacitor Preferences
 
 ## Быстрая помощь (`/quick-help`)
