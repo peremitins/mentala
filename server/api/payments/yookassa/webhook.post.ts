@@ -447,6 +447,8 @@ export default defineEventHandler(async (event) => {
     }
 
     // Аннулируем подписку и откатываем юзера на Basic.
+    const basicEndDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
     await db.transaction(async (tx) => {
       await tx
         .update(userSubscriptions)
@@ -472,6 +474,18 @@ export default defineEventHandler(async (event) => {
           updatedAt: now,
         })
         .where(eq(users.id, refundSub.userId));
+
+      // Создаём базовую подписку, чтобы пользователь не остался без тарифа.
+      await tx.insert(userSubscriptions).values({
+        userId: refundSub.userId,
+        planId: 'basic',
+        billingPeriod: 'month',
+        startDate: now,
+        endDate: basicEndDate,
+        paymentStatus: 'active',
+        autoRenew: false,
+        sourcePlatform: refundSub.sourcePlatform || 'web',
+      });
 
       await tx.insert(subscriptionEvents).values({
         userId: refundSub.userId,
