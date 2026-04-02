@@ -30,3 +30,8 @@
 - iOS: `navigator.audioSession.type = 'playback'`, восстановление через visibilitychange
 - Gesture unlock: `AudioContext.resume()` после первого пользовательского жеста
 - Кроссфейд при смене фаз (~200ms), fade при паузе (~120ms)
+
+## Breath Practice Howler
+- Дыхательные voice/cue используют `Howler` с `html5: true`, а не Web Audio API: это стабильнее для коротких клипов в Android Capacitor WebView
+- Для Android pool нужно поднимать выше дефолтного (`html5PoolSize > 10`), потому что одна практика держит несколько отдельных HTML5 Audio nodes для voice/cue
+- Любой toggle voice/cue и `unmount` обязан делать `Howl.unload()`, а не только `stop()`, иначе ноды не возвращаются в pool и следующие фазы начинают теряться

@@ -2,6 +2,8 @@ import { ref } from 'vue';
 import type { Howl } from 'howler';
 import type { BreathCueType } from '@/app/lib/breathPracticesCatalog';
 import { BREATH_PRACTICE_SOUNDS } from '@/app/lib/breathPracticeAudio';
+import { getBreathPracticeHowlerModule } from '@/app/lib/breathPracticeHowler';
+import { isDocumentAvailable } from '@/app/utils/document';
 
 type HowlConstructor = typeof import('howler').Howl;
 
@@ -20,6 +22,22 @@ export function useBreathPracticeAudio() {
   const VOLUME_FADE_MS = 120;
   // Небольшой буст, чтобы компенсировать тихие файлы (выше 1.0 нельзя).
   const VOLUME_BOOST = 1.35;
+  let cacheVersion = 0;
+  const fadeStopTimeouts: Record<
+    BreathCueType,
+    ReturnType<typeof setTimeout> | null
+  > = {
+    inhale: null,
+    exhale: null,
+    hold: null,
+    pause: null,
+  };
+
+  function canUseAudio() {
+    return (
+      !process.server && typeof window !== 'undefined' && isDocumentAvailable()
+    );
+  }
 
   function createSound(
     HowlCtor: HowlConstructor,
@@ -54,12 +72,30 @@ export function useBreathPracticeAudio() {
     return sound;
   }
 
-  async function ensureSounds(): Promise<boolean> {
-    if (process.server || typeof window === 'undefined') return false;
+  function clearFadeStopTimeout(type: BreathCueType): void {
+    const timeoutId = fadeStopTimeouts[type];
+    if (timeoutId === null) return;
+    clearTimeout(timeoutId);
+    fadeStopTimeouts[type] = null;
+  }
+
+  function clearAllFadeStopTimeouts(): void {
+    clearFadeStopTimeout('inhale');
+    clearFadeStopTimeout('exhale');
+    clearFadeStopTimeout('hold');
+    clearFadeStopTimeout('pause');
+  }
+
+  async function ensureSounds(version = cacheVersion): Promise<boolean> {
+    if (!canUseAudio()) return false;
+    if (version !== cacheVersion) return false;
 
     if (!inhaleSound.value) {
       // Инициализируем звуки один раз, чтобы не создавать объекты при каждом запуске.
-      const { Howl } = await import('howler');
+      const module = await getBreathPracticeHowlerModule();
+      if (!module || version !== cacheVersion) return false;
+
+      const { Howl } = module;
       inhaleSound.value = createSound(
         Howl,
         BREATH_PRACTICE_SOUNDS.inhale,
@@ -93,10 +129,12 @@ export function useBreathPracticeAudio() {
   }
 
   function stopSound(
+    type: BreathCueType,
     sound: Howl | null,
     soundId: number | null,
     fadeMs: number
   ): void {
+    clearFadeStopTimeout(type);
     if (!sound || soundId === null) return;
     if (!sound.playing(soundId)) return;
 
@@ -108,16 +146,17 @@ export function useBreathPracticeAudio() {
     const currentVolume = sound.volume(soundId);
     sound.fade(currentVolume, 0, fadeMs, soundId);
     // Останавливаем после фейда, чтобы освободить ресурс.
-    setTimeout(() => {
+    fadeStopTimeouts[type] = setTimeout(() => {
       sound.stop(soundId);
+      fadeStopTimeouts[type] = null;
     }, fadeMs + 20);
   }
 
   function stopAll(fadeMs = 0): void {
-    stopSound(inhaleSound.value, activeSoundIds.inhale, fadeMs);
-    stopSound(exhaleSound.value, activeSoundIds.exhale, fadeMs);
-    stopSound(holdSound.value, activeSoundIds.hold, fadeMs);
-    stopSound(pauseSound.value, activeSoundIds.pause, fadeMs);
+    stopSound('inhale', inhaleSound.value, activeSoundIds.inhale, fadeMs);
+    stopSound('exhale', exhaleSound.value, activeSoundIds.exhale, fadeMs);
+    stopSound('hold', holdSound.value, activeSoundIds.hold, fadeMs);
+    stopSound('pause', pauseSound.value, activeSoundIds.pause, fadeMs);
     activeSoundIds.inhale = null;
     activeSoundIds.exhale = null;
     activeSoundIds.hold = null;
@@ -165,8 +204,10 @@ export function useBreathPracticeAudio() {
   }
 
   async function playCue(type: BreathCueType, volume: number): Promise<void> {
-    const ready = await ensureSounds();
+    const version = cacheVersion;
+    const ready = await ensureSounds(version);
     if (!ready) return;
+    if (version !== cacheVersion) return;
 
     const sound = resolveSound(type);
     if (!sound) return;
@@ -186,10 +227,36 @@ export function useBreathPracticeAudio() {
     }
   }
 
+  function release(): void {
+    cacheVersion += 1;
+    clearAllFadeStopTimeouts();
+    stopAll(0);
+
+    for (const sound of [
+      inhaleSound.value,
+      exhaleSound.value,
+      holdSound.value,
+      pauseSound.value,
+    ]) {
+      if (!sound) continue;
+      try {
+        sound.unload();
+      } catch (error) {
+        console.error('[BreathAudio] Failed to unload cue sound:', error);
+      }
+    }
+
+    inhaleSound.value = null;
+    exhaleSound.value = null;
+    holdSound.value = null;
+    pauseSound.value = null;
+  }
+
   return {
     playCue,
     prepare,
     stopAll,
     setVolume,
+    release,
   };
 }
