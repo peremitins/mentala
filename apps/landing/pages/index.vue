@@ -1615,6 +1615,7 @@ useHead(() => ({
   ],
   script: [
     {
+      key: 'ld-organization',
       type: 'application/ld+json',
       textContent: JSON.stringify({
         '@context': 'https://schema.org',
@@ -1633,6 +1634,7 @@ useHead(() => ({
       }),
     },
     {
+      key: 'ld-website',
       type: 'application/ld+json',
       textContent: JSON.stringify({
         '@context': 'https://schema.org',
@@ -1643,6 +1645,7 @@ useHead(() => ({
       }),
     },
     {
+      key: 'ld-webpage',
       type: 'application/ld+json',
       textContent: JSON.stringify({
         '@context': 'https://schema.org',
@@ -1658,6 +1661,7 @@ useHead(() => ({
       }),
     },
     {
+      key: 'ld-faq',
       type: 'application/ld+json',
       textContent: JSON.stringify({
         '@context': 'https://schema.org',
