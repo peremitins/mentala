@@ -567,9 +567,68 @@ async function maybeRecoverWebAudioPlayback() {
   }
 }
 
+// setTimeout, запланированный при уходе в фон для остановки медитации по таймеру.
+// На Android с foreground service и iOS с background audio mode JS не всегда полностью
+// заморожен, поэтому setTimeout может сработать даже в бэкграунде.
+let backgroundStopTimeout: ReturnType<typeof setTimeout> | null = null;
+
+function clearBackgroundStopTimeout() {
+  if (backgroundStopTimeout !== null) {
+    clearTimeout(backgroundStopTimeout);
+    backgroundStopTimeout = null;
+  }
+}
+
+/**
+ * При уходе в бэкграунд планируем setTimeout на оставшееся время таймера.
+ * setInterval замораживается ОС, но setTimeout с точным дедлайном может
+ * сработать, когда ОС даёт приложению окно для выполнения кода.
+ */
+function scheduleBackgroundStop() {
+  clearBackgroundStopTimeout();
+  if (!globalState.timerEndsAt.value) return;
+  if (!globalState.isPlaying.value) return;
+  const remaining = globalState.timerEndsAt.value - Date.now();
+  if (remaining <= 0) {
+    void onTimerFinished();
+    return;
+  }
+  backgroundStopTimeout = setTimeout(() => {
+    backgroundStopTimeout = null;
+    if (globalState.timerEndsAt.value && globalState.isPlaying.value) {
+      void onTimerFinished();
+    }
+  }, remaining);
+}
+
+/**
+ * Проверяет, не истёк ли таймер медитации за время, пока приложение было в фоне.
+ * JS setInterval замораживается ОС при уходе приложения в бэкграунд,
+ * поэтому при возвращении нужно явно проверить deadline.
+ */
+function checkTimerOnResume() {
+  clearBackgroundStopTimeout();
+  if (!globalState.timerEndsAt.value) return;
+  if (!globalState.isPlaying.value) return;
+  const remaining = globalState.timerEndsAt.value - Date.now();
+  if (remaining <= 0) {
+    void onTimerFinished();
+  } else {
+    // Таймер ещё не истёк — обновляем отображение и перезапускаем countdown,
+    // т.к. старый setInterval мог быть throttled или потерян.
+    globalState.timerRemainingMs.value = remaining;
+    startTimerCountdown();
+  }
+}
+
 function handleVisibilityChange() {
   if (!isDocumentAvailable() || typeof document === 'undefined') return;
+  if (document.visibilityState === 'hidden') {
+    scheduleBackgroundStop();
+    return;
+  }
   if (document.visibilityState !== 'visible') return;
+  checkTimerOnResume();
   void maybeRecoverWebAudioPlayback();
 }
 
@@ -586,7 +645,11 @@ function ensureAppStateListener() {
   import('@capacitor/app')
     .then(({ App }) => {
       App.addListener('appStateChange', ({ isActive }) => {
-        if (!isActive) return;
+        if (!isActive) {
+          scheduleBackgroundStop();
+          return;
+        }
+        checkTimerOnResume();
         void maybeRecoverWebAudioPlayback();
       });
     })
@@ -1713,13 +1776,16 @@ function clearQueue() {
 export function useMeditationPlayer() {
   ensureNativeModeResolved();
 
+  // Слушатели visibility/appState нужны всегда — таймер медитации работает через JS setInterval,
+  // который замораживается ОС в фоне. При возврате проверяем, не истёк ли таймер.
+  ensureVisibilityListener();
+  ensureAppStateListener();
+
   if (globalState.nativeModeEnabled) {
     void ensureNativeService();
   } else {
     // Регистрируем слушатель жестов заранее, чтобы автозапуск был стабильнее.
     ensureGlobalGestureUnlock();
-    ensureVisibilityListener();
-    ensureAppStateListener();
     ensurePlaybackAudioSessionType();
   }
 
