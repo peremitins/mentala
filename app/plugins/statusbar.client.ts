@@ -7,8 +7,8 @@ import { Capacitor } from '@capacitor/core';
  * Важно:
  * - На Android 15+ / 16+ edge-to-edge фактически принудительный, поэтому нельзя
  *   полагаться на overlaysWebView=false и тем более на фиксированную высоту status bar.
- * - Insets для контента берём из CSS env(safe-area-inset-*), чтобы они были
- *   реальными для конкретного устройства, эмулятора и режима системных баров.
+ * - Insets для контента берём из CSS env(safe-area-inset-*) и Android WindowInsets bridge,
+ *   чтобы они были реальными для конкретного устройства, эмулятора и режима системных баров.
  * - На iOS явно оставляем overlay=true, чтобы WebView корректно отдавал safe area.
  */
 export default defineNuxtPlugin(async () => {

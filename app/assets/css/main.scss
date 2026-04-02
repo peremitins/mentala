@@ -14,11 +14,35 @@ body {
 }
 
 :root {
-  /* Системные safe area insets. На iOS и edge-to-edge Android приходят из WebView динамически. */
-  --safe-area-inset-top: env(safe-area-inset-top, 0px);
-  --safe-area-inset-right: env(safe-area-inset-right, 0px);
-  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
-  --safe-area-inset-left: env(safe-area-inset-left, 0px);
+  /* WebView env() работает не на всех Android-устройствах одинаково, особенно на планшетах. */
+  --safe-area-env-top: env(safe-area-inset-top, 0px);
+  --safe-area-env-right: env(safe-area-inset-right, 0px);
+  --safe-area-env-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-env-left: env(safe-area-inset-left, 0px);
+
+  /* Native fallback приходит из Android WindowInsets bridge. */
+  --native-safe-area-inset-top: 0px;
+  --native-safe-area-inset-right: 0px;
+  --native-safe-area-inset-bottom: 0px;
+  --native-safe-area-inset-left: 0px;
+
+  /* Берём максимум, чтобы не было ни потери inset'а, ни двойного сложения. */
+  --safe-area-inset-top: max(
+    var(--safe-area-env-top),
+    var(--native-safe-area-inset-top)
+  );
+  --safe-area-inset-right: max(
+    var(--safe-area-env-right),
+    var(--native-safe-area-inset-right)
+  );
+  --safe-area-inset-bottom: max(
+    var(--safe-area-env-bottom),
+    var(--native-safe-area-inset-bottom)
+  );
+  --safe-area-inset-left: max(
+    var(--safe-area-env-left),
+    var(--native-safe-area-inset-left)
+  );
 }
 
 /* Базовый app-shell: держим декоративный верхний отступ и добавляем реальный top inset устройства. */

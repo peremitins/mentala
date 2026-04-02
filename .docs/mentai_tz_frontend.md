@@ -39,7 +39,8 @@ shared/dto/        # Zod-схемы (общие с бэком)
 - Проверка API через `typeof` или `isDocumentAvailable()`
 - Capacitor plugins для нативных функций, VueUse для кросс-браузерных
 - Async/await везде, не .then()/.catch()
-- Для safe area и системных баров нельзя полагаться на фиксированные отступы или только на `StatusBar.overlaysWebView=false`: при target SDK Android 35+ / 36 edge-to-edge может быть принудительным. Верхние/нижние inset'ы в layout'ах нужно брать через `env(safe-area-inset-*)`
+- Для safe area и системных баров нельзя полагаться на фиксированные отступы или только на `StatusBar.overlaysWebView=false`: при target SDK Android 35+ / 36 edge-to-edge может быть принудительным
+- На iOS можно опираться на `env(safe-area-inset-*)`, но на Android, особенно на планшетах и некоторых WebView, нужен fallback через native `WindowInsets` bridge с прокидкой значений в CSS-переменные
 
 ## Mobile build notes
 

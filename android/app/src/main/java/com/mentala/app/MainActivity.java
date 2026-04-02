@@ -14,6 +14,7 @@ import com.getcapacitor.PluginHandle;
 import com.mentala.app.audio.MentalaAudioForegroundPlugin;
 import com.mentala.app.realtime.MentalaRealtimeVoiceAudioPlugin;
 import com.mentala.app.realtime.MentalaRealtimeVoiceForegroundPlugin;
+import com.mentala.app.ui.MentalaSafeAreaPlugin;
 
 import ee.forgr.capacitor.social.login.GoogleProvider;
 import ee.forgr.capacitor.social.login.ModifiedMainActivityForSocialLoginPlugin;
@@ -90,6 +91,7 @@ public class MainActivity extends BridgeActivity implements ModifiedMainActivity
     registerPlugin(MentalaAudioForegroundPlugin.class);
     registerPlugin(MentalaRealtimeVoiceAudioPlugin.class);
     registerPlugin(MentalaRealtimeVoiceForegroundPlugin.class);
+    registerPlugin(MentalaSafeAreaPlugin.class);
     super.onCreate(savedInstanceState);
     persistPushLaunchPayload(getIntent());
   }
