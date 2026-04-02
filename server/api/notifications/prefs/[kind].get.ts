@@ -35,7 +35,6 @@ export default defineEventHandler(
 
     await ensureAiNotificationAccessConsistency({
       userId,
-      trialEndedAt: (sessionResult.user as any)?.trialEndedAt ?? null,
       userRole: (sessionResult.user as any)?.roleId ?? null,
     });
 

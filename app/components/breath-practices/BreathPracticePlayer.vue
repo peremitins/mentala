@@ -323,20 +323,30 @@ const {
   prepare: prepareAudio,
   stopAll: stopAudio,
   setVolume,
+  release: releaseAudio,
 } = useBreathPracticeAudio();
 const {
   prepare: prepareVoice,
   play: playVoice,
   stop: stopVoice,
+  release: releaseVoice,
 } = useBreathPracticeVoice();
 const { trigger: triggerHaptic } = useBreathPracticeHaptics();
+const phasePlaybackCycle = ref(0);
+const lastVoicePhaseCycle = ref(0);
+const lastSoundPhaseCycle = ref(0);
 
 const player = useBreathPracticePlayer({
   onPhaseStart: async (phase) => {
+    phasePlaybackCycle.value += 1;
+    const currentCycle = phasePlaybackCycle.value;
+
     if (voiceEnabled.value) {
+      lastVoicePhaseCycle.value = currentCycle;
       await playVoice(phase.type, prepAddressing.value);
     }
     if (soundEnabled.value) {
+      lastSoundPhaseCycle.value = currentCycle;
       await playCue(phase.cue, soundVolume.value / 100);
     }
     if (hapticsEnabled.value) {
@@ -411,7 +421,7 @@ const activePatternPhaseIndex = computed<number | null>(() => {
 });
 
 const settingsOpen = ref(false);
-const voiceEnabled = ref(false);
+const voiceEnabled = ref(true);
 const soundEnabled = ref(true);
 const soundVolume = ref(70);
 const hapticsEnabled = ref(true);
@@ -450,15 +460,62 @@ function restartSession() {
   player.start();
 }
 
+function getCurrentInteractivePhaseState() {
+  if (
+    !isRunning.value ||
+    isPaused.value ||
+    isCompleted.value ||
+    prepCountdown.value > 0
+  ) {
+    return null;
+  }
+
+  const phase = currentPhase.value;
+  if (!phase) return null;
+  return {
+    phase,
+    cycle: phasePlaybackCycle.value,
+  };
+}
+
+async function syncCurrentPhaseVoice() {
+  const state = getCurrentInteractivePhaseState();
+  if (!state) return;
+  if (lastVoicePhaseCycle.value === state.cycle) return;
+
+  lastVoicePhaseCycle.value = state.cycle;
+  await playVoice(state.phase.type, prepAddressing.value);
+}
+
+async function syncCurrentPhaseCue() {
+  const state = getCurrentInteractivePhaseState();
+  if (!state) return;
+  if (lastSoundPhaseCycle.value === state.cycle) return;
+
+  lastSoundPhaseCycle.value = state.cycle;
+  await playCue(state.phase.cue, soundVolume.value / 100);
+}
+
 async function onSoundEnabledChange(value: boolean) {
   soundSaving.value = true;
+  const previousValue = soundEnabled.value;
+  soundEnabled.value = value;
   try {
-    await saveBreathPracticeSettings({ soundEnabled: value });
-    soundEnabled.value = value;
     if (value) {
       await prepareAudio();
       setVolume(soundVolume.value / 100);
+      await syncCurrentPhaseCue();
+    } else {
+      stopAudio(0);
+      releaseAudio();
     }
+    await saveBreathPracticeSettings({ soundEnabled: value });
+  } catch (error) {
+    soundEnabled.value = previousValue;
+    console.error(
+      '[BreathPracticePlayer] Failed to update sound setting:',
+      error
+    );
   } finally {
     soundSaving.value = false;
   }
@@ -466,17 +523,27 @@ async function onSoundEnabledChange(value: boolean) {
 
 async function onVoiceEnabledChange(value: boolean) {
   voiceSaving.value = true;
+  const previousValue = voiceEnabled.value;
+  voiceEnabled.value = value;
   try {
-    await saveBreathPracticeSettings({ voiceEnabled: value });
-    voiceEnabled.value = value;
     if (value) {
       await prepareVoice(prepAddressing.value);
       if (prepCountdown.value > 0) {
         await playVoice('intro', prepAddressing.value);
+      } else {
+        await syncCurrentPhaseVoice();
       }
-      return;
+    } else {
+      stopVoice();
+      releaseVoice();
     }
-    stopVoice();
+    await saveBreathPracticeSettings({ voiceEnabled: value });
+  } catch (error) {
+    voiceEnabled.value = previousValue;
+    console.error(
+      '[BreathPracticePlayer] Failed to update voice setting:',
+      error
+    );
   } finally {
     voiceSaving.value = false;
   }
@@ -519,6 +586,7 @@ onMounted(async () => {
 
   if (soundEnabled.value) {
     await prepareAudio();
+    setVolume(soundVolume.value / 100);
   }
   if (voiceEnabled.value) {
     await prepareVoice(prepAddressing.value);
@@ -536,6 +604,7 @@ watch(
   () => props.practice.phases,
   (value) => {
     if (!value) return;
+    stopAudio(0);
     stopVoice();
     player.stop();
     player.setPhases(value);
@@ -591,6 +660,8 @@ watch(
 onBeforeUnmount(() => {
   stopAudio(0);
   stopVoice();
+  releaseAudio();
+  releaseVoice();
   player.stop();
 });
 </script>

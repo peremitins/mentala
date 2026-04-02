@@ -50,8 +50,49 @@ function getAuthHeader(shopId: string, secretKey: string): string {
   return `Basic ${Buffer.from(`${shopId}:${secretKey}`).toString('base64')}`;
 }
 
+/**
+ * Формирует чек (receipt) для 54-ФЗ.
+ * YooKassa требует receipt для recurring-платежей (server-to-server).
+ */
+export function buildYooKassaReceipt(params: {
+  email: string;
+  amount: number;
+  description: string;
+}): YooKassaReceipt {
+  return {
+    customer: { email: params.email },
+    items: [
+      {
+        description: params.description.slice(0, 128),
+        quantity: '1.00',
+        amount: {
+          value: formatAmount(params.amount),
+          currency: 'RUB',
+        },
+        vat_code: 1,
+        payment_mode: 'full_payment',
+        payment_subject: 'service',
+      },
+    ],
+  };
+}
+
 function formatAmount(value: number): string {
   return Number(value).toFixed(2);
+}
+
+export interface YooKassaReceiptItem {
+  description: string;
+  quantity: string;
+  amount: YooKassaPaymentAmount;
+  vat_code: number;
+  payment_mode?: string;
+  payment_subject?: string;
+}
+
+export interface YooKassaReceipt {
+  customer: { email: string };
+  items: YooKassaReceiptItem[];
 }
 
 export async function createYooKassaPayment(params: {
@@ -66,6 +107,7 @@ export async function createYooKassaPayment(params: {
   returnUrl?: string;
   savePaymentMethod?: boolean;
   merchantCustomerId?: string;
+  receipt?: YooKassaReceipt;
 }): Promise<YooKassaPaymentResponse> {
   const auth = getAuthHeader(params.shopId, params.secretKey);
 
@@ -78,6 +120,10 @@ export async function createYooKassaPayment(params: {
     description: params.description,
     metadata: params.metadata ?? {},
   };
+
+  if (params.receipt) {
+    body.receipt = params.receipt;
+  }
 
   if (params.paymentMode === 'recurring') {
     if (!params.paymentMethodId) {
@@ -110,16 +156,57 @@ export async function createYooKassaPayment(params: {
     }
   }
 
-  return await $fetch<YooKassaPaymentResponse>(
-    'https://api.yookassa.ru/v3/payments',
+  try {
+    return await $fetch<YooKassaPaymentResponse>(
+      'https://api.yookassa.ru/v3/payments',
+      {
+        method: 'POST',
+        timeout: 15_000,
+        headers: {
+          Authorization: auth,
+          'Idempotence-Key': params.idempotenceKey,
+        },
+        body,
+      }
+    );
+  } catch (error: any) {
+    // Логируем тело ответа от YooKassa для диагностики.
+    const responseBody = error?.data ?? error?.response?._data ?? null;
+    if (responseBody) {
+      console.error('[YooKassa] createPayment error response', {
+        status: error?.statusCode ?? error?.status,
+        body: responseBody,
+        paymentMode: params.paymentMode,
+        idempotenceKey: params.idempotenceKey,
+      });
+    }
+    throw error;
+  }
+}
+
+export interface YooKassaRefundResponse {
+  id: string;
+  status: string;
+  amount: YooKassaPaymentAmount;
+  payment_id: string;
+  created_at?: string;
+  description?: string;
+  metadata?: Record<string, string>;
+}
+
+export async function getYooKassaRefund(params: {
+  shopId: string;
+  secretKey: string;
+  refundId: string;
+}): Promise<YooKassaRefundResponse> {
+  return await $fetch<YooKassaRefundResponse>(
+    `https://api.yookassa.ru/v3/refunds/${params.refundId}`,
     {
-      method: 'POST',
-      timeout: 15_000,
+      method: 'GET',
+      timeout: 10_000,
       headers: {
-        Authorization: auth,
-        'Idempotence-Key': params.idempotenceKey,
+        Authorization: getAuthHeader(params.shopId, params.secretKey),
       },
-      body,
     }
   );
 }

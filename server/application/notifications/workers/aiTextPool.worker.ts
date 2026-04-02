@@ -68,7 +68,6 @@ export function startAiTextPoolWorker() {
         // Если Trial закончился, переключаем AI-настройки в templates и не продолжаем генерацию.
         const aiAccess = await ensureAiNotificationAccessConsistency({
           userId,
-          trialEndedAt: userProfile?.trialEndedAt ?? null,
           userRole: userProfile?.roleId ?? null,
         });
         if (!aiAccess.canUseAiNotifications) {
