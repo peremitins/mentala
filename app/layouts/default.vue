@@ -1,9 +1,6 @@
 <template>
   <div
-    :class="[
-      'h-dvh w-full flex flex-col min-h-dvh px-1 pt-1 pb-0 overflow-hidden',
-      { 'ios-safe-layout': isIos },
-    ]"
+    class="safe-area-layout flex h-dvh min-h-dvh w-full flex-col overflow-hidden px-1 pb-0"
   >
     <Transition name="scene-bg-fade" mode="out-in">
       <div
@@ -74,7 +71,6 @@ import { useSos } from '@/app/composables/useSos';
 import { findSceneTrack } from '@/app/lib/sceneSelectionCatalog';
 import { resolveMediaUrl } from '@/app/utils/media';
 import { useAuthStore } from '@/app/stores/auth';
-import { usePlatform } from '@/app/composables/usePlatform';
 import { Capacitor } from '@capacitor/core';
 import { useViewportOrientation } from '@/app/composables/useViewportOrientation';
 import { pickOrientationMediaPath } from '@/app/utils/orientationMedia';
@@ -93,8 +89,6 @@ const { isPortraitMode } = useViewportOrientation();
 
 const route = useRoute();
 const auth = useAuthStore();
-const { platform } = usePlatform();
-const isIos = computed(() => platform.value === 'ios');
 const sceneSettings = useSceneSettingsStore();
 const uiSettings = useUiSettingsStore();
 const sceneAudio = useSceneAudio();

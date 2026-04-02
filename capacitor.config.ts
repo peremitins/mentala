@@ -38,8 +38,9 @@ const config: CapacitorConfig = {
     StatusBar: {
       backgroundColor: '#000000',
       style: 'dark',
-      // На Android: НЕ используем overlay, чтобы статус-бар не накладывался
-      // Высоту статус-бара получаем программно и добавляем padding
+      // На Android < 15 Capacitor ещё может отдать WebView ниже status bar.
+      // На Android 15+ / 16+ система навязывает edge-to-edge, поэтому layout
+      // всё равно обязан учитывать реальные safe insets через CSS env().
       overlaysWebView: false,
       androidOverlaysWebView: false,
     },
