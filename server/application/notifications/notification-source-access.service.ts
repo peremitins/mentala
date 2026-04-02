@@ -1,18 +1,13 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/server/infrastructure/db/client';
 import { notificationPreferences } from '@/server/infrastructure/db/schema';
-import { hasAiNotificationsAccess } from '@/server/application/subscriptions/access.service';
 import {
   getBillingSnapshot,
   getFeatureAccessOrDefault,
 } from '@/server/application/subscriptions/entitlements.service';
-import { getCurrentActiveSubscription } from '@/server/application/subscriptions/current-subscription.service';
-
-type SubscriptionRef = { planId: string } | null;
 
 type EnsureAiNotificationAccessParams = {
   userId: number;
-  trialEndedAt: Date | string | null | undefined;
   userRole?: string | null;
 };
 
@@ -21,46 +16,27 @@ type EnsureAiNotificationAccessResult = {
   switchedToTemplatesCount: number;
 };
 
-function normalizeTrialEndedAt(
-  value: Date | string | null | undefined
-): Date | null {
-  if (!value) return null;
-  if (value instanceof Date) {
-    return Number.isNaN(value.getTime()) ? null : value;
-  }
-
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-}
-
-async function getCurrentSubscription(
-  userId: number
-): Promise<SubscriptionRef> {
-  const active = await getCurrentActiveSubscription({
-    userId,
-    now: new Date(),
-  });
-  return active ? { planId: active.planId } : null;
-}
-
 /**
  * Проверяет entitlement на AI-уведомления и при необходимости
  * автоматически переключает все AI-источники пользователя на шаблоны.
  *
- * Это защищает от сценария, когда Trial истёк, а в БД остался `textSource=ai`,
- * из-за чего уведомления могли перестать стабильно наполняться.
+ * Использует getBillingSnapshot для корректного учёта grace period
+ * при неуспешной оплате (billingCollectionStatus='past_due').
+ *
+ * При автоматическом переключении сохраняет маркер textSourceBeforeAutoDowngrade,
+ * чтобы при последующей успешной оплате можно было восстановить AI-режим.
  */
 export async function ensureAiNotificationAccessConsistency(
   params: EnsureAiNotificationAccessParams
 ): Promise<EnsureAiNotificationAccessResult> {
-  const subscription = await getCurrentSubscription(params.userId);
-  const canUseAiNotifications = hasAiNotificationsAccess(
-    {
-      trialEndedAt: normalizeTrialEndedAt(params.trialEndedAt),
-    },
-    subscription,
+  const billing = await getBillingSnapshot(
+    params.userId,
     params.userRole || undefined
   );
+  const canUseAiNotifications = getFeatureAccessOrDefault(
+    billing,
+    'notifications.text_source_ai'
+  ).available;
 
   if (canUseAiNotifications) {
     return {
@@ -73,9 +49,12 @@ export async function ensureAiNotificationAccessConsistency(
   const updated = await db
     .update(notificationPreferences)
     .set({
-      // Принудительно фиксируем source как templates, чтобы новые AI-генерации
-      // больше не запускались без доступа.
-      meta: sql`jsonb_set(COALESCE(${notificationPreferences.meta}, '{}'::jsonb), '{textSource}', '"templates"', true)`,
+      // Принудительно фиксируем source как templates + сохраняем маркер
+      // для автовосстановления при повторной оплате.
+      meta: sql`jsonb_set(
+        jsonb_set(COALESCE(${notificationPreferences.meta}, '{}'::jsonb), '{textSource}', '"templates"', true),
+        '{textSourceBeforeAutoDowngrade}', '"ai"', true
+      )`,
       updatedAt: now,
     })
     .where(
@@ -90,7 +69,7 @@ export async function ensureAiNotificationAccessConsistency(
 
   if (updated.length > 0) {
     console.warn(
-      `[NotificationAccess] AI source disabled for user ${params.userId}: switched ${updated.length} preference(s) to templates`
+      `[NotificationAccess] AI source disabled for user ${params.userId}: switched ${updated.length} preference(s) to templates (marker saved for auto-restore)`
     );
   }
 
@@ -98,6 +77,58 @@ export async function ensureAiNotificationAccessConsistency(
     canUseAiNotifications: false,
     switchedToTemplatesCount: updated.length,
   };
+}
+
+type RestoreAiNotificationResult = {
+  restoredCount: number;
+};
+
+/**
+ * Восстанавливает AI-уведомления, которые были автоматически переключены
+ * на шаблоны при потере доступа (маркер textSourceBeforeAutoDowngrade).
+ *
+ * Вызывается при успешной оплате (billing.purchase_success).
+ */
+export async function restoreAutoDowngradedAiNotifications(
+  userId: number,
+  userRole?: string | null
+): Promise<RestoreAiNotificationResult> {
+  const billing = await getBillingSnapshot(userId, userRole || undefined);
+  const canUseAiNotifications = getFeatureAccessOrDefault(
+    billing,
+    'notifications.text_source_ai'
+  ).available;
+
+  if (!canUseAiNotifications) {
+    return { restoredCount: 0 };
+  }
+
+  const now = new Date();
+  const restored = await db
+    .update(notificationPreferences)
+    .set({
+      // Восстанавливаем textSource = 'ai' и удаляем маркер.
+      meta: sql`(COALESCE(${notificationPreferences.meta}, '{}'::jsonb) - 'textSourceBeforeAutoDowngrade') || '{"textSource": "ai"}'::jsonb`,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(notificationPreferences.userId, userId),
+        sql`${notificationPreferences.meta}->>'textSourceBeforeAutoDowngrade' = 'ai'`,
+        sql`${notificationPreferences.meta}->>'textSource' = 'templates'`
+      )
+    )
+    .returning({
+      id: notificationPreferences.id,
+    });
+
+  if (restored.length > 0) {
+    console.log(
+      `[NotificationAccess] Restored ${restored.length} AI notification preference(s) for user ${userId} after access regained`
+    );
+  }
+
+  return { restoredCount: restored.length };
 }
 
 export type CustomNotificationSourceAccessByKind = {

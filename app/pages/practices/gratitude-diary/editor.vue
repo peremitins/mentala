@@ -1,6 +1,6 @@
 <template>
-  <div class="h-100vh overflow-y-auto rounded-lg">
-    <div class="flex flex-col pb-[170px] overflow-auto space-y-2">
+  <div class="h-dvh overflow-y-auto rounded-lg">
+    <div class="h-dvh flex flex-col pb-[170px] overflow-auto space-y-2">
       <PageHeader :show-back-button="true" title="" @go-back="goBack">
         <template #custom>
           <div class="flex min-w-0 items-center gap-2">
