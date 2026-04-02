@@ -63,6 +63,9 @@ server/
 - `ai-text-pool-refill` — пополнение AI-текстов уведомлений
 - `chat-session-summary` — summary сессий чата
 - Production: обязателен process split (scheduler / slots worker / delivery worker)
+- Production Docker Compose: web-контейнер ходит в Redis по `REDIS_HOST=redis`, `REDIS_PORT=6379`
+- Production Redis требует аутентификацию через `REDIS_PASSWORD`; тот же секрет должен быть включён в `redis-server --requirepass ...`
+- Local dev может использовать Redis без пароля только при bind на `127.0.0.1`
 - `BULLMQ_ENABLE_WORKERS` для отключения на web-контейнерах
 - Retry: 3 попытки, exponential backoff. Graceful shutdown по SIGTERM/SIGINT
 
