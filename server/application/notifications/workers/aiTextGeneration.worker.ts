@@ -193,7 +193,6 @@ export function startAiTextGenerationWorker() {
         // новые AI-генерации не продолжались в фоне без открытия настроек.
         const aiAccess = await ensureAiNotificationAccessConsistency({
           userId,
-          trialEndedAt: user.trialEndedAt,
           userRole: user.roleId,
         });
         if (!aiAccess.canUseAiNotifications) {
