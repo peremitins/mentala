@@ -23,7 +23,7 @@ export interface BreathPracticeSettings {
 const DEFAULT_SETTINGS: BreathPracticeSettings = {
   sessionMinutes: 5,
   soundEnabled: true,
-  voiceEnabled: false,
+  voiceEnabled: true,
   volume: 100,
   hapticsEnabled: true,
   cueMode: 'cue',
