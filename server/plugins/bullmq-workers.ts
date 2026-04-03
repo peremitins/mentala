@@ -83,7 +83,7 @@ export default defineNitroPlugin(async () => {
     // 6. Telegram Alerts Worker
     startTelegramAlertsWorker();
 
-    console.log('[BullMQ] ✅ All workers started successfully');
+    console.log('[BullMQ] ✅ All workers started successfully!');
   } catch (error) {
     console.error('[BullMQ] ❌ Failed to start workers:', error);
     dispatchAppCriticalEvent({
