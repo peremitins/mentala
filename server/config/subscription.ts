@@ -2,6 +2,9 @@
  * Константы для системы подписок
  */
 
+/**
+ * Читает положительное целое из env. Возвращает fallback, если значение невалидное.
+ */
 function readPositiveIntFromEnv(
   value: string | undefined,
   fallback: number
@@ -15,9 +18,26 @@ function readPositiveIntFromEnv(
   return normalized > 0 ? normalized : fallback;
 }
 
-// PRO лимит ИИ-чата в минутах на неделю.
-export const PRO_WEEKLY_MINUTES_LIMIT =
-  Number(process.env.PRO_WEEKLY_MINUTES_LIMIT) || 100;
+/**
+ * Читает лимит из env: положительное число — конкретный лимит, -1 — безлимит.
+ * Любое другое значение → fallback.
+ */
+function readLimitFromEnv(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  if (parsed === -1) return -1;
+
+  const normalized = Math.floor(parsed);
+  return normalized > 0 ? normalized : fallback;
+}
+
+// PRO лимит ИИ-чата в минутах на неделю. -1 = безлимит (Pro ведёт себя как Premium).
+export const PRO_WEEKLY_MINUTES_LIMIT = readLimitFromEnv(
+  process.env.PRO_WEEKLY_MINUTES_LIMIT,
+  100
+);
 
 // Fair-use guard для Premium: после достижения порога новые ответы блокируются
 // до следующего окна сброса.

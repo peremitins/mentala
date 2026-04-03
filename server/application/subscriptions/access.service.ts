@@ -73,7 +73,7 @@ export function getAiChatMode(
   }
 
   if (effectiveSubscription.planId === 'pro') {
-    return 'limited';
+    return PRO_WEEKLY_MINUTES_LIMIT === -1 ? 'unlimited_fair_use' : 'limited';
   }
 
   if (effectiveSubscription.planId === 'premium') {

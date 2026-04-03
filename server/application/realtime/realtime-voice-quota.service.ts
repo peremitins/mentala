@@ -132,7 +132,10 @@ export async function getRealtimeVoiceQuotaSnapshot(params: {
       )
     );
 
-  const limitSeconds = REALTIME_VOICE_MONTHLY_LIMIT_MINUTES * 60;
+  const isUnlimited = REALTIME_VOICE_MONTHLY_LIMIT_MINUTES === -1;
+  const limitSeconds = isUnlimited
+    ? -1
+    : REALTIME_VOICE_MONTHLY_LIMIT_MINUTES * 60;
   const usedSeconds = calculateUsageSecondsForSessionsInWindow(sessions, {
     windowStart: quotaPeriod.startedAt,
     windowEnd: quotaPeriod.endsAt,
@@ -140,7 +143,9 @@ export async function getRealtimeVoiceQuotaSnapshot(params: {
     now,
   });
 
-  const remainingSeconds = Math.max(0, limitSeconds - usedSeconds);
+  const remainingSeconds = isUnlimited
+    ? -1
+    : Math.max(0, limitSeconds - usedSeconds);
 
   return {
     limitSeconds,
@@ -156,12 +161,15 @@ export function resolveRealtimeVoiceMaxDurationSeconds(params: {
   remainingMonthlySeconds: number;
   remainingWeeklyMinutes: number;
 }) {
-  return Math.max(
-    0,
-    Math.min(
-      params.remainingMonthlySeconds,
-      params.remainingWeeklyMinutes * 60,
-      REALTIME_VOICE_HARD_CEILING_SECONDS
-    )
-  );
+  const candidates = [
+    params.remainingWeeklyMinutes * 60,
+    REALTIME_VOICE_HARD_CEILING_SECONDS,
+  ];
+
+  // Месячный лимит учитываем только если он не безлимитный (-1)
+  if (params.remainingMonthlySeconds !== -1) {
+    candidates.push(params.remainingMonthlySeconds);
+  }
+
+  return Math.max(0, Math.min(...candidates));
 }
