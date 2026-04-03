@@ -61,7 +61,8 @@ export async function assertRealtimeVoiceAccess(params: {
     userId: params.userId,
   });
 
-  if (quota.remainingSeconds <= 0) {
+  // limitSeconds === -1 означает безлимит — квоту не проверяем
+  if (quota.limitSeconds !== -1 && quota.remainingSeconds <= 0) {
     throw createError({
       statusCode: 402,
       statusMessage:

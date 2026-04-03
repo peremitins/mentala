@@ -10,6 +10,21 @@ function readPositiveInt(value: string | undefined, fallback: number): number {
   return normalized > 0 ? normalized : fallback;
 }
 
+/**
+ * Читает лимит из env: положительное число — конкретный лимит, -1 — безлимит.
+ * Любое другое значение → fallback.
+ */
+function readLimitInt(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  if (parsed === -1) return -1;
+
+  const normalized = Math.floor(parsed);
+  return normalized > 0 ? normalized : fallback;
+}
+
 function readFloatInRange(
   value: string | undefined,
   fallback: number,
@@ -24,7 +39,8 @@ function readFloatInRange(
   return Math.min(max, Math.max(min, parsed));
 }
 
-export const REALTIME_VOICE_MONTHLY_LIMIT_MINUTES = readPositiveInt(
+// Месячный лимит голосового диалога в минутах. -1 = безлимит.
+export const REALTIME_VOICE_MONTHLY_LIMIT_MINUTES = readLimitInt(
   process.env.REALTIME_VOICE_MONTHLY_LIMIT_MINUTES,
   120
 );
