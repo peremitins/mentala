@@ -2,7 +2,7 @@
 
 ## Стек
 
-Nuxt 4, TypeScript, Pinia, Tailwind CSS, Radix Vue / shadcn-vue, unplugin-icons (Lucide), vue-i18n, @tanstack/vue-query (+ ofetch), @vueuse/core, Capacitor, Vitest, Sentry
+Nuxt 4, TypeScript, Pinia, Tailwind CSS, Radix Vue / shadcn-vue, unplugin-icons (Lucide), vue-i18n, ofetch, @vueuse/core, Capacitor, Vitest, Sentry
 
 ## Структура (Nuxt 4)
 
@@ -13,7 +13,7 @@ app/
 ├─ layouts/        # default, blank, auth
 ├─ middleware/     # auth, i18n-redirect
 ├─ pages/          # маршруты
-├─ plugins/        # i18n, vue-query, sentry, api
+├─ plugins/        # i18n, sentry, api
 ├─ stores/         # Pinia
 └─ utils/
 shared/dto/        # Zod-схемы (общие с бэком)
@@ -28,7 +28,7 @@ shared/dto/        # Zod-схемы (общие с бэком)
 
 ## Данные и запросы
 
-- HTTP только через vue-query (`useQuery`/`useMutation`) с `useAPI()` (`$api`)
+- HTTP только через `useAPI()` composable или `nuxtApp.$api` напрямую
 - Состояние: Pinia для глобального, composables для локального
 - DTO (Zod): `shared/dto/*`, ответ парсится через Zod
 

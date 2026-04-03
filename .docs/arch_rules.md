@@ -29,7 +29,7 @@
 ## UI/UX
 - Glassmorphism: backdrop-blur, полупрозрачные панели, AA не нарушается
 - Headless: Radix Vue (поведение/a11y), стили — Tailwind/shadcn
-- Все запросы через vue-query, состояния loading/error/empty обязательны
+- Все запросы через `useAPI()` / `$api`, состояния loading/error/empty обязательны
 
 ## Производительность
 - LCP < 2.5s, TTI < 3s (mid-девайсы)
