@@ -53,6 +53,12 @@ export function dispatchBillingSubscriptionCanceledEvent(
   dispatchAppEvent('billing.subscription_canceled', payload);
 }
 
+export function dispatchBillingSubscriptionResumedEvent(
+  payload: MentalaAppEventMap['billing.subscription_resumed']
+): void {
+  dispatchAppEvent('billing.subscription_resumed', payload);
+}
+
 export function dispatchBillingCheckoutErrorEvent(
   payload: MentalaAppEventMap['billing.checkout_error']
 ): void {

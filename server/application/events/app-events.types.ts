@@ -73,6 +73,15 @@ export type MentalaAppEventMap = {
     endDate?: Date | string | null;
     occurredAt?: Date;
   };
+  'billing.subscription_resumed': {
+    userId: number;
+    subscriptionId: number | null;
+    planId: string | null;
+    billingPeriod?: string | null;
+    nextChargeAt?: Date | string | null;
+    endDate?: Date | string | null;
+    occurredAt?: Date;
+  };
   'billing.checkout_error': {
     userId: number | null;
     planId: string | null;
