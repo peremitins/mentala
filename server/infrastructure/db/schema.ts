@@ -1743,6 +1743,20 @@ export const securityEvents = pgTable(
   })
 );
 
+// === App Version Policy ===
+
+export const appVersionPolicy = pgTable('app_version_policy', {
+  platform: varchar('platform', { length: 20 }).primaryKey(), // 'ios' | 'android'
+  minimumSupportedBuild: integer('minimum_supported_build').notNull().default(1),
+  storeUrl: text('store_url').notNull(),
+  blockerTitle: text('blocker_title'),
+  blockerMessage: text('blocker_message'),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedBy: varchar('updated_by', { length: 255 }),
+});
+
 // === Content Generation System ===
 
 // Таблица для хранения сгенерированных постов

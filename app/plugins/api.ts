@@ -4,6 +4,7 @@ import { getActivePinia } from 'pinia';
 
 import { useToast } from '#imports';
 import {
+  resolveAppInfo,
   resolveClientPlatformHeader,
   resolveClientTimezone,
   resolveRuntimeApiBaseUrl,
@@ -92,14 +93,26 @@ export default defineNuxtPlugin(() => {
 
   const SESSION_TOKEN_KEY = 'mentai.session.token';
 
+  // Версионные заголовки — инициализируются асинхронно при первом запросе
+  let appVersion = '';
+  let appBuild = '0';
+  let appInfoResolved = false;
+
+  const appInfoPromise = resolveAppInfo().then((info) => {
+    appVersion = info.version;
+    appBuild = info.build;
+    appInfoResolved = true;
+  });
+
   const api = $fetch.create({
     baseURL,
     credentials: 'include',
 
-    onRequest({ request, options }) {
-      // Добавляем токен сессии из localStorage в заголовок
-
-      // Это fallback, если cookies не работают (например, cross-domain или Capacitor)
+    async onRequest({ request, options }) {
+      // Дожидаемся получения версии приложения (кэшируется, повторные вызовы мгновенны)
+      if (!appInfoResolved) {
+        await appInfoPromise;
+      }
 
       if (typeof window !== 'undefined') {
         const token = localStorage.getItem(SESSION_TOKEN_KEY);
@@ -167,6 +180,8 @@ export default defineNuxtPlugin(() => {
             if (token) headers.set('X-Session-Token', token);
             headers.set('X-Timezone', timezone);
             headers.set('X-Platform', platformHeader);
+            headers.set('X-App-Version', appVersion);
+            headers.set('X-App-Build', appBuild);
             headers.set('Content-Type', 'application/json');
             // Fallback: если localStorage-токен отсутствует (пересборка, очистка данных),
             // но session cookie уцелел — сервер определит канал как cookie и потребует CSRF.
@@ -179,6 +194,8 @@ export default defineNuxtPlugin(() => {
               'Content-Type': 'application/json',
               'X-Timezone': timezone,
               'X-Platform': platformHeader,
+              'X-App-Version': appVersion,
+              'X-App-Build': appBuild,
             };
             if (token) headersObj['X-Session-Token'] = token;
             // Fallback: CSRF-токен на случай отсутствия localStorage-сессии (аналогично realtime voice)
@@ -194,6 +211,8 @@ export default defineNuxtPlugin(() => {
             'Content-Type': 'application/json',
             'X-Timezone': timezone,
             'X-Platform': platformHeader,
+            'X-App-Version': appVersion,
+            'X-App-Build': appBuild,
           };
           // Добавляем CSRF токен для state-changing операций (web)
           // ВАЖНО: Если токен отсутствует, запрос будет отклонен CSRF middleware
@@ -205,6 +224,8 @@ export default defineNuxtPlugin(() => {
             headers.set('Content-Type', 'application/json');
             headers.set('X-Timezone', timezone);
             headers.set('X-Platform', platformHeader);
+            headers.set('X-App-Version', appVersion);
+            headers.set('X-App-Build', appBuild);
             if (csrfToken) {
               headers.set('X-CSRF-Token', csrfToken);
             }
