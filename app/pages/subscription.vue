@@ -130,13 +130,24 @@
               </template>
 
               <div v-if="isPaidActiveSubscription" class="mt-3">
-                <p
+                <div
                   v-if="isCurrentSubscriptionCancellationScheduled"
-                  class="text-xs text-foreground/80"
+                  class="space-y-2"
                 >
-                  Автопродление отключено. Подписка останется активной до
-                  {{ formatDate(currentSubscription.endDate) }}.
-                </p>
+                  <p class="text-xs text-foreground/80">
+                    Автопродление отключено. Подписка останется активной до
+                    {{ formatDate(currentSubscription.endDate) }}.
+                  </p>
+                  <button
+                    v-if="canResumeCurrentSubscription"
+                    type="button"
+                    :disabled="processing"
+                    class="inline-flex items-center justify-center rounded-md bg-primary-ui px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary-ui/90 disabled:opacity-60 disabled:cursor-not-allowed"
+                    @click="showResumeSubscriptionDialog = true"
+                  >
+                    Включить автопродление
+                  </button>
+                </div>
                 <button
                   v-else-if="canCancelCurrentSubscription"
                   type="button"
@@ -392,6 +403,36 @@
             <span :class="processing ? 'invisible' : ''">
               Отменить подписку
             </span>
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
+    <!-- Модалка подтверждения возобновления автопродления -->
+    <AlertDialog
+      :open="showResumeSubscriptionDialog"
+      @update:open="showResumeSubscriptionDialog = $event"
+    >
+      <AlertDialogContent class="glass-deep">
+        <AlertDialogHeader>
+          <AlertDialogTitle>Включить автопродление?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Подписка будет автоматически продлена
+            {{ formatDate(currentSubscription?.endDate || null) }}. С вашей
+            карты будет списана оплата за следующий период.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel @click="showResumeSubscriptionDialog = false">
+            Отмена
+          </AlertDialogCancel>
+          <AlertDialogAction
+            class="relative"
+            :disabled="processing"
+            @click="resumeActiveSubscription"
+          >
+            <ButtonLoader v-if="processing" />
+            <span :class="processing ? 'invisible' : ''"> Включить</span>
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -726,12 +767,23 @@ const isCurrentSubscriptionCancellationScheduled = computed(() => {
 
   return currentSubscription.value?.autoRenew === false;
 });
+
+const canResumeCurrentSubscription = computed(() => {
+  if (!isPaidActiveSubscription.value) return false;
+  if (isCurrentSubscriptionApple.value) return false;
+  if (!isCurrentSubscriptionCancellationScheduled.value) return false;
+  const endDate = currentSubscription.value?.endDate;
+  if (!endDate) return false;
+  return new Date(endDate).getTime() > Date.now();
+});
+
 // Храним период оплаты для каждого плана отдельно
 const planBillingPeriods = ref<Map<string, 'month' | 'year'>>(new Map());
 const selectedPlanId = ref<string | null>(null);
 const processing = ref(false);
 const showConfirmDialog = ref(false);
 const showCancelSubscriptionDialog = ref(false);
+const showResumeSubscriptionDialog = ref(false);
 const pendingPlanChange = ref<Plan | null>(null);
 const checkoutIdempotencyKey = ref<string | null>(null);
 const checkoutPayloadSignature = ref<string | null>(null);
@@ -1701,6 +1753,46 @@ async function cancelActiveSubscription() {
       error?.message || 'Попробуйте еще раз.',
       'error'
     );
+  } finally {
+    processing.value = false;
+  }
+}
+
+async function resumeActiveSubscription() {
+  if (processing.value) return;
+
+  showResumeSubscriptionDialog.value = false;
+  processing.value = true;
+
+  try {
+    await useAPI('/api/subscriptions/resume', {
+      method: 'POST',
+    });
+
+    await subscriptionStore.refreshSubscription();
+    await refreshBillingAccessSnapshot();
+
+    useToast(
+      'Автопродление включено',
+      'Подписка будет продлена автоматически.',
+      'success'
+    );
+  } catch (error: any) {
+    console.error('Failed to resume subscription:', error);
+
+    if (error?.statusMessage === 'payment_method_required') {
+      useToast(
+        'Привяжите карту',
+        'Для автопродления необходимо привязать карту.',
+        'warning'
+      );
+    } else {
+      useToast(
+        'Не удалось включить автопродление',
+        error?.message || 'Попробуйте еще раз.',
+        'error'
+      );
+    }
   } finally {
     processing.value = false;
   }
