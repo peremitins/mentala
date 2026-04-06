@@ -179,6 +179,7 @@ import { useNow } from '@vueuse/core';
 import { computed, onMounted } from 'vue';
 import { usePlatform } from '@/app/composables/usePlatform';
 import { useSubscriptionStore } from '@/app/stores/subscription';
+import { useEntitlements } from '@/app/composables/useEntitlements';
 import {
   getLocalizedPlanName,
   getLocalizedTrialPlanLabel,
@@ -191,6 +192,7 @@ import { useI18n } from 'vue-i18n';
 
 const subscriptionStore = useSubscriptionStore();
 const { t } = useI18n();
+const { getFeatureAccess } = useEntitlements();
 const { platform } = usePlatform();
 const now = useNow({ interval: 60_000 });
 
@@ -274,7 +276,9 @@ const shouldShowWeeklyProgressBar = computed(() => {
 });
 
 const shouldShowRealtimeVoiceProgressBar = computed(() => {
+  const { available } = getFeatureAccess('chat.realtime_voice');
   return (
+    available &&
     subscription.value?.paymentStatus === 'active' &&
     aiChatMode.value !== 'disabled' &&
     realtimeVoiceUsage.value !== null &&
