@@ -1,5 +1,19 @@
 apply plugin: 'com.android.application'
 
+def isTruthy = { value ->
+    if (value == null) return false
+
+    def normalized = value.toString().trim().toLowerCase()
+    return ['1', 'true', 'yes', 'on'].contains(normalized)
+}
+
+// Play Console track не прокидывается в Gradle build type автоматически:
+// internal testing, closed testing и production обычно используют один и тот же
+// release build. Поэтому оптимизацию включаем только явным флагом.
+def releaseOptimizationEnabled =
+    isTruthy(findProperty('mentalaEnableMinify')) ||
+    isTruthy(System.getenv('MENTALA_ANDROID_ENABLE_MINIFY'))
+
 android {
     namespace "com.mentala.app"
     compileSdk rootProject.ext.compileSdkVersion
@@ -18,8 +32,16 @@ android {
     }
     buildTypes {
         release {
-            // Отключено до настройки ProGuard правил для Capacitor/нативных плагинов
-            minifyEnabled false
+            // Для production рекомендуем R8 + shrinkResources, но включаем их
+            // только явным флагом, чтобы internal/closed testing не ломались
+            // внезапно из-за keep rules для Capacitor/кастомных плагинов.
+            minifyEnabled releaseOptimizationEnabled
+            shrinkResources releaseOptimizationEnabled
+            // Добавляем таблицу символов для native crash/ANR в Play Console
+            // без включения R8/ProGuard, чтобы не рисковать регрессиями в релизе.
+            ndk {
+                debugSymbolLevel 'SYMBOL_TABLE'
+            }
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
