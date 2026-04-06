@@ -1,9 +1,5 @@
 <template>
-  <div
-    class="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm transition-all duration-300 ease-in-out"
-    role="status"
-    aria-live="polite"
-  >
+  <div class="glass-deep rounded-2xl px-3 py-2 text-sm">
     <div class="flex items-center gap-2">
       <span class="flex-shrink-0 text-base">🔔</span>
       <div class="min-h-0 flex-1">
