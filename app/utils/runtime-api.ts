@@ -62,6 +62,49 @@ export function resolveClientPlatformHeader(
   return 'web';
 }
 
+export type AppInfoResult = {
+  version: string;
+  build: string;
+};
+
+let _appInfoCache: AppInfoResult | null = null;
+
+/**
+ * Получает версию и build number приложения.
+ * На нативных платформах — через App.getInfo() (Capacitor).
+ * На web — fallback: version из env/пустая строка, build = '0'.
+ * Результат кэшируется — значения не меняются в runtime.
+ */
+export async function resolveAppInfo(): Promise<AppInfoResult> {
+  if (_appInfoCache) return _appInfoCache;
+
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const { App } = await import('@capacitor/app');
+      const info = await App.getInfo();
+      _appInfoCache = {
+        version: info.version || '',
+        build: info.build || '',
+      };
+      return _appInfoCache;
+    } catch (error) {
+      // При ошибке на native: оставляем build пустым, чтобы сервер
+      // трактовал как "нет заголовка" → ok (обратная совместимость).
+      // Не ставим '0' — иначе при minimumSupportedBuild=1 будет ложный блок.
+      console.warn(
+        '[Runtime API] App.getInfo() failed, build header will be empty:',
+        error
+      );
+      _appInfoCache = { version: '', build: '' };
+      return _appInfoCache;
+    }
+  }
+
+  // Web: build='0' — сервер при platform=web всегда возвращает ok
+  _appInfoCache = { version: '', build: '0' };
+  return _appInfoCache;
+}
+
 export function resolveClientTimezone(fallback = 'Europe/Moscow'): string {
   try {
     if (
