@@ -51,7 +51,7 @@ function getAllowedOrigins(): string[] {
 const allowedOrigins = new Set(getAllowedOrigins());
 
 const allowHeaders =
-  'Content-Type, Authorization, X-Requested-With, X-Session-Token, X-Timezone, X-Platform, X-App-Env, X-CSRF-Token, Idempotency-Key';
+  'Content-Type, Authorization, X-Requested-With, X-Session-Token, X-Timezone, X-Platform, X-App-Env, X-CSRF-Token, Idempotency-Key, X-App-Version, X-App-Build';
 
 export default defineEventHandler((event) => {
   const req = event.node.req;
