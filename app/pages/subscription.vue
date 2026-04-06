@@ -142,7 +142,7 @@
                     v-if="canResumeCurrentSubscription"
                     type="button"
                     :disabled="processing"
-                    class="inline-flex items-center justify-center rounded-md bg-primary-ui px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary-ui/90 disabled:opacity-60 disabled:cursor-not-allowed"
+                    class="inline-flex items-center justify-center rounded-md border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-primary-ui/10 disabled:opacity-60 disabled:cursor-not-allowed"
                     @click="showResumeSubscriptionDialog = true"
                   >
                     Включить автопродление
