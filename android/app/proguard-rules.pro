@@ -19,3 +19,18 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# @capgo/capacitor-social-login содержит optional Facebook provider.
+# В Mentala используется Google login, а Facebook SDK не подключён.
+# Без этих suppress-правил R8 валит release build на missing optional classes.
+-dontwarn com.facebook.AccessToken$AccessTokenRefreshCallback
+-dontwarn com.facebook.AccessToken
+-dontwarn com.facebook.CallbackManager$Factory
+-dontwarn com.facebook.CallbackManager
+-dontwarn com.facebook.FacebookCallback
+-dontwarn com.facebook.FacebookSdk
+-dontwarn com.facebook.GraphRequest$GraphJSONObjectCallback
+-dontwarn com.facebook.GraphRequest
+-dontwarn com.facebook.GraphRequestAsyncTask
+-dontwarn com.facebook.login.LoginBehavior
+-dontwarn com.facebook.login.LoginManager
