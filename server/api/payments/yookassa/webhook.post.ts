@@ -644,6 +644,28 @@ export default defineEventHandler(async (event) => {
       });
 
       if (payment.status === 'succeeded' && payment.paid === true) {
+        // Защита от race condition: если пользователь отменил подписку
+        // пока платёж был в обработке, не активируем новую подписку.
+        const [currentUser] = await db
+          .select({
+            billingPlanId: users.billingPlanId,
+            billingCollectionStatus: users.billingCollectionStatus,
+          })
+          .from(users)
+          .where(eq(users.id, metadataUserId))
+          .limit(1);
+
+        if (
+          !currentUser?.billingPlanId &&
+          currentUser?.billingCollectionStatus === 'none'
+        ) {
+          event.context.logger?.warn(
+            { paymentId, userId: metadataUserId, billingPlanId, billingPeriod },
+            'Trial-scheduled payment succeeded but user billing was canceled — skipping activation (requires manual refund review)'
+          );
+          return { received: true };
+        }
+
         const presentation = extractPaymentMethodPresentation(
           payment.payment_method
         );

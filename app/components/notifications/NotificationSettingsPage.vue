@@ -52,6 +52,12 @@
     </PageHeader>
 
     <div class="space-y-3 pb-[120px] animate-fade-in">
+      <!-- Баннер recovery push-уведомлений -->
+      <PushRecoveryBanner
+        v-if="pushRecovery.showRecoveryBanner.value"
+        @enable="pushRecovery.attemptRecovery()"
+      />
+
       <!-- Карточка описания -->
       <section class="glass-deep p-3 space-y-3">
         <p class="text-sm font-semibold">Описание</p>
@@ -543,6 +549,8 @@ import InputComponent from '@/app/components/ui/shadcn/input/Input.vue';
 import TextareaResize from '@/app/components/ui/TextareaResize.vue';
 import ButtonLoader from '@/app/components/ui/ButtonLoader.vue';
 import PushPermissionDeniedDialog from '@/app/components/notifications/PushPermissionDeniedDialog.vue';
+import PushRecoveryBanner from '@/app/components/notifications/PushRecoveryBanner.vue';
+import { usePushRecovery } from '@/app/composables/usePushRecovery';
 import { Switch } from '@/app/components/ui/shadcn/switch';
 import { useNotificationsStore } from '@/app/stores/notifications';
 import { useUserHabitsStore } from '@/app/stores/userHabits';
@@ -570,6 +578,7 @@ const props = defineProps<{
 
 const router = useRouter();
 const { t } = useI18n();
+const pushRecovery = usePushRecovery();
 
 // Навигация к редактору текстов с передачей фильтров
 function goToTextsEditor() {
