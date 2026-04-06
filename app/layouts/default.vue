@@ -51,6 +51,17 @@
           @stop="stopPlayback"
           @open="openDetail"
         />
+        <PushRecoveryDialog
+          v-if="pushRecovery.showRecoveryDialog.value"
+          :open="pushRecovery.showRecoveryDialog.value"
+          @update:open="
+            (val) => {
+              if (!val) pushRecovery.dismissRecovery();
+            }
+          "
+          @dismiss="pushRecovery.dismissRecovery()"
+          @enable="pushRecovery.attemptRecovery()"
+        />
       </ClientOnly>
       <BottomNav />
     </div>
@@ -58,10 +69,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, watch } from 'vue';
+import { computed, onMounted, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import BottomNav from '@/app/components/BottomNav.vue';
 import MiniMeditationPlayer from '@/app/components/meditations/MiniMeditationPlayer.vue';
+import PushRecoveryDialog from '@/app/components/notifications/PushRecoveryDialog.vue';
+import { usePushRecovery } from '@/app/composables/usePushRecovery';
 import { useMeditationPlayer } from '@/app/composables/useMeditationPlayer';
 import { useMeditationsStore } from '@/app/stores/meditations';
 import { useSceneSettingsStore } from '@/app/stores/sceneSettings';
@@ -86,6 +99,7 @@ const {
 } = useMeditationPlayer();
 const meditationsStore = useMeditationsStore();
 const { isPortraitMode } = useViewportOrientation();
+const pushRecovery = usePushRecovery();
 
 const route = useRoute();
 const auth = useAuthStore();
@@ -116,6 +130,16 @@ const canPlaySceneAudio = computed(() => {
     !auth.loading &&
     onboardingCompleted
   );
+});
+
+// Проверяем recovery push-уведомлений через 5 секунд после mount
+// (после того как push-notifications.client.ts отработает за 3 секунды)
+onMounted(() => {
+  setTimeout(() => {
+    if (canPlaySceneAudio.value) {
+      void pushRecovery.checkRecoveryStatus();
+    }
+  }, 5000);
 });
 
 const detailTrackId = computed(() => {

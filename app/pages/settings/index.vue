@@ -112,6 +112,10 @@
         </div>
 
         <!-- Блок "Уведомления": Push + Маркетинговые сообщения -->
+        <PushRecoveryBanner
+          v-if="isPushNative && pushRecovery.showRecoveryBanner.value"
+          @enable="pushRecovery.attemptRecovery()"
+        />
         <div class="glass-deep">
           <p
             class="text-xs font-semibold text-muted-foreground tracking-wide pt-4 pb-1 px-4"
@@ -344,11 +348,13 @@ import { useNotificationsSettings } from '@/app/composables/useNotificationsSett
 import { useCopyToClipboard } from '@/app/composables/useCopyToClipboard';
 import { useToast } from '@/app/composables/useToast';
 import { usePushPermissionGate } from '@/app/composables/usePushPermissionGate';
+import { usePushRecovery } from '@/app/composables/usePushRecovery';
 import { useSettingsAnalytics } from '@/app/composables/useSettingsAnalytics';
 import SubscriptionBlock from '@/app/components/settings/SubscriptionBlock.vue';
 import Skeleton from '@/app/components/ui/Skeleton.vue';
 import ButtonLoader from '@/app/components/ui/ButtonLoader.vue';
 import PushPermissionDeniedDialog from '@/app/components/notifications/PushPermissionDeniedDialog.vue';
+import PushRecoveryBanner from '@/app/components/notifications/PushRecoveryBanner.vue';
 import { Switch } from '@/app/components/ui/shadcn/switch';
 import {
   Dialog,
@@ -402,6 +408,7 @@ const showPushDisableConfirmModal = ref(false);
 
 const pushPermissionGate = usePushPermissionGate();
 const pushSettings = pushPermissionGate.pushSettings;
+const pushRecovery = usePushRecovery();
 const settingsAnalytics = useSettingsAnalytics();
 
 /** Состояние свитчера Push берём из composable */
