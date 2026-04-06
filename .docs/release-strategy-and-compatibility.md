@@ -59,12 +59,13 @@ Mentala использует единый production backend и три кана�
 
 Каждый клиентский запрос должен содержать:
 
-- `X-App-Platform: ios | android | web`
+- `X-Platform: ios | android | web`
 - `X-App-Version: 1.3.0`
 - `X-App-Build: 42`
 
 Назначение полей:
 
+- `X-Platform` используется сервером для определения канала авторизации, платформенной логики и update policy;
 - `X-App-Version` используется для логов, аналитики, саппорта и диагностики;
 - `X-App-Build` используется сервером для сравнения версии и enforcement;
 - сравнение выполняется по `build`, а не по строке `version`.
@@ -73,8 +74,10 @@ Mentala использует единый production backend и три кана�
 
 - маркетинговая версия может следовать SemVer;
 - build number на каждой платформе обязан быть монотонно возрастающим integer;
-- на mobile `version` берется из runtime приложения;
-- на mobile `build` берется из store/native build number.
+- на mobile `version` и `build` берутся из нативного runtime через `App.getInfo()` (Capacitor);
+- на web `X-App-Build` равен `0`, `X-App-Version` равен версии из `package.json` или пустой строке.
+
+Примечание: заголовок `X-Platform` уже используется во всей кодовой базе (авторизация, платежи, подписки, CORS). Имя зафиксировано как финальное.
 
 ### 3. Политика обновления в v1
 
@@ -88,7 +91,7 @@ Mentala использует единый production backend и три кана�
 Клиент обязан проверять update policy:
 
 - на cold start;
-- при возврате приложения в foreground / resume.
+- при возврате приложения в foreground / resume (с debounce не чаще 1 раза в 60 секунд).
 
 Если `build < minimumSupportedBuild`, клиент:
 
@@ -96,32 +99,79 @@ Mentala использует единый production backend и три кана�
 - блокирует доступ к приложению;
 - предлагает перейти в store для обновления.
 
+Если update policy endpoint недоступен (сетевая ошибка, таймаут):
+
+- клиент продолжает работу (fail-open);
+- кэшируется последний успешный ответ в `@capacitor/preferences`;
+- повторная проверка при следующем foreground resume.
+
+Web не участвует в forced update логике. При `platform=web` сервер всегда возвращает `{status: 'ok'}`.
+
 `recommended update`, мягкие напоминания и rollout update policy по сегментам в v1 не описываются и не являются обязательной частью реализации.
 
 ### 4. Публичный клиент-серверный контракт
 
 Для v1 фиксируется следующий контракт update policy.
 
+Endpoint: `GET /api/app/update-policy`
+
+- Без аутентификации (доступен на cold start до логина);
+- Исключен из CSRF middleware;
+- Rate limit: стандартный (180 req/min).
+
 Request headers:
 
-- `X-App-Platform`
+- `X-Platform`
 - `X-App-Version`
 - `X-App-Build`
 
-Bootstrap/config response:
+Response body:
 
-- `status`
-- `minimumSupportedBuild`
-- `storeUrl`
-- `title`
-- `message`
+- `status` — `'ok' | 'required'`
+- `minimumSupportedBuild` — integer (текущий порог для платформы)
+- `storeUrl` — URL для перехода в store
+- `title` — заголовок blocker (i18n ключ или строка)
+- `message` — сообщение blocker (i18n ключ или строка)
 
-Допустимые значения `status` в v1:
+Поведение endpoint при отсутствии `X-App-Build`:
 
-- `ok`
-- `required`
+- если `platform=web` или заголовок отсутствует → `{status: 'ok'}`;
+- если `platform=ios|android` и `X-App-Build` отсутствует → `{status: 'ok'}` (обратная совместимость со старыми build, которые не отправляют заголовок).
 
-### 5. Feature flags не являются обязательной базой v1
+Shared DTO:
+
+- Контракт определяется Zod-схемой в `shared/dto/update-policy.ts`;
+- Используется и сервером (валидация), и клиентом (типизация).
+
+### 5. Серверное хранилище version policy
+
+`minimumSupportedBuild` хранится в таблице БД `app_version_policy`:
+
+| Колонка | Тип | Описание |
+|---------|-----|----------|
+| platform | varchar, PK | `'ios'` или `'android'` |
+| minimum_supported_build | integer, NOT NULL | Минимальный поддерживаемый build |
+| store_url | text, NOT NULL | URL для перехода в store |
+| blocker_title | text | Заголовок blocker экрана |
+| blocker_message | text | Сообщение blocker экрана |
+| updated_at | timestamp | Время последнего обновления |
+| updated_by | varchar | Кто обновил (admin email или 'migration') |
+
+Начальные значения (seed через миграцию, INSERT ... ON CONFLICT DO NOTHING):
+
+- iOS: `minimumSupportedBuild = 1`, `storeUrl = 'https://apps.apple.com/app/id<APP_ID>'`
+- Android: `minimumSupportedBuild = 1`, `storeUrl = 'https://play.google.com/store/apps/details?id=com.mentala.app'`
+
+Изменение через:
+
+- Admin endpoint `PATCH /api/admin/app-version-policy`;
+- Прямой SQL как fallback (аварийный rollback).
+
+Кэширование: in-memory на сервере с TTL 60 секунд.
+
+Повышение `minimumSupportedBuild` — только ручное действие. Не привязано автоматически ни к какому типу изменения.
+
+### 6. Feature flags не являются обязательной базой v1
 
 Feature flags допускаются как future / phase 2 capability, но:
 
@@ -131,7 +181,7 @@ Feature flags допускаются как future / phase 2 capability, но:
 
 Если позже появится полноценная server-driven feature flag платформа, она должна встраиваться поверх этой стратегии, а не вместо нее.
 
-### 6. Двухфазные миграции БД обязательны
+### 7. Двухфазные миграции БД обязательны
 
 Любые breaking schema changes запрещены, пока старые поддерживаемые build еще могут работать в production.
 
@@ -229,7 +279,9 @@ Feature flags допускаются как future / phase 2 capability, но:
 
 - клиент получает update policy с сервера;
 - при `status=required` показывает blocker;
-- blocker ведет пользователя в App Store.
+- blocker ведет пользователя в App Store через `storeUrl`.
+
+Store URL формат: `https://apps.apple.com/app/id<APP_ID>`
 
 ### Android
 
@@ -237,8 +289,11 @@ Feature flags допускаются как future / phase 2 capability, но:
 
 - клиент получает update policy с сервера;
 - при `status=required` показывает blocker;
-- основной путь обновления — `Immediate Update`;
-- fallback — переход в Google Play.
+- blocker ведет пользователя в Google Play через `storeUrl`.
+
+Store URL формат: `https://play.google.com/store/apps/details?id=com.mentala.app`
+
+In-App Updates (Immediate Update) не входит в v1. Может быть добавлено в v2 после установки соответствующего Capacitor-плагина.
 
 ### Web
 
@@ -247,7 +302,8 @@ Web не участвует в forced update логике по умолчани�
 Для web достаточно стандартного поведения канала:
 
 - новая версия становится доступна сразу после деплоя;
-- отдельная политика `minimumSupportedBuild` для web в рамках v1 не вводится.
+- отдельная политика `minimumSupportedBuild` для web в рамках v1 не вводится;
+- endpoint update-policy при `platform=web` всегда возвращает `{status: 'ok'}`.
 
 ## Безопасность mobile env
 
@@ -265,15 +321,36 @@ Web не участвует в forced update логике по умолчани�
 - Firebase Admin credentials;
 - любые server-side credentials.
 
+## Observability и rollback
+
+### Мониторинг
+
+- Сервер логирует каждый запрос с `status=required` (платформа, build, timestamp);
+- При аномальном росте blocked-запросов — Telegram alert через существующий `telegramAlertsWorker`;
+- Admin endpoint позволяет посмотреть текущие значения `minimumSupportedBuild`.
+
+### Rollback процедура
+
+Если `minimumSupportedBuild` выставлен ошибочно:
+
+1. Через admin endpoint: `PATCH /api/admin/app-version-policy` с пониженным значением;
+2. Через прямой SQL: `UPDATE app_version_policy SET minimum_supported_build = 1 WHERE platform = 'ios'`;
+3. Кэш сервера обновится в течение TTL (60 секунд);
+4. Клиенты при следующем foreground resume получат `{status: 'ok'}`.
+
 ## Test Cases для стратегии
 
 - старый, но поддерживаемый mobile build продолжает работать после server deploy;
 - mobile build ниже `minimumSupportedBuild` блокируется на cold start;
 - повторная проверка update policy срабатывает после возврата приложения из background;
-- Android immediate update / redirect сценарий не позволяет обойти блокировку неподдерживаемого build;
-- iOS blocker корректно уводит пользователя в App Store;
+- blocker корректно уводит пользователя в store (iOS → App Store, Android → Google Play);
 - server contract не ломается для старых поддерживаемых build после добавления новых полей или endpoint;
-- миграция БД по схеме `expand -> dual support -> mobile rollout -> contract cleanup` не ломает старые поддерживаемые клиенты.
+- миграция БД по схеме `expand -> dual support -> mobile rollout -> contract cleanup` не ломает старые поддерживаемые клиенты;
+- web с `X-App-Build=0` всегда получает `{status: 'ok'}`;
+- mobile build без заголовка `X-App-Build` (старые сборки) получает `{status: 'ok'}`;
+- при недоступности endpoint update-policy клиент продолжает работу (fail-open);
+- множественные foreground resume events не вызывают flood запросов (debounce 60 сек);
+- blocker показывается немедленно, даже если пользователь в активной сессии (данные сохраняются при уходе в фон).
 
 ## Что не входит в v1
 
@@ -283,7 +360,8 @@ Web не участвует в forced update логике по умолчани�
 - отдельная production БД под каждую версию клиента;
 - `recommended update`;
 - rollout update policy по сегментам;
-- полноценная feature flag платформа как обязательная часть релизной стратегии.
+- полноценная feature flag платформа как обязательная часть релизной стратегии;
+- In-App Updates для Android (Immediate Update).
 
 Это может быть добавлено во вторую итерацию, если появится реальная операционная необходимость.
 

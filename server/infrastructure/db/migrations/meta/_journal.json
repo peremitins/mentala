@@ -512,6 +512,13 @@
       "when": 1774520183049,
       "tag": "0076_cultured_blue_marvel",
       "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1775467013972,
+      "tag": "0077_chief_zarek",
+      "breakpoints": true
     }
   ]
 }

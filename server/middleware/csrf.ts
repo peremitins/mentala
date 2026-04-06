@@ -36,6 +36,7 @@ function isPublicEndpoint(path: string): boolean {
     '/api/auth/google/native',
     '/api/auth/vk/callback',
     '/api/payments/yookassa/webhook',
+    '/api/app/update-policy',
   ];
 
   // Проверяем точное совпадение или паттерн для OAuth callbacks
