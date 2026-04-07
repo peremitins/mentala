@@ -82,6 +82,13 @@ export function useBreathPracticeVoice() {
     const HowlCtor = await getHowlConstructor();
     if (!HowlCtor || version !== cacheVersion) return null;
 
+    // Double-check после await: параллельный вызов (prepare + play одновременно)
+    // мог уже создать и закэшировать звук для этого ключа.
+    // Без проверки оба вызова создают Howl — первый остаётся без ссылки
+    // и навсегда держит HTML5 Audio ноду из пула.
+    const existingAfterAwait = soundCache.get(key);
+    if (existingAfterAwait) return existingAfterAwait;
+
     const src = BREATH_PRACTICE_VOICE_AUDIO[addressing][phase];
     const sound = createSound(HowlCtor, src, key);
     soundCache.set(key, sound);

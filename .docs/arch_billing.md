@@ -67,6 +67,10 @@
 - Авто-fallback: без entitlement на AI-уведомления → сервер переводит в templates
 - `roleId=support` трактуется как premium-equivalent доступ для review/QA: полный доступ к premium-фичам без покупки, но без административного доступа к чужим данным
 
+## Промокоды
+
+- Проектное ТЗ по промокодам, offer codes и скидкам: `.docs/arch_promo_codes.md`
+
 ## Apple IAP client confirm
 
 - Клиент дедуплицирует `POST /api/subscriptions/apple/confirm` по `transactionId`, чтобы `purchase()` и `transactionUpdated` не создавали параллельные confirm-запросы.
