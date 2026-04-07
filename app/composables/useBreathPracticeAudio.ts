@@ -42,7 +42,8 @@ export function useBreathPracticeAudio() {
   function createSound(
     HowlCtor: HowlConstructor,
     src: string,
-    label: string
+    label: string,
+    onReplay?: (id: number) => void
   ): Howl {
     const sound = new HowlCtor({
       src: [src],
@@ -56,9 +57,15 @@ export function useBreathPracticeAudio() {
       preload: true,
       onplayerror: () => {
         // Ждём авто‑unlock и повторяем воспроизведение (важно для iOS/Android).
+        // onReplay обновляет activeSoundIds — без этого stopAll() не остановит
+        // звук, воспроизведённый после разблокировки, и он продолжит играть
+        // поверх следующих фаз.
         sound.once('unlock', () => {
           try {
-            sound.play();
+            const id = sound.play();
+            if (typeof id === 'number') {
+              onReplay?.(id);
+            }
           } catch (error) {
             console.error(`[BreathAudio] Failed to replay ${label}:`, error);
           }
@@ -95,23 +102,46 @@ export function useBreathPracticeAudio() {
       const module = await getBreathPracticeHowlerModule();
       if (!module || version !== cacheVersion) return false;
 
-      const { Howl } = module;
-      inhaleSound.value = createSound(
-        Howl,
-        BREATH_PRACTICE_SOUNDS.inhale,
-        'inhale'
-      );
-      exhaleSound.value = createSound(
-        Howl,
-        BREATH_PRACTICE_SOUNDS.exhale,
-        'exhale'
-      );
-      holdSound.value = createSound(Howl, BREATH_PRACTICE_SOUNDS.hold, 'hold');
-      pauseSound.value = createSound(
-        Howl,
-        BREATH_PRACTICE_SOUNDS.pause,
-        'pause'
-      );
+      // Double-check после await: параллельный вызов (например, onPhaseStart
+      // и onSoundEnabledChange одновременно) мог уже инициализировать звуки.
+      // Без этой проверки оба вызова создают по 4 Howl-объекта — первые 4
+      // остаются без ссылки и навсегда держат HTML5 Audio ноды из пула.
+      // Утечки исчерпывают пул (24 ноды на Android), и новые play() падают молча.
+      if (!inhaleSound.value) {
+        const { Howl } = module;
+        inhaleSound.value = createSound(
+          Howl,
+          BREATH_PRACTICE_SOUNDS.inhale,
+          'inhale',
+          (id) => {
+            activeSoundIds.inhale = id;
+          }
+        );
+        exhaleSound.value = createSound(
+          Howl,
+          BREATH_PRACTICE_SOUNDS.exhale,
+          'exhale',
+          (id) => {
+            activeSoundIds.exhale = id;
+          }
+        );
+        holdSound.value = createSound(
+          Howl,
+          BREATH_PRACTICE_SOUNDS.hold,
+          'hold',
+          (id) => {
+            activeSoundIds.hold = id;
+          }
+        );
+        pauseSound.value = createSound(
+          Howl,
+          BREATH_PRACTICE_SOUNDS.pause,
+          'pause',
+          (id) => {
+            activeSoundIds.pause = id;
+          }
+        );
+      }
     }
 
     return true;
