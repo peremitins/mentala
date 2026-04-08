@@ -78,6 +78,6 @@
 - Native Android launcher icon и splash генерировать отдельно из Apple-safe мастера: launcher через adaptive icon layers, splash — как отдельный тёмный launch screen со знаком бренда
 - Native iOS single-size AppIcon: `ios/App/App/Assets.xcassets/AppIcon.appiconset/favicon_ios.png`
 - Native iOS launch splash: `ios/App/App/Assets.xcassets/Splash.imageset/splash-2732x2732*.png`
-- iOS native-ассеты пересобирать командой `pnpm assets:ios`: `AppIcon` берётся из полного Apple-safe мастера, а splash собирается из того же мастера, но только со знаком бренда без фоновой карточки
+- iOS native-ассеты пересобирать командой `pnpm assets:ios`: `AppIcon` собирается той же светлой launcher-композицией, что и квадратный Android launcher icon (единая фон-подложка + тот же знак бренда), а splash — из того же мастера, но только со знаком бренда без фоновой карточки
 - Для `SplashScreen` в Capacitor не включать spinner и не держать искусственно длинный показ: визуал должен быть чистым и без ощущения дефолтного Capacitor
 - Android native-ассеты пересобирать командой `pnpm assets:android`: adaptive icon собирается из светлого брендового background layer + foreground знака, а splash заменяет дефолтный Capacitor во всех `drawable*`
