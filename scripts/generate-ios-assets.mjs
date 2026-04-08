@@ -15,6 +15,11 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import sharp from 'sharp';
+import {
+  PNG_OUTPUT_OPTIONS,
+  renderLauncherBitmap,
+  stripBackgroundFromMasterSvg,
+} from './lib/native-brand-assets.mjs';
 
 const ROOT_DIR = process.cwd();
 const IOS_ICON_MASTER_PATH = path.join(
@@ -38,19 +43,6 @@ const SPLASH_TARGETS = [
   'splash-2732x2732-1.png',
   'splash-2732x2732-2.png',
 ];
-
-/**
- * Для splash используем только знак бренда без фоновой плашки:
- * launch screen должен оставаться простым и не выглядеть как рекламный баннер.
- */
-function stripBackgroundFromMasterSvg(masterSvg) {
-  return [
-    /<rect width="1024" height="1024" fill="url\(#bg-fill\)" \/>\s*/g,
-    /<rect width="1024" height="1024" fill="url\(#bg-top-glow\)" \/>\s*/g,
-    /<rect width="1024" height="1024" fill="url\(#bg-bottom-glow\)" \/>\s*/g,
-    /<rect width="1024" height="1024" fill="url\(#bg-center-haze\)" \/>\s*/g,
-  ].reduce((svg, pattern) => svg.replace(pattern, ''), masterSvg);
-}
 
 function createSplashBackdropSvg(size) {
   return `
@@ -97,17 +89,14 @@ function createSplashBackdropSvg(size) {
   `;
 }
 
-async function renderAppIcon(masterSvg) {
-  const appIconBuffer = await sharp(Buffer.from(masterSvg))
-    .resize(APP_ICON_SIZE, APP_ICON_SIZE, {
-      fit: 'cover',
-    })
-    .flatten({ background: '#E8EEF9' })
-    .png({
-      compressionLevel: 9,
-      adaptiveFiltering: true,
-    })
-    .toBuffer();
+/**
+ * iOS AppIcon собираем той же светлой launcher-композицией, что и Android,
+ * но без alpha-канала, чтобы Xcode/App Store не получили прозрачную иконку.
+ */
+async function renderAppIcon(markSvg) {
+  const appIconBuffer = await renderLauncherBitmap(markSvg, APP_ICON_SIZE, {
+    removeAlpha: true,
+  });
 
   await writeFile(IOS_APP_ICON_PATH, appIconBuffer);
 }
@@ -116,20 +105,14 @@ async function renderSplash(markSvg) {
   const splashBackdropBuffer = await sharp(
     Buffer.from(createSplashBackdropSvg(SPLASH_SIZE))
   )
-    .png({
-      compressionLevel: 9,
-      adaptiveFiltering: true,
-    })
+    .png(PNG_OUTPUT_OPTIONS)
     .toBuffer();
 
   const splashMarkBuffer = await sharp(Buffer.from(markSvg))
     .resize(SPLASH_MARK_SIZE, SPLASH_MARK_SIZE, {
       fit: 'contain',
     })
-    .png({
-      compressionLevel: 9,
-      adaptiveFiltering: true,
-    })
+    .png(PNG_OUTPUT_OPTIONS)
     .toBuffer();
 
   const inset = Math.round((SPLASH_SIZE - SPLASH_MARK_SIZE) / 2);
@@ -141,10 +124,7 @@ async function renderSplash(markSvg) {
         top: inset,
       },
     ])
-    .png({
-      compressionLevel: 9,
-      adaptiveFiltering: true,
-    })
+    .png(PNG_OUTPUT_OPTIONS)
     .toBuffer();
 
   await mkdir(IOS_SPLASH_DIR, { recursive: true });
@@ -160,7 +140,7 @@ async function main() {
   const masterSvg = await readFile(IOS_ICON_MASTER_PATH, 'utf8');
   const markSvg = stripBackgroundFromMasterSvg(masterSvg);
 
-  await renderAppIcon(masterSvg);
+  await renderAppIcon(markSvg);
   await renderSplash(markSvg);
 
   console.log('✓ iOS AppIcon and Splash assets generated');
