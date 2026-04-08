@@ -45,6 +45,14 @@ export function useBreathPracticeVoice() {
       // это стабильнее, чем голый Audio и Web Audio API для коротких voice-clip.
       html5: true,
       preload: true,
+      // pool: 1 — голос всегда играется по одному: при переходе между фазами
+      // мы делаем stop() предыдущего Howl и сразу play() нового. Держать
+      // больше одного Sound на Howl не нужно, а если держать — Howler при
+      // повторном play() (редкий кейс, например, при быстром переключении
+      // фаз или перезапуске сессии) может взять новую ноду из общего html5
+      // pool, которая не preload'ена. На Android это приводит к пропускам
+      // голосовых подсказок.
+      pool: 1,
       onplayerror: () => {
         sound.once('unlock', () => {
           if (currentSound !== sound) return;
