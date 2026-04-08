@@ -12,7 +12,7 @@
           {{ t('SUPPORT.TITLE') }}
         </h1>
         <p class="text-sm text-muted-foreground">
-          {{ t('SUPPORT.SUBTITLE') }}
+          {{ supportSubtitle }}
         </p>
       </article>
 
@@ -38,7 +38,10 @@
           </p>
         </article>
 
-        <article class="glass-deep rounded-lg p-4 space-y-3">
+        <article
+          v-if="!shouldHideIosReviewBillingUi"
+          class="glass-deep rounded-lg p-4 space-y-3"
+        >
           <h2 class="text-base font-semibold text-foreground">
             {{ t('SUPPORT.CANCEL.TITLE') }}
           </h2>
@@ -79,7 +82,10 @@
           </ul>
         </article>
 
-        <article class="glass-deep rounded-lg p-4 space-y-3">
+        <article
+          v-if="!shouldHideIosReviewBillingUi"
+          class="glass-deep rounded-lg p-4 space-y-3"
+        >
           <h2 class="text-base font-semibold text-foreground">
             {{ t('SUPPORT.REFUND.TITLE') }}
           </h2>
@@ -130,8 +136,10 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { useIosReviewBillingUi } from '@/app/composables/useIosReviewBillingUi';
 
 const { t, locale } = useI18n();
+const { shouldHideIosReviewBillingUi } = useIosReviewBillingUi();
 
 const supportEmail = 'support@mentala.app';
 const supportMailto = `mailto:${supportEmail}`;
@@ -141,6 +149,13 @@ const refundReviewDays = '5';
 const supportLocale = computed(() => {
   const normalizedLocale = String(locale.value || 'ru').toLowerCase();
   return normalizedLocale.startsWith('en') ? 'en' : 'ru';
+});
+const supportSubtitle = computed(() => {
+  if (shouldHideIosReviewBillingUi.value) {
+    return 'Здесь вы можете быстро связаться с нами и получить помощь по приложению.';
+  }
+
+  return t('SUPPORT.SUBTITLE');
 });
 
 const privacyPolicyUrl = computed(

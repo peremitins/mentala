@@ -68,11 +68,15 @@
           <IconChevronRight class="h-4 w-4 text-muted-foreground" />
         </NuxtLink>
 
-        <div class="transition-all rounded-lg scroll-mt-24">
+        <div
+          v-if="!shouldHideIosReviewBillingUi"
+          class="transition-all rounded-lg scroll-mt-24"
+        >
           <SubscriptionBlock />
         </div>
 
         <ReferralShareCompactCard
+          v-if="!shouldHideIosReviewBillingUi"
           :visible="shouldShowReferralShare"
           :refresh-key="referralPanelRefreshKey"
         />
@@ -218,7 +222,7 @@
               <div class="">
                 <p class="text-sm font-medium">Поддержка</p>
                 <p class="text-xs text-muted-foreground">
-                  Вопросы, отмена подписки и возвраты
+                  {{ supportDescription }}
                 </p>
               </div>
               <IconChevronRight class="h-4 w-4 text-muted-foreground" />
@@ -375,6 +379,7 @@ import { useChatSettingsStore } from '@/app/stores/chatSettings';
 import { useSubscriptionStore } from '@/app/stores/subscription';
 import { useNotificationsSettings } from '@/app/composables/useNotificationsSettings';
 import { useCopyToClipboard } from '@/app/composables/useCopyToClipboard';
+import { useIosReviewBillingUi } from '@/app/composables/useIosReviewBillingUi';
 import { useToast } from '@/app/composables/useToast';
 import { usePushPermissionGate } from '@/app/composables/usePushPermissionGate';
 import { useSettingsAnalytics } from '@/app/composables/useSettingsAnalytics';
@@ -425,6 +430,7 @@ const subscriptionStore = useSubscriptionStore();
 const { fetchGlobalPreferences } = useNotificationsSettings();
 const { copy } = useCopyToClipboard();
 const { locale } = useI18n();
+const { shouldHideIosReviewBillingUi } = useIosReviewBillingUi();
 
 const preferences = ref<UserPreferencesDto | null>(null);
 const loadingUser = ref(true);
@@ -454,7 +460,17 @@ const isPushNative = computed(() => Boolean(pushSettings.isNative?.value));
 const isLoading = computed(() => loadingUser.value || loadingPreferences.value);
 const isAdmin = computed(() => auth.user?.role === 'admin');
 const shouldShowReferralShare = computed(() => {
-  return subscriptionStore.subscriptionData?.billingProviderHint === 'yookassa';
+  return (
+    !shouldHideIosReviewBillingUi.value &&
+    subscriptionStore.subscriptionData?.billingProviderHint === 'yookassa'
+  );
+});
+const supportDescription = computed(() => {
+  if (shouldHideIosReviewBillingUi.value) {
+    return 'Помощь, ответы на вопросы и обратная связь';
+  }
+
+  return 'Вопросы, отмена подписки и возвраты';
 });
 
 const displayName = computed(() => auth.user?.name?.trim() || 'Пользователь');
