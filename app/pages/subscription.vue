@@ -1,5 +1,8 @@
 <template>
-  <div class="space-y-2 h-full overflow-y-auto rounded-lg">
+  <div
+    v-if="!shouldHideIosReviewBillingUi"
+    class="space-y-2 h-full overflow-y-auto rounded-lg"
+  >
     <PageHeader
       :title="'Управление подпиской'"
       :show-back-button="true"
@@ -527,12 +530,20 @@
 import { Capacitor } from '@capacitor/core';
 import { useNow } from '@vueuse/core';
 import { nanoid } from 'nanoid';
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  watchEffect,
+} from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { useAPI } from '@/app/composables/useAPI';
 import { useEntitlements } from '@/app/composables/useEntitlements';
 import { useExternalFlowAppUrl } from '@/app/composables/useExternalFlowAppUrl';
+import { useIosReviewBillingUi } from '@/app/composables/useIosReviewBillingUi';
 import { useAppleIap } from '@/app/composables/useAppleIap';
 import { usePlatform } from '@/app/composables/usePlatform';
 import { useToast } from '@/app/composables/useToast';
@@ -654,6 +665,7 @@ const { refreshEntitlements } = useEntitlements();
 const route = useRoute();
 const router = useRouter();
 const { platform } = usePlatform();
+const { shouldHideIosReviewBillingUi } = useIosReviewBillingUi();
 const externalFlowAppUrl = useExternalFlowAppUrl();
 const appleIap = useAppleIap();
 const { $yooKassaWidget } = useNuxtApp();
@@ -790,6 +802,7 @@ const canResumeCurrentSubscription = computed(() => {
 const planBillingPeriods = ref<Map<string, 'month' | 'year'>>(new Map());
 const selectedPlanId = ref<string | null>(null);
 const processing = ref(false);
+const reviewRedirectStarted = ref(false);
 const showConfirmDialog = ref(false);
 const showCancelSubscriptionDialog = ref(false);
 const showResumeSubscriptionDialog = ref(false);
@@ -835,6 +848,20 @@ const hasAppleIapPrices = computed(() => {
 });
 const appleIapProductsLoadAttempted = ref(false);
 const appleIapPricesErrorMessage = ref<string | null>(null);
+
+// Для review-аккаунта billing-экран на native iOS полностью скрыт.
+watchEffect(() => {
+  if (
+    import.meta.server ||
+    reviewRedirectStarted.value ||
+    !shouldHideIosReviewBillingUi.value
+  ) {
+    return;
+  }
+
+  reviewRedirectStarted.value = true;
+  void navigateTo('/settings', { replace: true });
+});
 
 function resolveUserFacingErrorMessage(error: any): string | null {
   const candidates = [

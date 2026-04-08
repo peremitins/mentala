@@ -66,6 +66,7 @@
 - Lock/paywall: иконка тарифа + `FeaturePaywallModal` при клике
 - Авто-fallback: без entitlement на AI-уведомления → сервер переводит в templates
 - `roleId=support` трактуется как premium-equivalent доступ для review/QA: полный доступ к premium-фичам без покупки, но без административного доступа к чужим данным
+- Для `native iOS + roleId=support` frontend скрывает billing/referral UI (`Подписка`, promo/referral, `/subscription`, `/settings/referral`, billing-подсказки в `Поддержке`), чтобы review-аккаунт проверял функциональность без purchase-management surface
 - Effective entitlements теперь считаются не только по paid subscription и trial, но и по `billing_access_grants`
 
 ## Промокоды
