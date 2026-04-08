@@ -18,7 +18,7 @@
 - Каталог `/meditations`, детальный плеер через query `trackId`
 - Таблицы: `meditation_tracks`, `meditation_favorites`
 - Web Audio API для loop-треков (бесшовный цикл), HTMLAudio fallback для non-loop
-- Native: `@capgo/native-audio` на mobile, foreground service на Android
+- iOS: `@capgo/native-audio`; Android медитации используют тот же HTMLAudio/WebAudio стек, что и `scene-selection`, чтобы background timer работал единообразно
 - Контекст очереди: перемотка вперёд/назад по выбранной секции
 - Медиафайлы версионируются по content-hash, CDN кэш бессрочный
 - В mobile release локальный каталог `public/meditations` не бандлится: аудио/обложки/фоны должны загружаться с `mediaBaseUrl` (`https://media.mentala.app` в production)
@@ -28,6 +28,7 @@
 - Настройки в `/api/user/me` → `sceneSettings`
 - Loop-сцены: WebAudio (бесшовный цикл), non-loop: HTMLAudio fallback
 - Глушение при активном медитационном аудио
+- Если медитация завершилась по таймеру, пока приложение в фоне или под локскрином, сцена не должна автозапускаться до возврата приложения в active state
 - `backgroundPlayMinutes`: 0 = стоп в background, N > 0 = стоп через N минут
 
 ## Онбординг (`/onboarding`)

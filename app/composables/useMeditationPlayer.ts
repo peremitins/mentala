@@ -128,6 +128,9 @@ function isNativeMeditationAudioEnabled() {
     if (!featureEnabled) return false;
 
     if (!Capacitor.isNativePlatform()) return false;
+    // На Android медитации сознательно держим на том же HTMLAudio/WebAudio стеке,
+    // что и scene-selection: там background timer уже проверен в реальном сценарии.
+    if (Capacitor.getPlatform() !== 'ios') return false;
     return Capacitor.isPluginAvailable('NativeAudio');
   } catch {
     return false;
