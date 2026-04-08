@@ -28,6 +28,22 @@
               {{ auth.user?.id }}
             </span>
           </button>
+
+          <Separator class="my-3" />
+
+          <NuxtLink
+            to="/admin/promo-codes"
+            class="flex items-center justify-between gap-3"
+            :class="rowClass()"
+          >
+            <div>
+              <p class="text-sm font-medium">Промокоды и referral</p>
+              <p class="text-xs text-muted-foreground">
+                Управление кодами, скидками и реферальной программой
+              </p>
+            </div>
+            <IconChevronRight class="h-4 w-4 text-muted-foreground" />
+          </NuxtLink>
         </div>
 
         <NuxtLink
@@ -55,6 +71,11 @@
         <div class="transition-all rounded-lg scroll-mt-24">
           <SubscriptionBlock />
         </div>
+
+        <ReferralShareCompactCard
+          :visible="shouldShowReferralShare"
+          :refresh-key="referralPanelRefreshKey"
+        />
 
         <div class="glass-deep">
           <p
@@ -351,12 +372,14 @@ import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useAuthStore } from '@/app/stores/auth';
 import { useChatSettingsStore } from '@/app/stores/chatSettings';
+import { useSubscriptionStore } from '@/app/stores/subscription';
 import { useNotificationsSettings } from '@/app/composables/useNotificationsSettings';
 import { useCopyToClipboard } from '@/app/composables/useCopyToClipboard';
 import { useToast } from '@/app/composables/useToast';
 import { usePushPermissionGate } from '@/app/composables/usePushPermissionGate';
 import { useSettingsAnalytics } from '@/app/composables/useSettingsAnalytics';
 import SubscriptionBlock from '@/app/components/settings/SubscriptionBlock.vue';
+import ReferralShareCompactCard from '@/app/components/subscription/ReferralShareCompactCard.vue';
 import Skeleton from '@/app/components/ui/Skeleton.vue';
 import ButtonLoader from '@/app/components/ui/ButtonLoader.vue';
 import PushPermissionDeniedDialog from '@/app/components/notifications/PushPermissionDeniedDialog.vue';
@@ -398,6 +421,7 @@ import IconChevronRight from '~icons/lucide/chevron-right';
 
 const auth = useAuthStore();
 const chatSettings = useChatSettingsStore();
+const subscriptionStore = useSubscriptionStore();
 const { fetchGlobalPreferences } = useNotificationsSettings();
 const { copy } = useCopyToClipboard();
 const { locale } = useI18n();
@@ -407,6 +431,7 @@ const loadingUser = ref(true);
 const loadingPreferences = ref(true);
 const showDeleteDialog = ref(false);
 const isDeleting = ref(false);
+const referralPanelRefreshKey = ref(0);
 const marketingConsent = ref(false);
 const marketingConsentLoading = ref(false);
 const showPushDisableConfirmModal = ref(false);
@@ -428,6 +453,9 @@ const isPushNative = computed(() => Boolean(pushSettings.isNative?.value));
 
 const isLoading = computed(() => loadingUser.value || loadingPreferences.value);
 const isAdmin = computed(() => auth.user?.role === 'admin');
+const shouldShowReferralShare = computed(() => {
+  return subscriptionStore.subscriptionData?.billingProviderHint === 'yookassa';
+});
 
 const displayName = computed(() => auth.user?.name?.trim() || 'Пользователь');
 const displayEmail = computed(() => auth.user?.email || 'Не указан');

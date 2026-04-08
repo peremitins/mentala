@@ -31,6 +31,34 @@ shared/dto/        # Zod-схемы (общие с бэком)
 - HTTP только через `useAPI()` composable или `nuxtApp.$api` напрямую
 - Состояние: Pinia для глобального, composables для локального
 - DTO (Zod): `shared/dto/*`, ответ парсится через Zod
+- Для billing UI `subscription` store может получать optional promo/referral блоки без поломки старых клиентов
+
+## Billing UI
+
+- `/subscription` — единая точка для тарифов, промокодов, referral-кода и активных бонусов
+- На `/subscription` блоки промокода и активных бонусов должны идти перед карточками тарифов, но после блоков текущего billing-состояния, запланированного/проблемного списания и способа оплаты
+- `/settings` — компактный пользовательский блок `Пригласи друга` с личным кодом, copy/share и переходом на `/settings/referral`
+- `/settings/referral` — детальный экран referral со счётчиками, pending rewards, бонусным счётом и пояснением механики
+- `/admin/promo-codes` — два tab'а: `Промокоды` и `Referral`
+- `FeaturePaywallModal` не содержит полноценный billing-flow, только CTA на `/subscription`, включая `Есть промокод?`
+- Для `apple_iap` пользователь не должен видеть internal promo/referral controls
+- `/auth/login` и `/auth/register` должны поддерживать optional input для promo/referral code как дополнительную точку входа
+- pre-auth ввод кода не должен делать финальный redeem: код только сохраняется как pending и после авторизации обрабатывается тем же backend-flow, что и на `/subscription`
+- UX на auth/register должен объяснять тот же самый смысл reward, что и на `/subscription`, без отдельной логики “специального auth-кода”
+- Пользовательский referral UI должен уметь показывать:
+  - доступный `billingCredit`
+  - pending referral credits
+  - дату/правило подтверждения reward после первой оплаты приглашённого
+- Admin UI во вкладке `Referral` должен использовать только актуальные настройки consumer-модели:
+  - `inviteePercent`
+  - `referrerPercent`
+  - `inviteeRewardValidityDays`
+  - `creditHoldDays`
+- Для `creditHoldDays` нужен env-aware дефолт:
+  - development / QA: `1`
+  - production: `14`
+- Admin UI для промокодов должен уметь и генерировать код автоматически, и принимать ручной код от администратора с live-проверкой уникальности
+- Отдельный блогерский / affiliate UI в эту итерацию не входит
 
 ## Кроссплатформенность
 

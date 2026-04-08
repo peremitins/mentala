@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { AssistantSettingsDto } from '@/shared/dto/assistant-settings';
+import { AssistantSettingsDto } from './assistant-settings';
 
 export const BillingFeaturePaywallDto = z.object({
   title: z.string(),

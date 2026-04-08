@@ -69,6 +69,31 @@ interface SubscriptionResponse {
     billingPeriod: 'month' | 'year';
     effectiveAt: string;
   } | null;
+  promo?: {
+    activeAccessGrant?: {
+      id: number;
+      planId: 'pro' | 'premium';
+      startsAt: string;
+      endsAt: string;
+      sourceLabel: string;
+    } | null;
+    pendingDiscount?: {
+      id: number;
+      kind: 'admin_promo' | 'invitee_referral';
+      percent: number;
+      status: 'active' | 'reserved' | 'applied' | 'expired' | 'revoked';
+      expiresAt: string | null;
+      sourceLabel: string;
+      targetPlanScope: 'any_paid' | 'pro' | 'premium';
+      targetPeriodScope: 'any' | 'month' | 'year';
+    } | null;
+    effectiveBillingShiftDays?: number;
+  };
+  referral?: {
+    myCode?: string | null;
+    pendingRewardsCount?: number;
+    successfulInvitesCount?: number;
+  };
   user?: {
     billingCredit: number;
     hasUsedTrial: boolean;
