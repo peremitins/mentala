@@ -17,6 +17,7 @@ import {
 } from '@/server/application/subscriptions/trial-billing.service';
 import { resolveAiUsagePeriodStartedAt } from '@/server/application/subscriptions/usage-window.service';
 import { getRealtimeVoiceQuotaSnapshot } from '@/server/application/realtime/realtime-voice-quota.service';
+import { resolveEffectiveEntitlementsPlanWithAccessGrant } from '@/server/application/promo-codes/promo-access-grants.service';
 
 /**
  * GET /api/subscriptions/usage
@@ -82,7 +83,7 @@ export default defineEventHandler(async (event) => {
   if (userRecord) {
     const activeSub = activeSubscription[0];
     trialActive = isTrialActiveAt(userRecord.trialEndedAt, now);
-    currentEntitlementsPlan = resolveCurrentEntitlementsPlan({
+    const baseEntitlementsPlan = resolveCurrentEntitlementsPlan({
       now,
       trialActive,
       billingPlanId: userRecord.billingPlanId,
@@ -92,6 +93,13 @@ export default defineEventHandler(async (event) => {
       graceEndsAt: userRecord.graceEndsAt,
       activePaidPlanId: activeSub?.subscription.planId ?? null,
     });
+    currentEntitlementsPlan = (
+      await resolveEffectiveEntitlementsPlanWithAccessGrant({
+        userId: sessionResult.user.id,
+        basePlanId: baseEntitlementsPlan,
+        now,
+      })
+    ).planId;
     const entitlementsPlanRows = await db
       .select({
         id: subscriptionPlans.id,

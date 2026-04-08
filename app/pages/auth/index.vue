@@ -198,6 +198,25 @@
                   />
                 </div>
 
+                <div>
+                  <label
+                    class="block text-sm mb-1 text-foreground"
+                    for="auth-access-code"
+                  >
+                    Код доступа
+                  </label>
+                  <Input
+                    id="auth-access-code"
+                    v-model="accessCode"
+                    type="text"
+                    autocomplete="off"
+                    maxlength="64"
+                    placeholder="Промокод (необязательно)"
+                    :show-clear-button="false"
+                    @input="normalizeAccessCodeInput"
+                  />
+                </div>
+
                 <div
                   class="flex items-center justify-end"
                   v-if="mode === 'signin'"
@@ -351,6 +370,10 @@ import { Checkbox } from '@/app/components/ui/shadcn/checkbox';
 import { Tabs, TabsList, TabsTrigger } from '@/app/components/ui/shadcn/tabs';
 import { useToast } from '@/app/composables/useToast';
 import { getErrorDiagnosticsLog } from '@/app/utils/errorDiagnostics';
+import {
+  normalizePendingAccessCode,
+  usePendingAccessCode,
+} from '@/app/composables/usePendingAccessCode';
 
 definePageMeta({
   layout: 'auth',
@@ -368,6 +391,7 @@ const agree = ref(false);
 const marketingConsent = ref(false);
 const loading = ref(false);
 const oauthLoading = ref(false);
+const accessCode = ref('');
 
 const verificationEmail = ref('');
 const verificationCode = ref('');
@@ -403,6 +427,12 @@ const brandLogoComponent = computed(() => {
   const normalizedLocale = String(locale.value || 'ru').toLowerCase();
   return normalizedLocale.startsWith('ru') ? BrandLogoRu : BrandLogoEn;
 });
+
+const { pendingAccessCode, setPendingAccessCode } = usePendingAccessCode();
+
+function normalizeAccessCodeInput() {
+  accessCode.value = normalizePendingAccessCode(accessCode.value);
+}
 
 function startResendTimer(seconds = 60) {
   reset(seconds);
@@ -515,6 +545,7 @@ async function submit() {
 
   try {
     loading.value = true;
+    setPendingAccessCode(accessCode.value);
     if (mode.value === 'signin') {
       await auth.loginEmail({
         email: email.value,
@@ -618,6 +649,7 @@ async function resendCode() {
 async function loginWithGoogle() {
   try {
     oauthLoading.value = true;
+    setPendingAccessCode(accessCode.value);
     await auth.loginWithGoogle(locale.value);
   } catch (e: any) {
     const message =
@@ -682,6 +714,16 @@ onMounted(async () => {
       'OAuth-провайдер не вернул email. Попробуйте другой способ входа.',
       'error'
     );
+  }
+
+  const queryAccessCode = [
+    normalizePendingAccessCode(String(route.query.ref || '')),
+    normalizePendingAccessCode(String(route.query.promo || '')),
+    normalizePendingAccessCode(String(route.query.code || '')),
+  ].find((value) => value.length >= 3);
+  accessCode.value = queryAccessCode || pendingAccessCode.value || '';
+  if (queryAccessCode) {
+    setPendingAccessCode(queryAccessCode);
   }
 });
 </script>

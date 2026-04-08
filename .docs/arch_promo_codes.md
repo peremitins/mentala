@@ -1,704 +1,460 @@
-# Промокоды, offer codes и скидки на подписку
+# Промокоды и Referral
 
 ## Статус
 
-- Документ проектный.
-- Реализация в этом таске не выполняется.
-- Цель: зафиксировать целевую модель промокодов для web / Android / iOS без поломки текущего billing-flow.
+- Реализовано в billing-flow для `yookassa`.
+- Для `apple_iap` внутренние promo/referral controls не показываются.
+- Модель сделана по схеме `expand -> dual support`: старые клиенты не ломаются, новые поля в API только optional.
 
-## Зачем это нужно
+## Scope v1
 
-Нужно поддержать минимум два бизнес-сценария:
+Поддерживаются 3 механизма:
 
-1. Промокод на бесплатный доступ на произвольное число дней, которое можно менять в БД для будущих активаций.
-2. Промокод на скидку на следующий платеж или следующее списание.
+1. `free_access_days`
+2. `next_payment_percent_discount`
+3. `referral_program`
 
-Дополнительно важно не сломать:
+Обычные промокоды и referral разделены намеренно:
 
-- текущий trial-flow;
-- scheduled billing в конце trial;
-- upgrade/downgrade policy;
-- различие между YooKassa и Apple IAP;
-- обратную совместимость мобильных клиентов.
+- promo code создаёт админ;
+- promo code одноразовый глобально;
+- referral code персональный, многоразовый и живёт на уровне пользователя.
+- Автогенерация promo/referral-кодов использует префикс `MENTALA`; legacy-коды с префиксом `MENT` остаются валидными и продолжают приниматься.
 
-## Ключевые решения
+## Продуктовые правила
 
-### 1. Не переиспользовать `trial` как механизм промокодов
+### `free_access_days`
 
-Промокод на бесплатные дни не должен изменять `users.has_used_trial`, `trial_started_at`, `trial_ended_at` и anti-abuse логику trial.
+- Код задаёт `durationDays >= 1`.
+- Поддерживаются режимы `planMode = auto | explicit`.
+- `auto` берёт текущий активный paid-план пользователя. Если paid-плана нет, redeem запрещён.
+- `explicit` может выдать только `pro` или `premium`.
+- `explicit` не может понижать effective access пользователя.
 
-Почему:
+Ключевой инвариант:
 
-- trial у продукта уже имеет отдельный смысл и отдельные ограничения;
-- промокод может выдаваться саппортом, маркетингом, партнёрами и не должен считаться "первым пробным периодом";
-- смешивание trial и promo сильно усложнит аналитику и поддержку.
+- уже оплаченные дни не сгорают;
+- если у пользователя есть billing-boundary, она сдвигается на `N` дней;
+- если billing-boundary нет, создаётся только временный `access grant`.
 
-Решение:
+Примеры:
 
-- trial остаётся отдельной сущностью;
-- промокод даёт отдельный `access grant`;
-- entitlements рассчитываются по общей модели "активные источники доступа".
+- `active pro + auto` -> пользователь остаётся на `PRO`, `nextChargeAt` сдвигается.
+- `active pro + explicit premium` -> на `N` дней effective plan = `Premium`, затем возврат в `PRO`.
+- `basic + explicit premium` -> выдаётся временный `Premium`, после окончания пользователь возвращается в исходное состояние.
 
-### 2. Не смешивать промокодную скидку с `billingCredit`
+### `next_payment_percent_discount`
 
-`billingCredit` уже существует как отдельная денежная сущность. Промокодная скидка должна жить отдельно.
+- Скидка только процентная: `1..100`.
+- Применяется к ближайшему qualifying payment:
+  - `start-checkout`
+  - direct charge по сохранённой карте
+  - `retry-charge`
+  - `trial-billing-worker`
+  - `scheduled-plan-change`
+- Скидка применяется после proration.
+- Скидка не смешивается с `billingCredit`.
+- В одном платеже используется только один percentage discount source.
+- Если попытка оплаты неуспешна, grant не сгорает и возвращается в `active`.
 
-Почему:
+Targeting:
 
-- `billingCredit` похож на баланс/компенсацию и может иметь другой lifecycle;
-- промокодная скидка обычно одноразовая и не должна внезапно превращаться в вечный остаток;
-- возвраты, отмены, повторные попытки списания и аудит будут запутанными.
+- `targetPlanScope = any_paid | pro | premium`
+- `targetPeriodScope = any | month | year`
 
-Решение:
+Приоритет stacking policy:
 
-- для промокодов завести отдельные `discount grants`;
-- в финансовых артефактах хранить отдельный snapshot скидки по промокоду.
+1. bound admin promo
+2. unbound admin promo
+3. invitee referral reward
+4. referrer referral reward
 
-### 3. Изменение параметров промокода в БД должно влиять только на будущие активации
+### Referral
 
-Это принципиально.
+- У каждого пользователя есть персональный referral code.
+- Ленивая инициализация `user_referral_profiles` должна быть идемпотентной и concurrency-safe: параллельные запросы не должны приводить к `500`, смене уже выданного кода или дублированию профиля.
+- Invitee может активировать referral только один раз за lifetime.
+- Self-referral запрещён.
+- Reward выдаётся не в момент ввода кода, а после первой успешной paid-конверсии invitee.
 
-Нельзя делать так, чтобы изменение `durationDays = 30 -> 7` в кампании внезапно урезало уже выданный пользователям доступ.
+Экономика v1:
 
-Решение:
+- invitee: `20%` на первый paid payment
+- referrer: `20%` на следующий paid payment
+- invitee reward validity: `30` дней
+- referrer reward validity: `90` дней
+- yearly cap на referrer: `25` успешных reward-выдач
 
-- у кампании параметры можно менять в любой момент;
-- при redeem создаётся immutable snapshot условий;
-- если нужно продлить или отменить уже активированный доступ, это делается на уровне конкретного redemption/access grant, а не редактированием кампании.
+## Referral v2 (следующая итерация, пока не реализовано)
 
-### 4. В v1 не поддерживать stacking
+### Решение по scope
 
-Один пользовательский checkout / one-shot charge использует не более одного promo discount.
+- В этой итерации меняем только consumer referral для обычных пользователей.
+- Отдельный блок для блогеров / инфлюенсеров / affiliate-партнёров сейчас не делаем.
+- Для блогеров нужен отдельный future-contour с партнёрскими ссылками, атрибуцией, payout и anti-fraud правилами. Это фиксируется как отдельная будущая задача, но не входит в текущую реализацию.
 
-Почему:
+### Почему меняем модель
 
-- stacking быстро ломает понятность цены;
-- усложняет proration и retry-логику;
-- даёт много edge-cases для саппорта.
+Текущая схема `referrer -> % на следующий платёж` слишком слабая и плохо масштабируется:
 
-Решение:
+- reward не накапливается в понятный баланс;
+- reward быстро сгорает;
+- множество успешных referrals не превращаются в пропорциональную выгоду;
+- лимит `25/год` искусственно обрезает сильных рефереров и не соответствует product fit даже для обычных power users.
 
-- `stackingMode = exclusive` по умолчанию;
-- при необходимости later можно добавить controlled stacking для отдельных кампаний.
+### Новая продуктовая модель
 
-### 5. Для iOS Apple IAP использовать Apple offer codes / promotional offers, а не наш server-side текстовый купон
+- Invitee остаётся на модели `20% на следующий qualifying paid payment после активации кода`.
+- Referrer больше не получает `next_payment_percent_discount`.
+- Referrer получает накопительный `billingCredit`, который начисляется после qualifying paid conversion invitee.
+- `referrerYearlyCap` из product-логики убирается.
+- Anti-abuse строится не на cap, а на qualifying event, hold-периоде и ручной/moderated проверке аномалий.
 
-Для iOS non-RU flow, где billing provider = `apple_iap`, нельзя проектировать купон так же, как для YooKassa.
+### Что остаётся без изменений
 
-Решение:
+- Invitee может активировать referral только один раз за lifetime.
+- Self-referral запрещён.
+- Reward для invitee создаётся только до первой платной подписки.
+- Reward для referrer создаётся только после первой успешной paid-конверсии invitee.
+- Для `apple_iap` внутренний referral-flow по-прежнему не используется.
 
-- web / Android / iOS RU storefront (`yookassa`) используют internal promo codes;
-- iOS Apple IAP использует native StoreKit redemption flow;
-- в UI это разные entry points.
+Важно для текстов и UX:
 
-## Рекомендуемый scope v1
+- В пользовательских текстах и preview нужно писать `следующий платёж`, а не `первый платёж`.
+- Причина: пользователь видит эффект как скидку на ближайший qualifying payment после активации кода.
+- Ограничение `только до первой paid-подписки` остаётся отдельным eligibility-правилом и не должно смешиваться с текстом о reward.
 
-### Обязательные типы
+### Новая экономика referrer reward
 
-1. `grant_access_days`
-2. `discount_next_checkout`
-3. `discount_next_charge`
+`referrerPercent` больше не означает “скидка на следующий платёж referrer”.
 
-### Что значит каждый тип
+Теперь он означает:
 
-#### `grant_access_days`
+- `referrerCreditPercent` — процент от первой успешно оплаченной суммы invitee, который конвертируется во внутренний `billingCredit` referrer.
 
-Даёт доступ к плану `pro` или `premium` на `N` дней без немедленного платежа.
+Рекомендуемая формула для текущей итерации:
 
-Рекомендуемые ограничения v1:
+- `referrerCreditAmount = round(qualifyingCapturedAmount * referrerCreditPercent / 100, 2)`
 
-- применять только для пользователей без активной платной подписки;
-- разрешить для `basic`, `trial`, `expired`, `canceled`;
-- после окончания действия вернуть пользователя в обычное состояние по текущим billing-правилам.
+Где:
 
-Причина ограничения:
-
-- для активной paid-подписки бесплатные дни превращаются в "pause/extend billing", а это отдельная сложная бизнес-логика.
-
-#### `discount_next_checkout`
-
-Даёт скидку на следующий checkout, который пользователь запускает сам.
-
-Подходит для:
-
-- first purchase;
-- winback;
-- апгрейда на год;
-- партнёрских кампаний.
-
-#### `discount_next_charge`
-
-Даёт скидку на следующее автоматическое списание или scheduled charge.
-
-Подходит для:
-
-- компенсации после инцидента;
-- удержания пользователя перед renew;
-- trial conversion со скидкой на первое списание в конце trial.
-
-## Популярные варианты промокодов, которые стоит предусмотреть в модели
-
-Ниже не всё нужно делать в первой итерации, но модель должна это выдерживать.
-
-| Тип | Что даёт | Нужен в v1 |
-| --- | --- | --- |
-| `grant_access_days` | Бесплатный доступ к `pro`/`premium` на N дней | Да |
-| `discount_next_checkout_fixed` | Фиксированная скидка на следующий checkout | Да |
-| `discount_next_checkout_percent` | Процентная скидка на следующий checkout | Да |
-| `discount_next_charge_fixed` | Фиксированная скидка на следующее автосписание | Да |
-| `discount_next_charge_percent` | Процентная скидка на следующее автосписание | Да |
-| `free_next_charge` | 100% скидка на следующее списание | Да, как частный случай fixed/percent |
-| `gift_subscription_period` | Подарить 1 месяц / 1 год плана | Phase 2 |
-| `discount_n_cycles` | Скидка на первые 2-3 платежа | Phase 2 |
-| `upgrade_promo` | Скидка только при переходе на `premium` или `year` | Phase 2 |
-| `winback_only` | Только для churned пользователей | Через eligibility уже в v1 |
-| `referral_reward` | Награда за приглашение, двусторонняя логика | Phase 2 |
-| `support_recovery` | Компенсационный код саппорта после сбоя | Через `discount_next_charge` уже в v1 |
-| `partner_campaign` | Партнёрский / influencer код с лимитами | Через campaign rules уже в v1 |
-
-## Где давать ввод промокода
-
-### Основная точка входа
-
-`/subscription`
-
-Почему это лучшее место:
-
-- пользователь уже находится в billing-контексте;
-- можно показать точный effect preview рядом с тарифами;
-- не надо дублировать сложную pricing-логику по десятку paywall-экранов.
-
-### Дополнительная точка входа
-
-`/settings` -> блок подписки -> переход на `/subscription`
-
-Причина:
-
-- у вас уже есть единый поток "Управление подпиской";
-- не нужно плодить отдельные места с независимой бизнес-логикой.
-
-### Что делать с paywall-модалками
-
-Не встраивать полноценный ввод кода в каждый `FeaturePaywallModal`.
-
-Вместо этого:
-
-- добавить вторичный CTA `Есть промокод?`;
-- CTA открывает `/subscription` и фокусирует поле промокода.
-
-Почему:
-
-- paywall-модалки сейчас лёгкие и универсальные;
-- если тащить внутрь полноценный promo-flow, модалка станет второй billing-страницей;
-- возрастёт связность между paywall и checkout.
-
-### Что делать с `app/pages/billing.vue`
-
-Сейчас страница пустая. В будущем её логично использовать как "Billing center":
-
-- активные скидки;
-- история применённых промокодов;
-- управление следующим списанием.
-
-Но для первой версии ввод промокода лучше не уносить туда как в primary entry point. Иначе пользователь просто не найдёт эту функцию.
-
-## UX-поведение по платформам
-
-### Web / Android / iOS RU storefront (`yookassa`)
-
-Показываем обычный текстовый ввод промокода на `/subscription`.
-
-Сценарий:
-
-1. Пользователь вводит код.
-2. Клиент вызывает preview.
-3. Сервер отвечает, что именно получит пользователь.
-4. Пользователь нажимает `Применить`.
-5. Сервер фиксирует redemption.
-6. Если это access grant, доступ меняется сразу.
-7. Если это discount grant, на экране появляется плашка "Скидка активирована и будет применена к следующему платежу".
-
-### iOS non-RU storefront (`apple_iap`)
-
-Не показывать наш кастомный текстовый input для Apple offer codes.
-
-Показывать:
-
-- кнопку `Активировать offer code`;
-- она открывает native StoreKit redemption sheet.
-
-Если маркетинг хочет один и тот же публичный код для всех платформ, это должны быть две разные реализации одной кампании:
-
-- internal promo campaign для YooKassa;
-- Apple offer code / promotional offer в App Store Connect.
-
-Но UI всё равно разный.
-
-## Целевая доменная модель
-
-### 1. `promo_campaigns`
-
-Описывает сам промокод и его правила.
-
-Рекомендуемые поля:
-
-- `id`
-- `code` — уникальный нормализованный код, например `SPRING2026`
-- `status` — `draft | active | paused | archived`
-- `channel` — `internal | apple_offer_code`
-- `benefit_type` — `grant_access_days | discount_next_checkout | discount_next_charge`
-- `benefit_payload` — `jsonb`, валидируется Zod discriminated union
-- `eligibility_payload` — `jsonb`, валидируется Zod
-- `stacking_mode` — `exclusive`
-- `starts_at`
-- `ends_at`
-- `total_redemption_limit`
-- `per_user_redemption_limit`
-- `internal_name`
-- `public_label`
-- `comment`
-- `created_by`
-- `updated_by`
-- `created_at`
-- `updated_at`
-
-Пример `benefit_payload` для бесплатных дней:
-
-```json
-{
-  "type": "grant_access_days",
-  "planId": "premium",
-  "durationDays": 30
-}
-```
-
-Пример `benefit_payload` для скидки:
-
-```json
-{
-  "type": "discount_next_charge",
-  "mode": "percent",
-  "value": 50,
-  "maxAmount": 500,
-  "currency": "RUB"
-}
-```
-
-Пример `eligibility_payload`:
-
-```json
-{
-  "platforms": ["web", "android", "ios"],
-  "billingProviders": ["yookassa"],
-  "planIds": ["pro", "premium"],
-  "userStates": ["basic", "trial", "expired"],
-  "firstPurchaseOnly": false
-}
-```
-
-### 2. `promo_redemptions`
-
-Фиксирует факт активации кода пользователем и snapshot условий на момент redeem.
-
-Рекомендуемые поля:
-
-- `id`
-- `campaign_id`
-- `user_id`
-- `code_snapshot`
-- `benefit_type_snapshot`
-- `benefit_payload_snapshot`
-- `eligibility_payload_snapshot`
-- `status` — `active | consumed | expired | revoked`
-- `source_platform`
-- `source_context` — `subscription_page | settings | paywall | support`
-- `redeemed_at`
-- `expires_at`
-- `consumed_at`
-- `revoked_at`
-- `metadata`
-
-### 3. `billing_access_grants`
-
-Отдельная таблица временного доступа.
-
-Рекомендуемые поля:
-
-- `id`
-- `user_id`
-- `source_type` — `promo_code | support | manual`
-- `source_redemption_id`
-- `plan_id`
-- `starts_at`
-- `ends_at`
-- `status` — `active | expired | revoked`
-- `created_at`
-- `updated_at`
-
-Эта таблица нужна, чтобы не перегружать `users.trial_*`.
-
-### 4. `billing_discount_grants`
-
-Отдельная таблица отложенных скидок.
-
-Рекомендуемые поля:
-
-- `id`
-- `user_id`
-- `source_redemption_id`
-- `apply_on` — `next_checkout | next_charge`
-- `mode` — `fixed | percent`
-- `amount`
-- `percent`
-- `max_discount_amount`
-- `currency`
-- `target_plan_id`
-- `target_billing_period`
-- `billing_provider` — в v1 фактически `yookassa`
-- `status` — `active | reserved | applied | expired | revoked`
-- `expires_at`
-- `reserved_subscription_id`
-- `applied_subscription_id`
-- `applied_payment_id`
-- `applied_charge_attempt_id`
-- `applied_amount`
-- `created_at`
-- `updated_at`
-
-## Почему нужна отдельная `billing_access_grants`, а не только `promo_redemptions`
-
-Потому что redemption — это факт активации кода, а grant — это фактический доступ.
-
-Это позволит:
-
-- продлевать / отзывать доступ вручную на уровне grant;
-- в будущем использовать ту же таблицу для support-компенсаций без промокода;
-- держать entitlements engine простым: он смотрит на access grants, а не на все виды кампаний.
-
-## Правила расчёта доступа
-
-Текущий effective access план нужно считать как максимум по активным источникам:
-
-1. `support`-equivalent доступ
-2. `billing_access_grants`
-3. `trial`
-4. `active paid subscription`
-5. `basic`
-
-Если активно несколько источников:
-
-- выбираем план с наибольшим рангом;
-- при равном плане для UI можно показывать самый дальний `endsAt`;
-- billing engine при этом остаётся отдельным от entitlements.
-
-## Правила применения скидки
-
-### Базовый порядок расчёта
-
-1. Рассчитать обычную сумму чарджа по текущей логике `plan-change`.
-2. Найти один подходящий `billing_discount_grant`.
-3. Применить discount.
-4. Ограничить снизу `0`.
-5. Зафиксировать snapshot применённой скидки.
-
-### Что важно
-
-- скидка применяется после proration;
-- скидка не должна переписывать историю кампании задним числом;
-- если платёж не создался или был отменён до финализации, grant остаётся `active`, если политика не говорит обратное;
-- если скидка была зарезервирована на конкретный checkout, нужна защита от двойного применения.
-
-## В какие серверные потоки интегрировать discount grant
-
-Не только в `POST /api/subscriptions/start-checkout`.
-
-Нужно покрыть все точки, где появляется charge:
-
-1. `POST /api/subscriptions/start-checkout`
-2. `POST /api/subscriptions/retry-charge`
-3. `trial-billing-worker`
-4. `scheduled-plan-change.service` если он создаёт charge
-5. любые future renew / recovery flows
-
-Если интегрировать только `start-checkout`, то промокод "на следующее списание" будет работать непредсказуемо.
-
-## Изменения в текущих API
-
-### Не ломаем старые контракты
-
-Только добавляем новые поля как optional.
-
-### Публичные endpoints
-
-#### `POST /api/promo-codes/preview`
-
-Назначение:
-
-- проверить код;
-- показать пользователю точный effect preview;
-- не создавать redemption.
-
-Request:
-
-```json
-{
-  "code": "SPRING2026",
-  "context": "subscription_page",
-  "planId": "premium",
-  "billingPeriod": "year"
-}
-```
-
-Response:
-
-```json
-{
-  "valid": true,
-  "channel": "internal",
-  "benefitType": "discount_next_checkout",
-  "summary": "Скидка 30% на следующий checkout Premium (год)",
-  "requiresRedeem": true,
-  "platformAction": "redeem"
-}
-```
-
-#### `POST /api/promo-codes/redeem`
-
-Назначение:
-
-- зафиксировать redeem;
-- создать access grant или discount grant.
-
-#### `GET /api/promo-codes/active`
-
-Назначение:
-
-- отдать активные grants пользователя для `/subscription` и будущего billing center.
-
-### Изменения в `GET /api/subscriptions/current`
-
-Можно добавить optional-блок:
-
-```json
-{
-  "promo": {
-    "activeAccessGrant": {
-      "planId": "premium",
-      "endsAt": "2026-05-01T00:00:00.000Z"
-    },
-    "pendingDiscount": {
-      "applyOn": "next_charge",
-      "summary": "Скидка 50% на следующее списание"
-    }
-  }
-}
-```
-
-Важно:
-
-- блок только добавляется;
-- старые поля не меняются и не удаляются.
-
-### Изменения в `POST /api/subscriptions/start-checkout`
-
-В ответ безопасно добавить optional-поля:
-
-- `promoDiscountApplied`
-- `promoCode`
-- `priceBreakdown`
+- `qualifyingCapturedAmount` — реально успешно списанная сумма первого qualifying payment invitee;
+- сумма считается после invitee-discount, proration и других price adjustments;
+- refunded / canceled / chargeback-платежи не считаются финально подтверждённой базой награды.
 
 Пример:
 
-```json
-{
-  "amount": 3830,
-  "toPay": 2830,
-  "promoDiscountApplied": 1000,
-  "promoCode": "SPRING2026",
-  "priceBreakdown": {
-    "baseAmount": 3830,
-    "prorationCredit": 0,
-    "promoDiscount": 1000,
-    "finalToPay": 2830
-  }
-}
-```
+- invitee активировал referral;
+- затем оплатил первый `PRO`-платёж;
+- система дождалась успешного `payment.succeeded`;
+- reward для invitee работает как и раньше;
+- reward для referrer не создаётся как coupon, а начисляется в `billingCredit`.
 
-## Админка и управление через БД
+### Hold и anti-fraud
 
-### Минимум для v1
+Жёсткий yearly cap убирается, но добавляется более взрослая логика защиты:
 
-Даже если UI админки сразу не будет, система должна поддерживать:
+- reward сначала создаётся в статусе `pending`;
+- в `available` он переходит только после `creditHoldDays`;
+- рекомендуемое значение для production: `14` дней;
+- для development и QA допускается env-specific override `creditHoldDays = 1`, чтобы не блокировать ручную проверку сценариев;
+- если qualifying payment invitee refunded / reversed / chargeback во время hold, credit не становится доступным;
+- если reversal пришёл позже, credit должен уметь уходить в `reversed`, а баланс пользователя — пересчитываться.
 
-- создание кампании;
-- изменение параметров кампании;
-- паузу/архивацию;
-- просмотр редемпшенов;
-- ручное продление / отзыв конкретного grant.
+### Expiry policy
 
-### Рекомендуемые admin endpoints
+- Короткое истечение в `90` дней для referrer reward убирается.
+- Для текущей итерации рекомендуем не делать короткий hard-expiry вообще.
+- Если понадобится финансовое ограничение liabilities, позже можно ввести отдельную inactivity-policy, но не в этой итерации.
+
+Итог:
+
+- reward не сгорает “по-тихому” через несколько недель;
+- сильные рефереры получают пропорциональную накопительную выгоду;
+- экономика контролируется hold / antifraud / reversal-правилами, а не искусственным лимитом.
+
+### Как billingCredit должен применяться
+
+Для новой referral-модели `billingCredit` должен стать полноценной частью billing engine.
+
+Порядок расчёта рекомендован такой:
+
+1. base price / proration
+2. percent promo / invitee discount
+3. `billingCredit`
+4. external charge на остаток
+
+Правила:
+
+- `billingCredit` может использоваться частично;
+- если кредита больше, чем сумма к оплате, остаток переносится дальше;
+- если после применения `billingCredit` сумма стала `0`, subscription-flow должен завершаться internal-активацией без внешнего списания;
+- `billingCredit` должен уметь покрывать `100%` суммы платежа;
+- если для будущего auto-renew нужен payment method, это проверяется отдельно от самого факта нулевого первого charge.
+
+### Почему это лучше
+
+- reward становится накопительным и понятным в интерфейсе;
+- reward можно использовать на нескольких будущих платежах, а не терять из-за short expiry;
+- сильный реферер получает value пропорционально реальной конверсии;
+- модель ближе к best practice крупных consumer-продуктов, где reward появляется после qualifying action и копится в account value, а не живёт как пачка одноразовых “следующих скидок”.
+
+### Планируемые изменения в данных
+
+Текущий `users.billingCredit` можно сохранить как materialized balance, но для referral v2 этого недостаточно.
+
+Нужно добавить ledger-сущность:
+
+- `billing_credit_entries`
+
+Рекомендуемые поля:
+
+- `id`
+- `userId`
+- `sourceType = referral_reward | manual_adjustment | refund_restore | support_compensation`
+- `sourceReferralRedemptionId?`
+- `amount`
+- `currency`
+- `status = pending | available | partially_applied | applied | reversed`
+- `availableAt`
+- `appliedAt?`
+- `reversedAt?`
+- `metadata`
+- `createdAt`
+- `updatedAt`
+
+Правило:
+
+- `users.billingCredit` остаётся агрегированным snapshot-балансом;
+- truth source для аудита и разборов — `billing_credit_entries`.
+
+### Планируемые изменения в referral settings
+
+В `referral_program_settings` для новой итерации нужно перейти на такую модель:
+
+- `inviteePercent`
+- `inviteeRewardValidityDays`
+- `referrerRewardType = billing_credit`
+- `referrerCreditPercent`
+- `creditHoldDays`
+
+### Планируемые изменения в referral redemption lifecycle
+
+`referral_redemptions` должен явно хранить путь от активации к credit reward:
+
+- `status = pending_conversion | pending_credit | completed | revoked | reversed`
+- `qualifyingPaymentId?`
+- `qualifyingCapturedAmount?`
+- `qualifyingCurrency?`
+- `holdUntil?`
+- `referrerCreditEntryId?`
+- `creditAvailableAt?`
+- `creditReversedAt?`
+
+Рекомендуемый сценарий:
+
+1. invitee активирует код -> `pending_conversion`
+2. invitee делает первый успешный платёж -> `pending_credit`
+3. проходит hold -> создаётся / раскрывается available credit
+4. reward использован -> credit entry движется по своему lifecycle, а redemption остаётся completed
+
+### Планируемые API и UI-изменения
+
+Пользователь:
+
+- `/settings` и `/subscription` должны показывать:
+  - текущий доступный `billingCredit`
+  - pending referral credits
+  - последние успешные referrals
+  - пояснение “наградa подтверждается через N дней после первой оплаты друга”
+- `/auth/login` и `/auth/register` должны уметь принять referral/promocode как entry point, чтобы пользователь не был обязан отдельно идти в настройки или на paywall
+- ввод кода на auth/register, на `/subscription` и в будущем на landing/paywall должен означать один и тот же backend-flow:
+  - это не отдельный тип reward;
+  - это не отдельная referral-сущность;
+  - после авторизации должен использоваться тот же самый redeem/preview механизм
+- до авторизации код нельзя считать окончательно активированным:
+  - на pre-auth шаге код только сохраняется как pending input в local/session storage или ephemeral server session;
+  - окончательная проверка eligibility и redeem происходят только после появления user session
+
+Referral repeat-policy:
+
+- после успешной активации любого referral code у invitee фиксируется один `referrer of record`;
+- второй и последующие referral code от того же или другого пользователя больше не принимаются;
+- дополнительных скидок за повторный ввод других referral code пользователь не получает;
+- это правило должно одинаково работать для ввода в настройках, на `/subscription`, на auth/register и в будущих deeplink / landing entry points.
+
+Админ:
+
+- во вкладке `Referral` оставляем только параметры текущей consumer-модели:
+  - `inviteePercent`
+  - `referrerPercent`
+  - `inviteeRewardValidityDays`
+  - `creditHoldDays`
+- preview должен показывать invitee-discount и referrer-credit как разные сущности.
+
+Admin promo-code UX:
+
+- у админа должна быть кнопка `Сгенерировать код`;
+- при этом ручной ввод собственного кода должен остаться;
+- UI должен делать live-check уникальности кода до сохранения;
+- source of truth для уникальности остаётся сервер и БД, а не только клиентская проверка;
+- при конфликте сервер должен вернуть понятную бизнес-ошибку `code_already_exists`.
+
+### Текущее состояние реализации
+
+- referrer reward уже переведён с discount grant на `billingCredit`;
+- legacy-тип `referrer_referral` удалён из runtime и DTO;
+- deprecated-поля `referrerYearlyCap`, `referrerRewardValidityDays`, `referrerTargetPlanScope`, `referrerTargetPeriodScope` убраны из текущей модели;
+- backward-compatibility слой для этой части не сохранялся, потому что функциональность ещё не выезжала в production.
+
+## База данных
+
+Новые таблицы:
+
+- `promo_campaigns`
+- `promo_code_redemptions`
+- `billing_access_grants`
+- `billing_discount_grants`
+- `billing_schedule_adjustments`
+- `user_referral_profiles`
+- `referral_program_settings`
+- `referral_redemptions`
+
+Роли таблиц:
+
+- `promo_campaigns` хранит одноразовые admin-created коды и immutable payload кампании.
+- `promo_code_redemptions` фиксирует факт успешного redeem и snapshot результата.
+- `billing_access_grants` хранит временный доступ к `pro/premium`.
+- `billing_discount_grants` хранит будущую скидку на следующий платёж.
+- `billing_schedule_adjustments` хранит честный сдвиг billing-boundary.
+- `user_referral_profiles` хранит личный referral code пользователя.
+- `referral_program_settings` хранит глобальные настройки referral-программы.
+- `referral_redemptions` хранит связь `referrer -> invitee` и выдачу наград.
+
+## Серверная архитектура
+
+Новые application services:
+
+- `server/application/promo-codes/promo-code-preview.service.ts`
+- `server/application/promo-codes/promo-code-redeem.service.ts`
+- `server/application/promo-codes/promo-access-grants.service.ts`
+- `server/application/promo-codes/promo-discount-grants.service.ts`
+- `server/application/promo-codes/billing-schedule-adjustments.service.ts`
+- `server/application/promo-codes/promo-provider-guard.service.ts`
+- `server/application/referral/referral-redeem.service.ts`
+- `server/application/referral/referral-rewards.service.ts`
+- `server/application/referral/referral-event-subscribers.ts`
+
+Ключевые resolver'ы:
+
+- один resolver для effective access поверх paid subscription и access grants;
+- один resolver для pending discount grant;
+- один resolver для effective billing shift days.
+
+Promo-логика не встраивается в `trial` поля и не меняет `has_used_trial`.
+
+## API
+
+Публичные endpoints:
+
+- `POST /api/access-codes/preview`
+- `POST /api/access-codes/redeem`
+- `GET /api/promo-codes/active`
+- `GET /api/referral/me`
+
+`/api/access-codes/*` — единый транспорт для пользовательского ввода (admin promo и referral от друга). Бэкенд через `resolveAccessCodeKind()` детерминированно определяет тип кода (`promo` | `referral`) благодаря глобальной уникальности кодов в `assertAccessCodeAvailable()`. Внутри resolver вызывает существующие сервисы `previewPromoCode` / `redeemPromoCode` или `previewReferralCode` / `redeemReferralCode`. Ответ — discriminated union `{ kind: 'promo' | 'referral', ... }`.
+
+Admin endpoints:
 
 - `GET /api/admin/promo-codes`
 - `POST /api/admin/promo-codes`
 - `PATCH /api/admin/promo-codes/:id`
 - `POST /api/admin/promo-codes/:id/pause`
 - `POST /api/admin/promo-codes/:id/activate`
-- `GET /api/admin/promo-codes/:id/redemptions`
-- `POST /api/admin/promo-redemptions/:id/revoke`
-- `POST /api/admin/access-grants/:id/extend`
+- `POST /api/admin/promo-codes/:id/revoke`
+- `GET /api/admin/referral-program`
+- `PATCH /api/admin/referral-program`
+- `GET /api/admin/referrals`
+- `POST /api/admin/referrals/:id/revoke-reward`
+- `GET /api/admin/promo-codes/check-unique?code=...` или эквивалентный lightweight validation endpoint рекомендуется добавить в следующей итерации для live-проверки уникальности
 
-### Что значит "поменять количество дней в БД"
+Расширения существующих ответов:
 
-Корректная трактовка:
+- `GET /api/subscriptions/current` теперь может вернуть:
+  - `promo.activeAccessGrant`
+  - `promo.pendingDiscount`
+  - `promo.effectiveBillingShiftDays`
+  - `referral.myCode`
+  - `referral.pendingRewardsCount`
+  - `referral.successfulInvitesCount`
+  - `billingProviderHint`
 
-- редактируем `promo_campaigns.benefit_payload.durationDays`;
-- новое значение действует только на будущие redeem;
-- уже выданные access grants не меняются.
+Ни одно старое поле не удалено и не переименовано.
 
-Если нужен retroactive change:
+## UI
 
-- меняем запись в `billing_access_grants`;
-- логируем, кто и зачем это сделал.
+### Пользовательский flow
 
-## Популярные eligibility-ограничения, которые лучше заложить сразу
+Основная точка входа: `/subscription`.
 
-- по платформе: `web`, `ios`, `android`
-- по billing provider: `yookassa`, `apple_iap`
-- по plan target: `pro`, `premium`
-- по user state: `new`, `trial`, `active_paid`, `expired`, `past_due`, `churned`
-- only first purchase
-- only without active paid subscription
-- only for annual billing
-- country / storefront aware
-- per-user usage limit
-- global redemption cap
+На странице есть 2 блока:
 
-## Поведение в спорных кейсах
+- `Промокод` — единое поле для admin promo и referral от друга. Бэкенд через resolver однозначно определяет тип кода благодаря глобальной уникальности (`assertAccessCodeAvailable`), без try/catch и 404-fallback на клиенте.
+- `Активные бонусы` — текущий access grant, pending discounts и суммарный billing shift.
 
-### Пользователь ввёл код на бесплатные дни, но у него уже активен paid-plan
+Поведение единого поля: preview -> apply/activate. Текст кнопки и summary меняется по `kind` в ответе. В UI-текстах используется только «промокод» / «бонусный счёт» — слов `referral` и `billing credit` пользователю не показываем (в backend и DTO термин `billingCredit` остаётся).
 
-В v1 отклоняем.
+В `FeaturePaywallModal` добавлен CTA `Есть промокод?`, который ведёт на `/subscription?promo=1`.
 
-Причина:
+### Share UX
 
-- иначе придётся смещать `endDate`, `nextChargeAt`, renew-логику и Apple/YooKassa сценарии;
-- это уже не "промокод на free days", а "gift extension".
+В `Настройки` пользователь видит компактный блок `Пригласи друга`:
 
-### Пользователь активировал скидку на следующее списание, но сменил тариф
+- личный referral code;
+- `Копировать`;
+- `Поделиться`;
+- chevron и переход на детальный экран `/settings/referral`.
 
-Рекомендуемое правило v1:
+На `/settings/referral` пользователь видит подробности:
 
-- если grant ограничен `target_plan_id` / `target_billing_period`, проверяем их жёстко;
-- если не ограничен, применяем к первой подходящей charge-операции.
+- счётчики успешных приглашений и pending rewards;
+- бонусный счёт (`billingCredit` в DTO) и pending referral credits;
+- короткую инструкцию по шагам.
 
-### Платёж не прошёл
+### Админский flow
 
-Рекомендуемое правило v1:
+Страница `/admin/promo-codes` доступна только `admin`.
 
-- grant не сгорает при `failed` / `canceled`, пока не истёк `expires_at`;
-- при успешном применении помечаем `applied`.
+Вкладка `Промокоды`:
 
-### Пользователь вводит один и тот же код второй раз
+- список кампаний;
+- фильтры по статусу и типу;
+- create/edit form;
+- ручной ввод кода;
+- кнопка `Сгенерировать код`;
+- inline-индикатор уникальности / конфликта;
+- live preview пользовательского текста;
+- действия `Пауза`, `Активировать`, `Отозвать`.
 
-Возвращаем понятный ответ:
+Вкладка `Referral`:
 
-- либо код уже был использован этим аккаунтом;
-- либо лимит по аккаунту исчерпан;
-- либо уже есть активный grant того же типа.
+- глобальный switch программы;
+- проценты invitee/referrer;
+- invitee validity и `creditHoldDays`;
+- список `referral_redemptions`;
+- ручной revoke наград.
 
-## Аналитика и аудит
+## Платформенные ограничения
 
-Использовать и доменные таблицы, и `subscription_events`.
+`apple_iap` остаётся отдельным контуром:
 
-Новые события:
+- внутренние promo/referral controls скрыты;
+- внутренние promo/referral endpoints защищены `promo-provider-guard`;
+- future-ветка для offer codes должна идти отдельной реализацией StoreKit.
 
-- `promo_code_previewed`
-- `promo_code_redeemed`
-- `promo_access_granted`
-- `promo_discount_granted`
-- `promo_discount_applied`
-- `promo_grant_expired`
-- `promo_redemption_revoked`
+## Проверки и поддержка
 
-Важные метаданные:
-
-- `campaignId`
-- `codeSnapshot`
-- `benefitType`
-- `sourcePlatform`
-- `sourceContext`
-- `subscriptionId`
-- `paymentId`
-- `chargeAttemptId`
-
-## Обратная совместимость
-
-### API
-
-- не удалять и не менять существующие поля;
-- только добавлять optional-поля;
-- новый promo-flow должен работать рядом со старым checkout-flow.
-
-### БД
-
-Порядок только такой:
-
-1. `expand` — добавить новые таблицы и nullable-поля;
-2. `dual support` — сервер умеет работать и без promo данных, и с ними;
-3. rollout клиента;
-4. cleanup, если вообще потребуется.
-
-### Мобильные клиенты
-
-Старые mobile build, которые ничего не знают про промокоды:
-
-- не должны падать;
-- должны видеть обычные тарифы и обычный billing-flow;
-- промо-поля в API для них остаются необязательными.
-
-## Что рекомендую делать в реализации по этапам
-
-### Этап 1
-
-- `promo_campaigns`
-- `promo_redemptions`
-- `billing_access_grants`
-- `billing_discount_grants`
-- server validation + preview
-- redeem на `/subscription`
-- `grant_access_days`
-- `discount_next_checkout`
-- `discount_next_charge` для YooKassa flows
-
-### Этап 2
-
-- Billing center в `app/pages/billing.vue`
-- история активных/использованных промокодов
-- admin UI
-- расширенные eligibility rules
-
-### Этап 3
-
-- `gift_subscription_period`
-- `discount_n_cycles`
-- referral campaigns
-- Apple marketing sync / internal tooling around App Store offer codes
-
-## Итоговая рекомендация
-
-Лучшая модель для Mentala сейчас:
-
-- один unified promo domain на сервере;
-- отдельные сущности для `campaign`, `redemption`, `access grant`, `discount grant`;
-- primary UI-entry в `/subscription`;
-- paywall-модалки только перенаправляют;
-- Apple IAP живёт отдельным native offer-code сценарием;
-- free days не смешиваются с trial;
-- скидки не смешиваются с `billingCredit`.
-
-Это даст систему, которая:
-
-- понятна продукту;
-- поддерживаема саппортом;
-- не ломает текущий billing;
-- выдержит будущие маркетинговые кейсы без переделки всего checkout.
+- `pnpm db:generate` обязателен после изменения `schema.ts`.
+- `pnpm db:migrate` выполняется отдельно на нужном окружении.
+- Базовые unit tests добавлены для shared promo-логики.
+- Полный `pnpm test` и глобальный `pnpm lint` сейчас в проекте имеют внешние, не связанные с promo/referral, падения; перед релизом их надо чинить отдельно.

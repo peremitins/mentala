@@ -292,6 +292,11 @@
         </template>
       </div>
 
+      <div v-if="shouldShowInternalPromoControls" class="space-y-2">
+        <AccessCodePanel @changed="handlePromoStateChanged" />
+        <ActiveBonusesPanel :refresh-key="promoPanelsRefreshKey" />
+      </div>
+
       <div
         v-if="shouldShowAppleIapPricesError"
         class="glass-deep rounded-lg border border-destructive/50 p-4 space-y-3"
@@ -548,6 +553,8 @@ import {
   formatTrialCountdown,
   getTrialCountdown,
 } from '@/app/utils/trialCountdown';
+import AccessCodePanel from '@/app/components/subscription/AccessCodePanel.vue';
+import ActiveBonusesPanel from '@/app/components/subscription/ActiveBonusesPanel.vue';
 import PlanCard from '@/app/components/subscription/PlanCard.vue';
 import ButtonLoader from '@/app/components/ui/ButtonLoader.vue';
 import Skeleton from '@/app/components/ui/Skeleton.vue';
@@ -587,6 +594,8 @@ interface StartCheckoutResponse {
   toPay: number;
   creditApplied: number;
   creditGranted: number;
+  promoDiscountPercent?: number;
+  promoDiscountAmount?: number;
   status: 'pending' | 'active';
   paymentProvider: 'yookassa';
   paymentId: string | null;
@@ -785,6 +794,7 @@ const showConfirmDialog = ref(false);
 const showCancelSubscriptionDialog = ref(false);
 const showResumeSubscriptionDialog = ref(false);
 const pendingPlanChange = ref<Plan | null>(null);
+const promoPanelsRefreshKey = ref(0);
 const checkoutIdempotencyKey = ref<string | null>(null);
 const checkoutPayloadSignature = ref<string | null>(null);
 const pendingCheckoutSubscriptionId = ref<number | null>(null);
@@ -812,6 +822,10 @@ const isIosAppleIapFlow = computed(() => {
 });
 const isIosBillingFlowPending = computed(() => {
   return isNativeIos.value && !subscriptionStore.subscriptionData;
+});
+const shouldShowInternalPromoControls = computed(() => {
+  if (!subscriptionStore.subscriptionData) return false;
+  return billingProviderHint.value === 'yookassa';
 });
 const isAppleIapPricesLoading = computed(() => {
   return isIosAppleIapFlow.value && appleIap.loadingProducts.value;
@@ -948,6 +962,14 @@ function getCurrentStatusPlanLabel(): string {
     currentEntitlementsPlan.value || currentSubscription.value?.planId;
 
   return getPlanDisplayNameById(effectivePlanId || 'basic');
+}
+
+async function handlePromoStateChanged() {
+  promoPanelsRefreshKey.value += 1;
+  await Promise.allSettled([
+    subscriptionStore.fetchCurrentSubscription(true),
+    refreshEntitlements(),
+  ]);
 }
 
 function formatBillingPeriodLabel(period: 'month' | 'year') {
