@@ -33,9 +33,6 @@
         <p class="text-sm font-medium text-foreground">
           Скидка {{ discount.percent }}% на ближайший платёж
         </p>
-        <p class="text-xs text-foreground/75">
-          Действует до {{ formatDate(discount.expiresAt) }}
-        </p>
         <p class="text-xs text-foreground/60">{{ discount.sourceLabel }}</p>
       </div>
 
