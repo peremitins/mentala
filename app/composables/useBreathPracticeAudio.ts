@@ -12,7 +12,23 @@ export function useBreathPracticeAudio() {
   const exhaleSound = ref<Howl | null>(null);
   const holdSound = ref<Howl | null>(null);
   const pauseSound = ref<Howl | null>(null);
-  const activeSoundIds: Record<BreathCueType, number | null> = {
+  // persistentSoundIds — id первого (и единственного) Sound каждого Howl.
+  // Мы запоминаем его сразу после первого sound.play() и на последующих
+  // вызовах дёргаем sound.play(persistentId). Это принципиально:
+  //   1) sound.play(id) идёт через Howl._soundById(id) и НЕ вызывает
+  //      _inactiveSound() — значит Howler не пересоздаёт Sound и не
+  //      берёт новый HTMLAudioElement из Howler._html5AudioPool.
+  //   2) Sound.reset() (его вызывает _inactiveSound) генерирует новый
+  //      _id = ++Howler._counter — поэтому нам нельзя дважды звать
+  //      play() без id, иначе persistent id протухнет.
+  //   3) Howl._drain() в html5-режиме splice'ит Sound из _sounds, но НЕ
+  //      вызывает Howler._releaseHtml5Audio — каждая сдренированная нода
+  //      навсегда утекает из глобального пула (10 штук по умолчанию).
+  //      После того как пул истощён, _obtainHtml5Audio возвращает свежий
+  //      new Audio(), который на Android/iOS ещё заблокирован → cue
+  //      перестают звучать без ошибок. Это ровно симптом бага.
+  // ids обнуляются только в release() (где мы явно вызываем unload).
+  const persistentSoundIds: Record<BreathCueType, number | null> = {
     inhale: null,
     exhale: null,
     hold: null,
@@ -32,8 +48,7 @@ export function useBreathPracticeAudio() {
   function createSound(
     HowlCtor: HowlConstructor,
     src: string,
-    label: string,
-    onReplay?: (id: number) => void
+    type: BreathCueType
   ): Howl {
     const sound = new HowlCtor({
       src: [src],
@@ -45,34 +60,34 @@ export function useBreathPracticeAudio() {
       // именно так работает useBreathPracticeVoice, и там всё стабильно.
       html5: true,
       preload: true,
-      // pool: 1 — на каждый Howl держим максимум один Sound в пуле.
-      // По умолчанию Howler удерживает до 5 Sound-объектов и drain()
-      // удаляет лишние только когда длина превышает pool. Если предыдущий
-      // play() ещё не ended (например, звук длится 2 сек или идёт fade),
-      // то следующий play() создаёт новый Sound и берёт новую ноду
-      // из общего html5 pool — новую Audio элемент без preload,
-      // который на Android перед воспроизведением грузит .m4a с нуля.
-      // Итог: звук пропадает. pool: 1 + мгновенный stop() перед play()
-      // гарантируют переиспользование одного и того же HTMLAudioElement.
-      pool: 1,
+      // pool оставляем дефолтным. Нам важно, что мы сами НИКОГДА не
+      // вызываем sound.play() без id после первого раза — см. комментарий
+      // к persistentSoundIds. Это гарантирует, что _inactiveSound не
+      // срабатывает и _sounds всегда длины 1 без пересоздания Sound'ов.
       onplayerror: () => {
-        // Ждём авто‑unlock и повторяем воспроизведение (важно для iOS/Android).
-        // onReplay обновляет activeSoundIds — без этого stopAll() не остановит
-        // звук, воспроизведённый после разблокировки, и он продолжит играть
-        // поверх следующих фаз.
+        // Ждём авто-unlock и переигрываем тот же самый Sound по persistent id,
+        // а не через sound.play() без id. Иначе Howler пойдёт в
+        // _inactiveSound → при первом вызове создаст новый Sound с новой
+        // html5-нодой, а старый повиснет в _sounds неведомым orphan'ом,
+        // который потом утечёт при drain (html5 Audio не возвращается в пул).
         sound.once('unlock', () => {
           try {
+            const existingId = persistentSoundIds[type];
+            if (existingId !== null) {
+              sound.play(existingId);
+              return;
+            }
             const id = sound.play();
             if (typeof id === 'number') {
-              onReplay?.(id);
+              persistentSoundIds[type] = id;
             }
           } catch (error) {
-            console.error(`[BreathAudio] Failed to replay ${label}:`, error);
+            console.error(`[BreathAudio] Failed to replay ${type}:`, error);
           }
         });
       },
       onloaderror: (_id, error) => {
-        console.error(`[BreathAudio] Failed to load ${label}:`, error);
+        console.error(`[BreathAudio] Failed to load ${type}:`, error);
       },
     });
 
@@ -92,40 +107,28 @@ export function useBreathPracticeAudio() {
       // и onSoundEnabledChange одновременно) мог уже инициализировать звуки.
       // Без этой проверки оба вызова создают по 4 Howl-объекта — первые 4
       // остаются без ссылки и навсегда держат HTML5 Audio ноды из пула.
-      // Утечки исчерпывают пул (24 ноды на Android), и новые play() падают молча.
+      // Утечки исчерпывают пул (10 нод по умолчанию), и новые play() падают молча.
       if (!inhaleSound.value) {
         const { Howl } = module;
         inhaleSound.value = createSound(
           Howl,
           BREATH_PRACTICE_SOUNDS.inhale,
-          'inhale',
-          (id) => {
-            activeSoundIds.inhale = id;
-          }
+          'inhale'
         );
         exhaleSound.value = createSound(
           Howl,
           BREATH_PRACTICE_SOUNDS.exhale,
-          'exhale',
-          (id) => {
-            activeSoundIds.exhale = id;
-          }
+          'exhale'
         );
         holdSound.value = createSound(
           Howl,
           BREATH_PRACTICE_SOUNDS.hold,
-          'hold',
-          (id) => {
-            activeSoundIds.hold = id;
-          }
+          'hold'
         );
         pauseSound.value = createSound(
           Howl,
           BREATH_PRACTICE_SOUNDS.pause,
-          'pause',
-          (id) => {
-            activeSoundIds.pause = id;
-          }
+          'pause'
         );
       }
     }
@@ -158,11 +161,12 @@ export function useBreathPracticeAudio() {
     }
 
     // Останавливаем ровно по завершению fade через нативный Howler-эвент.
-    // Раньше использовался setTimeout(fadeMs + 20), но это поддерживало
-    // sound в состоянии _ended=false во время фейда, из-за чего параллельный
-    // play() создавал новый Sound с новой HTMLAudioElement из html5 pool.
-    // Теперь stop() вызывается как можно раньше — сразу после окончания fade,
-    // и _sounds-слот Howl освобождается для переиспользования.
+    // setTimeout(fadeMs + 20) здесь плох: пока таймер не сработал, Sound
+    // остаётся в _sounds с _ended=false. Если параллельно прилетит
+    // playCue с тем же persistent id, sound.play(id) увидит `!sound._paused`
+    // (см. howler.js:811) и просто вернёт id, НЕ перезапуская аудио.
+    // Нативный 'fade'-эвент позволяет позвать stop(id) раньше и привести
+    // Sound в paused-состояние к моменту следующего play(id).
     const currentVolume = sound.volume(soundId);
     sound.once(
       'fade',
@@ -175,14 +179,15 @@ export function useBreathPracticeAudio() {
   }
 
   function stopAll(fadeMs = 0): void {
-    stopSound(inhaleSound.value, activeSoundIds.inhale, fadeMs);
-    stopSound(exhaleSound.value, activeSoundIds.exhale, fadeMs);
-    stopSound(holdSound.value, activeSoundIds.hold, fadeMs);
-    stopSound(pauseSound.value, activeSoundIds.pause, fadeMs);
-    activeSoundIds.inhale = null;
-    activeSoundIds.exhale = null;
-    activeSoundIds.hold = null;
-    activeSoundIds.pause = null;
+    // ВАЖНО: persistentSoundIds НЕ обнуляем. Ids должны жить столько же,
+    // сколько сами Howl-объекты (до release()/unload). Обнуление здесь
+    // превратило бы следующий playCue в sound.play() без id, что вошло бы
+    // в _inactiveSound → создание нового Sound → drain старого →
+    // утечка HTMLAudioElement (см. комментарий к persistentSoundIds).
+    stopSound(inhaleSound.value, persistentSoundIds.inhale, fadeMs);
+    stopSound(exhaleSound.value, persistentSoundIds.exhale, fadeMs);
+    stopSound(holdSound.value, persistentSoundIds.hold, fadeMs);
+    stopSound(pauseSound.value, persistentSoundIds.pause, fadeMs);
   }
 
   function applyVolume(
@@ -203,10 +208,10 @@ export function useBreathPracticeAudio() {
 
   function setVolume(level: number): void {
     const target = normalizeVolume(level);
-    applyVolume(inhaleSound.value, activeSoundIds.inhale, target);
-    applyVolume(exhaleSound.value, activeSoundIds.exhale, target);
-    applyVolume(holdSound.value, activeSoundIds.hold, target);
-    applyVolume(pauseSound.value, activeSoundIds.pause, target);
+    applyVolume(inhaleSound.value, persistentSoundIds.inhale, target);
+    applyVolume(exhaleSound.value, persistentSoundIds.exhale, target);
+    applyVolume(holdSound.value, persistentSoundIds.hold, target);
+    applyVolume(pauseSound.value, persistentSoundIds.pause, target);
   }
 
   function resolveSound(type: BreathCueType): Howl | null {
@@ -235,23 +240,40 @@ export function useBreathPracticeAudio() {
     if (!sound) return;
 
     try {
-      // Мгновенно останавливаем все активные cue перед следующим play().
-      // Фейд-аут здесь создавал race condition на Android:
-      // пока Howler держал старый Sound в состоянии _ended=false (идёт fade),
-      // новый play() создавал новый Sound с НОВОЙ HTMLAudioElement-нодой
-      // из html5 pool. Новая нода — без preload, и на Android .m4a файл
-      // грузился с нуля перед воспроизведением. Если фаза короткая или
-      // файл не успевал догрузиться — звук пропадал совсем.
-      // Мгновенный stop переводит старый Sound в _ended=true, и следующий
-      // play() переиспользует тот же самый HTMLAudioElement через Sound.reset().
+      // Мгновенно глушим все активные cue перед следующим play(). Фейд
+      // нельзя: sound.play(persistentId) проверяет `!sound._paused` (см.
+      // howler.js:811) — если Sound ещё играет (или идёт fade), повторный
+      // play(id) вернёт id без реального воспроизведения. Моментальный stop
+      // приводит Sound к paused+ended состоянию, и следующий play(id)
+      // корректно перезапускает ту же ноду HTMLAudioElement.
       stopAll(0);
       const targetVolume = normalizeVolume(volume);
-      const id = sound.play();
-      activeSoundIds[type] = id;
-      // Сразу ставим целевую громкость без fade-in:
-      // на Android (html5: true) linearRampToValueAtTime ненадёжен —
-      // звук стартовал на 0 и там и оставался.
-      sound.volume(targetVolume, id);
+
+      const existingId = persistentSoundIds[type];
+      let id: number | null;
+      if (existingId !== null) {
+        // Переиспользуем тот же Sound через _soundById → тот же _node.
+        // Это обходит _inactiveSound, drain и утечку html5-аудионод.
+        sound.play(existingId);
+        id = existingId;
+      } else {
+        // Самый первый запуск этого cue: Howler создаст единственный Sound,
+        // его id мы запоминаем на весь lifecycle Howl.
+        const newId = sound.play();
+        if (typeof newId === 'number') {
+          persistentSoundIds[type] = newId;
+          id = newId;
+        } else {
+          id = null;
+        }
+      }
+
+      if (id !== null) {
+        // Сразу ставим целевую громкость без fade-in:
+        // на Android (html5: true) linearRampToValueAtTime ненадёжен —
+        // звук стартовал на 0 и там и оставался.
+        sound.volume(targetVolume, id);
+      }
     } catch (error) {
       console.error('[BreathAudio] Failed to play cue:', error);
     }
@@ -279,6 +301,14 @@ export function useBreathPracticeAudio() {
     exhaleSound.value = null;
     holdSound.value = null;
     pauseSound.value = null;
+
+    // После unload() id'ы протухают — Howl.unload() освобождает _sounds
+    // и возвращает _node в Howler._html5AudioPool через _releaseHtml5Audio.
+    // Обнуляем, чтобы следующий ensureSounds → createSound завёл новые ids.
+    persistentSoundIds.inhale = null;
+    persistentSoundIds.exhale = null;
+    persistentSoundIds.hold = null;
+    persistentSoundIds.pause = null;
   }
 
   return {
