@@ -138,7 +138,7 @@ export async function previewReferralCode(params: {
     ok: true as const,
     title: `Скидка ${Number(context.program.inviteePercent)}% на следующий платёж`,
     description: `После активации кода вы получите скидку ${Number(context.program.inviteePercent)}% на следующий платёж, а пользователю, который поделился кодом, пополнится бонусный счёт в размере ${Number(context.program.referrerPercent)}% от вашей первой успешной оплаты через ${Number(context.program.creditHoldDays ?? 0)} дн.`,
-    warning: `Код можно активировать только один раз. Ваша скидка будет действовать ${Number(context.program.inviteeRewardValidityDays)} дней после активации.`,
+    warning: `Код можно активировать только один раз.`,
     reward: {
       inviteePercent: Number(context.program.inviteePercent),
       referrerPercent: Number(context.program.referrerPercent),
