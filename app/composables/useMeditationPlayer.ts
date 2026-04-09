@@ -58,14 +58,11 @@ function shouldPreferWebAudio(track: MeditationTrackDto) {
     // Для не-loop треков всегда используем HTML Audio (более эффективно для больших файлов)
     return false;
   }
-  // Для бесшовного лупа используем WebAudio, если доступен.
-  // Но на мобильных для больших файлов лучше использовать HTML Audio
-  if (
-    isMobileUserAgent() &&
-    track.durationSeconds &&
-    track.durationSeconds > 300
-  ) {
-    // Для файлов больше 5 минут на мобильных используем HTML Audio
+  // На iOS loop-треки всегда через WebAudio для бесшовного цикла.
+  // Размер файла не проверяем: NativeAudio на iOS даёт слышимый разрыв при loop.
+  if (isIosUserAgent()) return isWebAudioAvailable();
+  // На остальных мобильных для больших файлов (>5 мин) → HTML Audio
+  if (isMobileUserAgent() && track.durationSeconds && track.durationSeconds > 300) {
     return false;
   }
   return isWebAudioAvailable();
@@ -128,9 +125,6 @@ function isNativeMeditationAudioEnabled() {
     if (!featureEnabled) return false;
 
     if (!Capacitor.isNativePlatform()) return false;
-    // На Android медитации сознательно держим на том же HTMLAudio/WebAudio стеке,
-    // что и scene-selection: там background timer уже проверен в реальном сценарии.
-    if (Capacitor.getPlatform() !== 'ios') return false;
     return Capacitor.isPluginAvailable('NativeAudio');
   } catch {
     return false;
@@ -407,7 +401,9 @@ function ensureGlobalGestureUnlock() {
       const pending = globalState.pendingGesturePlay;
       if (pending) {
         clearGestureUnlock();
-        await play(pending.track, pending.timerMinutes ?? null);
+        // Передаём timerMinutes как есть: undefined = сохранить текущий таймер,
+        // null = таймер не нужен (был явно отключён), number = конкретное значение.
+        await play(pending.track, pending.timerMinutes);
       }
 
       if (globalState.globalUnlockCleanup) {
@@ -561,7 +557,16 @@ async function maybeRecoverWebAudioPlayback() {
   try {
     ensurePlaybackAudioSessionType();
     const running = await ensureAudioContextRunning(context);
-    if (!running) return;
+    if (!running) {
+      // На iOS AudioContext нельзя возобновить без жеста пользователя.
+      // Сбрасываем isPlaying, чтобы UI показывал корректное состояние,
+      // и планируем автозапуск при следующем касании экрана.
+      if (globalState.isPlaying.value && globalState.currentTrack.value) {
+        globalState.isPlaying.value = false;
+        scheduleGestureUnlock(globalState.currentTrack.value);
+      }
+      return;
+    }
     if (!globalState.audioSource && globalState.audioBuffer) {
       createWebAudioSource(globalState.webAudioOffset);
     }
@@ -570,68 +575,9 @@ async function maybeRecoverWebAudioPlayback() {
   }
 }
 
-// setTimeout, запланированный при уходе в фон для остановки медитации по таймеру.
-// На Android с foreground service и iOS с background audio mode JS не всегда полностью
-// заморожен, поэтому setTimeout может сработать даже в бэкграунде.
-let backgroundStopTimeout: ReturnType<typeof setTimeout> | null = null;
-
-function clearBackgroundStopTimeout() {
-  if (backgroundStopTimeout !== null) {
-    clearTimeout(backgroundStopTimeout);
-    backgroundStopTimeout = null;
-  }
-}
-
-/**
- * При уходе в бэкграунд планируем setTimeout на оставшееся время таймера.
- * setInterval замораживается ОС, но setTimeout с точным дедлайном может
- * сработать, когда ОС даёт приложению окно для выполнения кода.
- */
-function scheduleBackgroundStop() {
-  clearBackgroundStopTimeout();
-  if (!globalState.timerEndsAt.value) return;
-  if (!globalState.isPlaying.value) return;
-  const remaining = globalState.timerEndsAt.value - Date.now();
-  if (remaining <= 0) {
-    void onTimerFinished();
-    return;
-  }
-  backgroundStopTimeout = setTimeout(() => {
-    backgroundStopTimeout = null;
-    if (globalState.timerEndsAt.value && globalState.isPlaying.value) {
-      void onTimerFinished();
-    }
-  }, remaining);
-}
-
-/**
- * Проверяет, не истёк ли таймер медитации за время, пока приложение было в фоне.
- * JS setInterval замораживается ОС при уходе приложения в бэкграунд,
- * поэтому при возвращении нужно явно проверить deadline.
- */
-function checkTimerOnResume() {
-  clearBackgroundStopTimeout();
-  if (!globalState.timerEndsAt.value) return;
-  if (!globalState.isPlaying.value) return;
-  const remaining = globalState.timerEndsAt.value - Date.now();
-  if (remaining <= 0) {
-    void onTimerFinished();
-  } else {
-    // Таймер ещё не истёк — обновляем отображение и перезапускаем countdown,
-    // т.к. старый setInterval мог быть throttled или потерян.
-    globalState.timerRemainingMs.value = remaining;
-    startTimerCountdown();
-  }
-}
-
 function handleVisibilityChange() {
   if (!isDocumentAvailable() || typeof document === 'undefined') return;
-  if (document.visibilityState === 'hidden') {
-    scheduleBackgroundStop();
-    return;
-  }
   if (document.visibilityState !== 'visible') return;
-  checkTimerOnResume();
   void maybeRecoverWebAudioPlayback();
 }
 
@@ -648,11 +594,7 @@ function ensureAppStateListener() {
   import('@capacitor/app')
     .then(({ App }) => {
       App.addListener('appStateChange', ({ isActive }) => {
-        if (!isActive) {
-          scheduleBackgroundStop();
-          return;
-        }
-        checkTimerOnResume();
+        if (!isActive) return;
         void maybeRecoverWebAudioPlayback();
       });
     })
@@ -1350,7 +1292,10 @@ async function play(track: MeditationTrackDto, timerMinutes?: number | null) {
 
   // Страховка от гонки: watcher видит isBuffering=true до любого await,
   // и не успевает включить scene между stop и play при переключении треков.
-  if (shouldUseNativePlayback()) {
+  // На iOS loop-треки воспроизводим через WebAudio вместо NativeAudio:
+  // NativeAudio на iOS делает play→loop (двойной вызов) = слышимый разрыв на границе цикла.
+  const shouldBypassNativeForLoop = Boolean(track.isLoop) && isIosUserAgent();
+  if (shouldUseNativePlayback() && !shouldBypassNativeForLoop) {
     globalState.isBuffering.value = true;
     const handledByNative = await playNative(track, timerMinutes);
     if (handledByNative) return;
@@ -1396,7 +1341,7 @@ async function play(track: MeditationTrackDto, timerMinutes?: number | null) {
       // Для лупов не падаем на HTML, чтобы не было слышимого шва.
       globalState.isPlaying.value = false;
       globalState.isBuffering.value = false;
-      scheduleGestureUnlock(track, timerMinutes ?? null);
+      scheduleGestureUnlock(track, timerMinutes);
       return;
     }
   }
@@ -1596,7 +1541,7 @@ async function play(track: MeditationTrackDto, timerMinutes?: number | null) {
         globalState.isBuffering.value = false;
         if (isAutoplayBlockedError(playbackResult.error)) {
           // Браузер ждёт жест — ставим отложенный старт.
-          scheduleGestureUnlock(track, timerMinutes ?? null);
+          scheduleGestureUnlock(track, timerMinutes);
         } else if (playbackResult.timedOut) {
           console.error(
             '[MeditationPlayer] Playback timeout, file may be corrupted or too large'
@@ -1779,16 +1724,13 @@ function clearQueue() {
 export function useMeditationPlayer() {
   ensureNativeModeResolved();
 
-  // Слушатели visibility/appState нужны всегда — таймер медитации работает через JS setInterval,
-  // который замораживается ОС в фоне. При возврате проверяем, не истёк ли таймер.
-  ensureVisibilityListener();
-  ensureAppStateListener();
-
   if (globalState.nativeModeEnabled) {
     void ensureNativeService();
   } else {
     // Регистрируем слушатель жестов заранее, чтобы автозапуск был стабильнее.
     ensureGlobalGestureUnlock();
+    ensureVisibilityListener();
+    ensureAppStateListener();
     ensurePlaybackAudioSessionType();
   }
 

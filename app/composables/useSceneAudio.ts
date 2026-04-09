@@ -48,18 +48,9 @@ function shouldPreferWebAudio(scene: SceneTrack | null) {
   return true;
 }
 
-function shouldAllowLoopHtmlBootstrapFallback() {
-  // Для loop-сцен полностью отключаем HTML fallback:
-  // он может давать слышимый шов на границе повторов.
-  // Если WebAudio ещё не готов, безопаснее отложить старт до unlock/gesture.
-  return false;
-}
-
 function canFallbackToHtml(scene: SceneTrack) {
-  if (!scene.isLoop) return true;
-  // Для loop-сцен fallback на HTMLAudio запрещён,
-  // чтобы сохранить бесшовный цикл без шва.
-  return shouldAllowLoopHtmlBootstrapFallback();
+  // Для loop-сцен fallback на HTMLAudio запрещён: он даёт слышимый шов.
+  return !scene.isLoop;
 }
 
 function getPlayStartTimeoutMs() {
@@ -102,8 +93,6 @@ const globalState = {
   settingsHydrated: false,
   audioUnlocked: false,
   playbackActionId: 0,
-  mediaElementPrimed: false,
-  loopUpgradeAttemptedSceneId: null as string | null,
 };
 
 function clampNumber(value: number, min: number, max: number) {
@@ -192,16 +181,7 @@ function ensureGlobalGestureUnlock() {
         if (pending) {
           clearGestureUnlock();
         }
-        const shouldUpgradeLoopFromHtml =
-          sceneToPlay.isLoop &&
-          globalState.playbackMode === 'html' &&
-          globalState.isPlaying.value;
-        if (
-          shouldUpgradeLoopFromHtml ||
-          (!globalState.isPlaying.value && !globalState.isBuffering.value)
-        ) {
-          // Если loop стартовал через HTML fallback, апгрейдим его в WebAudio
-          // на первом пользовательском жесте (возвращаем бесшовный цикл).
+        if (!globalState.isPlaying.value && !globalState.isBuffering.value) {
           await play(sceneToPlay);
         }
       }
@@ -829,8 +809,6 @@ function resetDetachedAudioState() {
   globalState.wasPlayingBeforeBackground = false;
   globalState.isSuspended.value = false;
   globalState.wasPlayingBeforeSuspend = false;
-  globalState.mediaElementPrimed = false;
-  globalState.loopUpgradeAttemptedSceneId = null;
   if (globalState.audioGain) {
     globalState.audioGain.gain.value = 0;
   }
@@ -909,8 +887,6 @@ async function play(scene: SceneTrack) {
     globalState.webAudioOffset = 0;
     globalState.playbackMode = null;
     globalState.currentScene.value = scene;
-    // Сбрасываем флаг попытки апгрейда при смене сцены.
-    globalState.loopUpgradeAttemptedSceneId = null;
   }
 
   if (globalState.volume.value <= 0) {
@@ -924,16 +900,6 @@ async function play(scene: SceneTrack) {
   const previousMode: PlaybackMode | null = sameScene
     ? globalState.playbackMode
     : null;
-  const shouldBootstrapLoopWithHtml =
-    scene.isLoop &&
-    mode === 'webaudio' &&
-    shouldAllowLoopHtmlBootstrapFallback() &&
-    !globalState.mediaElementPrimed;
-  if (shouldBootstrapLoopWithHtml) {
-    // В native-мобилках первый loop иногда молчит в WebAudio, пока не "прогрет"
-    // медиа-выход через HTMLAudio. Форсируем одноразовый bootstrap.
-    mode = 'html';
-  }
 
   if (mode === 'webaudio') {
     const unlocked = await unlockAudioContext();
@@ -1169,27 +1135,11 @@ async function play(scene: SceneTrack) {
 
     globalState.isBuffering.value = false;
     globalState.isPlaying.value = true;
-    // Успешный старт HTMLAudio подтверждает готовность нативного аудио-выхода.
-    if (shouldAllowLoopHtmlBootstrapFallback()) {
-      globalState.mediaElementPrimed = true;
-    }
     clearGestureUnlock();
     await fadeTo(globalState.volume.value, FADE_IN_MS);
     if (!isActionActive(actionId)) {
       stopDetachedAudio(audio);
       return;
-    }
-
-    if (
-      scene.isLoop &&
-      shouldPreferWebAudio(scene) &&
-      shouldAllowLoopHtmlBootstrapFallback() &&
-      globalState.loopUpgradeAttemptedSceneId !== scene.id
-    ) {
-      // Помечаем bootstrap выполненным, а апгрейд в WebAudio делаем
-      // только на следующем пользовательском жесте через global unlock handler,
-      // чтобы не допускать краткого наложения двух источников.
-      globalState.loopUpgradeAttemptedSceneId = scene.id;
     }
   }
 }
@@ -1256,8 +1206,7 @@ async function suspend() {
     // На Android — полный stop вместо pause, чтобы полностью освободить WebAudio/HTML5
     // и избежать duck-ования/смешивания с NativeAudio (ExoPlayer).
     const isAndroid =
-      Capacitor.isNativePlatform() &&
-      Capacitor.getPlatform() === 'android';
+      Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
     if (isAndroid) {
       await stop(false);
     } else {
