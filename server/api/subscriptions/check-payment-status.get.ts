@@ -1,5 +1,5 @@
 import { createError, getQuery } from 'h3';
-import { and, desc, eq, gt, ne } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, ne } from 'drizzle-orm';
 import { getSessionUser } from '@/server/application/auth/session';
 import { db } from '@/server/infrastructure/db/client';
 import {
@@ -332,7 +332,10 @@ export default defineEventHandler(
               tx,
             });
 
-            // Успешная non-trial активация должна очищать trial-scheduled поля.
+            // Сбрасываем trial-scheduled поля только если пользователь
+            // действительно был в этом состоянии. Если billing_collection_status
+            // уже 'none' (trial-billing завершился успешно), billing_plan_id и
+            // next_charge_at трогать нельзя — они нужны для авторелиза.
             await tx
               .update(users)
               .set({
@@ -346,7 +349,15 @@ export default defineEventHandler(
                 billingLockedBy: null,
                 updatedAt: now,
               })
-              .where(eq(users.id, targetSubscription!.userId));
+              .where(
+                and(
+                  eq(users.id, targetSubscription!.userId),
+                  inArray(users.billingCollectionStatus, [
+                    'scheduled',
+                    'past_due',
+                  ])
+                )
+              );
 
             const paymentMethodPresentation = extractPaymentMethodPresentation(
               payment.payment_method

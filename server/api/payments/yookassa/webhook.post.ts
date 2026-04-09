@@ -1,5 +1,5 @@
 import { createError, getHeader } from 'h3';
-import { and, eq, gt, ne, or } from 'drizzle-orm';
+import { and, eq, gt, inArray, ne, or } from 'drizzle-orm';
 import { db } from '@/server/infrastructure/db/client';
 import {
   payments,
@@ -913,8 +913,10 @@ export default defineEventHandler(async (event) => {
         tx,
       });
 
-      // Успешная non-trial активация подписки должна сбрасывать trial-scheduled
-      // состояние, чтобы в UI не оставалось устаревшее "Списание запланировано".
+      // Сбрасываем trial-scheduled состояние только если оно ещё актуально.
+      // Если billing_collection_status уже 'none' (trial-billing уже завершил
+      // успешно через markTrialChargeSuccess), не трогаем billing_plan_id и
+      // next_charge_at — они нужны для авторелиза следующего периода.
       await tx
         .update(users)
         .set({
@@ -928,7 +930,12 @@ export default defineEventHandler(async (event) => {
           billingLockedBy: null,
           updatedAt: now,
         })
-        .where(eq(users.id, sub.userId));
+        .where(
+          and(
+            eq(users.id, sub.userId),
+            inArray(users.billingCollectionStatus, ['scheduled', 'past_due'])
+          )
+        );
 
       await tx.insert(subscriptionEvents).values({
         userId: sub.userId,
