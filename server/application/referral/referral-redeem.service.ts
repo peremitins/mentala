@@ -2,6 +2,7 @@ import { createError } from 'h3';
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/server/infrastructure/db/client';
 import {
+  billingDiscountGrants,
   referralRedemptions,
   userReferralProfiles,
   users,
@@ -204,6 +205,13 @@ export async function redeemReferralCode(params: {
         updatedAt: now,
       })
       .returning();
+
+    // Обратная ссылка: проставляем sourceReferralRedemptionId на грант теперь,
+    // когда redemption.id известен. Нужно для admin-revoke и аудита.
+    await tx
+      .update(billingDiscountGrants)
+      .set({ sourceReferralRedemptionId: redemption.id, updatedAt: now })
+      .where(eq(billingDiscountGrants.id, inviteeReward.id));
 
     await tx
       .update(userReferralProfiles)
