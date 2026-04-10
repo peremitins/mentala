@@ -600,6 +600,29 @@ function ensureVisibilityListener() {
   globalState.visibilityBound = true;
 }
 
+function hasSleepTimerEnabled() {
+  return globalState.preferredTimerMinutes.value !== null;
+}
+
+async function stopPlaybackOnBackgroundWithoutTimer() {
+  if (!globalState.currentTrack.value) return;
+  if (!globalState.isPlaying.value && !globalState.isBuffering.value) return;
+  if (hasSleepTimerEnabled()) return;
+
+  // Без sleep timer медитация не должна продолжать играть в фоне.
+  await stop(false);
+}
+
+async function handleAppStateChange(isActive: boolean) {
+  if (!isActive) {
+    await stopPlaybackOnBackgroundWithoutTimer();
+    return;
+  }
+
+  checkTimerExpiredOnResume();
+  void maybeRecoverWebAudioPlayback();
+}
+
 function checkTimerExpiredOnResume() {
   if (!globalState.timerEndsAt.value) return;
 
@@ -622,9 +645,7 @@ function ensureAppStateListener() {
   import('@capacitor/app')
     .then(({ App }) => {
       App.addListener('appStateChange', ({ isActive }) => {
-        if (!isActive) return;
-        checkTimerExpiredOnResume();
-        void maybeRecoverWebAudioPlayback();
+        void handleAppStateChange(isActive);
       });
     })
     .catch(() => {
@@ -1425,6 +1446,7 @@ async function play(track: MeditationTrackDto, timerMinutes?: number | null) {
   // На native iOS/Android все meditation-треки идут через MediaGrid AudioPlayer:
   // iOS loop использует AVPlayerLooper, Android loop — ExoPlayer REPEAT_MODE_ONE.
   if (shouldUseNativePlayback()) {
+    ensureAppStateListener();
     globalState.isBuffering.value = true;
     const handledByNative = await playNative(track, timerMinutes);
     if (handledByNative) return;

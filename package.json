@@ -54,7 +54,7 @@
     "android:assemble:release": "cd android && ./gradlew assembleRelease",
     "android:assemble:release:optimized": "cd android && MENTALA_ANDROID_ENABLE_MINIFY=true ./gradlew assembleRelease",
     "android:bundle:release": "cd android && ./gradlew bundleRelease",
-    "android:bundle:release:optimized": "cd android && MENTALA_ANDROID_ENABLE_MINIFY=true ./gradlew bundleRelease",
+    "android:bundle:release:optimized": "cd android && MENTALA_ANDROID_ENABLE_MINIFY=true ./gradlew prepareReleasePlayConsoleArtifacts",
     "build:mobile:android:release": "pnpm run cap:sync:prod && pnpm run cap:verify:prod && pnpm run android:bundle:release",
     "build:mobile:android:prod": "pnpm run cap:sync:prod && pnpm run cap:verify:prod && pnpm run android:bundle:release:optimized",
     "upload:media": "bash scripts/upload-media-safe.sh",

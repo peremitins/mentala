@@ -5,6 +5,7 @@
 - Адаптер: `app/services/audio/nativeAudio.service.ts`
 - Native-плагин: MediaGrid `AudioPlayer` (`@mediagrid/capacitor-native-audio@2.3.2`) для Capacitor 7
 - Единая стратегия для native iOS/Android: meditation-треки и `scene-selection` идут через `AudioPlayer.create()` → `initialize()` → `play()` с CDN URL из `mediaBaseUrl`
+- Для медитаций правило background жёсткое: если sleep timer выключен (`Без таймера` / `0 минут`), `appStateChange(isActive=false)` должен мгновенно останавливать playback; если выбран `N > 0`, background playback разрешён до окончания таймера
 - Старый native-аудиоплагин, iOS loop cache через `Filesystem`, `nativeAudio.platform.ts`, `androidForegroundBridge.ts` и `MentalaAudioForegroundService` удалены
 - В native runtime не используется неявный fallback на WebAudio/HTMLAudio: ошибка MediaGrid должна быть видна как ошибка native playback, а не маскироваться старым route
 - Для `useForNotification: true` Android регистрирует сервис `us.mediagrid.capacitorjs.plugins.nativeaudio.AudioPlayerService`; iOS использует включённый `UIBackgroundModes=audio`
