@@ -24,6 +24,30 @@ const AUDIO_SESSION_PLAYBACK = 'playback';
 const INPUT_ACTIVITY_VOLUME_THRESHOLD = 4;
 const INPUT_ACTIVITY_CHECK_INTERVAL_MS = 750;
 const INPUT_ACTIVITY_THROTTLE_MS = 1_500;
+const HANDSHAKE_RETRY_DELAY_MS = 800;
+const HANDSHAKE_MAX_ATTEMPTS = 2;
+
+type RealtimeHandshakeErrorPayload = {
+  code?: string;
+  message?: string;
+  retryable?: boolean;
+  error?: {
+    code?: string;
+    message?: string;
+    details?: {
+      retryable?: boolean;
+    };
+  };
+};
+
+type RealtimeTransportError = Error & {
+  status?: number;
+  data?: RealtimeHandshakeErrorPayload | null;
+  response?: {
+    status: number;
+    _data: RealtimeHandshakeErrorPayload | null;
+  };
+};
 
 function ensureRealtimeVoicePlaybackAudioSessionType() {
   if (typeof navigator === 'undefined') {
@@ -78,6 +102,80 @@ async function waitForIceGatheringComplete(
       'icegatheringstatechange',
       handleIceGatheringChange
     );
+  });
+}
+
+function parseRealtimeHandshakeErrorPayload(
+  rawValue: string
+): RealtimeHandshakeErrorPayload | null {
+  const normalized = String(rawValue || '').trim();
+  if (!normalized) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(normalized) as RealtimeHandshakeErrorPayload;
+  } catch {
+    return {
+      message: normalized,
+    };
+  }
+}
+
+function buildRealtimeHandshakeTransportError(params: {
+  status: number;
+  payload: RealtimeHandshakeErrorPayload | null;
+}): RealtimeTransportError {
+  const message =
+    params.payload?.message ||
+    params.payload?.error?.message ||
+    `Realtime WebRTC handshake failed: ${params.status}`;
+  const error = new Error(message) as RealtimeTransportError;
+
+  error.status = params.status;
+  error.data = params.payload;
+  error.response = {
+    status: params.status,
+    _data: params.payload,
+  };
+
+  return error;
+}
+
+function isRetryableRealtimeHandshakeError(error: unknown): boolean {
+  const payload = (error as RealtimeTransportError | undefined)?.data;
+  if (payload?.retryable === true) {
+    return true;
+  }
+
+  if (payload?.error?.details?.retryable === true) {
+    return true;
+  }
+
+  const status = Number((error as RealtimeTransportError | undefined)?.status);
+  if (
+    Number.isFinite(status) &&
+    (status === 408 || status === 502 || status === 503 || status === 504)
+  ) {
+    return true;
+  }
+
+  const normalized =
+    `${String((error as any)?.name || '')} ${String((error as any)?.message || '')}`.toLowerCase();
+  return (
+    normalized.includes('fetch failed') ||
+    normalized.includes('failed to fetch') ||
+    normalized.includes('network request failed') ||
+    normalized.includes('networkerror when attempting to fetch resource') ||
+    normalized.includes('timeout') ||
+    normalized.includes('timed out') ||
+    normalized.includes('aborterror')
+  );
+}
+
+async function sleep(ms: number) {
+  await new Promise<void>((resolve) => {
+    window.setTimeout(resolve, ms);
   });
 }
 
@@ -342,25 +440,52 @@ export class RealtimeVoiceTransport {
     }
     headers.set('Content-Type', 'application/sdp');
 
-    const response = await fetch(params.webrtcUrl, {
-      method: 'POST',
-      credentials: 'include',
-      headers,
-      body: localDescription.sdp,
-    });
+    let answerSdp = '';
 
-    if (!response.ok) {
-      const responseText = await response.text().catch(() => '');
-      const normalizedResponseText = responseText.trim();
+    for (let attempt = 1; attempt <= HANDSHAKE_MAX_ATTEMPTS; attempt += 1) {
+      try {
+        const response = await fetch(params.webrtcUrl, {
+          method: 'POST',
+          credentials: 'include',
+          headers,
+          body: localDescription.sdp,
+        });
 
-      throw new Error(
-        normalizedResponseText
-          ? `Realtime WebRTC handshake failed: ${response.status} ${normalizedResponseText}`
-          : `Realtime WebRTC handshake failed: ${response.status}`
-      );
+        if (!response.ok) {
+          const responseText = await response.text().catch(() => '');
+          throw buildRealtimeHandshakeTransportError({
+            status: response.status,
+            payload: parseRealtimeHandshakeErrorPayload(responseText),
+          });
+        }
+
+        answerSdp = await response.text();
+        break;
+      } catch (error) {
+        const shouldRetry =
+          attempt < HANDSHAKE_MAX_ATTEMPTS &&
+          isRetryableRealtimeHandshakeError(error);
+
+        if (!shouldRetry) {
+          throw error;
+        }
+
+        // Один быстрый автоповтор покрывает типичный transient сбой relay /
+        // апстрима, из-за которого первая попытка на mobile иногда срывается.
+        console.warn(
+          '[RealtimeVoiceTransport] Retrying failed handshake attempt',
+          {
+            attempt,
+            nextAttempt: attempt + 1,
+            status: (error as RealtimeTransportError | undefined)?.status,
+            message: String(
+              (error as any)?.message || 'Unknown handshake error'
+            ),
+          }
+        );
+        await sleep(HANDSHAKE_RETRY_DELAY_MS);
+      }
     }
-
-    const answerSdp = await response.text();
 
     await peerConnection.setRemoteDescription({
       type: 'answer',
