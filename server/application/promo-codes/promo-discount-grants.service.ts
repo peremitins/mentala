@@ -4,6 +4,7 @@ import { billingDiscountGrants } from '@/server/infrastructure/db/schema';
 import type { BillingPeriod } from '@/server/application/subscriptions/price-calculator';
 import {
   addDays,
+  buildDiscountGrantAdvisoryLockKey,
   calculateDiscountedAmount,
   type MentalaPaidPlanId,
   type PromoBindingMode,
@@ -13,9 +14,6 @@ import {
 import { handleMissingPromoInfrastructureError } from './promo-infrastructure-compat.service';
 
 const STALE_RESERVATION_WINDOW_MS = 2 * 60 * 60 * 1000;
-// Namespace для pg_advisory_xact_lock: разделяем разные под-системы lock'ов
-// по высокому 32-битному полю ключа, чтобы не конфликтовать с другими lock'ами.
-const DISCOUNT_GRANT_ADVISORY_LOCK_NAMESPACE = 0x6d656e74; // 'ment'
 
 function resolveDbClient(tx?: any) {
   return tx ?? db;
@@ -27,8 +25,10 @@ async function acquireDiscountGrantUserLock(params: {
   userId: number;
   tx: any;
 }) {
+  const advisoryLockKey = buildDiscountGrantAdvisoryLockKey(params.userId);
+
   await params.tx.execute(
-    sql`select pg_advisory_xact_lock(${DISCOUNT_GRANT_ADVISORY_LOCK_NAMESPACE}::bigint, ${params.userId}::bigint)`
+    sql`select pg_advisory_xact_lock(${advisoryLockKey}::bigint)`
   );
 }
 

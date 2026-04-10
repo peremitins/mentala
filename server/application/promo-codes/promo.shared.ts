@@ -22,6 +22,8 @@ export type PromoDiscountGrantStatus =
   | 'expired'
   | 'revoked';
 
+const DISCOUNT_GRANT_ADVISORY_LOCK_NAMESPACE = 0x6d656e74; // 'ment'
+
 export const PLAN_RANK: Record<MentalaPlanId, number> = {
   basic: 0,
   pro: 1,
@@ -94,4 +96,13 @@ export function calculateDiscountedAmount(params: {
     discountAmount,
     finalAmount: Math.max(0, Math.round(params.amount) - discountAmount),
   };
+}
+
+export function buildDiscountGrantAdvisoryLockKey(userId: number): bigint {
+  // PostgreSQL умеет либо один bigint-ключ, либо пару int4-ключей.
+  // Здесь нам нужен namespace в старших 32 битах и userId в младших 32 битах.
+  return (
+    (BigInt(DISCOUNT_GRANT_ADVISORY_LOCK_NAMESPACE >>> 0) << 32n) |
+    BigInt(userId >>> 0)
+  );
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildDiscountGrantAdvisoryLockKey,
   calculateDiscountedAmount,
   getDiscountGrantPriority,
   isHigherPlan,
@@ -60,5 +61,14 @@ describe('promo shared helpers', () => {
       discountAmount: 499,
       finalAmount: 0,
     });
+  });
+
+  it('собирает advisory lock key для PostgreSQL в один bigint', () => {
+    expect(buildDiscountGrantAdvisoryLockKey(121)).toBe(
+      BigInt('7882828167277183097')
+    );
+    expect(buildDiscountGrantAdvisoryLockKey(1)).toBe(
+      BigInt('7882828167277182977')
+    );
   });
 });
