@@ -20,6 +20,7 @@ export default defineEventHandler(async (event) => {
   );
   const response = await endRealtimeVoiceSession({
     userId: sessionUser.id,
+    userRole: sessionUser.role,
     sessionId: body.sessionId,
     reason: body.reason,
   });
