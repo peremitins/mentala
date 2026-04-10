@@ -91,12 +91,16 @@
             </intent-filter>
         </service>
 
-        <!-- Foreground service для стабильного фонового аудио -->
+        <!-- MediaGrid AudioPlayer service для background playback и системных media controls -->
         <service
-            android:name=".audio.MentalaAudioForegroundService"
-            android:enabled="true"
-            android:exported="false"
-            android:foregroundServiceType="mediaPlayback" />
+            android:name="us.mediagrid.capacitorjs.plugins.nativeaudio.AudioPlayerService"
+            android:description="@string/audio_player_service_description"
+            android:exported="true"
+            android:foregroundServiceType="mediaPlayback">
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaSessionService" />
+            </intent-filter>
+        </service>
 
         <!-- Отдельный foreground service для realtime voice при lock-screen -->
         <service

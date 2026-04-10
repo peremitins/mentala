@@ -7,8 +7,18 @@
       >
     </div>
 
+    <div
+      v-if="shouldHideIosReviewBillingUi"
+      class="rounded-md border border-white/10 bg-white/5 p-3 animate-slide-up"
+    >
+      <p class="text-xs text-muted-foreground mt-1">
+        Для внесения изменений в тарифный план воспользуйтесь веб-версией
+        сервиса.
+      </p>
+    </div>
+
     <!-- Скелетон при загрузке -->
-    <div v-if="loading" class="space-y-3 animate-slide-up">
+    <div v-else-if="loading" class="space-y-3 animate-slide-up">
       <div class="space-y-2">
         <div class="h-4 bg-skeleton rounded w-2/3"></div>
         <div class="h-3 bg-skeleton rounded w-1/2"></div>
@@ -150,6 +160,7 @@
       </div>
 
       <Button
+        v-if="!shouldHideIosReviewBillingUi"
         type="button"
         variant="outline"
         class="w-fit border-white/20 bg-white/5 text-foreground hover:border-white/35 hover:bg-white/10 hover:text-foreground"
@@ -162,6 +173,7 @@
     <div v-else class="space-y-2">
       <p class="text-sm text-foreground">Текущий план: нет активной подписки</p>
       <Button
+        v-if="!shouldHideIosReviewBillingUi"
         type="button"
         variant="outline"
         class="w-fit border-white/20 bg-white/5 text-foreground hover:border-white/35 hover:bg-white/10 hover:text-foreground"
@@ -174,10 +186,9 @@
 </template>
 
 <script setup lang="ts">
-import { Capacitor } from '@capacitor/core';
 import { useNow } from '@vueuse/core';
 import { computed, onMounted } from 'vue';
-import { usePlatform } from '@/app/composables/usePlatform';
+import { useIosReviewBillingUi } from '@/app/composables/useIosReviewBillingUi';
 import { useSubscriptionStore } from '@/app/stores/subscription';
 import { useEntitlements } from '@/app/composables/useEntitlements';
 import {
@@ -193,7 +204,7 @@ import { useI18n } from 'vue-i18n';
 const subscriptionStore = useSubscriptionStore();
 const { t } = useI18n();
 const { getFeatureAccess } = useEntitlements();
-const { platform } = usePlatform();
+const { shouldHideIosReviewBillingUi } = useIosReviewBillingUi();
 const now = useNow({ interval: 60_000 });
 
 // Computed для удобства доступа
@@ -204,9 +215,6 @@ const realtimeVoiceUsage = computed(() => usage.value?.realtimeVoice ?? null);
 const loading = computed(
   () =>
     subscriptionStore.loading.subscription || subscriptionStore.loading.usage
-);
-const isNativeIos = computed(
-  () => platform.value === 'ios' && Capacitor.isNativePlatform()
 );
 const actionButtonLabel = computed(() => {
   return 'Управление подпиской';

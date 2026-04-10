@@ -68,10 +68,7 @@
           <IconChevronRight class="h-4 w-4 text-muted-foreground" />
         </NuxtLink>
 
-        <div
-          v-if="!shouldHideIosReviewBillingUi"
-          class="transition-all rounded-lg scroll-mt-24"
-        >
+        <div class="transition-all rounded-lg scroll-mt-24">
           <SubscriptionBlock />
         </div>
 
