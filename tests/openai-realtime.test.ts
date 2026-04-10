@@ -254,4 +254,60 @@ describe('openai realtime SDP exchange', () => {
     });
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it('классифицирует relay timeout как retryable timeout handshake failure', async () => {
+    isRelayEnabledMock.mockReturnValue(true);
+    relayRealtimeCallMock.mockRejectedValue(
+      Object.assign(new Error('Relay request timed out'), {
+        statusCode: 504,
+      })
+    );
+
+    const { exchangeOpenAiRealtimeWebRtcSdp } = await import(
+      '../server/infrastructure/llm/openai-realtime'
+    );
+
+    await expect(
+      exchangeOpenAiRealtimeWebRtcSdp({
+        sdp: 'v=0\r\n',
+        sessionConfig: {
+          type: 'realtime',
+          model: 'gpt-realtime-mini',
+          instructions: 'Говори кратко.',
+          truncation: {
+            type: 'retention_ratio',
+            retention_ratio: 0.8,
+            token_limits: {
+              post_instructions: 5_000,
+            },
+          },
+          audio: {
+            input: {
+              noise_reduction: {
+                type: 'near_field',
+              },
+              turn_detection: {
+                type: 'semantic_vad',
+                eagerness: 'low',
+                create_response: true,
+                interrupt_response: false,
+              },
+              transcription: {
+                model: 'gpt-4o-mini-transcribe',
+              },
+            },
+            output: {
+              voice: 'alloy',
+            },
+          },
+        },
+      })
+    ).rejects.toMatchObject({
+      statusCode: 504,
+      data: expect.objectContaining({
+        code: 'realtime_webrtc_handshake_timeout',
+        retryable: true,
+      }),
+    });
+  });
 });

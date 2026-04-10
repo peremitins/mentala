@@ -120,6 +120,14 @@ export const RealtimeVoiceSessionEventResponseDto = z.object({
 export const RealtimeVoiceSessionEndRequestDto = z.object({
   sessionId: z.string().trim().min(1).max(64),
   reason: RealtimeVoiceSessionEndReasonEnum,
+  error: z
+    .object({
+      code: z.string().trim().min(1).max(80).optional(),
+      message: z.string().trim().min(1).max(2000).optional(),
+    })
+    .partial()
+    .nullable()
+    .optional(),
 });
 
 export const RealtimeVoiceSessionEndResponseDto = z.object({
