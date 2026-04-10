@@ -2,6 +2,27 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const relayRealtimeCallMock = vi.fn();
 const isRelayEnabledMock = vi.fn(() => false);
+const defaultRealtimeConfigMock = {
+  REALTIME_VOICE_CLIENT_SECRET_TIMEOUT_MS: 60_000,
+  REALTIME_VOICE_CLIENT_SECRET_TTL_SECONDS: 60,
+  REALTIME_VOICE_OPENAI_MODEL: 'gpt-realtime-mini',
+  REALTIME_VOICE_OPENAI_VOICE: 'alloy',
+  REALTIME_VOICE_PROVIDER_TIMEOUT_MS: 60_000,
+  REALTIME_VOICE_PREFIX_PADDING_MS: 300,
+  REALTIME_VOICE_SILENCE_DURATION_MS: 1000,
+  REALTIME_VOICE_TRANSCRIPTION_MODEL: 'gpt-4o-mini-transcribe',
+  REALTIME_VOICE_TURN_DETECTION_MODE: 'semantic_vad',
+  REALTIME_VOICE_TURN_THRESHOLD: 0.7,
+  REALTIME_VOICE_VAD_EAGERNESS: 'low',
+  REALTIME_VOICE_WEBRTC_URL: 'https://api.openai.com/v1/realtime/calls',
+};
+const realtimeConfigMock = {
+  ...defaultRealtimeConfigMock,
+};
+
+function resetRealtimeConfigMock() {
+  Object.assign(realtimeConfigMock, defaultRealtimeConfigMock);
+}
 
 vi.mock('h3', () => ({
   createError(input: { statusMessage?: string }) {
@@ -12,18 +33,7 @@ vi.mock('h3', () => ({
   },
 }));
 
-vi.mock('@/server/config/realtime', () => ({
-  REALTIME_VOICE_CLIENT_SECRET_TIMEOUT_MS: 60_000,
-  REALTIME_VOICE_CLIENT_SECRET_TTL_SECONDS: 60,
-  REALTIME_VOICE_OPENAI_MODEL: 'gpt-realtime-mini',
-  REALTIME_VOICE_OPENAI_VOICE: 'alloy',
-  REALTIME_VOICE_PROVIDER_TIMEOUT_MS: 60_000,
-  REALTIME_VOICE_PREFIX_PADDING_MS: 300,
-  REALTIME_VOICE_SILENCE_DURATION_MS: 800,
-  REALTIME_VOICE_TRANSCRIPTION_MODEL: 'gpt-4o-mini-transcribe',
-  REALTIME_VOICE_TURN_THRESHOLD: 0.5,
-  REALTIME_VOICE_WEBRTC_URL: 'https://api.openai.com/v1/realtime/calls',
-}));
+vi.mock('@/server/config/realtime', () => realtimeConfigMock);
 
 vi.mock('@/server/config/chatMemory', () => ({
   CHAT_MEMORY_SOFT_INPUT_TOKENS: 5_000,
@@ -38,6 +48,7 @@ describe('openai realtime SDP exchange', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.resetModules();
+    resetRealtimeConfigMock();
     relayRealtimeCallMock.mockReset();
     isRelayEnabledMock.mockReset();
     isRelayEnabledMock.mockReturnValue(false);
@@ -80,10 +91,8 @@ describe('openai realtime SDP exchange', () => {
                 type: 'near_field',
               },
               turn_detection: {
-                type: 'server_vad',
-                threshold: 0.5,
-                prefix_padding_ms: 300,
-                silence_duration_ms: 800,
+                type: 'semantic_vad',
+                eagerness: 'low',
                 create_response: true,
                 interrupt_response: false,
               },
@@ -111,7 +120,7 @@ describe('openai realtime SDP exchange', () => {
     );
   });
 
-  it('строит realtime session config с near_field noise reduction и без auto-interrupt провайдера', async () => {
+  it('по умолчанию строит realtime session config с semantic_vad low и без auto-interrupt провайдера', async () => {
     const { buildOpenAiRealtimeSessionConfig } = await import(
       '../server/infrastructure/llm/openai-realtime'
     );
@@ -137,10 +146,8 @@ describe('openai realtime SDP exchange', () => {
             type: 'near_field',
           },
           turn_detection: {
-            type: 'server_vad',
-            threshold: 0.5,
-            prefix_padding_ms: 300,
-            silence_duration_ms: 800,
+            type: 'semantic_vad',
+            eagerness: 'low',
             create_response: true,
             interrupt_response: false,
           },
@@ -150,6 +157,36 @@ describe('openai realtime SDP exchange', () => {
         },
         output: {
           voice: 'alloy',
+        },
+      },
+    });
+  });
+
+  it('строит rollback-конфиг с server_vad 0.7/1000, когда режим переключён через env', async () => {
+    realtimeConfigMock.REALTIME_VOICE_TURN_DETECTION_MODE = 'server_vad';
+
+    const { buildOpenAiRealtimeSessionConfig } = await import(
+      '../server/infrastructure/llm/openai-realtime'
+    );
+
+    expect(
+      buildOpenAiRealtimeSessionConfig({
+        instructions: 'Отвечай спокойно.',
+      })
+    ).toMatchObject({
+      audio: {
+        input: {
+          noise_reduction: {
+            type: 'near_field',
+          },
+          turn_detection: {
+            type: 'server_vad',
+            threshold: 0.7,
+            prefix_padding_ms: 300,
+            silence_duration_ms: 1000,
+            create_response: true,
+            interrupt_response: false,
+          },
         },
       },
     });
@@ -188,10 +225,8 @@ describe('openai realtime SDP exchange', () => {
                 type: 'near_field',
               },
               turn_detection: {
-                type: 'server_vad',
-                threshold: 0.5,
-                prefix_padding_ms: 300,
-                silence_duration_ms: 800,
+                type: 'semantic_vad',
+                eagerness: 'low',
                 create_response: true,
                 interrupt_response: false,
               },

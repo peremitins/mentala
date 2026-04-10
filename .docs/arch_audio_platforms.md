@@ -36,6 +36,10 @@
 ## Realtime Voice
 
 - OpenAI Realtime API через WebRTC
+- Основной `turn_detection` — `semantic_vad` с `eagerness=low`, чтобы уменьшить ложные срабатывания на короткий шум и шорохи
+- Rollback через env остаётся на `server_vad` с консервативными параметрами `threshold=0.7` и `silence_duration_ms=1000`
+- В `audio.input` всегда включено `noise_reduction: near_field`
+- На mobile (`iOS/Android`) client-side `response.cancel` по `speech_started` отключён; barge-in сохраняется только на `web`
 - Runtime compaction по бюджетам текстового чата
 - Compaction строится text-моделью (gpt-realtime-\* не поддерживает json_schema)
 - Provider-side truncation как safety net
