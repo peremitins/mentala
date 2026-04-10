@@ -76,6 +76,7 @@ Targeting:
 - Invitee может активировать referral только один раз за lifetime.
 - Self-referral запрещён.
 - Reward выдаётся не в момент ввода кода, а после первой успешной paid-конверсии invitee.
+- Резервация `billing_discount_grants` в auto-renew/checkout flow должна сериализоваться через PostgreSQL advisory transaction lock с валидной сигнатурой `pg_advisory_xact_lock(bigint)`: ключ пакуется как `namespace << 32 | userId`, а не как несуществующая пара `bigint, bigint`.
 
 Экономика v1:
 
