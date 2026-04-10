@@ -1,5 +1,5 @@
 import { createError, getQuery } from 'h3';
-import { and, desc, eq, gt, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, ne } from 'drizzle-orm';
 import { getSessionUser } from '@/server/application/auth/session';
 import { db } from '@/server/infrastructure/db/client';
 import {
@@ -16,6 +16,11 @@ import {
 } from '@/server/application/events/app-events.dispatchers';
 import { dispatchBillingPlanChangedIfNeeded } from '@/server/application/events/billing-events.helpers';
 import { getCurrentActiveSubscription } from '@/server/application/subscriptions/current-subscription.service';
+import {
+  finalizeDiscountGrantSuccess,
+  releaseDiscountGrantReservation,
+} from '@/server/application/promo-codes/promo-discount-grants.service';
+import { restoreAppliedBillingCredit } from '@/server/application/subscriptions/billing-credit.service';
 
 interface YooKassaPaymentResponse {
   id?: string;
@@ -234,6 +239,7 @@ export default defineEventHandler(
           );
         } else {
           let shouldEnqueuePurchaseSuccess = false;
+          const discountReservationKey = `checkout-subscription:${targetSubscription.id}`;
           await db.transaction(async (tx) => {
             const inserted = await tx
               .insert(payments)
@@ -293,13 +299,18 @@ export default defineEventHandler(
               Number(targetSubscription!.billingCreditGranted || 0)
             );
             if (creditGranted > 0) {
-              await tx
-                .update(users)
-                .set({
-                  billingCredit: sql`${users.billingCredit} + ${creditGranted}`,
-                  updatedAt: now,
-                })
-                .where(eq(users.id, targetSubscription!.userId));
+              await restoreAppliedBillingCredit({
+                userId: targetSubscription!.userId,
+                amount: creditGranted,
+                sourceSubscriptionId: targetSubscription!.id,
+                sourcePaymentId: String(targetSubscription!.yookassaPaymentId),
+                entryType: 'subscription_credit_grant',
+                metadata: {
+                  source: 'check_payment_status_success',
+                },
+                now,
+                tx,
+              });
             }
 
             if (targetSubscription!.planId !== 'basic') {
@@ -314,7 +325,17 @@ export default defineEventHandler(
                 );
             }
 
-            // Успешная non-trial активация должна очищать trial-scheduled поля.
+            await finalizeDiscountGrantSuccess({
+              reservationKey: discountReservationKey,
+              paymentId: String(targetSubscription!.yookassaPaymentId),
+              now,
+              tx,
+            });
+
+            // Сбрасываем trial-scheduled поля только если пользователь
+            // действительно был в этом состоянии. Если billing_collection_status
+            // уже 'none' (trial-billing завершился успешно), billing_plan_id и
+            // next_charge_at трогать нельзя — они нужны для авторелиза.
             await tx
               .update(users)
               .set({
@@ -328,7 +349,15 @@ export default defineEventHandler(
                 billingLockedBy: null,
                 updatedAt: now,
               })
-              .where(eq(users.id, targetSubscription!.userId));
+              .where(
+                and(
+                  eq(users.id, targetSubscription!.userId),
+                  inArray(users.billingCollectionStatus, [
+                    'scheduled',
+                    'past_due',
+                  ])
+                )
+              );
 
             const paymentMethodPresentation = extractPaymentMethodPresentation(
               payment.payment_method
@@ -406,6 +435,7 @@ export default defineEventHandler(
         }
       } else if (providerStatus === 'canceled') {
         let shouldEnqueuePurchaseFailed = false;
+        const discountReservationKey = `checkout-subscription:${targetSubscription.id}`;
         await db.transaction(async (tx) => {
           const inserted = await tx
             .insert(payments)
@@ -445,13 +475,18 @@ export default defineEventHandler(
             Number(targetSubscription!.billingCreditApplied || 0)
           );
           if (creditApplied > 0) {
-            await tx
-              .update(users)
-              .set({
-                billingCredit: sql`${users.billingCredit} + ${creditApplied}`,
-                updatedAt: now,
-              })
-              .where(eq(users.id, targetSubscription!.userId));
+            await restoreAppliedBillingCredit({
+              userId: targetSubscription!.userId,
+              amount: creditApplied,
+              sourceSubscriptionId: targetSubscription!.id,
+              sourcePaymentId: String(targetSubscription!.yookassaPaymentId),
+              entryType: 'payment_restore',
+              metadata: {
+                source: 'check_payment_status_canceled',
+              },
+              now,
+              tx,
+            });
           }
 
           await tx.insert(subscriptionEvents).values({
@@ -464,6 +499,12 @@ export default defineEventHandler(
               reason: 'canceled',
               source: 'check-payment-status',
             },
+          });
+
+          await releaseDiscountGrantReservation({
+            reservationKey: discountReservationKey,
+            now,
+            tx,
           });
 
           shouldEnqueuePurchaseFailed = true;

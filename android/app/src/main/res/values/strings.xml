@@ -6,10 +6,7 @@
     <string name="custom_url_scheme">mentala</string>
     <string name="asset_statements" translatable="false">[{\"include\":\"https://my.mentala.app/.well-known/assetlinks.json\"}]</string>
     <string name="default_notification_channel_id">mentai_high</string>
-    <string name="audio_fg_channel_name">Ментала Audio</string>
-    <string name="audio_fg_channel_description">Воспроизведение медитаций в фоне</string>
-    <string name="audio_fg_default_title">Ментала</string>
-    <string name="audio_fg_default_subtitle">Идёт воспроизведение медитации</string>
+    <string name="audio_player_service_description">Фоновое воспроизведение медитаций</string>
     <string name="realtime_voice_fg_channel_name">Ментала Realtime Voice</string>
     <string name="realtime_voice_fg_channel_description">Активный голосовой диалог в фоне</string>
     <string name="realtime_voice_fg_default_title">Ментала</string>

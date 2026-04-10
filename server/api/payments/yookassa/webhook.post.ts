@@ -1,5 +1,5 @@
 import { createError, getHeader } from 'h3';
-import { and, eq, gt, ne, or, sql } from 'drizzle-orm';
+import { and, eq, gt, inArray, ne, or } from 'drizzle-orm';
 import { db } from '@/server/infrastructure/db/client';
 import {
   payments,
@@ -31,6 +31,11 @@ import {
 } from '@/server/application/events/app-events.dispatchers';
 import { dispatchBillingPlanChangedIfNeeded } from '@/server/application/events/billing-events.helpers';
 import { getCurrentActiveSubscription } from '@/server/application/subscriptions/current-subscription.service';
+import {
+  finalizeDiscountGrantSuccess,
+  releaseDiscountGrantReservation,
+} from '@/server/application/promo-codes/promo-discount-grants.service';
+import { restoreAppliedBillingCredit } from '@/server/application/subscriptions/billing-credit.service';
 
 /**
  * ВАЖНО: По официальной документации YooKassa входящие уведомления НЕ подписываются HMAC.
@@ -617,6 +622,7 @@ export default defineEventHandler(async (event) => {
     const billingPlanId = String(metadata.billingPlanId || '').trim();
     const billingPeriod = String(metadata.billingPeriod || '').trim();
     const nextChargeAtRaw = String(metadata.nextChargeAt || '').trim();
+    const billingCreditApplied = Number(metadata.billingCreditApplied || 0);
     const nextChargeAt = nextChargeAtRaw ? new Date(nextChargeAtRaw) : null;
     const trigger = String(metadata.trigger || '').trim();
     const attemptMode = trigger === 'manual_retry' ? 'manual' : 'automatic';
@@ -686,6 +692,7 @@ export default defineEventHandler(async (event) => {
           paymentMethodCardLast4: presentation.cardLast4,
           paymentMethodCardExpiryMonth: presentation.cardExpiryMonth,
           paymentMethodCardExpiryYear: presentation.cardExpiryYear,
+          billingCreditApplied,
         });
       } else if (payment.status === 'canceled') {
         await markTrialChargeFailure({
@@ -697,6 +704,7 @@ export default defineEventHandler(async (event) => {
           attemptMode,
           failureReason: 'provider_canceled_webhook',
           scheduledChargeAt: nextChargeAt,
+          billingCreditApplied,
           now,
         });
       }
@@ -797,6 +805,7 @@ export default defineEventHandler(async (event) => {
     }
 
     let shouldEnqueuePurchaseSuccess = false;
+    const discountReservationKey = `checkout-subscription:${sub.id}`;
     await db.transaction(async (tx) => {
       await tx
         .insert(payments)
@@ -855,13 +864,18 @@ export default defineEventHandler(async (event) => {
 
       const creditGranted = Math.max(0, Number(sub.billingCreditGranted || 0));
       if (creditGranted > 0 && sub.paymentStatus === 'pending') {
-        await tx
-          .update(users)
-          .set({
-            billingCredit: sql`${users.billingCredit} + ${creditGranted}`,
-            updatedAt: now,
-          })
-          .where(eq(users.id, sub.userId));
+        await restoreAppliedBillingCredit({
+          userId: sub.userId,
+          amount: creditGranted,
+          sourceSubscriptionId: sub.id,
+          sourcePaymentId: paymentId,
+          entryType: 'subscription_credit_grant',
+          metadata: {
+            source: 'yookassa_webhook_success',
+          },
+          now,
+          tx,
+        });
       }
 
       const paymentMethodPresentation = extractPaymentMethodPresentation(
@@ -892,8 +906,17 @@ export default defineEventHandler(async (event) => {
           .where(and(eq(users.id, sub.userId), gt(users.trialEndedAt, now)));
       }
 
-      // Успешная non-trial активация подписки должна сбрасывать trial-scheduled
-      // состояние, чтобы в UI не оставалось устаревшее "Списание запланировано".
+      await finalizeDiscountGrantSuccess({
+        reservationKey: discountReservationKey,
+        paymentId,
+        now,
+        tx,
+      });
+
+      // Сбрасываем trial-scheduled состояние только если оно ещё актуально.
+      // Если billing_collection_status уже 'none' (trial-billing уже завершил
+      // успешно через markTrialChargeSuccess), не трогаем billing_plan_id и
+      // next_charge_at — они нужны для авторелиза следующего периода.
       await tx
         .update(users)
         .set({
@@ -907,7 +930,12 @@ export default defineEventHandler(async (event) => {
           billingLockedBy: null,
           updatedAt: now,
         })
-        .where(eq(users.id, sub.userId));
+        .where(
+          and(
+            eq(users.id, sub.userId),
+            inArray(users.billingCollectionStatus, ['scheduled', 'past_due'])
+          )
+        );
 
       await tx.insert(subscriptionEvents).values({
         userId: sub.userId,
@@ -962,6 +990,7 @@ export default defineEventHandler(async (event) => {
 
   if (payment.status === 'canceled') {
     let shouldEnqueuePurchaseFailed = false;
+    const discountReservationKey = `checkout-subscription:${sub.id}`;
     await db.transaction(async (tx) => {
       await tx
         .insert(payments)
@@ -1003,13 +1032,18 @@ export default defineEventHandler(async (event) => {
 
       const creditApplied = Math.max(0, Number(sub.billingCreditApplied || 0));
       if (creditApplied > 0) {
-        await tx
-          .update(users)
-          .set({
-            billingCredit: sql`${users.billingCredit} + ${creditApplied}`,
-            updatedAt: now,
-          })
-          .where(eq(users.id, sub.userId));
+        await restoreAppliedBillingCredit({
+          userId: sub.userId,
+          amount: creditApplied,
+          sourceSubscriptionId: sub.id,
+          sourcePaymentId: paymentId,
+          entryType: 'payment_restore',
+          metadata: {
+            source: 'yookassa_webhook_canceled',
+          },
+          now,
+          tx,
+        });
       }
 
       await tx.insert(subscriptionEvents).values({
@@ -1021,6 +1055,12 @@ export default defineEventHandler(async (event) => {
           paymentId,
           reason: 'canceled',
         },
+      });
+
+      await releaseDiscountGrantReservation({
+        reservationKey: discountReservationKey,
+        now,
+        tx,
       });
 
       shouldEnqueuePurchaseFailed = true;

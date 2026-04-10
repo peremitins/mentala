@@ -24,6 +24,14 @@ import {
   buildYooKassaReceipt,
 } from '@/server/application/payments/yookassa.client';
 import { TRIAL_BILLING_EARLY_CHARGE_MS } from '@/server/config/subscription';
+import {
+  releaseDiscountGrantReservation,
+  reserveBestDiscountGrant,
+} from '@/server/application/promo-codes/promo-discount-grants.service';
+import {
+  applyAvailableBillingCredit,
+  restoreAppliedBillingCredit,
+} from '@/server/application/subscriptions/billing-credit.service';
 
 const LOCK_TTL_MS = 10 * 60 * 1000;
 
@@ -171,6 +179,7 @@ async function processChargeBatch(params: {
       billingPlanId: user.billingPlanId,
       billingPeriod: user.billingPeriod,
     });
+    let billingCreditApplied = 0;
 
     try {
       const existingAttemptRows = await db
@@ -287,6 +296,26 @@ async function processChargeBatch(params: {
         baseMonthlyPrice: Number(planRow.basePrice),
         billingPeriod: user.billingPeriod,
       });
+      const discountReservationKey = `trial-charge:${chargeAttemptKey}`;
+      const discount = await reserveBestDiscountGrant({
+        userId: user.id,
+        planId: user.billingPlanId,
+        billingPeriod: user.billingPeriod,
+        amount: chargeAmount,
+        reservationKey: discountReservationKey,
+      });
+      const credit = await applyAvailableBillingCredit({
+        userId: user.id,
+        amount: discount.finalAmount,
+        metadata: {
+          source: 'trial_billing_worker',
+          billingPlanId: user.billingPlanId,
+          billingPeriod: user.billingPeriod,
+          chargeAttemptKey,
+        },
+      });
+      billingCreditApplied = credit.appliedAmount;
+      const effectiveChargeAmount = credit.finalAmount;
 
       const chargeDescription = `Подписка Ментала ${user.billingPlanId === 'premium' ? 'Premium' : 'PRO'} (${user.billingPeriod === 'year' ? 'год' : 'месяц'})`;
       const attemptOrdinal = Number(existingAttempt?.attemptCount || 0) + 1;
@@ -299,14 +328,14 @@ async function processChargeBatch(params: {
           attemptMode: 'automatic',
           attemptOrdinal,
         }),
-        amount: chargeAmount,
+        amount: effectiveChargeAmount,
         description: chargeDescription,
         paymentMode: 'recurring',
         paymentMethodId: user.paymentMethodId,
         receipt: user.email
           ? buildYooKassaReceipt({
               email: user.email,
-              amount: chargeAmount,
+              amount: effectiveChargeAmount,
               description: chargeDescription,
             })
           : undefined,
@@ -318,11 +347,19 @@ async function processChargeBatch(params: {
           billingPeriod: user.billingPeriod,
           nextChargeAt: user.nextChargeAt.toISOString(),
           trigger: 'automatic',
+          promoDiscountPercent: discount.percent || null,
+          promoDiscountAmount: discount.discountAmount || null,
+          billingCreditApplied: billingCreditApplied || null,
         },
       });
 
       const paymentId = String(payment.id || '').trim();
-      const paymentAmount = Number(payment.amount?.value || chargeAmount);
+      if (!paymentId) {
+        throw new Error('YooKassa payment response missing payment id');
+      }
+      const paymentAmount = Number(
+        payment.amount?.value || effectiveChargeAmount
+      );
       const paymentCurrency = String(payment.amount?.currency || 'RUB');
       const paymentMethodPresentation = extractPaymentMethodPresentation(
         payment.payment_method
@@ -360,6 +397,7 @@ async function processChargeBatch(params: {
           paymentMethodCardExpiryMonth:
             paymentMethodPresentation.cardExpiryMonth,
           paymentMethodCardExpiryYear: paymentMethodPresentation.cardExpiryYear,
+          billingCreditApplied,
         });
       } else if (payment.status === 'canceled') {
         await markTrialChargeFailure({
@@ -371,6 +409,7 @@ async function processChargeBatch(params: {
           attemptMode: 'automatic',
           failureReason: `provider_status_${payment.status}`,
           scheduledChargeAt: user.nextChargeAt,
+          billingCreditApplied,
           now: params.now,
         });
       } else {
@@ -383,6 +422,10 @@ async function processChargeBatch(params: {
               providerPaymentId: paymentId,
               lockAt: null,
               lockBy: null,
+              metadata: {
+                source: 'trial-billing-worker',
+                billingCreditApplied,
+              },
               updatedAt: params.now,
             })
             .where(
@@ -400,8 +443,16 @@ async function processChargeBatch(params: {
         });
       }
     } catch (error: any) {
+      await releaseDiscountGrantReservation({
+        reservationKey: `trial-charge:${chargeAttemptKey}`,
+        now: params.now,
+      }).catch(() => {
+        // noop
+      });
+
       // Логируем тело ответа от провайдера (ofetch кладёт его в error.data).
-      const providerResponseBody = error?.data ?? error?.response?._data ?? null;
+      const providerResponseBody =
+        error?.data ?? error?.response?._data ?? null;
       const httpStatus = error?.statusCode ?? error?.status ?? null;
 
       console.error('[TrialBillingWorker] scheduled charge failed', {
@@ -428,6 +479,7 @@ async function processChargeBatch(params: {
             attemptMode: 'automatic',
             failureReason: `provider_http_${httpStatus}`,
             scheduledChargeAt: user.nextChargeAt!,
+            billingCreditApplied,
             now: params.now,
           });
         } catch (failureError) {
@@ -437,6 +489,24 @@ async function processChargeBatch(params: {
           );
         }
       } else {
+        if (billingCreditApplied > 0) {
+          await restoreAppliedBillingCredit({
+            userId: user.id,
+            amount: billingCreditApplied,
+            entryType: 'payment_restore',
+            metadata: {
+              source: 'trial_billing_worker_error',
+              billingPlanId: user.billingPlanId,
+              billingPeriod: user.billingPeriod,
+              chargeAttemptKey,
+            },
+            now: params.now,
+          }).catch(() => {
+            // noop
+          });
+          billingCreditApplied = 0;
+        }
+
         // Для серверных/сетевых ошибок — снимаем lock с charge attempt,
         // чтобы следующая итерация повторила попытку, но без бесконечного цикла.
         await db

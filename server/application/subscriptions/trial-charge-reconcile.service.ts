@@ -11,6 +11,11 @@ import {
   dispatchBillingPurchaseFailedEvent,
   dispatchBillingPurchaseSuccessEvent,
 } from '@/server/application/events/app-events.dispatchers';
+import {
+  finalizeDiscountGrantSuccess,
+  releaseDiscountGrantReservation,
+} from '@/server/application/promo-codes/promo-discount-grants.service';
+import { restoreAppliedBillingCredit } from '@/server/application/subscriptions/billing-credit.service';
 import type {
   TrialBillingPeriod,
   TrialBillingPlanId,
@@ -47,10 +52,12 @@ export async function markTrialChargeSuccess(params: {
   paymentMethodCardLast4?: string | null;
   paymentMethodCardExpiryMonth?: string | null;
   paymentMethodCardExpiryYear?: string | null;
+  billingCreditApplied?: number;
   tx?: any;
 }) {
   const now = params.now ?? new Date();
   const client = resolveDbClient(params.tx);
+  const discountReservationKey = `trial-charge:${params.chargeAttemptKey}`;
 
   const periodEnd = new Date(
     now.getTime() + getPeriodDays(params.billingPeriod) * 24 * 60 * 60 * 1000
@@ -79,7 +86,7 @@ export async function markTrialChargeSuccess(params: {
         billingPeriod: params.billingPeriod,
         checkoutAmount: String(params.amount),
         checkoutCurrency: params.currency,
-        billingCreditApplied: '0',
+        billingCreditApplied: String(params.billingCreditApplied || 0),
         billingCreditGranted: '0',
         yookassaPaymentId: params.paymentId,
         startDate: now,
@@ -114,6 +121,13 @@ export async function markTrialChargeSuccess(params: {
         updatedAt: now,
       })
       .where(eq(users.id, params.userId));
+
+    await finalizeDiscountGrantSuccess({
+      reservationKey: discountReservationKey,
+      paymentId: params.paymentId,
+      now,
+      tx,
+    });
 
     await tx
       .update(billingChargeAttempts)
@@ -151,6 +165,7 @@ export async function markTrialChargeSuccess(params: {
         amount: params.amount,
         currency: params.currency,
         attemptMode: params.attemptMode,
+        billingCreditApplied: params.billingCreditApplied || 0,
       },
     });
   });
@@ -180,17 +195,20 @@ export async function markTrialChargeFailure(params: {
   attemptMode: AttemptMode;
   failureReason: string;
   scheduledChargeAt: Date;
+  billingCreditApplied?: number;
   now?: Date;
   tx?: any;
 }) {
   const now = params.now ?? new Date();
   const client = resolveDbClient(params.tx);
+  const discountReservationKey = `trial-charge:${params.chargeAttemptKey}`;
 
   await client.transaction(async (tx: any) => {
     const existingAttempts = await tx
       .select({
         attemptCount: billingChargeAttempts.attemptCount,
         autoAttemptCount: billingChargeAttempts.autoAttemptCount,
+        metadata: billingChargeAttempts.metadata,
       })
       .from(billingChargeAttempts)
       .where(
@@ -207,6 +225,13 @@ export async function markTrialChargeFailure(params: {
       params.attemptMode === 'automatic'
         ? currentAutoAttemptCount + 1
         : currentAutoAttemptCount;
+    const currentMetadata =
+      (existingAttempts[0]?.metadata as Record<string, unknown> | undefined) ??
+      {};
+    const billingCreditApplied = Number(
+      params.billingCreditApplied ?? currentMetadata.billingCreditApplied ?? 0
+    );
+    const creditAlreadyRestored = Boolean(currentMetadata.creditRestoredAt);
     const nextAutoRetryAt =
       params.attemptMode === 'automatic'
         ? resolveNextAutoRetryAt({
@@ -244,6 +269,14 @@ export async function markTrialChargeFailure(params: {
         nextAutoRetryAt,
         lockAt: null,
         lockBy: null,
+        metadata: {
+          ...currentMetadata,
+          billingCreditApplied,
+          creditRestoredAt:
+            billingCreditApplied > 0 && !creditAlreadyRestored
+              ? now.toISOString()
+              : (currentMetadata.creditRestoredAt ?? null),
+        },
         updatedAt: now,
       })
       .where(
@@ -261,7 +294,30 @@ export async function markTrialChargeFailure(params: {
         failureReason: params.failureReason,
         attemptMode: params.attemptMode,
         nextAutoRetryAt: nextAutoRetryAt?.toISOString() || null,
+        billingCreditApplied,
       },
+    });
+
+    if (billingCreditApplied > 0 && !creditAlreadyRestored) {
+      await restoreAppliedBillingCredit({
+        userId: params.userId,
+        amount: billingCreditApplied,
+        entryType: 'payment_restore',
+        metadata: {
+          source: 'trial_charge_failure',
+          chargeAttemptKey: params.chargeAttemptKey,
+          billingPlanId: params.billingPlanId,
+          billingPeriod: params.billingPeriod,
+        },
+        now,
+        tx,
+      });
+    }
+
+    await releaseDiscountGrantReservation({
+      reservationKey: discountReservationKey,
+      now,
+      tx,
     });
   });
 

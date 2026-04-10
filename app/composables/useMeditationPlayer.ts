@@ -2,6 +2,7 @@ import { computed, ref } from 'vue';
 import { Capacitor } from '@capacitor/core';
 import { isDocumentAvailable } from '@/app/utils/document';
 import { resolveMediaUrl } from '@/app/utils/media';
+import { useSceneAudio } from '@/app/composables/useSceneAudio';
 import { NativeAudioService } from '@/app/services/audio/nativeAudio.service';
 import type {
   AudioServiceEvent,
@@ -37,6 +38,14 @@ function isIosUserAgent() {
   return /iphone|ipad|ipod/i.test(ua);
 }
 
+function isNativeIosPlatform() {
+  try {
+    return Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'ios';
+  } catch {
+    return false;
+  }
+}
+
 // Таймаут загрузки аудио файла (30 секунд для мобильных, 15 для десктопа)
 function getAudioLoadTimeout() {
   return isMobileUserAgent() ? 30000 : 15000;
@@ -58,16 +67,8 @@ function shouldPreferWebAudio(track: MeditationTrackDto) {
     // Для не-loop треков всегда используем HTML Audio (более эффективно для больших файлов)
     return false;
   }
-  // Для бесшовного лупа используем WebAudio, если доступен.
-  // Но на мобильных для больших файлов лучше использовать HTML Audio
-  if (
-    isMobileUserAgent() &&
-    track.durationSeconds &&
-    track.durationSeconds > 300
-  ) {
-    // Для файлов больше 5 минут на мобильных используем HTML Audio
-    return false;
-  }
+  // Loop-треки держим на WebAudio для бесшовного цикла.
+  // Размер контролируется при загрузке буфера, а не эвристикой по длительности.
   return isWebAudioAvailable();
 }
 
@@ -116,22 +117,25 @@ const globalState = {
   nativeModeEnabled: false,
   nativeService: null as NativeAudioService | null,
   nativeServiceUnsubscribe: null as (() => void) | null,
+  iosNativePausedPositionMs: null as number | null,
 };
 
 function isNativeMeditationAudioEnabled() {
   if (typeof window === 'undefined') return false;
 
   try {
-    const config = useRuntimeConfig();
-    const featureEnabled =
-      config.public.featureNativeMeditationAudioEnabled !== false;
-    if (!featureEnabled) return false;
+    if (!isNativeMeditationAudioFeatureEnabled()) return false;
 
     if (!Capacitor.isNativePlatform()) return false;
-    return Capacitor.isPluginAvailable('NativeAudio');
+    return Capacitor.isPluginAvailable('AudioPlayer');
   } catch {
     return false;
   }
+}
+
+function isNativeMeditationAudioFeatureEnabled() {
+  const config = useRuntimeConfig();
+  return config.public.featureNativeMeditationAudioEnabled !== false;
 }
 
 function ensureNativeModeResolved() {
@@ -213,11 +217,18 @@ function handleNativeAudioEvent(event: AudioServiceEvent) {
       globalState.isBuffering.value = false;
       globalState.currentTime.value = event.positionMs / 1000;
       syncNativeDuration(event.durationMs);
+      if (
+        globalState.timerRemainingMs.value &&
+        !globalState.timerEndsAt.value
+      ) {
+        resumeTimer();
+      }
       break;
     }
     case 'paused': {
       globalState.isPlaying.value = false;
       globalState.currentTime.value = event.positionMs / 1000;
+      pauseTimer();
       break;
     }
     case 'stopped': {
@@ -248,6 +259,7 @@ function handleNativeAudioEvent(event: AudioServiceEvent) {
 }
 
 async function destroyNativeService() {
+  globalState.iosNativePausedPositionMs = null;
   if (globalState.nativeServiceUnsubscribe) {
     globalState.nativeServiceUnsubscribe();
     globalState.nativeServiceUnsubscribe = null;
@@ -263,7 +275,9 @@ async function ensureNativeService() {
   if (globalState.nativeService) return globalState.nativeService;
 
   try {
-    const service = new NativeAudioService();
+    const service = new NativeAudioService({
+      audioIdNamespace: 'meditation',
+    });
     await service.init();
     globalState.nativeService = service;
     globalState.nativeServiceUnsubscribe = service.subscribe((event) => {
@@ -272,16 +286,10 @@ async function ensureNativeService() {
     return service;
   } catch (error) {
     console.error(
-      '[MeditationPlayer] Failed to initialize NativeAudio:',
+      '[MeditationPlayer] Failed to initialize MediaGrid AudioPlayer:',
       error
     );
-    globalState.nativeModeEnabled = false;
     await destroyNativeService();
-    // Fail-soft: если native-слой недоступен, переключаемся на legacy-пайплайн.
-    ensureGlobalGestureUnlock();
-    ensureVisibilityListener();
-    ensureAppStateListener();
-    ensurePlaybackAudioSessionType();
     return null;
   }
 }
@@ -404,7 +412,9 @@ function ensureGlobalGestureUnlock() {
       const pending = globalState.pendingGesturePlay;
       if (pending) {
         clearGestureUnlock();
-        await play(pending.track, pending.timerMinutes ?? null);
+        // Передаём timerMinutes как есть: undefined = сохранить текущий таймер,
+        // null = таймер не нужен (был явно отключён), number = конкретное значение.
+        await play(pending.track, pending.timerMinutes);
       }
 
       if (globalState.globalUnlockCleanup) {
@@ -558,7 +568,16 @@ async function maybeRecoverWebAudioPlayback() {
   try {
     ensurePlaybackAudioSessionType();
     const running = await ensureAudioContextRunning(context);
-    if (!running) return;
+    if (!running) {
+      // На iOS AudioContext нельзя возобновить без жеста пользователя.
+      // Сбрасываем isPlaying, чтобы UI показывал корректное состояние,
+      // и планируем автозапуск при следующем касании экрана.
+      if (globalState.isPlaying.value && globalState.currentTrack.value) {
+        globalState.isPlaying.value = false;
+        scheduleGestureUnlock(globalState.currentTrack.value);
+      }
+      return;
+    }
     if (!globalState.audioSource && globalState.audioBuffer) {
       createWebAudioSource(globalState.webAudioOffset);
     }
@@ -567,68 +586,10 @@ async function maybeRecoverWebAudioPlayback() {
   }
 }
 
-// setTimeout, запланированный при уходе в фон для остановки медитации по таймеру.
-// На Android с foreground service и iOS с background audio mode JS не всегда полностью
-// заморожен, поэтому setTimeout может сработать даже в бэкграунде.
-let backgroundStopTimeout: ReturnType<typeof setTimeout> | null = null;
-
-function clearBackgroundStopTimeout() {
-  if (backgroundStopTimeout !== null) {
-    clearTimeout(backgroundStopTimeout);
-    backgroundStopTimeout = null;
-  }
-}
-
-/**
- * При уходе в бэкграунд планируем setTimeout на оставшееся время таймера.
- * setInterval замораживается ОС, но setTimeout с точным дедлайном может
- * сработать, когда ОС даёт приложению окно для выполнения кода.
- */
-function scheduleBackgroundStop() {
-  clearBackgroundStopTimeout();
-  if (!globalState.timerEndsAt.value) return;
-  if (!globalState.isPlaying.value) return;
-  const remaining = globalState.timerEndsAt.value - Date.now();
-  if (remaining <= 0) {
-    void onTimerFinished();
-    return;
-  }
-  backgroundStopTimeout = setTimeout(() => {
-    backgroundStopTimeout = null;
-    if (globalState.timerEndsAt.value && globalState.isPlaying.value) {
-      void onTimerFinished();
-    }
-  }, remaining);
-}
-
-/**
- * Проверяет, не истёк ли таймер медитации за время, пока приложение было в фоне.
- * JS setInterval замораживается ОС при уходе приложения в бэкграунд,
- * поэтому при возвращении нужно явно проверить deadline.
- */
-function checkTimerOnResume() {
-  clearBackgroundStopTimeout();
-  if (!globalState.timerEndsAt.value) return;
-  if (!globalState.isPlaying.value) return;
-  const remaining = globalState.timerEndsAt.value - Date.now();
-  if (remaining <= 0) {
-    void onTimerFinished();
-  } else {
-    // Таймер ещё не истёк — обновляем отображение и перезапускаем countdown,
-    // т.к. старый setInterval мог быть throttled или потерян.
-    globalState.timerRemainingMs.value = remaining;
-    startTimerCountdown();
-  }
-}
-
 function handleVisibilityChange() {
   if (!isDocumentAvailable() || typeof document === 'undefined') return;
-  if (document.visibilityState === 'hidden') {
-    scheduleBackgroundStop();
-    return;
-  }
   if (document.visibilityState !== 'visible') return;
-  checkTimerOnResume();
+  checkTimerExpiredOnResume();
   void maybeRecoverWebAudioPlayback();
 }
 
@@ -639,18 +600,52 @@ function ensureVisibilityListener() {
   globalState.visibilityBound = true;
 }
 
+function hasSleepTimerEnabled() {
+  return globalState.preferredTimerMinutes.value !== null;
+}
+
+async function stopPlaybackOnBackgroundWithoutTimer() {
+  if (!globalState.currentTrack.value) return;
+  if (!globalState.isPlaying.value && !globalState.isBuffering.value) return;
+  if (hasSleepTimerEnabled()) return;
+
+  // Без sleep timer медитация не должна продолжать играть в фоне.
+  await stop(false);
+}
+
+async function handleAppStateChange(isActive: boolean) {
+  if (!isActive) {
+    await stopPlaybackOnBackgroundWithoutTimer();
+    return;
+  }
+
+  checkTimerExpiredOnResume();
+  void maybeRecoverWebAudioPlayback();
+}
+
+function checkTimerExpiredOnResume() {
+  if (!globalState.timerEndsAt.value) return;
+
+  if (Date.now() >= globalState.timerEndsAt.value) {
+    // Таймер истёк пока приложение было в фоне / экран заблокирован.
+    // setInterval замораживается Android WebView при backgrounding —
+    // поэтому проверяем абсолютный timestamp при каждом возврате в приложение.
+    void onTimerFinished();
+    return;
+  }
+
+  // Таймер ещё активен, но interval мог замёрзнуть на Android — перезапускаем.
+  updateTimerRemaining();
+  startTimerCountdown();
+}
+
 function ensureAppStateListener() {
   if (globalState.appStateBound) return;
   globalState.appStateBound = true;
   import('@capacitor/app')
     .then(({ App }) => {
       App.addListener('appStateChange', ({ isActive }) => {
-        if (!isActive) {
-          scheduleBackgroundStop();
-          return;
-        }
-        checkTimerOnResume();
-        void maybeRecoverWebAudioPlayback();
+        void handleAppStateChange(isActive);
       });
     })
     .catch(() => {
@@ -1007,6 +1002,28 @@ async function onTimerFinished() {
   await stop(false);
 }
 
+async function scheduleNativeTimerStop() {
+  if (globalState.playbackMode !== 'native') return;
+  if (!globalState.nativeService) return;
+  if (!globalState.timerEndsAt.value) return;
+
+  const delayMs = Math.max(0, globalState.timerEndsAt.value - Date.now());
+  try {
+    await globalState.nativeService.scheduleStop(delayMs);
+  } catch (error) {
+    console.error('[MeditationPlayer] Native timer schedule failed:', error);
+  }
+}
+
+async function clearNativeTimerStop() {
+  if (!globalState.nativeService) return;
+  try {
+    await globalState.nativeService.clearScheduledStop();
+  } catch (error) {
+    console.error('[MeditationPlayer] Native timer clear failed:', error);
+  }
+}
+
 function startTimerCountdown() {
   clearIntervalSafe(globalState.timerInterval);
   globalState.timerInterval = setInterval(() => {
@@ -1026,6 +1043,7 @@ function clearTimer() {
   globalState.timerRemainingMs.value = null;
   clearIntervalSafe(globalState.timerInterval);
   globalState.timerInterval = null;
+  void clearNativeTimerStop();
 }
 
 function setPreferredTimer(minutes: number | null) {
@@ -1044,6 +1062,7 @@ function setTimer(minutes: number | null) {
   globalState.timerEndsAt.value =
     Date.now() + globalState.timerRemainingMs.value;
   startTimerCountdown();
+  void scheduleNativeTimerStop();
 }
 
 function pauseTimer() {
@@ -1051,6 +1070,7 @@ function pauseTimer() {
   globalState.timerEndsAt.value = null;
   clearIntervalSafe(globalState.timerInterval);
   globalState.timerInterval = null;
+  void clearNativeTimerStop();
 }
 
 function resumeTimer() {
@@ -1058,6 +1078,7 @@ function resumeTimer() {
   globalState.timerEndsAt.value =
     Date.now() + globalState.timerRemainingMs.value;
   startTimerCountdown();
+  void scheduleNativeTimerStop();
 }
 
 async function playNative(
@@ -1065,7 +1086,12 @@ async function playNative(
   timerMinutes?: number | null
 ): Promise<boolean> {
   const service = await ensureNativeService();
-  if (!service) return false;
+  if (!service) {
+    globalState.isPlaying.value = false;
+    globalState.isBuffering.value = false;
+    // Native route уже выбран, поэтому не запускаем старый WebAudio/HTMLAudio fallback.
+    return true;
+  }
 
   const nativeTrack = mapTrackToNativeAudio(track);
   if (!nativeTrack) {
@@ -1077,16 +1103,46 @@ async function playNative(
     return true;
   }
 
+  await useSceneAudio().suspend();
+
   const actionId = bumpPlaybackActionId();
   const isActionActive = () => isPlaybackActionActive(actionId);
   const sameTrack =
     globalState.currentTrack.value?.id === track.id &&
     globalState.playbackMode === 'native';
+  const snapshotBeforePlayback = service.getSnapshot();
+  const shouldResumeNativeSource =
+    !isNativeIosPlatform() &&
+    sameTrack &&
+    !globalState.isPlaying.value &&
+    snapshotBeforePlayback.trackId === track.id;
+  const shouldReleaseIosPausedNativeSource =
+    isNativeIosPlatform() &&
+    sameTrack &&
+    !globalState.isPlaying.value &&
+    snapshotBeforePlayback.trackId === track.id;
+  const startPositionMs =
+    isNativeIosPlatform() && sameTrack && !globalState.isPlaying.value
+      ? (globalState.iosNativePausedPositionMs ??
+        (shouldReleaseIosPausedNativeSource
+          ? snapshotBeforePlayback.positionMs
+          : 0))
+      : 0;
 
   globalState.sessionEnded.value = false;
   globalState.isBuffering.value = true;
 
   try {
+    if (shouldReleaseIosPausedNativeSource) {
+      await releaseIosNativePausedSource(
+        service,
+        snapshotBeforePlayback.positionMs,
+        QUICK_STOP_FADE_MS
+      );
+      if (!isActionActive()) return true;
+      globalState.isBuffering.value = true;
+    }
+
     if (!sameTrack) {
       await stop(false, {
         keepActionId: true,
@@ -1119,17 +1175,14 @@ async function playNative(
       return true;
     }
 
-    if (
-      sameTrack &&
-      !globalState.isPlaying.value &&
-      snapshot.trackId === track.id
-    ) {
+    if (shouldResumeNativeSource) {
       await service.resume({ fadeInMs: FADE_IN_MS });
     } else {
       await service.play(nativeTrack, {
         loop: shouldLoop,
         volume: 1,
         fadeInMs: FADE_IN_MS,
+        startPositionMs,
       });
     }
 
@@ -1140,6 +1193,7 @@ async function playNative(
     syncNativeDuration(nextSnapshot.durationMs);
     globalState.isPlaying.value = true;
     globalState.isBuffering.value = false;
+    globalState.iosNativePausedPositionMs = null;
 
     if (timerMinutes !== undefined) {
       setTimer(timerMinutes);
@@ -1154,12 +1208,27 @@ async function playNative(
       globalState.isBuffering.value = false;
     }
     console.error('[MeditationPlayer] Native playback failed:', error);
-    globalState.nativeModeEnabled = false;
     await destroyNativeService();
-    return false;
+    // В native-сборках не падаем в старый WebAudio/HTMLAudio route:
+    // иначе loop снова пойдёт через прежнюю проблемную ветку.
+    return true;
   }
 
   return true;
+}
+
+async function releaseIosNativePausedSource(
+  service: NativeAudioService,
+  positionMs: number,
+  fadeOutMs: number
+) {
+  const safePositionMs = Math.max(0, Math.floor(positionMs));
+  await service.stop({ fadeOutMs });
+  globalState.iosNativePausedPositionMs = safePositionMs;
+  globalState.currentTime.value = safePositionMs / 1000;
+  globalState.isPlaying.value = false;
+  globalState.isBuffering.value = false;
+  globalState.playbackMode = 'native';
 }
 
 async function pauseNative() {
@@ -1170,7 +1239,26 @@ async function pauseNative() {
     return false;
   }
 
+  const snapshot = service.getSnapshot();
+  const pausedPositionMs =
+    snapshot.trackId === globalState.currentTrack.value?.id
+      ? snapshot.positionMs
+      : Math.max(0, Math.floor(globalState.currentTime.value * 1000));
+
+  if (isNativeIosPlatform()) {
+    // На iOS не держим MediaGrid/AVPlayer source в paused-состоянии:
+    // после конкуренции с scene-source повторный play того же source может зависнуть.
+    await releaseIosNativePausedSource(
+      service,
+      pausedPositionMs,
+      PAUSE_FADE_MS
+    );
+    pauseTimer();
+    return true;
+  }
+
   await service.pause({ fadeOutMs: PAUSE_FADE_MS });
+  globalState.iosNativePausedPositionMs = null;
   globalState.isPlaying.value = false;
   pauseTimer();
   return true;
@@ -1210,6 +1298,7 @@ async function stopNative(
   globalState.isPlaying.value = false;
   globalState.currentTrack.value = null;
   globalState.playbackMode = null;
+  globalState.iosNativePausedPositionMs = null;
   stopIntervals();
   clearTimer();
   resetProgress();
@@ -1219,7 +1308,16 @@ async function stopNative(
 async function seekNative(positionSeconds: number) {
   const service = await ensureNativeService();
   if (!service) return;
-  await service.seek(Math.floor(positionSeconds * 1000));
+  const positionMs = Math.floor(positionSeconds * 1000);
+  if (
+    isNativeIosPlatform() &&
+    globalState.playbackMode === 'native' &&
+    service.getSnapshot().trackId !== globalState.currentTrack.value?.id
+  ) {
+    globalState.iosNativePausedPositionMs = Math.max(0, positionMs);
+    return;
+  }
+  await service.seek(positionMs);
 }
 
 async function syncNativeLoopState() {
@@ -1345,9 +1443,10 @@ async function play(track: MeditationTrackDto, timerMinutes?: number | null) {
   }
   globalState.pendingBlockedPlay = null;
 
-  // Страховка от гонки: watcher видит isBuffering=true до любого await,
-  // и не успевает включить scene между stop и play при переключении треков.
+  // На native iOS/Android все meditation-треки идут через MediaGrid AudioPlayer:
+  // iOS loop использует AVPlayerLooper, Android loop — ExoPlayer REPEAT_MODE_ONE.
   if (shouldUseNativePlayback()) {
+    ensureAppStateListener();
     globalState.isBuffering.value = true;
     const handledByNative = await playNative(track, timerMinutes);
     if (handledByNative) return;
@@ -1368,24 +1467,6 @@ async function play(track: MeditationTrackDto, timerMinutes?: number | null) {
   const preferWebAudio = shouldPreferWebAudio(track);
   let mode: PlaybackMode = preferWebAudio ? 'webaudio' : 'html';
 
-  // Для больших не-loop файлов на мобильных принудительно используем HTML Audio
-  if (
-    mode === 'webaudio' &&
-    isMobileUserAgent() &&
-    !track.isLoop &&
-    track.durationSeconds &&
-    track.durationSeconds > 300
-  ) {
-    console.warn(
-      '[MeditationPlayer] Large non-loop file detected, forcing HTML Audio on mobile:',
-      {
-        trackId: track.id,
-        duration: track.durationSeconds,
-      }
-    );
-    mode = 'html';
-  }
-
   const shouldUseWebAudio = mode === 'webaudio' && isWebAudioAvailable();
   if (shouldUseWebAudio) {
     const unlocked = await unlockAudioContext();
@@ -1393,7 +1474,7 @@ async function play(track: MeditationTrackDto, timerMinutes?: number | null) {
       // Для лупов не падаем на HTML, чтобы не было слышимого шва.
       globalState.isPlaying.value = false;
       globalState.isBuffering.value = false;
-      scheduleGestureUnlock(track, timerMinutes ?? null);
+      scheduleGestureUnlock(track, timerMinutes);
       return;
     }
   }
@@ -1593,7 +1674,7 @@ async function play(track: MeditationTrackDto, timerMinutes?: number | null) {
         globalState.isBuffering.value = false;
         if (isAutoplayBlockedError(playbackResult.error)) {
           // Браузер ждёт жест — ставим отложенный старт.
-          scheduleGestureUnlock(track, timerMinutes ?? null);
+          scheduleGestureUnlock(track, timerMinutes);
         } else if (playbackResult.timedOut) {
           console.error(
             '[MeditationPlayer] Playback timeout, file may be corrupted or too large'
@@ -1776,16 +1857,13 @@ function clearQueue() {
 export function useMeditationPlayer() {
   ensureNativeModeResolved();
 
-  // Слушатели visibility/appState нужны всегда — таймер медитации работает через JS setInterval,
-  // который замораживается ОС в фоне. При возврате проверяем, не истёк ли таймер.
-  ensureVisibilityListener();
-  ensureAppStateListener();
-
   if (globalState.nativeModeEnabled) {
     void ensureNativeService();
   } else {
     // Регистрируем слушатель жестов заранее, чтобы автозапуск был стабильнее.
     ensureGlobalGestureUnlock();
+    ensureVisibilityListener();
+    ensureAppStateListener();
     ensurePlaybackAudioSessionType();
   }
 

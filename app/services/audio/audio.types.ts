@@ -13,7 +13,7 @@ export type AudioServiceTrack = {
   id: string;
   url: string;
   title: string;
-  category: 'meditation' | 'breathing';
+  category: 'meditation' | 'breathing' | 'scene';
   artworkUrl?: string | null;
   durationMs?: number | null;
   isLoop?: boolean;
@@ -24,6 +24,7 @@ export type AudioServicePlayOptions = {
   volume?: number;
   rate?: number;
   fadeInMs?: number;
+  startPositionMs?: number;
 };
 
 export type AudioServicePauseOptions = {
@@ -60,6 +61,8 @@ export interface AudioService {
   setLoop(enabled: boolean): Promise<void>;
   setVolume(value: number, fadeMs?: number): Promise<void>;
   setRate(rate: number): Promise<void>;
+  scheduleStop(delayMs: number): Promise<void>;
+  clearScheduledStop(): Promise<void>;
   getSnapshot(): AudioServiceSnapshot;
   subscribe(handler: AudioServiceEventHandler): () => void;
   destroy(): Promise<void>;
