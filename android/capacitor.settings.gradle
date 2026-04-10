@@ -14,9 +14,6 @@ project(':capacitor-app').projectDir = new File('../node_modules/.pnpm/@capacito
 include ':capacitor-clipboard'
 project(':capacitor-clipboard').projectDir = new File('../node_modules/.pnpm/@capacitor+clipboard@7.0.2_@capacitor+core@7.4.3/node_modules/@capacitor/clipboard/android')
 
-include ':capacitor-filesystem'
-project(':capacitor-filesystem').projectDir = new File('../node_modules/.pnpm/@capacitor+filesystem@7.1.8_@capacitor+core@7.4.3/node_modules/@capacitor/filesystem/android')
-
 include ':capacitor-haptics'
 project(':capacitor-haptics').projectDir = new File('../node_modules/.pnpm/@capacitor+haptics@7.0.2_@capacitor+core@7.4.3/node_modules/@capacitor/haptics/android')
 
@@ -41,8 +38,8 @@ project(':capacitor-status-bar').projectDir = new File('../node_modules/.pnpm/@c
 include ':capgo-capacitor-social-login'
 project(':capgo-capacitor-social-login').projectDir = new File('../node_modules/.pnpm/@capgo+capacitor-social-login@7.20.0_patch_hash=494f63e7b7f9e31eb1bfe9f162a2ac49a717948_09f6fb5a1db32fd44b4bf5e71e6fb80f/node_modules/@capgo/capacitor-social-login/android')
 
-include ':capgo-native-audio'
-project(':capgo-native-audio').projectDir = new File('../node_modules/.pnpm/@capgo+native-audio@7.11.2_@capacitor+core@7.4.3/node_modules/@capgo/native-audio/android')
+include ':mediagrid-capacitor-native-audio'
+project(':mediagrid-capacitor-native-audio').projectDir = new File('../node_modules/.pnpm/@mediagrid+capacitor-native-audio@2.3.2_patch_hash=2e58b0d1e1e7d66b1104f4465cd95b53eed7_af4d670fa7f37a77984f8a0cc26a87f5/node_modules/@mediagrid/capacitor-native-audio/android')
 
 include ':capacitor-native-settings'
 project(':capacitor-native-settings').projectDir = new File('../node_modules/.pnpm/capacitor-native-settings@7.0.2_@capacitor+core@7.4.3/node_modules/capacitor-native-settings/android')

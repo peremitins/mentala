@@ -42,11 +42,12 @@ export function shouldInterruptRealtimeAssistantOnSpeechStart(params: {
     return false;
   }
 
-  if (params.platform === 'web') {
-    return true;
+  if (params.platform !== 'web') {
+    // На mobile полностью отключаем client-side interrupt:
+    // ложные speech-start от шорохов и собственного playback дают
+    // слишком много лишних response.cancel.
+    return false;
   }
 
-  // На mobile не прерываем ассистента, пока реально играет его звук:
-  // Android/iOS WebView часто ловят свой же playback как новый speech-start.
-  return !params.isAssistantAudioPlaying;
+  return true;
 }

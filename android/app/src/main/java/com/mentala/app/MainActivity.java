@@ -11,7 +11,6 @@ import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginHandle;
 
-import com.mentala.app.audio.MentalaAudioForegroundPlugin;
 import com.mentala.app.realtime.MentalaRealtimeVoiceAudioPlugin;
 import com.mentala.app.realtime.MentalaRealtimeVoiceForegroundPlugin;
 import com.mentala.app.ui.MentalaSafeAreaPlugin;
@@ -88,7 +87,6 @@ public class MainActivity extends BridgeActivity implements ModifiedMainActivity
     // Локальные Capacitor plugins должны регистрироваться до super.onCreate(),
     // иначе Bridge создастся без их PluginHeaders и JS увидит
     // "plugin is not implemented on android".
-    registerPlugin(MentalaAudioForegroundPlugin.class);
     registerPlugin(MentalaRealtimeVoiceAudioPlugin.class);
     registerPlugin(MentalaRealtimeVoiceForegroundPlugin.class);
     registerPlugin(MentalaSafeAreaPlugin.class);

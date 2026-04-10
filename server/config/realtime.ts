@@ -39,6 +39,26 @@ function readFloatInRange(
   return Math.min(max, Math.max(min, parsed));
 }
 
+function readEnumValue<T extends string>(
+  value: string | undefined,
+  fallback: T,
+  allowedValues: readonly T[]
+): T {
+  const normalized = String(value || '')
+    .trim()
+    .toLowerCase();
+  if (!normalized) {
+    return fallback;
+  }
+
+  return (allowedValues as readonly string[]).includes(normalized)
+    ? (normalized as T)
+    : fallback;
+}
+
+export type RealtimeVoiceTurnDetectionMode = 'semantic_vad' | 'server_vad';
+export type RealtimeVoiceVadEagerness = 'low' | 'medium' | 'high' | 'auto';
+
 // Месячный лимит голосового диалога в минутах. -1 = безлимит.
 export const REALTIME_VOICE_MONTHLY_LIMIT_MINUTES = readLimitInt(
   process.env.REALTIME_VOICE_MONTHLY_LIMIT_MINUTES,
@@ -69,9 +89,23 @@ export const REALTIME_VOICE_OPENAI_VOICE =
 export const REALTIME_VOICE_TRANSCRIPTION_MODEL =
   process.env.OPENAI_REALTIME_TRANSCRIPTION_MODEL || 'gpt-4o-mini-transcribe';
 
+export const REALTIME_VOICE_TURN_DETECTION_MODE =
+  readEnumValue<RealtimeVoiceTurnDetectionMode>(
+    process.env.OPENAI_REALTIME_TURN_DETECTION_MODE,
+    'semantic_vad',
+    ['semantic_vad', 'server_vad']
+  );
+
+export const REALTIME_VOICE_VAD_EAGERNESS =
+  readEnumValue<RealtimeVoiceVadEagerness>(
+    process.env.OPENAI_REALTIME_VAD_EAGERNESS,
+    'low',
+    ['low', 'medium', 'high', 'auto']
+  );
+
 export const REALTIME_VOICE_TURN_THRESHOLD = readFloatInRange(
   process.env.OPENAI_REALTIME_TURN_THRESHOLD,
-  0.5,
+  0.7,
   0.1,
   0.95
 );
@@ -83,7 +117,7 @@ export const REALTIME_VOICE_PREFIX_PADDING_MS = readPositiveInt(
 
 export const REALTIME_VOICE_SILENCE_DURATION_MS = readPositiveInt(
   process.env.OPENAI_REALTIME_SILENCE_DURATION_MS,
-  600
+  1000
 );
 
 export const REALTIME_VOICE_CLIENT_SECRET_TIMEOUT_MS = readPositiveInt(

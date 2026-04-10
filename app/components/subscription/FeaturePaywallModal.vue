@@ -19,13 +19,28 @@
         </h2>
       </DialogHeader>
 
-      <div class="mt-3 flex gap-2">
-        <Button class="flex-1" @click="goToSubscription">
+      <div class="mt-3 space-y-2">
+        <Button class="w-full" @click="goToSubscription">
           {{ ctaText }}
         </Button>
-        <Button variant="outline" class="flex-1" @click="onOpenChange(false)">
-          Позже
-        </Button>
+        <div
+          :class="
+            shouldShowPromoCodeCta
+              ? 'grid gap-2 sm:grid-cols-2'
+              : 'grid grid-cols-1'
+          "
+        >
+          <Button
+            v-if="shouldShowPromoCodeCta"
+            variant="outline"
+            @click="goToPromoCode"
+          >
+            Есть промокод?
+          </Button>
+          <Button variant="outline" @click="onOpenChange(false)">
+            Позже
+          </Button>
+        </div>
       </div>
     </DialogContent>
   </Dialog>
@@ -36,6 +51,7 @@ import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { navigateTo } from '#app';
 import { Button } from '@/app/components/ui/button';
+import { useSubscriptionStore } from '@/app/stores/subscription';
 import {
   getLocalizedPlanName,
   getLocalizedRequiredPlanLabel,
@@ -60,6 +76,7 @@ type FeaturePaywall = {
 };
 
 const { t } = useI18n();
+const subscriptionStore = useSubscriptionStore();
 
 function normalizePaywallText(text: string, requiredPlan: PlanId): string {
   if (!text) return text;
@@ -197,6 +214,12 @@ const ctaText = computed(() => {
   return t('PLANS.SELECT_PLAN');
 });
 
+const shouldShowPromoCodeCta = computed(() => {
+  // Показываем промо-CTA только для yookassa: undefined/null тоже скрывает,
+  // чтобы на iOS не мелькнул forbidden-контрол пока subscriptionData грузится.
+  return subscriptionStore.subscriptionData?.billingProviderHint === 'yookassa';
+});
+
 function onOpenChange(value: boolean) {
   emit('update:open', value);
 }
@@ -208,6 +231,18 @@ async function goToSubscription() {
     query: {
       plan: targetPlan.value,
       feature: props.featureKey || undefined,
+    },
+  });
+}
+
+async function goToPromoCode() {
+  onOpenChange(false);
+  await navigateTo({
+    path: '/subscription',
+    query: {
+      plan: targetPlan.value,
+      feature: props.featureKey || undefined,
+      promo: '1',
     },
   });
 }

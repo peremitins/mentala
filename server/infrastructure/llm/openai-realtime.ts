@@ -6,7 +6,10 @@ import {
   REALTIME_VOICE_PREFIX_PADDING_MS,
   REALTIME_VOICE_SILENCE_DURATION_MS,
   REALTIME_VOICE_TRANSCRIPTION_MODEL,
+  REALTIME_VOICE_TURN_DETECTION_MODE,
   REALTIME_VOICE_TURN_THRESHOLD,
+  REALTIME_VOICE_VAD_EAGERNESS,
+  type RealtimeVoiceVadEagerness,
 } from '@/server/config/realtime';
 import { CHAT_MEMORY_SOFT_INPUT_TOKENS } from '@/server/config/chatMemory';
 import {
@@ -32,14 +35,21 @@ export type OpenAiRealtimeSessionConfig = {
       noise_reduction: {
         type: 'near_field';
       };
-      turn_detection: {
-        type: 'server_vad';
-        threshold: number;
-        prefix_padding_ms: number;
-        silence_duration_ms: number;
-        create_response: boolean;
-        interrupt_response: boolean;
-      };
+      turn_detection:
+        | {
+            type: 'server_vad';
+            threshold: number;
+            prefix_padding_ms: number;
+            silence_duration_ms: number;
+            create_response: boolean;
+            interrupt_response: boolean;
+          }
+        | {
+            type: 'semantic_vad';
+            eagerness: RealtimeVoiceVadEagerness;
+            create_response: boolean;
+            interrupt_response: boolean;
+          };
       transcription: {
         model: string;
       };
@@ -51,6 +61,28 @@ export type OpenAiRealtimeSessionConfig = {
 };
 
 const REALTIME_VOICE_CONTEXT_RETENTION_RATIO = 0.8;
+
+function buildRealtimeTurnDetectionConfig(): OpenAiRealtimeSessionConfig['audio']['input']['turn_detection'] {
+  if (REALTIME_VOICE_TURN_DETECTION_MODE === 'server_vad') {
+    return {
+      type: 'server_vad',
+      threshold: REALTIME_VOICE_TURN_THRESHOLD,
+      prefix_padding_ms: REALTIME_VOICE_PREFIX_PADDING_MS,
+      silence_duration_ms: REALTIME_VOICE_SILENCE_DURATION_MS,
+      create_response: true,
+      interrupt_response: false,
+    };
+  }
+
+  return {
+    // Semantic VAD меньше реагирует на короткие шорохи и паузы,
+    // поэтому держим его основным режимом для voice UX.
+    type: 'semantic_vad',
+    eagerness: REALTIME_VOICE_VAD_EAGERNESS,
+    create_response: true,
+    interrupt_response: false,
+  };
+}
 
 function getOpenAiProviderHeaders(apiKey: string): Record<string, string> {
   const organization =
@@ -85,14 +117,7 @@ export function buildOpenAiRealtimeSessionConfig(params: {
         noise_reduction: {
           type: 'near_field',
         },
-        turn_detection: {
-          type: 'server_vad',
-          threshold: REALTIME_VOICE_TURN_THRESHOLD,
-          prefix_padding_ms: REALTIME_VOICE_PREFIX_PADDING_MS,
-          silence_duration_ms: REALTIME_VOICE_SILENCE_DURATION_MS,
-          create_response: true,
-          interrupt_response: false,
-        },
+        turn_detection: buildRealtimeTurnDetectionConfig(),
         transcription: {
           model: REALTIME_VOICE_TRANSCRIPTION_MODEL,
         },

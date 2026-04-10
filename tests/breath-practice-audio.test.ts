@@ -6,9 +6,15 @@ const howlerMocks = vi.hoisted(() => {
 
     private listeners = new Map<string, Set<(...args: unknown[]) => void>>();
     private activeIds = new Set<number>();
+    private knownIds = new Set<number>();
     private nextId = 0;
     private currentVolume = 1;
     private currentState: 'loaded' | 'loading' | 'unloaded' = 'loaded';
+    // Количество Sound'ов, созданных этим Howl'ом. Растёт только при
+    // вызове play() без id — именно этот путь в Howler проходит через
+    // _inactiveSound и может утечь html5 Audio-ноду через drain. Тесты
+    // используют это поле как прокси "утечки пула".
+    soundsCreated = 0;
     unloaded = false;
 
     constructor(public options: Record<string, unknown>) {
@@ -37,10 +43,23 @@ const howlerMocks = vi.hoisted(() => {
       }
     }
 
-    play() {
-      const id = ++this.nextId;
-      this.activeIds.add(id);
-      return id;
+    play(id?: number) {
+      if (typeof id === 'number') {
+        // Переиспользование существующего Sound через _soundById.
+        // Если id неизвестен — считаем это ошибкой (имитируем поведение
+        // реального Howler, где _soundById вернёт null).
+        if (!this.knownIds.has(id)) {
+          throw new Error(`FakeHowl.play: unknown sound id ${id}`);
+        }
+        this.activeIds.add(id);
+        return id;
+      }
+
+      const newId = ++this.nextId;
+      this.knownIds.add(newId);
+      this.activeIds.add(newId);
+      this.soundsCreated += 1;
+      return newId;
     }
 
     stop(id?: number) {
@@ -75,6 +94,7 @@ const howlerMocks = vi.hoisted(() => {
     unload() {
       this.unloaded = true;
       this.activeIds.clear();
+      this.knownIds.clear();
     }
   }
 
@@ -212,5 +232,62 @@ describe('breath practice audio hardening', () => {
     expect(
       howlerMocks.FakeHowl.instances.every((instance) => instance.unloaded)
     ).toBe(true);
+  });
+
+  it('playCue переиспользует один Sound на Howl и не создаёт новые на повторных вызовах', async () => {
+    // Регрессионный тест на баг: после нескольких переключений фаз cue-треки
+    // молча переставали звучать. Причина — Howler создавал новый Sound при
+    // каждом sound.play() без id (_inactiveSound → drain), и каждый drain
+    // в html5-режиме навсегда утекал HTMLAudioElement из глобального пула.
+    // Фикс: все повторные вызовы идут через sound.play(persistentId).
+    stubBrowserGlobals();
+
+    const { useBreathPracticeAudio } = await import(
+      '../app/composables/useBreathPracticeAudio'
+    );
+
+    const audio = useBreathPracticeAudio();
+    await audio.prepare();
+
+    // Прогоняем длинную серию фаз — если бы код шёл через play() без id,
+    // soundsCreated рос бы до 20 для каждого Howl.
+    for (let i = 0; i < 5; i++) {
+      await audio.playCue('inhale', 0.5);
+      await audio.playCue('hold', 0.5);
+      await audio.playCue('exhale', 0.5);
+      await audio.playCue('pause', 0.5);
+    }
+
+    // Ровно 4 Howl-а — по одному на cue-тип.
+    expect(howlerMocks.FakeHowl.instances).toHaveLength(4);
+    // Каждый Howl создал ровно ОДИН Sound и дальше переиспользовал его.
+    for (const instance of howlerMocks.FakeHowl.instances) {
+      expect(instance.soundsCreated).toBe(1);
+    }
+  });
+
+  it('voice.play переиспользует один Sound на Howl между повторными проигрываниями', async () => {
+    stubBrowserGlobals();
+
+    const { useBreathPracticeVoice } = await import(
+      '../app/composables/useBreathPracticeVoice'
+    );
+
+    const voice = useBreathPracticeVoice();
+    await voice.prepare('formal');
+
+    // Несколько циклов по всем фазам — проверяем, что повторные play()
+    // не плодят новые Sound'ы.
+    for (let i = 0; i < 3; i++) {
+      await voice.play('inhale', 'formal');
+      await voice.play('hold', 'formal');
+      await voice.play('exhale', 'formal');
+      await voice.play('pause', 'formal');
+      await voice.play('intro', 'formal');
+    }
+
+    for (const instance of howlerMocks.FakeHowl.instances) {
+      expect(instance.soundsCreated).toBe(1);
+    }
   });
 });

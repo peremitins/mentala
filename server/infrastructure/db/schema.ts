@@ -1652,6 +1652,364 @@ export const billingChargeAttempts = pgTable(
   })
 );
 
+// Admin-created одноразовые промокампании.
+export const promoCampaigns = pgTable(
+  'promo_campaigns',
+  {
+    id: serial('id').primaryKey(),
+    code: varchar('code', { length: 64 }).notNull(),
+    status: varchar('status', { length: 20 }).notNull().default('draft'),
+    campaignType: varchar('campaign_type', { length: 50 }).notNull(),
+    bindingMode: varchar('binding_mode', { length: 20 })
+      .notNull()
+      .default('none'),
+    targetUserId: integer('target_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    targetEmail: varchar('target_email', { length: 255 }),
+    startsAt: timestamp('starts_at', { withTimezone: true }),
+    endsAt: timestamp('ends_at', { withTimezone: true }),
+    benefitPayload: jsonb('benefit_payload').notNull().default({}),
+    adminComment: text('admin_comment'),
+    createdBy: integer('created_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    updatedBy: integer('updated_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    codeUnique: unique('uk_promo_campaigns_code').on(table.code),
+    statusIdx: index('idx_promo_campaigns_status').on(table.status),
+    startsEndsIdx: index('idx_promo_campaigns_dates').on(
+      table.startsAt,
+      table.endsAt
+    ),
+  })
+);
+
+// Факт успешного redeem одноразового промокода.
+export const promoCodeRedemptions = pgTable(
+  'promo_code_redemptions',
+  {
+    id: serial('id').primaryKey(),
+    campaignId: integer('campaign_id')
+      .notNull()
+      .references(() => promoCampaigns.id, { onDelete: 'cascade' }),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    status: varchar('status', { length: 20 }).notNull().default('succeeded'),
+    redeemedAt: timestamp('redeemed_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    campaignSnapshot: jsonb('campaign_snapshot').notNull().default({}),
+    resultPayload: jsonb('result_payload').default({}),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    campaignUnique: unique('uk_promo_code_redemptions_campaign').on(
+      table.campaignId
+    ),
+    userIdx: index('idx_promo_code_redemptions_user').on(table.userId),
+  })
+);
+
+// Персональный referral-code пользователя и агрегаты по программе.
+export const userReferralProfiles = pgTable(
+  'user_referral_profiles',
+  {
+    userId: integer('user_id')
+      .primaryKey()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    code: varchar('code', { length: 64 }).notNull(),
+    successfulInvitesCount: integer('successful_invites_count')
+      .notNull()
+      .default(0),
+    pendingRewardsCount: integer('pending_rewards_count').notNull().default(0),
+    blocked: boolean('blocked').notNull().default(false),
+    lastRewardIssuedAt: timestamp('last_reward_issued_at', {
+      withTimezone: true,
+    }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    codeUnique: unique('uk_user_referral_profiles_code').on(table.code),
+  })
+);
+
+// Глобальные настройки referral-программы.
+export const referralProgramSettings = pgTable('referral_program_settings', {
+  id: text('id').primaryKey().default('default'),
+  enabled: boolean('enabled').notNull().default(true),
+  inviteePercent: integer('invitee_percent').notNull().default(20),
+  referrerPercent: integer('referrer_percent').notNull().default(20),
+  inviteeRewardValidityDays: integer('invitee_reward_validity_days')
+    .notNull()
+    .default(30),
+  creditHoldDays: integer('credit_hold_days').notNull().default(14),
+  inviteeTargetPlanScope: varchar('invitee_target_plan_scope', {
+    length: 20,
+  })
+    .notNull()
+    .default('any_paid'),
+  inviteeTargetPeriodScope: varchar('invitee_target_period_scope', {
+    length: 10,
+  })
+    .notNull()
+    .default('any'),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+// Факт применения referral-кода invitee'ом.
+export const referralRedemptions = pgTable(
+  'referral_redemptions',
+  {
+    id: serial('id').primaryKey(),
+    referrerUserId: integer('referrer_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    inviteeUserId: integer('invitee_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    referralCode: varchar('referral_code', { length: 64 }).notNull(),
+    status: varchar('status', { length: 30 })
+      .notNull()
+      .default('pending_conversion'),
+    inviteeRewardGrantId: integer('invitee_reward_grant_id'),
+    redeemedAt: timestamp('redeemed_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    convertedAt: timestamp('converted_at', { withTimezone: true }),
+    rewardIssuedAt: timestamp('reward_issued_at', { withTimezone: true }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    metadata: jsonb('metadata').notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    inviteeUnique: unique('uk_referral_redemptions_invitee').on(
+      table.inviteeUserId
+    ),
+    referrerIdx: index('idx_referral_redemptions_referrer').on(
+      table.referrerUserId,
+      table.redeemedAt
+    ),
+  })
+);
+
+// Ledger накопительных billing credits: pending, доступные и компенсационные движения.
+export const billingCreditEntries = pgTable(
+  'billing_credit_entries',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    entryType: varchar('entry_type', { length: 50 }).notNull(),
+    status: varchar('status', { length: 20 }).notNull().default('posted'),
+    amount: numeric('amount', { precision: 10, scale: 2 }).notNull(),
+    availableAt: timestamp('available_at', { withTimezone: true }),
+    postedAt: timestamp('posted_at', { withTimezone: true }),
+    reversedAt: timestamp('reversed_at', { withTimezone: true }),
+    sourceReferralRedemptionId: integer('source_referral_redemption_id')
+      .references(() => referralRedemptions.id, {
+        onDelete: 'set null',
+      }),
+    sourceSubscriptionId: integer('source_subscription_id').references(
+      () => userSubscriptions.id,
+      {
+        onDelete: 'set null',
+      }
+    ),
+    sourcePaymentId: text('source_payment_id'),
+    metadata: jsonb('metadata').notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    userStatusAvailableIdx: index(
+      'idx_billing_credit_entries_user_status_available'
+    ).on(table.userId, table.status, table.availableAt),
+    referralIdx: index('idx_billing_credit_entries_referral').on(
+      table.sourceReferralRedemptionId
+    ),
+    subscriptionIdx: index('idx_billing_credit_entries_subscription').on(
+      table.sourceSubscriptionId
+    ),
+  })
+);
+
+// Временный access overlay поверх trial/paid-plan.
+export const billingAccessGrants = pgTable(
+  'billing_access_grants',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    sourceCampaignId: integer('source_campaign_id').references(
+      () => promoCampaigns.id,
+      { onDelete: 'set null' }
+    ),
+    sourceRedemptionId: integer('source_redemption_id').references(
+      () => promoCodeRedemptions.id,
+      { onDelete: 'set null' }
+    ),
+    planId: varchar('plan_id', { length: 50 })
+      .notNull()
+      .references(() => subscriptionPlans.id),
+    startsAt: timestamp('starts_at', { withTimezone: true }).notNull(),
+    endsAt: timestamp('ends_at', { withTimezone: true }).notNull(),
+    status: varchar('status', { length: 20 }).notNull().default('active'),
+    metadata: jsonb('metadata').notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    userStatusEndsIdx: index('idx_billing_access_grants_user_status_ends').on(
+      table.userId,
+      table.status,
+      table.endsAt
+    ),
+  })
+);
+
+// Будущая скидка на ближайший qualifying payment.
+export const billingDiscountGrants = pgTable(
+  'billing_discount_grants',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    provider: varchar('provider', { length: 20 }).notNull().default('yookassa'),
+    grantKind: varchar('grant_kind', { length: 30 }).notNull(),
+    sourceCampaignId: integer('source_campaign_id').references(
+      () => promoCampaigns.id,
+      { onDelete: 'set null' }
+    ),
+    sourceRedemptionId: integer('source_redemption_id').references(
+      () => promoCodeRedemptions.id,
+      { onDelete: 'set null' }
+    ),
+    sourceReferralRedemptionId: integer(
+      'source_referral_redemption_id'
+    ).references(() => referralRedemptions.id, {
+      onDelete: 'set null',
+    }),
+    bindingMode: varchar('binding_mode', { length: 20 })
+      .notNull()
+      .default('none'),
+    targetPlanScope: varchar('target_plan_scope', { length: 20 })
+      .notNull()
+      .default('any_paid'),
+    targetPeriodScope: varchar('target_period_scope', { length: 10 })
+      .notNull()
+      .default('any'),
+    percent: integer('percent').notNull(),
+    status: varchar('status', { length: 20 }).notNull().default('active'),
+    reservationKey: varchar('reservation_key', { length: 255 }),
+    reservedAt: timestamp('reserved_at', { withTimezone: true }),
+    appliedAt: timestamp('applied_at', { withTimezone: true }),
+    appliedPaymentId: text('applied_payment_id'),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    metadata: jsonb('metadata').notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    userStatusExpiresIdx: index(
+      'idx_billing_discount_grants_user_status_expires'
+    ).on(table.userId, table.status, table.expiresAt),
+    reservationIdx: index('idx_billing_discount_grants_reservation').on(
+      table.reservationKey
+    ),
+  })
+);
+
+// Аудит "честного" сдвига платёжной границы при free access days.
+export const billingScheduleAdjustments = pgTable(
+  'billing_schedule_adjustments',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    days: integer('days').notNull(),
+    reason: varchar('reason', { length: 50 }).notNull(),
+    sourceCampaignId: integer('source_campaign_id').references(
+      () => promoCampaigns.id,
+      { onDelete: 'set null' }
+    ),
+    sourceRedemptionId: integer('source_redemption_id').references(
+      () => promoCodeRedemptions.id,
+      { onDelete: 'set null' }
+    ),
+    sourceAccessGrantId: integer('source_access_grant_id').references(
+      () => billingAccessGrants.id,
+      { onDelete: 'set null' }
+    ),
+    activeSubscriptionId: integer('active_subscription_id').references(
+      () => userSubscriptions.id,
+      { onDelete: 'set null' }
+    ),
+    appliedAt: timestamp('applied_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    metadata: jsonb('metadata').notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    userAppliedIdx: index('idx_billing_schedule_adjustments_user_applied').on(
+      table.userId,
+      table.appliedAt
+    ),
+  })
+);
+
 // Идемпотентность для команд (checkout, webhook, etc.)
 export const idempotencyKeys = pgTable(
   'idempotency_keys',
@@ -1747,7 +2105,9 @@ export const securityEvents = pgTable(
 
 export const appVersionPolicy = pgTable('app_version_policy', {
   platform: varchar('platform', { length: 20 }).primaryKey(), // 'ios' | 'android'
-  minimumSupportedBuild: integer('minimum_supported_build').notNull().default(1),
+  minimumSupportedBuild: integer('minimum_supported_build')
+    .notNull()
+    .default(1),
   storeUrl: text('store_url').notNull(),
   blockerTitle: text('blocker_title'),
   blockerMessage: text('blocker_message'),

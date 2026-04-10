@@ -15,6 +15,7 @@ import {
   resolveCurrentEntitlementsPlan,
 } from './trial-billing.service';
 import { resolveAiUsagePeriodStartedAt } from './usage-window.service';
+import { resolveEffectiveEntitlementsPlanWithAccessGrant } from '@/server/application/promo-codes/promo-access-grants.service';
 
 export type AiUsageGateStatus = 'ok' | 'no_ai_access' | 'weekly_limit_reached';
 
@@ -134,7 +135,7 @@ export async function getAiUsageGate(
     .limit(1);
 
   const sub = activeSubscription[0]?.subscription;
-  const entitlementsPlanId = user
+  const baseEntitlementsPlanId = user
     ? resolveCurrentEntitlementsPlan({
         now,
         trialActive,
@@ -145,6 +146,15 @@ export async function getAiUsageGate(
         graceEndsAt: user.graceEndsAt,
         activePaidPlanId: sub?.planId || null,
       })
+    : 'basic';
+  const entitlementsPlanId = user
+    ? (
+        await resolveEffectiveEntitlementsPlanWithAccessGrant({
+          userId,
+          basePlanId: baseEntitlementsPlanId,
+          now,
+        })
+      ).planId
     : 'basic';
   const entitlementsPlanRows = await db
     .select({

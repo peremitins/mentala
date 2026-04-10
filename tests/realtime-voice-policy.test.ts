@@ -36,6 +36,17 @@ describe('realtime voice policy', () => {
     ).toBe(false);
   });
 
+  it('полностью отключает client-side interrupt на mobile даже без активного playback ассистента', () => {
+    expect(
+      shouldInterruptRealtimeAssistantOnSpeechStart({
+        platform: 'ios',
+        activeResponseId: 'resp_1',
+        wasAlreadyInterrupted: false,
+        isAssistantAudioPlaying: false,
+      })
+    ).toBe(false);
+  });
+
   it('сохраняет barge-in на web', () => {
     expect(
       shouldInterruptRealtimeAssistantOnSpeechStart({

@@ -13,6 +13,7 @@ import {
   resolveCurrentEntitlementsPlan,
   normalizeBillingCollectionStatus,
 } from './trial-billing.service';
+import { resolveEffectiveEntitlementsPlanWithAccessGrant } from '@/server/application/promo-codes/promo-access-grants.service';
 
 export type PlanId = 'basic' | 'pro' | 'premium';
 export type LockIcon = 'pro' | 'premium';
@@ -416,7 +417,7 @@ export async function getBillingSnapshot(
     .limit(1);
 
   const active = activeSubscription[0];
-  const resolvedPlanId = normalizePlanId(
+  const basePlanId = normalizePlanId(
     resolveCurrentEntitlementsPlan({
       now,
       trialActive,
@@ -428,10 +429,15 @@ export async function getBillingSnapshot(
       activePaidPlanId: active?.subscription?.planId || null,
     })
   );
+  const effectivePlan = await resolveEffectiveEntitlementsPlanWithAccessGrant({
+    userId,
+    basePlanId,
+    now,
+  });
   // support-роль видим как Premium для review/QA, но без service-role bypass.
   const planId = isPremiumEquivalentRole(effectiveUserRole)
     ? 'premium'
-    : resolvedPlanId;
+    : normalizePlanId(effectivePlan.planId);
 
   const features = await getFeatures(
     {

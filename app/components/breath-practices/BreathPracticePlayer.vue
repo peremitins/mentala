@@ -332,6 +332,7 @@ const {
   release: releaseVoice,
 } = useBreathPracticeVoice();
 const { trigger: triggerHaptic } = useBreathPracticeHaptics();
+let appStateListener: { remove(): Promise<void> } | null = null;
 const phasePlaybackCycle = ref(0);
 const lastVoicePhaseCycle = ref(0);
 const lastSoundPhaseCycle = ref(0);
@@ -598,6 +599,23 @@ onMounted(async () => {
   if (props.autoStart) {
     player.start();
   }
+
+  // Пауза при уходе в фон (Android/iOS): без этого setInterval продолжает
+  // тикать в фоне, onPhaseStart вызывает play() на заблокированном аудио,
+  // и при возврате в приложение накопленные unlock-листенеры воспроизводят
+  // несколько звуков одновременно.
+  try {
+    const { App } = await import('@capacitor/app');
+    appStateListener = await App.addListener('appStateChange', ({ isActive }) => {
+      if (!isActive && isRunning.value && !isPaused.value) {
+        stopAudio(120);
+        stopVoice();
+        player.pause();
+      }
+    });
+  } catch {
+    // Capacitor недоступен в веб-версии — игнорируем
+  }
 });
 
 watch(
@@ -663,5 +681,6 @@ onBeforeUnmount(() => {
   releaseAudio();
   releaseVoice();
   player.stop();
+  void appStateListener?.remove();
 });
 </script>
