@@ -52,7 +52,7 @@
           @open="openDetail"
         />
         <PushRecoveryDialog
-          v-if="pushRecovery.showRecoveryDialog.value"
+          v-if="showPushRecoveryDialog"
           :open="pushRecovery.showRecoveryDialog.value"
           @update:open="
             (val) => {
@@ -130,6 +130,9 @@ const canPlaySceneAudio = computed(() => {
     !auth.loading &&
     onboardingCompleted
   );
+});
+const showPushRecoveryDialog = computed(() => {
+  return pushRecovery.showRecoveryDialog.value && auth.user?.role !== 'support';
 });
 
 const isAppActive = ref(true);
