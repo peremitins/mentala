@@ -205,4 +205,48 @@ describe('realtime voice transport', () => {
 
     expect(FakeAudio.instances[0]?.pause).toHaveBeenCalledTimes(1);
   });
+
+  it('повторяет transient handshake один раз и успешно подключается со второй попытки', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              code: 'realtime_webrtc_handshake_service_unavailable',
+              message:
+                'Голосовой сервер временно недоступен. Обычно это разовый сбой, можно попробовать ещё раз.',
+              retryable: true,
+            }),
+            {
+              status: 503,
+              headers: {
+                'Content-Type': 'application/json',
+              },
+            }
+          )
+        )
+        .mockResolvedValueOnce(
+          new Response('v=0\r\n', {
+            status: 200,
+          })
+        )
+    );
+
+    const { RealtimeVoiceTransport } = await import(
+      '../app/services/realtime/realtimeVoiceTransport'
+    );
+
+    const transport = new RealtimeVoiceTransport();
+
+    await expect(
+      transport.start({
+        webrtcUrl: 'https://api.openai.com/v1/realtime/calls',
+        onEvent: vi.fn(),
+      })
+    ).resolves.toBeUndefined();
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
 });

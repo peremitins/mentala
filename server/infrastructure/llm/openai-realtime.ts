@@ -19,6 +19,194 @@ import {
 
 const OPENAI_REALTIME_CALLS_URL = 'https://api.openai.com/v1/realtime/calls';
 
+type RealtimeWebRtcHandshakeErrorCode =
+  | 'realtime_webrtc_handshake_timeout'
+  | 'realtime_webrtc_handshake_network_error'
+  | 'realtime_webrtc_handshake_service_unavailable'
+  | 'realtime_webrtc_handshake_rate_limited'
+  | 'realtime_webrtc_handshake_invalid_response'
+  | 'realtime_webrtc_handshake_rejected';
+
+type RealtimeWebRtcHandshakeFailure = Error & {
+  statusCode: number;
+  statusMessage: string;
+  data: {
+    code: RealtimeWebRtcHandshakeErrorCode;
+    retryable: boolean;
+    userMessage: string;
+    failureKind:
+      | 'timeout'
+      | 'network'
+      | 'service_unavailable'
+      | 'rate_limited'
+      | 'invalid_response'
+      | 'rejected';
+    upstreamStatus: number | null;
+  };
+};
+
+function normalizeErrorMessage(error: any): string {
+  if (typeof error?.message === 'string' && error.message.trim().length > 0) {
+    return error.message.trim();
+  }
+
+  if (
+    typeof error?.statusMessage === 'string' &&
+    error.statusMessage.trim().length > 0
+  ) {
+    return error.statusMessage.trim();
+  }
+
+  return 'Unknown realtime handshake error';
+}
+
+function normalizeErrorStatusCode(error: any): number | null {
+  const value =
+    error?.statusCode ?? error?.status ?? error?.response?.status ?? null;
+
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function buildRealtimeHandshakeFailure(params: {
+  statusCode: number;
+  code: RealtimeWebRtcHandshakeErrorCode;
+  retryable: boolean;
+  userMessage: string;
+  statusMessage: string;
+  failureKind: RealtimeWebRtcHandshakeFailure['data']['failureKind'];
+  upstreamStatus?: number | null;
+}): RealtimeWebRtcHandshakeFailure {
+  return createError({
+    statusCode: params.statusCode,
+    statusMessage: params.statusMessage,
+    data: {
+      code: params.code,
+      retryable: params.retryable,
+      userMessage: params.userMessage,
+      failureKind: params.failureKind,
+      upstreamStatus:
+        typeof params.upstreamStatus === 'number' &&
+        Number.isFinite(params.upstreamStatus)
+          ? params.upstreamStatus
+          : null,
+    },
+  }) as RealtimeWebRtcHandshakeFailure;
+}
+
+function classifyRealtimeHandshakeError(
+  error: any
+): RealtimeWebRtcHandshakeFailure {
+  const message = normalizeErrorMessage(error);
+  const normalizedMessage = message.toLowerCase();
+  const upstreamStatus = normalizeErrorStatusCode(error);
+  const isTimeout =
+    error?.name === 'AbortError' ||
+    normalizedMessage.includes('timeout') ||
+    normalizedMessage.includes('timed out') ||
+    normalizedMessage.includes('aborted');
+
+  if (isTimeout) {
+    return buildRealtimeHandshakeFailure({
+      statusCode: 504,
+      statusMessage: 'Realtime WebRTC handshake timed out',
+      code: 'realtime_webrtc_handshake_timeout',
+      retryable: true,
+      userMessage:
+        'Не удалось быстро подключить голосовой чат. Похоже, сеть или голосовой сервер ответили слишком медленно. Попробуй ещё раз.',
+      failureKind: 'timeout',
+      upstreamStatus,
+    });
+  }
+
+  const isNetworkError =
+    normalizedMessage.includes('fetch failed') ||
+    normalizedMessage.includes('failed to fetch') ||
+    normalizedMessage.includes('network request failed') ||
+    normalizedMessage.includes(
+      'networkerror when attempting to fetch resource'
+    ) ||
+    normalizedMessage.includes('socket hang up') ||
+    normalizedMessage.includes('econnreset') ||
+    normalizedMessage.includes('enotfound') ||
+    normalizedMessage.includes('ehostunreach') ||
+    normalizedMessage.includes('eai_again');
+
+  if (isNetworkError) {
+    return buildRealtimeHandshakeFailure({
+      statusCode: 503,
+      statusMessage: 'Realtime WebRTC handshake network error',
+      code: 'realtime_webrtc_handshake_network_error',
+      retryable: true,
+      userMessage:
+        'Не удалось подключить голосовой чат из-за сетевого сбоя. Проверь интернет и попробуй ещё раз.',
+      failureKind: 'network',
+      upstreamStatus,
+    });
+  }
+
+  if (upstreamStatus === 429) {
+    return buildRealtimeHandshakeFailure({
+      statusCode: 503,
+      statusMessage: 'Realtime WebRTC handshake rate limited',
+      code: 'realtime_webrtc_handshake_rate_limited',
+      retryable: false,
+      userMessage:
+        'Голосовой сервер сейчас перегружен. Попробуй ещё раз чуть позже.',
+      failureKind: 'rate_limited',
+      upstreamStatus,
+    });
+  }
+
+  if (typeof upstreamStatus === 'number' && upstreamStatus >= 500) {
+    return buildRealtimeHandshakeFailure({
+      statusCode: 503,
+      statusMessage: 'Realtime WebRTC handshake service unavailable',
+      code: 'realtime_webrtc_handshake_service_unavailable',
+      retryable: true,
+      userMessage:
+        'Голосовой сервер временно недоступен. Обычно это разовый сбой, можно попробовать ещё раз.',
+      failureKind: 'service_unavailable',
+      upstreamStatus,
+    });
+  }
+
+  if (
+    normalizedMessage.includes('empty sdp answer') ||
+    normalizedMessage.includes('returned empty sdp answer')
+  ) {
+    return buildRealtimeHandshakeFailure({
+      statusCode: 502,
+      statusMessage: 'Realtime WebRTC handshake returned invalid SDP answer',
+      code: 'realtime_webrtc_handshake_invalid_response',
+      retryable: true,
+      userMessage:
+        'Голосовой сервер вернул некорректный ответ. Обычно помогает повторная попытка.',
+      failureKind: 'invalid_response',
+      upstreamStatus,
+    });
+  }
+
+  return buildRealtimeHandshakeFailure({
+    statusCode: 502,
+    statusMessage: 'Realtime WebRTC handshake was rejected',
+    code: 'realtime_webrtc_handshake_rejected',
+    retryable: false,
+    userMessage:
+      'Не удалось подготовить голосовой чат. Попробуй ещё раз чуть позже.',
+    failureKind: 'rejected',
+    upstreamStatus,
+  });
+}
+
+export function isRealtimeWebRtcHandshakeFailure(
+  error: unknown
+): error is RealtimeWebRtcHandshakeFailure {
+  const code = (error as RealtimeWebRtcHandshakeFailure | undefined)?.data
+    ?.code;
+
+  return typeof code === 'string' && code.startsWith('realtime_webrtc_');
+}
+
 export type OpenAiRealtimeSessionConfig = {
   type: 'realtime';
   model: string;
@@ -207,11 +395,17 @@ export async function exchangeOpenAiRealtimeWebRtcSdp(params: {
     const response = await fetch(OPENAI_REALTIME_CALLS_URL, requestInit);
     const answerSdp = await response.text();
     if (!response.ok) {
-      throw new Error(
+      const upstreamError = new Error(
         answerSdp.trim().length > 0
           ? `OpenAI realtime call failed: ${response.status} ${answerSdp}`
           : `OpenAI realtime call failed: ${response.status}`
-      );
+      ) as Error & {
+        statusCode?: number;
+        status?: number;
+      };
+      upstreamError.statusCode = response.status;
+      upstreamError.status = response.status;
+      throw upstreamError;
     }
 
     if (!answerSdp.trim()) {
@@ -222,18 +416,13 @@ export async function exchangeOpenAiRealtimeWebRtcSdp(params: {
   } catch (error: any) {
     console.error('[RealtimeVoice] Failed to exchange realtime SDP:', {
       message: error?.message,
+      statusCode: normalizeErrorStatusCode(error),
       sdpLength: sdp.length,
       endsWithCrLf: sdp.endsWith('\r\n'),
       usesUnifiedSessionConfig: Boolean(sessionConfig),
       usedRelay: isRelayEnabled(),
     });
 
-    throw createError({
-      statusCode: 502,
-      statusMessage: 'Failed to complete realtime WebRTC handshake',
-      data: {
-        code: 'realtime_webrtc_handshake_failed',
-      },
-    });
+    throw classifyRealtimeHandshakeError(error);
   }
 }

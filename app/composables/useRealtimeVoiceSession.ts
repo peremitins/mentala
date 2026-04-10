@@ -115,6 +115,17 @@ function extractRealtimeAssistantText(response: any): string {
 }
 
 function extractApiErrorMessage(error: any): string {
+  const userMessage =
+    error?.data?.userMessage ||
+    error?.data?.error?.details?.userMessage ||
+    error?.response?._data?.userMessage ||
+    error?.response?._data?.error?.details?.userMessage ||
+    null;
+
+  if (typeof userMessage === 'string' && userMessage.trim().length > 0) {
+    return userMessage.trim();
+  }
+
   const payloadCode =
     error?.data?.code ||
     error?.data?.error?.code ||
@@ -143,31 +154,58 @@ function extractApiErrorMessage(error: any): string {
   return 'Не удалось запустить голосовую сессию';
 }
 
-function extractEmbeddedJsonMessage(value: string): string | null {
-  const normalized = String(value || '').trim();
-  if (!normalized) {
+function extractRealtimeStartErrorReason(
+  error: any
+): RealtimeVoiceSessionEndReason {
+  const errorCode = extractRealtimeErrorCode(error);
+
+  if (
+    errorCode === 'realtime_webrtc_handshake_network_error' ||
+    errorCode === 'realtime_webrtc_handshake_timeout'
+  ) {
+    return 'network_error';
+  }
+
+  if (
+    errorCode === 'realtime_webrtc_handshake_service_unavailable' ||
+    errorCode === 'realtime_webrtc_handshake_rate_limited' ||
+    errorCode === 'realtime_webrtc_handshake_invalid_response' ||
+    errorCode === 'realtime_webrtc_handshake_rejected' ||
+    errorCode === 'realtime_provider_init_failed'
+  ) {
+    return 'provider_error';
+  }
+
+  const normalized =
+    `${String(error?.name || '')} ${String(error?.message || '')}`.toLowerCase();
+  if (
+    normalized.includes('failed to fetch') ||
+    normalized.includes('fetch failed') ||
+    normalized.includes('network request failed') ||
+    normalized.includes('timeout') ||
+    normalized.includes('timed out')
+  ) {
+    return 'network_error';
+  }
+
+  return 'provider_error';
+}
+
+function extractRealtimeStartErrorPayload(error: any): {
+  code?: string;
+  message?: string;
+} | null {
+  const code = extractRealtimeErrorCode(error) || undefined;
+  const message = extractApiErrorMessage(error) || undefined;
+
+  if (!code && !message) {
     return null;
   }
 
-  const jsonStartIndex = normalized.indexOf('{');
-  if (jsonStartIndex === -1) {
-    return null;
-  }
-
-  try {
-    const payload = JSON.parse(normalized.slice(jsonStartIndex));
-    const payloadMessage =
-      payload?.statusMessage ||
-      payload?.message ||
-      payload?.data?.message ||
-      null;
-    return typeof payloadMessage === 'string' &&
-      payloadMessage.trim().length > 0
-      ? payloadMessage.trim()
-      : null;
-  } catch {
-    return null;
-  }
+  return {
+    ...(code ? { code } : {}),
+    ...(message ? { message } : {}),
+  };
 }
 
 function extractEmbeddedJsonPayload(value: string): Record<string, any> | null {
@@ -275,12 +313,7 @@ function extractRealtimeStartErrorMessage(error: any): string {
   }
 
   if (normalized.includes('realtime webrtc handshake failed')) {
-    const embeddedMessage = extractEmbeddedJsonMessage(message);
-    if (embeddedMessage) {
-      return `Не удалось установить realtime WebRTC-соединение: ${embeddedMessage}`;
-    }
-
-    return 'Не удалось установить realtime WebRTC-соединение с OpenAI.';
+    return 'Не удалось подключить голосовой чат. Попробуй ещё раз.';
   }
 
   return 'Не удалось запустить голосовую сессию';
@@ -664,6 +697,10 @@ export function useRealtimeVoiceSession(options?: {
     reason: RealtimeVoiceSessionEndReason,
     options?: {
       keepalive?: boolean;
+      error?: {
+        code?: string;
+        message?: string;
+      } | null;
     }
   ) {
     if (!sessionId.value) {
@@ -686,6 +723,7 @@ export function useRealtimeVoiceSession(options?: {
           body: JSON.stringify({
             sessionId: currentSessionId,
             reason,
+            error: options?.error || undefined,
           }),
           keepalive: true,
         });
@@ -703,6 +741,7 @@ export function useRealtimeVoiceSession(options?: {
         body: {
           sessionId: currentSessionId,
           reason,
+          error: options?.error || undefined,
         } as Record<string, unknown>,
       });
       const parsed = RealtimeVoiceSessionEndResponseDto.parse(response);
@@ -1204,10 +1243,14 @@ export function useRealtimeVoiceSession(options?: {
       return true;
     } catch (error: any) {
       errorMessage.value = extractRealtimeStartErrorMessage(error);
+      const failureReason = extractRealtimeStartErrorReason(error);
+      const failurePayload = extractRealtimeStartErrorPayload(error);
       await cleanupLocalTransport();
 
       if (sessionId.value) {
-        await finalizeSessionOnServer('network_error');
+        await finalizeSessionOnServer(failureReason, {
+          error: failurePayload,
+        });
       }
 
       sessionId.value = null;
