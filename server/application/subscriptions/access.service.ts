@@ -28,11 +28,11 @@ function getEffectiveSubscription(
   subscription: UserSubscriptionRef,
   userRole?: string
 ): UserSubscriptionRef {
-  if (subscription) return subscription;
   // review/support-роль должна вести себя как Premium без админских прав.
   if (isPremiumEquivalentRole(userRole)) {
     return { planId: 'premium' };
   }
+  if (subscription) return subscription;
   return null;
 }
 
