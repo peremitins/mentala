@@ -28,6 +28,15 @@ import {
   dispatchBillingPurchaseSuccessEvent,
 } from '@/server/application/events/app-events.dispatchers';
 import { dispatchBillingPlanChangedIfNeeded } from '@/server/application/events/billing-events.helpers';
+import {
+  finalizeDiscountGrantSuccess,
+  releaseDiscountGrantReservation,
+  reserveBestDiscountGrant,
+} from '@/server/application/promo-codes/promo-discount-grants.service';
+import {
+  applyAvailableBillingCredit,
+  restoreAppliedBillingCredit,
+} from '@/server/application/subscriptions/billing-credit.service';
 
 type ScheduledBillingPeriod = BillingPeriod;
 type ScheduledApplyStatus = 'noop' | 'success' | 'processing' | 'failed';
@@ -294,6 +303,20 @@ async function applyScheduledPlanChangeForUser(params: {
   }
 
   if (!user.paymentMethodBound || !user.paymentMethodId) {
+    // Восстанавливаем schedule: когда пользователь привяжет способ оплаты,
+    // воркер повторит попытку без ручного вмешательства.
+    await db
+      .update(users)
+      .set({
+        scheduledPlanId,
+        scheduledBillingPeriod,
+        scheduledChangeAt,
+        scheduledFromSubscriptionId,
+        scheduledChangeUpdatedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(users.id, userId));
+
     await db.insert(subscriptionEvents).values({
       userId,
       eventType: 'subscription_change_failed',
@@ -331,6 +354,20 @@ async function applyScheduledPlanChangeForUser(params: {
 
   const plan = planRows[0];
   if (!plan) {
+    // Восстанавливаем schedule: администратор настроит тариф, после чего
+    // воркер повторит попытку автоматически.
+    await db
+      .update(users)
+      .set({
+        scheduledPlanId,
+        scheduledBillingPeriod,
+        scheduledChangeAt,
+        scheduledFromSubscriptionId,
+        scheduledChangeUpdatedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(users.id, userId));
+
     await db.insert(subscriptionEvents).values({
       userId,
       eventType: 'subscription_change_failed',
@@ -363,40 +400,182 @@ async function applyScheduledPlanChangeForUser(params: {
     billingPeriod: scheduledBillingPeriod,
   });
 
-  const [pendingSubscription] = await db
-    .insert(userSubscriptions)
-    .values({
+  // Всю подготовку к платежу выполняем в единой транзакции:
+  // если любой шаг упадёт, INSERT подписки и резервация гранта/кредита
+  // откатятся атомарно — не останется частично-применённого состояния.
+  const {
+    pendingSubscription,
+    discount,
+    discountReservationKey,
+    billingCreditApplied,
+    effectiveCheckoutAmount,
+  } = await db.transaction(async (tx) => {
+    const [sub] = await tx
+      .insert(userSubscriptions)
+      .values({
+        userId,
+        planId: scheduledPlanId,
+        billingPeriod: scheduledBillingPeriod,
+        checkoutAmount: String(checkoutAmount),
+        checkoutCurrency: 'RUB',
+        billingCreditApplied: '0',
+        billingCreditGranted: '0',
+        startDate: periodStart,
+        endDate: periodEnd,
+        paymentStatus: 'pending',
+        autoRenew: true,
+        sourcePlatform: 'web',
+      })
+      .returning({ id: userSubscriptions.id });
+
+    const reservationKey = `scheduled-plan-change:${sub.id}`;
+    const disc = await reserveBestDiscountGrant({
       userId,
-      planId: scheduledPlanId,
+      planId: scheduledPlanId as 'pro' | 'premium',
       billingPeriod: scheduledBillingPeriod,
-      checkoutAmount: String(checkoutAmount),
-      checkoutCurrency: 'RUB',
-      billingCreditApplied: '0',
-      billingCreditGranted: '0',
-      startDate: periodStart,
-      endDate: periodEnd,
-      paymentStatus: 'pending',
-      autoRenew: true,
-      sourcePlatform: 'web',
-    })
-    .returning({
-      id: userSubscriptions.id,
+      amount: checkoutAmount,
+      reservationKey,
+      tx,
+    });
+    const cred = await applyAvailableBillingCredit({
+      userId,
+      amount: disc.finalAmount,
+      sourceSubscriptionId: sub.id,
+      metadata: {
+        source: 'scheduled_plan_change',
+        planId: scheduledPlanId,
+        billingPeriod: scheduledBillingPeriod,
+      },
+      tx,
+    });
+    const creditApplied = cred.appliedAmount;
+    const toPay = cred.finalAmount;
+
+    await tx
+      .update(userSubscriptions)
+      .set({
+        checkoutAmount: String(toPay),
+        billingCreditApplied: String(creditApplied),
+        updatedAt: now,
+      })
+      .where(eq(userSubscriptions.id, sub.id));
+
+    await tx.insert(subscriptionEvents).values({
+      userId,
+      eventType: 'checkout_started',
+      planId: scheduledPlanId,
+      metadata: {
+        source: 'scheduled_plan_change_worker',
+        workerId,
+        subscriptionId: sub.id,
+        billingPeriod: scheduledBillingPeriod,
+        toPay,
+        effectiveAt: scheduledChangeAt.toISOString(),
+        fromSubscriptionId: scheduledFromSubscriptionId,
+        promoDiscountPercent: disc.percent,
+        promoDiscountAmount: disc.discountAmount,
+        billingCreditApplied: creditApplied,
+      },
     });
 
-  await db.insert(subscriptionEvents).values({
-    userId,
-    eventType: 'checkout_started',
-    planId: scheduledPlanId,
-    metadata: {
-      source: 'scheduled_plan_change_worker',
-      workerId,
-      subscriptionId: pendingSubscription.id,
-      billingPeriod: scheduledBillingPeriod,
-      toPay: checkoutAmount,
-      effectiveAt: scheduledChangeAt.toISOString(),
-      fromSubscriptionId: scheduledFromSubscriptionId,
-    },
+    return {
+      pendingSubscription: sub,
+      discount: disc,
+      discountReservationKey: reservationKey,
+      billingCreditApplied: creditApplied,
+      effectiveCheckoutAmount: toPay,
+    };
   });
+
+  if (effectiveCheckoutAmount === 0) {
+    await db.transaction(async (tx) => {
+      await tx
+        .update(userSubscriptions)
+        .set({
+          paymentStatus: 'active',
+          autoRenew: true,
+          updatedAt: now,
+        })
+        .where(eq(userSubscriptions.id, pendingSubscription.id));
+
+      await tx
+        .update(userSubscriptions)
+        .set({
+          paymentStatus: 'expired',
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(userSubscriptions.userId, userId),
+            eq(userSubscriptions.paymentStatus, 'active'),
+            gt(userSubscriptions.endDate, now),
+            ne(userSubscriptions.id, pendingSubscription.id)
+          )
+        );
+
+      await finalizeDiscountGrantSuccess({
+        reservationKey: discountReservationKey,
+        paymentId: null,
+        now,
+        tx,
+      });
+
+      await tx.insert(subscriptionEvents).values({
+        userId,
+        eventType: 'purchase_success',
+        planId: scheduledPlanId,
+        metadata: {
+          source: 'scheduled_plan_change_worker',
+          workerId,
+          subscriptionId: pendingSubscription.id,
+          paymentId: null,
+          amount: 0,
+          currency: 'RUB',
+          billingPeriod: scheduledBillingPeriod,
+          effectiveAt: scheduledChangeAt.toISOString(),
+          fromSubscriptionId: scheduledFromSubscriptionId,
+          promoDiscountPercent: discount.percent,
+          promoDiscountAmount: discount.discountAmount,
+          billingCreditApplied,
+        },
+      });
+    });
+
+    // Dispatch-событие нужно и для zero-amount пути: referral-rewards,
+    // push-уведомления и Telegram-алерты подписываются на это событие.
+    dispatchBillingPurchaseSuccessEvent({
+      userId,
+      subscriptionId: pendingSubscription.id,
+      paymentId: null,
+      planId: scheduledPlanId,
+      billingPeriod: scheduledBillingPeriod,
+      amount: 0,
+      currency: 'RUB',
+      source: 'subscriptions.scheduled-plan-change',
+    });
+
+    dispatchBillingPlanChangedIfNeeded({
+      userId,
+      source: 'subscriptions.scheduled-plan-change',
+      previous: previousPlanSnapshot
+        ? {
+            subscriptionId: previousPlanSnapshot.id,
+            planId: previousPlanSnapshot.planId,
+            billingPeriod: previousPlanSnapshot.billingPeriod,
+          }
+        : null,
+      next: {
+        subscriptionId: pendingSubscription.id,
+        planId: scheduledPlanId,
+        billingPeriod: scheduledBillingPeriod,
+      },
+      paymentId: null,
+      effectiveAt: scheduledChangeAt,
+      occurredAt: now,
+    });
+
+    return { status: 'success' };
+  }
 
   const yookassaIdempotenceKey = buildScheduledChangeIdempotenceKey({
     userId,
@@ -413,7 +592,7 @@ async function applyScheduledPlanChangeForUser(params: {
       shopId,
       secretKey,
       idempotenceKey: yookassaIdempotenceKey,
-      amount: checkoutAmount,
+      amount: effectiveCheckoutAmount,
       description: planChangeDescription,
       metadata: {
         userId: String(userId),
@@ -422,13 +601,16 @@ async function applyScheduledPlanChangeForUser(params: {
         billingPeriod: scheduledBillingPeriod,
         chargeType: 'scheduled_downgrade',
         effectiveAt: scheduledChangeAt.toISOString(),
+        promoDiscountPercent: discount.percent || null,
+        promoDiscountAmount: discount.discountAmount || null,
+        billingCreditApplied: billingCreditApplied || null,
       },
       paymentMode: 'recurring',
       paymentMethodId: user.paymentMethodId,
       receipt: user.email
         ? buildYooKassaReceipt({
             email: user.email,
-            amount: checkoutAmount,
+            amount: effectiveCheckoutAmount,
             description: planChangeDescription,
           })
         : undefined,
@@ -472,6 +654,28 @@ async function applyScheduledPlanChangeForUser(params: {
       });
     });
 
+    if (billingCreditApplied > 0) {
+      await restoreAppliedBillingCredit({
+        userId,
+        amount: billingCreditApplied,
+        sourceSubscriptionId: pendingSubscription.id,
+        entryType: 'payment_restore',
+        metadata: {
+          source: 'scheduled_plan_change_create_failed',
+          planId: scheduledPlanId,
+          billingPeriod: scheduledBillingPeriod,
+        },
+        now,
+      });
+    }
+
+    await releaseDiscountGrantReservation({
+      reservationKey: discountReservationKey,
+      now,
+    }).catch(() => {
+      // noop
+    });
+
     dispatchScheduledPlanChangeCriticalEvent({
       userId,
       workerId,
@@ -511,6 +715,27 @@ async function applyScheduledPlanChangeForUser(params: {
       },
     });
 
+    if (billingCreditApplied > 0) {
+      await restoreAppliedBillingCredit({
+        userId,
+        amount: billingCreditApplied,
+        sourceSubscriptionId: pendingSubscription.id,
+        entryType: 'payment_restore',
+        metadata: {
+          source: 'scheduled_plan_change_missing_payment_id',
+          planId: scheduledPlanId,
+          billingPeriod: scheduledBillingPeriod,
+        },
+        now,
+      });
+    }
+
+    // Освобождаем резервацию гранта, иначе грант останется в reserved навсегда.
+    await releaseDiscountGrantReservation({
+      reservationKey: discountReservationKey,
+      now,
+    }).catch(() => {});
+
     dispatchScheduledPlanChangeCriticalEvent({
       userId,
       workerId,
@@ -534,7 +759,9 @@ async function applyScheduledPlanChangeForUser(params: {
       : paymentStatusRaw === 'canceled'
         ? 'canceled'
         : 'pending';
-  const paymentAmount = Number(payment.amount?.value || checkoutAmount);
+  const paymentAmount = Number(
+    payment.amount?.value || effectiveCheckoutAmount
+  );
   const paymentCurrency = String(payment.amount?.currency || 'RUB')
     .trim()
     .toUpperCase();
@@ -575,7 +802,7 @@ async function applyScheduledPlanChangeForUser(params: {
   if (paymentStatus === 'succeeded' && payment.paid === true) {
     const amountMatches =
       paymentCurrency === 'RUB' &&
-      toCents(paymentAmount) === toCents(checkoutAmount);
+      toCents(paymentAmount) === toCents(effectiveCheckoutAmount);
 
     if (!amountMatches) {
       await db.transaction(async (tx) => {
@@ -605,6 +832,22 @@ async function applyScheduledPlanChangeForUser(params: {
         });
       });
 
+      if (billingCreditApplied > 0) {
+        await restoreAppliedBillingCredit({
+          userId,
+          amount: billingCreditApplied,
+          sourceSubscriptionId: pendingSubscription.id,
+          sourcePaymentId: paymentId,
+          entryType: 'payment_restore',
+          metadata: {
+            source: 'scheduled_plan_change_amount_mismatch',
+            planId: scheduledPlanId,
+            billingPeriod: scheduledBillingPeriod,
+          },
+          now,
+        });
+      }
+
       dispatchScheduledPlanChangeCriticalEvent({
         userId,
         workerId,
@@ -616,11 +859,18 @@ async function applyScheduledPlanChangeForUser(params: {
         subscriptionId: pendingSubscription.id,
         paymentId,
         context: {
-          expectedAmount: checkoutAmount,
+          expectedAmount: effectiveCheckoutAmount,
           actualAmount: paymentAmount,
           expectedCurrency: 'RUB',
           actualCurrency: paymentCurrency,
         },
+      });
+
+      await releaseDiscountGrantReservation({
+        reservationKey: discountReservationKey,
+        now,
+      }).catch(() => {
+        // noop
       });
 
       return { status: 'failed', reason: 'amount_currency_mismatch' };
@@ -666,6 +916,13 @@ async function applyScheduledPlanChangeForUser(params: {
           .where(eq(users.id, userId));
       }
 
+      await finalizeDiscountGrantSuccess({
+        reservationKey: discountReservationKey,
+        paymentId,
+        now,
+        tx,
+      });
+
       const paymentMethodPresentation = extractPaymentMethodPresentation(
         payment.payment_method
       );
@@ -701,6 +958,9 @@ async function applyScheduledPlanChangeForUser(params: {
           billingPeriod: scheduledBillingPeriod,
           effectiveAt: scheduledChangeAt.toISOString(),
           fromSubscriptionId: scheduledFromSubscriptionId,
+          promoDiscountPercent: discount.percent,
+          promoDiscountAmount: discount.discountAmount,
+          billingCreditApplied,
         },
       });
 
@@ -778,6 +1038,29 @@ async function applyScheduledPlanChangeForUser(params: {
           effectiveAt: scheduledChangeAt.toISOString(),
         },
       });
+
+      if (billingCreditApplied > 0) {
+        await restoreAppliedBillingCredit({
+          userId,
+          amount: billingCreditApplied,
+          sourceSubscriptionId: pendingSubscription.id,
+          sourcePaymentId: paymentId,
+          entryType: 'payment_restore',
+          metadata: {
+            source: 'scheduled_plan_change_provider_canceled',
+            planId: scheduledPlanId,
+            billingPeriod: scheduledBillingPeriod,
+          },
+          now,
+          tx,
+        });
+      }
+
+      await releaseDiscountGrantReservation({
+        reservationKey: discountReservationKey,
+        now,
+        tx,
+      });
     });
 
     dispatchBillingPurchaseFailedEvent({
@@ -803,8 +1086,11 @@ async function applyScheduledPlanChangeForUser(params: {
       subscriptionId: pendingSubscription.id,
       paymentId,
       billingPeriod: scheduledBillingPeriod,
-      toPay: checkoutAmount,
+      toPay: effectiveCheckoutAmount,
       effectiveAt: scheduledChangeAt.toISOString(),
+      promoDiscountPercent: discount.percent,
+      promoDiscountAmount: discount.discountAmount,
+      billingCreditApplied,
     },
   });
 

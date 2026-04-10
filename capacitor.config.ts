@@ -52,10 +52,6 @@ const config: CapacitorConfig = {
       smallIcon: 'ic_stat_mentala',
       iconColor: '#488AFF',
     },
-    NativeAudio: {
-      // HLS не используем для текущих медитаций, чтобы не увеличивать APK лишними зависимостями.
-      hls: false,
-    },
     SocialLogin: {
       // Используем только Google-логин; Facebook, Apple и Twitter отключены,
       // чтобы не тянуть лишние SDK (в т.ч. Facebook → AD_ID permission).

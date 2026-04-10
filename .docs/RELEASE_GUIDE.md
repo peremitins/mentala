@@ -51,9 +51,19 @@ pnpm build:mobile:android:prod
 1. Собирает Nuxt production bundle (`.output/public`)
 2. Синхронизирует с Capacitor (`cap sync`)
 3. Проверяет prod-safe конфиг (нет dev URL, правильные API endpoints)
-4. Собирает оптимизированный Android App Bundle (`.aab`)
+4. Собирает оптимизированный Android App Bundle (`.aab`) с включённым R8
+5. Проверяет, что `mapping.txt` встроен внутрь `aab`
+6. Готовит `native-debug-symbols.zip` для Google Play Console
+7. Складывает полный набор release-артефактов в отдельный каталог
 
 Результат: `android/app/build/outputs/bundle/release/app-release.aab`
+
+Дополнительные артефакты для Play Console:
+
+- `android/app/build/outputs/play-console/release/app-release.aab`
+- `android/app/build/outputs/play-console/release/mapping.txt`
+- `android/app/build/outputs/play-console/release/native-debug-symbols.zip`
+- `android/app/build/outputs/play-console/release/artifacts-info.txt`
 
 ### 2.3. Подписать и загрузить
 

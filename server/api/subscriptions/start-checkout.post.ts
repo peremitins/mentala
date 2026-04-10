@@ -50,6 +50,15 @@ import {
   dispatchBillingPurchaseSuccessEvent,
 } from '@/server/application/events/app-events.dispatchers';
 import { dispatchBillingPlanChangedIfNeeded } from '@/server/application/events/billing-events.helpers';
+import {
+  finalizeDiscountGrantSuccess,
+  releaseDiscountGrantReservation,
+  reserveBestDiscountGrant,
+} from '@/server/application/promo-codes/promo-discount-grants.service';
+import {
+  applyAvailableBillingCredit,
+  restoreAppliedBillingCredit,
+} from '@/server/application/subscriptions/billing-credit.service';
 
 type SourcePlatform = 'web' | 'ios' | 'android';
 type CheckoutStatus = 'pending' | 'active';
@@ -74,6 +83,8 @@ interface StartCheckoutResponse {
   toPay: number;
   creditApplied: number;
   creditGranted: number;
+  promoDiscountPercent?: number;
+  promoDiscountAmount?: number;
   status: CheckoutStatus;
   paymentProvider: 'yookassa';
   paymentId: string | null;
@@ -179,7 +190,7 @@ function resolveSourcePlatform(event: any): SourcePlatform {
  * Главная команда смены тарифа:
  * - upgrade выполняется сразу;
  * - downgrade планируется на конец периода;
- * - billingCredit не участвует в checkout-расчётах.
+ * - billingCredit применяется после процентной скидки и может покрыть 100% суммы.
  */
 export default defineEventHandler(async (event) => {
   const sessionResult = await getSessionUser(event);
@@ -272,6 +283,12 @@ export default defineEventHandler(async (event) => {
 
   let createdPendingSubscriptionId: number | null = null;
   let yookassaPaymentCreated = false;
+  let discountReservationKey: string | null = null;
+  let creditRestoreContext: {
+    amount: number;
+    sourceSubscriptionId?: number | null;
+    metadata?: Record<string, unknown>;
+  } | null = null;
 
   try {
     const planRows = await db
@@ -962,6 +979,207 @@ export default defineEventHandler(async (event) => {
     );
 
     if (canChargeSavedMethod) {
+      const savedMethodDiscountReservationKey = `saved-checkout:${userId}:${idempotencyKey}`;
+      // Атомарно резервируем скидочный грант и списываем billing credit в одной
+      // транзакции. Ранее эти шаги выполнялись последовательными отдельными
+      // транзакциями, и при падении процесса между ними мы могли получить
+      // расход credit без резервации гранта (или наоборот).
+      const { savedMethodDiscount, savedMethodCredit } = await db.transaction(
+        async (tx) => {
+          const grant = await reserveBestDiscountGrant({
+            userId,
+            planId: planId as 'pro' | 'premium',
+            billingPeriod: billingPeriodTyped,
+            amount: decision.toPay,
+            reservationKey: savedMethodDiscountReservationKey,
+            now,
+            tx,
+          });
+          const credit = await applyAvailableBillingCredit({
+            userId,
+            amount: grant.finalAmount,
+            metadata: {
+              source: 'saved_method_checkout',
+              planId,
+              billingPeriod: billingPeriodTyped,
+            },
+            now,
+            tx,
+          });
+
+          return {
+            savedMethodDiscount: grant,
+            savedMethodCredit: credit,
+          };
+        }
+      );
+      const savedMethodCreditApplied = savedMethodCredit.appliedAmount;
+      const savedMethodToPay = savedMethodCredit.finalAmount;
+      discountReservationKey = savedMethodDiscountReservationKey;
+      creditRestoreContext =
+        savedMethodCreditApplied > 0
+          ? {
+              amount: savedMethodCreditApplied,
+              metadata: {
+                source: 'saved_method_checkout_restore',
+                planId,
+                billingPeriod: billingPeriodTyped,
+              },
+            }
+          : null;
+
+      if (savedMethodToPay === 0) {
+        const response = await db.transaction(async (tx) => {
+          await tx
+            .update(users)
+            .set({
+              scheduledPlanId: null,
+              scheduledBillingPeriod: null,
+              scheduledChangeAt: null,
+              scheduledFromSubscriptionId: null,
+              scheduledChangeUpdatedAt: now,
+              billingPlanId: null,
+              billingPeriod: null,
+              nextChargeAt: null,
+              billingCollectionStatus: 'none',
+              graceEndsAt: null,
+              billingReminderSentAt: null,
+              billingLockedAt: null,
+              billingLockedBy: null,
+              updatedAt: now,
+            })
+            .where(eq(users.id, userId));
+
+          const [newSubscription] = await tx
+            .insert(userSubscriptions)
+            .values({
+              userId,
+              planId,
+              billingPeriod: billingPeriodTyped,
+              checkoutAmount: '0',
+              checkoutCurrency: 'RUB',
+              billingCreditApplied: String(savedMethodCreditApplied),
+              billingCreditGranted: '0',
+              startDate: now,
+              endDate: nextEndDate,
+              paymentStatus: 'active',
+              autoRenew: true,
+              sourcePlatform,
+            })
+            .returning();
+
+          await tx
+            .update(userSubscriptions)
+            .set({ paymentStatus: 'expired', updatedAt: now })
+            .where(
+              and(
+                eq(userSubscriptions.userId, userId),
+                eq(userSubscriptions.paymentStatus, 'active'),
+                gt(userSubscriptions.endDate, now),
+                ne(userSubscriptions.id, newSubscription.id)
+              )
+            );
+
+          if (
+            planId !== 'basic' &&
+            userRow?.trialEndedAt &&
+            userRow.trialEndedAt > now
+          ) {
+            await tx
+              .update(users)
+              .set({
+                trialEndedAt: now,
+                updatedAt: now,
+              })
+              .where(eq(users.id, userId));
+          }
+
+          await finalizeDiscountGrantSuccess({
+            reservationKey: savedMethodDiscountReservationKey,
+            paymentId: null,
+            now,
+            tx,
+          });
+
+          await tx.insert(subscriptionEvents).values({
+            userId,
+            eventType: 'checkout_started',
+            planId,
+            metadata: {
+              subscriptionId: newSubscription.id,
+              billingPeriod: billingPeriodTyped,
+              policyAction: decision.policyAction,
+              targetChargeValue: decision.targetChargeValue,
+              unusedCurrentValue: decision.unusedCurrentValue,
+              toPay: 0,
+              sourcePlatform,
+              hadCurrentActive: hasCurrentActive,
+              promoDiscountPercent: savedMethodDiscount.percent,
+              promoDiscountAmount: savedMethodDiscount.discountAmount,
+              billingCreditApplied: savedMethodCreditApplied,
+              paymentMode: 'promo_full_discount',
+            },
+          });
+
+          await tx.insert(subscriptionEvents).values({
+            userId,
+            eventType: 'purchase_success',
+            planId,
+            metadata: {
+              subscriptionId: newSubscription.id,
+              paymentId: null,
+              amountPaid: 0,
+              currency: 'RUB',
+              method: 'promo_discount_full',
+              promoDiscountPercent: savedMethodDiscount.percent,
+              promoDiscountAmount: savedMethodDiscount.discountAmount,
+              billingCreditApplied: savedMethodCreditApplied,
+            },
+          });
+
+          const activatedResponse: StartCheckoutResponse = {
+            subscriptionId: newSubscription.id,
+            amount: decision.amount,
+            toPay: 0,
+            creditApplied: savedMethodCreditApplied,
+            creditGranted: 0,
+            promoDiscountPercent: savedMethodDiscount.percent,
+            promoDiscountAmount: savedMethodDiscount.discountAmount,
+            status: 'active',
+            paymentProvider: 'yookassa',
+            paymentId: null,
+            paymentMode: 'none',
+            confirmationToken: null,
+            paymentUrl: null,
+            checkoutAction: 'activated',
+            scheduledChange: null,
+          };
+
+          await finishIdempotentRequest({
+            recordId: idempotencyRecordId,
+            response: activatedResponse,
+            tx,
+          });
+
+          return activatedResponse;
+        });
+
+        // Dispatch-события нужны и для zero-amount пути (100% скидка или кредит):
+        // без них referral-rewards, push-уведомления и Telegram-алерты не сработают.
+        dispatchBillingPurchaseSuccessEvent({
+          userId,
+          subscriptionId: response.subscriptionId,
+          paymentId: null,
+          planId,
+          billingPeriod: billingPeriodTyped,
+          amount: 0,
+          currency: 'RUB',
+          source: 'subscriptions.start-checkout:saved_method_zero_amount',
+        });
+
+        return response;
+      }
+
       const savedMethodIdempotenceKey = crypto
         .createHash('sha256')
         .update(
@@ -976,20 +1194,22 @@ export default defineEventHandler(async (event) => {
         shopId,
         secretKey,
         idempotenceKey: savedMethodIdempotenceKey,
-        amount: decision.toPay,
+        amount: savedMethodToPay,
         description: savedMethodDescription,
         metadata: {
           userId: String(userId),
           planId,
           billingPeriod: billingPeriodTyped,
           flow: 'saved_method_checkout',
+          promoDiscountPercent: savedMethodDiscount.percent || null,
+          promoDiscountAmount: savedMethodDiscount.discountAmount || null,
         },
         paymentMode: 'recurring',
         paymentMethodId: savedPaymentMethodId,
         receipt: userRow?.email
           ? buildYooKassaReceipt({
               email: userRow.email,
-              amount: decision.toPay,
+              amount: savedMethodToPay,
               description: savedMethodDescription,
             })
           : undefined,
@@ -1018,8 +1238,26 @@ export default defineEventHandler(async (event) => {
       if (savedMethodStatus === 'succeeded' && savedMethodPaid) {
         const amountMatches =
           savedMethodCurrency === 'RUB' &&
-          toCents(savedMethodAmount) === toCents(decision.toPay);
+          toCents(savedMethodAmount) === toCents(savedMethodToPay);
         if (!amountMatches) {
+          if (savedMethodCreditApplied > 0) {
+            await restoreAppliedBillingCredit({
+              userId,
+              amount: savedMethodCreditApplied,
+              entryType: 'payment_restore',
+              metadata: {
+                source: 'saved_method_checkout_amount_mismatch',
+                planId,
+                billingPeriod: billingPeriodTyped,
+              },
+              now,
+            });
+            creditRestoreContext = null;
+          }
+          await releaseDiscountGrantReservation({
+            reservationKey: savedMethodDiscountReservationKey,
+            now,
+          });
           throw createError({
             statusCode: 409,
             statusMessage:
@@ -1056,9 +1294,9 @@ export default defineEventHandler(async (event) => {
               userId,
               planId,
               billingPeriod: billingPeriodTyped,
-              checkoutAmount: String(decision.toPay),
+              checkoutAmount: String(savedMethodToPay),
               checkoutCurrency: 'RUB',
-              billingCreditApplied: '0',
+              billingCreditApplied: String(savedMethodCreditApplied),
               billingCreditGranted: '0',
               yookassaPaymentId: savedMethodPaymentId,
               startDate: now,
@@ -1094,6 +1332,13 @@ export default defineEventHandler(async (event) => {
               })
               .where(eq(users.id, userId));
           }
+
+          await finalizeDiscountGrantSuccess({
+            reservationKey: savedMethodDiscountReservationKey,
+            paymentId: savedMethodPaymentId,
+            now,
+            tx,
+          });
 
           await tx
             .insert(payments)
@@ -1149,10 +1394,13 @@ export default defineEventHandler(async (event) => {
               policyAction: decision.policyAction,
               targetChargeValue: decision.targetChargeValue,
               unusedCurrentValue: decision.unusedCurrentValue,
-              toPay: decision.toPay,
+              toPay: savedMethodToPay,
               sourcePlatform,
               hadCurrentActive: hasCurrentActive,
               paymentMode: 'saved_method',
+              promoDiscountPercent: savedMethodDiscount.percent,
+              promoDiscountAmount: savedMethodDiscount.discountAmount,
+              billingCreditApplied: savedMethodCreditApplied,
             },
           });
 
@@ -1166,15 +1414,20 @@ export default defineEventHandler(async (event) => {
               amountPaid: savedMethodAmount,
               currency: savedMethodCurrency,
               method: 'saved_payment_method',
+              promoDiscountPercent: savedMethodDiscount.percent,
+              promoDiscountAmount: savedMethodDiscount.discountAmount,
+              billingCreditApplied: savedMethodCreditApplied,
             },
           });
 
           const activatedResponse: StartCheckoutResponse = {
             subscriptionId: newSubscription.id,
             amount: decision.amount,
-            toPay: decision.toPay,
-            creditApplied: 0,
+            toPay: savedMethodToPay,
+            creditApplied: savedMethodCreditApplied,
             creditGranted: 0,
+            promoDiscountPercent: savedMethodDiscount.percent,
+            promoDiscountAmount: savedMethodDiscount.discountAmount,
             status: 'active',
             paymentProvider: 'yookassa',
             paymentId: savedMethodPaymentId,
@@ -1193,6 +1446,8 @@ export default defineEventHandler(async (event) => {
 
           return activatedResponse;
         });
+
+        creditRestoreContext = null;
 
         dispatchBillingPurchaseSuccessEvent({
           userId,
@@ -1247,29 +1502,92 @@ export default defineEventHandler(async (event) => {
         },
         'Saved payment method charge failed, falling back to checkout flow'
       );
+
+      if (savedMethodCreditApplied > 0) {
+        await restoreAppliedBillingCredit({
+          userId,
+          amount: savedMethodCreditApplied,
+          entryType: 'payment_restore',
+          metadata: {
+            source: 'saved_method_checkout_fallback',
+            planId,
+            billingPeriod: billingPeriodTyped,
+          },
+          now,
+        });
+        creditRestoreContext = null;
+      }
+
+      await releaseDiscountGrantReservation({
+        reservationKey: savedMethodDiscountReservationKey,
+        now,
+      });
     }
 
-    const [pendingSubscription] = await db
-      .insert(userSubscriptions)
-      .values({
+    // Всё состояние pending-сабскрипшна, reserve гранта и списание credit
+    // коммитятся в одной транзакции, чтобы при падении процесса до создания
+    // платежа в YooKassa у нас не оказалось рассинхрона (грант зарезервирован,
+    // credit снят, а подписки нет — или наоборот).
+    const {
+      pendingSubscription,
+      checkoutDiscount,
+      checkoutCreditApplied,
+      checkoutToPay,
+    } = await db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(userSubscriptions)
+        .values({
+          userId,
+          planId,
+          billingPeriod: billingPeriodTyped,
+          checkoutAmount: String(decision.toPay),
+          checkoutCurrency: 'RUB',
+          billingCreditApplied: '0',
+          billingCreditGranted: '0',
+          startDate: now,
+          endDate: nextEndDate,
+          paymentStatus: 'pending',
+          autoRenew: true,
+          sourcePlatform,
+        })
+        .returning();
+
+      const discountReservationKey = `checkout-subscription:${created.id}`;
+      const discount = await reserveBestDiscountGrant({
         userId,
-        planId,
+        planId: planId as 'pro' | 'premium',
         billingPeriod: billingPeriodTyped,
-        checkoutAmount: String(decision.toPay),
-        checkoutCurrency: 'RUB',
-        billingCreditApplied: '0',
-        billingCreditGranted: '0',
-        startDate: now,
-        endDate: nextEndDate,
-        paymentStatus: 'pending',
-        autoRenew: true,
-        sourcePlatform,
-      })
-      .returning();
+        amount: decision.toPay,
+        reservationKey: discountReservationKey,
+        now,
+        tx,
+      });
 
-    createdPendingSubscriptionId = pendingSubscription.id;
+      const credit = await applyAvailableBillingCredit({
+        userId,
+        amount: discount.finalAmount,
+        sourceSubscriptionId: created.id,
+        metadata: {
+          source: 'checkout_subscription',
+          planId,
+          billingPeriod: billingPeriodTyped,
+        },
+        now,
+        tx,
+      });
 
-    await db.transaction(async (tx) => {
+      const creditApplied = credit.appliedAmount;
+      const toPay = credit.finalAmount;
+
+      await tx
+        .update(userSubscriptions)
+        .set({
+          checkoutAmount: String(toPay),
+          billingCreditApplied: String(creditApplied),
+          updatedAt: now,
+        })
+        .where(eq(userSubscriptions.id, created.id));
+
       // Для upgrade с оплатой тоже очищаем запланированную смену.
       await tx
         .update(users)
@@ -1298,17 +1616,133 @@ export default defineEventHandler(async (event) => {
         eventType: 'checkout_started',
         planId,
         metadata: {
-          subscriptionId: pendingSubscription.id,
+          subscriptionId: created.id,
           billingPeriod: billingPeriodTyped,
           policyAction: decision.policyAction,
           targetChargeValue: decision.targetChargeValue,
           unusedCurrentValue: decision.unusedCurrentValue,
-          toPay: decision.toPay,
+          toPay,
           sourcePlatform,
           hadCurrentActive: hasCurrentActive,
+          promoDiscountPercent: discount.percent,
+          promoDiscountAmount: discount.discountAmount,
+          billingCreditApplied: creditApplied,
         },
       });
+
+      return {
+        pendingSubscription: created,
+        checkoutDiscount: discount,
+        checkoutCreditApplied: creditApplied,
+        checkoutToPay: toPay,
+      };
     });
+
+    createdPendingSubscriptionId = pendingSubscription.id;
+    const checkoutDiscountReservationKey = `checkout-subscription:${pendingSubscription.id}`;
+    discountReservationKey = checkoutDiscountReservationKey;
+    creditRestoreContext =
+      checkoutCreditApplied > 0
+        ? {
+            amount: checkoutCreditApplied,
+            sourceSubscriptionId: pendingSubscription.id,
+            metadata: {
+              source: 'checkout_subscription_restore',
+              planId,
+              billingPeriod: billingPeriodTyped,
+            },
+          }
+        : null;
+
+    if (checkoutToPay === 0) {
+      const response = await db.transaction(async (tx) => {
+        await tx
+          .update(userSubscriptions)
+          .set({
+            paymentStatus: 'active',
+            updatedAt: now,
+          })
+          .where(eq(userSubscriptions.id, pendingSubscription.id));
+
+        await tx
+          .update(userSubscriptions)
+          .set({ paymentStatus: 'expired', updatedAt: now })
+          .where(
+            and(
+              eq(userSubscriptions.userId, userId),
+              eq(userSubscriptions.paymentStatus, 'active'),
+              gt(userSubscriptions.endDate, now),
+              ne(userSubscriptions.id, pendingSubscription.id)
+            )
+          );
+
+        await finalizeDiscountGrantSuccess({
+          reservationKey: checkoutDiscountReservationKey,
+          paymentId: null,
+          now,
+          tx,
+        });
+
+        await tx.insert(subscriptionEvents).values({
+          userId,
+          eventType: 'purchase_success',
+          planId,
+          metadata: {
+            subscriptionId: pendingSubscription.id,
+            paymentId: null,
+            amountPaid: 0,
+            currency: 'RUB',
+            method: 'promo_discount_full',
+            promoDiscountPercent: checkoutDiscount.percent,
+            promoDiscountAmount: checkoutDiscount.discountAmount,
+            billingCreditApplied: checkoutCreditApplied,
+          },
+        });
+
+        const activatedResponse: StartCheckoutResponse = {
+          subscriptionId: pendingSubscription.id,
+          amount: decision.amount,
+          toPay: 0,
+          creditApplied: checkoutCreditApplied,
+          creditGranted: 0,
+          promoDiscountPercent: checkoutDiscount.percent,
+          promoDiscountAmount: checkoutDiscount.discountAmount,
+          status: 'active',
+          paymentProvider: 'yookassa',
+          paymentId: null,
+          paymentMode: 'none',
+          confirmationToken: null,
+          paymentUrl: null,
+          checkoutAction: 'activated',
+          scheduledChange: null,
+        };
+
+        await finishIdempotentRequest({
+          recordId: idempotencyRecordId,
+          response: activatedResponse,
+          tx,
+        });
+
+        return activatedResponse;
+      });
+
+      creditRestoreContext = null;
+
+      // Dispatch-события нужны и для zero-amount пути (100% скидка):
+      // без них referral-rewards, push-уведомления и Telegram-алерты не сработают.
+      dispatchBillingPurchaseSuccessEvent({
+        userId,
+        subscriptionId: response.subscriptionId,
+        paymentId: null,
+        planId,
+        billingPeriod: billingPeriodTyped,
+        amount: 0,
+        currency: 'RUB',
+        source: 'subscriptions.start-checkout:checkout_zero_amount',
+      });
+
+      return response;
+    }
 
     const yookassaIdempotenceKey = crypto
       .createHash('sha256')
@@ -1344,13 +1778,16 @@ export default defineEventHandler(async (event) => {
       shopId,
       secretKey,
       idempotenceKey: yookassaIdempotenceKey,
-      amount: decision.toPay,
+      amount: checkoutToPay,
       description: checkoutDescription,
       metadata: {
         userId: String(userId),
         subscriptionId: String(pendingSubscription.id),
         planId,
         billingPeriod: billingPeriodTyped,
+        promoDiscountPercent: checkoutDiscount.percent || null,
+        promoDiscountAmount: checkoutDiscount.discountAmount || null,
+        billingCreditApplied: checkoutCreditApplied || null,
       },
       paymentMode,
       savePaymentMethod: true,
@@ -1359,13 +1796,11 @@ export default defineEventHandler(async (event) => {
       receipt: userRow?.email
         ? buildYooKassaReceipt({
             email: userRow.email,
-            amount: decision.toPay,
+            amount: checkoutToPay,
             description: checkoutDescription,
           })
         : undefined,
     });
-
-    yookassaPaymentCreated = true;
 
     const paymentId = String(yookassaPayment.id || '').trim();
     if (!paymentId) {
@@ -1400,12 +1835,17 @@ export default defineEventHandler(async (event) => {
       });
     }
 
+    yookassaPaymentCreated = true;
+    creditRestoreContext = null;
+
     const paymentResponse: StartCheckoutResponse = {
       subscriptionId: pendingSubscription.id,
       amount: decision.amount,
-      toPay: decision.toPay,
-      creditApplied: 0,
+      toPay: checkoutToPay,
+      creditApplied: checkoutCreditApplied,
       creditGranted: 0,
+      promoDiscountPercent: checkoutDiscount.percent,
+      promoDiscountAmount: checkoutDiscount.discountAmount,
       status: 'pending',
       paymentProvider: 'yookassa',
       paymentId,
@@ -1435,7 +1875,10 @@ export default defineEventHandler(async (event) => {
           subscriptionId: pendingSubscription.id,
           paymentId,
           paymentMode,
-          toPay: decision.toPay,
+          toPay: checkoutToPay,
+          promoDiscountPercent: checkoutDiscount.percent,
+          promoDiscountAmount: checkoutDiscount.discountAmount,
+          billingCreditApplied: checkoutCreditApplied,
         },
       });
 
@@ -1448,6 +1891,54 @@ export default defineEventHandler(async (event) => {
 
     return paymentResponse;
   } catch (error) {
+    if (discountReservationKey) {
+      try {
+        await releaseDiscountGrantReservation({
+          reservationKey: discountReservationKey,
+          now,
+        });
+      } catch (releaseError) {
+        // Это критично: если не восстановили резерв, грант остаётся "залипшим"
+        // до stale-cleanup. Логируем для ручного расследования, но не перекрываем
+        // исходную ошибку checkout'а — её нужно вернуть клиенту.
+        event.context.logger?.error(
+          {
+            userId,
+            reservationKey: discountReservationKey,
+            error: releaseError,
+          },
+          'Failed to release discount grant reservation after checkout error'
+        );
+      }
+    }
+
+    if (creditRestoreContext && !yookassaPaymentCreated) {
+      try {
+        await restoreAppliedBillingCredit({
+          userId,
+          amount: creditRestoreContext.amount,
+          sourceSubscriptionId:
+            creditRestoreContext.sourceSubscriptionId ?? null,
+          entryType: 'payment_restore',
+          metadata: creditRestoreContext.metadata ?? {},
+          now,
+        });
+      } catch (restoreError) {
+        // Аналогично: credit уже списан, восстановление упало — надо знать.
+        event.context.logger?.error(
+          {
+            userId,
+            amount: creditRestoreContext.amount,
+            sourceSubscriptionId:
+              creditRestoreContext.sourceSubscriptionId ?? null,
+            error: restoreError,
+          },
+          'Failed to restore billing credit after checkout error'
+        );
+      }
+      creditRestoreContext = null;
+    }
+
     if (createdPendingSubscriptionId && !yookassaPaymentCreated) {
       await db.transaction(async (tx) => {
         const canceled = await tx

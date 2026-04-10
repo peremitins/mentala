@@ -47,3 +47,6 @@ scripts/.notification-cache/
 
 # Локальные загрузки пользователей (legacy — перенесены в Object Storage)
 public/uploads/
+
+# Playwright CLI (автогенерируемые артефакты)
+.playwright-cli/

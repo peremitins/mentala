@@ -24,6 +24,14 @@ import {
   markTrialChargeSuccess,
 } from '@/server/application/subscriptions/trial-charge-reconcile.service';
 import { calculatePlanPrice } from '@/server/application/subscriptions/price-calculator';
+import {
+  releaseDiscountGrantReservation,
+  reserveBestDiscountGrant,
+} from '@/server/application/promo-codes/promo-discount-grants.service';
+import {
+  applyAvailableBillingCredit,
+  restoreAppliedBillingCredit,
+} from '@/server/application/subscriptions/billing-credit.service';
 
 /**
  * POST /api/subscriptions/retry-charge
@@ -40,6 +48,7 @@ export default defineEventHandler(async (event) => {
 
   const userId = sessionResult.user.id;
   const now = new Date();
+  let billingCreditApplied = 0;
 
   const userRows = await db
     .select({
@@ -171,6 +180,26 @@ export default defineEventHandler(async (event) => {
       baseMonthlyPrice: Number(plan.basePrice),
       billingPeriod: user.billingPeriod,
     });
+    const discountReservationKey = `trial-charge:${chargeAttemptKey}`;
+    const discount = await reserveBestDiscountGrant({
+      userId,
+      planId: user.billingPlanId,
+      billingPeriod: user.billingPeriod,
+      amount: chargeAmount,
+      reservationKey: discountReservationKey,
+    });
+    const credit = await applyAvailableBillingCredit({
+      userId,
+      amount: discount.finalAmount,
+      metadata: {
+        source: 'trial_charge_manual_retry',
+        billingPlanId: user.billingPlanId,
+        billingPeriod: user.billingPeriod,
+        chargeAttemptKey,
+      },
+    });
+    billingCreditApplied = credit.appliedAmount;
+    const effectiveChargeAmount = credit.finalAmount;
 
     const config = useRuntimeConfig(event);
     const shopId = String(config.yookassaShopId || '').trim();
@@ -194,14 +223,14 @@ export default defineEventHandler(async (event) => {
         attemptMode: 'manual',
         attemptOrdinal,
       }),
-      amount: chargeAmount,
+      amount: effectiveChargeAmount,
       description: retryDescription,
       paymentMode: 'recurring',
       paymentMethodId: user.paymentMethodId,
       receipt: user.email
         ? buildYooKassaReceipt({
             email: user.email,
-            amount: chargeAmount,
+            amount: effectiveChargeAmount,
             description: retryDescription,
           })
         : undefined,
@@ -213,11 +242,22 @@ export default defineEventHandler(async (event) => {
         billingPeriod: user.billingPeriod,
         nextChargeAt: user.nextChargeAt.toISOString(),
         trigger: 'manual_retry',
+        promoDiscountPercent: discount.percent || null,
+        promoDiscountAmount: discount.discountAmount || null,
+        billingCreditApplied: billingCreditApplied || null,
       },
     });
 
     const paymentId = String(payment.id || '').trim();
-    const paymentAmount = Number(payment.amount?.value || chargeAmount);
+    if (!paymentId) {
+      throw createError({
+        statusCode: 502,
+        statusMessage: 'YooKassa payment response missing payment id',
+      });
+    }
+    const paymentAmount = Number(
+      payment.amount?.value || effectiveChargeAmount
+    );
     const paymentCurrency = String(payment.amount?.currency || 'RUB');
 
     await db
@@ -255,6 +295,7 @@ export default defineEventHandler(async (event) => {
         paymentMethodCardLast4: paymentMethodPresentation.cardLast4,
         paymentMethodCardExpiryMonth: paymentMethodPresentation.cardExpiryMonth,
         paymentMethodCardExpiryYear: paymentMethodPresentation.cardExpiryYear,
+        billingCreditApplied,
       });
 
       return {
@@ -274,6 +315,7 @@ export default defineEventHandler(async (event) => {
         attemptMode: 'manual',
         failureReason: `provider_status_${payment.status}`,
         scheduledChargeAt: user.nextChargeAt,
+        billingCreditApplied,
         now,
       });
 
@@ -291,6 +333,10 @@ export default defineEventHandler(async (event) => {
         providerPaymentId: paymentId,
         lockAt: null,
         lockBy: null,
+        metadata: {
+          source: 'manual-retry',
+          billingCreditApplied,
+        },
         updatedAt: now,
       })
       .where(eq(billingChargeAttempts.chargeAttemptKey, chargeAttemptKey));
@@ -310,6 +356,31 @@ export default defineEventHandler(async (event) => {
       chargeAttemptKey,
     };
   } catch (error) {
+    await releaseDiscountGrantReservation({
+      reservationKey: `trial-charge:${chargeAttemptKey}`,
+      now,
+    }).catch(() => {
+      // noop
+    });
+
+    if (billingCreditApplied > 0) {
+      await restoreAppliedBillingCredit({
+        userId,
+        amount: billingCreditApplied,
+        entryType: 'payment_restore',
+        metadata: {
+          source: 'trial_charge_manual_retry_error',
+          billingPlanId: user.billingPlanId,
+          billingPeriod: user.billingPeriod,
+          chargeAttemptKey,
+        },
+        now,
+      }).catch(() => {
+        // noop
+      });
+      billingCreditApplied = 0;
+    }
+
     await db
       .update(users)
       .set({
@@ -325,6 +396,10 @@ export default defineEventHandler(async (event) => {
         status: 'failed',
         lockAt: null,
         lockBy: null,
+        metadata: {
+          source: 'manual-retry',
+          billingCreditApplied,
+        },
         updatedAt: now,
       })
       .where(eq(billingChargeAttempts.chargeAttemptKey, chargeAttemptKey));

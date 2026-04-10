@@ -54,7 +54,7 @@
     "android:assemble:release": "cd android && ./gradlew assembleRelease",
     "android:assemble:release:optimized": "cd android && MENTALA_ANDROID_ENABLE_MINIFY=true ./gradlew assembleRelease",
     "android:bundle:release": "cd android && ./gradlew bundleRelease",
-    "android:bundle:release:optimized": "cd android && MENTALA_ANDROID_ENABLE_MINIFY=true ./gradlew bundleRelease",
+    "android:bundle:release:optimized": "cd android && MENTALA_ANDROID_ENABLE_MINIFY=true ./gradlew prepareReleasePlayConsoleArtifacts",
     "build:mobile:android:release": "pnpm run cap:sync:prod && pnpm run cap:verify:prod && pnpm run android:bundle:release",
     "build:mobile:android:prod": "pnpm run cap:sync:prod && pnpm run cap:verify:prod && pnpm run android:bundle:release:optimized",
     "upload:media": "bash scripts/upload-media-safe.sh",
@@ -72,7 +72,6 @@
     "@capacitor/cli": "^7.4.4",
     "@capacitor/clipboard": "^7.0.2",
     "@capacitor/core": "^7.4.3",
-    "@capacitor/filesystem": "^7.1.8",
     "@capacitor/haptics": "^7.0.2",
     "@capacitor/inappbrowser": "^2.5.4",
     "@capacitor/ios": "^7.4.4",
@@ -82,9 +81,9 @@
     "@capacitor/splash-screen": "^7.0.3",
     "@capacitor/status-bar": "^7.0.3",
     "@capgo/capacitor-social-login": "7.20.0",
-    "@capgo/native-audio": "7.11.2",
     "@iconify-json/lucide": "^1.2.68",
     "@internationalized/date": "3.9.0",
+    "@mediagrid/capacitor-native-audio": "2.3.2",
     "@nuxtjs/tailwindcss": "6.14.0",
     "@radix-icons/vue": "^1.0.0",
     "@sentry/node": "^10.15.0",
@@ -196,7 +195,8 @@
     },
     "patchedDependencies": {
       "@capacitor-community/speech-recognition": "patches/@capacitor-community__speech-recognition.patch",
-      "@capgo/capacitor-social-login@7.20.0": "patches/@capgo__capacitor-social-login@7.20.0.patch"
+      "@capgo/capacitor-social-login@7.20.0": "patches/@capgo__capacitor-social-login@7.20.0.patch",
+      "@mediagrid/capacitor-native-audio@2.3.2": "patches/@mediagrid__capacitor-native-audio@2.3.2.patch"
     }
   },
   "config": {

@@ -219,6 +219,44 @@ describe('realtime voice chat adapter', () => {
     expect(messages[1]?.feedbackDisabled).toBe(false);
   });
 
+  it('сохраняет порядок user -> assistant даже при повторных speech_started до финальной транскрипции', () => {
+    const { adapter, messages } = createAdapterHarness();
+
+    adapter.handleServerEvent({
+      type: 'conversation.item.created',
+      item: { id: 'user_5', role: 'user' },
+    });
+    adapter.handleServerEvent({
+      type: 'input_audio_buffer.speech_started',
+      item_id: 'user_5',
+    });
+    adapter.handleServerEvent({
+      type: 'response.audio_transcript.delta',
+      response_id: 'resp_5',
+      item_id: 'item_5',
+      delta: 'Первый ответ',
+    });
+    adapter.handleServerEvent({
+      type: 'input_audio_buffer.speech_started',
+      item_id: 'user_5',
+    });
+    adapter.handleServerEvent({
+      type: 'conversation.item.input_audio_transcription.completed',
+      item_id: 'user_5',
+      transcript: 'Мой вопрос после шума',
+    });
+
+    expect(messages).toHaveLength(2);
+    expect(messages.map((message) => message.role)).toEqual([
+      'user',
+      'assistant',
+    ]);
+    expect(messages.map((message) => message.content)).toEqual([
+      'Мой вопрос после шума',
+      'Первый ответ',
+    ]);
+  });
+
   it('очищает незавершённые пустые realtime bubbles при cleanup', () => {
     const { adapter, messages } = createAdapterHarness();
 
