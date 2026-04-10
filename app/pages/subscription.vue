@@ -10,43 +10,6 @@
     />
 
     <div class="space-y-2 pb-[100px]">
-      <div
-        v-if="isIosAppleIapFlow"
-        class="glass-deep rounded-lg border border-border p-4 space-y-3"
-      >
-        <div
-          v-if="shouldBlockAppleIapPurchase"
-          class="rounded-md border border-amber-400/30 bg-amber-400/10 p-3 text-xs text-foreground/90"
-        >
-          У вас уже есть активная подписка. Чтобы избежать двойного списания,
-          оформление через App Store временно недоступно.
-        </div>
-
-        <div class="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            :disabled="processing"
-            class="inline-flex items-center justify-center rounded-md border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-primary-ui/10 disabled:opacity-60 disabled:cursor-not-allowed"
-            @click="handleRestorePurchases"
-          >
-            Восстановить покупки
-          </button>
-          <button
-            type="button"
-            :disabled="processing"
-            class="inline-flex items-center justify-center rounded-md border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-primary-ui/10 disabled:opacity-60 disabled:cursor-not-allowed"
-            @click="handleManageAppleSubscriptions"
-          >
-            Управление подпиской в App Store
-          </button>
-        </div>
-
-        <p class="text-[11px] leading-snug text-foreground/80">
-          Подписка автоматически продлевается, если не отменена минимум за 24
-          часа до окончания текущего периода.
-        </p>
-      </div>
-
       <!-- Текущий статус -->
       <div
         v-if="shouldShowCurrentStatusCard"
@@ -348,6 +311,43 @@
           @update:billing-period="(period) => setBillingPeriod(plan.id, period)"
           @confirm-change="handlePlanChangeConfirm"
         />
+      </div>
+
+      <div
+        v-if="isIosAppleIapFlow"
+        class="glass-deep rounded-lg border border-border p-4 space-y-3"
+      >
+        <div
+          v-if="shouldBlockAppleIapPurchase"
+          class="rounded-md border border-amber-400/30 bg-amber-400/10 p-3 text-xs text-foreground/90"
+        >
+          У вас уже есть активная подписка. Чтобы избежать двойного списания,
+          оформление через App Store временно недоступно.
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            :disabled="processing"
+            class="inline-flex items-center justify-center rounded-md border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-primary-ui/10 disabled:opacity-60 disabled:cursor-not-allowed"
+            @click="handleRestorePurchases"
+          >
+            Восстановить покупки
+          </button>
+          <button
+            type="button"
+            :disabled="processing"
+            class="inline-flex items-center justify-center rounded-md border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-primary-ui/10 disabled:opacity-60 disabled:cursor-not-allowed"
+            @click="handleManageAppleSubscriptions"
+          >
+            Управление подпиской в App Store
+          </button>
+        </div>
+
+        <p class="text-[11px] leading-snug text-foreground/80">
+          Подписка автоматически продлевается, если не отменена минимум за 24
+          часа до окончания текущего периода.
+        </p>
       </div>
     </div>
 
@@ -849,7 +849,7 @@ const hasAppleIapPrices = computed(() => {
 const appleIapProductsLoadAttempted = ref(false);
 const appleIapPricesErrorMessage = ref<string | null>(null);
 
-// Для review-аккаунта billing-экран на native iOS полностью скрыт.
+// На native iOS billing-экран полностью скрыт для всех пользователей.
 watchEffect(() => {
   if (
     import.meta.server ||

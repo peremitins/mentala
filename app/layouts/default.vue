@@ -84,7 +84,6 @@ import { useSos } from '@/app/composables/useSos';
 import { findSceneTrack } from '@/app/lib/sceneSelectionCatalog';
 import { resolveMediaUrl } from '@/app/utils/media';
 import { useAuthStore } from '@/app/stores/auth';
-import { Capacitor } from '@capacitor/core';
 import { useViewportOrientation } from '@/app/composables/useViewportOrientation';
 import { pickOrientationMediaPath } from '@/app/utils/orientationMedia';
 
@@ -106,6 +105,7 @@ const auth = useAuthStore();
 const sceneSettings = useSceneSettingsStore();
 const uiSettings = useUiSettingsStore();
 const sceneAudio = useSceneAudio();
+const RESUME_SCENE_AFTER_MEDITATION_DELAY_MS = 450;
 const SOS_TECHNIQUE_STEPS = [
   'panic-grounding',
   'panic-breathing',
@@ -328,7 +328,7 @@ async function hydrateSceneAudioFromSettings() {
   sceneAudioHydrated = true;
 }
 
-/** Флаг: переход с mute на unmute (остановка медитации). Нужен для задержки на Android. */
+/** Флаг: переход с mute на unmute (остановка медитации). Нужен для отменяемого resume сцены. */
 async function syncSceneAudioState(options?: {
   transitioningFromMute?: boolean;
 }) {
@@ -345,9 +345,6 @@ async function syncSceneAudioState(options?: {
   }
   if (runId !== syncSceneAudioRunId) return;
   if (!currentScene.value) return;
-  // Обновляем текущую сцену, чтобы не было рассинхрона при смене.
-  await sceneAudio.setScene(currentScene.value);
-  if (runId !== syncSceneAudioRunId) return;
   // Нулевая громкость = сцена полностью выключена.
   if (sceneSettings.volume <= 0) {
     await sceneAudio.stop(false);
@@ -355,6 +352,9 @@ async function syncSceneAudioState(options?: {
   }
   // Пока открыт трек медитации или активен мини‑плеер — фоновые звуки выключены.
   if (shouldMuteSceneAudio.value) {
+    // Обновляем текущую сцену без автозапуска, пока приоритет у другого аудио.
+    await sceneAudio.setScene(currentScene.value);
+    if (runId !== syncSceneAudioRunId) return;
     await sceneAudio.suspend();
     return;
   }
@@ -366,18 +366,11 @@ async function syncSceneAudioState(options?: {
     return;
   }
 
-  // На Android при переходе с медитации на сцену даём ExoPlayer освободить audio focus,
-  // иначе накладываются два трека (медитация ещё в хвосте + сцена стартует).
-  const isAndroid =
-    typeof Capacitor !== 'undefined' && Capacitor.getPlatform() === 'android';
-  if (isAndroid && transitioningFromMute) {
-    await new Promise<void>((resolve) => setTimeout(resolve, 280));
-    if (runId !== syncSceneAudioRunId) return;
-  }
-
-  await sceneAudio.resume();
+  const resumed = await sceneAudio.resume({
+    delayMs: transitioningFromMute ? RESUME_SCENE_AFTER_MEDITATION_DELAY_MS : 0,
+  });
   if (runId !== syncSceneAudioRunId) return;
-  if (!sceneAudio.isPlaying.value) {
+  if (!resumed && !sceneAudio.isPlaying.value) {
     await sceneAudio.play(currentScene.value);
   }
 }

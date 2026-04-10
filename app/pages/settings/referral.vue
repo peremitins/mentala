@@ -21,7 +21,7 @@ import ReferralSharePanel from '@/app/components/subscription/ReferralSharePanel
 const { shouldHideIosReviewBillingUi } = useIosReviewBillingUi();
 const reviewRedirectStarted = ref(false);
 
-// Не даём review-аккаунту попасть на referral-экран в native iOS.
+// На native iOS referral-экран недоступен для всех пользователей.
 watchEffect(() => {
   if (
     import.meta.server ||

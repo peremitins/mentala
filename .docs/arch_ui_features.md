@@ -1,6 +1,7 @@
 # UI и фичи
 
 ## Практики (хаб `/practices`)
+
 - Медитации, дыхательные практики, быстрая помощь, дневник благодарности
 - Дыхательные: каталог в `app/lib/breathPracticesCatalog.ts`, плеер `BreathPracticePlayer.vue` + `BreathOrb.vue`
 - Голосовые подсказки фаз из `public/breath/voice/{informal|formal}/*.mp3`
@@ -10,28 +11,39 @@
 - Кастомные практики: 1-30 сек фазы, 2-4 фазы, хранение в localStorage/Capacitor Preferences
 
 ## Быстрая помощь (`/quick-help`)
+
 - 5 карточек: 5-4-3-2-1, Дыхание, Сброс напряжения, Выговориться, Выгрузка мыслей
 - Входы: PageHeader, хаб практик, chat suggested chips (`open_sos`)
 - Выгрузка мыслей: `/quick-help/thought-dump`, textarea + голосовой ввод, handoff в чат через `entryContext`
 
 ## Медитации
+
 - Каталог `/meditations`, детальный плеер через query `trackId`
 - Таблицы: `meditation_tracks`, `meditation_favorites`
-- Web Audio API для loop-треков (бесшовный цикл), HTMLAudio fallback для non-loop
-- iOS: `@capgo/native-audio`; Android медитации используют тот же HTMLAudio/WebAudio стек, что и `scene-selection`, чтобы background timer работал единообразно
+- Web/legacy: Web Audio API для loop-треков (бесшовный цикл), HTMLAudio fallback для non-loop
+- iOS/Android native: все meditation-треки идут через MediaGrid `AudioPlayer` (`@mediagrid/capacitor-native-audio@2.3.2`) с CDN URL и `useForNotification: true`
+- Native loop: для треков с `isLoop=true` включается `loop: true` на уровне плагина; на iOS это `AVPlayerLooper`, на Android - ExoPlayer `REPEAT_MODE_ONE`
+- Repeat обычных non-loop треков реализуется через `onAudioEnd` → `seek(0)` → `play()`, чтобы не переводить длинные обычные медитации в native loop mode
+- Системный плеер iOS/Android для медитаций минимальный: только активный play/pause/toggle, без seek/previous/next controls. На Android это ограничение применяется только к внешним/system controllers; internal MediaGrid controller приложения должен сохранять полный набор команд для `setMediaItem()`/`prepare()`/`play()`
+- Android sleep timer дополнительно ставится в native MediaGrid-патч через `scheduleStop`, чтобы остановка сработала при lockscreen/background, даже если JS timers в WebView заморожены
+- При выборе WebAudio/HTMLAudio не используется эвристика `durationSeconds > 300`; для loop-треков ограничение идёт по фактическому размеру буфера
+- Native route не падает в WebAudio/HTMLAudio fallback при ошибке MediaGrid, иначе старый проблемный путь снова маскирует реальные native-ошибки
 - Контекст очереди: перемотка вперёд/назад по выбранной секции
 - Медиафайлы версионируются по content-hash, CDN кэш бессрочный
 - В mobile release локальный каталог `public/meditations` не бандлится: аудио/обложки/фоны должны загружаться с `mediaBaseUrl` (`https://media.mentala.app` в production)
 
 ## Фоновая сцена (`/scene-selection`)
+
 - Фиксированный каталог в `app/lib/sceneSelectionCatalog.ts`
 - Настройки в `/api/user/me` → `sceneSettings`
-- Loop-сцены: WebAudio (бесшовный цикл), non-loop: HTMLAudio fallback
-- Глушение при активном медитационном аудио
+- Native iOS/Android: сцены используют тот же MediaGrid `NativeAudioService`, что и медитации; web/legacy: loop-сцены остаются на WebAudio, non-loop — HTMLAudio fallback
+- MediaGrid source сцены уничтожается при старте медитации, потому что системный native-плеер и `useForNotification` должны перейти к медитации
+- Глушение при активном медитационном аудио: при старте медитации вызывается `sceneAudio.suspend()`, после остановки/паузы медитации layout watcher возвращает сцену через `sceneAudio.resume()`, если она играла до suspend
 - Если медитация завершилась по таймеру, пока приложение в фоне или под локскрином, сцена не должна автозапускаться до возврата приложения в active state
 - `backgroundPlayMinutes`: 0 = стоп в background, N > 0 = стоп через N минут
 
 ## Онбординг (`/onboarding`)
+
 - 5 шагов: имя, причина, возраст, пол, tone
 - `users`: `gender`, `age_range`, `onboarding` (jsonb)
 - `user_preferences.onboarding_reasons` — мультивыбор, порядок = приоритет
@@ -39,6 +51,7 @@
 - Отдельный фоновый слой из `public/onboarding/welcome`
 
 ## Аутентификация (`/auth`)
+
 - Для входа поле e-mail размечается как `autocomplete="username"`, пароль — `autocomplete="current-password"`
 - Для регистрации поле имени размечается как `autocomplete="name"`, e-mail — `autocomplete="email"`, пароль — `autocomplete="new-password"`
 - У auth-полей должны быть стабильные `id`/`name`, отключённые `autocapitalize`/`spellcheck` для e-mail и валидные `type="email"` / `type="password"`
@@ -46,6 +59,7 @@
 - Для Android-связки сайта и приложения `/.well-known/assetlinks.json` должен содержать не только `delegate_permission/common.handle_all_urls`, но и `delegate_permission/common.get_login_creds`
 
 ## Дневник благодарности (`/practices/gratitude-diary`)
+
 - Overview (streak + история) и editor (вопрос + worksheet + composer)
 - Entitlement `gratitude.diary.full`, premium-ограничения для worksheet/photo
 - API: GET/POST/PATCH `/api/gratitude-diary/*`, upload-photo staged-flow
@@ -54,6 +68,7 @@
 - Фото: staged-flow (upload только при save, compensating cleanup при ошибке)
 
 ## Лендинг (`apps/landing`)
+
 - Отдельная Nuxt-сборка для SEO, SSR + SWR
 - Домены: `mentala.app` (лендинг), `my.mentala.app` (продукт + API)
 - API: `/api/landing/config` (cache 60s), `/api/landing/lead` (rate-limit + honeypot)
@@ -63,6 +78,7 @@
 - FAQ на лендинге рендерится полностью закрытым по умолчанию; раскрытие только по явному клику пользователя
 
 ## Компоненты и паттерны
+
 - `HorizontalScroller.vue` — горизонтальные ленты с drag, стрелками на desktop
 - `StateBlock` — idle/loading/empty/error
 - `ButtonLoader.vue` — спиннер внутри кнопки
@@ -70,6 +86,7 @@
 - DTO: Zod, `shared/dto/index.ts`
 
 ## Бренд-ассеты
+
 - Web/favicon мастер с rounded-card подложкой: `public/app-icon-web-master.svg`
 - Продакшен favicon для web и landing: `public/favicon.svg`
 - Apple-safe мастер для native iOS/AppIcon: `public/app-icon-native-master.svg` (квадратный фон, без прозрачности и без преднарисованных скруглений)

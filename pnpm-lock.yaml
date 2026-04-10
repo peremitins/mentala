@@ -15,6 +15,9 @@ patchedDependencies:
   '@capgo/capacitor-social-login@7.20.0':
     hash: 494f63e7b7f9e31eb1bfe9f162a2ac49a7179480cc7c75ac130ec34c5e53b838
     path: patches/@capgo__capacitor-social-login@7.20.0.patch
+  '@mediagrid/capacitor-native-audio@2.3.2':
+    hash: 2e58b0d1e1e7d66b1104f4465cd95b53eed785a4bd219fedccb8ba6f947b62b3
+    path: patches/@mediagrid__capacitor-native-audio@2.3.2.patch
 
 importers:
 
@@ -44,9 +47,6 @@ importers:
       '@capacitor/core':
         specifier: ^7.4.3
         version: 7.4.3
-      '@capacitor/filesystem':
-        specifier: ^7.1.8
-        version: 7.1.8(@capacitor/core@7.4.3)
       '@capacitor/haptics':
         specifier: ^7.0.2
         version: 7.0.2(@capacitor/core@7.4.3)
@@ -74,15 +74,15 @@ importers:
       '@capgo/capacitor-social-login':
         specifier: 7.20.0
         version: 7.20.0(patch_hash=494f63e7b7f9e31eb1bfe9f162a2ac49a7179480cc7c75ac130ec34c5e53b838)(@capacitor/core@7.4.3)
-      '@capgo/native-audio':
-        specifier: 7.11.2
-        version: 7.11.2(@capacitor/core@7.4.3)
       '@iconify-json/lucide':
         specifier: ^1.2.68
         version: 1.2.68
       '@internationalized/date':
         specifier: 3.9.0
         version: 3.9.0
+      '@mediagrid/capacitor-native-audio':
+        specifier: 2.3.2
+        version: 2.3.2(patch_hash=2e58b0d1e1e7d66b1104f4465cd95b53eed785a4bd219fedccb8ba6f947b62b3)(@capacitor/core@7.4.3)
       '@nuxtjs/tailwindcss':
         specifier: 6.14.0
         version: 6.14.0(magicast@0.3.5)(ts-node@10.9.2(@types/node@24.5.2)(typescript@5.6.3))
@@ -746,11 +746,6 @@ packages:
   '@capacitor/core@7.4.3':
     resolution: {integrity: sha512-wCWr8fQ9Wxn0466vPg7nMn0tivbNVjNy1yL4GvDSIZuZx7UpU2HeVGNe9QjN/quEd+YLRFeKEBLBw619VqUiNg==}
 
-  '@capacitor/filesystem@7.1.8':
-    resolution: {integrity: sha512-Qpw/2SE4/CzqAUvGgSM9hw/uXQ5qoOaF4wxbToXwpAaKPS+tzletS1h5ti3jjLmGcqizTs2sEXMtcsARW/Ceew==}
-    peerDependencies:
-      '@capacitor/core': '>=7.0.0'
-
   '@capacitor/haptics@7.0.2':
     resolution: {integrity: sha512-vqfeEM6s2zMgLjpITCTUIy7P/hadq/Gr5E/RClFgMJPB41Y5FsqOKD+j85/uwh8N2cf/aWaPeXUmjnTzJbEB2g==}
     peerDependencies:
@@ -791,16 +786,8 @@ packages:
     peerDependencies:
       '@capacitor/core': '>=7.0.0'
 
-  '@capacitor/synapse@1.0.4':
-    resolution: {integrity: sha512-/C1FUo8/OkKuAT4nCIu/34ny9siNHr9qtFezu4kxm6GY1wNFxrCFWjfYx5C1tUhVGz3fxBABegupkpjXvjCHrw==}
-
   '@capgo/capacitor-social-login@7.20.0':
     resolution: {integrity: sha512-rHlEALFUonLe4sDG+qybDowh2/XDiHJ4DK9pShe1aPTGSrmA5j7kz8VbHYGqgof5xdyeC7pAY3+8PASTW+qGKg==}
-    peerDependencies:
-      '@capacitor/core': '>=7.0.0'
-
-  '@capgo/native-audio@7.11.2':
-    resolution: {integrity: sha512-/V4NIeo9BN5o5QEYQkPpeyZWQ/XKxBV8xNweMepviD7nugePKKCFa9Iy5ETJCybh/sV7mnbk6bMNcKcp+ohNPQ==}
     peerDependencies:
       '@capacitor/core': '>=7.0.0'
 
@@ -2044,6 +2031,11 @@ packages:
 
   '@marijn/find-cluster-break@1.0.2':
     resolution: {integrity: sha512-l0h88YhZFyKdXIFNfSWpyjStDjGHwZ/U7iobcK1cQQD8sejsONdQtTVU+1wVN1PBw40PiiHB1vA5S7VTfQiP9g==}
+
+  '@mediagrid/capacitor-native-audio@2.3.2':
+    resolution: {integrity: sha512-ZFuezYokxBri1WlqmKbzINg2qWoh6jS1WlDBD7/0jvByGW7yZyHgmONBSc3mzUlaW0kyJyv+NSsmitUs2a/UBg==}
+    peerDependencies:
+      '@capacitor/core': '>=7.0.0'
 
   '@msgpackr-extract/msgpackr-extract-darwin-arm64@3.0.3':
     resolution: {integrity: sha512-QZHtlVgbAdy2zAqNA9Gu1UpIuI8Xvsd1v8ic6B2pZmeFnFcMWiPLfWXh7TVw4eGEZ/C9TH281KwhVoeQUKbyjw==}
@@ -11010,11 +11002,6 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
-  '@capacitor/filesystem@7.1.8(@capacitor/core@7.4.3)':
-    dependencies:
-      '@capacitor/core': 7.4.3
-      '@capacitor/synapse': 1.0.4
-
   '@capacitor/haptics@7.0.2(@capacitor/core@7.4.3)':
     dependencies:
       '@capacitor/core': 7.4.3
@@ -11047,13 +11034,7 @@ snapshots:
     dependencies:
       '@capacitor/core': 7.4.3
 
-  '@capacitor/synapse@1.0.4': {}
-
   '@capgo/capacitor-social-login@7.20.0(patch_hash=494f63e7b7f9e31eb1bfe9f162a2ac49a7179480cc7c75ac130ec34c5e53b838)(@capacitor/core@7.4.3)':
-    dependencies:
-      '@capacitor/core': 7.4.3
-
-  '@capgo/native-audio@7.11.2(@capacitor/core@7.4.3)':
     dependencies:
       '@capacitor/core': 7.4.3
 
@@ -12212,6 +12193,10 @@ snapshots:
       - supports-color
 
   '@marijn/find-cluster-break@1.0.2': {}
+
+  '@mediagrid/capacitor-native-audio@2.3.2(patch_hash=2e58b0d1e1e7d66b1104f4465cd95b53eed785a4bd219fedccb8ba6f947b62b3)(@capacitor/core@7.4.3)':
+    dependencies:
+      '@capacitor/core': 7.4.3
 
   '@msgpackr-extract/msgpackr-extract-darwin-arm64@3.0.3':
     optional: true
