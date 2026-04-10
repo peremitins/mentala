@@ -1,6 +1,16 @@
-import { createError, getHeader, getQuery, readRawBody, setHeader } from 'h3';
+import {
+  createError,
+  getHeader,
+  getQuery,
+  readRawBody,
+  setHeader,
+  setResponseStatus,
+} from 'h3';
 import { assertRealtimeVoiceSessionCanHandshake } from '@/server/application/realtime/realtime-voice-session.service';
-import { exchangeOpenAiRealtimeWebRtcSdp } from '@/server/infrastructure/llm/openai-realtime';
+import {
+  exchangeOpenAiRealtimeWebRtcSdp,
+  isRealtimeWebRtcHandshakeFailure,
+} from '@/server/infrastructure/llm/openai-realtime';
 import { verifyRealtimeVoiceHandshakeToken } from '@/server/application/realtime/realtime-voice-handshake-token';
 import { getRealtimeVoiceSessionConfig } from '@/server/application/realtime/realtime-voice-session-config.store';
 
@@ -46,11 +56,43 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const answerSdp = await exchangeOpenAiRealtimeWebRtcSdp({
-    clientSecret,
-    sdp,
-    sessionConfig,
-  });
+  let answerSdp: string;
+
+  try {
+    answerSdp = await exchangeOpenAiRealtimeWebRtcSdp({
+      clientSecret,
+      sdp,
+      sessionConfig,
+    });
+  } catch (error) {
+    if (!isRealtimeWebRtcHandshakeFailure(error)) {
+      throw error;
+    }
+
+    // Для transient handshake-ошибок возвращаем управляемый 5xx-ответ,
+    // чтобы клиент получил человекочитаемое сообщение, а Nitro не считал
+    // это необработанным app-critical исключением.
+    setResponseStatus(
+      event,
+      error.statusCode,
+      String(error.statusMessage || 'Realtime handshake failed')
+    );
+
+    return {
+      code: error.data.code,
+      message: error.data.userMessage,
+      retryable: error.data.retryable,
+      error: {
+        code: error.data.code,
+        message: error.data.userMessage,
+        details: {
+          retryable: error.data.retryable,
+          failureKind: error.data.failureKind,
+          upstreamStatus: error.data.upstreamStatus,
+        },
+      },
+    };
+  }
 
   setHeader(event, 'Content-Type', 'application/sdp');
   return answerSdp;
