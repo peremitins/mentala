@@ -23,6 +23,8 @@ export default defineEventHandler(async (event) => {
     userRole: sessionUser.role,
     sessionId: body.sessionId,
     reason: body.reason,
+    errorCode: body.error?.code || null,
+    errorMessage: body.error?.message || null,
   });
 
   return RealtimeVoiceSessionEndResponseDto.parse(response);

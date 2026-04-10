@@ -876,6 +876,8 @@ export async function endRealtimeVoiceSession(params: {
   sessionId: string;
   reason: RealtimeVoiceSessionEndReason;
   skipPostEndMemoryLifecycle?: boolean;
+  errorCode?: string | null;
+  errorMessage?: string | null;
 }) {
   const now = new Date();
 
@@ -902,6 +904,8 @@ export async function endRealtimeVoiceSession(params: {
       session,
       reason: params.reason,
       now,
+      errorCode: params.errorCode ?? null,
+      errorMessage: params.errorMessage ?? null,
     });
   });
 
