@@ -13,6 +13,14 @@ export function useBreathPracticeVoice() {
   const soundCache = new Map<string, Howl>();
   const preloaded = new Set<string>();
   const preloadInFlight = new Map<string, Promise<void>>();
+  // persistent id первого (и единственного) Sound каждого Howl-а голоса.
+  // Ключ — тот же cacheKey, что и в soundCache. См. комментарий к
+  // persistentSoundIds в useBreathPracticeAudio.ts: sound.play(id) идёт
+  // через _soundById и обходит _inactiveSound + _drain, что не даёт
+  // Howler'у утечь html5 Audio-ноды из глобального пула (10 штук).
+  // Без этого повторные play() постепенно выедают пул и voice-подсказки
+  // молча перестают звучать.
+  const persistentSoundIds = new Map<string, number>();
   let currentSound: Howl | null = null;
   let currentSoundId: number | null = null;
   let cacheVersion = 0;
@@ -37,7 +45,7 @@ export function useBreathPracticeVoice() {
   function createSound(
     HowlCtor: HowlConstructor,
     src: string,
-    label: string
+    key: string
   ): Howl {
     const sound = new HowlCtor({
       src: [src],
@@ -45,22 +53,37 @@ export function useBreathPracticeVoice() {
       // это стабильнее, чем голый Audio и Web Audio API для коротких voice-clip.
       html5: true,
       preload: true,
+      // pool оставляем дефолтным. Мы сами никогда не зовём play() без id
+      // после первого раза (см. persistentSoundIds) — поэтому у Howl'а
+      // всегда ровно один Sound в _sounds, _inactiveSound не срабатывает,
+      // drain ничего не сплайсит, html5 Audio-нода не утекает.
       onplayerror: () => {
         sound.once('unlock', () => {
           if (currentSound !== sound) return;
 
           try {
-            currentSoundId = sound.play();
+            const existingId = persistentSoundIds.get(key);
+            if (existingId !== undefined) {
+              // Переигрываем тот же Sound — без захвата новой html5-ноды.
+              sound.play(existingId);
+              currentSoundId = existingId;
+              return;
+            }
+            const id = sound.play();
+            if (typeof id === 'number') {
+              persistentSoundIds.set(key, id);
+              currentSoundId = id;
+            }
           } catch (error) {
             console.error(
-              `[BreathVoice] Failed to replay ${label} after unlock:`,
+              `[BreathVoice] Failed to replay ${key} after unlock:`,
               error
             );
           }
         });
       },
       onloaderror: (_id, error) => {
-        console.error(`[BreathVoice] Failed to load ${label}:`, error);
+        console.error(`[BreathVoice] Failed to load ${key}:`, error);
       },
     });
 
@@ -189,10 +212,26 @@ export function useBreathPracticeVoice() {
     if (!sound) return;
     if (version !== cacheVersion) return;
 
+    const key = cacheKey(phase, addressing);
     stop();
     currentSound = sound;
     try {
-      currentSoundId = sound.play();
+      const existingId = persistentSoundIds.get(key);
+      if (existingId !== undefined) {
+        // Переиспользуем уже созданный Sound (и его HTMLAudioElement)
+        // через sound.play(id) — обходим _inactiveSound/drain.
+        sound.play(existingId);
+        currentSoundId = existingId;
+      } else {
+        // Первый запуск этого клипа — Howler создаст Sound, запоминаем id.
+        const id = sound.play();
+        if (typeof id === 'number') {
+          persistentSoundIds.set(key, id);
+          currentSoundId = id;
+        } else {
+          currentSoundId = null;
+        }
+      }
     } catch (error: any) {
       currentSound = null;
       currentSoundId = null;
@@ -216,6 +255,9 @@ export function useBreathPracticeVoice() {
     }
 
     soundCache.clear();
+    // После unload() id'ы протухают — новый ensureSounds/getOrCreateSound
+    // создаст свежие Howl-объекты и новые persistent ids.
+    persistentSoundIds.clear();
   }
 
   return {

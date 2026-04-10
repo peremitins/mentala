@@ -26,6 +26,12 @@ import { runTrialBillingForUser } from '@/server/application/subscriptions/trial
 import { runScheduledPlanChangeForUser } from '@/server/application/subscriptions/scheduled-plan-change.service';
 import { getOrCreateAppleAppAccountToken } from '@/server/application/subscriptions/apple-app-account-token.service';
 import { normalizeStorefrontCountryCode } from '@/shared/utils/storefront';
+import { resolveEffectiveEntitlementsPlanWithAccessGrant } from '@/server/application/promo-codes/promo-access-grants.service';
+import { getEffectiveBillingShiftDaysForUser } from '@/server/application/promo-codes/billing-schedule-adjustments.service';
+import { listPendingDiscountGrantsForUser } from '@/server/application/promo-codes/promo-discount-grants.service';
+import { isMissingPromoOrReferralInfrastructureError } from '@/server/application/promo-codes/promo-infrastructure-compat.service';
+import { getReferralSummary } from '@/server/application/referral/referral-rewards.service';
+import { releaseDueBillingCredits } from '@/server/application/subscriptions/billing-credit.service';
 
 interface ScheduledChangeResponse {
   planId: string;
@@ -185,6 +191,12 @@ export default defineEventHandler(async (event) => {
   await expireOutdatedActiveSubscriptions({
     userId: targetUserId,
     now,
+  });
+  await releaseDueBillingCredits({
+    userId: targetUserId,
+    now,
+  }).catch(() => {
+    // Не валим текущее чтение из-за фона release-path.
   });
 
   let userRecord = await readCurrentUserBillingRow(targetUserId);
@@ -466,7 +478,7 @@ export default defineEventHandler(async (event) => {
   const billingCollectionStatus = normalizeBillingCollectionStatus(
     userRecord.billingCollectionStatus
   );
-  const currentEntitlementsPlan = resolveCurrentEntitlementsPlan({
+  const baseEntitlementsPlan = resolveCurrentEntitlementsPlan({
     now,
     trialActive,
     billingPlanId: userRecord.billingPlanId,
@@ -474,6 +486,14 @@ export default defineEventHandler(async (event) => {
     graceEndsAt: userRecord.graceEndsAt,
     activePaidPlanId: activeSubscription?.subscription.planId ?? null,
   });
+  const effectiveAccess = await resolveEffectiveEntitlementsPlanWithAccessGrant(
+    {
+      userId: targetUserId,
+      basePlanId: baseEntitlementsPlan,
+      now,
+    }
+  );
+  const currentEntitlementsPlan = effectiveAccess.planId;
 
   // Для корректного расчета лимитов берем конфиг эффективного плана доступа.
   const effectivePlanRows = await db
@@ -518,10 +538,46 @@ export default defineEventHandler(async (event) => {
   const storefrontCountry = normalizeStorefrontCountry(
     userRecord.billingStorefrontCountry
   );
+  const billingProviderHint = resolveBillingProviderHint({
+    platform: sourcePlatform,
+    storefrontCountry,
+  });
   const appleAppAccountToken =
     sourcePlatform === 'ios'
       ? await getOrCreateAppleAppAccountToken(targetUserId)
       : null;
+  const shouldExposeInternalPromo = billingProviderHint === 'yookassa';
+  let pendingDiscounts: any[] = [];
+  let effectiveBillingShiftDays = 0;
+  let referralSummary: Awaited<ReturnType<typeof getReferralSummary>> | null =
+    null;
+
+  if (shouldExposeInternalPromo) {
+    try {
+      [pendingDiscounts, effectiveBillingShiftDays, referralSummary] =
+        await Promise.all([
+          listPendingDiscountGrantsForUser({
+            userId: targetUserId,
+            now,
+          }),
+          getEffectiveBillingShiftDaysForUser({
+            userId: targetUserId,
+          }),
+          getReferralSummary({
+            userId: targetUserId,
+            now,
+          }),
+        ]);
+    } catch (error) {
+      if (!isMissingPromoOrReferralInfrastructureError(error)) {
+        throw error;
+      }
+
+      pendingDiscounts = [];
+      effectiveBillingShiftDays = 0;
+      referralSummary = null;
+    }
+  }
 
   const response = {
     plan: currentEntitlementsPlan,
@@ -554,10 +610,7 @@ export default defineEventHandler(async (event) => {
     graceEndsAt: userRecord.graceEndsAt?.toISOString() || null,
     storefrontCountry,
     appleAppAccountToken,
-    billingProviderHint: resolveBillingProviderHint({
-      platform: sourcePlatform,
-      storefrontCountry,
-    }),
+    billingProviderHint,
     features,
     subscription: subscriptionDto,
     user: {
@@ -567,6 +620,59 @@ export default defineEventHandler(async (event) => {
     },
     noActiveSubscription: !activeSubscription,
     scheduledChange,
+    promo: shouldExposeInternalPromo
+      ? {
+          activeAccessGrant: effectiveAccess.activeAccessGrant
+            ? {
+                id: effectiveAccess.activeAccessGrant.id,
+                planId: effectiveAccess.activeAccessGrant.planId,
+                startsAt:
+                  effectiveAccess.activeAccessGrant.startsAt.toISOString(),
+                endsAt: effectiveAccess.activeAccessGrant.endsAt.toISOString(),
+                sourceLabel:
+                  (
+                    effectiveAccess.activeAccessGrant.metadata as Record<
+                      string,
+                      unknown
+                    >
+                  )?.sourceLabel || 'Промокод',
+              }
+            : null,
+          pendingDiscount:
+            pendingDiscounts.length > 0
+              ? {
+                  id: pendingDiscounts[0].id,
+                  kind: pendingDiscounts[0].grantKind,
+                  percent: Number(pendingDiscounts[0].percent),
+                  status: pendingDiscounts[0].status,
+                  expiresAt:
+                    pendingDiscounts[0].expiresAt?.toISOString() || null,
+                  sourceLabel:
+                    (pendingDiscounts[0].metadata as Record<string, unknown>)
+                      ?.sourceLabel || 'Скидка',
+                  targetPlanScope: pendingDiscounts[0].targetPlanScope,
+                  targetPeriodScope: pendingDiscounts[0].targetPeriodScope,
+                }
+              : null,
+          effectiveBillingShiftDays,
+        }
+      : {
+          activeAccessGrant: null,
+          pendingDiscount: null,
+          effectiveBillingShiftDays: 0,
+        },
+    referral:
+      shouldExposeInternalPromo && referralSummary
+        ? {
+            myCode: referralSummary.profile.code,
+            pendingRewardsCount: referralSummary.pendingRewardsCount,
+            successfulInvitesCount: referralSummary.successfulInvitesCount,
+          }
+        : {
+            myCode: null,
+            pendingRewardsCount: 0,
+            successfulInvitesCount: 0,
+          },
   };
 
   setHeader(event, 'Cache-Control', 'private, no-store');
@@ -574,7 +680,7 @@ export default defineEventHandler(async (event) => {
     setHeader(
       event,
       'ETag',
-      `"${targetUserId}-${currentEntitlementsPlan}-${userRecord.updatedAt.getTime()}"`
+      `"${targetUserId}-${currentEntitlementsPlan}-${userRecord.updatedAt.getTime()}-${effectiveAccess.activeAccessGrant?.id || 0}-${pendingDiscounts?.length || 0}"`
     );
   }
 

@@ -66,10 +66,25 @@
 - Lock/paywall: иконка тарифа + `FeaturePaywallModal` при клике
 - Авто-fallback: без entitlement на AI-уведомления → сервер переводит в templates
 - `roleId=support` трактуется как premium-equivalent доступ для review/QA: полный доступ к premium-фичам без покупки, но без административного доступа к чужим данным
+- Для `native iOS` frontend во всех сборках отключает purchase-management surface: скрываются promo/referral, `/subscription`, `/settings/referral` и billing-подсказки в `Поддержке`. В `Настройки` блок `Подписка` остаётся видимым и показывает текст о переходе в веб-версию для изменения тарифа.
+- Effective entitlements теперь считаются не только по paid subscription и trial, но и по `billing_access_grants`
 
 ## Промокоды
 
-- Проектное ТЗ по промокодам, offer codes и скидкам: `.docs/arch_promo_codes.md`
+- Реализован internal promo/referral flow для `yookassa`: `.docs/arch_promo_codes.md`
+- Новые billing-сущности:
+  - `billing_access_grants`
+  - `billing_discount_grants`
+  - `billing_schedule_adjustments`
+- `GET /api/subscriptions/current` может вернуть optional-блоки `promo` и `referral`
+- `start-checkout`, `retry-charge`, `trial-billing-worker` и `scheduled-plan-change` используют единый discount-grant resolver
+- `free_access_days` не трогает `trial`, а честно сдвигает billing-boundary через `billing_schedule_adjustments`
+- Для `apple_iap` внутренние promo/referral controls и endpoints не используются
+- Referrer reward уже переведён на `billing_credit_entries` + агрегированный `users.billingCredit`
+- `billingCredit` участвует в расчёте платежа после proration/discount и до внешнего charge
+- Invitee reward остаётся percentage discount на следующий qualifying payment
+- Reward referrer выпускается после qualifying payment invitee и hold-периода, а не мгновенно при вводе кода
+- Отдельный influencer / blogger / affiliate contour в эту итерацию не входит и будет проектироваться отдельно
 
 ## Apple IAP client confirm
 

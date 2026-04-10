@@ -6,7 +6,10 @@ import type { UseFetchOptions } from 'nuxt/app';
  */
 export function useAPI<T = unknown>(
   url: string | (() => string),
-  options: UseFetchOptions<T> & { useFetch?: boolean } = {}
+  options: UseFetchOptions<T> & {
+    useFetch?: boolean;
+    suppressErrorToast?: boolean;
+  } = {}
 ) {
   const nuxtApp = useNuxtApp();
   const method = (options.method || 'GET').toString().toUpperCase();

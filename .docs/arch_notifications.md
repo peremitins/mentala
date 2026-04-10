@@ -32,6 +32,7 @@
 
 ## Push (FCM)
 - **Android**: data-only сообщения, `MentalaMessagingService` строит системное уведомление. Один обработчик `MESSAGING_EVENT`
+- **Android**: не используем `full-screen intent` и permission `USE_FULL_SCREEN_INTENT`; push показываются как обычные high-priority системные уведомления через `contentIntent`
 - **iOS**: FCM token через `@capacitor-community/fcm`, APNs только для диагностики. Rich-image через `MentalaNotificationService` (UNNotificationServiceExtension)
 - Foreground-показ на iOS идёт штатно через `PushNotifications.presentationOptions` и системный `UNUserNotificationCenterDelegate` из Capacitor
 - Debug и Release на iOS должны быть разведены по APNs-среде: debug/local использует `aps-environment=development`, release/TestFlight — `aps-environment=production`

@@ -1,5 +1,7 @@
 apply plugin: 'com.android.application'
 
+import java.util.zip.ZipFile
+
 def isTruthy = { value ->
     if (value == null) return false
 
@@ -21,8 +23,8 @@ android {
         applicationId "com.mentala.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 4
-        versionName "1.1.2"
+        versionCode 6
+        versionName "1.1.4"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -79,6 +81,106 @@ dependencies {
 }
 
 apply from: 'capacitor.build.gradle'
+
+def releaseAabFile = file("$buildDir/outputs/bundle/release/app-release.aab")
+def releaseMappingFile = file("$buildDir/outputs/mapping/release/mapping.txt")
+def releaseNativeSymbolsDir = file("$buildDir/outputs/native-debug-symbols/release")
+def releaseNativeSymbolsFile = file("$buildDir/outputs/native-debug-symbols/release/native-debug-symbols.zip")
+def releaseNativeSymbolsFallbackFile = file("$buildDir/outputs/native-debug-symbols/release/native-debug-symbols-fallback.zip")
+def releaseMergedNativeLibsDir = file("$buildDir/intermediates/merged_native_libs/release/mergeReleaseNativeLibs/out/lib")
+def releasePlayConsoleDir = file("$buildDir/outputs/play-console/release")
+
+tasks.register('zipReleaseNativeDebugSymbolsFallback', Zip) {
+    group = 'distribution'
+    description = 'Создаёт fallback-архив native symbols для Google Play, если AGP не сформировал стандартный zip.'
+    dependsOn 'mergeReleaseNativeLibs'
+    from(releaseMergedNativeLibsDir)
+    include '**/*.so'
+    destinationDirectory = releaseNativeSymbolsDir
+    archiveFileName = 'native-debug-symbols-fallback.zip'
+
+    onlyIf {
+        releaseMergedNativeLibsDir.exists()
+    }
+}
+
+tasks.register('prepareReleasePlayConsoleArtifacts') {
+    group = 'distribution'
+    description = 'Проверяет release AAB и собирает полный набор артефактов для Google Play Console.'
+    dependsOn 'bundleRelease', 'zipReleaseNativeDebugSymbolsFallback'
+
+    doLast {
+        if (!releaseAabFile.exists()) {
+            throw new GradleException("Не найден Android App Bundle: ${releaseAabFile}")
+        }
+
+        if (!releaseMappingFile.exists()) {
+            throw new GradleException(
+                "Не найден mapping.txt. Для prod build должен быть включён R8/ProGuard."
+            )
+        }
+
+        ZipFile bundleZip = new ZipFile(releaseAabFile)
+        try {
+            // Проверяем, что файл деобфускации реально попал внутрь AAB,
+            // иначе Play Console продолжит ругаться на отсутствие mapping.
+            def mappingEntry = bundleZip.getEntry(
+                'BUNDLE-METADATA/com.android.tools.build.obfuscation/proguard.map'
+            )
+
+            if (mappingEntry == null) {
+                throw new GradleException(
+                    'Внутри app-release.aab отсутствует BUNDLE-METADATA/.../proguard.map.'
+                )
+            }
+        } finally {
+            bundleZip.close()
+        }
+
+        def nativeSymbolsForPlay = releaseNativeSymbolsFile.exists()
+            ? releaseNativeSymbolsFile
+            : releaseNativeSymbolsFallbackFile
+
+        if (!nativeSymbolsForPlay.exists()) {
+            throw new GradleException(
+                "Не найден native-debug-symbols.zip. " +
+                "Проверь native зависимости и генерацию symbols для release build."
+            )
+        }
+
+        delete(releasePlayConsoleDir)
+        mkdir(releasePlayConsoleDir)
+
+        copy {
+            from(releaseAabFile)
+            into(releasePlayConsoleDir)
+        }
+
+        copy {
+            from(releaseMappingFile)
+            into(releasePlayConsoleDir)
+        }
+
+        copy {
+            from(nativeSymbolsForPlay)
+            into(releasePlayConsoleDir)
+            rename { 'native-debug-symbols.zip' }
+        }
+
+        def nativeSymbolsSource = releaseNativeSymbolsFile.exists()
+            ? 'agp-native-debug-symbols'
+            : 'fallback-merged-native-libs'
+
+        def metadataFile = new File(releasePlayConsoleDir, 'artifacts-info.txt')
+        metadataFile.text =
+            "AAB=${releaseAabFile.name}\n" +
+            "MAPPING=${releaseMappingFile.name}\n" +
+            "NATIVE_SYMBOLS=native-debug-symbols.zip\n" +
+            "NATIVE_SYMBOLS_SOURCE=${nativeSymbolsSource}\n"
+
+        println "✓ Play Console artifacts prepared: ${releasePlayConsoleDir}"
+    }
+}
 
 try {
     def servicesJSON = file('google-services.json')

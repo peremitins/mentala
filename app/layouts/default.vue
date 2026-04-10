@@ -69,7 +69,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import BottomNav from '@/app/components/BottomNav.vue';
 import MiniMeditationPlayer from '@/app/components/meditations/MiniMeditationPlayer.vue';
@@ -84,7 +84,6 @@ import { useSos } from '@/app/composables/useSos';
 import { findSceneTrack } from '@/app/lib/sceneSelectionCatalog';
 import { resolveMediaUrl } from '@/app/utils/media';
 import { useAuthStore } from '@/app/stores/auth';
-import { Capacitor } from '@capacitor/core';
 import { useViewportOrientation } from '@/app/composables/useViewportOrientation';
 import { pickOrientationMediaPath } from '@/app/utils/orientationMedia';
 
@@ -106,6 +105,7 @@ const auth = useAuthStore();
 const sceneSettings = useSceneSettingsStore();
 const uiSettings = useUiSettingsStore();
 const sceneAudio = useSceneAudio();
+const RESUME_SCENE_AFTER_MEDITATION_DELAY_MS = 450;
 const SOS_TECHNIQUE_STEPS = [
   'panic-grounding',
   'panic-breathing',
@@ -132,14 +132,59 @@ const canPlaySceneAudio = computed(() => {
   );
 });
 
+const isAppActive = ref(true);
+let removeVisibilityListener: (() => void) | null = null;
+let removeAppStateListener: (() => Promise<void>) | null = null;
+
 // Проверяем recovery push-уведомлений через 5 секунд после mount
 // (после того как push-notifications.client.ts отработает за 3 секунды)
 onMounted(() => {
+  if (typeof document !== 'undefined') {
+    const syncVisibilityState = () => {
+      isAppActive.value = document.visibilityState === 'visible';
+    };
+
+    syncVisibilityState();
+    document.addEventListener('visibilitychange', syncVisibilityState);
+    removeVisibilityListener = () => {
+      document.removeEventListener('visibilitychange', syncVisibilityState);
+    };
+  }
+
+  void (async () => {
+    try {
+      const { App } = await import('@capacitor/app');
+      const state = await App.getState();
+      isAppActive.value = state.isActive;
+
+      const listener = await App.addListener(
+        'appStateChange',
+        ({ isActive }) => {
+          isAppActive.value = isActive;
+        }
+      );
+
+      removeAppStateListener = () => listener.remove();
+    } catch {
+      // На web fallback уже закрыт visibilitychange.
+    }
+  })();
+
   setTimeout(() => {
     if (canPlaySceneAudio.value) {
       void pushRecovery.checkRecoveryStatus();
     }
   }, 5000);
+});
+
+onBeforeUnmount(() => {
+  removeVisibilityListener?.();
+  removeVisibilityListener = null;
+
+  if (removeAppStateListener) {
+    void removeAppStateListener();
+    removeAppStateListener = null;
+  }
 });
 
 const detailTrackId = computed(() => {
@@ -283,7 +328,7 @@ async function hydrateSceneAudioFromSettings() {
   sceneAudioHydrated = true;
 }
 
-/** Флаг: переход с mute на unmute (остановка медитации). Нужен для задержки на Android. */
+/** Флаг: переход с mute на unmute (остановка медитации). Нужен для отменяемого resume сцены. */
 async function syncSceneAudioState(options?: {
   transitioningFromMute?: boolean;
 }) {
@@ -300,9 +345,6 @@ async function syncSceneAudioState(options?: {
   }
   if (runId !== syncSceneAudioRunId) return;
   if (!currentScene.value) return;
-  // Обновляем текущую сцену, чтобы не было рассинхрона при смене.
-  await sceneAudio.setScene(currentScene.value);
-  if (runId !== syncSceneAudioRunId) return;
   // Нулевая громкость = сцена полностью выключена.
   if (sceneSettings.volume <= 0) {
     await sceneAudio.stop(false);
@@ -310,22 +352,25 @@ async function syncSceneAudioState(options?: {
   }
   // Пока открыт трек медитации или активен мини‑плеер — фоновые звуки выключены.
   if (shouldMuteSceneAudio.value) {
+    // Обновляем текущую сцену без автозапуска, пока приоритет у другого аудио.
+    await sceneAudio.setScene(currentScene.value);
+    if (runId !== syncSceneAudioRunId) return;
     await sceneAudio.suspend();
     return;
   }
 
-  // На Android при переходе с медитации на сцену даём ExoPlayer освободить audio focus,
-  // иначе накладываются два трека (медитация ещё в хвосте + сцена стартует).
-  const isAndroid =
-    typeof Capacitor !== 'undefined' && Capacitor.getPlatform() === 'android';
-  if (isAndroid && transitioningFromMute) {
-    await new Promise<void>((resolve) => setTimeout(resolve, 280));
-    if (runId !== syncSceneAudioRunId) return;
+  if (!isAppActive.value) {
+    // Если медитация закончилась по таймеру в фоне/под локскрином,
+    // сцену нельзя поднимать сразу: пользователь её не видит и
+    // вместо тишины получит неожиданный фоновый звук.
+    return;
   }
 
-  await sceneAudio.resume();
+  const resumed = await sceneAudio.resume({
+    delayMs: transitioningFromMute ? RESUME_SCENE_AFTER_MEDITATION_DELAY_MS : 0,
+  });
   if (runId !== syncSceneAudioRunId) return;
-  if (!sceneAudio.isPlaying.value) {
+  if (!resumed && !sceneAudio.isPlaying.value) {
     await sceneAudio.play(currentScene.value);
   }
 }
@@ -335,6 +380,7 @@ watch(
     () => shouldMuteSceneAudio.value,
     () => canPlaySceneAudio.value,
     () => currentScene.value?.id,
+    () => isAppActive.value,
   ],
   ([mute], [oldMute]) => {
     const transitioningFromMute = oldMute === true && mute === false;
