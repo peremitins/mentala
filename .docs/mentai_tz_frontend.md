@@ -76,6 +76,8 @@ shared/dto/        # Zod-схемы (общие с бэком)
 - Для Android используется локальный pnpm patch `patches/@capgo__capacitor-social-login@7.20.0.patch`, который устраняет конфликт `androidx.browser` vs `androidbrowserhelper`
 - Release-сборка Android включает `ndk.debugSymbolLevel = 'SYMBOL_TABLE'`, чтобы Google Play Console получал native symbols для читаемых native crash/ANR без включения R8/ProGuard
 - Для финального production AAB R8 и `shrinkResources` включаются только явным флагом `MENTALA_ANDROID_ENABLE_MINIFY=true` или командами `pnpm android:bundle:release:optimized` / `pnpm build:mobile:android:prod`; по умолчанию `release` остаётся без minify, потому что Play track сам по себе не меняет Gradle build type
+- `pnpm build:mobile:android:prod` должен завершаться только после подготовки полного набора артефактов для Play Console в `android/app/build/outputs/play-console/release`: `app-release.aab`, `mapping.txt`, `native-debug-symbols.zip`
+- Если AGP не формирует `native-debug-symbols.zip` автоматически, build создаёт fallback-архив из merged release `.so`, чтобы артефакт не терялся между сборкой и загрузкой в Play Console
 - В `android/app/proguard-rules.pro` зафиксированы `-dontwarn com.facebook.**` для optional Facebook-классов из `@capgo/capacitor-social-login`; без этого R8 роняет optimized release даже если в приложении используется только Google login
 - Перед обновлением social-login до `8.x` сначала нужно мигрировать весь Capacitor-стек проекта на `8.x`, иначе Android build снова сломается на разрешении зависимостей
 
