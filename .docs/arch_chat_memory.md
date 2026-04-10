@@ -38,6 +38,11 @@
 - `/api/session/handoff` закрывает source-session, строит handoff summary, target-mode стартует как новая session
 - Realtime Voice: runtime compaction по тем же бюджетам, compaction строится text-моделью (не realtime)
 - Summary строится по всему transcript сессии, не только по хвосту после compaction
+- WebRTC handshake для Realtime Voice должен деградировать fail-soft:
+  - transient ошибки relay / OpenAI / сети классифицируются отдельно
+  - клиент делает один быстрый автоповтор handshake перед финальным fail
+  - пользователю показывается короткое human-readable сообщение без сырого upstream текста
+  - диагностический `error.code` сохраняется при server-side завершении voice session
 
 ## Хранение
 - Encrypted по умолчанию: AES-256-GCM (`SUMMARY_AES_KEY`), plaintext только через `SUMMARY_ENCRYPTION_DISABLED=true` (dev)
