@@ -872,6 +872,7 @@ export async function recordRealtimeVoiceSessionEvent(params: {
 
 export async function endRealtimeVoiceSession(params: {
   userId: number;
+  userRole?: string;
   sessionId: string;
   reason: RealtimeVoiceSessionEndReason;
   skipPostEndMemoryLifecycle?: boolean;
@@ -927,7 +928,7 @@ export async function endRealtimeVoiceSession(params: {
     userId: params.userId,
     now,
   });
-  const weeklyAi = await getAiUsageGate(params.userId);
+  const weeklyAi = await getAiUsageGate(params.userId, params.userRole);
 
   if (params.skipPostEndMemoryLifecycle !== true) {
     try {
