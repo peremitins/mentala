@@ -89,3 +89,12 @@ shared/dto/        # Zod-схемы (общие с бэком)
 - ESLint + Prettier, Husky + lint-staged
 - Vitest для критичных путей
 - TS no-any, Zod-валидация форм (vee-validate)
+
+## SEO и домены
+
+- `mentala.app` — основной SEO-хост под органику, брендовый и небрендовый трафик, особенно для RU-рынка
+- `my.mentala.app` — продуктовый хост; весь SPA-shell и внутренние маршруты должны быть закрыты от индексации
+- На текущем этапе `my.mentala.app` не продвигается в поиске отдельно; SEO-фокус только на `mentala.app`
+- Для продуктового хоста обязательны `noindex` в shell и запрещающий `robots.txt`, чтобы поисковики не индексировали внутренние app-маршруты
+- Русский язык — основной; `ru` должен быть primary/x-default, `en` — secondary через `hreflang`
+- Verification hooks для поисковиков задаются через `NUXT_PUBLIC_GOOGLE_SITE_VERIFICATION` и `NUXT_PUBLIC_YANDEX_VERIFICATION`
