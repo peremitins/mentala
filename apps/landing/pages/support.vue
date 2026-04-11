@@ -193,8 +193,14 @@ import LanguageSelect from '../components/ui/LanguageSelect.vue';
 
 const runtimeConfig = useRuntimeConfig();
 const { t } = useI18n();
-const { locale, selectedLocale, switchLocale, brandLogoSrc, brandLogoAlt } =
-  useLandingLocale();
+const {
+  locale,
+  selectedLocale,
+  switchLocale,
+  getLocalizedPath,
+  brandLogoSrc,
+  brandLogoAlt,
+} = useLandingLocale();
 
 const supportEmail = 'support@mentala.app';
 const supportMailto = `mailto:${supportEmail}`;
@@ -219,18 +225,26 @@ const termsOfServiceUrl = computed(
 );
 const siteUrl = useLandingSiteUrl();
 const accountDeletionUrl = computed(
-  () => `/account-deletion?lang=${selectedLocale.value}`
+  () => getLocalizedPath('/account-deletion', selectedLocale.value)
 );
-const homeUrl = computed(() => `/?lang=${selectedLocale.value}`);
+const homeUrl = computed(() => getLocalizedPath('/', selectedLocale.value));
+const ruSupportUrl = computed(() => `${siteUrl.value}/support`);
+const enSupportUrl = computed(() => `${ruSupportUrl.value}?lang=en`);
 
 async function onLocaleChange(nextLocale: SupportedLocale) {
   await switchLocale(nextLocale);
 }
-const supportUrl = computed(() => `${siteUrl.value}/support`);
+const supportUrl = computed(() =>
+  locale.value === 'en' ? enSupportUrl.value : ruSupportUrl.value
+);
 
 useSeoMeta({
   title: () => String(t('SUPPORT.META.TITLE')),
   description: () => String(t('SUPPORT.META.DESCRIPTION')),
+  robots: () =>
+    locale.value === 'ru'
+      ? 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1'
+      : 'noindex, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1',
   ogTitle: () => String(t('SUPPORT.META.TITLE')),
   ogDescription: () => String(t('SUPPORT.META.DESCRIPTION')),
   ogType: 'website',
@@ -249,17 +263,12 @@ useHead(() => ({
     {
       rel: 'alternate',
       hreflang: 'ru',
-      href: `${supportUrl.value}?lang=ru`,
-    },
-    {
-      rel: 'alternate',
-      hreflang: 'en',
-      href: `${supportUrl.value}?lang=en`,
+      href: ruSupportUrl.value,
     },
     {
       rel: 'alternate',
       hreflang: 'x-default',
-      href: supportUrl.value,
+      href: ruSupportUrl.value,
     },
   ],
 }));

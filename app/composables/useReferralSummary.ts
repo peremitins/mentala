@@ -12,6 +12,7 @@ import {
 } from '@/shared/dto/referral';
 import { useAPI } from '@/app/composables/useAPI';
 import { copyToClipboard } from '@/app/composables/useCopyToClipboard';
+import { shareContent } from '@/app/composables/useShareContent';
 import { useToast } from '@/app/composables/useToast';
 
 type UseReferralSummaryOptions = {
@@ -74,25 +75,21 @@ export function useReferralSummary(options: UseReferralSummaryOptions = {}) {
     if (!summary.value?.myCode) return;
 
     const shareText = `Мой промокод Mentala: ${summary.value.myCode}`;
-    if (
-      typeof navigator !== 'undefined' &&
-      typeof navigator.share === 'function'
-    ) {
-      try {
-        await navigator.share({
-          text: shareText,
-        });
-        return;
-      } catch {
-        // Если пользователь закрыл share-sheet, используем copy как fallback.
-      }
+    const result = await shareContent({
+      title: 'Промокод Mentala',
+      text: shareText,
+      dialogTitle: 'Поделиться промокодом',
+      fallbackText: shareText,
+    });
+
+    if (result === 'shared' || result === 'cancelled') {
+      return;
     }
 
-    const copied = await copyToClipboard(shareText);
-    if (copied) {
+    if (result === 'copied') {
       useToast(
         'Текст приглашения скопирован',
-        'Теперь его можно отправить.',
+        'На этом устройстве системный share-sheet недоступен, поэтому текст просто скопирован.',
         'success'
       );
       return;
