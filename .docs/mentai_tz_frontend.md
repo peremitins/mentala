@@ -97,4 +97,4 @@ shared/dto/        # Zod-схемы (общие с бэком)
 - На текущем этапе `my.mentala.app` не продвигается в поиске отдельно; SEO-фокус только на `mentala.app`
 - Для продуктового хоста обязательны `noindex` в shell и запрещающий `robots.txt`, чтобы поисковики не индексировали внутренние app-маршруты
 - Русский язык — основной; `ru` должен быть primary/x-default, `en` — secondary через `hreflang`
-- Verification hooks для поисковиков задаются через `NUXT_PUBLIC_GOOGLE_SITE_VERIFICATION` и `NUXT_PUBLIC_YANDEX_VERIFICATION`
+- Подтверждение прав в Google Search Console / Яндекс.Вебмастере делаем через DNS или HTML-файл (meta verification через env не используем)
