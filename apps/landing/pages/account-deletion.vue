@@ -189,8 +189,14 @@ import type { SupportedLocale } from '../composables/useLandingLocale';
 import LanguageSelect from '../components/ui/LanguageSelect.vue';
 
 const { t } = useI18n();
-const { locale, selectedLocale, switchLocale, brandLogoSrc, brandLogoAlt } =
-  useLandingLocale();
+const {
+  locale,
+  selectedLocale,
+  switchLocale,
+  getLocalizedPath,
+  brandLogoSrc,
+  brandLogoAlt,
+} = useLandingLocale();
 
 const supportEmail = 'support@mentala.app';
 const supportMailto = `mailto:${supportEmail}`;
@@ -198,10 +204,15 @@ const siteUrl = useLandingSiteUrl();
 const accountDeletionBaseUrl = computed(
   () => `${siteUrl.value}/account-deletion`
 );
-const homeUrl = computed(() => `/?lang=${selectedLocale.value}`);
+const homeUrl = computed(() => getLocalizedPath('/', selectedLocale.value));
 const homeUrlWithLocale = computed(() => homeUrl.value);
-const supportUrlWithLocale = computed(
-  () => `/support?lang=${selectedLocale.value}`
+const supportUrlWithLocale = computed(() =>
+  getLocalizedPath('/support', selectedLocale.value)
+);
+const accountDeletionUrl = computed(() =>
+  locale.value === 'en'
+    ? `${accountDeletionBaseUrl.value}?lang=en`
+    : accountDeletionBaseUrl.value
 );
 
 const deletedDataItems = computed(() => [
@@ -222,10 +233,14 @@ async function onLocaleChange(nextLocale: SupportedLocale) {
 useSeoMeta({
   title: () => String(t('ACCOUNT_DELETION.META.TITLE')),
   description: () => String(t('ACCOUNT_DELETION.META.DESCRIPTION')),
+  robots: () =>
+    locale.value === 'ru'
+      ? 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1'
+      : 'noindex, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1',
   ogTitle: () => String(t('ACCOUNT_DELETION.META.TITLE')),
   ogDescription: () => String(t('ACCOUNT_DELETION.META.DESCRIPTION')),
   ogType: 'website',
-  ogUrl: () => `${accountDeletionBaseUrl.value}?lang=${locale.value}`,
+  ogUrl: () => accountDeletionUrl.value,
 });
 
 useHead(() => ({
@@ -235,17 +250,12 @@ useHead(() => ({
   link: [
     {
       rel: 'canonical',
-      href: accountDeletionBaseUrl.value,
+      href: accountDeletionUrl.value,
     },
     {
       rel: 'alternate',
       hreflang: 'ru',
-      href: `${accountDeletionBaseUrl.value}?lang=ru`,
-    },
-    {
-      rel: 'alternate',
-      hreflang: 'en',
-      href: `${accountDeletionBaseUrl.value}?lang=en`,
+      href: accountDeletionBaseUrl.value,
     },
     {
       rel: 'alternate',

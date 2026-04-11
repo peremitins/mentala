@@ -970,8 +970,14 @@ type ComparisonPoint = {
 const { t } = useI18n();
 const runtimeConfig = useRuntimeConfig();
 const route = useRoute();
-const { locale, selectedLocale, switchLocale, brandLogoSrc, brandLogoAlt } =
-  useLandingLocale();
+const {
+  locale,
+  selectedLocale,
+  switchLocale,
+  getLocalizedPath,
+  brandLogoSrc,
+  brandLogoAlt,
+} = useLandingLocale();
 const siteUrl = useLandingSiteUrl();
 const reducedMotion = usePreferredReducedMotion();
 
@@ -993,8 +999,8 @@ const privacyPolicyUrl = computed(
 const termsOfServiceUrl = computed(
   () => `${webAppUrl.value}/legal/terms-of-service-${legalLocale.value}.html`
 );
-const accountDeletionUrl = computed(
-  () => `/account-deletion?lang=${selectedLocale.value}`
+const accountDeletionUrl = computed(() =>
+  getLocalizedPath('/account-deletion', selectedLocale.value)
 );
 const billingPeriod = ref<'month' | 'year'>('month');
 const waitlistOpen = ref(false);
@@ -1356,12 +1362,13 @@ function getYearlySavings(plan: PricingPlan): number {
   return savings > 0 ? savings : 0;
 }
 
-const canonicalUrl = computed(() => `${siteUrl.value}/`);
-const localizedHomeUrl = computed(
-  () => `${canonicalUrl.value}?lang=${locale.value}`
+const ruHomeUrl = computed(() => `${siteUrl.value}/`);
+const enHomeUrl = computed(() => `${ruHomeUrl.value}?lang=en`);
+const canonicalUrl = computed(() =>
+  locale.value === 'en' ? enHomeUrl.value : ruHomeUrl.value
 );
 const ogImageUrl = computed(
-  () => new URL('/landing/features/hero_bg.jpg', canonicalUrl.value).href
+  () => new URL('/landing/features/hero_bg.jpg', ruHomeUrl.value).href
 );
 
 function toSingleQueryValue(value: unknown): string | undefined {
@@ -1587,12 +1594,14 @@ onBeforeUnmount(() => {
 useSeoMeta({
   title: () => String(t('LANDING.SEO.HOME.TITLE')),
   description: () => String(t('LANDING.SEO.HOME.DESCRIPTION')),
-  robots:
-    'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1',
+  robots: () =>
+    locale.value === 'ru'
+      ? 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1'
+      : 'noindex, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1',
   ogTitle: () => String(t('LANDING.SEO.HOME.OG_TITLE')),
   ogDescription: () => String(t('LANDING.SEO.HOME.OG_DESCRIPTION')),
   ogType: 'website',
-  ogUrl: () => localizedHomeUrl.value,
+  ogUrl: () => canonicalUrl.value,
   ogSiteName: () => String(t('LANDING.SEO.HOME.SITE_NAME')),
   ogLocale: () => (locale.value === 'ru' ? 'ru_RU' : 'en_US'),
   ogImage: () => ogImageUrl.value,
@@ -1609,9 +1618,8 @@ useHead(() => ({
   },
   link: [
     { rel: 'canonical', href: canonicalUrl.value },
-    { rel: 'alternate', hreflang: 'ru', href: `${canonicalUrl.value}?lang=ru` },
-    { rel: 'alternate', hreflang: 'en', href: `${canonicalUrl.value}?lang=en` },
-    { rel: 'alternate', hreflang: 'x-default', href: canonicalUrl.value },
+    { rel: 'alternate', hreflang: 'ru', href: ruHomeUrl.value },
+    { rel: 'alternate', hreflang: 'x-default', href: ruHomeUrl.value },
   ],
   script: [
     {
@@ -1621,8 +1629,8 @@ useHead(() => ({
         '@context': 'https://schema.org',
         '@type': 'Organization',
         name: String(t('LANDING.STRUCTURED_DATA.ORGANIZATION_NAME')),
-        url: canonicalUrl.value,
-        logo: new URL(brandLogoSrc.value, canonicalUrl.value).href,
+        url: ruHomeUrl.value,
+        logo: new URL(brandLogoSrc.value, ruHomeUrl.value).href,
         contactPoint: [
           {
             '@type': 'ContactPoint',
@@ -1640,8 +1648,8 @@ useHead(() => ({
         '@context': 'https://schema.org',
         '@type': 'WebSite',
         name: String(t('LANDING.STRUCTURED_DATA.WEBSITE_NAME')),
-        url: canonicalUrl.value,
-        inLanguage: locale.value,
+        url: ruHomeUrl.value,
+        inLanguage: 'ru',
       }),
     },
     {
@@ -1651,12 +1659,12 @@ useHead(() => ({
         '@context': 'https://schema.org',
         '@type': 'WebPage',
         name: String(t('LANDING.STRUCTURED_DATA.WEBPAGE_NAME')),
-        url: localizedHomeUrl.value,
+        url: canonicalUrl.value,
         inLanguage: locale.value,
         primaryImageOfPage: ogImageUrl.value,
         isPartOf: {
           '@type': 'WebSite',
-          url: canonicalUrl.value,
+          url: ruHomeUrl.value,
         },
       }),
     },
