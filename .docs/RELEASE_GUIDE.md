@@ -108,7 +108,8 @@ pnpm cap:sync:prod
 1. Собирает Nuxt production bundle
 2. Синхронизирует с iOS проектом
 3. Синхронизирует Google OAuth конфиг в Info.plist
-4. Проверяет prod-safe конфиг
+4. Перед `pod install` принудительно вырезает Facebook SDK из `@capgo/capacitor-social-login`, потому что в Mentala на iOS используется только Google Sign-In
+5. Проверяет prod-safe конфиг и отсутствие `FBSDKCoreKit` / `FBSDKLoginKit` / `FBAEMKit` в `ios/App/Podfile.lock`
 
 ### 3.3. Собрать и загрузить через Xcode
 
