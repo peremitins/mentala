@@ -113,6 +113,9 @@ run_capacitor_sync() {
   # Делаем copy/update раздельно, чтобы успеть нормализовать App.xcodeproj
   # непосредственно перед pod install.
   npx cap copy
+  # Дополнительная страховка для iOS: вырезаем Facebook pods из social-login
+  # до pod install, даже если upstream hook не отработал.
+  node scripts/strip-ios-social-login-ads-sdk.js
   ensure_ios_project_object_version_compatible
   npx cap update
 }
