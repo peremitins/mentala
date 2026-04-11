@@ -157,24 +157,6 @@ export default defineNuxtConfig({
         { name: 'msapplication-TileColor', content: '#ffffff' },
         { name: 'msapplication-TileImage', content: '/ms-icon-144x144.png' },
         { name: 'theme-color', content: '#ffffff' },
-        ...(String(process.env.NUXT_PUBLIC_GOOGLE_SITE_VERIFICATION || '').trim()
-          ? [
-              {
-                name: 'google-site-verification',
-                content: String(
-                  process.env.NUXT_PUBLIC_GOOGLE_SITE_VERIFICATION
-                ).trim(),
-              },
-            ]
-          : []),
-        ...(String(process.env.NUXT_PUBLIC_YANDEX_VERIFICATION || '').trim()
-          ? [
-              {
-                name: 'yandex-verification',
-                content: String(process.env.NUXT_PUBLIC_YANDEX_VERIFICATION).trim(),
-              },
-            ]
-          : []),
       ],
       // Noscript-пиксель Яндекс.Метрики (при отключённом JS). ID подставляется на этапе сборки.
       ...(process.env.NUXT_PUBLIC_YANDEX_METRIKA_ID?.trim()
@@ -195,9 +177,6 @@ export default defineNuxtConfig({
       appAuthUrl:
         process.env.NUXT_PUBLIC_APP_AUTH_URL || 'https://my.mentala.app/auth',
       landingSiteUrl: process.env.NUXT_PUBLIC_LANDING_SITE_URL || '',
-      googleSiteVerification:
-        process.env.NUXT_PUBLIC_GOOGLE_SITE_VERIFICATION || '',
-      yandexVerification: process.env.NUXT_PUBLIC_YANDEX_VERIFICATION || '',
       /** ID счётчика Яндекс.Метрики. Задаётся через NUXT_PUBLIC_YANDEX_METRIKA_ID (на проде — в CI). */
       yandexMetrikaId: process.env.NUXT_PUBLIC_YANDEX_METRIKA_ID || '',
     },

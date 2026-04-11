@@ -142,24 +142,6 @@ export default defineNuxtConfig({
           name: 'googlebot',
           content: 'noindex, nofollow, noarchive, nosnippet, noimageindex',
         },
-        ...(String(process.env.NUXT_PUBLIC_GOOGLE_SITE_VERIFICATION || '').trim()
-          ? [
-              {
-                name: 'google-site-verification',
-                content: String(
-                  process.env.NUXT_PUBLIC_GOOGLE_SITE_VERIFICATION
-                ).trim(),
-              },
-            ]
-          : []),
-        ...(String(process.env.NUXT_PUBLIC_YANDEX_VERIFICATION || '').trim()
-          ? [
-              {
-                name: 'yandex-verification',
-                content: String(process.env.NUXT_PUBLIC_YANDEX_VERIFICATION).trim(),
-              },
-            ]
-          : []),
       ],
     },
     // Глобальные настройки переходов между страницами
@@ -239,9 +221,6 @@ export default defineNuxtConfig({
         process.env.NUXT_PUBLIC_APP_URL ||
         process.env.NUXT_PRIVATE_API_BASE ||
         'http://localhost:3000',
-      googleSiteVerification:
-        process.env.NUXT_PUBLIC_GOOGLE_SITE_VERIFICATION || '',
-      yandexVerification: process.env.NUXT_PUBLIC_YANDEX_VERIFICATION || '',
       // Dev-only URL для внешнего браузера на реальных устройствах (LAN).
       deviceAppUrl: process.env.NUXT_PUBLIC_DEVICE_APP_URL || '',
       mediaBaseUrl:
