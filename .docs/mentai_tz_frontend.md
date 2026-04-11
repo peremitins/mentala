@@ -69,6 +69,8 @@ shared/dto/        # Zod-схемы (общие с бэком)
 - Async/await везде, не .then()/.catch()
 - Для safe area и системных баров нельзя полагаться на фиксированные отступы или только на `StatusBar.overlaysWebView=false`: при target SDK Android 35+ / 36 edge-to-edge может быть принудительным
 - На iOS можно опираться на `env(safe-area-inset-*)`, но на Android, особенно на планшетах и некоторых WebView, нужен fallback через native `WindowInsets` bridge с прокидкой значений в CSS-переменные
+- Для action `share` в Capacitor нельзя полагаться только на `navigator.share` внутри WebView: на iOS/Android использовать официальный `@capacitor/share`, а на web оставлять fallback через `navigator.share` / `navigator.canShare`
+- Для copy/share UX в referral и других user-facing сценариях на native сначала использовать Capacitor plugins (`@capacitor/share`, `@capacitor/clipboard`), а web API держать как fallback для desktop-браузеров
 
 ## Mobile build notes
 
@@ -96,5 +98,7 @@ shared/dto/        # Zod-схемы (общие с бэком)
 - `my.mentala.app` — продуктовый хост; весь SPA-shell и внутренние маршруты должны быть закрыты от индексации
 - На текущем этапе `my.mentala.app` не продвигается в поиске отдельно; SEO-фокус только на `mentala.app`
 - Для продуктового хоста обязательны `noindex` в shell и запрещающий `robots.txt`, чтобы поисковики не индексировали внутренние app-маршруты
-- Русский язык — основной; `ru` должен быть primary/x-default, `en` — secondary через `hreflang`
+- На лендинге `mentala.app` корневой URL `/` всегда должен отдавать русский контент без locale autodetect по cookie, `Accept-Language` или browser locale
+- Английская версия лендинга допускается только по явному `?lang=en` и не должна индексироваться
+- Русский язык — основной; `ru` должен быть canonical/x-default
 - Подтверждение прав в Google Search Console / Яндекс.Вебмастере делаем через DNS или HTML-файл (meta verification через env не используем)

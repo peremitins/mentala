@@ -32,94 +32,17 @@ function resolveLocale(value: unknown): SupportedLocale | null {
   return null;
 }
 
-function parseAcceptLanguage(headerValue?: string): string[] {
-  if (!headerValue) {
-    return [];
-  }
-
-  return headerValue
-    .split(',')
-    .map((rawLocale, index) => {
-      const [localeTag, ...params] = rawLocale.trim().split(';');
-      if (!localeTag) {
-        return null;
-      }
-
-      const qualityParam = params.find((param) =>
-        param.trim().toLowerCase().startsWith('q=')
-      );
-      const qualityValue = qualityParam
-        ? Number.parseFloat(qualityParam.split('=')[1] ?? '')
-        : 1;
-
-      return {
-        localeTag,
-        quality: Number.isFinite(qualityValue) ? qualityValue : 1,
-        index,
-      };
-    })
-    .filter(
-      (item): item is { localeTag: string; quality: number; index: number } =>
-        Boolean(item)
-    )
-    .sort((left, right) => {
-      if (right.quality !== left.quality) {
-        return right.quality - left.quality;
-      }
-      return left.index - right.index;
-    })
-    .map((item) => item.localeTag);
-}
-
-function detectBrowserLocales(): string[] {
-  if (typeof navigator === 'undefined') {
-    return [];
-  }
-
-  const locales = [
-    ...(Array.isArray(navigator.languages) ? navigator.languages : []),
-    navigator.language,
-  ];
-
-  return locales.filter(
-    (localeTag, index) =>
-      typeof localeTag === 'string' &&
-      localeTag.length > 0 &&
-      locales.indexOf(localeTag) === index
-  );
-}
-
 export function useLandingLocale() {
   const route = useRoute();
-  const langCookie = useCookie<string | null>('mentai.lang', {
-    maxAge: 365 * 24 * 3600,
-    path: '/',
-  });
   const { locale } = useI18n();
-  const requestHeaders = import.meta.server
-    ? useRequestHeaders(['accept-language'])
-    : {};
 
   const selectedLocale = computed<SupportedLocale>(() => {
-    // Best practice: явный выбор пользователя (URL/cookie) всегда приоритетнее автодетекта.
+    // Для SEO корневой URL лендинга должен всегда оставаться русской версией.
+    // Английский включаем только по явному query-параметру.
     const queryLocale =
       resolveLocale(toSingleQueryValue(route.query.lang)) ||
       resolveLocale(toSingleQueryValue(route.query.locale));
     if (queryLocale) return queryLocale;
-
-    const cookieLocale = resolveLocale(langCookie.value);
-    if (cookieLocale) return cookieLocale;
-
-    const autoDetectedLocales = import.meta.client
-      ? detectBrowserLocales()
-      : parseAcceptLanguage(requestHeaders['accept-language']);
-
-    for (const autoDetectedLocale of autoDetectedLocales) {
-      const resolvedAutoLocale = resolveLocale(autoDetectedLocale);
-      if (resolvedAutoLocale) {
-        return resolvedAutoLocale;
-      }
-    }
 
     return 'ru';
   });
@@ -130,9 +53,6 @@ export function useLandingLocale() {
       if (locale.value !== value) {
         locale.value = value;
       }
-      if (langCookie.value !== value) {
-        langCookie.value = value;
-      }
     },
     { immediate: true }
   );
@@ -142,19 +62,31 @@ export function useLandingLocale() {
       return;
     }
 
-    langCookie.value = nextLocale;
     locale.value = nextLocale;
+
+    const nextQuery = { ...route.query };
+    delete nextQuery.locale;
+
+    if (nextLocale === 'ru') {
+      delete nextQuery.lang;
+    } else {
+      nextQuery.lang = nextLocale;
+    }
 
     await navigateTo(
       {
         path: route.path,
-        query: {
-          ...route.query,
-          lang: nextLocale,
-        },
+        query: nextQuery,
       },
       { replace: true }
     );
+  }
+
+  function getLocalizedPath(
+    path: string,
+    nextLocale: SupportedLocale = selectedLocale.value
+  ): string {
+    return nextLocale === 'en' ? `${path}?lang=en` : path;
   }
 
   const brandLogoSrc = computed(() =>
@@ -169,6 +101,7 @@ export function useLandingLocale() {
     locale,
     selectedLocale,
     switchLocale,
+    getLocalizedPath,
     brandLogoSrc,
     brandLogoAlt,
   };

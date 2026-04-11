@@ -5,6 +5,10 @@ function trimTrailingSlash(value: string): string {
   return value.replace(/\/$/, '');
 }
 
+function isLocalOrigin(value: string): boolean {
+  return /^(https?:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?$/i.test(value);
+}
+
 export function useLandingSiteUrl() {
   const runtimeConfig = useRuntimeConfig();
   const requestUrl = useRequestURL();
@@ -14,12 +18,18 @@ export function useLandingSiteUrl() {
       runtimeConfig.public.landingSiteUrl || ''
     ).trim();
 
-    // В local dev и preview не уводим внутренние/seo-ссылки на продовый домен,
-    // если публичный origin явно не задан через env.
     if (configuredSiteUrl) {
       return trimTrailingSlash(configuredSiteUrl);
     }
 
-    return trimTrailingSlash(requestUrl.origin);
+    const requestOrigin = trimTrailingSlash(requestUrl.origin);
+
+    // Для production/generate SEO-ссылки должны оставаться на боевом домене,
+    // даже если CI не прокинул явный origin и Nitro использует localhost.
+    if (!import.meta.dev && isLocalOrigin(requestOrigin)) {
+      return 'https://mentala.app';
+    }
+
+    return requestOrigin;
   });
 }

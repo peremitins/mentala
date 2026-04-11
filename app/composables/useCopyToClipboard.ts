@@ -1,13 +1,29 @@
+import { Capacitor } from '@capacitor/core';
 import { useToast } from './useToast';
+import { isDocumentAvailable } from '@/app/utils/document';
 
 /**
  * Универсальная функция для копирования текста в буфер обмена
  * Работает на всех платформах (Web, iOS, Android)
  */
 export async function copyToClipboard(text: string): Promise<boolean> {
-  if (typeof document === 'undefined') {
-    console.error('[copyToClipboard] Document not available');
-    return false;
+  // На iOS/Android сначала используем официальный native plugin,
+  // чтобы не зависеть от ограничений WebView.
+  if (
+    !import.meta.server &&
+    Capacitor.isNativePlatform() &&
+    Capacitor.isPluginAvailable('Clipboard')
+  ) {
+    try {
+      const { Clipboard } = await import('@capacitor/clipboard');
+      await Clipboard.write({ string: text });
+      return true;
+    } catch (error) {
+      console.warn(
+        '[copyToClipboard] Capacitor Clipboard failed, using web fallback:',
+        error
+      );
+    }
   }
 
   // Пробуем современный Clipboard API
@@ -25,6 +41,11 @@ export async function copyToClipboard(text: string): Promise<boolean> {
   }
 
   // Fallback через document.execCommand (работает на мобильных)
+  if (!isDocumentAvailable()) {
+    console.error('[copyToClipboard] Document not available');
+    return false;
+  }
+
   const textArea = document.createElement('textarea');
   textArea.value = text;
   textArea.style.position = 'fixed';
