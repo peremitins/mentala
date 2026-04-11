@@ -34,6 +34,9 @@ export default defineNuxtConfig({
   },
   app: {
     head: {
+      htmlAttrs: {
+        lang: 'ru',
+      },
       viewport:
         'width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover',
       link: [
@@ -93,6 +96,10 @@ export default defineNuxtConfig({
           href: '/favicon.ico',
         },
         {
+          rel: 'shortcut icon',
+          href: '/favicon.ico',
+        },
+        {
           rel: 'icon',
           type: 'image/png',
           sizes: '192x192',
@@ -116,7 +123,7 @@ export default defineNuxtConfig({
           sizes: '16x16',
           href: '/favicon-16x16.png',
         },
-        { rel: 'manifest', href: '/manifest.json' },
+        { rel: 'manifest', href: '/site.webmanifest' },
       ],
       meta: [
         {
@@ -127,6 +134,32 @@ export default defineNuxtConfig({
         { name: 'msapplication-TileColor', content: '#ffffff' },
         { name: 'msapplication-TileImage', content: '/ms-icon-144x144.png' },
         { name: 'theme-color', content: '#ffffff' },
+        {
+          name: 'robots',
+          content: 'noindex, nofollow, noarchive, nosnippet, noimageindex',
+        },
+        {
+          name: 'googlebot',
+          content: 'noindex, nofollow, noarchive, nosnippet, noimageindex',
+        },
+        ...(String(process.env.NUXT_PUBLIC_GOOGLE_SITE_VERIFICATION || '').trim()
+          ? [
+              {
+                name: 'google-site-verification',
+                content: String(
+                  process.env.NUXT_PUBLIC_GOOGLE_SITE_VERIFICATION
+                ).trim(),
+              },
+            ]
+          : []),
+        ...(String(process.env.NUXT_PUBLIC_YANDEX_VERIFICATION || '').trim()
+          ? [
+              {
+                name: 'yandex-verification',
+                content: String(process.env.NUXT_PUBLIC_YANDEX_VERIFICATION).trim(),
+              },
+            ]
+          : []),
       ],
     },
     // Глобальные настройки переходов между страницами
@@ -200,7 +233,15 @@ export default defineNuxtConfig({
     public: {
       // Если не задано, будет пустая строка = относительные пути
       apiBase: process.env.NUXT_PUBLIC_API_SERVER_URL || '',
-      appUrl: process.env.NUXT_PRIVATE_API_BASE || 'http://localhost:3000',
+      // Для SEO, OAuth callback и внешних ссылок нужен именно публичный origin приложения,
+      // а не приватный API base. Фолбэк на private base оставляем только для локальной разработки.
+      appUrl:
+        process.env.NUXT_PUBLIC_APP_URL ||
+        process.env.NUXT_PRIVATE_API_BASE ||
+        'http://localhost:3000',
+      googleSiteVerification:
+        process.env.NUXT_PUBLIC_GOOGLE_SITE_VERIFICATION || '',
+      yandexVerification: process.env.NUXT_PUBLIC_YANDEX_VERIFICATION || '',
       // Dev-only URL для внешнего браузера на реальных устройствах (LAN).
       deviceAppUrl: process.env.NUXT_PUBLIC_DEVICE_APP_URL || '',
       mediaBaseUrl:
