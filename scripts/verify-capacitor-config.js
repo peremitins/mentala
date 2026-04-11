@@ -31,6 +31,8 @@ const HTML_BUNDLE_TARGETS = [
   },
 ];
 
+const IOS_FORBIDDEN_PODS = ['FBAEMKit', 'FBSDKCoreKit', 'FBSDKLoginKit'];
+
 function parseArgs(argv) {
   const options = {
     envFile: '.env.production',
@@ -191,6 +193,34 @@ function getServerUrl(config) {
   return url.trim();
 }
 
+function verifyIosForbiddenPodsAbsent() {
+  const podfileLockPath = join(process.cwd(), 'ios/App/Podfile.lock');
+
+  if (!existsSync(podfileLockPath)) {
+    console.log('• iOS Podfile.lock not found, forbidden pod check skipped');
+    return;
+  }
+
+  const podfileLock = readFileSync(podfileLockPath, 'utf8');
+  const foundPods = IOS_FORBIDDEN_PODS.filter((podName) =>
+    podfileLock.includes(podName)
+  );
+
+  if (!foundPods.length) {
+    console.log('✓ iOS Podfile.lock: no forbidden Facebook ad-related pods');
+    return;
+  }
+
+  console.error('\n❌ Forbidden iOS pods detected in Podfile.lock:');
+  for (const podName of foundPods) {
+    console.error(`- ${podName}`);
+  }
+  console.error(
+    '\nFix: rerun `pnpm cap:sync:prod` and confirm @capgo/capacitor-social-login podspec was stripped before Xcode Archive.'
+  );
+  process.exit(1);
+}
+
 function main() {
   const { envFile, mode } = parseArgs(process.argv.slice(2));
   const violations = [];
@@ -240,6 +270,7 @@ function main() {
 
   if (mode === 'release') {
     verifyReleaseBundleAgainstEnv(envFile);
+    verifyIosForbiddenPodsAbsent();
   }
 }
 
