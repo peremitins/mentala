@@ -93,6 +93,7 @@
 - `ButtonLoader.vue` — спиннер внутри кнопки
 - Pinia stores: ui, user, chat
 - DTO: Zod, `shared/dto/index.ts`
+- Referral share-кнопка должна открывать системный share-sheet на iOS/Android через `@capacitor/share`; если на web/browser шаринг недоступен, допустим fallback в copy с явным toast-сообщением, что текст именно скопирован
 
 ## Бренд-ассеты
 

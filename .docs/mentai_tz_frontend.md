@@ -69,6 +69,8 @@ shared/dto/        # Zod-схемы (общие с бэком)
 - Async/await везде, не .then()/.catch()
 - Для safe area и системных баров нельзя полагаться на фиксированные отступы или только на `StatusBar.overlaysWebView=false`: при target SDK Android 35+ / 36 edge-to-edge может быть принудительным
 - На iOS можно опираться на `env(safe-area-inset-*)`, но на Android, особенно на планшетах и некоторых WebView, нужен fallback через native `WindowInsets` bridge с прокидкой значений в CSS-переменные
+- Для action `share` в Capacitor нельзя полагаться только на `navigator.share` внутри WebView: на iOS/Android использовать официальный `@capacitor/share`, а на web оставлять fallback через `navigator.share` / `navigator.canShare`
+- Для copy/share UX в referral и других user-facing сценариях на native сначала использовать Capacitor plugins (`@capacitor/share`, `@capacitor/clipboard`), а web API держать как fallback для desktop-браузеров
 
 ## Mobile build notes
 
