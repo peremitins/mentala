@@ -76,6 +76,16 @@
 - CI/CD: deploy-prod.yml / deploy-dev.yml, атомарное переключение symlink
 - В секции `Приватность и безопасность` есть короткий публичный disclosure про Google Sign-In: только базовые данные аккаунта для входа, без доступа к Gmail/Drive/Calendar
 - FAQ на лендинге рендерится полностью закрытым по умолчанию; раскрытие только по явному клику пользователя
+- `mentala.app` хранит основной SEO-контур: canonical, hreflang, JSON-LD, sitemap, robots и verification meta
+- Для RU-рынка канонический default URL — русская версия без `?lang=ru`; `en` остаётся только в alternate-ссылках
+- `SoftwareApplication` / `MobileApplication` JSON-LD на лендинге описывают Web, iOS и Android точки входа
+
+## SEO продуктового хоста (`my.mentala.app`)
+
+- Продуктовый shell работает как SPA и должен быть глобально закрыт от индексации через `robots` meta
+- Для поисковиков доступен отдельный публичный entry `/install`, который отдаётся server-side HTML без зависимости от client JS
+- `robots.txt` на `my.mentala.app` работает по allow-list модели: разрешены только `/install`, `public/legal/*`, favicon/manifest family и `.well-known`
+- `sitemap.xml` на `my.mentala.app` включает только индексируемые публичные URL и не должен содержать внутренние app-роуты
 
 ## Компоненты и паттерны
 
