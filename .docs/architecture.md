@@ -34,7 +34,7 @@
 - Release-сборка валидирует обязательные mobile env (`NUXT_PUBLIC_API_SERVER_URL`, `NUXT_PRIVATE_API_BASE`, `NUXT_OAUTH_GOOGLE_CLIENT_ID`, `NUXT_PUBLIC_GOOGLE_IOS_CLIENT_ID`) и падает до публикации, если они не настроены
 - Для server route нельзя полагаться на `cfg.public.googleWebClientId` как на источник истины для Google OAuth: этот ключ может быть зафиксирован на build-time. В backend-проверках сначала использовать server-only runtime/env (`cfg.OAUTH_GOOGLE_CLIENT_ID`, `process.env.*`), и только потом public fallback
 - После `nuxt generate` release pipeline дополнительно сверяет фактический `window.__NUXT__.config.public` в iOS/Android bundle с `.env.production`, чтобы в Archive/TestFlight не ушёл IPA/APK со stale Google client id или неправильным `apiBase`
-- В production backend CORS/origin allowlist обязан учитывать нативные origin-ы WebView: `capacitor://localhost`, `ionic://localhost`, а для Android release ещё и `http://localhost` / `http://127.0.0.1`, иначе preflight к API ломает login ещё до появления понятной ошибки в UI
+- В production backend CORS/origin allowlist обязан учитывать нативные origin-ы WebView: `capacitor://localhost`, а для Android release ещё и `http://localhost` / `http://127.0.0.1`, иначе preflight к API ломает login ещё до появления понятной ошибки в UI
 
 ## Version Compatibility и релизы
 

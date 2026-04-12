@@ -33,7 +33,7 @@ function isTrustedRealtimeVoiceOrigin(origin: string | null): boolean {
     return false;
   }
 
-  return /^(https?:|capacitor:|ionic:)\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(
+  return /^(https?:|capacitor:)\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(
     normalizedOrigin
   );
 }
@@ -99,7 +99,9 @@ export function getRealtimeVoiceSupport(): RealtimeVoiceSupportSnapshot {
   const isSecureContextValue =
     (typeof window.isSecureContext === 'boolean'
       ? window.isSecureContext
-      : false) || isTrustedRealtimeVoiceOrigin(origin) || isNativePlatform;
+      : false) ||
+    isTrustedRealtimeVoiceOrigin(origin) ||
+    isNativePlatform;
 
   return {
     hasPeerConnection,
