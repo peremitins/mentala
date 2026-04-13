@@ -1,4 +1,9 @@
 import { Capacitor } from '@capacitor/core';
+import {
+  DefaultSystemBrowserOptions,
+  DismissStyle,
+  InAppBrowser,
+} from '@capacitor/inappbrowser';
 
 export async function openExternalBrowser(url: string) {
   if (typeof window === 'undefined') return;
@@ -17,16 +22,31 @@ export async function openExternalBrowser(url: string) {
   }
 
   try {
-    const { InAppBrowser } = await import('@capacitor/inappbrowser');
-    await InAppBrowser.openInExternalBrowser({ url: resolvedUrl });
+    // На iOS откроется SFSafariViewController с системной кнопкой "Готово",
+    // на Android — Custom Tabs с системной навигацией "назад".
+    await InAppBrowser.openInSystemBrowser({
+      url: resolvedUrl,
+      options: {
+        ...DefaultSystemBrowserOptions,
+        iOS: {
+          ...DefaultSystemBrowserOptions.iOS,
+          closeButtonText: DismissStyle.DONE,
+          enableBarsCollapsing: true,
+        },
+        android: {
+          ...DefaultSystemBrowserOptions.android,
+          showTitle: true,
+          hideToolbarOnScroll: true,
+        },
+      },
+    });
   } catch (error) {
     // На случай, если плагин не подключен в текущей сборке.
     console.warn(
       '[openExternalBrowser] Failed to open external browser via InAppBrowser:',
       error
     );
-    // `window.open` на iOS часто блокируется (теряется user gesture из-за await import).
-    // location.href работает стабильнее.
+    // Фоллбек внутри WebView приложения.
     window.location.href = resolvedUrl;
   }
 }
