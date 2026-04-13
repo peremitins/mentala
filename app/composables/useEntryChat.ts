@@ -4,6 +4,7 @@ import { useEntitlements } from '@/app/composables/useEntitlements';
 import { navigateTo } from '#app';
 import { HABITS_CATALOG } from '@/app/lib/habitsCatalog';
 import { THERAPY_TOPICS } from '@/app/lib/therapyCatalog';
+import { useAiChatConsentGate } from '@/app/composables/useAiChatConsentGate';
 
 const CATALOG_HABIT_KEYS = new Set(
   HABITS_CATALOG.map((habit) => habit.habitKey)
@@ -13,6 +14,7 @@ const CATALOG_THERAPY_KEYS = new Set(THERAPY_TOPICS.map((topic) => topic.key));
 export function useEntryChat() {
   const chat = useChatStore();
   const { getFeatureAccess, refreshEntitlements } = useEntitlements();
+  const { requestAiConsent } = useAiChatConsentGate();
 
   function resolveLockedFeatureByEntryContext(): string | null {
     const entryContext = chat.entryContext;
@@ -66,6 +68,11 @@ export function useEntryChat() {
           lockedFeature: 'chat.assistant',
         },
       });
+      return;
+    }
+
+    const consentGranted = await requestAiConsent();
+    if (!consentGranted) {
       return;
     }
 

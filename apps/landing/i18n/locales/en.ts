@@ -385,23 +385,23 @@ export default {
     },
     SEO: {
       HOME: {
-        TITLE: 'Mentala — psychological support 24/7',
+        TITLE: 'Mentala — AI chat, meditations, breathing, and habits',
         DESCRIPTION:
-          'AI support chat, breathing practices, meditations, and habits — all in one app. Start for free (Basic) or try Premium for 7 days.',
-        OG_TITLE: 'Mentala — psychological support 24/7',
+          'AI chat, breathing, meditations, gratitude journaling, healthy habits, and breaking harmful ones. Free features included, plus 7 days of Premium for new users.',
+        OG_TITLE: 'Mentala — AI support, breathing, meditations, and habits',
         OG_DESCRIPTION:
-          'AI chat, meditations, breathing, SOS practices, and personalized reminders. Start for free or try Premium for 7 days.',
-        OG_IMAGE_ALT: 'Mentala — psychological support 24/7',
-        TWITTER_TITLE: 'Mentala — psychological support 24/7',
+          '24/7 support with AI chat, SOS practices, breathing, meditations, gratitude journaling, and habit support. Free features are available right away, plus 7 days of Premium for new users.',
+        OG_IMAGE_ALT: 'Mentala — AI chat, meditations, breathing, and habits',
+        TWITTER_TITLE: 'Mentala — AI chat, breathing, and meditations',
         TWITTER_DESCRIPTION:
-          'AI chat, meditations, breathing practices, and habits. Start for free or try Premium for 7 days.',
+          'For anxiety, stress, sleep, healthier habits, and breaking harmful ones. Free features included, plus 7 days of Premium for new users.',
         SITE_NAME: 'Mentala',
       },
     },
     STRUCTURED_DATA: {
       ORGANIZATION_NAME: 'Mentala',
       WEBSITE_NAME: 'Mentala',
-      WEBPAGE_NAME: 'Mentala — psychological support 24/7',
+      WEBPAGE_NAME: 'Mentala — AI chat, meditations, breathing, and habits',
     },
   },
   ACCOUNT_DELETION: {

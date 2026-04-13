@@ -1,6 +1,34 @@
 export default {
   COMMON: {},
   CHAT: {},
+  AI_CHAT_CONSENT: {
+    TITLE: 'Using the AI chat',
+    DESCRIPTION:
+      'Mentala uses a third-party AI provider {provider} to generate replies. By continuing, you agree to the transfer of the data required for this chat flow.',
+    DATA_TITLE: 'What is shared',
+    DATA_MESSAGES: 'Your chat messages.',
+    DATA_TECHNICAL:
+      'Technical request data such as language, platform, and service parameters.',
+    NOTE_TITLE: 'Important',
+    NOTE_BODY:
+      'Please do not include excessive personal data unless it is required for your request.',
+    PRIVACY_LINK: 'Privacy Policy',
+    CANCEL: 'Cancel',
+    ACCEPT: 'I agree',
+    SETTINGS_TITLE: 'AI chat consent',
+    SETTINGS_ENABLED:
+      'Consent is active. AI chat may send messages and session context to OpenAI.',
+    SETTINGS_DISABLED:
+      'Consent is not active. We will show this disclosure again before the next AI chat session.',
+    SETTINGS_VERSION_LABEL: 'Disclosure version',
+    SETTINGS_DATE_LABEL: 'Last consent',
+    OPEN_MODAL: 'Open consent dialog',
+    REVOKE: 'Revoke consent',
+    REVOKE_TITLE: 'Revoke AI chat consent?',
+    REVOKE_DESCRIPTION:
+      'After revocation, chat and voice mode will require explicit confirmation again before data is sent to OpenAI.',
+    REVOKE_CONFIRM: 'Revoke',
+  },
   PLANS: {
     BASIC: 'Basic',
     PRO: 'Pro',

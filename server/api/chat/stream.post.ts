@@ -36,6 +36,7 @@ import {
 import { trackPhobiasEvent } from '@/server/application/chat/phobias-analytics.service';
 import { getAssistantToneMeta } from '@/shared/constants/assistantTone';
 import { resolveAddressing } from '@/shared/utils/addressing';
+import { assertAiChatConsent } from '@/server/application/chat/ai-chat-consent.service';
 
 export default defineEventHandler(async (event) => {
   // Не логируем ключи API (чувствительные данные)
@@ -81,6 +82,22 @@ export default defineEventHandler(async (event) => {
     const uid = sessionResult?.id ? String(sessionResult.id) : undefined;
     if (!uid) {
       writeSseError('E_AUTH', 'Unauthorized');
+      return;
+    }
+    try {
+      assertAiChatConsent({
+        event,
+        snapshot: {
+          accepted: (sessionResult as any)?.aiConsentAccepted,
+          version: (sessionResult as any)?.aiConsentVersion,
+        },
+      });
+    } catch (error: any) {
+      writeSseError(
+        error?.data?.code || 'ai_consent_required',
+        error?.statusMessage || 'AI consent required',
+        error?.data
+      );
       return;
     }
 

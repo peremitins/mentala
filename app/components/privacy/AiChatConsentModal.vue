@@ -1,0 +1,119 @@
+<template>
+  <Dialog :open="modalOpen" @update:open="handleOpenChange">
+    <DialogContent
+      class="glass-deep w-[calc(100%-2rem)] max-w-[560px] overflow-hidden rounded-2xl border border-white/15 p-0 text-white shadow-[0_28px_80px_rgba(4,10,24,0.45)] backdrop-blur-2xl sm:w-full"
+    >
+      <div class="relative">
+        <div class="pointer-events-none absolute inset-0 opacity-80">
+          <div
+            class="absolute -left-20 top-0 h-48 w-48 rounded-full bg-cyan-400/18 blur-3xl"
+          />
+          <div
+            class="absolute right-0 top-12 h-56 w-56 rounded-full bg-blue-500/20 blur-3xl"
+          />
+        </div>
+
+        <div class="relative space-y-5 p-6 sm:p-7">
+          <DialogHeader class="space-y-3 text-left">
+            <DialogTitle class="text-2xl font-semibold text-white">
+              {{ t('AI_CHAT_CONSENT.TITLE') }}
+            </DialogTitle>
+            <DialogDescription class="text-sm leading-6 text-slate-200/86">
+              {{ t('AI_CHAT_CONSENT.DESCRIPTION', { provider: providerName }) }}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div class="grid gap-3 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+            <section class="rounded-2xl border border-white/12 bg-white/7 p-4">
+              <div class="mb-3 text-sm font-medium text-white/95">
+                {{ t('AI_CHAT_CONSENT.DATA_TITLE') }}
+              </div>
+              <ul class="space-y-2 text-sm leading-5 text-slate-200/82">
+                <li class="rounded-xl bg-black/12 px-3 py-2">
+                  {{ t('AI_CHAT_CONSENT.DATA_MESSAGES') }}
+                </li>
+
+                <li class="rounded-xl bg-black/12 px-3 py-2">
+                  {{ t('AI_CHAT_CONSENT.DATA_TECHNICAL') }}
+                </li>
+              </ul>
+            </section>
+
+            <section
+              class="rounded-2xl border border-cyan-300/14 bg-cyan-400/8 p-4"
+            >
+              <div class="mb-3 text-sm font-medium text-white/95">
+                {{ t('AI_CHAT_CONSENT.NOTE_TITLE') }}
+              </div>
+              <p class="text-sm leading-6 text-slate-200/82">
+                {{ t('AI_CHAT_CONSENT.NOTE_BODY') }}
+              </p>
+              <NuxtLink
+                :to="privacyPolicyUrl"
+                class="mt-4 inline-flex text-xs underline font-medium text-cyan-200 transition hover:text-cyan-100"
+              >
+                {{ t('AI_CHAT_CONSENT.PRIVACY_LINK') }}
+              </NuxtLink>
+            </section>
+          </div>
+
+          <DialogFooter
+            class="flex-col-reverse gap-3 sm:flex-row sm:justify-end"
+          >
+            <Button
+              variant="ghost"
+              class="w-full border border-white/12 bg-white/6 text-white hover:bg-white/12 sm:w-auto"
+              :disabled="isSubmitting"
+              @click="cancelAiConsentRequest"
+            >
+              {{ t('AI_CHAT_CONSENT.CANCEL') }}
+            </Button>
+            <Button
+              class="w-full sm:w-auto"
+              :disabled="isSubmitting"
+              :loading="isSubmitting"
+              @click="acceptAiConsent"
+            >
+              {{ t('AI_CHAT_CONSENT.ACCEPT') }}
+            </Button>
+          </DialogFooter>
+        </div>
+      </div>
+    </DialogContent>
+  </Dialog>
+</template>
+
+<script setup lang="ts">
+import { useI18n } from 'vue-i18n';
+import { Button } from '@/app/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/app/components/ui/shadcn/dialog';
+import { useAiChatConsentGate } from '@/app/composables/useAiChatConsentGate';
+
+const { t } = useI18n();
+const {
+  acceptAiConsent,
+  cancelAiConsentRequest,
+  isSubmitting,
+  modalOpen,
+  privacyPolicyUrl,
+  providerName,
+} = useAiChatConsentGate();
+
+function handleOpenChange(nextOpen: boolean) {
+  if (nextOpen) {
+    modalOpen.value = true;
+    return;
+  }
+
+  if (modalOpen.value) {
+    cancelAiConsentRequest();
+  }
+}
+</script>

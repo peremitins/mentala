@@ -1,6 +1,14 @@
-import { getHeader, readBody } from 'h3';
+import { readBody } from 'h3';
 import { eq } from 'drizzle-orm';
 import { getUserAssistantSettingsProjection } from '@/server/application/chat/assistant-persona.service';
+import {
+  AI_CHAT_CONSENT_VERSION,
+  type AiChatConsentLocale,
+} from '@/shared/constants/ai-consent';
+import {
+  detectAiConsentSource,
+  resolveAiConsentLocale,
+} from '@/server/application/chat/ai-chat-consent.service';
 import { getSessionUserWithRole } from '@/server/utils/require-role';
 import { db } from '@/server/infrastructure/db/client';
 import { users } from '@/server/infrastructure/db/schema';
@@ -9,10 +17,7 @@ import { toIsoString } from '@/server/utils/serialize';
 import { getBillingSnapshot } from '@/server/application/subscriptions/entitlements.service';
 
 function detectMarketingSource(event: any): 'web' | 'ios' | 'android' {
-  const userAgent = getHeader(event, 'user-agent') || '';
-  if (/Android/i.test(userAgent)) return 'android';
-  if (/iPhone|iPad|iPod/i.test(userAgent)) return 'ios';
-  return 'web';
+  return detectAiConsentSource(event);
 }
 
 type SceneSettingsPayload = Partial<{
@@ -26,6 +31,10 @@ type Payload = Partial<{
   sceneSettings: SceneSettingsPayload;
   marketingConsent: boolean;
   pushNotificationsEnabled: boolean;
+  aiConsent: {
+    accepted: boolean;
+    locale?: AiChatConsentLocale;
+  };
 }>;
 
 function clampNumber(value: number, min: number, max: number) {
@@ -76,6 +85,14 @@ export default defineEventHandler(async (event) => {
     ? detectMarketingSource(event)
     : null;
   const hasPushUpdate = typeof body.pushNotificationsEnabled === 'boolean';
+  const hasAiConsentUpdate = typeof body.aiConsent?.accepted === 'boolean';
+  const aiConsentAcceptedAt = body.aiConsent?.accepted ? new Date() : undefined;
+  const aiConsentLocale = body.aiConsent?.accepted
+    ? resolveAiConsentLocale({
+        requestedLocale: body.aiConsent?.locale,
+        userLocale: user.locale,
+      })
+    : undefined;
 
   await db
     .update(users)
@@ -89,6 +106,19 @@ export default defineEventHandler(async (event) => {
         : {}),
       ...(hasPushUpdate
         ? { pushNotificationsEnabled: body.pushNotificationsEnabled }
+        : {}),
+      ...(hasAiConsentUpdate
+        ? {
+            aiConsentAccepted: body.aiConsent!.accepted,
+            aiConsentAcceptedAt:
+              aiConsentAcceptedAt ?? (user as any)?.aiConsentAcceptedAt ?? null,
+            aiConsentVersion: body.aiConsent!.accepted
+              ? AI_CHAT_CONSENT_VERSION
+              : (user as any)?.aiConsentVersion ?? null,
+            aiConsentLocale: body.aiConsent!.accepted
+              ? aiConsentLocale
+              : (user as any)?.aiConsentLocale ?? null,
+          }
         : {}),
       updatedAt: new Date(),
     })
@@ -118,6 +148,22 @@ export default defineEventHandler(async (event) => {
       marketingConsent: hasMarketingUpdate
         ? body.marketingConsent
         : Boolean((user as any)?.marketingConsentAt),
+      aiConsentAccepted: hasAiConsentUpdate
+        ? body.aiConsent!.accepted
+        : Boolean((user as any)?.aiConsentAccepted),
+      aiConsentAcceptedAt: hasAiConsentUpdate
+        ? toIsoString(aiConsentAcceptedAt ?? (user as any)?.aiConsentAcceptedAt)
+        : toIsoString((user as any)?.aiConsentAcceptedAt),
+      aiConsentVersion: hasAiConsentUpdate
+        ? body.aiConsent!.accepted
+          ? AI_CHAT_CONSENT_VERSION
+          : (user as any)?.aiConsentVersion ?? null
+        : (user as any)?.aiConsentVersion ?? null,
+      aiConsentLocale: hasAiConsentUpdate
+        ? body.aiConsent!.accepted
+          ? aiConsentLocale
+          : (user as any)?.aiConsentLocale ?? null
+        : (user as any)?.aiConsentLocale ?? null,
       pushNotificationsEnabled: hasPushUpdate
         ? body.pushNotificationsEnabled!
         : Boolean((user as any)?.pushNotificationsEnabled ?? true),

@@ -7,6 +7,7 @@ import {
 import { resolveRealtimeVoicePlatform } from '@/server/application/realtime/realtime-voice-platform';
 import { startRealtimeVoiceSession } from '@/server/application/realtime/realtime-voice-session.service';
 import { createRealtimeVoiceHandshakeToken } from '@/server/application/realtime/realtime-voice-handshake-token';
+import { assertAiChatConsent } from '@/server/application/chat/ai-chat-consent.service';
 
 export default defineEventHandler(async (event) => {
   const sessionUser = await getSessionUserWithRole(event);
@@ -16,6 +17,13 @@ export default defineEventHandler(async (event) => {
       statusMessage: 'Unauthorized',
     });
   }
+  assertAiChatConsent({
+    event,
+    snapshot: {
+      accepted: (sessionUser as any)?.aiConsentAccepted,
+      version: (sessionUser as any)?.aiConsentVersion,
+    },
+  });
 
   const body = RealtimeVoiceSessionStartRequestDto.parse(
     (await readBody(event)) || {}

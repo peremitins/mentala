@@ -26,6 +26,7 @@ Node 20+, TypeScript, Nitro, Drizzle ORM + PostgreSQL, Redis, BullMQ, OpenAI, Yo
 - Пагинация: `?page=1&limit=20` → `{ items, page, limit, total }`
 - Идемпотентность: `Idempotency-Key` на POST
 - DTO: Zod, `shared/dto/*`
+- AI chat consent хранится в профиле пользователя (`aiConsentAccepted`, `aiConsentAcceptedAt`, `aiConsentVersion`, `aiConsentLocale`) и должен проверяться перед вызовами OpenAI chat/realtime
 
 ## Безопасность
 - CORS whitelist из env, rate-limit per IP/user
