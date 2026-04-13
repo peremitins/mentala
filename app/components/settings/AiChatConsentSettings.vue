@@ -51,6 +51,9 @@
       </Button>
       <NuxtLink
         :to="privacyPolicyUrl"
+        external
+        target="_blank"
+        rel="noopener noreferrer"
         class="text-sm font-medium text-primary-ui underline-offset-4 hover:underline"
       >
         {{ t('AI_CHAT_CONSENT.PRIVACY_LINK') }}
