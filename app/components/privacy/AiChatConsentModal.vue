@@ -1,7 +1,7 @@
 <template>
   <Dialog :open="modalOpen" @update:open="handleOpenChange">
     <DialogContent
-      class="overflow-hidden border border-white/15 bg-[linear-gradient(180deg,rgba(18,30,56,0.96),rgba(11,17,33,0.98))] p-0 text-white shadow-[0_28px_80px_rgba(4,10,24,0.45)] backdrop-blur-2xl sm:max-w-[560px]"
+      class="glass-deep w-[calc(100%-2rem)] max-w-[560px] overflow-hidden rounded-2xl border border-white/15 p-0 text-white shadow-[0_28px_80px_rgba(4,10,24,0.45)] backdrop-blur-2xl sm:w-full"
     >
       <div class="relative">
         <div class="pointer-events-none absolute inset-0 opacity-80">
@@ -69,7 +69,7 @@
               {{ t('AI_CHAT_CONSENT.CANCEL') }}
             </Button>
             <Button
-              class="w-full bg-cyan-400 text-slate-950 shadow-[0_12px_30px_rgba(34,211,238,0.28)] hover:bg-cyan-300 sm:w-auto"
+              class="w-full sm:w-auto"
               :disabled="isSubmitting"
               :loading="isSubmitting"
               @click="acceptAiConsent"

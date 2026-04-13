@@ -51,7 +51,7 @@ function buildLegalConsent(event: any) {
   };
 }
 
-export type Provider = 'google' | 'vk';
+export type Provider = 'google' | 'vk' | 'apple';
 export type OAuthResult =
   | { status: 'linked'; userId: number; isNewUser: boolean }
   | { status: 'linking_required'; linkingToken: string; email: string };

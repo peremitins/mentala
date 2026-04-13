@@ -350,6 +350,90 @@ export const useAuthStore = defineStore('auth', {
         this.loading = false;
       }
     },
+    async loginWithApple() {
+      if (typeof window === 'undefined') return;
+
+      const { Capacitor } = await import('@capacitor/core');
+      if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== 'ios') {
+        throw new Error('Sign in with Apple доступен только на iOS');
+      }
+
+      this.loading = true;
+      try {
+        const { SocialLogin } = await import('@capgo/capacitor-social-login');
+
+        if (!Capacitor.isPluginAvailable('SocialLogin')) {
+          throw new Error(
+            'Нативный плагин SocialLogin не найден. Выполни `npx cap sync ios`, затем Clean/Rebuild.'
+          );
+        }
+
+        await SocialLogin.initialize({ apple: {} });
+
+        const loginResponse: any = await SocialLogin.login({
+          provider: 'apple',
+          options: {},
+        });
+
+        // Плагин @capgo/capacitor-social-login возвращает поле idToken (не identityToken)
+        const identityToken = loginResponse?.result?.idToken ?? loginResponse?.result?.identityToken;
+        if (!identityToken) {
+          throw new Error('Apple identityToken missing');
+        }
+
+        const givenName = loginResponse?.result?.profile?.givenName || undefined;
+        const familyName = loginResponse?.result?.profile?.familyName || undefined;
+
+        const response: any = await useAPI('/api/auth/apple/native', {
+          method: 'POST',
+          body: {
+            identityToken,
+            firstName: givenName,
+            lastName: familyName,
+          },
+        });
+
+        if (response?.requiresAccountLinking) {
+          const params = new URLSearchParams({
+            token: response.linkingToken,
+            email: response.email,
+            back: '/',
+          });
+          await navigateTo(`/auth/link?${params.toString()}`);
+          return response;
+        }
+
+        const sessionToken = response?.sessionToken;
+        if (sessionToken) {
+          localStorage.setItem(SESSION_TOKEN_KEY, sessionToken);
+        }
+
+        if (response?.user) {
+          this.user = response.user;
+          this.isLoggedIn = true;
+        }
+
+        try {
+          await this.me();
+          const sceneSettings = useSceneSettingsStore();
+          await sceneSettings.loadFromUser();
+        } catch {
+          // Игнорируем, чтобы не ломать логин.
+        }
+
+        await this._registerPushTokenForSession();
+        await navigateTo('/');
+        return response;
+      } catch (error) {
+        console.error(
+          'Ошибка нативного входа Apple:',
+          getErrorDiagnosticsLog(error)
+        );
+        throw error;
+      } finally {
+        this.loading = false;
+      }
+    },
     async registerEmail(payload: {
       email: string;
       password: string;
