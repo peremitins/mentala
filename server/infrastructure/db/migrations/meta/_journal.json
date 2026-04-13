@@ -533,6 +533,13 @@
       "when": 1775560554342,
       "tag": "0078_little_supernaut",
       "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1776060837976,
+      "tag": "0079_curious_manta",
+      "breakpoints": true
     }
   ]
 }

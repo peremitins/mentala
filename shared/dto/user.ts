@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { AssistantSettingsDto } from './assistant-settings';
+import { AI_CHAT_CONSENT_LOCALES } from '@/shared/constants/ai-consent';
 
 export const BillingFeaturePaywallDto = z.object({
   title: z.string(),
@@ -48,6 +49,10 @@ export const UserMeDto = z.object({
       sceneSettings: z.record(z.any()).optional(),
       marketingConsent: z.boolean().optional(),
       pushNotificationsEnabled: z.boolean().optional(),
+      aiConsentAccepted: z.boolean().optional(),
+      aiConsentAcceptedAt: z.string().nullable().optional(),
+      aiConsentVersion: z.string().nullable().optional(),
+      aiConsentLocale: z.enum(AI_CHAT_CONSENT_LOCALES).nullable().optional(),
       assistantSettings: AssistantSettingsDto.optional(),
       billing: UserBillingDto.optional(),
     })
@@ -65,6 +70,12 @@ export const UserMePatchDto = z.object({
     })
     .optional(),
   marketingConsent: z.boolean().optional(),
+  aiConsent: z
+    .object({
+      accepted: z.boolean(),
+      locale: z.enum(AI_CHAT_CONSENT_LOCALES).optional(),
+    })
+    .optional(),
 });
 
 export type UserMeDto = z.infer<typeof UserMeDto>;
