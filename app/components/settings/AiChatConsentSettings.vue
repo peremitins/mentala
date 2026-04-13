@@ -49,15 +49,13 @@
       >
         {{ t('AI_CHAT_CONSENT.OPEN_MODAL') }}
       </Button>
-      <NuxtLink
-        :to="privacyPolicyUrl"
-        external
-        target="_blank"
-        rel="noopener noreferrer"
-        class="text-sm font-medium text-primary-ui underline-offset-4 hover:underline"
+      <button
+        type="button"
+        class="text-left text-sm font-medium text-primary-ui underline-offset-4 hover:underline"
+        @click="openPrivacyPolicy"
       >
         {{ t('AI_CHAT_CONSENT.PRIVACY_LINK') }}
-      </NuxtLink>
+      </button>
     </div>
 
     <AlertDialog :open="revokeDialogOpen" @update:open="revokeDialogOpen = $event">
@@ -99,6 +97,7 @@ import {
 } from '@/app/components/ui/shadcn/alert-dialog';
 import { useAiChatConsentGate } from '@/app/composables/useAiChatConsentGate';
 import { isAiChatConsentCurrent } from '@/shared/utils/ai-consent';
+import { openExternalBrowser } from '@/app/utils/openExternalBrowser';
 
 const { t, locale } = useI18n();
 const revokeDialogOpen = ref(false);
@@ -139,5 +138,9 @@ async function handleRevokeConsent() {
   if (revoked) {
     revokeDialogOpen.value = false;
   }
+}
+
+async function openPrivacyPolicy() {
+  await openExternalBrowser(privacyPolicyUrl.value);
 }
 </script>
