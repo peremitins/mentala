@@ -40,7 +40,7 @@
             </section>
 
             <section
-              class="rounded-2xl border border-cyan-300/14 bg-cyan-400/8 p-4"
+              class="relative rounded-2xl border border-cyan-300/14 bg-cyan-400/8 p-4"
             >
               <div class="mb-3 text-sm font-medium text-white/95">
                 {{ t('AI_CHAT_CONSENT.NOTE_TITLE') }}
@@ -50,8 +50,9 @@
               </p>
               <button
                 type="button"
-                class="mt-4 inline-flex text-xs underline font-medium text-cyan-200 transition hover:text-cyan-100"
-                @click="openPrivacyPolicy"
+                class="relative z-10 mt-4 inline-flex touch-manipulation select-none text-xs font-medium text-cyan-200 underline transition hover:text-cyan-100"
+                @click.stop.prevent="openPrivacyPolicy"
+                @pointerdown.stop
               >
                 {{ t('AI_CHAT_CONSENT.PRIVACY_LINK') }}
               </button>
