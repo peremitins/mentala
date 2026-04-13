@@ -1,5 +1,5 @@
 <template>
-  <Dialog :open="modalOpen" @update:open="handleOpenChange">
+  <Dialog v-model:open="modalOpen" @update:open="handleOpenChange">
     <DialogContent
       class="glass-deep w-[calc(100%-2rem)] max-w-[560px] overflow-hidden rounded-2xl border border-white/15 p-0 text-white shadow-[0_28px_80px_rgba(4,10,24,0.45)] backdrop-blur-2xl sm:w-full"
     >
@@ -50,6 +50,9 @@
               </p>
               <NuxtLink
                 :to="privacyPolicyUrl"
+                external
+                target="_blank"
+                rel="noopener noreferrer"
                 class="mt-4 inline-flex text-xs underline font-medium text-cyan-200 transition hover:text-cyan-100"
               >
                 {{ t('AI_CHAT_CONSENT.PRIVACY_LINK') }}
@@ -72,7 +75,7 @@
               class="w-full sm:w-auto"
               :disabled="isSubmitting"
               :loading="isSubmitting"
-              @click="acceptAiConsent"
+              @click="handleAcceptClick"
             >
               {{ t('AI_CHAT_CONSENT.ACCEPT') }}
             </Button>
@@ -84,6 +87,7 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { Button } from '@/app/components/ui/button';
 import {
@@ -106,14 +110,28 @@ const {
   providerName,
 } = useAiChatConsentGate();
 
+const closingByAccept = ref(false);
+
 function handleOpenChange(nextOpen: boolean) {
   if (nextOpen) {
-    modalOpen.value = true;
     return;
   }
 
-  if (modalOpen.value) {
+  // Если закрываемся после успешного принятия — не трактуем это как "отмена".
+  if (closingByAccept.value) {
+    closingByAccept.value = false;
+    return;
+  }
+
+  // Пользователь закрыл модалку вручную (оверлей/esc/крестик) — считаем это отказом.
+  if (!isSubmitting.value) {
     cancelAiConsentRequest();
   }
+}
+
+async function handleAcceptClick() {
+  if (isSubmitting.value) return;
+  closingByAccept.value = true;
+  await acceptAiConsent();
 }
 </script>
