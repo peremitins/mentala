@@ -150,6 +150,12 @@ export const users = pgTable(
       withTimezone: true,
     }),
     marketingConsentSource: varchar('marketing_consent_source', { length: 16 }),
+    aiConsentAccepted: boolean('ai_consent_accepted').default(false).notNull(),
+    aiConsentAcceptedAt: timestamp('ai_consent_accepted_at', {
+      withTimezone: true,
+    }),
+    aiConsentVersion: varchar('ai_consent_version', { length: 32 }),
+    aiConsentLocale: varchar('ai_consent_locale', { length: 8 }),
     pushNotificationsEnabled: boolean('push_notifications_enabled')
       .default(true)
       .notNull(),

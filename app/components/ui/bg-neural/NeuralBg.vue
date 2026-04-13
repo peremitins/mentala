@@ -1,5 +1,5 @@
 <template>
-  <canvas
+  <!-- <canvas
     ref="canvasRef"
     :class="
       cn(
@@ -7,7 +7,7 @@
         props.class
       )
     "
-  />
+  /> -->
 </template>
 
 <script setup lang="ts">

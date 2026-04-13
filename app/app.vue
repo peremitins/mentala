@@ -26,6 +26,9 @@
       <GlobalNavigationPaywall />
     </ClientOnly>
     <ClientOnly>
+      <AiChatConsentModal />
+    </ClientOnly>
+    <ClientOnly>
       <ForceUpdateBlocker />
     </ClientOnly>
 
@@ -49,6 +52,7 @@ import { useSceneSettingsStore } from '@/app/stores/sceneSettings';
 import { useUiSettingsStore } from '@/app/stores/uiSettings';
 import GlobalNavigationPaywall from '@/app/components/navigation/GlobalNavigationPaywall.vue';
 import ForceUpdateBlocker from '@/app/components/ForceUpdateBlocker.vue';
+import AiChatConsentModal from '@/app/components/privacy/AiChatConsentModal.vue';
 import {
   DEFAULT_SCENE_ID,
   findSceneTrack,

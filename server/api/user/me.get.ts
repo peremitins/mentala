@@ -43,6 +43,10 @@ export default defineEventHandler(async (event) => {
         hasPassword: !!user.passwordHash,
         sceneSettings: (user as any)?.sceneSettings || {},
         marketingConsent: Boolean((user as any)?.marketingConsentAt),
+        aiConsentAccepted: Boolean((user as any)?.aiConsentAccepted),
+        aiConsentAcceptedAt: toIsoString((user as any)?.aiConsentAcceptedAt),
+        aiConsentVersion: (user as any)?.aiConsentVersion || null,
+        aiConsentLocale: (user as any)?.aiConsentLocale || null,
         pushNotificationsEnabled: Boolean(
           (user as any)?.pushNotificationsEnabled ?? true
         ),
