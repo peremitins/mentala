@@ -7,12 +7,11 @@ export async function openExternalBrowser(url: string) {
   if (!resolvedUrl) return;
 
   if (!Capacitor.isNativePlatform()) {
-    // В web — обычный переход/новая вкладка.
+    // В web — стараемся открыть в новой вкладке, но при блокировке попапов уходим в location.
     if (typeof window.open === 'function') {
-      window.open(resolvedUrl, '_blank', 'noopener,noreferrer');
-      return;
+      const opened = window.open(resolvedUrl, '_blank', 'noopener,noreferrer');
+      if (opened) return;
     }
-
     window.location.href = resolvedUrl;
     return;
   }
@@ -26,9 +25,9 @@ export async function openExternalBrowser(url: string) {
       '[openExternalBrowser] Failed to open external browser via InAppBrowser:',
       error
     );
-    if (typeof window.open === 'function') {
-      window.open(resolvedUrl, '_blank', 'noopener,noreferrer');
-    }
+    // `window.open` на iOS часто блокируется (теряется user gesture из-за await import).
+    // location.href работает стабильнее.
+    window.location.href = resolvedUrl;
   }
 }
 
