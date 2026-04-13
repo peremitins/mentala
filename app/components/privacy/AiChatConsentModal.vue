@@ -48,15 +48,13 @@
               <p class="text-sm leading-6 text-slate-200/82">
                 {{ t('AI_CHAT_CONSENT.NOTE_BODY') }}
               </p>
-              <NuxtLink
-                :to="privacyPolicyUrl"
-                external
-                target="_blank"
-                rel="noopener noreferrer"
+              <button
+                type="button"
                 class="mt-4 inline-flex text-xs underline font-medium text-cyan-200 transition hover:text-cyan-100"
+                @click="openPrivacyPolicy"
               >
                 {{ t('AI_CHAT_CONSENT.PRIVACY_LINK') }}
-              </NuxtLink>
+              </button>
             </section>
           </div>
 
@@ -72,12 +70,14 @@
               {{ t('AI_CHAT_CONSENT.CANCEL') }}
             </Button>
             <Button
-              class="w-full sm:w-auto"
+              class="relative w-full sm:w-auto"
               :disabled="isSubmitting"
-              :loading="isSubmitting"
               @click="handleAcceptClick"
             >
-              {{ t('AI_CHAT_CONSENT.ACCEPT') }}
+              <ButtonLoader v-if="isSubmitting" />
+              <span :class="isSubmitting ? 'invisible' : ''">
+                {{ t('AI_CHAT_CONSENT.ACCEPT') }}
+              </span>
             </Button>
           </DialogFooter>
         </div>
@@ -90,6 +90,7 @@
 import { ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { Button } from '@/app/components/ui/button';
+import ButtonLoader from '@/app/components/ui/ButtonLoader.vue';
 import {
   Dialog,
   DialogContent,
@@ -99,6 +100,7 @@ import {
   DialogTitle,
 } from '@/app/components/ui/shadcn/dialog';
 import { useAiChatConsentGate } from '@/app/composables/useAiChatConsentGate';
+import { openExternalBrowser } from '@/app/utils/openExternalBrowser';
 
 const { t } = useI18n();
 const {
@@ -133,5 +135,9 @@ async function handleAcceptClick() {
   if (isSubmitting.value) return;
   closingByAccept.value = true;
   await acceptAiConsent();
+}
+
+async function openPrivacyPolicy() {
+  await openExternalBrowser(privacyPolicyUrl.value);
 }
 </script>
