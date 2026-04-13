@@ -45,6 +45,7 @@ import { trackPhobiasEvent } from '@/server/application/chat/phobias-analytics.s
 import { readChatSettings, writeChatSettings } from '@/server/utils/storage';
 import { getAssistantToneMeta } from '@/shared/constants/assistantTone';
 import { resolveAddressing } from '@/shared/utils/addressing';
+import { assertAiChatConsent } from '@/server/application/chat/ai-chat-consent.service';
 
 export default defineEventHandler(async (event) => {
   try {
@@ -58,6 +59,13 @@ export default defineEventHandler(async (event) => {
     }
 
     const uid = Number(sessionResult.id);
+    assertAiChatConsent({
+      event,
+      snapshot: {
+        accepted: (sessionResult as any)?.aiConsentAccepted,
+        version: (sessionResult as any)?.aiConsentVersion,
+      },
+    });
     const userName =
       (sessionResult as any)?.name || parsed.user_name || undefined;
     const userGender = (sessionResult as any)?.gender || undefined;

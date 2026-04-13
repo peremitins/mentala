@@ -402,6 +402,7 @@ import {
   type ChatFeedbackTopicCode,
 } from '@/shared/dto';
 import { getAddressingCopy } from '@/app/lib/addressingCopy';
+import { useAiChatConsentGate } from '@/app/composables/useAiChatConsentGate';
 import { useAppNavigation } from '@/app/composables/useAppNavigation';
 import { useEntitlements } from '@/app/composables/useEntitlements';
 import { useNuxtApp, useRuntimeConfig } from '#imports';
@@ -412,6 +413,7 @@ const emit = defineEmits<{ (e: 'send', text: string): void }>();
 const route = useRoute();
 const router = useRouter();
 const { navigateToTarget } = useAppNavigation();
+const { requestAiConsent } = useAiChatConsentGate();
 const auth = useAuthStore();
 const addressing = computed(() => resolveAddressing(auth.user?.addressing));
 const chatViewportStyle = computed(() => {
@@ -658,6 +660,11 @@ async function handleWelcomeSelect() {
     return;
   }
 
+  const consentGranted = await requestAiConsent();
+  if (!consentGranted) {
+    return;
+  }
+
   console.log('chat.messages?.length111', chat.messages?.length);
   if (chat.messages?.length) {
     console.log('chat.messages?.length', chat.messages?.length);
@@ -741,6 +748,8 @@ const textareaRef = ref<InstanceType<typeof TextareaResize> | null>(null);
 const sendText = async (rawText: string) => {
   if (!ensureChatAccessOrPaywall()) return;
   if (isTextInputDisabled.value) return;
+  const consentGranted = await requestAiConsent();
+  if (!consentGranted) return;
   const textToSend = rawText?.trim();
   if (!textToSend) return;
 
@@ -1285,6 +1294,11 @@ async function handleRealtimeVoiceAction() {
 
   if (!ensureRealtimeVoiceAccessOrPaywall()) {
     await realtimeVoiceCallFeedback.notifyUnavailableIntent();
+    return;
+  }
+
+  const consentGranted = await requestAiConsent();
+  if (!consentGranted) {
     return;
   }
 
