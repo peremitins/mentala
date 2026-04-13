@@ -21,7 +21,10 @@ export function useAiChatConsentGate() {
   const auth = useAuthStore();
   const { locale } = useI18n();
 
-  const modalOpen = useState<boolean>('ai-chat-consent-modal-open', () => false);
+  const modalOpen = useState<boolean>(
+    'ai-chat-consent-modal-open',
+    () => false
+  );
   const isSubmitting = useState<boolean>(
     'ai-chat-consent-modal-submitting',
     () => false
@@ -62,7 +65,10 @@ export function useAiChatConsentGate() {
     try {
       await auth.me();
     } catch (error) {
-      console.warn('[AI Consent] Failed to load user before consent check:', error);
+      console.warn(
+        '[AI Consent] Failed to load user before consent check:',
+        error
+      );
     }
   }
 
@@ -108,7 +114,8 @@ export function useAiChatConsentGate() {
       });
 
       const acceptedAt =
-        (response as any)?.user?.aiConsentAcceptedAt || new Date().toISOString();
+        (response as any)?.user?.aiConsentAcceptedAt ||
+        new Date().toISOString();
 
       if (auth.user) {
         auth.user.aiConsentAccepted = true;
@@ -117,7 +124,9 @@ export function useAiChatConsentGate() {
         auth.user.aiConsentLocale = consentLocale.value;
       }
 
-      await writeCachedAiChatConsent({
+      // На iOS `Preferences.set()` может подвиснуть, хотя запись успевает примениться.
+      // Поэтому кэш пишем в фоне — UI не должен ждать local storage.
+      void writeCachedAiChatConsent({
         accepted: true,
         acceptedAt,
         locale: consentLocale.value,
@@ -156,7 +165,8 @@ export function useAiChatConsentGate() {
         auth.user.aiConsentAccepted = false;
       }
 
-      await writeCachedAiChatConsent({
+      // Аналогично accept: не блокируем UI на storage.
+      void writeCachedAiChatConsent({
         accepted: false,
       });
 
