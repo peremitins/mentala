@@ -42,8 +42,9 @@ export function useAiChatConsentGate() {
   const consentLocale = computed<AiChatConsentLocale>(() =>
     normalizeAiChatConsentLocale(auth.user?.locale || locale.value || 'ru')
   );
+  const { public: publicConfig } = useRuntimeConfig();
   const privacyPolicyUrl = computed(
-    () => `/legal/privacy-policy-${consentLocale.value}.html`
+    () => `${publicConfig.appUrl}/legal/privacy-policy-${consentLocale.value}.html`
   );
 
   function closeModal(result: boolean) {
