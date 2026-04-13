@@ -288,7 +288,23 @@
               </div>
 
               <div class="grid grid-cols-1 gap-2">
-                <!-- 1️⃣ Google -->
+                <!-- Sign in with Apple (только iOS) -->
+                <!-- Кнопка соответствует Apple HIG: solid white, Apple logo + текст, min 44px -->
+                <button
+                  v-if="isIos"
+                  type="button"
+                  :disabled="loading || oauthLoading"
+                  @click="loginWithApple"
+                  class="relative h-11 rounded-xl bg-white hover:brightness-95 active:brightness-90 text-black flex items-center justify-center gap-2 px-4 disabled:opacity-60 disabled:cursor-not-allowed transition"
+                >
+                  <ButtonLoader v-if="appleLoading" />
+                  <template v-else>
+                    <AppleIcon class="w-5 h-5 shrink-0" />
+                    <span class="text-sm font-medium">Sign in with Apple</span>
+                  </template>
+                </button>
+
+                <!-- Google -->
                 <button
                   type="button"
                   :disabled="loading || oauthLoading"
@@ -361,6 +377,7 @@ import { ref, computed, onMounted, nextTick } from 'vue';
 import { useCountdown } from '@vueuse/core';
 import { useAuthStore } from '@/app/stores/auth';
 import GoogleIcon from '~icons/logos/google-icon';
+import AppleIcon from '~icons/logos/apple';
 import NeuralBg from '@/app/components/ui/bg-neural/NeuralBg.vue';
 import BrandLogoEn from '@/app/assets/images/logo_en.svg';
 import BrandLogoRu from '@/app/assets/images/logo_ru.svg';
@@ -391,6 +408,8 @@ const agree = ref(false);
 const marketingConsent = ref(false);
 const loading = ref(false);
 const oauthLoading = ref(false);
+const appleLoading = ref(false);
+const isIos = ref(false);
 const accessCode = ref('');
 
 const verificationEmail = ref('');
@@ -646,6 +665,24 @@ async function resendCode() {
   }
 }
 
+async function loginWithApple() {
+  try {
+    appleLoading.value = true;
+    oauthLoading.value = true;
+    await auth.loginWithApple();
+  } catch (e: any) {
+    const message =
+      e instanceof Error && e.message
+        ? e.message
+        : 'Не удалось войти через Apple';
+    useToast('Ошибка входа через Apple', message, 'error');
+    console.error('[Auth] Apple login error:', getErrorDiagnosticsLog(e));
+  } finally {
+    appleLoading.value = false;
+    oauthLoading.value = false;
+  }
+}
+
 async function loginWithGoogle() {
   try {
     oauthLoading.value = true;
@@ -701,6 +738,15 @@ const checkSvgLoaded = () => {
 onMounted(async () => {
   await nextTick();
   checkSvgLoaded();
+
+  // Определяем iOS после гидрации, чтобы избежать SSR-мисматча
+  try {
+    const { Capacitor } = await import('@capacitor/core');
+    isIos.value =
+      Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'ios';
+  } catch {
+    isIos.value = false;
+  }
   if (route.query.error === 'email_not_verified') {
     useToast(
       'Ошибка',

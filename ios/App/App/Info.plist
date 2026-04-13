@@ -71,5 +71,9 @@
 	<true/>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>SKExternalPurchaseCustomLinkRegions</key>
+	<array>
+		<string>ru</string>
+	</array>
 </dict>
 </plist>

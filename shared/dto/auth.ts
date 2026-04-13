@@ -82,6 +82,13 @@ export const GoogleNativeAuthDto = z.object({
   idToken: z.string().min(10),
 });
 
+export const AppleNativeAuthDto = z.object({
+  identityToken: z.string().min(10),
+  // Apple возвращает имя только при первом входе
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
+});
+
 export const PasswordForgotDto = z.object({
   email: z.string().email(),
 });
@@ -112,5 +119,6 @@ export type OAuthLinkSendCodeDto = z.infer<typeof OAuthLinkSendCodeDto>;
 export type OAuthLinkVerifyCodeDto = z.infer<typeof OAuthLinkVerifyCodeDto>;
 export type OAuthLinkCancelDto = z.infer<typeof OAuthLinkCancelDto>;
 export type GoogleNativeAuthDto = z.infer<typeof GoogleNativeAuthDto>;
+export type AppleNativeAuthDto = z.infer<typeof AppleNativeAuthDto>;
 export type PasswordForgotDto = z.infer<typeof PasswordForgotDto>;
 export type PasswordResetDto = z.infer<typeof PasswordResetDto>;
