@@ -20,7 +20,10 @@ type NavigatorWithAudioSession = Navigator & {
   };
 };
 
-const AUDIO_SESSION_PLAYBACK = 'playback';
+// 'play-and-record' совместим с одновременным захватом микрофона (getUserMedia).
+// 'playback' конфликтует с audio capture в PWA WebKit и вызывает ошибку
+// "AudioSession category is not compatible with audio capture".
+const AUDIO_SESSION_PLAY_AND_RECORD = 'play-and-record';
 const INPUT_ACTIVITY_VOLUME_THRESHOLD = 4;
 const INPUT_ACTIVITY_CHECK_INTERVAL_MS = 750;
 const INPUT_ACTIVITY_THROTTLE_MS = 1_500;
@@ -60,8 +63,8 @@ function ensureRealtimeVoicePlaybackAudioSessionType() {
   }
 
   try {
-    if (session.type !== AUDIO_SESSION_PLAYBACK) {
-      session.type = AUDIO_SESSION_PLAYBACK;
+    if (session.type !== AUDIO_SESSION_PLAY_AND_RECORD) {
+      session.type = AUDIO_SESSION_PLAY_AND_RECORD;
     }
   } catch {
     // В старых WebView API может отсутствовать или быть read-only.
@@ -371,6 +374,12 @@ export class RealtimeVoiceTransport {
 
     const peerConnection = new PeerConnection();
     const dataChannel = peerConnection.createDataChannel('oai-events');
+
+    // Устанавливаем audioSession = 'play-and-record' ДО getUserMedia.
+    // На iOS WebKit в PWA, если session в режиме 'playback' (например, после медитации),
+    // вызов getUserMedia() упадёт с "AudioSession category is not compatible with audio capture".
+    ensureRealtimeVoicePlaybackAudioSessionType();
+
     const localStream = await requestRealtimeVoiceUserMedia({
       audio: params.audioConstraints ?? true,
     });

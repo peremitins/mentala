@@ -62,6 +62,14 @@
           @dismiss="pushRecovery.dismissRecovery()"
           @enable="pushRecovery.attemptRecovery()"
         />
+        <!-- PWA install banners -->
+        <PwaInstallBanner
+          :visible="showInstallBanner"
+          :native="pwaInstall.hasNativeInstallPrompt.value"
+          @install="handlePwaInstall"
+          @close="handlePwaClose"
+        />
+        <PwaIosGuide :visible="showIosGuide" @close="handlePwaClose" />
       </ClientOnly>
       <BottomNav />
     </div>
@@ -74,7 +82,11 @@ import { useRoute } from 'vue-router';
 import BottomNav from '@/app/components/BottomNav.vue';
 import MiniMeditationPlayer from '@/app/components/meditations/MiniMeditationPlayer.vue';
 import PushRecoveryDialog from '@/app/components/notifications/PushRecoveryDialog.vue';
+import PwaInstallBanner from '@/app/components/pwa/PwaInstallBanner.vue';
+import PwaIosGuide from '@/app/components/pwa/PwaIosGuide.vue';
 import { usePushRecovery } from '@/app/composables/usePushRecovery';
+import { usePwaInstall } from '@/app/composables/usePwaInstall';
+import { useWebPush } from '@/app/composables/useWebPush';
 import { useMeditationPlayer } from '@/app/composables/useMeditationPlayer';
 import { useMeditationsStore } from '@/app/stores/meditations';
 import { useSceneSettingsStore } from '@/app/stores/sceneSettings';
@@ -103,6 +115,94 @@ const pushRecovery = usePushRecovery();
 const route = useRoute();
 const auth = useAuthStore();
 const sceneSettings = useSceneSettingsStore();
+
+// ==========================================
+// PWA install prompt + Web Push
+// ==========================================
+const pwaInstall = usePwaInstall();
+const webPush = useWebPush();
+let webPushPermissionTimer: ReturnType<typeof setTimeout> | null = null;
+const showInstallBanner = ref(false);
+const showIosGuide = ref(false);
+
+let pwaInstallTimer: ReturnType<typeof setTimeout> | null = null;
+
+function tryShowPwaOffer() {
+  pwaInstall.init();
+  // Показываем предложение с задержкой 5 сек — не мешаем первому визиту
+  pwaInstallTimer = setTimeout(() => {
+    if (!pwaInstall.canShowInstallOffer()) return;
+    if (pwaInstall.isIos.value) {
+      showIosGuide.value = true;
+    } else {
+      showInstallBanner.value = true;
+    }
+  }, 5000);
+}
+
+async function handlePwaInstall() {
+  showInstallBanner.value = false;
+  await pwaInstall.promptInstall();
+}
+
+/** Закрыл баннер — скрываем до следующих 10:00 */
+function handlePwaClose() {
+  showInstallBanner.value = false;
+  showIosGuide.value = false;
+  pwaInstall.markDismissed();
+}
+
+// Показываем PWA offer + запрашиваем web push разрешение только авторизованным
+watch(
+  () => auth.isLoggedIn,
+  (loggedIn) => {
+    if (loggedIn) {
+      tryShowPwaOffer();
+      tryRequestWebPushPermission();
+      // Если push уже включён (permission + активный флаг) — регистрируем foreground-listener.
+      // Нужно при каждой загрузке страницы (не только при login/enable).
+      // Без этого foreground-уведомления не показываются при data-only web push.
+      if (
+        typeof Notification !== 'undefined' &&
+        Notification.permission === 'granted' &&
+        webPush.isUserActivated()
+      ) {
+        webPush.setupForegroundListener();
+      }
+    } else {
+      if (pwaInstallTimer) clearTimeout(pwaInstallTimer);
+      if (webPushPermissionTimer) clearTimeout(webPushPermissionTimer);
+      showInstallBanner.value = false;
+      showIosGuide.value = false;
+    }
+  },
+  { immediate: true }
+);
+
+/**
+ * Запрашивает разрешение на web push через 10 секунд после логина.
+ * Только если браузер поддерживает, разрешение ещё не запрашивалось
+ * и это не нативная платформа.
+ */
+function tryRequestWebPushPermission() {
+  if (!webPush.isBrowserCapable()) return;
+  if (typeof Notification === 'undefined') return;
+  // Уже было решение — не спрашиваем снова
+  if (Notification.permission !== 'default') return;
+
+  webPushPermissionTimer = setTimeout(async () => {
+    // Повторная проверка — вдруг уже решил за это время
+    if (Notification.permission !== 'default') return;
+    if (await webPush.isNativePlatform()) return;
+
+    // Запрашиваем разрешение браузера
+    const permission = await webPush.requestPermission();
+    if (permission === 'granted') {
+      // Если Firebase настроен — сразу регистрируем токен
+      void webPush.ensureRegisteredAfterLogin();
+    }
+  }, 10_000);
+}
 const uiSettings = useUiSettingsStore();
 const sceneAudio = useSceneAudio();
 const RESUME_SCENE_AFTER_MEDITATION_DELAY_MS = 450;
@@ -187,6 +287,16 @@ onBeforeUnmount(() => {
   if (removeAppStateListener) {
     void removeAppStateListener();
     removeAppStateListener = null;
+  }
+
+  if (pwaInstallTimer) {
+    clearTimeout(pwaInstallTimer);
+    pwaInstallTimer = null;
+  }
+
+  if (webPushPermissionTimer) {
+    clearTimeout(webPushPermissionTimer);
+    webPushPermissionTimer = null;
   }
 });
 
