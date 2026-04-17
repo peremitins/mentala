@@ -71,3 +71,18 @@ export function selectDeliveryTargets(
   const sortedDevices = [...activeDevices].sort(compareDeliveryDevices);
   return sortedDevices[0] ? [sortedDevices[0]] : [];
 }
+
+/**
+ * Возвращает все активные endpoint'ы в порядке глобального приоритета.
+ *
+ * Используется для failover: если лучший endpoint не доставился
+ * (невалидный/протухший токен и т.п.), можно попробовать следующий,
+ * не разваливая инвариант "не больше одного успешного уведомления".
+ */
+export function orderDeliveryTargetsByPriority(
+  allDevices: DeliveryDevice[]
+): DeliveryDevice[] {
+  const activeDevices = allDevices.filter(isDeviceActive);
+  if (activeDevices.length === 0) return [];
+  return [...activeDevices].sort(compareDeliveryDevices);
+}
