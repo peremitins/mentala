@@ -5,6 +5,7 @@ export function createWebSpeechEngine(): SpeechEngine {
   const speechStore = useSpeechStore();
   let finalCb: ((t: string) => void) | null = null;
   let partialCb: ((t: string) => void) | null = null;
+  let errorCb: ((error: unknown) => void) | null = null;
   let rec: any = null;
   let silenceTimer: any = null;
   let silenceMs = 10000;
@@ -50,7 +51,14 @@ export function createWebSpeechEngine(): SpeechEngine {
         stop();
       }
     };
-    rec.onerror = (_e: any) => {
+    rec.onerror = (event: any) => {
+      errorCb?.(
+        new Error(
+          typeof event?.error === 'string'
+            ? `Web Speech error: ${event.error}`
+            : 'Web Speech error'
+        )
+      );
       stop();
     };
     rec.onend = () => {
@@ -68,7 +76,9 @@ export function createWebSpeechEngine(): SpeechEngine {
     clearTimeout(silenceTimer);
     try {
       rec?.stop();
-    } catch {}
+    } catch {
+      // Игнорируем stop-ошибку, если браузер уже завершил распознавание.
+    }
   }
 
   return {
@@ -79,6 +89,9 @@ export function createWebSpeechEngine(): SpeechEngine {
     },
     onFinal(cb) {
       finalCb = cb;
+    },
+    onError(cb) {
+      errorCb = cb;
     },
     isAvailable() {
       return isSupported();

@@ -8,7 +8,7 @@
       <!-- Заголовок с иконкой и кнопкой закрыть -->
       <div class="flex items-start gap-3">
         <img
-          src="/web-app-manifest-192x192.png"
+          src="/brand-mark-192.png"
           alt="Ментала"
           class="h-12 w-12 flex-shrink-0 rounded-xl"
         />

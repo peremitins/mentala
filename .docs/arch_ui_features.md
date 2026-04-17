@@ -104,6 +104,8 @@
 - Apple-safe мастер для native iOS/AppIcon: `public/app-icon-native-master.svg` (квадратный фон, без прозрачности и без преднарисованных скруглений)
 - `apps/landing/public/favicon.svg` синхронизировать с `public/favicon.svg`
 - Web PNG/ICO/apple-touch/android/ms/manifest family генерировать из rounded-card мастера с прозрачным фоном вне скруглённой карточки
+- Для текущего PWA splash/launcher используем прозрачный брендовый знак, визуально совпадающий с native-иконкой; белую rounded-card подложку в manifest-иконках использовать нельзя
+- Для PWA splash/loader и web push нельзя использовать устаревший `notification-badge.png`; актуальные `icon`/`badge` должны идти из прозрачного брендового знака, синхронизированного с native-иконкой
 - Native iOS/AppIcon генерировать отдельно из Apple-safe мастера без предскругления
 - Native Android launcher icon и splash генерировать отдельно из Apple-safe мастера: launcher через adaptive icon layers, splash — как отдельный тёмный launch screen со знаком бренда
 - Native iOS single-size AppIcon: `ios/App/App/Assets.xcassets/AppIcon.appiconset/favicon_ios.png`

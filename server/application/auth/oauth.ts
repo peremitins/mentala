@@ -23,8 +23,14 @@ import {
   getCookieName,
 } from './cookie-names';
 import { dispatchUserRegisteredEvent } from '@/server/application/events/app-events.dispatchers';
+import { redisConnection } from '@/server/infrastructure/redis/bullmqClient';
 
 const isProd = process.env.NODE_ENV === 'production';
+const GOOGLE_OAUTH_REPLAY_TTL_SECONDS = 5 * 60;
+const googleOAuthReplayMemory = new Map<
+  string,
+  { redirectUrl: string; expiresAt: number }
+>();
 
 function detectAcceptanceSource(event: any): 'web' | 'ios' | 'android' {
   const userAgent = getHeader(event, 'user-agent') || '';
@@ -55,6 +61,98 @@ export type Provider = 'google' | 'vk' | 'apple';
 export type OAuthResult =
   | { status: 'linked'; userId: number; isNewUser: boolean }
   | { status: 'linking_required'; linkingToken: string; email: string };
+
+function getGoogleOAuthReplayKey(state: string): string {
+  return `auth:google:callback-replay:${state}`;
+}
+
+function getRedisClient() {
+  return typeof (redisConnection as any)?.get === 'function'
+    ? (redisConnection as any)
+    : null;
+}
+
+function readGoogleOAuthReplayFromMemory(state: string): string | null {
+  const record = googleOAuthReplayMemory.get(state);
+  if (!record) return null;
+
+  if (record.expiresAt <= Date.now()) {
+    googleOAuthReplayMemory.delete(state);
+    return null;
+  }
+
+  return record.redirectUrl;
+}
+
+export async function getGoogleOAuthReplayRedirect(
+  state: string
+): Promise<string | null> {
+  if (!state) return null;
+
+  const memoryRedirect = readGoogleOAuthReplayFromMemory(state);
+  if (memoryRedirect) return memoryRedirect;
+
+  const redis = getRedisClient();
+  if (!redis) return null;
+
+  try {
+    const raw = await redis.get(getGoogleOAuthReplayKey(state));
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as { redirectUrl?: string };
+    return typeof parsed.redirectUrl === 'string' && parsed.redirectUrl
+      ? parsed.redirectUrl
+      : null;
+  } catch (error) {
+    console.warn('[OAuth] Не удалось прочитать replay Google callback:', error);
+    return null;
+  }
+}
+
+export async function storeGoogleOAuthReplayRedirect(
+  state: string,
+  redirectUrl: string
+): Promise<void> {
+  if (!state || !redirectUrl) return;
+
+  googleOAuthReplayMemory.set(state, {
+    redirectUrl,
+    expiresAt: Date.now() + GOOGLE_OAUTH_REPLAY_TTL_SECONDS * 1000,
+  });
+
+  const redis = getRedisClient();
+  if (!redis) return;
+
+  try {
+    await redis.set(
+      getGoogleOAuthReplayKey(state),
+      JSON.stringify({ redirectUrl }),
+      'EX',
+      GOOGLE_OAUTH_REPLAY_TTL_SECONDS
+    );
+  } catch (error) {
+    console.warn('[OAuth] Не удалось сохранить replay Google callback:', error);
+  }
+}
+
+export async function waitForGoogleOAuthReplayRedirect(
+  state: string,
+  options?: { timeoutMs?: number; intervalMs?: number }
+): Promise<string | null> {
+  if (!state) return null;
+
+  const timeoutMs = options?.timeoutMs ?? 1500;
+  const intervalMs = options?.intervalMs ?? 150;
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const redirectUrl = await getGoogleOAuthReplayRedirect(state);
+    if (redirectUrl) return redirectUrl;
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+
+  return null;
+}
 
 export function makeState() {
   return randomBytes(16).toString('hex');
