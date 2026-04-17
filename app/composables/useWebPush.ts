@@ -418,7 +418,7 @@ export function useWebPush() {
       const title =
         payload.notification?.title || payload.data?.title || 'Ментала';
       const body = payload.notification?.body || payload.data?.body || '';
-      const icon = '/web-app-manifest-192x192.png';
+      const icon = '/brand-mark-192.png';
       // data-only push: image приходит в payload.data.imageUrl
       const image =
         payload.notification?.image || payload.data?.imageUrl || null;
@@ -429,7 +429,7 @@ export function useWebPush() {
           const options: NotificationOptions = {
             body,
             icon,
-            badge: '/notification-badge.png',
+            badge: '/brand-mark-96.png',
             data: payload.data || {},
             tag: payload.data?.slotId
               ? `slot-${payload.data.slotId}`

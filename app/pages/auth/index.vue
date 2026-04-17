@@ -411,7 +411,6 @@ const oauthLoading = ref(false);
 const appleLoading = ref(false);
 const isIos = ref(false);
 const accessCode = ref('');
-
 const verificationEmail = ref('');
 const verificationCode = ref('');
 const attemptsLeft = ref<number | null>(null);
@@ -747,6 +746,7 @@ onMounted(async () => {
   } catch {
     isIos.value = false;
   }
+
   if (route.query.error === 'email_not_verified') {
     useToast(
       'Ошибка',
