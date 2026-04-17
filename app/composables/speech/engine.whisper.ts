@@ -7,7 +7,6 @@ import { useRuntimeConfig } from '#imports';
 export function createWhisperEngine(): SpeechEngine {
   const speechStore = useSpeechStore();
   let finalCb: ((t: string) => void) | null = null;
-  let partialCb: ((t: string) => void) | null = null;
   let mediaStream: MediaStream | null = null;
   let mediaRecorder: MediaRecorder | null = null;
   let chunks: Blob[] = [];
@@ -172,21 +171,27 @@ export function createWhisperEngine(): SpeechEngine {
     if (audioSource) {
       try {
         audioSource.disconnect();
-      } catch {}
+      } catch {
+        // Нода могла уже быть отсоединена браузером.
+      }
       audioSource = null;
     }
 
     if (analyser) {
       try {
         analyser.disconnect();
-      } catch {}
+      } catch {
+        // Анализатор мог уже быть очищен вместе с контекстом.
+      }
       analyser = null;
     }
 
     if (audioContext) {
       try {
         await audioContext.close();
-      } catch {}
+      } catch {
+        // Контекст мог уже перейти в closed.
+      }
       audioContext = null;
     }
 
@@ -209,6 +214,9 @@ export function createWhisperEngine(): SpeechEngine {
     },
     onFinal(cb) {
       finalCb = cb;
+    },
+    onError(cb) {
+      void cb;
     },
     isAvailable() {
       return !!(

@@ -378,13 +378,17 @@ export const useAuthStore = defineStore('auth', {
         });
 
         // Плагин @capgo/capacitor-social-login возвращает поле idToken (не identityToken)
-        const identityToken = loginResponse?.result?.idToken ?? loginResponse?.result?.identityToken;
+        const identityToken =
+          loginResponse?.result?.idToken ??
+          loginResponse?.result?.identityToken;
         if (!identityToken) {
           throw new Error('Apple identityToken missing');
         }
 
-        const givenName = loginResponse?.result?.profile?.givenName || undefined;
-        const familyName = loginResponse?.result?.profile?.familyName || undefined;
+        const givenName =
+          loginResponse?.result?.profile?.givenName || undefined;
+        const familyName =
+          loginResponse?.result?.profile?.familyName || undefined;
 
         const response: any = await useAPI('/api/auth/apple/native', {
           method: 'POST',

@@ -10,5 +10,6 @@ export interface SpeechEngine {
   stop(): Promise<void>;
   onPartial(cb: (text: string) => void): void;
   onFinal(cb: (text: string) => void): void;
+  onError(cb: (error: unknown) => void): void;
   isAvailable(): boolean;
 }
