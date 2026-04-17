@@ -40,6 +40,8 @@
 - Server `firebase-admin` и мобильные `google-services.json` / `GoogleService-Info.plist` должны смотреть в один и тот же Firebase project; иначе получаем `SenderId mismatch` и автоматическую чистку токена
 - `messaging/authentication-error` / `third-party-auth-error` на iOS обычно означает проблему с APNs credentials в Firebase project (APNs key не загружен, инвалиден или не соответствует Team ID / Bundle ID)
 - `/api/notifications/register-token` обязан быть идемпотентным по `user_devices.token`, потому что один и тот же токен может параллельно зарегистрироваться из push-плагина, auth-store и экрана настроек
+- Канал web push различаем на `pwa` и `browser`: standalone/Home Screen регистрация выше по приоритету, чем обычная вкладка браузера
+- Delivery-маршрутизация глобальная на пользователя: выбираем ровно один endpoint по приоритету `native > pwa > browser > legacy`, а не по нескольким платформенным семействам сразу
 - Невалидные токены (invalid-registration-token и др.) автоудаляются из `user_devices`
 - На iOS нельзя полагаться только на первый `registration` event: после reinstall/первого старта FCM token может дообновиться позже APNs-регистрации, поэтому клиент повторно синхронизирует актуальный FCM token при старте приложения, логине и возврате в active
 - Для локальной iOS-диагностики ориентируемся на короткие префиксы APNs/FCM token в логах `AppDelegate` и `push-notifications.client.ts`; это позволяет сопоставить текущий девайс с серверным `Sending to device: ios (...)`

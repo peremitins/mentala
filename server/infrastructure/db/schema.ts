@@ -863,13 +863,24 @@ export const slotsSchedulerState = pgTable('slots_scheduler_state', {
     .notNull(),
 });
 
-// Регистрация FCM токенов устройств
+// Регистрация FCM токенов устройств (нативных и web push)
 export const userDevices = pgTable('user_devices', {
   id: text('id').primaryKey(),
   userId: integer('user_id').notNull(),
   token: text('token').notNull().unique(), // FCM token
   platform: varchar('platform', { length: 20 }).notNull(), // 'ios' | 'android' | 'web'
   appEnv: varchar('app_env', { length: 10 }).notNull().default('dev'), // 'dev' | 'prod'
+  // Тип канала доставки: 'native' (Capacitor push) | 'pwa' (Web Push)
+  channelType: varchar('channel_type', { length: 20 }).notNull().default('native'),
+  // Семейство платформы для маршрутизации: 'ios' | 'android' | 'desktop'
+  // Nullable для обратной совместимости со старыми записями
+  platformFamily: varchar('platform_family', { length: 20 }),
+  // Стабильный идентификатор установки (localStorage UUID для PWA)
+  installationId: varchar('installation_id', { length: 255 }),
+  // Endpoint активен и может принимать push-уведомления
+  isActive: boolean('is_active').notNull().default(true),
+  // Основной канал доставки для данного пользователя+платформа (вычисляется сервером)
+  isPrimary: boolean('is_primary').notNull().default(false),
   lastSeen: timestamp('last_seen', { withTimezone: true }).defaultNow(),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
