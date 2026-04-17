@@ -6,6 +6,7 @@ import { useSpeechStore } from '@/app/stores/speech';
 let engineSingleton: SpeechEngine | null = null;
 const partialListeners: Array<(t: string) => void> = [];
 const finalListeners: Array<(t: string) => void> = [];
+const errorListeners: Array<(error: unknown) => void> = [];
 
 export function useSpeechEngine() {
   const speech = useSpeechStore();
@@ -79,6 +80,7 @@ export function useSpeechEngine() {
     const e = await pickEngine(id);
     for (const cb of partialListeners) e.onPartial(cb);
     for (const cb of finalListeners) e.onFinal(cb);
+    for (const cb of errorListeners) e.onError(cb);
     engineSingleton = e;
     engine = e;
     currentEngineId.value = id;
@@ -142,6 +144,10 @@ export function useSpeechEngine() {
     finalListeners.push(cb);
     engine?.onFinal(cb);
   }
+  function onError(cb: (error: unknown) => void) {
+    errorListeners.push(cb);
+    engine?.onError(cb);
+  }
 
   async function setEngine(id: SpeechEngineId) {
     const target = resolveEngineId(id);
@@ -178,5 +184,14 @@ export function useSpeechEngine() {
     }
   );
 
-  return { settings, start, stop, onPartial, onFinal, setEngine, setAutoSend };
+  return {
+    settings,
+    start,
+    stop,
+    onPartial,
+    onFinal,
+    onError,
+    setEngine,
+    setAutoSend,
+  };
 }
