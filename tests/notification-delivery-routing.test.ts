@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { selectDeliveryTargets } from '../server/application/notifications/delivery-routing.utils';
+import {
+  orderDeliveryTargetsByPriority,
+  selectDeliveryTargets,
+} from '../server/application/notifications/delivery-routing.utils';
 
 function makeDevice(
   overrides: Partial<{
@@ -136,5 +139,40 @@ describe('notification delivery routing', () => {
 
     expect(selected).toHaveLength(1);
     expect(selected[0]?.id).toBe('browser');
+  });
+
+  it('строит fallback-цепочку без fan-out: native -> pwa -> browser', () => {
+    const ordered = orderDeliveryTargetsByPriority([
+      makeDevice({
+        id: 'browser',
+        token: 'browser-token',
+        platform: 'web',
+        channelType: 'browser',
+        platformFamily: 'android',
+        lastSeen: new Date('2026-04-17T10:30:00.000Z'),
+      }),
+      makeDevice({
+        id: 'native',
+        token: 'native-token',
+        platform: 'android',
+        channelType: 'native',
+        platformFamily: 'android',
+        lastSeen: new Date('2026-04-17T10:20:00.000Z'),
+      }),
+      makeDevice({
+        id: 'pwa',
+        token: 'pwa-token',
+        platform: 'web',
+        channelType: 'pwa',
+        platformFamily: 'android',
+        lastSeen: new Date('2026-04-17T10:10:00.000Z'),
+      }),
+    ]);
+
+    expect(ordered.map((device) => device.id)).toEqual([
+      'native',
+      'pwa',
+      'browser',
+    ]);
   });
 });

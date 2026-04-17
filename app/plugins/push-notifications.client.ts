@@ -45,6 +45,7 @@ export default defineNuxtPlugin({
     const isAndroid = platform === 'android';
     const PUSH_TOKEN_STORAGE_KEY = 'pushToken';
     const APNS_TOKEN_STORAGE_KEY = 'pushToken.apns';
+    const NATIVE_PUSH_DISABLED_KEY = 'mentala.native.push.disabled';
     const IOS_FCM_TOKEN_MAX_ATTEMPTS = 6;
     const IOS_FCM_TOKEN_RETRY_DELAY_MS = 1200;
 
@@ -54,6 +55,11 @@ export default defineNuxtPlugin({
       const normalized = typeof value === 'string' ? value.trim() : '';
       if (!normalized) return 'empty';
       return `${normalized.slice(0, prefixLength)}...`;
+    }
+
+    function isNativePushDisabledInApp(): boolean {
+      if (typeof window === 'undefined') return false;
+      return window.localStorage.getItem(NATIVE_PUSH_DISABLED_KEY) === 'true';
     }
 
     const wait = (ms: number) =>
@@ -98,6 +104,17 @@ export default defineNuxtPlugin({
       platformHeader: 'ios' | 'android',
       reason: string
     ): Promise<void> {
+      if (isNativePushDisabledInApp()) {
+        console.log(
+          '[PushPlugin] Skip token registration: native push disabled in app',
+          {
+            platform: platformHeader,
+            reason,
+          }
+        );
+        return;
+      }
+
       const sessionToken =
         typeof window !== 'undefined'
           ? window.localStorage.getItem('mentai.session.token')
@@ -145,6 +162,14 @@ export default defineNuxtPlugin({
         typeof currentToken === 'string' ? currentToken.trim() : '';
       if (!normalizedToken) {
         console.warn('[PushPlugin] Native token sync skipped: token is empty', {
+          platform: platformHeader,
+          reason,
+        });
+        return;
+      }
+
+      if (isNativePushDisabledInApp()) {
+        console.log('[PushPlugin] Native token sync skipped: disabled in app', {
           platform: platformHeader,
           reason,
         });
@@ -1101,6 +1126,17 @@ export default defineNuxtPlugin({
           return;
         }
 
+        if (isNativePushDisabledInApp()) {
+          console.log(
+            '[PushPlugin] Registration event ignored: native push disabled in app',
+            {
+              platform,
+              tokenPrefix: maskToken(effectiveToken),
+            }
+          );
+          return;
+        }
+
         // Сохраняем локально
         if (typeof window !== 'undefined') {
           window.localStorage.setItem(PUSH_TOKEN_STORAGE_KEY, effectiveToken);
@@ -1168,25 +1204,6 @@ export default defineNuxtPlugin({
       console.error('[PushPlugin] Failed to add push listeners:', error);
     }
 
-    const DENIED_PENDING_SYNC_KEY = 'mentai.push.deniedPendingSync';
-
-    async function patchPushEnabled(value: boolean): Promise<boolean> {
-      try {
-        await nuxtApp.$api('/api/user/me', {
-          method: 'PATCH',
-          body: { pushNotificationsEnabled: value },
-        });
-        if (auth.user) auth.user.pushNotificationsEnabled = value;
-        return true;
-      } catch (e) {
-        console.warn(
-          `[PushPlugin] PATCH pushNotificationsEnabled=${value} failed:`,
-          e
-        );
-        return false;
-      }
-    }
-
     async function trySyncDeniedToServer(): Promise<void> {
       const sessionToken =
         typeof window !== 'undefined'
@@ -1196,12 +1213,28 @@ export default defineNuxtPlugin({
       try {
         const permStatus = await PushNotifications.checkPermissions();
         if (permStatus.receive !== 'denied') return;
-        if (auth.user?.pushNotificationsEnabled === false) {
-          await writeStoredValue(DENIED_PENDING_SYNC_KEY, null);
-          return;
+
+        const token =
+          typeof window !== 'undefined'
+            ? window.localStorage.getItem(PUSH_TOKEN_STORAGE_KEY)?.trim() || ''
+            : '';
+
+        if (!token) return;
+
+        try {
+          await nuxtApp.$api('/api/notifications/unregister-token', {
+            method: 'POST',
+            body: { token },
+          });
+          if (typeof window !== 'undefined') {
+            window.localStorage.removeItem(PUSH_TOKEN_STORAGE_KEY);
+          }
+        } catch (error) {
+          console.warn(
+            '[PushPlugin] Failed to unregister denied native token:',
+            error
+          );
         }
-        const ok = await patchPushEnabled(false);
-        if (ok) await writeStoredValue(DENIED_PENDING_SYNC_KEY, null);
       } catch {
         // ignore
       }
@@ -1218,18 +1251,18 @@ export default defineNuxtPlugin({
         const permStatus = await PushNotifications.checkPermissions();
 
         if (permStatus.receive === 'denied') {
-          await writeStoredValue(DENIED_PENDING_SYNC_KEY, '1');
-          const ok = await patchPushEnabled(false);
-          if (!ok) {
-            setTimeout(() => void trySyncDeniedToServer(), 2000);
-            setTimeout(() => void trySyncDeniedToServer(), 5000);
-          } else {
-            await writeStoredValue(DENIED_PENDING_SYNC_KEY, null);
-          }
+          await trySyncDeniedToServer();
           return;
         }
 
         if (permStatus.receive !== 'granted') {
+          return;
+        }
+
+        if (isNativePushDisabledInApp()) {
+          console.log(
+            '[PushPlugin] Init register skipped: native push disabled in app'
+          );
           return;
         }
 
@@ -1300,12 +1333,7 @@ export default defineNuxtPlugin({
             void syncCurrentNativeToken('app_became_active', {
               forceServerSync: false,
             });
-            void (async () => {
-              const value = await readStoredValue(DENIED_PENDING_SYNC_KEY);
-              if (value === '1') {
-                await trySyncDeniedToServer();
-              }
-            })();
+            void trySyncDeniedToServer();
           });
         })
         .catch((error) => {

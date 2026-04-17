@@ -16,7 +16,6 @@ import {
 import {
   notificationSlots,
   userDevices,
-  users,
 } from '@/server/infrastructure/db/schema';
 import type { NotificationPayload } from '@/shared/dto/notifications';
 import { enqueueAiTextPoolRefillForAllActivePreferences } from '@/server/application/notifications/schedulers/aiTextPool.scheduler';
@@ -26,7 +25,10 @@ import {
   dispatchIntegrationCriticalEvent,
   dispatchPushDeliverySampleEvent,
 } from '@/server/application/events/app-events.dispatchers';
-import { selectDeliveryTargets } from './delivery-routing.utils';
+import {
+  orderDeliveryTargetsByPriority,
+  selectDeliveryTargets,
+} from './delivery-routing.utils';
 import { getUserTimezone, toLocalTime } from './timezone.utils';
 import { resolveEntityKeyForSlots } from './entity-key.service';
 import { getCustomNotificationSourceAccessByKind } from './notification-source-access.service';
@@ -582,23 +584,6 @@ export async function sendToUser(
   userId: number,
   payload: NotificationPayload
 ): Promise<SendToUserResult> {
-  const [userRow] = await db
-    .select({ pushNotificationsEnabled: users.pushNotificationsEnabled })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
-
-  if (userRow?.pushNotificationsEnabled === false) {
-    console.log(`[FCM] Push disabled for user ${userId}, skipping delivery`);
-    return {
-      deviceCount: 0,
-      sentCount: 0,
-      mockCount: 0,
-      failedCount: 0,
-      hasRealDelivery: false,
-    };
-  }
-
   const appEnv = resolveServerAppEnv();
   console.log(`[FCM] Looking for devices for user ${userId} (env=${appEnv})`);
   const allDevices = await db
@@ -606,14 +591,18 @@ export async function sendToUser(
     .from(userDevices)
     .where(and(eq(userDevices.userId, userId), eq(userDevices.appEnv, appEnv)));
 
-  // Фильтруем только активные endpoint'ы и применяем маршрутизацию native > pwa
-  const devices = selectDeliveryTargets(allDevices);
+  // Основной selected endpoint нужен для понятных логов и тестирования инварианта:
+  // по нормальному пути должен победить ровно один top-priority endpoint.
+  const selectedTopTarget = selectDeliveryTargets(allDevices);
+  // Для runtime failover держим полный список кандидатов в порядке приоритета.
+  // Это позволяет не терять доставку, если верхний endpoint протух/невалиден.
+  const deliveryCandidates = orderDeliveryTargetsByPriority(allDevices);
 
   console.log(
-    `[FCM] Found ${allDevices.length} device(s) total, ${devices.length} selected for delivery for user ${userId} (env=${appEnv})`
+    `[FCM] Found ${allDevices.length} device(s) total, top=${selectedTopTarget.length}, candidates=${deliveryCandidates.length} for user ${userId} (env=${appEnv})`
   );
 
-  if (devices.length === 0) {
+  if (deliveryCandidates.length === 0) {
     console.warn(`[FCM] No devices found for user ${userId}`);
     return {
       deviceCount: 0,
@@ -628,9 +617,9 @@ export async function sendToUser(
   let mockCount = 0;
   let failedCount = 0;
 
-  for (const device of devices) {
+  for (const device of deliveryCandidates) {
     console.log(
-      `[FCM] Sending to device: ${device.platform} (token: ${device.token.substring(0, 20)}...)`
+      `[FCM] Sending to device: ${device.platform}/${device.channelType ?? 'legacy'} (token: ${device.token.substring(0, 20)}...)`
     );
     const result = await sendFCMNotification(
       device.token,
@@ -640,15 +629,23 @@ export async function sendToUser(
 
     if (result === 'sent') {
       sentCount++;
+      break;
     } else if (result === 'mock') {
       mockCount++;
+      break;
     } else {
       failedCount++;
+      console.warn('[FCM] Delivery candidate failed, trying next fallback', {
+        userId,
+        platform: device.platform,
+        channelType: device.channelType ?? 'legacy',
+        tokenPrefix: device.token.substring(0, 20),
+      });
     }
   }
 
   console.log(
-    `[FCM] Delivery summary for user ${userId}: sent=${sentCount}, mock=${mockCount}, failed=${failedCount}, total=${devices.length}`
+    `[FCM] Delivery summary for user ${userId}: sent=${sentCount}, mock=${mockCount}, failed=${failedCount}, totalCandidates=${deliveryCandidates.length}`
   );
 
   dispatchPushDeliverySampleEvent({
@@ -658,7 +655,7 @@ export async function sendToUser(
   });
 
   return {
-    deviceCount: devices.length,
+    deviceCount: deliveryCandidates.length,
     sentCount,
     mockCount,
     failedCount,
