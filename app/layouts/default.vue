@@ -131,6 +131,11 @@ function tryShowPwaOffer() {
   pwaInstall.init();
   // Показываем предложение с задержкой 5 сек — не мешаем первому визиту
   pwaInstallTimer = setTimeout(() => {
+    // Guard на уровне layout: баннеры показываем только в обычном браузере,
+    // а не в standalone PWA и не в native-приложении.
+    if (pwaInstall.isInstalled.value || pwaInstall.isInStandaloneMode.value) {
+      return;
+    }
     if (!pwaInstall.canShowInstallOffer()) return;
     if (pwaInstall.isIos.value) {
       showIosGuide.value = true;

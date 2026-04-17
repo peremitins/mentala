@@ -3,31 +3,43 @@
  *
  * Три уровня, которые нужно синхронизировать:
  * 1. Системное разрешение (Android/iOS permission)
- * 2. Серверный флаг (pushNotificationsEnabled в users)
+ * 2. Регистрация токена текущего native-устройства на сервере
  * 3. Локальное состояние UI (переключатель)
  *
  * Формула эффективного состояния:
- * effectivePushEnabled = (permission === 'granted') && (serverFlag === true) && (токен зарегистрирован)
- * Переключатель отображает эффективное состояние (с учётом токена).
+ * effectivePushEnabled = (permission === 'granted') && (токен зарегистрирован)
+ * Переключатель управляет только текущим native-устройством и не должен
+ * отключать fallback на PWA/browser для того же пользователя.
  */
-import { ref, computed } from 'vue';
+import { computed } from 'vue';
 import { Capacitor } from '@capacitor/core';
 import { PushNotifications } from '@capacitor/push-notifications';
-import { useAuthStore } from '@/app/stores/auth';
 import { useNotifications } from '@/app/composables/useNotifications';
 
 export type PushPermissionStatus = 'granted' | 'denied' | 'prompt';
 
 const PUSH_TOKEN_STORAGE_KEY = 'pushToken';
+const NATIVE_PUSH_DISABLED_KEY = 'mentala.native.push.disabled';
 
 export function usePushSettings() {
-  const auth = useAuthStore();
   const { checkPermissions, cancelAll } = useNotifications();
 
-  const pushPermissionStatus = ref<PushPermissionStatus | null>(null);
-  const storedToken = ref<string | null>(null);
-  const isChecking = ref(false);
-  const isToggling = ref(false);
+  const pushPermissionStatus = useState<PushPermissionStatus | null>(
+    'native-push.permission-status',
+    () => null
+  );
+  const storedToken = useState<string | null>('native-push.stored-token', () =>
+    import.meta.client
+      ? window.localStorage.getItem(PUSH_TOKEN_STORAGE_KEY)?.trim() || null
+      : null
+  );
+  const isPushDisabled = useState<boolean>('native-push.disabled', () =>
+    import.meta.client
+      ? window.localStorage.getItem(NATIVE_PUSH_DISABLED_KEY) === 'true'
+      : false
+  );
+  const isChecking = useState<boolean>('native-push.is-checking', () => false);
+  const isToggling = useState<boolean>('native-push.is-toggling', () => false);
 
   const isNative = computed(
     () =>
@@ -36,11 +48,34 @@ export function usePushSettings() {
         Capacitor.getPlatform() === 'android')
   );
 
-  /** Эффективное состояние: permission granted И serverFlag true */
+  function isPushDisabledInApp(): boolean {
+    return isPushDisabled.value;
+  }
+
+  function setPushDisabledInApp(value: boolean) {
+    isPushDisabled.value = value;
+    if (typeof window === 'undefined') return;
+    if (value) {
+      window.localStorage.setItem(NATIVE_PUSH_DISABLED_KEY, 'true');
+    } else {
+      window.localStorage.removeItem(NATIVE_PUSH_DISABLED_KEY);
+    }
+  }
+
+  function syncPushDisabledFlag() {
+    if (typeof window === 'undefined') {
+      isPushDisabled.value = false;
+      return;
+    }
+    isPushDisabled.value =
+      window.localStorage.getItem(NATIVE_PUSH_DISABLED_KEY) === 'true';
+  }
+
+  /** Эффективное состояние только для текущего native-устройства */
   const toggleChecked = computed(() => {
     if (!isNative.value) return false;
     if (pushPermissionStatus.value !== 'granted') return false;
-    if (auth.user?.pushNotificationsEnabled === false) return false;
+    if (isPushDisabledInApp()) return false;
     return Boolean(storedToken.value);
   });
 
@@ -66,29 +101,20 @@ export function usePushSettings() {
   /** Таймаут проверки разрешений, чтобы не зависнуть при недоступности плагинов */
   const CHECK_PERMISSIONS_TIMEOUT_MS = 5000;
 
-  /**
-   * Синхронизирует серверный флаг pushNotificationsEnabled.
-   * Не делает лишний PATCH, если значение уже совпадает.
-   */
-  async function syncPushPreference(value: boolean): Promise<boolean> {
-    if (auth.user?.pushNotificationsEnabled === value) {
-      return true;
-    }
+  async function unregisterStoredTokenFromServer(): Promise<void> {
+    const token = storedToken.value;
+    if (!token) return;
+
     try {
-      await useAPI('/api/user/me', {
-        method: 'PATCH',
-        body: { pushNotificationsEnabled: value },
+      await useAPI('/api/notifications/unregister-token', {
+        method: 'POST',
+        body: { token },
       });
-      if (auth.user) {
-        auth.user.pushNotificationsEnabled = value;
-      }
-      return true;
-    } catch (e) {
+    } catch (error) {
       console.warn(
-        `[usePushSettings] Не удалось синхронизировать pushNotificationsEnabled=${value}:`,
-        e
+        '[usePushSettings] Не удалось удалить native push-токен с сервера:',
+        error
       );
-      return false;
     }
   }
 
@@ -119,19 +145,20 @@ export function usePushSettings() {
             ? 'denied'
             : 'prompt';
 
+      syncPushDisabledFlag();
       syncStoredToken();
 
-      // Системное разрешение отклонено — синхронизируем сервер, если нужно.
+      // Разрешение отключено на уровне ОС — токен этого устройства больше нельзя использовать.
       if (pushPermissionStatus.value === 'denied') {
-        await syncPushPreference(false);
+        await unregisterStoredTokenFromServer();
         clearStoredToken();
       }
 
-      // Разрешение есть + сервер разрешает, но токена нет → пробуем восстановить регистрацию.
+      // Разрешение есть, но локально токен потерян — пробуем восстановить регистрацию.
       if (
         pushPermissionStatus.value === 'granted' &&
-        auth.user?.pushNotificationsEnabled !== false &&
-        !storedToken.value
+        !storedToken.value &&
+        !isPushDisabledInApp()
       ) {
         try {
           await PushNotifications.register();
@@ -168,7 +195,7 @@ export function usePushSettings() {
       }
       if (perm.receive === 'denied') {
         pushPermissionStatus.value = 'denied';
-        await syncPushPreference(false);
+        await unregisterStoredTokenFromServer();
         clearStoredToken();
         return false;
       }
@@ -178,7 +205,7 @@ export function usePushSettings() {
       const granted = result.receive === 'granted';
       pushPermissionStatus.value = granted ? 'granted' : 'denied';
       if (!granted) {
-        await syncPushPreference(false);
+        await unregisterStoredTokenFromServer();
         clearStoredToken();
         return false;
       }
@@ -212,7 +239,7 @@ export function usePushSettings() {
   }
 
   /**
-   * Отключает push на уровне приложения: PATCH в /api/user/me,
+   * Отключает push только на текущем native-устройстве:
    * удаляет токен с сервера, очищает локальный кэш, отменяет локальные уведомления.
    */
   async function disablePushInApp(): Promise<void> {
@@ -220,17 +247,9 @@ export function usePushSettings() {
 
     isToggling.value = true;
     try {
-      // 1. Сохраняем предпочтение на бэкенде
-      await syncPushPreference(false);
-
-      // 2. Удаляем токен с сервера
-      const token = storedToken.value;
-      if (token) {
-        await useAPI('/api/notifications/unregister-token', {
-          method: 'POST',
-          body: { token },
-        });
-      }
+      setPushDisabledInApp(true);
+      // Удаляем только endpoint этого устройства, сохраняя fallback на PWA/browser.
+      await unregisterStoredTokenFromServer();
 
       clearStoredToken();
       await cancelAll();
@@ -289,13 +308,15 @@ export function usePushSettings() {
   }
 
   /**
-   * Включает push: запрашивает разрешение, регистрирует токен, затем PATCH на бэк.
+   * Включает push для текущего native-устройства:
+   * запрашивает разрешение и регистрирует токен этого устройства на сервере.
    */
   async function enablePushInApp(): Promise<boolean> {
     if (!isNative.value) return false;
 
     isToggling.value = true;
     try {
+      setPushDisabledInApp(false);
       const granted = await requestPermission();
       if (!granted) {
         return false;
@@ -304,6 +325,7 @@ export function usePushSettings() {
       await PushNotifications.register();
       await ensureTokenRegisteredOnServer();
       syncStoredToken();
+      syncPushDisabledFlag();
 
       if (!storedToken.value) {
         console.warn(
@@ -312,9 +334,6 @@ export function usePushSettings() {
         await refreshPermissionStatus();
         return false;
       }
-
-      // Сохраняем предпочтение на бэкенде после успешной регистрации токена
-      await syncPushPreference(true);
 
       await new Promise((r) => setTimeout(r, 500));
       await refreshPermissionStatus();
@@ -343,5 +362,6 @@ export function usePushSettings() {
     ensureTokenRegisteredOnServer,
     syncStoredToken,
     clearStoredToken,
+    isPushDisabledInApp,
   };
 }
