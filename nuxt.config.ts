@@ -26,6 +26,7 @@ export default defineNuxtConfig({
     '@scalar/nuxt',
     'vue-sonner/nuxt',
     'floating-vue/nuxt',
+    '@vite-pwa/nuxt',
   ],
   plugins: ['~/i18n/plugin'],
   shadcn: {
@@ -273,5 +274,30 @@ export default defineNuxtConfig({
         },
       },
     ],
+  },
+
+  // ==========================================
+  // PWA + Service Worker
+  // ==========================================
+  pwa: {
+    // Используем injectManifest, чтобы писать кастомный SW с Firebase Messaging
+    strategies: 'injectManifest',
+    srcDir: '.',
+    filename: 'sw.ts',
+    // Регистрация SW через useRegisterSW composable вручную (из useWebPush.ts)
+    injectRegister: false,
+    // Не генерируем отдельный manifest — используем существующий /site.webmanifest
+    manifest: false,
+    injectManifest: {
+      // Кешируем только статику: иконки, шрифты, базовый shell
+      globPatterns: ['**/*.{ico,png,svg,woff2}'],
+      // Не кешируем API, чувствительные данные, HTML
+      globIgnores: ['**/api/**', '**/*.html'],
+    },
+    devOptions: {
+      // В dev режиме SW регистрируется, но не кеширует ресурсы
+      enabled: true,
+      type: 'module',
+    },
   },
 });

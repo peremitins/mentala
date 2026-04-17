@@ -26,6 +26,7 @@ import {
   dispatchIntegrationCriticalEvent,
   dispatchPushDeliverySampleEvent,
 } from '@/server/application/events/app-events.dispatchers';
+import { selectDeliveryTargets } from './delivery-routing.utils';
 import { getUserTimezone, toLocalTime } from './timezone.utils';
 import { resolveEntityKeyForSlots } from './entity-key.service';
 import { getCustomNotificationSourceAccessByKind } from './notification-source-access.service';
@@ -344,6 +345,10 @@ export async function sendFCMNotification(
 
   try {
     const isAndroid = normalizedPlatform === 'android';
+    // Web push (браузер/PWA) — data-only: убирает дублирование уведомлений.
+    // С notification-полем: браузер авто-показывает И onMessage/onBackgroundMessage тоже — два раза.
+    // Без notification-поля: только наши обработчики (SW onBackgroundMessage + foreground onMessage).
+    const isWebPush = normalizedPlatform === 'web';
     const imageValidation =
       payload.image && payload.image.trim()
         ? validateNotificationImageUrl(payload.image)
@@ -371,11 +376,14 @@ export async function sendFCMNotification(
       deepLink: payload.deepLink || '',
     };
 
-    // Для Android используем data-only и строим уведомление нативно.
-    // Поэтому прокидываем текст в data только для Android.
-    if (isAndroid) {
+    // Android native и Web Push: title/body в data (уведомление строится клиентом)
+    if (isAndroid || isWebPush) {
       dataPayload.title = payload.title || '';
       dataPayload.body = payload.body || '';
+    }
+    // imageUrl в data — SW и Android native могут показать картинку
+    if (validatedImageUrl) {
+      dataPayload.imageUrl = validatedImageUrl;
     }
 
     if (payload.navigation) {
@@ -443,6 +451,9 @@ export async function sendFCMNotification(
       androidNotification.imageUrl = validatedImageUrl;
     }
 
+    // data-only для Android native и Web Push; notification-поля только для native iOS
+    const skipNotificationField = isAndroid || isWebPush;
+
     const message: admin.messaging.Message = {
       token,
       data: dataPayload,
@@ -450,10 +461,10 @@ export async function sendFCMNotification(
         priority: 'high',
         ttl: 60 * 60 * 1000, // 1 час (3600 секунд)
         ...(collapseKey ? { collapseKey } : {}),
-        ...(isAndroid ? {} : { notification: androidNotification }),
+        ...(skipNotificationField ? {} : { notification: androidNotification }),
       },
-      ...(isAndroid ? {} : { notification: notificationPayload }),
-      ...(isAndroid
+      ...(skipNotificationField ? {} : { notification: notificationPayload }),
+      ...(skipNotificationField
         ? {}
         : {
             apns: {
@@ -488,8 +499,8 @@ export async function sendFCMNotification(
       platform: normalizedPlatform || null,
       slotId: payload.data?.slotId ?? null,
       imageUrl: validatedImageUrl,
-      hasMutableContent: Boolean(validatedImageUrl && !isAndroid),
-      hasApnsImageField: Boolean(validatedImageUrl && !isAndroid),
+      hasMutableContent: Boolean(validatedImageUrl && !skipNotificationField),
+      hasApnsImageField: Boolean(validatedImageUrl && !skipNotificationField),
       firebaseProjectId,
     });
 
@@ -590,13 +601,16 @@ export async function sendToUser(
 
   const appEnv = resolveServerAppEnv();
   console.log(`[FCM] Looking for devices for user ${userId} (env=${appEnv})`);
-  const devices = await db
+  const allDevices = await db
     .select()
     .from(userDevices)
     .where(and(eq(userDevices.userId, userId), eq(userDevices.appEnv, appEnv)));
 
+  // Фильтруем только активные endpoint'ы и применяем маршрутизацию native > pwa
+  const devices = selectDeliveryTargets(allDevices);
+
   console.log(
-    `[FCM] Found ${devices.length} device(s) for user ${userId} (env=${appEnv})`
+    `[FCM] Found ${allDevices.length} device(s) total, ${devices.length} selected for delivery for user ${userId} (env=${appEnv})`
   );
 
   if (devices.length === 0) {

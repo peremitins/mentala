@@ -141,34 +141,39 @@
             УВЕДОМЛЕНИЯ
           </p>
           <div class="">
-            <!-- Push-уведомления (только native) -->
-            <div v-if="isPushNative" class="px-4 py-3" :class="rowClass()">
+            <!-- Push-уведомления (native и web) -->
+            <div v-if="showPushRow" class="px-4 py-3" :class="rowClass()">
               <div class="">
                 <p class="text-sm font-medium">Push-уведомления</p>
                 <p
                   class="text-xs"
                   :class="
-                    pushSwitchChecked
+                    !isPushSupported
                       ? 'text-muted-foreground'
-                      : 'text-amber-400'
+                      : unifiedPushChecked
+                        ? 'text-muted-foreground'
+                        : 'text-amber-400'
                   "
                 >
                   {{
-                    pushSwitchChecked
-                      ? 'Напоминания и сообщения'
-                      : 'Уведомления отключены'
+                    !isPushSupported
+                      ? 'Добавьте сайт на экран Домой для уведомлений'
+                      : unifiedPushChecked
+                        ? 'Напоминания и сообщения'
+                        : 'Уведомления отключены'
                   }}
                 </p>
               </div>
               <Switch
-                :checked="pushSwitchChecked"
+                :checked="unifiedPushChecked"
                 class="flex-shrink-0"
-                :loading="pushLoading"
-                @update:checked="handlePushToggle"
+                :disabled="!isPushSupported"
+                :loading="unifiedPushLoading"
+                @update:checked="handleUnifiedPushToggle"
               />
             </div>
 
-            <Separator v-if="isPushNative" class="w-auto mx-4" />
+            <Separator v-if="showPushRow" class="w-auto mx-4" />
 
             <!-- Маркетинговые сообщения -->
             <div class="px-4 py-3" :class="rowClass()">
@@ -276,11 +281,108 @@
           </div>
         </div>
 
+        <!-- Диалог для native push (permission denied в системных настройках) -->
         <PushPermissionDeniedDialog
           :open="pushPermissionGate.showPushDeniedModal.value"
           @update:open="pushPermissionGate.setPushDeniedModalOpen"
           @open-settings="handleOpenPushSystemSettings"
         />
+
+        <!-- Диалог для web push (permission denied в браузере) -->
+        <Dialog v-model:open="showWebPushDeniedDialog" :modal="true">
+          <DialogContent class="glass-deep max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Уведомления заблокированы</DialogTitle>
+              <DialogDescription>
+                Уведомления запрещены в настройках для этого сайта. Нужно
+                разблокировать вручную — автоматически это сделать нельзя.
+              </DialogDescription>
+            </DialogHeader>
+            <div class="text-sm text-muted-foreground space-y-3 px-1">
+              <!-- Если запущено как установленное PWA — показываем специальные инструкции -->
+              <template v-if="isStandaloneMode">
+                <div
+                  class="rounded-md bg-amber-500/10 border border-amber-500/20 p-3"
+                >
+                  <p class="font-medium text-foreground mb-1">
+                    📱 Приложение установлено на экран
+                  </p>
+                  <p class="text-xs mb-2">
+                    Разрешения управляются на уровне Android OS, а не Chrome.
+                    Нужно включить в системных настройках:
+                  </p>
+                  <ol class="list-decimal list-inside space-y-1 text-xs">
+                    <li>Откройте <strong>Настройки Android</strong></li>
+                    <li>Приложения → найдите <strong>«Ментала»</strong></li>
+                    <li>Уведомления → включите</li>
+                    <li>Вернитесь в приложение и включите тоггл снова</li>
+                  </ol>
+                </div>
+                <div>
+                  <p class="font-medium text-foreground mb-1">
+                    Альтернатива — через Chrome:
+                  </p>
+                  <ol class="list-decimal list-inside space-y-1">
+                    <li>Откройте Chrome (не иконку на рабочем столе)</li>
+                    <li>
+                      Перейдите на сайт, нажмите значок слева от адресной строки
+                      (⊕ или ⓘ)
+                    </li>
+                    <li>«Разрешения» → «Уведомления» → «Сбросить»</li>
+                    <li>Снова откройте приложение с рабочего стола</li>
+                  </ol>
+                </div>
+              </template>
+              <!-- Обычный браузер (не standalone) -->
+              <template v-else>
+                <div>
+                  <p class="font-medium text-foreground mb-1">
+                    Chrome на Android:
+                  </p>
+                  <ol class="list-decimal list-inside space-y-1">
+                    <li>
+                      Нажмите на значок слева от адресной строки (⊕ или ⓘ)
+                    </li>
+                    <li>«Разрешения» → «Уведомления»</li>
+                    <li>Нажмите «Сбросить разрешения»</li>
+                    <li>
+                      Перезагрузите страницу — Chrome спросит разрешение снова
+                    </li>
+                  </ol>
+                  <p class="text-xs text-muted-foreground/70 mt-1">
+                    ⚠️ Если значок не виден — откройте меню Chrome (⋮) →
+                    Настройки → Настройки сайтов → Уведомления.
+                  </p>
+                </div>
+                <div>
+                  <p class="font-medium text-foreground mb-1">
+                    Chrome на Desktop:
+                  </p>
+                  <ol class="list-decimal list-inside space-y-1">
+                    <li>Нажмите значок слева от адресной строки (🔒 или ⚙)</li>
+                    <li>«Настройки сайта» → «Уведомления» → «Разрешить»</li>
+                    <li>Перезагрузите страницу и включите тоггл снова</li>
+                  </ol>
+                </div>
+                <div>
+                  <p class="font-medium text-foreground mb-1">
+                    Safari (macOS):
+                  </p>
+                  <ol class="list-decimal list-inside space-y-1">
+                    <li>Safari → Настройки → Веб-сайты → Уведомления</li>
+                    <li>Найдите этот сайт → выберите «Разрешить»</li>
+                    <li>Перезагрузите страницу и включите тоггл снова</li>
+                  </ol>
+                </div>
+              </template>
+            </div>
+            <DialogFooter>
+              <Button @click="showWebPushDeniedDialog = false">
+                Понятно
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <Dialog v-model:open="showPushDisableConfirmModal" :modal="true">
           <DialogContent class="glass-deep max-w-sm">
@@ -379,6 +481,7 @@ import { useCopyToClipboard } from '@/app/composables/useCopyToClipboard';
 import { useIosReviewBillingUi } from '@/app/composables/useIosReviewBillingUi';
 import { useToast } from '@/app/composables/useToast';
 import { usePushPermissionGate } from '@/app/composables/usePushPermissionGate';
+import { useWebPush } from '@/app/composables/useWebPush';
 import { useSettingsAnalytics } from '@/app/composables/useSettingsAnalytics';
 import SubscriptionBlock from '@/app/components/settings/SubscriptionBlock.vue';
 import ReferralShareCompactCard from '@/app/components/subscription/ReferralShareCompactCard.vue';
@@ -453,6 +556,111 @@ const pushLoading = computed(() => pushSettings.isToggling?.value ?? false);
 
 /** На native ли платформа (для v-if и проверок) */
 const isPushNative = computed(() => Boolean(pushSettings.isNative?.value));
+
+// ==========================================
+// Web push (desktop / PWA)
+// ==========================================
+const webPush = useWebPush();
+const webPushAvailable = ref(false);
+const webPushChecked = ref(false);
+const webPushLoading = ref(false);
+const showWebPushDeniedDialog = ref(false);
+
+onMounted(() => {
+  // Показываем строку если браузер умеет Web Push — независимо от Firebase конфига
+  webPushAvailable.value = webPush.isBrowserCapable();
+  // Состояние тоггла = пользователь явно включил + браузер дал разрешение.
+  // Нельзя полагаться только на Notification.permission — оно остаётся 'granted'
+  // даже после деактивации токена (например, при выключении в настройках).
+  const permissionGranted =
+    typeof Notification !== 'undefined' &&
+    Notification.permission === 'granted';
+  webPushChecked.value = permissionGranted && webPush.isUserActivated();
+  // Если разрешение есть и пользователь был активирован — запускаем foreground listener
+  if (permissionGranted && webPush.isUserActivated()) {
+    webPush.setupForegroundListener();
+  }
+});
+
+/** Показываем строку Push всегда — обработка несовместимых браузеров внутри */
+const showPushRow = computed(() => true);
+
+/**
+ * Запущено ли приложение в standalone-режиме (установлено на домашний экран как PWA).
+ * Используется для показа правильных инструкций в диалоге "уведомления заблокированы".
+ * На Android PWA: разрешения управляются на уровне Android OS, а не Chrome site settings.
+ */
+const isStandaloneMode = computed(() => {
+  if (typeof window === 'undefined') return false;
+  return (
+    (window.navigator as any).standalone === true ||
+    window.matchMedia('(display-mode: standalone)').matches
+  );
+});
+
+/** Push полностью поддерживается на этой платформе */
+const isPushSupported = computed(
+  () => isPushNative.value || webPushAvailable.value
+);
+
+/** Единое состояние свитчера */
+const unifiedPushChecked = computed(() =>
+  isPushNative.value ? pushSwitchChecked.value : webPushChecked.value
+);
+
+/** Единый лоадер */
+const unifiedPushLoading = computed(() =>
+  isPushNative.value ? pushLoading.value : webPushLoading.value
+);
+
+/** Единый обработчик переключения Push */
+async function handleUnifiedPushToggle(checked: boolean) {
+  if (isPushNative.value) {
+    await handlePushToggle(checked);
+    return;
+  }
+  // Web push (desktop / PWA)
+
+  if (!checked) {
+    // Выключение — async операция, user gesture не нужен
+    webPushLoading.value = true;
+    try {
+      await webPush.deactivateOnLogout();
+      webPushChecked.value = false;
+    } finally {
+      webPushLoading.value = false;
+    }
+    return;
+  }
+
+  // === Включение ===
+  // КРИТИЧНО: requestPermission() должен быть ПЕРВЫМ await в обработчике клика.
+  // Любой await перед ним (dynamic import, fetch и т.д.) разрывает user gesture chain —
+  // Chrome на Android не покажет диалог разрешений.
+  //
+  // Если permission уже 'granted' → вернёт 'granted' мгновенно (без диалога).
+  // Если 'denied' → вернёт 'denied' мгновенно (без диалога) → покажем инструкцию.
+  // Если 'default' → покажет диалог браузера → ждём выбора.
+  const permissionResult = await webPush.requestPermission();
+
+  if (permissionResult !== 'granted') {
+    webPushChecked.value = false;
+    if (permissionResult === 'denied') {
+      showWebPushDeniedDialog.value = true;
+    }
+    // 'default' = закрыл диалог без выбора, просто сбрасываем тоггл
+    return;
+  }
+
+  // Разрешение получено — регистрируем токен (не запрашиваем разрешение повторно)
+  webPushLoading.value = true;
+  try {
+    const success = await webPush.enableWebPushWithPermission();
+    webPushChecked.value = success;
+  } finally {
+    webPushLoading.value = false;
+  }
+}
 
 const isLoading = computed(() => loadingUser.value || loadingPreferences.value);
 const isAdmin = computed(() => auth.user?.role === 'admin');
