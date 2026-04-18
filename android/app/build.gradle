@@ -23,8 +23,8 @@ android {
         applicationId "com.mentala.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 9
-        versionName "1.1.7"
+        versionCode 10
+        versionName "1.1.8"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -111,11 +111,11 @@ tasks.register('prepareReleasePlayConsoleArtifacts') {
 
     doLast {
         if (!releaseAabFile.exists()) {
-            throw new GradleException("Не найден Android App Bundle: ${releaseAabFile}")
+            throw new Exception("Не найден Android App Bundle: ${releaseAabFile}")
         }
 
         if (!releaseMappingFile.exists()) {
-            throw new GradleException(
+            throw new Exception(
                 "Не найден mapping.txt. Для prod build должен быть включён R8/ProGuard."
             )
         }
@@ -129,7 +129,7 @@ tasks.register('prepareReleasePlayConsoleArtifacts') {
             )
 
             if (mappingEntry == null) {
-                throw new GradleException(
+                throw new Exception(
                     'Внутри app-release.aab отсутствует BUNDLE-METADATA/.../proguard.map.'
                 )
             }
@@ -142,7 +142,7 @@ tasks.register('prepareReleasePlayConsoleArtifacts') {
             : releaseNativeSymbolsFallbackFile
 
         if (!nativeSymbolsForPlay.exists()) {
-            throw new GradleException(
+            throw new Exception(
                 "Не найден native-debug-symbols.zip. " +
                 "Проверь native зависимости и генерацию symbols для release build."
             )
