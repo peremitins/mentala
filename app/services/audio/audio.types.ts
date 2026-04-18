@@ -17,6 +17,8 @@ export type AudioServiceTrack = {
   artworkUrl?: string | null;
   durationMs?: number | null;
   isLoop?: boolean;
+  useForNotification?: boolean;
+  isBackgroundMusic?: boolean;
 };
 
 export type AudioServicePlayOptions = {
