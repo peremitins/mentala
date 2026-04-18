@@ -67,6 +67,8 @@ export class NativeAudioService implements AudioService {
   private activeAudioId: string | null = null;
   private activeSourceReady = false;
   private activeTrackUsesNativeLoop = false;
+  private activeTrackUsesNotification = true;
+  private activeTrackIsBackgroundMusic = false;
   private positionMs = 0;
   private durationMs = 0;
   private isPlaying = false;
@@ -108,11 +110,15 @@ export class NativeAudioService implements AudioService {
     }
 
     const nextUsesNativeLoop = Boolean(track.isLoop);
+    const nextUsesNotification = track.useForNotification !== false;
+    const nextIsBackgroundMusic = Boolean(track.isBackgroundMusic);
     const sameSource =
       this.activeSourceReady &&
       this.activeTrack?.id === track.id &&
       this.activeTrack?.url === track.url &&
-      this.activeTrackUsesNativeLoop === nextUsesNativeLoop;
+      this.activeTrackUsesNativeLoop === nextUsesNativeLoop &&
+      this.activeTrackUsesNotification === nextUsesNotification &&
+      this.activeTrackIsBackgroundMusic === nextIsBackgroundMusic;
 
     if (sameSource) {
       this.activeTrack = track;
@@ -139,6 +145,8 @@ export class NativeAudioService implements AudioService {
     this.activeAudioId = nextAudioId;
     this.activeSourceReady = false;
     this.activeTrackUsesNativeLoop = nextUsesNativeLoop;
+    this.activeTrackUsesNotification = nextUsesNotification;
+    this.activeTrackIsBackgroundMusic = nextIsBackgroundMusic;
     this.positionMs = 0;
     this.durationMs = this.getTrackDurationFallbackMs(track);
     this.currentVolume = this.volume;
@@ -158,11 +166,12 @@ export class NativeAudioService implements AudioService {
             : track.category === 'scene'
               ? 'Атмосфера'
               : 'Медитация',
-        useForNotification: true,
+        useForNotification: nextUsesNotification,
+        isBackgroundMusic: nextIsBackgroundMusic,
         artworkSource: track.artworkUrl ?? undefined,
         loop: nextUsesNativeLoop,
-        showSeekBackward: false,
-        showSeekForward: false,
+        showSeekBackward: nextUsesNotification ? false : undefined,
+        showSeekForward: nextUsesNotification ? false : undefined,
         seekBackwardTime: 15,
         seekForwardTime: 15,
       });
@@ -891,6 +900,8 @@ export class NativeAudioService implements AudioService {
     this.activeAudioId = null;
     this.activeSourceReady = false;
     this.activeTrackUsesNativeLoop = false;
+    this.activeTrackUsesNotification = true;
+    this.activeTrackIsBackgroundMusic = false;
     this.positionMs = 0;
     this.durationMs = 0;
     this.isPlaying = false;

@@ -5,9 +5,14 @@
 - Медитации, дыхательные практики, быстрая помощь, дневник благодарности
 - Дыхательные: каталог в `app/lib/breathPracticesCatalog.ts`, плеер `BreathPracticePlayer.vue` + `BreathOrb.vue`
 - Голосовые подсказки фаз из `public/breath/voice/{informal|formal}/*.mp3`
-- На mobile/web голосовые фазы дыхания идут через `Howler` с `html5: true` и unlock-retry: это основной защитный путь для Android WebView
-- Voice/cue для дыхательных практик обязаны делать `unload()` при выключении канала и `unmount`, иначе в Android WebView быстро истощается глобальный `Howler.html5PoolSize` и отдельные фазы начинают пропадать
-- Если голос или cue включают во время уже идущей практики, плеер сразу синхронизирует текущую фазу, а не ждёт следующий переход
+- Web/legacy дыхательные voice/cue идут через `Howler` с `html5: true`; native iOS/Android используют отдельный `NativeBreathSessionService` поверх MediaGrid для основной практики и отдельный intro-source для prep countdown
+- На native дыхательная практика может держать два MediaGrid source одновременно: primary source для cue-loop c `useForNotification: true` и secondary source для voice c `useForNotification: false`; это нужно, чтобы voice и `sounds/*` стартовали одновременно и не конфликтовали на Android
+- Таймер дыхательной практики считает остаток по абсолютному `Date.now()`, а не только по живому `setInterval`: после возврата из background фаза и `remaining` обязаны синхронизироваться без рассинхрона
+- На native phase switching идёт в самом MediaGrid breathing-session, а stop по таймеру не зависит от JS timers: практика обязана завершиться даже при lockscreen/background
+- Voice/cue для web-route дыхательных практик обязаны делать `unload()` при выключении канала и `unmount`, иначе в Android WebView быстро истощается глобальный `Howler.html5PoolSize` и отдельные фазы начинают пропадать
+- Cue-треки `sounds/*` сейчас получают короткий fadeout только на native; voice-подсказки переключаются без fade, чтобы не смазывать команду фазы. В web-ветке fadeout временно отключён
+- Переключение voice/cue во время уже идущей практики не должно повторно озвучивать текущую фазу: toggle меняет состояние канала без немедленного дубля того же шага
+- `pause -> play` и `stop -> play` на native не перезапускают текущую фазу через JS: player вызывает `pauseSession` / `resumeSession`, а защита от stale команд делается на уровне session-service
 - Кастомные практики: 1-30 сек фазы, 2-4 фазы, хранение в localStorage/Capacitor Preferences
 
 ## Быстрая помощь (`/quick-help`)
@@ -104,6 +109,8 @@
 - Apple-safe мастер для native iOS/AppIcon: `public/app-icon-native-master.svg` (квадратный фон, без прозрачности и без преднарисованных скруглений)
 - `apps/landing/public/favicon.svg` синхронизировать с `public/favicon.svg`
 - Web PNG/ICO/apple-touch/android/ms/manifest family генерировать из rounded-card мастера с прозрачным фоном вне скруглённой карточки
+- Для текущего PWA splash/launcher используем прозрачный брендовый знак, визуально совпадающий с native-иконкой; белую rounded-card подложку в manifest-иконках использовать нельзя
+- Для PWA splash/loader и web push нельзя использовать устаревший `notification-badge.png`; актуальные `icon`/`badge` должны идти из прозрачного брендового знака, синхронизированного с native-иконкой
 - Native iOS/AppIcon генерировать отдельно из Apple-safe мастера без предскругления
 - Native Android launcher icon и splash генерировать отдельно из Apple-safe мастера: launcher через adaptive icon layers, splash — как отдельный тёмный launch screen со знаком бренда
 - Native iOS single-size AppIcon: `ios/App/App/Assets.xcassets/AppIcon.appiconset/favicon_ios.png`

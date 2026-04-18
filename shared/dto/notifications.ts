@@ -23,6 +23,10 @@ export type Addressing = 'informal' | 'formal';
 export type Tone = AssistantToneWithUnknown;
 export type Directness = 'soft' | 'moderate' | 'hard';
 export type Platform = 'ios' | 'android' | 'web';
+// Тип канала доставки push-уведомлений
+export type ChannelType = 'native' | 'pwa' | 'browser';
+// Семейство платформы для маршрутизации (более точное, чем Platform)
+export type PlatformFamily = 'ios' | 'android' | 'desktop';
 export type SlotStatus = 'planned' | 'sent' | 'skipped' | 'failed';
 export type InteractionAction =
   | 'yes'
@@ -268,6 +272,11 @@ export interface UserDeviceDto {
   token: string;
   platform: Platform;
   appEnv: AppEnv;
+  channelType: ChannelType;
+  platformFamily: PlatformFamily | null;
+  installationId: string | null;
+  isActive: boolean;
+  isPrimary: boolean;
   lastSeen: string | null;
   createdAt: string;
   updatedAt: string;
@@ -277,6 +286,10 @@ export interface RegisterTokenDto {
   token: string;
   platform: Platform;
   appEnv?: AppEnv;
+  // Опциональные поля для web push (PWA). Нативные клиенты могут не передавать.
+  channelType?: ChannelType;
+  platformFamily?: PlatformFamily;
+  installationId?: string;
 }
 
 export interface UnregisterTokenDto {

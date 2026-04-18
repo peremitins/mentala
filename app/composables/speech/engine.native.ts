@@ -75,7 +75,9 @@ export function createNativeEngine(): SpeechEngine {
     // Чистим старые слушатели перед добавлением новых
     try {
       await SpeechRecognition.removeAllListeners();
-    } catch {}
+    } catch {
+      // Игнорируем отсутствие старых listeners.
+    }
 
     speechStore.isListening = true;
     await SpeechRecognition.start({
@@ -171,7 +173,9 @@ export function createNativeEngine(): SpeechEngine {
     clearTimeout(silenceTimer);
     try {
       await SpeechRecognition?.stop();
-    } catch {}
+    } catch {
+      // Игнорируем stop-ошибку при уже завершённом распознавании.
+    }
   }
 
   return {
@@ -182,6 +186,9 @@ export function createNativeEngine(): SpeechEngine {
     },
     onFinal(cb) {
       finalCb = cb;
+    },
+    onError(cb) {
+      void cb;
     },
     isAvailable() {
       const p = Capacitor.getPlatform();

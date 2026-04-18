@@ -11,6 +11,10 @@ import {
   type RealtimeVoiceSessionEventType,
 } from '@/shared/dto';
 import { usePlatform } from '@/app/composables/usePlatform';
+import {
+  useMicPermissionGate,
+  type MicPermissionState,
+} from '@/app/composables/useMicPermissionGate';
 import { getRealtimeVoiceSupport } from '@/app/services/realtime/realtimeVoiceBrowser';
 import { RealtimeVoiceChatAdapter } from '@/app/services/realtime/realtimeVoiceChatAdapter';
 import { useChatStore } from '@/app/stores/chat';
@@ -350,6 +354,7 @@ export function useRealtimeVoiceSession(options?: {
   const runtimeConfig = useRuntimeConfig();
   const chat = useChatStore();
   const { getPlatform } = usePlatform();
+  const micPermissionGate = useMicPermissionGate();
   const clientPlatform = ref<RealtimeVoiceClientPlatform>(getPlatform());
 
   const status = ref<RealtimeVoiceStatus>('idle');
@@ -1162,6 +1167,14 @@ export function useRealtimeVoiceSession(options?: {
 
     status.value = 'starting';
     errorMessage.value = null;
+    const priorPermissionState: MicPermissionState =
+      await micPermissionGate.getPermissionState();
+
+    const canStartCapture = await micPermissionGate.ensureCanStartCapture();
+    if (!canStartCapture) {
+      status.value = 'idle';
+      return false;
+    }
 
     try {
       if (!chat.sessionId) {
@@ -1242,7 +1255,15 @@ export function useRealtimeVoiceSession(options?: {
 
       return true;
     } catch (error: any) {
-      errorMessage.value = extractRealtimeStartErrorMessage(error);
+      const permissionHandled = await micPermissionGate.handleStartFailure(
+        error,
+        {
+          priorPermissionState,
+        }
+      );
+      errorMessage.value = permissionHandled
+        ? 'Доступ к микрофону запрещён. Разреши его для Mentala и повтори попытку.'
+        : extractRealtimeStartErrorMessage(error);
       const failureReason = extractRealtimeStartErrorReason(error);
       const failurePayload = extractRealtimeStartErrorPayload(error);
       await cleanupLocalTransport();
@@ -1356,6 +1377,10 @@ export function useRealtimeVoiceSession(options?: {
     isActive,
     isBusy,
     blocksTextInput,
+    showMicDeniedModal: micPermissionGate.showMicDeniedModal,
+    micDeniedDialogMode: micPermissionGate.dialogMode,
+    micDeniedIsStandalonePwa: micPermissionGate.isStandalonePwa,
+    openMicSettings: micPermissionGate.openMicSettings,
     start,
     stop,
   };

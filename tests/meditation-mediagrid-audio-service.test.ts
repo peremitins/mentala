@@ -140,6 +140,22 @@ async function flushAsyncAudioCallback() {
   });
 }
 
+async function waitForCreatedAudioId(
+  audioPlayer: ReturnType<typeof createAudioPlayerMock>,
+  index = 0
+) {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const params = audioPlayer.create.mock.calls[index]?.[0];
+    if (params?.audioId) {
+      return params.audioId;
+    }
+
+    await flushAsyncAudioCallback();
+  }
+
+  throw new Error(`Expected AudioPlayer.create call at index ${index}`);
+}
+
 const loopTrack = {
   id: 'midnight-calm',
   url: 'https://media.mentala.app/meditations/audio/nature/midnight-calm.2240f8b8.m4a',
@@ -156,6 +172,17 @@ const nonLoopTrack = {
   category: 'meditation' as const,
   isLoop: false,
   durationMs: 454_000,
+};
+
+const secondaryBreathVoiceTrack = {
+  id: 'breath-voice-formal-inhale',
+  url: 'https://app.mentala.test/breath/voice/formal/inhale.mp3',
+  title: 'Дыхательная подсказка: inhale',
+  category: 'breathing' as const,
+  isLoop: false,
+  durationMs: 1_104,
+  useForNotification: false,
+  isBackgroundMusic: false,
 };
 
 afterEach(() => {
@@ -213,6 +240,29 @@ describe('NativeAudioService MediaGrid AudioPlayer', () => {
       expect.objectContaining({
         audioId: expect.stringMatching(/^scene_midnight-calm_\d+$/),
         audioSource: loopTrack.url,
+      })
+    );
+  });
+
+  it('умеет создавать secondary source без системного notification ownership', async () => {
+    setWindow();
+    const { NativeAudioService, audioPlayer } = await setupService();
+    const service = new NativeAudioService({ audioIdNamespace: 'breathing' });
+
+    try {
+      await service.play(secondaryBreathVoiceTrack, { volume: 1 });
+    } finally {
+      await service.destroy();
+    }
+
+    expect(audioPlayer.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        audioId: expect.stringMatching(
+          /^breathing_breath-voice-formal-inhale_\d+$/
+        ),
+        audioSource: secondaryBreathVoiceTrack.url,
+        useForNotification: false,
+        isBackgroundMusic: false,
       })
     );
   });
@@ -357,15 +407,13 @@ describe('NativeAudioService MediaGrid AudioPlayer', () => {
         loop: true,
         volume: 1,
       });
-      await flushAsyncAudioCallback();
-      const staleAudioId = getCreatedAudioId(audioPlayer);
+      const staleAudioId = await waitForCreatedAudioId(audioPlayer);
 
       const activePlayPromise = service.play(nonLoopTrack, {
         loop: true,
         volume: 1,
       });
-      await flushAsyncAudioCallback();
-      const activeAudioId = getCreatedAudioId(audioPlayer, 1);
+      const activeAudioId = await waitForCreatedAudioId(audioPlayer, 1);
 
       audioPlayer.resolveInitialize(staleAudioId);
       await Promise.all([stalePlayPromise, activePlayPromise]);
