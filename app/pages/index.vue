@@ -338,6 +338,8 @@
     </Dialog>
     <MicPermissionDeniedDialog
       :open="showMicDeniedModal"
+      :mode="micDeniedDialogMode"
+      :is-standalone-pwa="micDeniedIsStandalonePwa"
       @update:open="showMicDeniedModal = $event"
       @open-settings="openMicSettings"
     />
@@ -533,6 +535,8 @@ const {
   stopListening: stopMic,
   clearBaseText: clearVoiceBase,
   showMicDeniedModal,
+  micDeniedDialogMode,
+  micDeniedIsStandalonePwa,
   openMicSettings,
 } = useVoiceDictationInput({
   getValue: () => chat.userText,

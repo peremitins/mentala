@@ -197,8 +197,9 @@ export const useAuthStore = defineStore('auth', {
           // Если профайл не загрузился, всё равно пускаем в приложение.
         }
 
-        // Перепривязываем push-токен к текущей сессии (native)
+        // Перепривязываем push-токен к текущей сессии (native + PWA)
         await this._registerPushTokenForSession();
+        void this._ensureWebPushAfterLogin();
 
         // Переходим на главную
         await navigateTo('/');
@@ -330,8 +331,9 @@ export const useAuthStore = defineStore('auth', {
           // Игнорируем, чтобы не ломать логин.
         }
 
-        // Перепривязываем push-токен к текущей сессии (native)
+        // Перепривязываем push-токен к текущей сессии (native + PWA)
         await this._registerPushTokenForSession();
+        void this._ensureWebPushAfterLogin();
 
         await navigateTo('/');
         return response;
@@ -376,13 +378,17 @@ export const useAuthStore = defineStore('auth', {
         });
 
         // Плагин @capgo/capacitor-social-login возвращает поле idToken (не identityToken)
-        const identityToken = loginResponse?.result?.idToken ?? loginResponse?.result?.identityToken;
+        const identityToken =
+          loginResponse?.result?.idToken ??
+          loginResponse?.result?.identityToken;
         if (!identityToken) {
           throw new Error('Apple identityToken missing');
         }
 
-        const givenName = loginResponse?.result?.profile?.givenName || undefined;
-        const familyName = loginResponse?.result?.profile?.familyName || undefined;
+        const givenName =
+          loginResponse?.result?.profile?.givenName || undefined;
+        const familyName =
+          loginResponse?.result?.profile?.familyName || undefined;
 
         const response: any = await useAPI('/api/auth/apple/native', {
           method: 'POST',
@@ -422,6 +428,7 @@ export const useAuthStore = defineStore('auth', {
         }
 
         await this._registerPushTokenForSession();
+        void this._ensureWebPushAfterLogin();
         await navigateTo('/');
         return response;
       } catch (error) {
@@ -495,8 +502,9 @@ export const useAuthStore = defineStore('auth', {
           // Игнорируем, чтобы не блокировать верификацию.
         }
 
-        // Перепривязываем push-токен к текущей сессии (native)
+        // Перепривязываем push-токен к текущей сессии (native + PWA)
         await this._registerPushTokenForSession();
+        void this._ensureWebPushAfterLogin();
 
         const redirectTo =
           options && 'redirect' in options ? options.redirect : '/';
@@ -550,8 +558,9 @@ export const useAuthStore = defineStore('auth', {
           this.isLoggedIn = true;
         }
 
-        // Перепривязываем push-токен к текущей сессии (native)
+        // Перепривязываем push-токен к текущей сессии (native + PWA)
         await this._registerPushTokenForSession();
+        void this._ensureWebPushAfterLogin();
 
         return response as any;
       } catch (error) {
@@ -607,8 +616,9 @@ export const useAuthStore = defineStore('auth', {
           this.isLoggedIn = true;
         }
 
-        // Перепривязываем push-токен к текущей сессии (native)
+        // Перепривязываем push-токен к текущей сессии (native + PWA)
         await this._registerPushTokenForSession();
+        void this._ensureWebPushAfterLogin();
 
         return response as any;
       } catch (error) {
@@ -651,8 +661,9 @@ export const useAuthStore = defineStore('auth', {
           this.isLoggedIn = true;
         }
 
-        // Перепривязываем push-токен к текущей сессии (native)
+        // Перепривязываем push-токен к текущей сессии (native + PWA)
         await this._registerPushTokenForSession();
+        void this._ensureWebPushAfterLogin();
 
         return response;
       } catch (error) {
@@ -832,6 +843,43 @@ export const useAuthStore = defineStore('auth', {
     },
 
     /**
+     * Деактивирует web push токен (PWA) при logout.
+     * Не вызывается на нативных платформах — там работает _unregisterPushTokenForDevice.
+     */
+    async _deactivateWebPushToken() {
+      if (typeof window === 'undefined') return;
+      try {
+        const { Capacitor } = await import('@capacitor/core');
+        if (Capacitor.isNativePlatform()) return; // native — не наш случай
+
+        const { useWebPush } = await import('@/app/composables/useWebPush');
+        const webPush = useWebPush();
+        await webPush.deactivateOnLogout();
+      } catch (error) {
+        // Не блокируем logout
+        console.warn('[Auth Store] Web push deactivate error:', error);
+      }
+    },
+
+    /**
+     * Перепривязывает web push токен к новой сессии после login.
+     * Не запрашивает разрешение — только переregister если оно уже выдано.
+     */
+    async _ensureWebPushAfterLogin() {
+      if (typeof window === 'undefined') return;
+      try {
+        const { Capacitor } = await import('@capacitor/core');
+        if (Capacitor.isNativePlatform()) return;
+
+        const { useWebPush } = await import('@/app/composables/useWebPush');
+        const webPush = useWebPush();
+        await webPush.ensureRegisteredAfterLogin();
+      } catch (error) {
+        console.warn('[Auth Store] Web push re-register error:', error);
+      }
+    },
+
+    /**
      * Сбрасывает состояние auth store
      */
     _resetAuthState() {
@@ -852,6 +900,9 @@ export const useAuthStore = defineStore('auth', {
 
         // 2.1 Отключаем push-уведомления на текущем устройстве до разлогина
         await this._unregisterPushTokenForDevice();
+
+        // 2.2 Деактивируем web push токен (PWA) до разлогина
+        await this._deactivateWebPushToken();
 
         // 3. Делаем запрос на разлогин в фоне, чтобы UI не зависал.
         logoutRequest = (async () => {

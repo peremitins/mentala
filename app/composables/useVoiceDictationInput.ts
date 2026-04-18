@@ -1,7 +1,10 @@
 import { computed, nextTick, onScopeDispose, ref, watch, type Ref } from 'vue';
 import { useSpeechEngine } from '@/app/composables/useSpeechEngine';
+import {
+  useMicPermissionGate,
+  type MicPermissionState,
+} from '@/app/composables/useMicPermissionGate';
 import { useSpeechStore } from '@/app/stores/speech';
-import { Capacitor } from '@capacitor/core';
 
 interface VoiceDictationFinalPayload {
   finalText: string;
@@ -35,12 +38,14 @@ function mergeWithBase(base: string, chunk: string, separator: string): string {
 
 export function useVoiceDictationInput(options: UseVoiceDictationInputOptions) {
   const speechStore = useSpeechStore();
-  const { settings, start, stop, onPartial, onFinal } = useSpeechEngine();
+  const { settings, start, stop, onPartial, onFinal, onError } =
+    useSpeechEngine();
+  const micPermissionGate = useMicPermissionGate();
   const isApplyingVoiceInput = ref(false);
   const baseText = ref('');
   const isDisposed = ref(false);
   const separator = options.separator ?? ' ';
-  const showMicDeniedModal = ref(false);
+  const lastStartPermissionState = ref<MicPermissionState>(null);
 
   function isBlocked(): boolean {
     return options.isBlocked?.value === true;
@@ -87,6 +92,16 @@ export function useVoiceDictationInput(options: UseVoiceDictationInputOptions) {
     });
   });
 
+  onError((error) => {
+    if (isDisposed.value) return;
+
+    speechStore.isListening = false;
+    void micPermissionGate.handleStartFailure(error, {
+      priorPermissionState: lastStartPermissionState.value,
+    });
+    options.onStartError?.(error);
+  });
+
   watch(
     () => normalizeText(options.getValue()),
     (nextValue) => {
@@ -105,6 +120,13 @@ export function useVoiceDictationInput(options: UseVoiceDictationInputOptions) {
     }
 
     baseText.value = normalizeText(options.getValue());
+    lastStartPermissionState.value =
+      await micPermissionGate.getPermissionState();
+
+    const canStartCapture = await micPermissionGate.ensureCanStartCapture();
+    if (!canStartCapture) {
+      return;
+    }
 
     try {
       await start();
@@ -112,19 +134,16 @@ export function useVoiceDictationInput(options: UseVoiceDictationInputOptions) {
       console.error('[VoiceDictationInput] Failed to start dictation:', error);
       speechStore.isListening = false;
       baseText.value = '';
-      const isNative =
-        Capacitor.getPlatform() === 'ios' ||
-        Capacitor.getPlatform() === 'android';
-      if (isNative) {
-        if ((error as any)?.code === 'PERMISSION_DENIED_FIRST') {
-          // Первый отказ в системном диалоге — молча пропускаем,
-          // юзер только что сознательно нажал «Не разрешать»
-          return;
+      const permissionHandled = await micPermissionGate.handleStartFailure(
+        error,
+        {
+          priorPermissionState: lastStartPermissionState.value,
         }
-        // Любая другая ошибка на нативе (denied, ошибка start(),
-        // iOS confirmation-диалог, отдельное разрешение Microphone и т.д.) —
-        // показываем модал с кнопкой «Открыть настройки»
-        showMicDeniedModal.value = true;
+      );
+      if (
+        permissionHandled ||
+        (error as any)?.code === 'PERMISSION_DENIED_FIRST'
+      ) {
         return;
       }
       options.onStartError?.(error);
@@ -142,41 +161,6 @@ export function useVoiceDictationInput(options: UseVoiceDictationInputOptions) {
     baseText.value = '';
   }
 
-  /**
-   * Открывает системные настройки приложения для выдачи разрешения на микрофон.
-   * На iOS приложение может быть убито системой при переходе в настройки —
-   * сохраняем текущий маршрут, чтобы восстановить его при холодном старте.
-   */
-  async function openMicSettings(): Promise<void> {
-    showMicDeniedModal.value = false;
-
-    const isNative =
-      Capacitor.getPlatform() === 'ios' ||
-      Capacitor.getPlatform() === 'android';
-    if (!isNative) return;
-
-    // Сохраняем маршрут перед уходом в настройки (iOS может убить WebView)
-    const { setPersistentItem } = await import(
-      '@/app/utils/persistentStorage'
-    );
-    const currentPath =
-      typeof window !== 'undefined'
-        ? window.location.pathname + window.location.search
-        : '/';
-    await setPersistentItem('mentai.settings.returnRoute', JSON.stringify({
-      path: currentPath,
-      ts: Date.now(),
-    }));
-
-    const { NativeSettings, AndroidSettings, IOSSettings } = await import(
-      'capacitor-native-settings'
-    );
-    await NativeSettings.open({
-      optionAndroid: AndroidSettings.ApplicationDetails,
-      optionIOS: IOSSettings.App,
-    });
-  }
-
   onScopeDispose(() => {
     isDisposed.value = true;
   });
@@ -185,10 +169,12 @@ export function useVoiceDictationInput(options: UseVoiceDictationInputOptions) {
     settings,
     isListening: computed(() => speechStore.isListening),
     isApplyingVoiceInput,
-    showMicDeniedModal,
+    showMicDeniedModal: micPermissionGate.showMicDeniedModal,
+    micDeniedDialogMode: micPermissionGate.dialogMode,
+    micDeniedIsStandalonePwa: micPermissionGate.isStandalonePwa,
     toggleListening,
     stopListening,
     clearBaseText,
-    openMicSettings,
+    openMicSettings: micPermissionGate.openMicSettings,
   };
 }

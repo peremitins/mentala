@@ -112,6 +112,8 @@
     />
     <MicPermissionDeniedDialog
       :open="showMicDeniedModal"
+      :mode="micDeniedDialogMode"
+      :is-standalone-pwa="micDeniedIsStandalonePwa"
       @update:open="showMicDeniedModal = $event"
       @open-settings="openMicSettings"
     />
@@ -227,6 +229,8 @@ const {
   stopListening,
   clearBaseText,
   showMicDeniedModal,
+  micDeniedDialogMode,
+  micDeniedIsStandalonePwa,
   openMicSettings,
 } = useVoiceDictationInput({
   getValue: () => thoughtText.value,

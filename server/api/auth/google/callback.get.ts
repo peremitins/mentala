@@ -1,8 +1,11 @@
 import {
   consumeOAuthCookies,
+  getGoogleOAuthReplayRedirect,
   need,
   postForm,
+  storeGoogleOAuthReplayRedirect,
   upsertUserWithOAuth,
+  waitForGoogleOAuthReplayRedirect,
 } from '@/server/application/auth/oauth';
 import { resolveAppUrl } from '@/server/application/auth/oauth-redirect';
 
@@ -18,9 +21,17 @@ export default defineEventHandler(async (event) => {
   const appUrl = resolveAppUrl(event, cfg.public.appUrl);
 
   const { code, state } = getQuery(event);
+  const stateValue = typeof state === 'string' ? state : String(state || '');
   const { state: saved, redirect, locale } = consumeOAuthCookies(event);
   need(code, 400, 'Missing code');
-  need(state && saved && state === saved, 400, 'Invalid state');
+  if (!(stateValue && saved && stateValue === saved)) {
+    const replayRedirect = await getGoogleOAuthReplayRedirect(stateValue);
+    if (replayRedirect) {
+      return sendRedirect(event, replayRedirect, 303);
+    }
+
+    need(false, 400, 'Invalid state');
+  }
   if (!clientId) {
     throw createError({
       statusCode: 500,
@@ -48,6 +59,17 @@ export default defineEventHandler(async (event) => {
     const errorCode = err?.data?.error || err?.error || 'unknown_error';
     const errorDescription =
       err?.data?.error_description || err?.message || 'Unknown error';
+
+    if (errorCode === 'invalid_grant') {
+      const replayRedirect = await waitForGoogleOAuthReplayRedirect(stateValue);
+      if (replayRedirect) {
+        console.warn('[OAuth] Повторный Google callback использовал replay', {
+          state: stateValue,
+        });
+        return sendRedirect(event, replayRedirect, 303);
+      }
+    }
+
     console.error('Token exchange failed', {
       error: errorCode,
       description: errorDescription,
@@ -78,11 +100,15 @@ export default defineEventHandler(async (event) => {
   const avatarUrl = u.picture || null;
 
   if (!email) {
-    return sendRedirect(event, `${appUrl}/auth?error=email_required`, 303);
+    const replayRedirect = `${appUrl}/auth?error=email_required`;
+    await storeGoogleOAuthReplayRedirect(stateValue, replayRedirect);
+    return sendRedirect(event, replayRedirect, 303);
   }
 
   if (!emailVerified) {
-    return sendRedirect(event, `${appUrl}/auth?error=email_not_verified`, 303);
+    const replayRedirect = `${appUrl}/auth?error=email_not_verified`;
+    await storeGoogleOAuthReplayRedirect(stateValue, replayRedirect);
+    return sendRedirect(event, replayRedirect, 303);
   }
 
   const result = await upsertUserWithOAuth(event, 'google', {
@@ -102,8 +128,11 @@ export default defineEventHandler(async (event) => {
     linkUrl.searchParams.set('email', result.email);
     linkUrl.searchParams.set('back', backUrl.toString());
     console.log('[OAuth] Redirecting to:', linkUrl.toString());
+    await storeGoogleOAuthReplayRedirect(stateValue, linkUrl.toString());
     return sendRedirect(event, linkUrl.toString(), 303);
   }
 
-  return sendRedirect(event, redirect || `${appUrl}/`, 303);
+  const finalRedirect = redirect || `${appUrl}/`;
+  await storeGoogleOAuthReplayRedirect(stateValue, finalRedirect);
+  return sendRedirect(event, finalRedirect, 303);
 });
