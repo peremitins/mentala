@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const howlerMocks = vi.hoisted(() => {
   class FakeHowl {
@@ -89,6 +89,9 @@ const howlerMocks = vi.hoisted(() => {
 
     fade(_from: number, to: number) {
       this.currentVolume = to;
+      for (const listener of this.listeners.get('fade') || []) {
+        listener();
+      }
     }
 
     unload() {
@@ -159,7 +162,11 @@ function stubBrowserGlobals() {
   Object.defineProperty(globalThis, 'window', {
     configurable: true,
     writable: true,
-    value: {},
+    value: {
+      location: {
+        origin: 'https://app.mentala.test',
+      },
+    },
   });
   Object.defineProperty(globalThis, 'document', {
     configurable: true,
@@ -180,6 +187,14 @@ afterEach(() => {
   vi.resetModules();
   delete (globalThis as Record<string, unknown>).window;
   delete (globalThis as Record<string, unknown>).document;
+});
+
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe('breath practice audio hardening', () => {

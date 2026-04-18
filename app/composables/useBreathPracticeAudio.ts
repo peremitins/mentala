@@ -230,7 +230,12 @@ export function useBreathPracticeAudio() {
     return holdSound.value;
   }
 
-  async function playCue(type: BreathCueType, volume: number): Promise<void> {
+  async function playCue(
+    type: BreathCueType,
+    volume: number,
+    _phaseDurationMs?: number
+  ): Promise<void> {
+    void _phaseDurationMs;
     const version = cacheVersion;
     const ready = await ensureSounds(version);
     if (!ready) return;

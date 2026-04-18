@@ -21,6 +21,7 @@
 - Для iOS loop патч MediaGrid читает `getDuration()`/`getCurrentTime()` из активного `AVQueuePlayer`/`AVPlayerItem`; UI всё равно держит DTO-duration и локальный clock для loop-треков, чтобы не зависеть от нестабильного native progress
 - Native adapter не опрашивает `getDuration()`/`getCurrentTime()` для loop-треков; позиция считается JS-clock от DTO-duration, а stale progress tick после переключения обязан игнорироваться
 - `seek()` и `setRate()` для iOS loop в самом плагине no-op; в текущем UI у loop-медитаций нет scrubber-прогресса
+- Для дыхательных практик iOS voice-клипы идут через `AVPlayer` с `automaticallyWaitsToMinimizeStalling = false` и `playImmediately(atRate:)`, иначе короткие HTTP-клипы постепенно отъезжают от cue/фазы из-за автоматического ожидания буфера
 - MediaGrid `2.3.2` закреплён через `pnpm patch`: в iOS loop-mode active player живёт в `playerQueue`, поэтому обращения плагина к `player.rate` внутри Now Playing/remote controls заменены на безопасное чтение rate из активного player; Now Playing не пишет отрицательные duration/currentTime и держит отдельный `nowPlayingPlaybackRate`, чтобы loop-треки не выглядели как неактивный playback во время буферизации
 - iOS Remote Command Center патчится под активные play/pause/toggle handlers и отключённые seek/next/previous/change-position команды. Это нужно, чтобы lockscreen controls не были неактивными и не показывали лишние действия
 
@@ -65,8 +66,15 @@
 - На iOS native meditation `pause` не оставляет MediaGrid/AVPlayer source в paused-состоянии: позиция сохраняется в JS, source останавливается/уничтожается, следующий `play` создаёт новый `audioId` и стартует с сохранённой позиции. Android остаётся на штатном `pause()`/`resume()`
 - При смене сцены `play()` фиксирует новый `currentScene` до остановки старого source, а `kickstart()` игнорирует buffering только для той же сцены. Это защищает от гонки layout watcher + tap handler, из-за которой новая сцена требовала повторный тап
 
-## Breath Practice Howler
+## Breath Practice Audio
 
-- Дыхательные voice/cue используют `Howler` с `html5: true`, а не Web Audio API: это стабильнее для коротких клипов в Android Capacitor WebView
-- Для Android pool нужно поднимать выше дефолтного (`html5PoolSize > 10`), потому что одна практика держит несколько отдельных HTML5 Audio nodes для voice/cue
-- Любой toggle voice/cue и `unmount` обязан делать `Howl.unload()`, а не только `stop()`, иначе ноды не возвращаются в pool и следующие фазы начинают теряться
+- Web/legacy: и voice, и `sounds/*` дыхательных практик идут через `Howler` с `html5: true`; отдельный Web Audio route для дыхания не используется
+- Native iOS/Android: основная практика идёт через отдельный `NativeBreathSessionService`, который управляет MediaGrid breathing-session поверх плагина, а intro-voice остаётся отдельным коротким source
+- В native breathing-session primary source всегда один: cue-loop с `useForNotification: true`, либо voice-клип, если `sounds/*` выключены. Дополнительный voice при `sounds + voice` идёт параллельно на secondary source с `useForNotification: false`, иначе Android падает с `There can only be one`
+- Плагин пропатчен дополнительными командами `startBreathingSession`, `pauseBreathingSession`, `resumeBreathingSession`, `stopBreathingSession`, `updateBreathingSessionConfig`; они сами переключают фазы по native timers и не зависят от JS `setInterval`
+- Включённые одновременно `voice + sounds` стартуют в одной фазе параллельно без последовательности `voice -> cue`; по `pause/resume` current phase не пересоздаётся через JS, а продолжается внутри native session
+- Если `sounds/*` выключены, остаётся только voice-клип как primary; если voice выключен, текущий voice source просто гасится, а cue остаётся primary. Обратное включение канала вступает только со следующей фазы, без дубля текущей voice-фразы
+- Cue-треки дыхательных практик (`public/breath/sounds/*`) на native уходят в короткий phase-end fadeout перед переключением шага; voice-клипы не фейдятся. Web-ветка дыхательных cue сейчас играет без phase-end fadeout
+- Таймер дыхательной практики хранит абсолютный `endsAt` в UI для синхронизации прогресса и одновременно уходит в native breathing-session; фактическая остановка практики в фоне / под локскрином не зависит от живого WebView
+- Для Android pool нужно поднимать выше дефолтного (`html5PoolSize > 10`), потому что web-route дыхания держит несколько отдельных HTML5 Audio nodes для voice/cue
+- Любой toggle voice/cue и `unmount` в web-route обязан делать `Howl.unload()`, а не только `stop()`, иначе ноды не возвращаются в pool и следующие фазы начинают теряться
