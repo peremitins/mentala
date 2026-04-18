@@ -265,8 +265,7 @@ import {
 } from '@/app/utils/breathPracticeSettings';
 import { useNotificationsSettings } from '@/app/composables/useNotificationsSettings';
 import { useBreathPracticePlayer } from '@/app/composables/useBreathPracticePlayer';
-import { useBreathPracticeAudio } from '@/app/composables/useBreathPracticeAudio';
-import { useBreathPracticeVoice } from '@/app/composables/useBreathPracticeVoice';
+import { useBreathPracticePhaseAudio } from '@/app/composables/useBreathPracticePhaseAudio';
 import { useBreathPracticeHaptics } from '@/app/composables/useBreathPracticeHaptics';
 import TimePicker from '@/app/components/TimePicker.vue';
 
@@ -319,42 +318,55 @@ const controlsGridClass = computed(() => {
 });
 
 const {
-  playCue,
-  prepare: prepareAudio,
+  playPhase,
+  startSession,
+  updateSessionConfig,
+  pauseSession,
+  resumeSession,
+  playIntro,
+  prepare: preparePhaseAudio,
   stopAll: stopAudio,
   setVolume,
-  release: releaseAudio,
-} = useBreathPracticeAudio();
-const {
-  prepare: prepareVoice,
-  play: playVoice,
-  stop: stopVoice,
-  release: releaseVoice,
-} = useBreathPracticeVoice();
+  setScheduledStopAt,
+  release: releasePhaseAudio,
+  isNativeSessionEnabled,
+} = useBreathPracticePhaseAudio();
 const { trigger: triggerHaptic } = useBreathPracticeHaptics();
 let appStateListener: { remove(): Promise<void> } | null = null;
-const phasePlaybackCycle = ref(0);
-const lastVoicePhaseCycle = ref(0);
-const lastSoundPhaseCycle = ref(0);
 
 const player = useBreathPracticePlayer({
-  onPhaseStart: async (phase) => {
-    phasePlaybackCycle.value += 1;
-    const currentCycle = phasePlaybackCycle.value;
-
-    if (voiceEnabled.value) {
-      lastVoicePhaseCycle.value = currentCycle;
-      await playVoice(phase.type, prepAddressing.value);
+  onSessionStart: async () => {
+    if (!isNativeSessionEnabled()) {
+      return Date.now();
     }
-    if (soundEnabled.value) {
-      lastSoundPhaseCycle.value = currentCycle;
-      await playCue(phase.cue, soundVolume.value / 100);
+
+    return startSession({
+      phases: props.practice.phases,
+      addressing: prepAddressing.value,
+      soundEnabled: soundEnabled.value,
+      voiceEnabled: voiceEnabled.value,
+      volume: soundVolume.value / 100,
+      sessionEndsAtMs: sessionEndsAt.value,
+    });
+  },
+  onPhaseStart: async (phase) => {
+    if (!isNativeSessionEnabled()) {
+      await playPhase({
+        cue: phase.cue,
+        voice: phase.type,
+        addressing: prepAddressing.value,
+        phaseDurationMs: Math.max(0, Math.floor(phase.seconds * 1000)),
+        soundEnabled: soundEnabled.value,
+        voiceEnabled: voiceEnabled.value,
+        volume: soundVolume.value / 100,
+      });
     }
     if (hapticsEnabled.value) {
       await triggerHaptic();
     }
   },
   onSessionComplete: () => {
+    stopAudio(0);
     emit('complete');
   },
 });
@@ -365,6 +377,7 @@ const {
   phaseRemainingSeconds,
   sessionRemainingSeconds,
   sessionDurationSeconds,
+  sessionEndsAt,
   prepCountdown,
   isRunning,
   isPaused,
@@ -436,65 +449,28 @@ function clampNumber(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, Math.floor(safe)));
 }
 
-function togglePlayback() {
+async function togglePlayback() {
   if (!props.practice) return;
   if (!isRunning.value) {
-    player.start();
+    await player.start();
     return;
   }
   if (isPaused.value) {
+    await resumeSession();
     player.resume();
   } else {
-    stopAudio(120);
-    stopVoice();
+    await pauseSession();
     player.pause();
   }
 }
 
-function stopSession() {
-  stopAudio(120);
-  stopVoice();
+async function stopSession() {
+  await stopAudio(0);
   player.stop();
 }
 
 function restartSession() {
-  player.start();
-}
-
-function getCurrentInteractivePhaseState() {
-  if (
-    !isRunning.value ||
-    isPaused.value ||
-    isCompleted.value ||
-    prepCountdown.value > 0
-  ) {
-    return null;
-  }
-
-  const phase = currentPhase.value;
-  if (!phase) return null;
-  return {
-    phase,
-    cycle: phasePlaybackCycle.value,
-  };
-}
-
-async function syncCurrentPhaseVoice() {
-  const state = getCurrentInteractivePhaseState();
-  if (!state) return;
-  if (lastVoicePhaseCycle.value === state.cycle) return;
-
-  lastVoicePhaseCycle.value = state.cycle;
-  await playVoice(state.phase.type, prepAddressing.value);
-}
-
-async function syncCurrentPhaseCue() {
-  const state = getCurrentInteractivePhaseState();
-  if (!state) return;
-  if (lastSoundPhaseCycle.value === state.cycle) return;
-
-  lastSoundPhaseCycle.value = state.cycle;
-  await playCue(state.phase.cue, soundVolume.value / 100);
+  void player.start();
 }
 
 async function onSoundEnabledChange(value: boolean) {
@@ -502,13 +478,16 @@ async function onSoundEnabledChange(value: boolean) {
   const previousValue = soundEnabled.value;
   soundEnabled.value = value;
   try {
+    await preparePhaseAudio(prepAddressing.value);
+    if (!isNativeSessionEnabled() && !value) {
+      await stopAudio(0);
+    } else if (isNativeSessionEnabled()) {
+      await updateSessionConfig({
+        soundEnabled: value,
+      });
+    }
     if (value) {
-      await prepareAudio();
       setVolume(soundVolume.value / 100);
-      await syncCurrentPhaseCue();
-    } else {
-      stopAudio(0);
-      releaseAudio();
     }
     await saveBreathPracticeSettings({ soundEnabled: value });
   } catch (error) {
@@ -527,16 +506,13 @@ async function onVoiceEnabledChange(value: boolean) {
   const previousValue = voiceEnabled.value;
   voiceEnabled.value = value;
   try {
-    if (value) {
-      await prepareVoice(prepAddressing.value);
-      if (prepCountdown.value > 0) {
-        await playVoice('intro', prepAddressing.value);
-      } else {
-        await syncCurrentPhaseVoice();
-      }
-    } else {
-      stopVoice();
-      releaseVoice();
+    await preparePhaseAudio(prepAddressing.value);
+    if (!isNativeSessionEnabled() && !value) {
+      await stopAudio(0);
+    } else if (isNativeSessionEnabled()) {
+      await updateSessionConfig({
+        voiceEnabled: value,
+      });
     }
     await saveBreathPracticeSettings({ voiceEnabled: value });
   } catch (error) {
@@ -586,33 +562,32 @@ onMounted(async () => {
   }
 
   if (soundEnabled.value) {
-    await prepareAudio();
+    await preparePhaseAudio(prepAddressing.value);
     setVolume(soundVolume.value / 100);
   }
-  if (voiceEnabled.value) {
-    await prepareVoice(prepAddressing.value);
+  if (!soundEnabled.value && voiceEnabled.value) {
+    await preparePhaseAudio(prepAddressing.value);
   }
 
   player.setPhases(props.practice.phases);
   player.setSessionDuration(sessionMinutesValue.value * 60);
 
   if (props.autoStart) {
-    player.start();
+    void player.start();
   }
 
-  // Пауза при уходе в фон (Android/iOS): без этого setInterval продолжает
-  // тикать в фоне, onPhaseStart вызывает play() на заблокированном аудио,
-  // и при возврате в приложение накопленные unlock-листенеры воспроизводят
-  // несколько звуков одновременно.
+  // В фоне сессия должна продолжаться, а при возврате пересчитываем фазу и
+  // остаток по абсолютному времени. Это устраняет зависимость от живых JS-таймеров.
   try {
     const { App } = await import('@capacitor/app');
-    appStateListener = await App.addListener('appStateChange', ({ isActive }) => {
-      if (!isActive && isRunning.value && !isPaused.value) {
-        stopAudio(120);
-        stopVoice();
-        player.pause();
+    appStateListener = await App.addListener(
+      'appStateChange',
+      ({ isActive }) => {
+        if (isActive) {
+          player.sync();
+        }
       }
-    });
+    );
   } catch {
     // Capacitor недоступен в веб-версии — игнорируем
   }
@@ -623,7 +598,6 @@ watch(
   (value) => {
     if (!value) return;
     stopAudio(0);
-    stopVoice();
     player.stop();
     player.setPhases(value);
   }
@@ -657,12 +631,22 @@ watch(soundVolume, (value) => {
 });
 
 watch(
+  sessionEndsAt,
+  (value) => {
+    void setScheduledStopAt(value);
+  },
+  {
+    immediate: true,
+  }
+);
+
+watch(
   () => prepCountdown.value,
   (value, prevValue) => {
     // Intro звучит в момент появления prep-оверлея.
     if (!voiceEnabled.value) return;
     if (value > 0 && prevValue === 0) {
-      void playVoice('intro', prepAddressing.value);
+      void playIntro(prepAddressing.value);
     }
   }
 );
@@ -670,16 +654,14 @@ watch(
 watch(
   () => prepAddressing.value,
   (nextAddressing) => {
-    if (!voiceEnabled.value) return;
-    void prepareVoice(nextAddressing);
+    if (!voiceEnabled.value && !soundEnabled.value) return;
+    void preparePhaseAudio(nextAddressing);
   }
 );
 
 onBeforeUnmount(() => {
-  stopAudio(0);
-  stopVoice();
-  releaseAudio();
-  releaseVoice();
+  void stopAudio(0);
+  releasePhaseAudio();
   player.stop();
   void appStateListener?.remove();
 });
