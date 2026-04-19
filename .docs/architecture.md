@@ -90,6 +90,7 @@ server/
 ## Логирование
 
 - Pino + Sentry, request_id/user_id/service/env всегда в логах
+- Транзакционные SMTP-письма (auth verification / password reset) должны отправляться с явными SMTP timeout-ами и коротким retry только для transient socket-ошибок (`ESOCKET`, `ECONNRESET`, `ETIMEDOUT`, `ECONNECTION`, `EPIPE`), чтобы кратковременный обрыв сети не ломал auth-flow
 
 ## Связанные документы
 
