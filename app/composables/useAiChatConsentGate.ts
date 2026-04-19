@@ -3,6 +3,7 @@ import { useI18n } from 'vue-i18n';
 import { useAuthStore } from '@/app/stores/auth';
 import { useAPI } from '@/app/composables/useAPI';
 import { useToast } from '@/app/composables/useToast';
+import { usePlatform } from '@/app/composables/usePlatform';
 import {
   AI_CHAT_CONSENT_PROVIDER,
   AI_CHAT_CONSENT_VERSION,
@@ -20,6 +21,7 @@ let resolvePendingConsent: ((value: boolean) => void) | null = null;
 export function useAiChatConsentGate() {
   const auth = useAuthStore();
   const { locale } = useI18n();
+  const { platform } = usePlatform();
 
   const modalOpen = useState<boolean>(
     'ai-chat-consent-modal-open',
@@ -42,9 +44,11 @@ export function useAiChatConsentGate() {
   const consentLocale = computed<AiChatConsentLocale>(() =>
     normalizeAiChatConsentLocale(auth.user?.locale || locale.value || 'ru')
   );
+  const requiresExplicitModalConsent = computed(() => platform.value === 'ios');
   const { public: publicConfig } = useRuntimeConfig();
   const privacyPolicyUrl = computed(
-    () => `${publicConfig.appUrl}/legal/privacy-policy-${consentLocale.value}.html`
+    () =>
+      `${publicConfig.appUrl}/legal/privacy-policy-${consentLocale.value}.html`
   );
 
   function closeModal(result: boolean) {
@@ -84,6 +88,12 @@ export function useAiChatConsentGate() {
       return true;
     }
 
+    // На iOS оставляем явный disclosure для compliance App Store.
+    // На web и Android сохраняем consent при явном старте чата без лишней модалки.
+    if (!requiresExplicitModalConsent.value) {
+      return await saveAiConsent({ silent: true });
+    }
+
     if (pendingConsentPromise) {
       return await pendingConsentPromise;
     }
@@ -96,9 +106,9 @@ export function useAiChatConsentGate() {
     return await pendingConsentPromise;
   }
 
-  async function acceptAiConsent() {
+  async function saveAiConsent(options?: { silent?: boolean }) {
     if (!auth.isLoggedIn || isSubmitting.value) {
-      return;
+      return false;
     }
 
     isSubmitting.value = true;
@@ -132,17 +142,29 @@ export function useAiChatConsentGate() {
         acceptedAt,
         locale: consentLocale.value,
       });
-      closeModal(true);
+
+      if (requiresExplicitModalConsent.value) {
+        closeModal(true);
+      }
+
+      return true;
     } catch (error) {
       console.error('[AI Consent] Failed to save consent:', error);
-      useToast(
-        'Не удалось сохранить согласие',
-        'Попробуй ещё раз. Без согласия ИИ-чат останется закрыт.',
-        'error'
-      );
+      if (!options?.silent) {
+        useToast(
+          'Не удалось сохранить согласие',
+          'Попробуй ещё раз. Без согласия ИИ-чат останется закрыт.',
+          'error'
+        );
+      }
+      return false;
     } finally {
       isSubmitting.value = false;
     }
+  }
+
+  async function acceptAiConsent() {
+    await saveAiConsent();
   }
 
   async function revokeAiConsent() {
@@ -201,6 +223,7 @@ export function useAiChatConsentGate() {
     isSubmitting,
     modalOpen,
     needsConsent,
+    requiresExplicitModalConsent,
     privacyPolicyUrl,
     requestAiConsent,
     acceptAiConsent,

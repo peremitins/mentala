@@ -13,14 +13,12 @@
       <div class="scroll-mt-24 rounded-lg glass-deep p-4">
         <MemorySettings />
       </div>
-      <AiChatConsentSettings />
     </section>
   </div>
 </template>
 
 <script setup lang="ts">
 import MemorySettings from '@/app/components/settings/MemorySettings.vue';
-import AiChatConsentSettings from '@/app/components/settings/AiChatConsentSettings.vue';
 
 function goBack() {
   navigateTo('/settings');

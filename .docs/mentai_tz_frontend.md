@@ -32,7 +32,7 @@ shared/dto/        # Zod-схемы (общие с бэком)
 - Состояние: Pinia для глобального, composables для локального
 - DTO (Zod): `shared/dto/*`, ответ парсится через Zod
 - Для billing UI `subscription` store может получать optional promo/referral блоки без поломки старых клиентов
-- Для AI-чата disclosure/consent живёт в общем gate: модалка открывается до старта welcome-chat, quick chat из привычек/терапии и до voice-chat; revoke доступен на `/privacy`
+- Для AI-чата disclosure/consent живёт в общем gate: на iOS перед первым стартом welcome-chat / quick chat / voice-chat показывается явная модалка, на web и Android consent фиксируется без отдельного промежуточного экрана в момент явного старта чата; отдельного revoke-блока на `/privacy` нет
 
 ## Billing UI
 
