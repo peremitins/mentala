@@ -20,6 +20,7 @@
 - 5 карточек: 5-4-3-2-1, Дыхание, Сброс напряжения, Выговориться, Выгрузка мыслей
 - Входы: PageHeader, хаб практик, chat suggested chips (`open_sos`)
 - `SOS / Снять напряжение в теле` использует cue `inhale/exhale` через `useBreathPracticeAudio`; mobile production route нужно прогревать заранее, иначе первый `clench` может пройти с voice, но без cue
+- Для новых локальных настроек `SOS / Снять напряжение в теле` voice по умолчанию включён; уже сохранённый пользовательский toggle не перетирается
 - Выгрузка мыслей: `/quick-help/thought-dump`, textarea + голосовой ввод, handoff в чат через `entryContext`
 
 ## Медитации
