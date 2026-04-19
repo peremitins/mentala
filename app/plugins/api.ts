@@ -9,6 +9,7 @@ import {
   resolveClientTimezone,
   resolveRuntimeApiBaseUrl,
 } from '@/app/utils/runtime-api';
+import { sanitizePublicErrorMessage } from '@/app/utils/errorMessage';
 
 /**
  * Получает CSRF токен из cookie (только для web)
@@ -326,11 +327,43 @@ export default defineNuxtPlugin(() => {
         });
       }
 
-      const payload = response?._data as any;
-      const message =
-        (payload && (payload.message || payload.error)) ||
-        error?.message ||
-        `${response?.status || 'Network'} ${response?.statusText || 'Request Error'}`;
+      const payload = response?._data as Record<string, any> | undefined;
+
+      if (payload && typeof payload === 'object') {
+        if ('message' in payload) {
+          payload.message = sanitizePublicErrorMessage(payload.message);
+        }
+        if ('error' in payload && typeof payload.error === 'string') {
+          payload.error = sanitizePublicErrorMessage(payload.error);
+        }
+        if ('statusMessage' in payload) {
+          payload.statusMessage = sanitizePublicErrorMessage(
+            payload.statusMessage
+          );
+        }
+      }
+
+      const fallbackMessage =
+        response?.status && response.status >= 500
+          ? 'Произошла внутренняя ошибка. Попробуйте ещё раз позже.'
+          : `${response?.status || 'Network'} ${response?.statusText || 'Request Error'}`;
+
+      const message = sanitizePublicErrorMessage(
+        (payload &&
+          (payload.message || payload.error || payload.statusMessage)) ||
+          error?.message,
+        fallbackMessage
+      );
+
+      if (error && typeof error === 'object') {
+        (error as any).message = message;
+        (error as any).statusMessage = message;
+        (error as any).userMessage = message;
+        if ((error as any).data && typeof (error as any).data === 'object') {
+          (error as any).data.message = message;
+          (error as any).data.statusMessage = message;
+        }
+      }
 
       // Авто‑тост ошибок
       if ((options as any)?.suppressErrorToast !== true) {
