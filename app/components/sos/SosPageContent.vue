@@ -466,6 +466,8 @@ let tensionPrepTimerId: number | null = null;
 let tensionCurrentAudio: HTMLAudioElement | null = null;
 let groundingCurrentAudio: HTMLAudioElement | null = null;
 let groundingHintTimerId: ReturnType<typeof setTimeout> | null = null;
+let tensionCuePreparePromise: Promise<void> | null = null;
+let tensionCuePrepared = false;
 const tensionVoiceCache = new Map<string, HTMLAudioElement>();
 const tensionVoicePreloaded = new Set<string>();
 const tensionVoicePreloadInFlight = new Set<string>();
@@ -735,28 +737,34 @@ async function playTensionVoice(audioKey: SosTensionAudioKey) {
   }
 }
 
-function announceTensionStage(audioKey: SosTensionAudioKey) {
+async function announceTensionStage(audioKey: SosTensionAudioKey) {
   tensionStage.value = audioKey;
+  const shouldPlayCue =
+    (audioKey === 'clench' || audioKey === 'release') &&
+    tensionSoundEnabled.value;
+
+  if (shouldPlayCue) {
+    await ensureTensionCueAudioReady();
+  }
+
   void playTensionVoice(audioKey);
 
-  if (audioKey === 'clench' || audioKey === 'release') {
-    if (tensionSoundEnabled.value) {
-      const cue = audioKey === 'clench' ? 'inhale' : 'exhale';
-      void playTensionCue(
-        cue,
-        clampNumber(tensionSoundVolume.value, 0, 100) / 100
-      );
-    }
-    if (tensionHapticsEnabled.value) {
-      void triggerTensionHaptic();
-    }
+  if (!shouldPlayCue) {
+    return;
+  }
+
+  const cue = audioKey === 'clench' ? 'inhale' : 'exhale';
+  void playTensionCue(cue, clampNumber(tensionSoundVolume.value, 0, 100) / 100);
+
+  if (tensionHapticsEnabled.value) {
+    void triggerTensionHaptic();
   }
 }
 
 function scheduleTensionStage(audioKey: SosTensionAudioKey, delayMs: number) {
   const timerId = window.setTimeout(() => {
     tensionVoiceScheduleTimers.delete(timerId);
-    announceTensionStage(audioKey);
+    void announceTensionStage(audioKey);
   }, delayMs);
   tensionVoiceScheduleTimers.add(timerId);
 }
@@ -794,6 +802,27 @@ function formatSeconds(total: number) {
 
 function applyTensionCueVolume() {
   setTensionCueVolume(clampNumber(tensionSoundVolume.value, 0, 100) / 100);
+}
+
+async function ensureTensionCueAudioReady() {
+  if (tensionCuePrepared) {
+    applyTensionCueVolume();
+    return;
+  }
+
+  if (!tensionCuePreparePromise) {
+    // В production WebView первый cue может потеряться, если Howler/HTML5 Audio
+    // ещё не прогрет к моменту первой фазы. Готовим route один раз заранее.
+    tensionCuePreparePromise = (async () => {
+      await prepareTensionCueAudio();
+      applyTensionCueVolume();
+      tensionCuePrepared = true;
+    })().finally(() => {
+      tensionCuePreparePromise = null;
+    });
+  }
+
+  await tensionCuePreparePromise;
 }
 
 function repeatLastPractice() {
@@ -840,8 +869,7 @@ async function loadTensionPracticeSettings() {
   tensionHapticsEnabled.value = settings.hapticsEnabled;
 
   if (tensionSoundEnabled.value) {
-    await prepareTensionCueAudio();
-    applyTensionCueVolume();
+    await ensureTensionCueAudioReady();
   }
 }
 
@@ -851,8 +879,7 @@ async function onTensionSoundEnabledChange(value: boolean) {
     tensionSoundEnabled.value = value;
     await saveSosTensionPracticeSettings({ soundEnabled: value });
     if (value) {
-      await prepareTensionCueAudio();
-      applyTensionCueVolume();
+      await ensureTensionCueAudioReady();
     } else {
       stopTensionCueAudio(120);
     }
@@ -1039,6 +1066,9 @@ function startTensionPractice() {
   tensionStepRemaining.value = TENSION_CLENCH_SECONDS;
   tensionTotalRemaining.value = tensionSessionDurationSeconds.value;
   void preloadTensionVoice(resolveTensionAddressing());
+  if (tensionSoundEnabled.value) {
+    void ensureTensionCueAudioReady();
+  }
 
   tensionPrepCountdown.value = 3;
   if (tensionVoiceEnabled.value) {

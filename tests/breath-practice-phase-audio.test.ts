@@ -126,6 +126,17 @@ vi.mock('@capacitor/core', () => ({
   },
 }));
 
+vi.mock('#imports', () => ({
+  useRuntimeConfig: () => ({
+    public: {
+      featureNativeMeditationAudioEnabled: true,
+      apiBase: 'https://my.mentala.test',
+      appUrl: 'https://my.mentala.test',
+      isDev: false,
+    },
+  }),
+}));
+
 vi.mock('@/app/services/audio/nativeAudio.service', () => ({
   NativeAudioService: nativeAudioMocks.NativeAudioServiceMock,
 }));
@@ -184,12 +195,6 @@ function stubWindow() {
       },
     },
   });
-
-  vi.stubGlobal('useRuntimeConfig', () => ({
-    public: {
-      featureNativeMeditationAudioEnabled: true,
-    },
-  }));
 }
 
 beforeEach(() => {
@@ -211,7 +216,6 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
-  vi.unstubAllGlobals();
   delete (globalThis as Record<string, unknown>).window;
 });
 
@@ -259,16 +263,16 @@ describe('useBreathPracticePhaseAudio native session orchestration', () => {
         expect.objectContaining({
           type: 'inhale',
           cue: 'inhale',
-          cueAudioSource: 'https://app.mentala.test/breath/sounds/inhale.m4a',
+          cueAudioSource: 'https://my.mentala.test/breath/sounds/inhale.m4a',
           voiceAudioSource:
-            'https://app.mentala.test/breath/voice/formal/inhale.mp3',
+            'https://my.mentala.test/breath/voice/formal/inhale.mp3',
         }),
         expect.objectContaining({
           type: 'hold',
           cue: 'hold',
-          cueAudioSource: 'https://app.mentala.test/breath/sounds/wait.m4a',
+          cueAudioSource: 'https://my.mentala.test/breath/sounds/wait.m4a',
           voiceAudioSource:
-            'https://app.mentala.test/breath/voice/formal/hold.mp3',
+            'https://my.mentala.test/breath/voice/formal/hold.mp3',
         }),
       ])
     );
