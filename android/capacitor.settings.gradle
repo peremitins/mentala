@@ -42,7 +42,7 @@ include ':capgo-capacitor-social-login'
 project(':capgo-capacitor-social-login').projectDir = new File('../node_modules/.pnpm/@capgo+capacitor-social-login@7.20.0_patch_hash=494f63e7b7f9e31eb1bfe9f162a2ac49a717948_09f6fb5a1db32fd44b4bf5e71e6fb80f/node_modules/@capgo/capacitor-social-login/android')
 
 include ':mediagrid-capacitor-native-audio'
-project(':mediagrid-capacitor-native-audio').projectDir = new File('../node_modules/.pnpm/@mediagrid+capacitor-native-audio@2.3.2_patch_hash=4b3416549d8303ce13fc408419b8b9c99e6e_26653e0729c4679e17b0cb397af924dc/node_modules/@mediagrid/capacitor-native-audio/android')
+project(':mediagrid-capacitor-native-audio').projectDir = new File('../node_modules/.pnpm/@mediagrid+capacitor-native-audio@2.3.2_patch_hash=f0855946516e081a94cdea8ee9a8d37e3a72_4a210e8793d92ba283af67eff2b6d577/node_modules/@mediagrid/capacitor-native-audio/android')
 
 include ':capacitor-native-settings'
 project(':capacitor-native-settings').projectDir = new File('../node_modules/.pnpm/capacitor-native-settings@7.0.2_@capacitor+core@7.4.3/node_modules/capacitor-native-settings/android')
