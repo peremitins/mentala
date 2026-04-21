@@ -73,6 +73,7 @@ shared/dto/        # Zod-схемы (общие с бэком)
 - На iOS можно опираться на `env(safe-area-inset-*)`, но на Android, особенно на планшетах и некоторых WebView, нужен fallback через native `WindowInsets` bridge с прокидкой значений в CSS-переменные
 - Для action `share` в Capacitor нельзя полагаться только на `navigator.share` внутри WebView: на iOS/Android использовать официальный `@capacitor/share`, а на web оставлять fallback через `navigator.share` / `navigator.canShare`
 - Для copy/share UX в referral и других user-facing сценариях на native сначала использовать Capacitor plugins (`@capacitor/share`, `@capacitor/clipboard`), а web API держать как fallback для desktop-браузеров
+- На Android mobile web больше не продвигаем PWA как основной install path: вместо этого используем мягкий `native-first` app-promo flow (`Открыть приложение` / `Google Play`) без автоматического редиректа и без помех для web billing маршрутов `/subscription` и `/payment-success`
 
 ## Mobile build notes
 
