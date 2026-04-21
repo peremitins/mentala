@@ -292,6 +292,20 @@ export default {
         },
       },
     },
+    ANDROID_PROMO: {
+      BADGE_LINK_ARIA: 'Открыть страницу Mentala в Google Play',
+      GOOGLE_PLAY_BADGE_ALT: 'Открыть Mentala в Google Play',
+      QR_LINK_ARIA: 'Открыть Google Play по QR-коду',
+      SECTION: {
+        TITLE: 'Google Play',
+      },
+      HERO: {
+        TITLE: 'Google Play',
+      },
+      QR_ALT: 'QR-код для установки Mentala на Android',
+      STRUCTURED_DESCRIPTION:
+        'Приложение Mentala для Android: ИИ-чат, дыхательные практики, медитации, привычки и ежедневная психологическая поддержка.',
+    },
     DISCLAIMER:
       'Ментала создана для психологической поддержки и самопомощи. Это не медицинская услуга и не замена врачу или психотерапевту. Если вы чувствуете, что вам нужна профессиональная помощь, пожалуйста, не откладывайте визит к квалифицированному специалисту.',
     PRIVACY: {
@@ -399,6 +413,7 @@ export default {
     },
     STRUCTURED_DATA: {
       ORGANIZATION_NAME: 'Ментала',
+      SOFTWARE_APPLICATION_NAME: 'Ментала',
       WEBSITE_NAME: 'Ментала',
       WEBPAGE_NAME: 'Ментала — психологическая поддержка 24/7',
     },
