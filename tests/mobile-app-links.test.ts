@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  GOOGLE_PLAY_MARKET_URL,
   GOOGLE_PLAY_WEB_URL,
   LANDING_ANDROID_QR_PATH,
   buildAndroidStoreRedirectHtml,
@@ -31,12 +30,13 @@ describe('buildLandingAndroidQrUrl', () => {
 });
 
 describe('buildAndroidStoreRedirectHtml', () => {
-  it('встраивает noindex и обе ссылки на магазин', () => {
+  it('встраивает auto-redirect в intent и fallback на web Google Play', () => {
     const html = buildAndroidStoreRedirectHtml();
 
     expect(html).toContain('noindex,nofollow');
-    expect(html).toContain(GOOGLE_PLAY_MARKET_URL);
     expect(html).toContain(GOOGLE_PLAY_WEB_URL);
-    expect(html).toContain('window.location.replace(marketUrl);');
+    expect(html).toContain('window.setTimeout(fallbackToWeb, 900);');
+    expect(html).toContain('window.location.replace(intentUrl);');
+    expect(html).toContain('http-equiv="refresh"');
   });
 });

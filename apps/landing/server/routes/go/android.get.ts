@@ -1,5 +1,8 @@
 import { setHeader } from 'h3';
-import { buildAndroidStoreRedirectHtml } from '../../../../../shared/utils/mobileAppLinks';
+import {
+  buildAndroidStoreRedirectHtml,
+  buildGooglePlayIntentUrl,
+} from '../../../../../shared/utils/mobileAppLinks';
 
 /**
  * Стабильный first-party маршрут для QR-кодов.
@@ -12,7 +15,6 @@ export default defineEventHandler((event) => {
   setHeader(event, 'X-Robots-Tag', 'noindex, nofollow');
 
   return buildAndroidStoreRedirectHtml({
-    appName: 'Mentala',
-    homeUrl: '/',
+    intentUrl: buildGooglePlayIntentUrl(),
   });
 });

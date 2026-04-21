@@ -116,10 +116,13 @@
               </button>
             </div>
 
-            <div class="flex flex-col w-max gap-3 items-center rounded-lg">
+            <div
+              class="reveal-item flex flex-col w-max gap-3 items-center rounded-lg"
+            >
               <!-- На телефонах QR не показываем: там он избыточен, нужен только CTA. -->
               <a
                 :href="androidInstallHref"
+                target="_blank"
                 class="hidden lg:flex items-center justify-center transition hover:border-white/20 hover:bg-white/[0.07]"
                 :aria-label="t('LANDING.ANDROID_PROMO.QR_LINK_ARIA')"
                 @click="trackAndroidPromoClick('hero_qr')"
@@ -143,6 +146,7 @@
                 <!-- Ведём на стабильный first-party путь, чтобы потом не перевыпускать QR. -->
                 <a
                   :href="androidInstallHref"
+                  target="_blank"
                   class="inline-flex transition hover:border-white/20 hover:bg-white/[0.06]"
                   :aria-label="t('LANDING.ANDROID_PROMO.BADGE_LINK_ARIA')"
                   @click="trackAndroidPromoClick('hero_primary')"
@@ -672,7 +676,10 @@
         </div>
       </section>
 
-      <section id="android-download" class="scroll-mt-header mt-20 lg:mt-28">
+      <section
+        id="android-download"
+        class="reveal-item scroll-mt-header mt-20 lg:mt-28"
+      >
         <div class="landing-container flex items-center">
           <div
             class="flex w-full justify-center reveal-item glass-panel relative overflow-hidden rounded-2xl border-white/20 p-6 sm:p-8 lg:p-10"
@@ -689,6 +696,7 @@
             <div class="relative w-max flex flex-col gap-5">
               <a
                 :href="androidInstallHref"
+                target="_blank"
                 class="hidden lg:flex items-center justify-center transition hover:border-white/20 hover:bg-white/[0.07]"
                 :aria-label="t('LANDING.ANDROID_PROMO.QR_LINK_ARIA')"
                 @click="trackAndroidPromoClick('bottom_qr')"
@@ -711,6 +719,7 @@
               <div class="flex flex-wrap items-center gap-3 w-full">
                 <a
                   :href="androidInstallHref"
+                  target="_blank"
                   class="w-full inline-flex transition hover:border-white/20 hover:bg-white/[0.06]"
                   :aria-label="t('LANDING.ANDROID_PROMO.BADGE_LINK_ARIA')"
                   @click="trackAndroidPromoClick('bottom_primary')"
