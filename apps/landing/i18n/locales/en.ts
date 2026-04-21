@@ -291,6 +291,20 @@ export default {
         },
       },
     },
+    ANDROID_PROMO: {
+      BADGE_LINK_ARIA: 'Open Mentala in Google Play',
+      GOOGLE_PLAY_BADGE_ALT: 'Open Mentala in Google Play',
+      QR_LINK_ARIA: 'Open Google Play from the QR code',
+      SECTION: {
+        TITLE: 'Google Play',
+      },
+      HERO: {
+        TITLE: 'Google Play',
+      },
+      QR_ALT: 'QR code to install Mentala on Android',
+      STRUCTURED_DESCRIPTION:
+        'Mentala for Android: AI chat, breathing practices, meditations, habits, and daily psychological support.',
+    },
     DISCLAIMER:
       'Mentala is designed for psychological support and self-help. It is not a medical service and does not replace a doctor or psychotherapist. If you feel you need professional help, please do not delay seeing a qualified specialist.',
     PRIVACY: {
@@ -400,6 +414,7 @@ export default {
     },
     STRUCTURED_DATA: {
       ORGANIZATION_NAME: 'Mentala',
+      SOFTWARE_APPLICATION_NAME: 'Mentala',
       WEBSITE_NAME: 'Mentala',
       WEBPAGE_NAME: 'Mentala — AI chat, meditations, breathing, and habits',
     },

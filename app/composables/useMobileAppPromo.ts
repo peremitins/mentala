@@ -1,14 +1,16 @@
 import { Capacitor } from '@capacitor/core';
+import {
+  ANDROID_APP_PACKAGE_ID,
+  GOOGLE_PLAY_WEB_URL,
+  buildGooglePlayIntentUrl,
+} from '@/shared/utils/mobileAppLinks';
 import { openExternalBrowser } from '@/app/utils/openExternalBrowser';
 
 const LEGACY_DISMISSED_KEY = 'mentala.pwa.install_show_after';
 const IOS_GUIDE_DISMISSED_KEY = 'mentala.mobile-promo.ios-pwa.show-after';
 
-const ANDROID_APP_PACKAGE_ID = 'com.mentala.app';
-const GOOGLE_PLAY_URL = `https://play.google.com/store/apps/details?id=${ANDROID_APP_PACKAGE_ID}`;
-const GOOGLE_PLAY_INTENT_URL = `intent://details?id=${ANDROID_APP_PACKAGE_ID}#Intent;scheme=market;package=com.android.vending;S.browser_fallback_url=${encodeURIComponent(
-  GOOGLE_PLAY_URL
-)};end`;
+const GOOGLE_PLAY_URL = GOOGLE_PLAY_WEB_URL;
+const GOOGLE_PLAY_INTENT_URL = buildGooglePlayIntentUrl(GOOGLE_PLAY_URL);
 const ANDROID_APP_OPEN_URL = 'mentala://open?source=android_web_promo';
 
 const PROMO_BLOCKED_PATH_PREFIXES = [
