@@ -526,7 +526,7 @@ const isDislikeSubmitDisabled = computed(() => {
 const { speak: speakTTS, stop: stopTTS } = useTTS();
 const { renderMarkdown } = useMarkdown();
 
-const isSending = ref(false); // Флаг отправки сообщения - блокирует обновление textarea из голосового ввода
+const isSending = ref(false); // Флаг отправки сообщения — защита от повторной отправки
 const lastSendPointerTs = ref(0); // Защита от двойного клика после pointer-события
 
 const {
@@ -543,7 +543,6 @@ const {
   setValue: (value) => {
     chat.userText = value;
   },
-  isBlocked: isSending,
   onStartError: (error) => {
     console.error('[Chat] Failed to start dictation:', error);
   },

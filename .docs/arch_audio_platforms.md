@@ -38,6 +38,7 @@
 ## Realtime Voice
 
 - OpenAI Realtime API через WebRTC
+- При запуске realtime voice фон `scene-selection` захватывается через общий `sceneAudioFocus` lock: сцена уходит в `useSceneAudio().suspend({ withFade: true })`, а после `stop/page_leave/error` возвращается через `resume()` только когда больше не осталось других активных mic-lock'ов
 - Основной `turn_detection` — `semantic_vad` с `eagerness=low`, чтобы уменьшить ложные срабатывания на короткий шум и шорохи
 - Rollback через env остаётся на `server_vad` с консервативными параметрами `threshold=0.7` и `silence_duration_ms=1000`
 - В `audio.input` всегда включено `noise_reduction: near_field`
@@ -62,6 +63,7 @@
 
 - `scene-selection` на native iOS/Android использует тот же `NativeAudioService`/MediaGrid route, что и медитации; web/legacy остаётся на WebAudio для loop-сцен и HTMLAudio fallback для non-loop
 - При старте медитации `useMeditationPlayer` вызывает `useSceneAudio().suspend()`: native-сцена жёстко останавливается и уничтожается, web/iOS legacy ставится на паузу
+- Любая голосовая диктовка через `speechStore.isListening` и realtime voice используют общий `sceneAudioFocus` reference-counted lock, чтобы несколько mic-сценариев не ломали друг другу возврат фоновой сцены
 - После остановки/паузы медитации layout watcher вызывает `sceneAudio.resume()` и возвращает сцену, если до suspend она играла, пользователь всё ещё в active state и громкость сцены больше 0
 - Resume сцены после медитации отложен и отменяем через `playbackActionId`/`resumeAfterSuspendActionId`: быстрый `pause → play` в медитации не должен поднимать scene-source параллельно с meditation-source
 - На iOS native meditation `pause` не оставляет MediaGrid/AVPlayer source в paused-состоянии: позиция сохраняется в JS, source останавливается/уничтожается, следующий `play` создаёт новый `audioId` и стартует с сохранённой позиции. Android остаётся на штатном `pause()`/`resume()`

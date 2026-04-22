@@ -36,6 +36,10 @@ import {
   resolveRuntimeApiBaseUrl,
   resolveRuntimeApiUrl,
 } from '@/app/utils/runtime-api';
+import {
+  useSceneAudioFocus,
+  type SceneAudioFocusLock,
+} from '@/app/composables/useSceneAudioFocus';
 
 type RealtimeVoiceStatus =
   | 'idle'
@@ -355,6 +359,7 @@ export function useRealtimeVoiceSession(options?: {
   const chat = useChatStore();
   const { getPlatform } = usePlatform();
   const micPermissionGate = useMicPermissionGate();
+  const sceneAudioFocus = useSceneAudioFocus();
   const clientPlatform = ref<RealtimeVoiceClientPlatform>(getPlatform());
 
   const status = ref<RealtimeVoiceStatus>('idle');
@@ -386,6 +391,7 @@ export function useRealtimeVoiceSession(options?: {
   let isEnding = false;
   let readyHintMessageId: string | null = null;
   let idleTimeoutMs = 30_000;
+  let realtimeSceneAudioLock: SceneAudioFocusLock | null = null;
 
   const isSupported = computed(() => {
     const support = getRealtimeVoiceSupport();
@@ -851,6 +857,10 @@ export function useRealtimeVoiceSession(options?: {
 
     await deactivateRealtimeVoiceNativeAudioSession();
     await stopRealtimeVoiceForegroundService();
+    if (realtimeSceneAudioLock) {
+      await realtimeSceneAudioLock.release();
+      realtimeSceneAudioLock = null;
+    }
     adapter = null;
     resetRuntimeMaps();
     startedAtMs = 0;
@@ -1210,6 +1220,7 @@ export function useRealtimeVoiceSession(options?: {
       adapter = buildChatAdapter(parsed.session.therapySessionId);
       resetRuntimeMaps();
       transport = new RealtimeVoiceTransport();
+      realtimeSceneAudioLock = await sceneAudioFocus.acquire('realtime-voice');
       await transport.start({
         clientSecret: parsed.openai.clientSecret || null,
         webrtcUrl: parsed.openai.webrtcUrl,

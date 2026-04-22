@@ -170,10 +170,6 @@
           </button>
         </div>
 
-        <div v-if="isListening" class="text-right text-xs text-red-300">
-          {{ t('GRATITUDE_DIARY.LISTENING') }}
-        </div>
-
         <div v-if="selectedMoodItem" class="flex items-center">
           <button
             type="button"

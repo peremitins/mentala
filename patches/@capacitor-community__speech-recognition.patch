@@ -1,44 +1,258 @@
 diff --git a/ios/Plugin/Plugin.swift b/ios/Plugin/Plugin.swift
-index 5d1b35b175de90e2aafbd75b8a20a791f068dc17..04879b276c09f3890827f7fb6dc40436efad2e16 100644
+index 5d1b35b175de90e2aafbd75b8a20a791f068dc17..97f234ed121691652f317e8ec7f0fcab538a6663 100644
 --- a/ios/Plugin/Plugin.swift
 +++ b/ios/Plugin/Plugin.swift
-@@ -67,6 +67,8 @@ public class SpeechRecognition: CAPPlugin {
-             do {
-                 try audioSession.setCategory(AVAudioSession.Category.playAndRecord, options: AVAudioSession.CategoryOptions.defaultToSpeaker)
-                 try audioSession.setMode(AVAudioSession.Mode.default)
-+                // Подсказка системе о желаемой частоте ДО активации — помогает избежать 0 Hz на некоторых устройствах
-+                try? audioSession.setPreferredSampleRate(48000)
-                 do {
-                     try audioSession.setActive(true, options: AVAudioSession.SetActiveOptions.notifyOthersOnDeactivation)
-                 } catch {
-@@ -81,7 +83,21 @@ public class SpeechRecognition: CAPPlugin {
-             self.recognitionRequest?.shouldReportPartialResults = partialResults
- 
-             let inputNode: AVAudioInputNode = self.audioEngine!.inputNode
--            let format: AVAudioFormat = inputNode.outputFormat(forBus: 0)
+@@ -18,6 +18,48 @@ public class SpeechRecognition: CAPPlugin {
+     private var audioEngine: AVAudioEngine?
+     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
+     private var recognitionTask: SFSpeechRecognitionTask?
++    private var hasInstalledTap = false
++    // Отслеживаем, была ли аудиосессия переведена в .playAndRecord.
++    // После stop её нужно корректно деактивировать и вернуть категорию playback,
++    // но не переактивировать сессию преждевременно.
++    private var sessionIsActive = false
 +
-+            // Вызываем prepare() до получения формата — иначе outputFormat может вернуть 0 Hz и installTap крашит с IsFormatSampleRateAndChannelCountValid
-+            self.audioEngine?.prepare()
-+
-+            var format: AVAudioFormat = inputNode.outputFormat(forBus: 0)
-+            // Если формат невалиден (0 Hz) — пробуем inputFormat, иначе reject чтобы не крашить
-+            if format.sampleRate <= 0 || format.channelCount <= 0 {
-+                let inputFmt = inputNode.inputFormat(forBus: 0)
-+                if inputFmt.sampleRate > 0 && inputFmt.channelCount > 0 {
-+                    format = inputFmt
-+                } else {
-+                    call.reject("Audio hardware format not ready. Please close other audio apps and try again.")
-+                    return
-+                }
++    private func cleanupRecognitionResources(cancelTask: Bool = false) {
++        if let engine = self.audioEngine {
++            if engine.isRunning {
++                engine.stop()
 +            }
++
++            if self.hasInstalledTap {
++                engine.inputNode.removeTap(onBus: 0)
++                self.hasInstalledTap = false
++            }
++        }
++
++        self.recognitionRequest?.endAudio()
++
++        if cancelTask {
++            self.recognitionTask?.cancel()
++        }
++
++        self.recognitionTask = nil
++        self.recognitionRequest = nil
++        self.speechRecognizer = nil
++        self.audioEngine = nil
++
++        if self.sessionIsActive {
++            self.sessionIsActive = false
++            let session = AVAudioSession.sharedInstance()
++            try? session.setActive(false, options: .notifyOthersOnDeactivation)
++            // После завершения записи возвращаем playback-категорию,
++            // чтобы следующий плеер поднимал уже корректную конфигурацию.
++            try? session.setCategory(
++                .playback,
++                mode: .default,
++                options: [.allowBluetoothA2DP, .allowAirPlay]
++            )
++        }
++    }
  
-             self.recognitionTask = self.speechRecognizer?.recognitionTask(with: self.recognitionRequest!, resultHandler: { (result, error) in
-                 if result != nil {
-@@ -126,7 +142,6 @@ public class SpeechRecognition: CAPPlugin {
-                 self.recognitionRequest?.append(buffer)
+     @objc func available(_ call: CAPPluginCall) {
+         guard let recognizer = SFSpeechRecognizer() else {
+@@ -51,100 +93,139 @@ public class SpeechRecognition: CAPPlugin {
+                 return
              }
  
+-            let language: String = call.getString("language") ?? "en-US"
+-            let maxResults: Int = call.getInt("maxResults") ?? self.defaultMatches
+-            let partialResults: Bool = call.getBool("partialResults") ?? false
++            DispatchQueue.main.async {
++                let language: String = call.getString("language") ?? "en-US"
++                let maxResults: Int = call.getInt("maxResults") ?? self.defaultMatches
++                let partialResults: Bool = call.getBool("partialResults") ?? false
+ 
+-            if self.recognitionTask != nil {
+-                self.recognitionTask?.cancel()
+-                self.recognitionTask = nil
+-            }
++                self.cleanupRecognitionResources(cancelTask: true)
+ 
+-            self.audioEngine = AVAudioEngine.init()
+-            self.speechRecognizer = SFSpeechRecognizer.init(locale: Locale(identifier: language))
++                self.audioEngine = AVAudioEngine.init()
++                self.speechRecognizer = SFSpeechRecognizer.init(locale: Locale(identifier: language))
+ 
+-            let audioSession: AVAudioSession = AVAudioSession.sharedInstance()
+-            do {
+-                try audioSession.setCategory(AVAudioSession.Category.playAndRecord, options: AVAudioSession.CategoryOptions.defaultToSpeaker)
+-                try audioSession.setMode(AVAudioSession.Mode.default)
+                 do {
+-                    try audioSession.setActive(true, options: AVAudioSession.SetActiveOptions.notifyOthersOnDeactivation)
++                    let audioSession: AVAudioSession = AVAudioSession.sharedInstance()
++                    try audioSession.setCategory(AVAudioSession.Category.playAndRecord, options: AVAudioSession.CategoryOptions.defaultToSpeaker)
++                    try audioSession.setMode(AVAudioSession.Mode.default)
++                    // Подсказка системе о желаемой частоте ДО активации — помогает избежать 0 Hz на некоторых устройствах
++                    try? audioSession.setPreferredSampleRate(48000)
++                    // notifyOthersOnDeactivation корректен только для деактивации.
++                    // На активации держим стандартный путь без лишних флагов.
++                    try audioSession.setActive(true, options: [])
++                    self.sessionIsActive = true
+                 } catch {
+-                      call.reject("Microphone is already in use by another application.")
+-                      return
++                    self.cleanupRecognitionResources(cancelTask: true)
++                    call.reject("Microphone is already in use by another application.")
++                    return
+                 }
+-            } catch {
+ 
+-            }
++                guard let audioEngine = self.audioEngine else {
++                    call.reject(self.messageUnknown)
++                    return
++                }
+ 
+-            self.recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
+-            self.recognitionRequest?.shouldReportPartialResults = partialResults
++                guard let speechRecognizer = self.speechRecognizer else {
++                    self.cleanupRecognitionResources(cancelTask: true)
++                    call.reject(self.messageUnknown)
++                    return
++                }
+ 
+-            let inputNode: AVAudioInputNode = self.audioEngine!.inputNode
+-            let format: AVAudioFormat = inputNode.outputFormat(forBus: 0)
++                let recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
++                recognitionRequest.shouldReportPartialResults = partialResults
++                self.recognitionRequest = recognitionRequest
+ 
+-            self.recognitionTask = self.speechRecognizer?.recognitionTask(with: self.recognitionRequest!, resultHandler: { (result, error) in
+-                if result != nil {
+-                    let resultArray: NSMutableArray = NSMutableArray()
+-                    var counter: Int = 0
++                let inputNode: AVAudioInputNode = audioEngine.inputNode
+ 
+-                    for transcription: SFTranscription in result!.transcriptions {
+-                        if maxResults > 0 && counter < maxResults {
+-                            resultArray.add(transcription.formattedString)
+-                        }
+-                        counter+=1
+-                    }
++                // Вызываем prepare() до получения формата — иначе outputFormat может вернуть 0 Hz и installTap крашит с IsFormatSampleRateAndChannelCountValid
++                audioEngine.prepare()
+ 
+-                    if partialResults {
+-                        self.notifyListeners("partialResults", data: ["matches": resultArray])
++                var format: AVAudioFormat = inputNode.outputFormat(forBus: 0)
++                // Если формат невалиден (0 Hz) — пробуем inputFormat, иначе reject чтобы не крашить
++                if format.sampleRate <= 0 || format.channelCount <= 0 {
++                    let inputFmt = inputNode.inputFormat(forBus: 0)
++                    if inputFmt.sampleRate > 0 && inputFmt.channelCount > 0 {
++                        format = inputFmt
+                     } else {
+-                        call.resolve([
+-                            "matches": resultArray
+-                        ])
++                        self.cleanupRecognitionResources(cancelTask: true)
++                        call.reject("Audio hardware format not ready. Please close other audio apps and try again.")
++                        return
+                     }
++                }
+ 
+-                    if result!.isFinal {
+-                        self.audioEngine!.stop()
+-                        self.audioEngine?.inputNode.removeTap(onBus: 0)
++                self.recognitionTask = speechRecognizer.recognitionTask(with: recognitionRequest, resultHandler: { [weak self] (result, error) in
++                    guard let self = self else {
++                        return
++                    }
++
++                    if let result = result {
++                        let resultArray: NSMutableArray = NSMutableArray()
++                        var counter: Int = 0
++
++                        for transcription: SFTranscription in result.transcriptions {
++                            if maxResults > 0 && counter < maxResults {
++                                resultArray.add(transcription.formattedString)
++                            }
++                            counter += 1
++                        }
++
++                        if partialResults {
++                            self.notifyListeners("partialResults", data: ["matches": resultArray])
++                        } else {
++                            call.resolve([
++                                "matches": resultArray
++                            ])
++                        }
++
++                        if result.isFinal {
++                            self.cleanupRecognitionResources(cancelTask: false)
++                            self.notifyListeners("listeningState", data: ["status": "stopped"])
++                            return
++                        }
++                    }
++
++                    if let error = error {
++                        let message = error.localizedDescription
++                        self.cleanupRecognitionResources(cancelTask: false)
+                         self.notifyListeners("listeningState", data: ["status": "stopped"])
+-                        self.recognitionTask = nil
+-                        self.recognitionRequest = nil
++
++                        if !partialResults {
++                            call.reject(message)
++                        }
+                     }
+-                }
++                })
+ 
+-                if error != nil {
+-                    self.audioEngine!.stop()
+-                    self.audioEngine?.inputNode.removeTap(onBus: 0)
+-                    self.recognitionRequest = nil
+-                    self.recognitionTask = nil
+-                    self.notifyListeners("listeningState", data: ["status": "stopped"])
+-                    call.reject(error!.localizedDescription)
++                guard self.recognitionTask != nil else {
++                    self.cleanupRecognitionResources(cancelTask: true)
++                    call.reject(self.messageUnknown)
++                    return
+                 }
+-            })
+ 
+-            inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { (buffer: AVAudioPCMBuffer, _: AVAudioTime) in
+-                self.recognitionRequest?.append(buffer)
+-            }
++                inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] (buffer: AVAudioPCMBuffer, _: AVAudioTime) in
++                    self?.recognitionRequest?.append(buffer)
++                }
++                self.hasInstalledTap = true
+ 
 -            self.audioEngine?.prepare()
-             do {
-                 try self.audioEngine?.start()
-                 self.notifyListeners("listeningState", data: ["status": "started"])
+-            do {
+-                try self.audioEngine?.start()
+-                self.notifyListeners("listeningState", data: ["status": "started"])
+-                if partialResults {
+-                    call.resolve()
++                do {
++                    try audioEngine.start()
++                    self.notifyListeners("listeningState", data: ["status": "started"])
++                    if partialResults {
++                        call.resolve()
++                    }
++                } catch {
++                    self.cleanupRecognitionResources(cancelTask: true)
++                    call.reject(self.messageUnknown)
+                 }
+-            } catch {
+-                call.reject(self.messageUnknown)
+             }
+         }
+     }
+ 
+     @objc func stop(_ call: CAPPluginCall) {
+-        DispatchQueue.global(qos: DispatchQoS.QoSClass.default).async {
++        DispatchQueue.main.async {
+             if let engine = self.audioEngine, engine.isRunning {
+-                engine.stop()
+-                self.recognitionRequest?.endAudio()
++                self.cleanupRecognitionResources(cancelTask: false)
+                 self.notifyListeners("listeningState", data: ["status": "stopped"])
++            } else {
++                self.cleanupRecognitionResources(cancelTask: false)
+             }
+             call.resolve()
+         }
