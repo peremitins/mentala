@@ -22,6 +22,18 @@
 - `SOS / Снять напряжение в теле` использует cue `inhale/exhale` через `useBreathPracticeAudio`; mobile production route нужно прогревать заранее, иначе первый `clench` может пройти с voice, но без cue
 - Для новых локальных настроек `SOS / Снять напряжение в теле` voice по умолчанию включён; уже сохранённый пользовательский toggle не перетирается
 - Выгрузка мыслей: `/quick-help/thought-dump`, textarea + голосовой ввод, handoff в чат через `entryContext`
+- iOS voice dictation через `@capacitor-community/speech-recognition` обязана переживать `No speech detected` без native-crash: plugin teardown должен быть nil-safe, `AVAudioEngine` очищается на main thread, а JS-движок не запускает двойной auto-restart после одного `stopped/end`
+
+## Чат (`/`)
+
+- Диктовка в чате не должна зависеть от активного `isSending`: пока ассистент стримит текущий ответ, частичные и финальные транскрипции всё равно обязаны попадать в поле ввода
+- Защита от устаревших dictation callbacks должна быть session-based, иначе после stop/restart или системного permission prompt старые `partial/final` могут перетирать новое состояние
+- На mobile старт диктовки не должен автоматически переводить textarea в focus: текст обязан вставляться в поле без принудительного поднятия клавиатуры
+- Для native dictation listeners `partialResults/listeningState/end` должны регистрироваться до `SpeechRecognition.start()`, иначе первые фразы теряются, а JS silence timer может преждевременно остановить запись
+- Для mobile dictation scene-audio lock должен браться прямо в `useVoiceDictationInput` до `SpeechRecognition.start()`, а не через отдельный watcher по `speechStore.isListening`, иначе iOS запускает микрофон параллельно с `AudioPlayer stop/destroy` фоновой сцены
+- Когда диктовка завершилась автоматически по таймеру тишины, `scene audio focus` всё равно должен освобождаться по факту перехода `speechStore.isListening -> false`, а не только из ручного `stopListening()`
+- На iOS dictation не должна запускать длинный native fade сцены во время старта микрофона: bridge-flood из серии `AudioPlayer.setVolume(...)` ухудшает распознавание и обрубает транскрипцию
+- Android speech plugin `stop()` обязан завершать plugin call (`call.resolve()`), иначе JS `await stop()` зависает и кнопка микрофона остаётся в состоянии активной записи
 
 ## Медитации
 
@@ -35,6 +47,8 @@
 - Android sleep timer дополнительно ставится в native MediaGrid-патч через `scheduleStop`, чтобы остановка сработала при lockscreen/background, даже если JS timers в WebView заморожены
 - При выборе WebAudio/HTMLAudio не используется эвристика `durationSeconds > 300`; для loop-треков ограничение идёт по фактическому размеру буфера
 - Native route не падает в WebAudio/HTMLAudio fallback при ошибке MediaGrid, иначе старый проблемный путь снова маскирует реальные native-ошибки
+- iOS MediaGrid `destroy()` обязан сначала удалить `AudioSource` из внутреннего registry и только потом best-effort деактивировать `AVAudioSession`; иначе после микрофона source может «застрять», а следующий `create(scene_*)` падает на `already exists`
+- Для iOS `artworkSource` с remote URL должен принимать и `http`, и `https`; нельзя интерпретировать `http://...` как локальный путь `file:///.../public/http://...`
 - Контекст очереди: перемотка вперёд/назад по выбранной секции
 - Медиафайлы версионируются по content-hash, CDN кэш бессрочный
 - В mobile release локальный каталог `public/meditations` не бандлится: аудио/обложки/фоны должны загружаться с `mediaBaseUrl` (`https://media.mentala.app` в production)
@@ -46,6 +60,8 @@
 - Native iOS/Android: сцены используют тот же MediaGrid `NativeAudioService`, что и медитации; web/legacy: loop-сцены остаются на WebAudio, non-loop — HTMLAudio fallback
 - MediaGrid source сцены уничтожается при старте медитации, потому что системный native-плеер и `useForNotification` должны перейти к медитации
 - Глушение при активном медитационном аудио: при старте медитации вызывается `sceneAudio.suspend()`, после остановки/паузы медитации layout watcher возвращает сцену через `sceneAudio.resume()`, если она играла до suspend
+- На iOS voice dictation не должна отпускать scene audio по раннему JS-флагу: scene lock снимается только после завершения native `SpeechRecognition.stop()`, иначе сцена может вернуться слишком рано и создать гонку с медитационным `AudioPlayer`
+- Для iOS speech-recognition `AVAudioSession.setActive(true)` не должен использовать `notifyOthersOnDeactivation`: этот флаг нужен только при деактивации сессии
 - Если медитация завершилась по таймеру, пока приложение в фоне или под локскрином, сцена не должна автозапускаться до возврата приложения в active state
 - `backgroundPlayMinutes`: 0 = стоп в background, N > 0 = стоп через N минут
 

@@ -9,14 +9,14 @@ overrides:
   on-change: 6.0.2
 
 patchedDependencies:
-  '@capacitor-community/speech-recognition':
-    hash: 1b6c30bb5e45c4977eb929caea60a4ef071738786f4749fbb3eecf9a08cb3d3d
-    path: patches/@capacitor-community__speech-recognition.patch
+  '@capacitor-community/speech-recognition@7.0.1':
+    hash: afc69579663989f198ce0aacb2fe6f015b1a331621955826b523559012dff8a3
+    path: patches/@capacitor-community__speech-recognition@7.0.1.patch
   '@capgo/capacitor-social-login@7.20.0':
     hash: 494f63e7b7f9e31eb1bfe9f162a2ac49a7179480cc7c75ac130ec34c5e53b838
     path: patches/@capgo__capacitor-social-login@7.20.0.patch
   '@mediagrid/capacitor-native-audio@2.3.2':
-    hash: 4b3416549d8303ce13fc408419b8b9c99e6e01cc2135909b21ccb23f6193be89
+    hash: 4bc2c25b48894d417cf89e3b3a800acb5a24537fe2eeba956fd57b90ea7a38e8
     path: patches/@mediagrid__capacitor-native-audio@2.3.2.patch
 
 importers:
@@ -31,7 +31,7 @@ importers:
         version: 7.3.0(@capacitor/core@7.4.3)
       '@capacitor-community/speech-recognition':
         specifier: ^7.0.1
-        version: 7.0.1(patch_hash=1b6c30bb5e45c4977eb929caea60a4ef071738786f4749fbb3eecf9a08cb3d3d)(@capacitor/core@7.4.3)
+        version: 7.0.1(patch_hash=afc69579663989f198ce0aacb2fe6f015b1a331621955826b523559012dff8a3)(@capacitor/core@7.4.3)
       '@capacitor/android':
         specifier: ^7.4.4
         version: 7.4.4(@capacitor/core@7.4.3)
@@ -85,7 +85,7 @@ importers:
         version: 3.9.0
       '@mediagrid/capacitor-native-audio':
         specifier: 2.3.2
-        version: 2.3.2(patch_hash=4b3416549d8303ce13fc408419b8b9c99e6e01cc2135909b21ccb23f6193be89)(@capacitor/core@7.4.3)
+        version: 2.3.2(patch_hash=4bc2c25b48894d417cf89e3b3a800acb5a24537fe2eeba956fd57b90ea7a38e8)(@capacitor/core@7.4.3)
       '@nuxtjs/tailwindcss':
         specifier: 6.14.0
         version: 6.14.0(magicast@0.3.5)(ts-node@10.9.2(@types/node@24.5.2)(typescript@5.6.3))
@@ -12571,7 +12571,7 @@ snapshots:
     dependencies:
       '@capacitor/core': 7.4.3
 
-  '@capacitor-community/speech-recognition@7.0.1(patch_hash=1b6c30bb5e45c4977eb929caea60a4ef071738786f4749fbb3eecf9a08cb3d3d)(@capacitor/core@7.4.3)':
+  '@capacitor-community/speech-recognition@7.0.1(patch_hash=afc69579663989f198ce0aacb2fe6f015b1a331621955826b523559012dff8a3)(@capacitor/core@7.4.3)':
     dependencies:
       '@capacitor/core': 7.4.3
 
@@ -14125,7 +14125,7 @@ snapshots:
 
   '@marijn/find-cluster-break@1.0.2': {}
 
-  '@mediagrid/capacitor-native-audio@2.3.2(patch_hash=4b3416549d8303ce13fc408419b8b9c99e6e01cc2135909b21ccb23f6193be89)(@capacitor/core@7.4.3)':
+  '@mediagrid/capacitor-native-audio@2.3.2(patch_hash=4bc2c25b48894d417cf89e3b3a800acb5a24537fe2eeba956fd57b90ea7a38e8)(@capacitor/core@7.4.3)':
     dependencies:
       '@capacitor/core': 7.4.3
 

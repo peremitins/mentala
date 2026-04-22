@@ -12,7 +12,7 @@ def capacitor_pods
   pod 'Capacitor', :path => '../../node_modules/.pnpm/@capacitor+ios@7.4.5_@capacitor+core@7.4.3/node_modules/@capacitor/ios'
   pod 'CapacitorCordova', :path => '../../node_modules/.pnpm/@capacitor+ios@7.4.5_@capacitor+core@7.4.3/node_modules/@capacitor/ios'
   pod 'CapacitorCommunityFcm', :path => '../../node_modules/.pnpm/@capacitor-community+fcm@7.3.0_@capacitor+core@7.4.3/node_modules/@capacitor-community/fcm'
-  pod 'CapacitorCommunitySpeechRecognition', :path => '../../node_modules/.pnpm/@capacitor-community+speech-recognition@7.0.1_patch_hash=1b6c30bb5e45c4977eb929caea60a4_8991de8e83e0815e0ec6d1461c8c8ef5/node_modules/@capacitor-community/speech-recognition'
+  pod 'CapacitorCommunitySpeechRecognition', :path => '../../node_modules/.pnpm/@capacitor-community+speech-recognition@7.0.1_patch_hash=afc69579663989f198ce0aacb2fe6f_aa0345454bd13e7c2f074cf69069b65f/node_modules/@capacitor-community/speech-recognition'
   pod 'CapacitorApp', :path => '../../node_modules/.pnpm/@capacitor+app@7.1.0_@capacitor+core@7.4.3/node_modules/@capacitor/app'
   pod 'CapacitorClipboard', :path => '../../node_modules/.pnpm/@capacitor+clipboard@7.0.2_@capacitor+core@7.4.3/node_modules/@capacitor/clipboard'
   pod 'CapacitorHaptics', :path => '../../node_modules/.pnpm/@capacitor+haptics@7.0.2_@capacitor+core@7.4.3/node_modules/@capacitor/haptics'
@@ -24,7 +24,7 @@ def capacitor_pods
   pod 'CapacitorSplashScreen', :path => '../../node_modules/.pnpm/@capacitor+splash-screen@7.0.3_@capacitor+core@7.4.3/node_modules/@capacitor/splash-screen'
   pod 'CapacitorStatusBar', :path => '../../node_modules/.pnpm/@capacitor+status-bar@7.0.3_@capacitor+core@7.4.3/node_modules/@capacitor/status-bar'
   pod 'CapgoCapacitorSocialLogin', :path => '../../node_modules/.pnpm/@capgo+capacitor-social-login@7.20.0_patch_hash=494f63e7b7f9e31eb1bfe9f162a2ac49a717948_09f6fb5a1db32fd44b4bf5e71e6fb80f/node_modules/@capgo/capacitor-social-login'
-  pod 'MediagridCapacitorNativeAudio', :path => '../../node_modules/.pnpm/@mediagrid+capacitor-native-audio@2.3.2_patch_hash=f0855946516e081a94cdea8ee9a8d37e3a72_4a210e8793d92ba283af67eff2b6d577/node_modules/@mediagrid/capacitor-native-audio'
+  pod 'MediagridCapacitorNativeAudio', :path => '../../node_modules/.pnpm/@mediagrid+capacitor-native-audio@2.3.2_patch_hash=4bc2c25b48894d417cf89e3b3a800acb5a24_4ad0ca218fac7cdc2cafef4a7b717307/node_modules/@mediagrid/capacitor-native-audio'
   pod 'CapacitorNativeSettings', :path => '../../node_modules/.pnpm/capacitor-native-settings@7.0.2_@capacitor+core@7.4.3/node_modules/capacitor-native-settings'
 end
 
