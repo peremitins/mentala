@@ -148,6 +148,16 @@ export default {
             CHIP_4: 'and more',
           },
         },
+        DIARY: {
+          TITLE: 'Gratitude Journal',
+          DESCRIPTION:
+            'Write down what you are grateful for every day. A small habit of noticing the good changes your overall mood.',
+          CHIPS: {
+            CHIP_1: 'Every day',
+            CHIP_2: 'Short entries',
+            CHIP_3: 'Positive focus',
+          },
+        },
       },
     },
     SCENARIOS: {
@@ -322,12 +332,6 @@ export default {
           ICON: '🛡️',
           TITLE: 'Data is protected',
           TEXT: 'Data is transmitted over a secure connection. Access is strictly limited.',
-        },
-        GOOGLE_SIGN_IN: {
-          ID: 'google-sign-in',
-          ICON: '🔑',
-          TITLE: 'Google Sign-In',
-          TEXT: 'We only use email and profile data for sign-in. No access to Gmail, Drive, Calendar, or other Google data.',
         },
       },
     },
