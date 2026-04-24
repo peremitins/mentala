@@ -350,7 +350,7 @@
 
         <p class="mt-4 text-center text-xs text-muted-foreground">
           <template v-if="mode === 'signin' || mode === 'signup'">
-            Входя в аккаунт, вы подтверждаете согласие с
+            Продолжая, вы подтверждаете согласие с
             <a
               :href="termsOfServiceUrl"
               class="underline text-primary-ui hover:text-primary-ui/80"

@@ -1,5 +1,6 @@
 package com.mentala.app.ui;
 
+import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.View;
 
@@ -20,10 +21,16 @@ import com.getcapacitor.annotation.CapacitorPlugin;
  * На части Android WebView, особенно на больших экранах и edge-to-edge режимах,
  * CSS env(safe-area-inset-*) может приходить как 0px. Поэтому берём WindowInsets
  * напрямую из native-слоя и отдаём их в JS.
+ *
+ * ВАЖНО: WindowInsets возвращает значения в физических пикселях, а CSS 1px = 1dp.
+ * Без деления на density получим гигантский отступ на hi-DPI устройствах
+ * (Pixel 8 Pro, любой телефон с density > 1). Поэтому здесь конвертируем
+ * pixels → dp (CSS-px) перед отдачей в JS.
  */
 @CapacitorPlugin(name = "MentalaSafeArea")
 public class MentalaSafeAreaPlugin extends Plugin {
     private static final String TAG = "MentalaSafeAreaPlugin";
+    private static final float DEFAULT_DENSITY = 1f;
 
     private Insets currentInsets = Insets.NONE;
 
@@ -99,11 +106,35 @@ public class MentalaSafeAreaPlugin extends Plugin {
 
     @NonNull
     private JSObject toJsObject(@NonNull Insets insets) {
+        final float density = resolveDensity();
         final JSObject result = new JSObject();
-        result.put("top", insets.top);
-        result.put("right", insets.right);
-        result.put("bottom", insets.bottom);
-        result.put("left", insets.left);
+        result.put("top", pxToDp(insets.top, density));
+        result.put("right", pxToDp(insets.right, density));
+        result.put("bottom", pxToDp(insets.bottom, density));
+        result.put("left", pxToDp(insets.left, density));
         return result;
+    }
+
+    /**
+     * Конвертирует физические пиксели WindowInsets в CSS-px (dp).
+     * На устройствах с density 1.0 вернёт исходное значение без изменений.
+     */
+    private double pxToDp(int px, float density) {
+        if (density <= 0f || !Float.isFinite(density)) return px;
+        return px / (double) density;
+    }
+
+    private float resolveDensity() {
+        try {
+            final DisplayMetrics metrics =
+                getContext().getResources().getDisplayMetrics();
+            if (metrics != null && metrics.density > 0f
+                && Float.isFinite(metrics.density)) {
+                return metrics.density;
+            }
+        } catch (Throwable throwable) {
+            Log.w(TAG, "Failed to read display density, falling back to 1.0", throwable);
+        }
+        return DEFAULT_DENSITY;
     }
 }
