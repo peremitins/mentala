@@ -1,0 +1,1 @@
+ALTER TABLE "session_summaries_user" ADD COLUMN "messages_count" integer DEFAULT 0 NOT NULL;

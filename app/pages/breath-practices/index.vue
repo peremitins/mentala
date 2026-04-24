@@ -386,7 +386,7 @@ function openViewAll(key: BreathPracticeTag) {
 }
 
 function goBack() {
-  navigateTo('/practices');
+  navigateTo('/');
 }
 
 function openPaywall(featureKey: string) {

@@ -331,7 +331,7 @@ const selectedTopicKey = computed<MeditationTopicKey | null>(() => {
 const autoOpenTopicKey = ref<MeditationTopicKey | null>(null);
 
 function goBack() {
-  navigateTo('/practices');
+  navigateTo('/');
 }
 
 onMounted(async () => {

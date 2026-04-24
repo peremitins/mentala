@@ -871,7 +871,9 @@ export const userDevices = pgTable('user_devices', {
   platform: varchar('platform', { length: 20 }).notNull(), // 'ios' | 'android' | 'web'
   appEnv: varchar('app_env', { length: 10 }).notNull().default('dev'), // 'dev' | 'prod'
   // Тип канала доставки: 'native' (Capacitor push) | 'pwa' (Web Push)
-  channelType: varchar('channel_type', { length: 20 }).notNull().default('native'),
+  channelType: varchar('channel_type', { length: 20 })
+    .notNull()
+    .default('native'),
   // Семейство платформы для маршрутизации: 'ios' | 'android' | 'desktop'
   // Nullable для обратной совместимости со старыми записями
   platformFamily: varchar('platform_family', { length: 20 }),
@@ -1854,10 +1856,11 @@ export const billingCreditEntries = pgTable(
     availableAt: timestamp('available_at', { withTimezone: true }),
     postedAt: timestamp('posted_at', { withTimezone: true }),
     reversedAt: timestamp('reversed_at', { withTimezone: true }),
-    sourceReferralRedemptionId: integer('source_referral_redemption_id')
-      .references(() => referralRedemptions.id, {
-        onDelete: 'set null',
-      }),
+    sourceReferralRedemptionId: integer(
+      'source_referral_redemption_id'
+    ).references(() => referralRedemptions.id, {
+      onDelete: 'set null',
+    }),
     sourceSubscriptionId: integer('source_subscription_id').references(
       () => userSubscriptions.id,
       {
@@ -2177,6 +2180,68 @@ export const contentPosts = pgTable(
     topicCreatedIdx: index('idx_cp_topic_created_at').on(
       table.topic,
       table.createdAt
+    ),
+  })
+);
+
+// Пользовательские саммари сессий (редизайн главной, ТЗ п.5).
+// Отдельная сущность от sessionSummaries (handoff для LLM): здесь — человекочитаемый
+// итог для пользователя (shortSummary, keyPoints, recommendations, nextStep),
+// зашифрованный AES-GCM (iv+ct base64). Не ломает обратную совместимость.
+export const sessionSummariesUser = pgTable(
+  'session_summaries_user',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    // Клиентский sessionId (если есть) — на случай, если therapy_sessions ещё нет.
+    clientSessionId: varchar('client_session_id', { length: 120 }),
+    // Ссылка на серверную сессию (может быть null, если саммари создано оффлайн/fallback).
+    therapySessionId: integer('therapy_session_id').references(
+      () => therapySessions.id,
+      { onDelete: 'set null' }
+    ),
+    model: text('model'),
+    schemaVersion: integer('schema_version').notNull().default(1),
+    // Метаданные сессии — не чувствительны, хранятся открыто для сортировки/фильтрации.
+    sessionStartedAt: timestamp('session_started_at', { withTimezone: true }),
+    sessionEndedAt: timestamp('session_ended_at', { withTimezone: true }),
+    durationSeconds: integer('duration_seconds').default(0).notNull(),
+    messagesCount: integer('messages_count').default(0).notNull(),
+    userMessagesCount: integer('user_messages_count').default(0).notNull(),
+    qualifyingUserMessagesCount: integer('qualifying_user_messages_count')
+      .default(0)
+      .notNull(),
+    // Зашифрованный JSON: { shortSummary, keyPoints[], recommendations[], nextStep }.
+    summaryIv: text('summary_iv'),
+    summaryCt: text('summary_ct'),
+    status: varchar('status', { length: 20 }).notNull().default('pending'), // pending | completed | failed
+    errorMessage: text('error_message'),
+    // Момент, когда пользователь увидел/закрыл модалку (для логики "непрочитанного итога").
+    viewedAt: timestamp('viewed_at', { withTimezone: true }),
+    // Trigger, породивший саммари: manual | logout | app-hidden | cron-nightly.
+    trigger: varchar('trigger', { length: 32 }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    // Один пользовательский итог на therapy session.
+    therapySessionUnique: uniqueIndex(
+      'uk_session_summaries_user_therapy_session_id'
+    ).on(table.therapySessionId),
+    userCreatedIdx: index('idx_session_summaries_user_user_created_at').on(
+      table.userId,
+      table.createdAt
+    ),
+    // Быстрый поиск непросмотренного итога пользователя.
+    userViewedIdx: index('idx_session_summaries_user_user_viewed').on(
+      table.userId,
+      table.viewedAt
     ),
   })
 );

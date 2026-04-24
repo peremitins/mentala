@@ -729,14 +729,27 @@ export const useAuthStore = defineStore('auth', {
     },
 
     /**
-     * Сохраняет текущую сессию чата в фоне (не блокирует выполнение)
+     * Завершает активную therapy-сессию до logout.
+     *
+     * На logout больше не запускаем user-summary: transcript уже сохранён на
+     * сервере и будет восстановлен/обработан штатным lifecycle позже.
+     *
+     * Здесь важно именно дождаться `end`, пока авторизация ещё валидна,
+     * иначе запрос может потеряться после очистки session token.
      */
-    _saveSessionInBackground() {
+    async _endChatSessionBeforeLogout() {
       const chat = useChatStore();
-      if (chat.sessionId && chat.messages && chat.messages.length > 0) {
-        void chat.finishAndSave().catch((err) => {
-          console.error('[Auth Store] Фоновое сохранение не удалось:', err);
-        });
+      if (!chat.therapySessionId) {
+        return;
+      }
+
+      try {
+        await chat.endTherapySession();
+      } catch (err) {
+        console.error(
+          '[Auth Store] Завершение therapy session перед logout не удалось:',
+          err
+        );
       }
     },
 
@@ -895,16 +908,16 @@ export const useAuthStore = defineStore('auth', {
         // 1. Останавливаем все активные запросы и озвучки
         await this._stopAllActiveRequests();
 
-        // 2. Сохраняем текущую сессию в фоне (не блокируем logout)
-        this._saveSessionInBackground();
+        // 2. До очистки auth корректно останавливаем billing-сессию.
+        await this._endChatSessionBeforeLogout();
 
-        // 2.1 Отключаем push-уведомления на текущем устройстве до разлогина
+        // 3. Отключаем push-уведомления на текущем устройстве до разлогина
         await this._unregisterPushTokenForDevice();
 
-        // 2.2 Деактивируем web push токен (PWA) до разлогина
+        // 4. Деактивируем web push токен (PWA) до разлогина
         await this._deactivateWebPushToken();
 
-        // 3. Делаем запрос на разлогин в фоне, чтобы UI не зависал.
+        // 5. Делаем запрос на разлогин в фоне, чтобы UI не зависал.
         logoutRequest = (async () => {
           try {
             await useAPI('/api/auth/logout', {
@@ -918,16 +931,16 @@ export const useAuthStore = defineStore('auth', {
           }
         })();
 
-        // 4. Сбрасываем auth-состояние заранее, чтобы не запускался фон.
+        // 6. Сбрасываем auth-состояние заранее, чтобы не запускался фон.
         this._resetAuthState();
 
-        // 5. Сбрасываем все stores
+        // 7. Сбрасываем все stores
         this._resetAllStores();
 
-        // 6. Очищаем токен из localStorage
+        // 8. Очищаем токен из localStorage
         this._clearSessionToken();
 
-        // 7. Переходим на страницу авторизации
+        // 9. Переходим на страницу авторизации — UI разблокирован немедленно.
         await navigateTo('/auth');
       } catch (error) {
         console.error(

@@ -136,15 +136,29 @@ export const approachHints = {
 };
 
 // ===================================================================
-// РОТАЦИЯ ТИПОВ ОТВЕТОВ (3.4 - С КОНКРЕТНОСТЬЮ)
+// РОТАЦИЯ ТИПОВ ОТВЕТОВ (3.5 - БЕЗ ПРИНУДИТЕЛЬНОГО ЗАВЕРШЕНИЯ)
 // ===================================================================
+//
+// Убраны типы recommendation (СИНТЕЗ СЕССИИ) и synthesis (ДОМАШНЕЕ ЗАДАНИЕ):
+// они срабатывали механически по счётчику и прерывали живой диалог в середине
+// разговора. Синтез сессии теперь происходит только явно — через кнопку
+// «Завершить сессию» (endSessionAndSummarize).
+//
+// Цикл из 6 позиций (% 6):
+//   0, 2, 4 → exploration  (базовый режим: исследование + инсайт)
+//   1, 5    → analytics    (аналитика + варианты, каждый 3-й ответ)
+//   3       → support      (поддержка, каждый 6-й ответ)
+//
+// Exploration доминирует — это рабочий режим.
+// Analytics добавляет структуру и варианты раз в несколько обменов.
+// Support появляется реже, на "эмоциональном" месте цикла.
 
 export function getResponseTypeByNumber(responseNumber: number): {
   type: ResponseType;
   description: string;
   structure: string;
 } {
-  const cyclePosition = responseNumber % 10;
+  const cyclePosition = responseNumber % 6;
 
   const types = {
     exploration: {
@@ -159,7 +173,7 @@ export function getResponseTypeByNumber(responseNumber: number): {
       description: 'АНАЛИТИКА + ВАРИАНТЫ (ПРИВЯЗАНЫ К ДЕТАЛЯМ)',
       structure: `1. Короткая рефлексия по сути и эмоции (1 фраза)
 2. Гипотеза о паттерне
-3. 2 ВАРИАНТА (ссылаются на конкретные слова: "когда пользователь сказал X...")
+3. 2 ВАРИАНТА (ссылаются на конкретные слова пользователя)
 4. Максимум 1 вопрос-выбор`,
     },
     support: {
@@ -170,27 +184,11 @@ export function getResponseTypeByNumber(responseNumber: number): {
 3. КОНКРЕТНАЯ фраза/рамка (не просто перефраз)
 4. Опционально: проверка понимания`,
     },
-    recommendation: {
-      type: 'recommendation' as ResponseType,
-      description: 'СИНТЕЗ СЕССИИ',
-      structure: `1. Резюме что мы обсудили (1-2 предложения)
-2. Главный инсайт сессии
-3. Переход к домашнему заданию`,
-    },
-    synthesis: {
-      type: 'synthesis' as ResponseType,
-      description: 'ДОМАШНЕЕ ЗАДАНИЕ',
-      structure: `1. Название упражнения
-2. Конкретные 2-3 шага
-3. "Когда вернёшься расскажи результат"`,
-    },
   };
 
-  if ([1, 3, 5, 9].includes(cyclePosition)) return types.exploration;
-  if ([2, 4, 8].includes(cyclePosition)) return types.analytics;
-  if (cyclePosition === 6) return types.support;
-  if (cyclePosition === 7) return types.recommendation;
-  return types.synthesis;
+  if (cyclePosition === 1 || cyclePosition === 5) return types.analytics;
+  if (cyclePosition === 3) return types.support;
+  return types.exploration;
 }
 
 // ===================================================================
@@ -239,7 +237,6 @@ export const onboarding = `Привет!
 1. Ты рассказываешь, что волнует
 2. Я слушаю и задаю вопросы для углубления
 3. Мы вместе исследуем проблему (+ я даю конкретную опору: фразы, варианты, рамки)
-4. В конце сессии я предложу упражнение для дома
 
 О конфиденциальности:
 Твой разговор конфиденциален. Используй приватное место.
@@ -315,7 +312,8 @@ export const sessionSummaryJson = `Создай подробное резюме 
 export const suggestedChipsSystemPrompt = `Ты генерируешь короткие реплики пользователя для чипов.
 Пиши по-русски, естественно, от первого лица.
 Только text-чипы.
-Без повторов, канцелярита, диагнозов и пустых фраз вроде "расскажи больше".`;
+Без повторов, канцелярита, диагнозов и пустых фраз вроде "расскажи больше".
+Не генерируй вопросы, на которые только сам пользователь знает ответ (например "что меня триггерит?", пользователь не может спросить это у терапевта). Чипы это то, что пользователь мог бы сказать или спросить у терапевта.`;
 
 export const suggestedChipsDeveloperPrompt = `Сгенерируй 1..maxChips чипов.
 Правила:

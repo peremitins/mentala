@@ -12,6 +12,7 @@ export * from './update-policy';
 export * from './promo-code';
 export * from './referral';
 export * from './access-code';
+export * from './sessionSummaryUser';
 export * from '../navigation';
 
 const THOUGHT_DUMP_ENTRY_CONTEXT_MAX_CHARS = 2_500;
@@ -528,9 +529,7 @@ export type TherapyApproach =
 export type ResponseType =
   | 'exploration'
   | 'analytics'
-  | 'support'
-  | 'recommendation'
-  | 'synthesis';
+  | 'support';
 
 /**
  * Дополняем существующий ChatSession интерфейс

@@ -100,7 +100,8 @@ export const summaryStore = {
   },
 
   async getHandoffSummaryByTherapySessionId<T>(
-    therapySessionId: number
+    therapySessionId: number,
+    userId?: number | string
   ): Promise<{
     summary: T;
     therapySessionId: number;
@@ -110,10 +111,16 @@ export const summaryStore = {
       .select()
       .from(sessionSummaries)
       .where(
-        and(
-          eq(sessionSummaries.therapySessionId, therapySessionId),
-          eq(sessionSummaries.summaryKind, 'handoff')
-        )
+        userId !== undefined
+          ? and(
+              eq(sessionSummaries.therapySessionId, therapySessionId),
+              eq(sessionSummaries.summaryKind, 'handoff'),
+              eq(sessionSummaries.userId, String(userId))
+            )
+          : and(
+              eq(sessionSummaries.therapySessionId, therapySessionId),
+              eq(sessionSummaries.summaryKind, 'handoff')
+            )
       )
       .limit(1);
 
@@ -150,10 +157,17 @@ export const summaryStore = {
     return rows.length > 0;
   },
 
-  async deleteByTherapySessionId(therapySessionId: number): Promise<void> {
+  async deleteByTherapySessionId(therapySessionId: number, userId?: number | string): Promise<void> {
     await db
       .delete(sessionSummaries)
-      .where(eq(sessionSummaries.therapySessionId, therapySessionId));
+      .where(
+        userId !== undefined
+          ? and(
+              eq(sessionSummaries.therapySessionId, therapySessionId),
+              eq(sessionSummaries.userId, String(userId))
+            )
+          : eq(sessionSummaries.therapySessionId, therapySessionId)
+      );
   },
 
   async deleteByUserId(userId: number | string): Promise<void> {

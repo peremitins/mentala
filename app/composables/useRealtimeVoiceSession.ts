@@ -1214,6 +1214,11 @@ export function useRealtimeVoiceSession(options?: {
 
       sessionId.value = parsed.session.id;
       therapySessionId.value = parsed.session.therapySessionId;
+      // Синхронизируем therapySessionId в chat store: без этого
+      // endSessionAndSummarize() не знает об активной голосовой сессии
+      // (store.therapySessionId остаётся null для чистого voice-flow)
+      // и тихо пропускает POST /api/session-summaries-user.
+      chat.therapySessionId = parsed.session.therapySessionId;
       clientPlatform.value = parsed.session.clientPlatform;
       weeklyQuota.value = parsed.weeklyAi;
 

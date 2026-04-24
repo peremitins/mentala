@@ -976,12 +976,7 @@ async function goToChat(entry: SosEntry, afterPractice = false) {
       sos_entry: entry,
       after_practice: afterPractice || undefined,
     };
-    await navigateTo({
-      path: '/',
-      query: {
-        screen: 'chat',
-      },
-    });
+    await navigateTo('/chat');
     void chat.startConversation();
   } catch (error: unknown) {
     console.error('[SOS] Failed to open chat from SOS:', error);

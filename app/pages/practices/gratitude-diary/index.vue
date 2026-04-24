@@ -373,7 +373,7 @@ function handleBack() {
     router.back();
     return;
   }
-  void navigateTo('/practices');
+  void navigateTo('/');
 }
 
 function openCreateEntry() {

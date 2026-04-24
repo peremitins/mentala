@@ -3,6 +3,7 @@ import {
   fitDurableUserMemoryForPrompt,
   normalizeHandoffSummary,
   normalizeDurableUserMemory,
+  serializeActiveBacklogForPrompt,
   serializeHandoffSummaryForPrompt,
   serializeDurableUserMemoryForPrompt,
 } from '../server/application/chat/chatMemory.types';
@@ -155,5 +156,65 @@ describe('durable user memory', () => {
       themesActive: ['тревога перед разговором'],
       unfinishedThreads: ['подготовить одну честную фразу'],
     });
+  });
+
+  it('не создаёт active backlog block для первого пользовательского сообщения после welcome', () => {
+    const serialized = serializeActiveBacklogForPrompt([
+      {
+        role: 'assistant',
+        content: 'Привет. О чём хочешь поговорить?',
+      },
+      {
+        role: 'user',
+        content: 'Мне тревожно перед созвоном',
+      },
+    ]);
+
+    expect(serialized).toBeNull();
+  });
+
+  it('строит active backlog block из предыдущих turn и не дублирует текущее "давай продолжим"', () => {
+    const serialized = serializeActiveBacklogForPrompt([
+      {
+        role: 'assistant',
+        content: 'С чего тебе удобнее начать?',
+      },
+      {
+        role: 'user',
+        content: 'Давай поговорим о моём проекте Mentala',
+      },
+      {
+        role: 'assistant',
+        content: 'Какой аспект приложения тебе сейчас наиболее интересен?',
+      },
+      {
+        role: 'user',
+        content: 'Я хочу обсудить функционал приложения.',
+      },
+      {
+        role: 'assistant',
+        content: 'Какие идеи у тебя уже есть для функционала?',
+      },
+      {
+        role: 'user',
+        content: 'Мне бы хотелось добавить социальные функции.',
+      },
+      {
+        role: 'assistant',
+        content: 'Можно рассмотреть групповые чаты и обмен достижениями.',
+      },
+      {
+        role: 'user',
+        content: 'Давай продолжим',
+      },
+    ]);
+
+    expect(serialized).toContain(
+      'Активный контекст текущей несуммаризованной сессии'
+    );
+    expect(serialized).toContain('проекте Mentala');
+    expect(serialized).toContain('функционал приложения');
+    expect(serialized).toContain('социальные функции');
+    expect(serialized).not.toContain('"content":"Давай продолжим"');
   });
 });
