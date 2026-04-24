@@ -30,15 +30,6 @@
         <slot v-if="$slots.trailing" name="trailing" />
         <template v-else>
           <button
-            v-if="!route.path.startsWith('/quick-help')"
-            type="button"
-            class="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-foreground/80 transition hover:border-white/20 hover:text-foreground"
-            aria-label="Быстрая помощь"
-            @click="openQuickHelp"
-          >
-            <IconHeartPulse class="h-4 w-4" />
-          </button>
-          <button
             type="button"
             class="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-foreground/80 transition hover:border-white/20 hover:text-foreground"
             aria-label="Настройки атмосферы"
@@ -54,7 +45,6 @@
 
 <script lang="ts" setup>
 import IconChevronLeft from '~icons/lucide/chevron-left';
-import IconHeartPulse from '~icons/lucide/heart-pulse';
 import IconSlidersHorizontal from '~icons/lucide/sliders-horizontal';
 import { useRoute, useRouter } from 'vue-router';
 
@@ -82,10 +72,6 @@ const openSceneSelection = async () => {
   // Открываем страницу настроек атмосферы напрямую.
   await router.push('/scene-selection');
 };
-
-function openQuickHelp() {
-  void router.push('/quick-help');
-}
 
 const detailTrackId = computed(() => {
   const raw = route.query.trackId;

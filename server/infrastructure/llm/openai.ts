@@ -491,10 +491,10 @@ export const openaiProvider: LlmProviderPort = {
           typeof options?.therapySessionId === 'number'
             ? options.therapySessionId
             : null;
+        const canPersistServerTranscript =
+          therapySessionId !== null && Number.isFinite(numericUserId);
         const canUseSessionMemory =
-          enablePreviousResponseId &&
-          therapySessionId !== null &&
-          Number.isFinite(numericUserId);
+          enablePreviousResponseId && canPersistServerTranscript;
 
         // Вычисляем responseNumber для ротации типов ответов
         // Считаем количество сообщений пользователя в текущей сессии
@@ -549,11 +549,13 @@ export const openaiProvider: LlmProviderPort = {
                   lastUserMessage,
                 ]),
                 isSafeUserTurn: Boolean(lastUserMessage.trim()),
+                requestMessages: messages,
               })
             : {
                 previousResponseId: null,
                 shouldSendBootstrap: true,
                 isFirstSession: true,
+                activeBacklogContext: null,
                 durableUserMemory: null,
                 handoffSummary: null,
                 runtimeCompactState: null,
@@ -570,6 +572,7 @@ export const openaiProvider: LlmProviderPort = {
           memoryContext.previousResponseId || undefined;
         const isFirst = memoryContext.isFirstSession;
         const sessionMemoryBlocks = buildSessionMemoryPromptBlocks({
+          activeBacklogContext: memoryContext.activeBacklogContext,
           durableUserMemory: memoryContext.durableUserMemory,
           handoffSummary: memoryContext.handoffSummary,
           runtimeCompactState: memoryContext.runtimeCompactState,
@@ -716,12 +719,12 @@ export const openaiProvider: LlmProviderPort = {
           res?.response_id ||
           (res?.output?.[0] as any)?.id;
 
-        if (canUseSessionMemory && therapySessionId !== null) {
+        if (canPersistServerTranscript && therapySessionId !== null) {
           await recordSuccessfulChatTurn({
             userId: numericUserId,
             therapySessionId,
             turnIndex: responseNumber,
-            enableMemory: true,
+            enableMemory: canUseSessionMemory,
             conversationMessages: messages,
             userMessage: lastUserMessage,
             assistantMessage: content,
@@ -834,10 +837,10 @@ export const openaiProvider: LlmProviderPort = {
       typeof options?.therapySessionId === 'number'
         ? options.therapySessionId
         : null;
+    const canPersistServerTranscript =
+      therapySessionId !== null && Number.isFinite(numericUserId);
     const canUseSessionMemory =
-      enablePreviousResponseId &&
-      therapySessionId !== null &&
-      Number.isFinite(numericUserId);
+      enablePreviousResponseId && canPersistServerTranscript;
 
     // Проверяем, является ли это стартом с welcome-экрана (messages пустой)
     const isWelcomeStart = (messages?.length || 0) === 0;
@@ -881,11 +884,13 @@ export const openaiProvider: LlmProviderPort = {
                 String(options?.userPrompt || ''),
               ]),
               isSafeUserTurn: false,
+              requestMessages: messages,
             })
           : {
               previousResponseId: null,
               shouldSendBootstrap: true,
               isFirstSession: true,
+              activeBacklogContext: null,
               durableUserMemory: null,
               handoffSummary: null,
               runtimeCompactState: null,
@@ -900,6 +905,7 @@ export const openaiProvider: LlmProviderPort = {
         welcomeMemoryContext.previousResponseId || undefined;
       const isFirst = welcomeMemoryContext.isFirstSession;
       const sessionMemoryBlocks = buildSessionMemoryPromptBlocks({
+        activeBacklogContext: welcomeMemoryContext.activeBacklogContext,
         durableUserMemory: welcomeMemoryContext.durableUserMemory,
         handoffSummary: welcomeMemoryContext.handoffSummary,
         runtimeCompactState: welcomeMemoryContext.runtimeCompactState,
@@ -1257,11 +1263,13 @@ export const openaiProvider: LlmProviderPort = {
               lastUserMessage,
             ]),
             isSafeUserTurn: Boolean(lastUserMessage.trim()),
+            requestMessages: messages,
           })
         : {
             previousResponseId: null,
             shouldSendBootstrap: true,
             isFirstSession: true,
+            activeBacklogContext: null,
             durableUserMemory: null,
             handoffSummary: null,
             runtimeCompactState: null,
@@ -1278,6 +1286,7 @@ export const openaiProvider: LlmProviderPort = {
     const previousResponseId = memoryContext.previousResponseId || undefined;
     const isFirst = memoryContext.isFirstSession;
     const sessionMemoryBlocks = buildSessionMemoryPromptBlocks({
+      activeBacklogContext: memoryContext.activeBacklogContext,
       durableUserMemory: memoryContext.durableUserMemory,
       handoffSummary: memoryContext.handoffSummary,
       runtimeCompactState: memoryContext.runtimeCompactState,
@@ -1509,12 +1518,12 @@ export const openaiProvider: LlmProviderPort = {
       },
     });
 
-    if (canUseSessionMemory && therapySessionId !== null) {
+    if (canPersistServerTranscript && therapySessionId !== null) {
       await recordSuccessfulChatTurn({
         userId: numericUserId,
         therapySessionId,
         turnIndex: responseNumber,
-        enableMemory: true,
+        enableMemory: canUseSessionMemory,
         conversationMessages: messages,
         userMessage: lastUserMessage,
         assistantMessage: streamedText,

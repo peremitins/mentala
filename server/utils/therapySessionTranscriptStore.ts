@@ -1,4 +1,4 @@
-import { and, asc, eq, gt } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray } from 'drizzle-orm';
 import { db } from '../infrastructure/db/client';
 import { therapySessionMessages } from '../infrastructure/db/schema';
 import { decryptPayload, encryptPayload } from './securePayload';
@@ -68,12 +68,20 @@ export const therapySessionTranscriptStore = {
   },
 
   async getMessages(
-    therapySessionId: number
+    therapySessionId: number,
+    userId?: number
   ): Promise<TherapySessionTranscriptMessage[]> {
     const rows = await db
       .select()
       .from(therapySessionMessages)
-      .where(eq(therapySessionMessages.therapySessionId, therapySessionId))
+      .where(
+        userId !== undefined
+          ? and(
+              eq(therapySessionMessages.therapySessionId, therapySessionId),
+              eq(therapySessionMessages.userId, userId)
+            )
+          : eq(therapySessionMessages.therapySessionId, therapySessionId)
+      )
       .orderBy(
         asc(therapySessionMessages.turnIndex),
         asc(therapySessionMessages.id)
@@ -90,15 +98,28 @@ export const therapySessionTranscriptStore = {
   async getMessagesAfter(params: {
     therapySessionId: number;
     afterMessageId: number;
+    userId?: number;
   }): Promise<TherapySessionTranscriptMessage[]> {
     const rows = await db
       .select()
       .from(therapySessionMessages)
       .where(
-        and(
-          eq(therapySessionMessages.therapySessionId, params.therapySessionId),
-          gt(therapySessionMessages.id, params.afterMessageId)
-        )
+        params.userId !== undefined
+          ? and(
+              eq(
+                therapySessionMessages.therapySessionId,
+                params.therapySessionId
+              ),
+              gt(therapySessionMessages.id, params.afterMessageId),
+              eq(therapySessionMessages.userId, params.userId)
+            )
+          : and(
+              eq(
+                therapySessionMessages.therapySessionId,
+                params.therapySessionId
+              ),
+              gt(therapySessionMessages.id, params.afterMessageId)
+            )
       )
       .orderBy(
         asc(therapySessionMessages.turnIndex),
@@ -137,7 +158,10 @@ export const therapySessionTranscriptStore = {
     await client
       .delete(therapySessionMessages)
       .where(
-        eq(therapySessionMessages.therapySessionId, params.therapySessionId)
+        and(
+          eq(therapySessionMessages.therapySessionId, params.therapySessionId),
+          eq(therapySessionMessages.userId, params.userId)
+        )
       );
 
     if (!normalizedMessages.length) {
@@ -175,24 +199,71 @@ export const therapySessionTranscriptStore = {
     return rows[rows.length - 1]?.id ?? null;
   },
 
-  async countUserMessages(therapySessionId: number): Promise<number> {
+  async countUserMessages(
+    therapySessionId: number,
+    userId?: number
+  ): Promise<number> {
     const rows = await db
       .select({ id: therapySessionMessages.id })
       .from(therapySessionMessages)
       .where(
-        and(
-          eq(therapySessionMessages.therapySessionId, therapySessionId),
-          eq(therapySessionMessages.role, 'user')
-        )
+        userId !== undefined
+          ? and(
+              eq(therapySessionMessages.therapySessionId, therapySessionId),
+              eq(therapySessionMessages.role, 'user'),
+              eq(therapySessionMessages.userId, userId)
+            )
+          : and(
+              eq(therapySessionMessages.therapySessionId, therapySessionId),
+              eq(therapySessionMessages.role, 'user')
+            )
       );
 
     return rows.length;
   },
 
-  async deleteByTherapySessionId(therapySessionId: number): Promise<void> {
+  async deleteByTherapySessionId(
+    therapySessionId: number,
+    userId?: number
+  ): Promise<void> {
     await db
       .delete(therapySessionMessages)
-      .where(eq(therapySessionMessages.therapySessionId, therapySessionId));
+      .where(
+        userId !== undefined
+          ? and(
+              eq(therapySessionMessages.therapySessionId, therapySessionId),
+              eq(therapySessionMessages.userId, userId)
+            )
+          : eq(therapySessionMessages.therapySessionId, therapySessionId)
+      );
+  },
+
+  async deleteByTherapySessionIds(
+    therapySessionIds: number[],
+    userId?: number
+  ): Promise<void> {
+    const normalizedIds = Array.from(
+      new Set(
+        therapySessionIds.filter(
+          (sessionId) => Number.isInteger(sessionId) && sessionId > 0
+        )
+      )
+    );
+
+    if (!normalizedIds.length) {
+      return;
+    }
+
+    await db
+      .delete(therapySessionMessages)
+      .where(
+        userId !== undefined
+          ? and(
+              inArray(therapySessionMessages.therapySessionId, normalizedIds),
+              eq(therapySessionMessages.userId, userId)
+            )
+          : inArray(therapySessionMessages.therapySessionId, normalizedIds)
+      );
   },
 
   async deleteByUserId(userId: number): Promise<void> {
