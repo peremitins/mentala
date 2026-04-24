@@ -248,9 +248,15 @@ deploy_android_debug_build_to_connected_devices() {
 }
 
 if [ "$DEVICE_TYPE" = "emulator" ]; then
-  # Для эмулятора используем специальный IP
-  SERVER_URL="http://10.0.2.2:${DEV_SERVER_PORT}"
-  echo "🔧 Настройка для эмулятора: $SERVER_URL"
+  # Android-эмулятор обращается к хосту через специальный alias 10.0.2.2.
+  # iOS симулятор запускается прямо на macOS и видит хост через localhost.
+  # Поэтому для каждой платформы нужен свой URL.
+  ANDROID_SERVER_URL="http://10.0.2.2:${DEV_SERVER_PORT}"
+  IOS_SERVER_URL="http://localhost:${DEV_SERVER_PORT}"
+  SERVER_URL="$ANDROID_SERVER_URL"
+  echo "🔧 Настройка для эмулятора:"
+  echo "   Android: $ANDROID_SERVER_URL"
+  echo "   iOS:     $IOS_SERVER_URL"
 elif [ "$DEVICE_TYPE" = "device" ]; then
   # Для реального устройства получаем локальный IP (для macOS)
   LOCAL_IP=$(ipconfig getifaddr en0 || ipconfig getifaddr en1)
@@ -365,7 +371,11 @@ elif [ "$DEVICE_TYPE" = "device-wireless" ]; then
 elif [ -n "$SERVER_URL" ]; then
   ensure_dev_server_is_available "http://127.0.0.1:${DEV_SERVER_PORT}"
   echo "📦 Синхронизация с dev-сервером..."
-  run_capacitor_sync && CAPACITOR_SERVER_URL="$SERVER_URL" node scripts/fix-capacitor-config.js
+  run_capacitor_sync && \
+    CAPACITOR_SERVER_URL="$SERVER_URL" \
+    CAPACITOR_SERVER_URL_ANDROID="${ANDROID_SERVER_URL:-$SERVER_URL}" \
+    CAPACITOR_SERVER_URL_IOS="${IOS_SERVER_URL:-$SERVER_URL}" \
+    node scripts/fix-capacitor-config.js
 else
   echo "📦 Синхронизация со статическими файлами..."
   clean_nuxt_static_build_cache

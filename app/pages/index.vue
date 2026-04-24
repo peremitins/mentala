@@ -26,7 +26,7 @@
       <div class="relative z-10 space-y-4">
         <div class="space-y-2">
           <div class="flex items-center gap-2">
-            <div class="w-[80px]">
+            <div class="w-[60px]">
               <img
                 src="../assets/images/ai_terapist.webp"
                 loading="lazy"
@@ -92,7 +92,7 @@
             />
           </div>
           <div class="space-y-1">
-            <h3 class="text-base font-semibold text-foreground">
+            <h3 class="text-sm font-semibold text-foreground">
               Быстрая помощь
             </h3>
             <p class="text-xs text-foreground/75">
@@ -125,7 +125,7 @@
             />
           </div>
           <div class="space-y-1">
-            <h3 class="text-base font-semibold text-foreground">
+            <h3 class="text-sm font-semibold text-foreground">
               Дыхательные практики
             </h3>
             <p class="text-xs text-foreground/75">
@@ -159,7 +159,7 @@
             />
           </div>
           <div class="space-y-1">
-            <h3 class="text-base font-semibold text-foreground">Медитации</h3>
+            <h3 class="text-sm font-semibold text-foreground">Медитации</h3>
             <p class="text-xs text-foreground/75">
               Музыка и звуки для отдыха и концентрации
             </p>
@@ -197,7 +197,7 @@
             />
           </div>
           <div class="space-y-1">
-            <h3 class="text-base font-semibold text-foreground">Медитации</h3>
+            <h3 class="text-sm font-semibold text-foreground">Медитации</h3>
             <p class="text-xs text-foreground/75">
               {{
                 getLockedFeatureLabel(
@@ -234,7 +234,7 @@
             />
           </div>
           <div class="space-y-1">
-            <h3 class="text-base font-semibold text-foreground">
+            <h3 class="text-sm font-semibold text-foreground">
               Дневник благодарности
             </h3>
             <p class="text-xs text-foreground/75">
@@ -274,7 +274,7 @@
             />
           </div>
           <div class="space-y-1">
-            <h3 class="text-base font-semibold text-foreground">
+            <h3 class="text-sm font-semibold text-foreground">
               Дневник благодарности
             </h3>
             <p class="text-xs text-foreground/75">
