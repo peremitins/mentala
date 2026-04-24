@@ -198,9 +198,9 @@
       "on-change": "6.0.2"
     },
     "patchedDependencies": {
-      "@capacitor-community/speech-recognition": "patches/@capacitor-community__speech-recognition.patch",
       "@capgo/capacitor-social-login@7.20.0": "patches/@capgo__capacitor-social-login@7.20.0.patch",
-      "@mediagrid/capacitor-native-audio@2.3.2": "patches/@mediagrid__capacitor-native-audio@2.3.2.patch"
+      "@mediagrid/capacitor-native-audio@2.3.2": "patches/@mediagrid__capacitor-native-audio@2.3.2.patch",
+      "@capacitor-community/speech-recognition@7.0.1": "patches/@capacitor-community__speech-recognition@7.0.1.patch"
     }
   },
   "config": {

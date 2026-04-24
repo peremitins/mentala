@@ -11,20 +11,100 @@ export function createNativeEngine(): SpeechEngine {
   let language = 'ru-RU';
   let SpeechRecognition: any;
   let lastPartialText = ''; // Сохраняем последний partial для передачи в finalCb
+  let restartTimer: ReturnType<typeof setTimeout> | null = null;
+  let restartInFlight = false;
+  let stopInFlight = false;
+  let listenersBound = false;
 
   const resetSilence = () => {
     clearTimeout(silenceTimer);
     silenceTimer = setTimeout(stop, silenceMs);
   };
 
+  const clearRestartTimer = () => {
+    if (restartTimer) {
+      clearTimeout(restartTimer);
+      restartTimer = null;
+    }
+  };
+
+  const scheduleRestart = () => {
+    if (!speechStore.isListening || restartInFlight || stopInFlight) return;
+
+    clearRestartTimer();
+    restartTimer = setTimeout(() => {
+      restartTimer = null;
+      if (!speechStore.isListening || restartInFlight || stopInFlight) return;
+
+      if (lastPartialText) {
+        console.log('[NativeEngine] Calling finalCb with:', lastPartialText);
+        finalCb?.(lastPartialText);
+        lastPartialText = '';
+      }
+
+      restartInFlight = true;
+      void startInternal().finally(() => {
+        restartInFlight = false;
+      });
+    }, 300);
+  };
+
+  const bindRecognitionListeners = () => {
+    if (!SpeechRecognition || listenersBound) return;
+
+    SpeechRecognition.addListener('partialResults', (e: any) => {
+      const text = e.matches?.[0] || '';
+      // Сохраняем только если не пустой, чтобы не потерять последний текст.
+      if (text) lastPartialText = text;
+      partialCb?.(text);
+      resetSilence();
+    });
+
+    SpeechRecognition.addListener('result', (e: any) => {
+      const text = e.matches?.[0] || '';
+      finalCb?.(text);
+      // НЕ вызываем stop() автоматически - пусть микрофон продолжает слушать.
+      resetSilence();
+    });
+
+    SpeechRecognition.addListener('listeningState', (data: any) => {
+      const status = data?.status || '';
+      if (status === 'stopped' && speechStore.isListening && !stopInFlight) {
+        console.log(
+          '[NativeEngine] Plugin auto-stopped, lastPartialText:',
+          lastPartialText
+        );
+        scheduleRestart();
+      }
+    });
+
+    SpeechRecognition.addListener('end', () => {
+      if (speechStore.isListening && !stopInFlight) {
+        console.log(
+          '[NativeEngine] Plugin ended, lastPartialText:',
+          lastPartialText
+        );
+        scheduleRestart();
+      }
+    });
+
+    listenersBound = true;
+  };
+
   async function start(opts?: SpeechEngineOptions) {
     if (speechStore.isListening) return;
-    language = opts?.language || language;
-    silenceMs = opts?.silenceMs ?? silenceMs;
-
     const platform = Capacitor.getPlatform();
     if (platform !== 'ios' && platform !== 'android')
       throw new Error('Native SR only on mobile');
+    const isIos = platform === 'ios';
+
+    language = opts?.language || language;
+    silenceMs = opts?.silenceMs ?? silenceMs;
+    if (isIos) {
+      // На iOS partial callbacks приходят менее стабильно, чем на web/android,
+      // поэтому слишком короткий auto-stop обрубает запись прямо во время фразы.
+      silenceMs = Math.max(silenceMs, 10000);
+    }
 
     const mod = await import('@capacitor-community/speech-recognition');
     SpeechRecognition = mod.SpeechRecognition;
@@ -75,10 +155,12 @@ export function createNativeEngine(): SpeechEngine {
     // Чистим старые слушатели перед добавлением новых
     try {
       await SpeechRecognition.removeAllListeners();
+      listenersBound = false;
     } catch {
       // Игнорируем отсутствие старых listeners.
     }
 
+    bindRecognitionListeners();
     speechStore.isListening = true;
     await SpeechRecognition.start({
       language,
@@ -86,74 +168,11 @@ export function createNativeEngine(): SpeechEngine {
       partialResults: true,
     });
     resetSilence();
-
-    SpeechRecognition.addListener('partialResults', (e: any) => {
-      const text = e.matches?.[0] || '';
-      // Сохраняем только если не пустой, чтобы не потерять последний текст
-      if (text) lastPartialText = text;
-      partialCb?.(text);
-      resetSilence();
-    });
-    SpeechRecognition.addListener('result', (e: any) => {
-      const text = e.matches?.[0] || '';
-      finalCb?.(text);
-      // НЕ вызываем stop() автоматически - пусть микрофон продолжает слушать
-      resetSilence();
-    });
-
-    // Если плагин сам остановился - перезапускаем
-    SpeechRecognition.addListener('listeningState', (data: any) => {
-      const status = data?.status || '';
-      if (status === 'stopped' && speechStore.isListening) {
-        console.log(
-          '[NativeEngine] Plugin auto-stopped, lastPartialText:',
-          lastPartialText
-        );
-        // Перезапускаем распознавание
-        setTimeout(() => {
-          if (speechStore.isListening) {
-            // Сохраняем последний partial как final перед перезапуском
-            if (lastPartialText) {
-              console.log(
-                '[NativeEngine] Calling finalCb with:',
-                lastPartialText
-              );
-              finalCb?.(lastPartialText);
-              lastPartialText = '';
-            }
-            startInternal();
-          }
-        }, 300);
-      }
-    });
-
-    SpeechRecognition.addListener('end', () => {
-      if (speechStore.isListening) {
-        console.log(
-          '[NativeEngine] Plugin ended, lastPartialText:',
-          lastPartialText
-        );
-        setTimeout(() => {
-          if (speechStore.isListening) {
-            // Сохраняем последний partial как final перед перезапуском
-            if (lastPartialText) {
-              console.log(
-                '[NativeEngine] Calling finalCb with:',
-                lastPartialText
-              );
-              finalCb?.(lastPartialText);
-              lastPartialText = '';
-            }
-            startInternal();
-          }
-        }, 300);
-      }
-    });
   }
 
   // Внутренняя функция для автоперезапуска
   async function startInternal() {
-    if (!SpeechRecognition || !speechStore.isListening) return;
+    if (!SpeechRecognition || !speechStore.isListening || stopInFlight) return;
 
     try {
       await SpeechRecognition.start({
@@ -168,13 +187,18 @@ export function createNativeEngine(): SpeechEngine {
   }
 
   async function stop() {
-    if (!speechStore.isListening) return;
-    speechStore.isListening = false;
+    if (!speechStore.isListening || stopInFlight) return;
+    stopInFlight = true;
     clearTimeout(silenceTimer);
+    clearRestartTimer();
+    restartInFlight = false;
     try {
       await SpeechRecognition?.stop();
     } catch {
       // Игнорируем stop-ошибку при уже завершённом распознавании.
+    } finally {
+      speechStore.isListening = false;
+      stopInFlight = false;
     }
   }
 

@@ -12,11 +12,12 @@
 ## Публичный landing
 
 - Публичный сайт `mentala.app` живёт в `apps/landing` как отдельное Nuxt-приложение
-- Ключевые публичные маршруты лендинга: `/`, `/support`, `/account-deletion`
+- Ключевые публичные маршруты лендинга: `/`, `/support`, `/account-deletion`, `/go/android`
 - Страница `/account-deletion` используется как публичный URL для store-review и объясняет:
   - как запросить удаление аккаунта;
   - какие данные удаляются в Mentala;
   - какие данные могут храниться ограниченный срок
+- `/go/android` — стабильный first-party redirect для QR-кодов Android: сам QR кодируется в HTTPS-ссылку Mentala, а открытие `Google Play` происходит уже на устройстве; маршрут должен оставаться `noindex`
 - Внутренние ссылки лендинга должны оставаться относительными (`/support`, `/account-deletion`), чтобы local dev и preview не уводили пользователя на production-домен
 - Абсолютный origin для canonical/og на лендинге берётся из `NUXT_PUBLIC_LANDING_SITE_URL`, а при отсутствии переменной в local dev вычисляется из текущего request origin
 
@@ -90,6 +91,7 @@ server/
 ## Логирование
 
 - Pino + Sentry, request_id/user_id/service/env всегда в логах
+- Транзакционные SMTP-письма (auth verification / password reset) должны отправляться с явными SMTP timeout-ами и коротким retry только для transient socket-ошибок (`ESOCKET`, `ECONNRESET`, `ETIMEDOUT`, `ECONNECTION`, `EPIPE`), чтобы кратковременный обрыв сети не ломал auth-flow
 
 ## Связанные документы
 

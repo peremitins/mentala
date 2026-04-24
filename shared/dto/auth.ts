@@ -17,6 +17,8 @@ export const AuthRegisterDto = z.object({
 export const AuthRegisterResponseDto = z.object({
   userId: z.number().int().positive(),
   email: z.string().email(),
+  verificationEmailSent: z.boolean().optional(),
+  verificationEmailMessage: z.string().optional(),
 });
 
 export const AuthRegisterValidationErrorDto = z.object({

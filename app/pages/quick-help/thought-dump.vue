@@ -325,13 +325,7 @@ async function handoffToChat() {
     dump_text: handoffText,
   };
 
-  await navigateTo({
-    path: '/',
-    query: {
-      screen: 'chat',
-    },
-  });
-
+  await navigateTo('/chat');
   void chat.startConversation();
 }
 

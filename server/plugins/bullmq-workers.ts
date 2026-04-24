@@ -64,6 +64,9 @@ export default defineNitroPlugin(async () => {
     const { startTelegramAlertsWorker } = await import(
       '@/server/application/telegram/workers/telegramAlerts.worker'
     );
+    const { startStaleSessionSummarizerWorker } = await import(
+      '@/server/application/sessionSummaryUser/workers/staleSessionSummarizer.worker'
+    );
 
     // 1. AI Text Pool Worker
     startAiTextPoolWorker();
@@ -82,6 +85,10 @@ export default defineNitroPlugin(async () => {
 
     // 6. Telegram Alerts Worker
     startTelegramAlertsWorker();
+
+    // 7. Nightly Session Summarizer Worker (cron: ежедневно закрывает idle
+    //    therapy-сессии и пытается создать пользовательский итог).
+    startStaleSessionSummarizerWorker();
 
     console.log('[BullMQ] ✅ All workers started successfully!');
   } catch (error) {

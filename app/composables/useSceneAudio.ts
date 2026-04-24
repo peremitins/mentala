@@ -30,6 +30,10 @@ type SceneResumeOptions = {
   delayMs?: number;
 };
 
+type SceneSuspendOptions = {
+  withFade?: boolean;
+};
+
 function getUserAgent() {
   if (typeof navigator === 'undefined') return '';
   return navigator.userAgent || '';
@@ -1407,7 +1411,7 @@ function setBackgroundPlayMinutes(minutes: number) {
   }
 }
 
-async function suspend() {
+async function suspend(options: SceneSuspendOptions = {}) {
   const shouldPreserveResumeIntent =
     globalState.resumeAfterSuspendActionId !== null &&
     globalState.wasPlayingBeforeSuspend;
@@ -1429,9 +1433,9 @@ async function suspend() {
       globalState.playbackMode === 'native' ||
       (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android');
     if (needsHardStop) {
-      await stop(false);
+      await stop(options.withFade === true);
     } else {
-      await pause(false);
+      await pause(options.withFade === true);
     }
   }
 }

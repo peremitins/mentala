@@ -10,7 +10,9 @@ export interface SosVoiceSettings {
 }
 
 const DEFAULT_SETTINGS: SosVoiceSettings = {
-  voiceEnabled: false,
+  // По умолчанию в SOS-практике озвучка включена, если пользователь
+  // ещё ни разу явно не сохранял локальную настройку.
+  voiceEnabled: true,
 };
 
 /**

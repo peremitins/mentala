@@ -93,6 +93,8 @@ export default defineEventHandler(async (event) => {
     .limit(1);
 
   if (existing.length) {
+    let verificationEmailSent = true;
+
     if (!existing[0].emailVerifiedAt) {
       const passwordHash = await argon2.hash(body.password, {
         type: argon2.argon2id,
@@ -130,7 +132,9 @@ export default defineEventHandler(async (event) => {
       try {
         await issueVerificationCode(getEmailVerificationKey(email), email);
       } catch (error: any) {
-        // Ошибка отправки не должна менять ответ, но должна быть залогирована
+        // Не скрываем факт сбоя полностью: клиенту нужно понимать,
+        // что модалку ввода кода показывать нельзя, если письмо не ушло.
+        verificationEmailSent = false;
         console.error('[Auth] Failed to send verification email:', {
           email: maskEmail(email),
           error: error?.message || String(error),
@@ -143,6 +147,10 @@ export default defineEventHandler(async (event) => {
     return {
       userId: existing[0].id,
       email,
+      verificationEmailSent,
+      verificationEmailMessage: verificationEmailSent
+        ? undefined
+        : 'Не удалось отправить письмо с кодом подтверждения. Попробуйте позже.',
     };
   }
 
@@ -180,10 +188,11 @@ export default defineEventHandler(async (event) => {
     AUTH_CODE_TTL_SECONDS
   );
 
+  let verificationEmailSent = true;
   try {
     await issueVerificationCode(getEmailVerificationKey(email), email);
   } catch (error: any) {
-    // Ошибка отправки не должна менять ответ, но должна быть залогирована
+    verificationEmailSent = false;
     console.error('[Auth] Failed to send verification email:', {
       email: maskEmail(email),
       error: error?.message || String(error),
@@ -200,5 +209,9 @@ export default defineEventHandler(async (event) => {
   return {
     userId: createdUser.id,
     email: createdUser.email,
+    verificationEmailSent,
+    verificationEmailMessage: verificationEmailSent
+      ? undefined
+      : 'Не удалось отправить письмо с кодом подтверждения. Попробуйте позже.',
   };
 });

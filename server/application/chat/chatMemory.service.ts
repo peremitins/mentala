@@ -1,6 +1,10 @@
 import { db } from '@/server/infrastructure/db/client';
-import { realtimeVoiceSessions } from '@/server/infrastructure/db/schema';
-import { eq } from 'drizzle-orm';
+import {
+  realtimeVoiceSessions,
+  sessionSummariesUser,
+  therapySessions,
+} from '@/server/infrastructure/db/schema';
+import { and, eq } from 'drizzle-orm';
 import {
   CHAT_HANDOFF_SUMMARY_SCHEMA_VERSION,
   CHAT_MEMORY_MAX_INPUT_TOKENS,
@@ -20,6 +24,7 @@ import {
   hasMeaningfulDurableUserMemory,
   normalizeDurableUserMemory,
   normalizeHandoffSummary,
+  serializeActiveBacklogForPrompt,
   serializeHandoffSummaryForPrompt,
   serializeDurableUserMemoryForPrompt,
   serializeRuntimeCompactStateForPrompt,
@@ -41,6 +46,10 @@ import {
   projectTherapySessionTranscriptFromHistory,
   type TherapySessionSourceMode,
 } from './sessionTranscriptProjection';
+import {
+  computeEligibilityFromTranscript,
+  isEligibleForSummary,
+} from '@/server/application/sessionSummaryUser/sessionSummaryEligibility';
 
 export type CompactionReason =
   | 'soft_threshold'
@@ -52,6 +61,7 @@ export type ChatMemoryContext = {
   previousResponseId: string | null;
   shouldSendBootstrap: boolean;
   isFirstSession: boolean;
+  activeBacklogContext: string | null;
   durableUserMemory: DurableUserMemory | null;
   handoffSummary: SessionHandoffSummary | null;
   runtimeCompactState: RuntimeCompactState | null;
@@ -81,6 +91,7 @@ export function estimateTokensByTexts(texts: string[]): number {
 
 async function loadTherapySessionSummarySourceState(params: {
   therapySessionId: number;
+  userId?: number;
 }) {
   const state = await chatSessionMemoryStore.get<RuntimeCompactState>(
     params.therapySessionId
@@ -102,9 +113,11 @@ async function loadTherapySessionSummarySourceState(params: {
       ? await therapySessionTranscriptStore.getMessagesAfter({
           therapySessionId: params.therapySessionId,
           afterMessageId: state.runtimeCompactCursorMessageId,
+          userId: params.userId,
         })
       : await therapySessionTranscriptStore.getMessages(
-          params.therapySessionId
+          params.therapySessionId,
+          params.userId
         );
 
   const sessionSourceMode = await resolveTherapySessionSourceMode(
@@ -220,12 +233,14 @@ export async function resolveChatMemoryContext(params: {
   estimatedBootstrapTokens: number;
   estimatedPerTurnTokens: number;
   isSafeUserTurn: boolean;
+  requestMessages?: Array<{ role: string; content: string }>;
 }): Promise<ChatMemoryContext> {
   if (!params.enableMemory) {
     return {
       previousResponseId: null,
       shouldSendBootstrap: true,
       isFirstSession: true,
+      activeBacklogContext: null,
       durableUserMemory: null,
       handoffSummary: null,
       runtimeCompactState: null,
@@ -246,7 +261,7 @@ export async function resolveChatMemoryContext(params: {
   const hasValidPreviousResponseId =
     Boolean(state?.previousResponseId) &&
     chatSessionMemoryStore.isResponseIdValid(state?.previousResponseExpiresAt);
-  const estimatedNextInputTokens = hasValidPreviousResponseId
+  let estimatedNextInputTokens = hasValidPreviousResponseId
     ? (state?.lastObservedInputTokens ?? 0) + params.estimatedPerTurnTokens
     : params.estimatedBootstrapTokens + params.estimatedPerTurnTokens;
 
@@ -285,11 +300,20 @@ export async function resolveChatMemoryContext(params: {
       ? state.previousResponseId
       : null;
 
+  const activeBacklogContext =
+    !previousResponseId && !runtimeCompactState
+      ? serializeActiveBacklogForPrompt(params.requestMessages ?? [])
+      : null;
+
+  if (!hasValidPreviousResponseId && activeBacklogContext) {
+    estimatedNextInputTokens += estimateTokensByChars(activeBacklogContext);
+  }
+
   // Межсессионную память подмешиваем только в bootstrap новой chain.
   // После runtime compaction внутри той же сессии достаточно compact-state,
   // иначе мы платим повторно за те же durable blocks.
   const shouldUseCrossSessionBootstrap =
-    !previousResponseId && !runtimeCompactState;
+    !previousResponseId && !runtimeCompactState && !activeBacklogContext;
 
   const durableUserMemory = shouldUseCrossSessionBootstrap
     ? await getMeaningfulDurableUserMemoryForUser(params.userId)
@@ -307,6 +331,7 @@ export async function resolveChatMemoryContext(params: {
 
   const isFirstSession =
     !previousResponseId &&
+    !activeBacklogContext &&
     !runtimeCompactState &&
     !handoffSummary &&
     !durableUserMemory;
@@ -315,6 +340,7 @@ export async function resolveChatMemoryContext(params: {
     previousResponseId,
     shouldSendBootstrap: !previousResponseId,
     isFirstSession,
+    activeBacklogContext,
     durableUserMemory,
     handoffSummary,
     runtimeCompactState,
@@ -344,9 +370,11 @@ export async function performRuntimeCompaction(params: {
       ? await therapySessionTranscriptStore.getMessagesAfter({
           therapySessionId: params.therapySessionId,
           afterMessageId: state.runtimeCompactCursorMessageId,
+          userId: params.userId,
         })
       : await therapySessionTranscriptStore.getMessages(
-          params.therapySessionId
+          params.therapySessionId,
+          params.userId
         );
 
   const compactState =
@@ -412,10 +440,6 @@ export async function recordSuccessfulChatTurn(params: {
   responseId: string | null;
   usageSource: unknown;
 }) {
-  if (!params.enableMemory) {
-    return;
-  }
-
   const trimmedUserMessage = String(params.userMessage || '').trim();
   const trimmedAssistantMessage = String(params.assistantMessage || '').trim();
   if (!trimmedUserMessage || !trimmedAssistantMessage) {
@@ -454,39 +478,46 @@ export async function recordSuccessfulChatTurn(params: {
     });
   }
 
-  const usage = extractOpenAiUsageSnapshot(params.usageSource);
-  const inputTokens = usage?.inputTokens ?? null;
-  const outputTokens = usage?.outputTokens ?? null;
-  const totalTokens = usage?.totalTokens ?? null;
-  const pendingSoftCompaction =
-    typeof inputTokens === 'number' &&
-    inputTokens >= CHAT_MEMORY_SOFT_INPUT_TOKENS &&
-    inputTokens < CHAT_MEMORY_MAX_INPUT_TOKENS;
+  if (params.enableMemory) {
+    const usage = extractOpenAiUsageSnapshot(params.usageSource);
+    const inputTokens = usage?.inputTokens ?? null;
+    const outputTokens = usage?.outputTokens ?? null;
+    const totalTokens = usage?.totalTokens ?? null;
+    const pendingSoftCompaction =
+      typeof inputTokens === 'number' &&
+      inputTokens >= CHAT_MEMORY_SOFT_INPUT_TOKENS &&
+      inputTokens < CHAT_MEMORY_MAX_INPUT_TOKENS;
 
-  await chatSessionMemoryStore.recordSuccessfulTurn({
-    therapySessionId: params.therapySessionId,
-    userId: params.userId,
-    inputTokens,
-    outputTokens,
-    totalTokens,
-    pendingSoftCompaction,
-  });
-
-  if (params.responseId) {
-    await chatSessionMemoryStore.saveResponseId({
+    await chatSessionMemoryStore.recordSuccessfulTurn({
       therapySessionId: params.therapySessionId,
       userId: params.userId,
-      responseId: params.responseId,
+      inputTokens,
+      outputTokens,
+      totalTokens,
+      pendingSoftCompaction,
     });
+
+    if (params.responseId) {
+      await chatSessionMemoryStore.saveResponseId({
+        therapySessionId: params.therapySessionId,
+        userId: params.userId,
+        responseId: params.responseId,
+      });
+    }
   }
 }
 
 export function buildSessionMemoryPromptBlocks(context: {
+  activeBacklogContext: string | null;
   durableUserMemory: DurableUserMemory | null;
   handoffSummary: SessionHandoffSummary | null;
   runtimeCompactState: RuntimeCompactState | null;
 }): string[] {
   const blocks: string[] = [];
+
+  if (context.activeBacklogContext) {
+    blocks.push(context.activeBacklogContext);
+  }
 
   if (context.durableUserMemory) {
     blocks.push(serializeDurableUserMemoryForPrompt(context.durableUserMemory));
@@ -516,7 +547,16 @@ export async function handleTherapySessionEnded(params: {
   await chatSessionMemoryStore.clearResponseId(params.therapySessionId);
 
   if (!enableMemory) {
-    await cleanupTherapySessionMemory(params.therapySessionId);
+    await cleanupTransientTherapySessionMemory(
+      params.therapySessionId,
+      params.userId,
+      { preserveTranscript: true }
+    );
+    await cleanupTherapySessionTranscriptIfReady({
+      therapySessionId: params.therapySessionId,
+      userId: params.userId,
+      handoffResolved: true,
+    });
     return;
   }
 
@@ -555,24 +595,52 @@ export async function handleTherapySessionEnded(params: {
           error: inlineError,
         }
       );
-      await cleanupTransientTherapySessionMemory(params.therapySessionId);
+      await cleanupTransientTherapySessionMemory(
+        params.therapySessionId,
+        params.userId,
+        { preserveTranscript: true }
+      );
     }
   }
 }
 
-export async function cleanupTransientTherapySessionMemory(
-  therapySessionId: number
-) {
-  await Promise.all([
-    therapySessionTranscriptStore.deleteByTherapySessionId(therapySessionId),
-    chatSessionMemoryStore.clearSession(therapySessionId),
-  ]);
+async function clearChatSessionRuntimeState(therapySessionId: number) {
+  await chatSessionMemoryStore.clearSession(therapySessionId);
 }
 
-export async function cleanupTherapySessionMemory(therapySessionId: number) {
+async function deleteTherapySessionTranscript(
+  therapySessionId: number,
+  userId?: number
+) {
+  await therapySessionTranscriptStore.deleteByTherapySessionId(
+    therapySessionId,
+    userId
+  );
+}
+
+export async function cleanupTransientTherapySessionMemory(
+  therapySessionId: number,
+  userId?: number,
+  options?: {
+    preserveTranscript?: boolean;
+  }
+) {
+  await clearChatSessionRuntimeState(therapySessionId);
+
+  if (options?.preserveTranscript === true) {
+    return;
+  }
+
+  await deleteTherapySessionTranscript(therapySessionId, userId);
+}
+
+export async function cleanupTherapySessionMemory(
+  therapySessionId: number,
+  userId?: number
+) {
   await Promise.all([
-    cleanupTransientTherapySessionMemory(therapySessionId),
-    summaryStore.deleteByTherapySessionId(therapySessionId),
+    cleanupTransientTherapySessionMemory(therapySessionId, userId),
+    summaryStore.deleteByTherapySessionId(therapySessionId, userId),
   ]);
 }
 
@@ -585,6 +653,104 @@ export async function clearAllChatMemoryForUser(userId: number) {
   ]);
 }
 
+export async function cleanupTherapySessionTranscriptIfReady(params: {
+  therapySessionId: number;
+  userId: number;
+  handoffResolved?: boolean;
+}) {
+  const [sessionRows, chatSettings, userSummaryRows] = await Promise.all([
+    db
+      .select({
+        id: therapySessions.id,
+        startedAt: therapySessions.startedAt,
+        endedAt: therapySessions.endedAt,
+      })
+      .from(therapySessions)
+      .where(
+        and(
+          eq(therapySessions.id, params.therapySessionId),
+          eq(therapySessions.userId, params.userId)
+        )
+      )
+      .limit(1),
+    readChatSettings(String(params.userId)),
+    db
+      .select({
+        id: sessionSummariesUser.id,
+        status: sessionSummariesUser.status,
+      })
+      .from(sessionSummariesUser)
+      .where(
+        and(
+          eq(sessionSummariesUser.therapySessionId, params.therapySessionId),
+          eq(sessionSummariesUser.userId, params.userId)
+        )
+      )
+      .limit(1),
+  ]);
+
+  const session = sessionRows[0] ?? null;
+  if (!session?.endedAt) {
+    return { cleaned: false, reason: 'session_active' as const };
+  }
+
+  const enableMemory = chatSettings.enablePreviousResponseId ?? true;
+  let handoffResolved = !enableMemory || params.handoffResolved === true;
+
+  if (!handoffResolved && enableMemory) {
+    const handoffSummary =
+      await summaryStore.getHandoffSummaryByTherapySessionId<SessionHandoffSummary>(
+        params.therapySessionId,
+        params.userId
+      );
+    handoffResolved = Boolean(handoffSummary);
+  }
+
+  if (!handoffResolved) {
+    return { cleaned: false, reason: 'handoff_pending' as const };
+  }
+
+  const userSummary = userSummaryRows[0] ?? null;
+  if (userSummary?.status === 'pending') {
+    return { cleaned: false, reason: 'user_summary_pending' as const };
+  }
+
+  if (userSummary?.status === 'failed') {
+    return { cleaned: false, reason: 'user_summary_failed' as const };
+  }
+
+  const transcriptMessages = await therapySessionTranscriptStore.getMessages(
+    params.therapySessionId,
+    params.userId
+  );
+  if (!transcriptMessages.length) {
+    return { cleaned: false, reason: 'transcript_missing' as const };
+  }
+
+  if (userSummary?.status === 'completed') {
+    await deleteTherapySessionTranscript(
+      params.therapySessionId,
+      params.userId
+    );
+    return { cleaned: true, reason: 'user_summary_completed' as const };
+  }
+
+  const metrics = computeEligibilityFromTranscript(
+    transcriptMessages,
+    session.startedAt ?? null,
+    session.endedAt
+  );
+
+  if (!isEligibleForSummary(metrics)) {
+    return { cleaned: false, reason: 'not_eligible' as const };
+  }
+
+  return {
+    cleaned: false,
+    reason: 'eligible_waiting_for_user_summary' as const,
+  };
+}
+
 export async function buildAndPersistHandoffSummaryForTherapySession(params: {
   therapySessionId: number;
   userId: number;
@@ -592,10 +758,12 @@ export async function buildAndPersistHandoffSummaryForTherapySession(params: {
   saveFallbackEmptySummary?: boolean;
   throwOnError?: boolean;
   cleanupTransientMemory?: boolean;
+  preserveTranscriptOnCleanup?: boolean;
 }) {
   const existingSummary =
     await summaryStore.getHandoffSummaryByTherapySessionId<SessionHandoffSummary>(
-      params.therapySessionId
+      params.therapySessionId,
+      params.userId
     );
 
   if (existingSummary) {
@@ -604,7 +772,20 @@ export async function buildAndPersistHandoffSummaryForTherapySession(params: {
     );
 
     if (params.cleanupTransientMemory !== false) {
-      await cleanupTransientTherapySessionMemory(params.therapySessionId);
+      await cleanupTransientTherapySessionMemory(
+        params.therapySessionId,
+        params.userId,
+        {
+          preserveTranscript: params.preserveTranscriptOnCleanup === true,
+        }
+      );
+      if (params.preserveTranscriptOnCleanup === true) {
+        await cleanupTherapySessionTranscriptIfReady({
+          therapySessionId: params.therapySessionId,
+          userId: params.userId,
+          handoffResolved: true,
+        });
+      }
     }
 
     return {
@@ -618,6 +799,7 @@ export async function buildAndPersistHandoffSummaryForTherapySession(params: {
   const { runtimeCompactState, sessionSourceMode, state, transcriptMessages } =
     await loadTherapySessionSummarySourceState({
       therapySessionId: params.therapySessionId,
+      userId: params.userId,
     });
   const existingDurableUserMemory = await getMeaningfulDurableUserMemoryForUser(
     params.userId
@@ -629,7 +811,20 @@ export async function buildAndPersistHandoffSummaryForTherapySession(params: {
 
   if (!hasAnyUserContext) {
     if (params.cleanupTransientMemory !== false) {
-      await cleanupTransientTherapySessionMemory(params.therapySessionId);
+      await cleanupTransientTherapySessionMemory(
+        params.therapySessionId,
+        params.userId,
+        {
+          preserveTranscript: params.preserveTranscriptOnCleanup === true,
+        }
+      );
+      if (params.preserveTranscriptOnCleanup === true) {
+        await cleanupTherapySessionTranscriptIfReady({
+          therapySessionId: params.therapySessionId,
+          userId: params.userId,
+          handoffResolved: true,
+        });
+      }
     }
 
     return {
@@ -673,7 +868,20 @@ export async function buildAndPersistHandoffSummaryForTherapySession(params: {
   });
 
   if (params.cleanupTransientMemory !== false) {
-    await cleanupTransientTherapySessionMemory(params.therapySessionId);
+    await cleanupTransientTherapySessionMemory(
+      params.therapySessionId,
+      params.userId,
+      {
+        preserveTranscript: params.preserveTranscriptOnCleanup === true,
+      }
+    );
+    if (params.preserveTranscriptOnCleanup === true) {
+      await cleanupTherapySessionTranscriptIfReady({
+        therapySessionId: params.therapySessionId,
+        userId: params.userId,
+        handoffResolved: true,
+      });
+    }
   }
 
   return {
@@ -690,12 +898,22 @@ export async function processSessionSummaryJob(params: {
   model?: string;
   saveFallbackEmptySummary?: boolean;
   throwOnError?: boolean;
+  preserveTranscriptOnCleanup?: boolean;
 }) {
   const chatSettings = await readChatSettings(String(params.userId));
   const enableMemory = chatSettings.enablePreviousResponseId ?? true;
 
   if (!enableMemory) {
-    await cleanupTherapySessionMemory(params.therapySessionId);
+    await cleanupTransientTherapySessionMemory(
+      params.therapySessionId,
+      params.userId,
+      { preserveTranscript: true }
+    );
+    await cleanupTherapySessionTranscriptIfReady({
+      therapySessionId: params.therapySessionId,
+      userId: params.userId,
+      handoffResolved: true,
+    });
     return;
   }
 
@@ -706,6 +924,7 @@ export async function processSessionSummaryJob(params: {
     saveFallbackEmptySummary: params.saveFallbackEmptySummary,
     throwOnError: params.throwOnError,
     cleanupTransientMemory: true,
+    preserveTranscriptOnCleanup: params.preserveTranscriptOnCleanup ?? true,
   });
 }
 

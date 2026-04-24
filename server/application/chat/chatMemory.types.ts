@@ -47,6 +47,10 @@ export const durableUserMemorySchema = z.object({
 
 export type DurableUserMemory = z.infer<typeof durableUserMemorySchema>;
 
+const ACTIVE_BACKLOG_PROMPT_MAX_MESSAGES = 8;
+const ACTIVE_BACKLOG_PROMPT_MESSAGE_MAX_CHARS = 280;
+const ACTIVE_BACKLOG_PROMPT_MAX_CHARS = 2200;
+
 type DurableUserMemoryRawRecord = Record<string, unknown> & {
   v?: unknown;
   n?: unknown;
@@ -188,6 +192,45 @@ function limitMemoryList(
       maxChars,
     }
   );
+}
+
+type ActiveBacklogPromptMessage = {
+  role: 'user' | 'assistant';
+  content: string;
+};
+
+function normalizeActiveBacklogPromptContent(value: string): string {
+  return String(value || '')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+function trimActiveBacklogPromptMessages(
+  messages: ActiveBacklogPromptMessage[]
+): ActiveBacklogPromptMessage[] {
+  const trimmedMessages = messages
+    .map((message) => ({
+      role: message.role,
+      content: normalizeActiveBacklogPromptContent(message.content).slice(
+        0,
+        ACTIVE_BACKLOG_PROMPT_MESSAGE_MAX_CHARS
+      ),
+    }))
+    .filter((message) => message.content.length > 0);
+
+  let scopedMessages = trimmedMessages.slice(
+    -ACTIVE_BACKLOG_PROMPT_MAX_MESSAGES
+  );
+
+  while (scopedMessages.length > 1) {
+    const candidate = JSON.stringify({ recentMessages: scopedMessages });
+    if (candidate.length <= ACTIVE_BACKLOG_PROMPT_MAX_CHARS) {
+      break;
+    }
+    scopedMessages = scopedMessages.slice(1);
+  }
+
+  return scopedMessages;
 }
 
 export function fitDurableUserMemoryToBudget(
@@ -472,4 +515,49 @@ export function serializeRuntimeCompactStateForPrompt(
   compactState: RuntimeCompactState
 ): string {
   return `Runtime compact текущей сессии. Это канонический контекст после reset chain.\n${JSON.stringify(compactState)}`;
+}
+
+export function serializeActiveBacklogForPrompt(
+  messages: Array<{ role: string; content: string }>
+): string | null {
+  const dialogMessages = messages
+    .filter(
+      (message): message is { role: 'user' | 'assistant'; content: string } =>
+        (message.role === 'user' || message.role === 'assistant') &&
+        typeof message.content === 'string'
+    )
+    .map((message) => ({
+      role: message.role,
+      content: normalizeActiveBacklogPromptContent(message.content),
+    }))
+    .filter((message) => message.content.length > 0);
+
+  if (!dialogMessages.length) {
+    return null;
+  }
+
+  const historyMessages =
+    dialogMessages.length > 1 &&
+    dialogMessages[dialogMessages.length - 1]?.role === 'user'
+      ? dialogMessages.slice(0, -1)
+      : dialogMessages;
+
+  const hasPriorUserTurn = historyMessages.some(
+    (message) => message.role === 'user'
+  );
+
+  if (!hasPriorUserTurn) {
+    return null;
+  }
+
+  const scopedMessages = trimActiveBacklogPromptMessages(historyMessages);
+  if (!scopedMessages.length) {
+    return null;
+  }
+
+  return `Активный контекст текущей несуммаризованной сессии. Это основной источник контекста для продолжения диалога после восстановления истории. Если этот блок конфликтует с handoff прошлой завершённой сессии или долговременной памятью, опирайся именно на него.\n${JSON.stringify(
+    {
+      recentMessages: scopedMessages,
+    }
+  )}`;
 }

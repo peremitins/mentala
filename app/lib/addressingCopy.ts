@@ -5,14 +5,6 @@ import {
 } from '@/shared/utils/addressing';
 
 const ADDRESSING_COPY = {
-  welcomeTitle: {
-    informal: 'Привет!',
-    formal: 'Здравствуйте!',
-  },
-  welcomeSubtitle: {
-    informal: 'Здесь можно поговорить',
-    formal: 'Здесь можно поговорить',
-  },
   chatInputPlaceholder: {
     informal: 'Напиши сообщение…',
     formal: 'Напишите сообщение…',
