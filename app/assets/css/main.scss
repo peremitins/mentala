@@ -6,6 +6,15 @@ body,
   width: 100%;
   height: 100dvh;
   box-sizing: border-box;
+
+  /*
+   * Запрещаем WebKit (iOS Safari, WKWebView) автоматически масштабировать
+   * шрифты «для улучшения читаемости». Без этой настройки iOS самостоятельно
+   * увеличивает font-size, из-за чего UI выглядит крупнее чем на Android.
+   * Значение 100% = «рендери шрифты ровно так, как задано в CSS».
+   */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
