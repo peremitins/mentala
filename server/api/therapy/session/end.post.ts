@@ -2,7 +2,7 @@ import { getSessionUser } from '@/server/application/auth/session';
 import { createError } from 'h3';
 import { z } from 'zod';
 import {
-  endTherapySession,
+  endTherapySessionWithOptions,
   calculateSessionMinutes,
 } from '@/server/application/subscriptions/session-time.service';
 import { db } from '@/server/infrastructure/db/client';
@@ -48,7 +48,13 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const endedSession = await endTherapySession(sessionId);
+  // skipPostEndMemoryLifecycle: не запускаем BullMQ-задачу здесь — она удалит
+  // therapy_session_messages раньше, чем пользователь успеет восстановить сессию.
+  // Lifecycle (AI handoff + очистка транскрипта) запустится позже — при генерации
+  // пользовательского саммари в sessionSummaryUser.service.ts.
+  const endedSession = await endTherapySessionWithOptions(sessionId, undefined, {
+    skipPostEndMemoryLifecycle: true,
+  });
   const minutes = calculateSessionMinutes(endedSession.durationSeconds);
 
   return {

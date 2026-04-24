@@ -62,14 +62,15 @@
           @dismiss="pushRecovery.dismissRecovery()"
           @enable="pushRecovery.attemptRecovery()"
         />
-        <!-- PWA install banners -->
-        <PwaInstallBanner
-          :visible="showInstallBanner"
-          :native="pwaInstall.hasNativeInstallPrompt.value"
-          @install="handlePwaInstall"
-          @close="handlePwaClose"
+        <!-- Mobile install / app-promo surfaces -->
+        <AndroidAppPromoBanner
+          :visible="showAndroidAppPromo"
+          :variant="mobileAppPromo.androidPromoVariant.value"
+          @open-app="handleAndroidAppOpen"
+          @open-store="handleGooglePlayOpen"
+          @close="handleMobilePromoClose"
         />
-        <PwaIosGuide :visible="showIosGuide" @close="handlePwaClose" />
+        <PwaIosGuide :visible="showIosGuide" @close="handleMobilePromoClose" />
       </ClientOnly>
       <BottomNav />
     </div>
@@ -82,10 +83,10 @@ import { useRoute } from 'vue-router';
 import BottomNav from '@/app/components/BottomNav.vue';
 import MiniMeditationPlayer from '@/app/components/meditations/MiniMeditationPlayer.vue';
 import PushRecoveryDialog from '@/app/components/notifications/PushRecoveryDialog.vue';
-import PwaInstallBanner from '@/app/components/pwa/PwaInstallBanner.vue';
+import AndroidAppPromoBanner from '@/app/components/pwa/AndroidAppPromoBanner.vue';
 import PwaIosGuide from '@/app/components/pwa/PwaIosGuide.vue';
+import { useMobileAppPromo } from '@/app/composables/useMobileAppPromo';
 import { usePushRecovery } from '@/app/composables/usePushRecovery';
-import { usePwaInstall } from '@/app/composables/usePwaInstall';
 import { useWebPush } from '@/app/composables/useWebPush';
 import { useMeditationPlayer } from '@/app/composables/useMeditationPlayer';
 import { useMeditationsStore } from '@/app/stores/meditations';
@@ -117,52 +118,60 @@ const auth = useAuthStore();
 const sceneSettings = useSceneSettingsStore();
 
 // ==========================================
-// PWA install prompt + Web Push
+// Mobile app-promo + Web Push
 // ==========================================
-const pwaInstall = usePwaInstall();
+const mobileAppPromo = useMobileAppPromo();
 const webPush = useWebPush();
 let webPushPermissionTimer: ReturnType<typeof setTimeout> | null = null;
-const showInstallBanner = ref(false);
-const showIosGuide = ref(false);
 
-let pwaInstallTimer: ReturnType<typeof setTimeout> | null = null;
+const showAndroidAppPromo = computed(
+  () => mobileAppPromo.activePromoKind.value === 'android-app'
+);
+const showIosGuide = computed(
+  () => mobileAppPromo.activePromoKind.value === 'ios-pwa'
+);
 
-function tryShowPwaOffer() {
-  pwaInstall.init();
-  // Показываем предложение с задержкой 5 сек — не мешаем первому визиту
-  pwaInstallTimer = setTimeout(() => {
-    // Guard на уровне layout: баннеры показываем только в обычном браузере,
-    // а не в standalone PWA и не в native-приложении.
-    if (pwaInstall.isInstalled.value || pwaInstall.isInStandaloneMode.value) {
-      return;
-    }
-    if (!pwaInstall.canShowInstallOffer()) return;
-    if (pwaInstall.isIos.value) {
-      showIosGuide.value = true;
-    } else {
-      showInstallBanner.value = true;
-    }
+let mobilePromoTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearMobilePromoTimer() {
+  if (!mobilePromoTimer) return;
+  clearTimeout(mobilePromoTimer);
+  mobilePromoTimer = null;
+}
+
+function scheduleMobilePromoOffer() {
+  clearMobilePromoTimer();
+
+  if (!auth.isLoggedIn) return;
+  if (mobileAppPromo.isPromoBlockedPath(route.path || '')) {
+    mobileAppPromo.hideActiveOffer();
+    return;
+  }
+
+  // Даём пользователю сначала войти в контекст экрана, затем мягко показываем promotion.
+  mobilePromoTimer = setTimeout(() => {
+    void mobileAppPromo.prepareOffer(route.path || '');
   }, 5000);
 }
 
-async function handlePwaInstall() {
-  showInstallBanner.value = false;
-  await pwaInstall.promptInstall();
+function handleMobilePromoClose() {
+  mobileAppPromo.dismissActiveOffer();
 }
 
-/** Закрыл баннер — скрываем до следующих 10:00 */
-function handlePwaClose() {
-  showInstallBanner.value = false;
-  showIosGuide.value = false;
-  pwaInstall.markDismissed();
+async function handleAndroidAppOpen() {
+  await mobileAppPromo.openAndroidApp();
 }
 
-// Показываем PWA offer + запрашиваем web push разрешение только авторизованным
+async function handleGooglePlayOpen() {
+  await mobileAppPromo.openGooglePlayStore();
+}
+
+// Показываем mobile promotion + запрашиваем web push разрешение только авторизованным.
 watch(
   () => auth.isLoggedIn,
   (loggedIn) => {
     if (loggedIn) {
-      tryShowPwaOffer();
+      scheduleMobilePromoOffer();
       tryRequestWebPushPermission();
       // Если push уже включён (permission + активный флаг) — регистрируем foreground-listener.
       // Нужно при каждой загрузке страницы (не только при login/enable).
@@ -175,13 +184,33 @@ watch(
         webPush.setupForegroundListener();
       }
     } else {
-      if (pwaInstallTimer) clearTimeout(pwaInstallTimer);
+      mobileAppPromo.resetAndroidRuntimeDismiss();
+      clearMobilePromoTimer();
       if (webPushPermissionTimer) clearTimeout(webPushPermissionTimer);
-      showInstallBanner.value = false;
-      showIosGuide.value = false;
+      mobileAppPromo.hideActiveOffer();
     }
   },
   { immediate: true }
+);
+
+watch(
+  () => route.path,
+  (path) => {
+    clearMobilePromoTimer();
+
+    if (!auth.isLoggedIn) return;
+
+    if (mobileAppPromo.isPromoBlockedPath(path || '')) {
+      mobileAppPromo.hideActiveOffer();
+      return;
+    }
+
+    if (mobileAppPromo.activePromoKind.value !== 'none') {
+      return;
+    }
+
+    scheduleMobilePromoOffer();
+  }
 );
 
 /**
@@ -294,10 +323,7 @@ onBeforeUnmount(() => {
     removeAppStateListener = null;
   }
 
-  if (pwaInstallTimer) {
-    clearTimeout(pwaInstallTimer);
-    pwaInstallTimer = null;
-  }
+  clearMobilePromoTimer();
 
   if (webPushPermissionTimer) {
     clearTimeout(webPushPermissionTimer);

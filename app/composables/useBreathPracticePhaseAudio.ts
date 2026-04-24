@@ -1,3 +1,4 @@
+import { useRuntimeConfig } from '#imports';
 import { Capacitor } from '@capacitor/core';
 import type {
   BreathCueType,
@@ -18,12 +19,7 @@ import {
 } from '@/app/services/audio/nativeBreathSession.service';
 import type { AudioServiceTrack } from '@/app/services/audio/audio.types';
 import { isDocumentAvailable } from '@/app/utils/document';
-
-type RuntimeConfigReader = () => {
-  public?: {
-    featureNativeMeditationAudioEnabled?: boolean;
-  };
-};
+import { isHttpUrl, resolveAppAssetBaseUrl } from '../utils/media-base';
 
 type BreathPhasePlayback = {
   cue: BreathCueType;
@@ -59,14 +55,6 @@ function normalizeCueVolume(raw: number) {
   return Math.min(1, clamped * CUE_VOLUME_BOOST);
 }
 
-function resolveRuntimeConfigReader() {
-  return (
-    globalThis as typeof globalThis & {
-      useRuntimeConfig?: RuntimeConfigReader;
-    }
-  ).useRuntimeConfig;
-}
-
 export function useBreathPracticePhaseAudio() {
   const webCueAudio = useWebBreathPracticeCueAudio();
   const webVoiceAudio = useWebBreathPracticeVoice();
@@ -92,7 +80,7 @@ export function useBreathPracticePhaseAudio() {
     if (!Capacitor.isPluginAvailable('AudioPlayer')) return false;
 
     try {
-      const config = resolveRuntimeConfigReader()?.();
+      const config = useRuntimeConfig();
       return config?.public?.featureNativeMeditationAudioEnabled !== false;
     } catch {
       return true;
@@ -108,9 +96,27 @@ export function useBreathPracticePhaseAudio() {
   }
 
   function resolveAudioUrl(path: string) {
-    if (typeof window === 'undefined') return '';
+    if (!path) return '';
+    if (isHttpUrl(path)) return path;
+
+    const config = useRuntimeConfig();
+    const publicConfig = config?.public;
+    const origin =
+      typeof window !== 'undefined' && isHttpUrl(window.location.origin)
+        ? window.location.origin
+        : '';
+    const baseUrl = resolveAppAssetBaseUrl({
+      isDev: publicConfig?.isDev === true,
+      isNativeRuntime: Capacitor.isNativePlatform(),
+      origin,
+      apiBaseUrl: publicConfig?.apiBase,
+      appUrl: publicConfig?.appUrl,
+    });
+
+    if (!baseUrl) return path;
+
     try {
-      return new URL(path, window.location.origin).toString();
+      return new URL(path, `${baseUrl}/`).toString();
     } catch {
       return path;
     }

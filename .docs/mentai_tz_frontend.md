@@ -31,8 +31,9 @@ shared/dto/        # Zod-схемы (общие с бэком)
 - HTTP только через `useAPI()` composable или `nuxtApp.$api` напрямую
 - Состояние: Pinia для глобального, composables для локального
 - DTO (Zod): `shared/dto/*`, ответ парсится через Zod
+- UI не должен показывать пользователю сырые backend/ORM/SQL ошибки; общий API-layer обязан санитизировать `message` / `statusMessage` / `error`, а подробности оставлять только в `console`/Sentry
 - Для billing UI `subscription` store может получать optional promo/referral блоки без поломки старых клиентов
-- Для AI-чата disclosure/consent живёт в общем gate: модалка открывается до старта welcome-chat, quick chat из привычек/терапии и до voice-chat; revoke доступен на `/privacy`
+- Для AI-чата disclosure/consent живёт в общем gate: на iOS перед первым стартом welcome-chat / quick chat / voice-chat показывается явная модалка, на web и Android consent фиксируется без отдельного промежуточного экрана в момент явного старта чата; отдельного revoke-блока на `/privacy` нет
 
 ## Billing UI
 
@@ -72,6 +73,7 @@ shared/dto/        # Zod-схемы (общие с бэком)
 - На iOS можно опираться на `env(safe-area-inset-*)`, но на Android, особенно на планшетах и некоторых WebView, нужен fallback через native `WindowInsets` bridge с прокидкой значений в CSS-переменные
 - Для action `share` в Capacitor нельзя полагаться только на `navigator.share` внутри WebView: на iOS/Android использовать официальный `@capacitor/share`, а на web оставлять fallback через `navigator.share` / `navigator.canShare`
 - Для copy/share UX в referral и других user-facing сценариях на native сначала использовать Capacitor plugins (`@capacitor/share`, `@capacitor/clipboard`), а web API держать как fallback для desktop-браузеров
+- На Android mobile web больше не продвигаем PWA как основной install path: вместо этого используем мягкий `native-first` app-promo flow (`Открыть приложение` / `Google Play`) без автоматического редиректа и без помех для web billing маршрутов `/subscription` и `/payment-success`
 
 ## Mobile build notes
 
@@ -105,3 +107,6 @@ shared/dto/        # Zod-схемы (общие с бэком)
 - Английская версия лендинга допускается только по явному `?lang=en` и не должна индексироваться
 - Русский язык — основной; `ru` должен быть canonical/x-default
 - Подтверждение прав в Google Search Console / Яндекс.Вебмастере делаем через DNS или HTML-файл (meta verification через env не используем)
+- QR-коды для Android не кодируем напрямую в `market://details?...`: используем стабильный first-party URL на `mentala.app` (сейчас `/go/android`), а уже этот маршрут открывает `Google Play` или показывает fallback; кликабельные store-links на лендинге при этом должны оставаться обычными crawlable `https://` ссылками
+- На публичном лендинге Android promo-блоки строим так: на desktop показываем QR + CTA, на телефонах — только прямой CTA без QR, чтобы не перегружать мобильный экран
+- Маршрут `/go/android` не должен показывать промежуточную UI-модалку: он обязан автоматически вести в `Google Play`, а при отсутствии handler-а тихо падать на web-страницу `Google Play`

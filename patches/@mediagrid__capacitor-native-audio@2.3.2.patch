@@ -1296,7 +1296,7 @@ index b553a07c4a71539214bf8419bbfc19a56d074d8a..3207dc4c85c18c7c5a01901b3349db2c
       * Register a callback for when the app comes to the foreground.
       *
 diff --git a/ios/Sources/AudioPlayerPlugin/AudioPlayerPlugin.swift b/ios/Sources/AudioPlayerPlugin/AudioPlayerPlugin.swift
-index 106fa303401b10c051786ef6d5820b15ab30320b..fdec40366692dd1bc65b51ad6e1ba796f934c99f 100644
+index 106fa303401b10c051786ef6d5820b15ab30320b..e8decfbfef5a719f42ebfcbab6f344f22067beb4 100644
 --- a/ios/Sources/AudioPlayerPlugin/AudioPlayerPlugin.swift
 +++ b/ios/Sources/AudioPlayerPlugin/AudioPlayerPlugin.swift
 @@ -15,10 +15,15 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
@@ -1390,7 +1390,26 @@ index 106fa303401b10c051786ef6d5820b15ab30320b..fdec40366692dd1bc65b51ad6e1ba796
      @objc func seek(_ call: CAPPluginCall) {
          do {
              guard let timeInSeconds = call.getInt("timeInSeconds") else {
-@@ -318,6 +370,19 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
+@@ -307,17 +359,36 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
+             audioSource.stop()
+ 
+             if audioSource.useForNotification {
+-                try audioSession.setActive(false)
++                // Ошибка деактивации после микрофона не должна ломать сам stop:
++                // источник уже остановлен, а сессию можно дожать позже.
++                try? audioSession.setActive(
++                    false,
++                    options: .notifyOthersOnDeactivation
++                )
+             }
+ 
+             call.resolve()
+         } catch AudioPlayerError.missingAudioSource {
+-            return
++            // Повторный stop для уже очищенного source считаем идемпотентным.
++            call.resolve()
+         } catch {
+             call.reject("There was an issue stopping the audio.", nil, error)
          }
      }
  
@@ -1410,7 +1429,7 @@ index 106fa303401b10c051786ef6d5820b15ab30320b..fdec40366692dd1bc65b51ad6e1ba796
      @objc func setVolume(_ call: CAPPluginCall) {
          do {
              guard let volume = call.getFloat("volume") else {
-@@ -340,6 +405,52 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
+@@ -340,6 +411,52 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
          }
      }
  
@@ -1463,7 +1482,40 @@ index 106fa303401b10c051786ef6d5820b15ab30320b..fdec40366692dd1bc65b51ad6e1ba796
      @objc func setRate(_ call: CAPPluginCall) {
          do {
              guard let rate = call.getFloat("rate") else {
-@@ -530,6 +641,110 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
+@@ -388,10 +505,6 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
+                 call: call
+             )
+ 
+-            if audioSource.useForNotification {
+-                try audioSession.setActive(false)
+-            }
+-
+             audioSource.stop()
+             audioSource.destroy()
+ 
+@@ -401,9 +514,20 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
+             onLosesFocusCallbackIds.removeValue(forKey: audioId)
+             onGainsFocusCallbackIds.removeValue(forKey: audioId)
+ 
++            if audioSource.useForNotification && !audioSources.hasNotification() {
++                // Сначала обязательно удаляем source из registry, и только потом
++                // best-effort деактивируем сессию. Иначе при throw source "застревает"
++                // в audioSources и следующий create падает на already exists.
++                try? audioSession.setActive(
++                    false,
++                    options: .notifyOthersOnDeactivation
++                )
++            }
++
+             call.resolve()
+         } catch AudioPlayerError.missingAudioSource {
+-            return
++            // Destroy должен быть идемпотентным: если source уже убран, это не ошибка.
++            call.resolve()
+         } catch {
+             call.reject(
+                 "There was an issue cleaning up the audio player.",
+@@ -530,6 +654,113 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
          makeFocusChangeCallbackCalls(callbackIds: onGainsFocusCallbackIds)
      }
  
@@ -1559,7 +1611,10 @@ index 106fa303401b10c051786ef6d5820b15ab30320b..fdec40366692dd1bc65b51ad6e1ba796
 +        _ = audioSources.remove(sourceId: audioId)
 +
 +        if audioSource.useForNotification && !audioSources.hasNotification() {
-+            try? audioSession.setActive(false)
++            try? audioSession.setActive(
++                false,
++                options: .notifyOthersOnDeactivation
++            )
 +        }
 +    }
 +
@@ -1575,7 +1630,7 @@ index 106fa303401b10c051786ef6d5820b15ab30320b..fdec40366692dd1bc65b51ad6e1ba796
          guard let audioId = call.getString("audioId") else {
              throw AudioPlayerError.invalidAudioId
 diff --git a/ios/Sources/AudioPlayerPlugin/AudioSource.swift b/ios/Sources/AudioPlayerPlugin/AudioSource.swift
-index 5a65e690c55308c4991f7f0ee268ff1155a93d42..f008d961d62bba868231fb8e71366a6505d9537d 100644
+index 5a65e690c55308c4991f7f0ee268ff1155a93d42..464d01f72d992b205dd715c6351544a437066f38 100644
 --- a/ios/Sources/AudioPlayerPlugin/AudioSource.swift
 +++ b/ios/Sources/AudioPlayerPlugin/AudioSource.swift
 @@ -18,6 +18,7 @@ public class AudioSource: NSObject, AVAudioPlayerDelegate {
@@ -1909,7 +1964,17 @@ index 5a65e690c55308c4991f7f0ee268ff1155a93d42..f008d961d62bba868231fb8e71366a65
  
          let artwork = getNowPlayingArtwork()
  
-@@ -608,12 +707,33 @@ public class AudioSource: NSObject, AVAudioPlayerDelegate {
+@@ -564,7 +663,8 @@ public class AudioSource: NSObject, AVAudioPlayerDelegate {
+             return
+         }
+ 
+-        if artworkSourceUrl.scheme != "https" {
++        let artworkScheme = artworkSourceUrl.scheme?.lowercased() ?? ""
++        if artworkScheme != "https" && artworkScheme != "http" {
+             guard
+                 let baseAppPath = pluginOwner.bridge?.config.appLocation
+                     .absoluteString,
+@@ -608,12 +708,33 @@ public class AudioSource: NSObject, AVAudioPlayerDelegate {
              return
          }
  

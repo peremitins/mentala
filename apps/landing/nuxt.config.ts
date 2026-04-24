@@ -46,6 +46,7 @@ export default defineNuxtConfig({
     '/account-deletion': {
       swr: process.env.NODE_ENV === 'development' ? 0 : 120,
     },
+    '/go/android': { swr: process.env.NODE_ENV === 'development' ? 0 : 120 },
   },
   // Статический экспорт (nuxt generate): предрендер только маршрута / и статичных файлов из public/
   nitro: {
@@ -60,6 +61,7 @@ export default defineNuxtConfig({
         '/',
         '/support',
         '/account-deletion',
+        '/go/android',
         '/.well-known/apple-app-site-association',
         '/.well-known/assetlinks.json',
       ],

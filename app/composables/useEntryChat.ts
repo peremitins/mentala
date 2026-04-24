@@ -78,12 +78,7 @@ export function useEntryChat() {
 
     try {
       void chat.startConversation();
-      await navigateTo({
-        path: '/',
-        query: {
-          screen: 'chat',
-        },
-      });
+      await navigateTo('/chat');
     } catch (error: any) {
       console.error('[EntryChat] Failed to start entry conversation:', error);
       useToast('Не удалось открыть чат', error?.message);

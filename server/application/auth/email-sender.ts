@@ -13,7 +13,18 @@ type SmtpConfig = {
   fromName: string;
 };
 
-let cachedTransporter: nodemailer.Transporter | null = null;
+const SMTP_CONNECTION_TIMEOUT_MS = 15_000;
+const SMTP_GREETING_TIMEOUT_MS = 10_000;
+const SMTP_SOCKET_TIMEOUT_MS = 20_000;
+const SMTP_MAX_SEND_ATTEMPTS = 2;
+const SMTP_RETRY_DELAY_MS = 800;
+const RETRYABLE_SMTP_ERROR_CODES = new Set([
+  'ECONNECTION',
+  'ECONNRESET',
+  'EPIPE',
+  'ESOCKET',
+  'ETIMEDOUT',
+]);
 
 function getSmtpConfig(): SmtpConfig {
   const cfg = useRuntimeConfig();
@@ -61,10 +72,8 @@ export function validateSmtpConfig(): { valid: boolean; errors: string[] } {
   return { valid: errors.length === 0, errors };
 }
 
-function getTransporter(): nodemailer.Transporter {
-  if (cachedTransporter) return cachedTransporter;
-  const smtp = getSmtpConfig();
-  cachedTransporter = nodemailer.createTransport({
+function createTransporter(smtp: SmtpConfig): nodemailer.Transporter {
+  return nodemailer.createTransport({
     host: smtp.host,
     port: smtp.port,
     secure: smtp.secure,
@@ -72,76 +81,142 @@ function getTransporter(): nodemailer.Transporter {
       user: smtp.user,
       pass: smtp.pass,
     },
+    connectionTimeout: SMTP_CONNECTION_TIMEOUT_MS,
+    greetingTimeout: SMTP_GREETING_TIMEOUT_MS,
+    socketTimeout: SMTP_SOCKET_TIMEOUT_MS,
+    tls: {
+      servername: smtp.host,
+    },
   });
-  return cachedTransporter;
+}
+
+function isRetryableSmtpError(error: unknown): boolean {
+  const code =
+    typeof (error as { code?: unknown })?.code === 'string'
+      ? String((error as { code: string }).code).toUpperCase()
+      : '';
+
+  return RETRYABLE_SMTP_ERROR_CODES.has(code);
+}
+
+async function wait(delayMs: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, delayMs));
+}
+
+type SendEmailParams = {
+  to: string;
+  subject: string;
+  text: string;
+  html: string;
+  successLabel: string;
+  errorLabel: string;
+};
+
+async function sendEmailWithRetry({
+  to,
+  subject,
+  text,
+  html,
+  successLabel,
+  errorLabel,
+}: SendEmailParams): Promise<void> {
+  const smtp = getSmtpConfig();
+  let lastError: unknown = null;
+
+  for (let attempt = 1; attempt <= SMTP_MAX_SEND_ATTEMPTS; attempt += 1) {
+    try {
+      const transporter = createTransporter(smtp);
+
+      await transporter.sendMail({
+        from: `${smtp.fromName} <${smtp.from}>`,
+        to,
+        subject,
+        text,
+        html,
+      });
+
+      console.log(`[Email] ✅ ${successLabel} sent to ${maskEmail(to)}`, {
+        attempt,
+      });
+      return;
+    } catch (error: any) {
+      lastError = error;
+
+      const errorMessage = error?.message || String(error);
+      const errorCode = error?.code || 'UNKNOWN';
+      const retryable =
+        isRetryableSmtpError(error) && attempt < SMTP_MAX_SEND_ATTEMPTS;
+
+      console.error(
+        `[Email] ❌ Failed to send ${errorLabel} to ${maskEmail(to)}:`,
+        {
+          attempt,
+          maxAttempts: SMTP_MAX_SEND_ATTEMPTS,
+          error: errorMessage,
+          code: errorCode,
+          command: error?.command,
+          responseCode: error?.responseCode,
+          smtpHost: smtp.host,
+          smtpPort: smtp.port,
+          retryable,
+        }
+      );
+
+      if (!retryable) {
+        break;
+      }
+
+      // Короткий backoff помогает пережить transient reset без заметной задержки для пользователя.
+      await wait(SMTP_RETRY_DELAY_MS * attempt);
+    }
+  }
+
+  const errorMessage =
+    (lastError as { message?: string } | null)?.message || String(lastError);
+
+  throw createError({
+    statusCode: 500,
+    statusMessage: 'Email send failed',
+    message:
+      'Не удалось отправить письмо. Попробуйте позже или обратитесь в поддержку.',
+    data:
+      process.env.NODE_ENV === 'development'
+        ? { originalError: errorMessage }
+        : undefined,
+  });
 }
 
 export async function sendVerificationEmail(
   to: string,
   code: string
 ): Promise<void> {
-  let smtp: SmtpConfig | null = null;
-
-  try {
-    smtp = getSmtpConfig();
-    const transporter = getTransporter();
-
-    const subject = 'Подтвердите ваш email — Ментала';
-    const text = `Ваш код подтверждения: ${code}. Код действителен 15 минут.`;
-    const html = `
-      <div style="font-family: Inter, Arial, sans-serif; line-height: 1.6; color: #0f172a;">
-        <h2 style="margin: 0 0 12px;">Подтвердите ваш email</h2>
-        <p style="margin: 0 0 16px;">Ваш код подтверждения:</p>
-        <div style="display: inline-block; font-size: 24px; letter-spacing: 6px; font-weight: 700; padding: 12px 16px; background: #f1f5f9; border-radius: 12px;">
-          ${code}
-        </div>
-        <p style="margin: 16px 0 0; color: #64748b;">Код действителен 15 минут.</p>
+  const subject = 'Подтвердите ваш email — Ментала';
+  const text = `Ваш код подтверждения: ${code}. Код действителен 15 минут.`;
+  const html = `
+    <div style="font-family: Inter, Arial, sans-serif; line-height: 1.6; color: #0f172a;">
+      <h2 style="margin: 0 0 12px;">Подтвердите ваш email</h2>
+      <p style="margin: 0 0 16px;">Ваш код подтверждения:</p>
+      <div style="display: inline-block; font-size: 24px; letter-spacing: 6px; font-weight: 700; padding: 12px 16px; background: #f1f5f9; border-radius: 12px;">
+        ${code}
       </div>
-    `;
+      <p style="margin: 16px 0 0; color: #64748b;">Код действителен 15 минут.</p>
+    </div>
+  `;
 
-    await transporter.sendMail({
-      from: `${smtp.fromName} <${smtp.from}>`,
-      to,
-      subject,
-      text,
-      html,
-    });
-
-    // Логируем успешную отправку для мониторинга (без PII)
-    console.log(`[Email] ✅ Verification code sent to ${maskEmail(to)}`);
-  } catch (error: any) {
-    const errorMessage = error?.message || String(error);
-    const errorCode = error?.code || 'UNKNOWN';
-
-    console.error(
-      `[Email] ❌ Failed to send verification code to ${maskEmail(to)}:`,
-      {
-        error: errorMessage,
-        code: errorCode,
-        smtpHost: smtp?.host,
-        smtpPort: smtp?.port,
-      }
-    );
-
-    throw createError({
-      statusCode: 500,
-      statusMessage:
-        'Не удалось отправить письмо. Попробуйте позже или обратитесь в поддержку.',
-      data:
-        process.env.NODE_ENV === 'development'
-          ? { originalError: errorMessage }
-          : undefined,
-    });
-  }
+  await sendEmailWithRetry({
+    to,
+    subject,
+    text,
+    html,
+    successLabel: 'Verification code',
+    errorLabel: 'verification code',
+  });
 }
 
 export async function sendPasswordResetEmail(
   to: string,
   resetUrl: string
 ): Promise<void> {
-  const smtp = getSmtpConfig();
-  const transporter = getTransporter();
-
   const subject = 'Восстановление пароля — Ментала';
   const text = `Перейдите по ссылке для восстановления пароля: ${resetUrl}. Ссылка действительна 1 час.`;
   const html = `
@@ -171,11 +246,12 @@ export async function sendPasswordResetEmail(
     </div>
   `;
 
-  await transporter.sendMail({
-    from: `${smtp.fromName} <${smtp.from}>`,
+  await sendEmailWithRetry({
     to,
     subject,
     text,
     html,
+    successLabel: 'Password reset email',
+    errorLabel: 'password reset email',
   });
 }

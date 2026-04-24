@@ -38,10 +38,12 @@
 ## Realtime Voice
 
 - OpenAI Realtime API через WebRTC
+- При запуске realtime voice фон `scene-selection` захватывается через общий `sceneAudioFocus` lock: сцена уходит в `useSceneAudio().suspend({ withFade: true })`, а после `stop/page_leave/error` возвращается через `resume()` только когда больше не осталось других активных mic-lock'ов
 - Основной `turn_detection` — `semantic_vad` с `eagerness=low`, чтобы уменьшить ложные срабатывания на короткий шум и шорохи
 - Rollback через env остаётся на `server_vad` с консервативными параметрами `threshold=0.7` и `silence_duration_ms=1000`
 - В `audio.input` всегда включено `noise_reduction: near_field`
 - На mobile (`iOS/Android`) client-side `response.cancel` по `speech_started` отключён; barge-in сохраняется только на `web`
+- На native iOS любой отказ в доступе к микрофону, включая первый отказ в системном prompt и повторный отказ из WKWebView/getUserMedia, обязан открывать общий `MicPermissionDeniedDialog`; Android сохраняет прежний flow без принудительного показа модалки после первого системного отказа
 - Если пользователь отклонил доступ к микрофону в `web` или `PWA`, следующий запуск voice/dictation обязан открывать общий `MicPermissionDeniedDialog` с инструкцией по ручному восстановлению разрешения; на native по-прежнему используется переход в системные настройки приложения
 - Runtime compaction по бюджетам текстового чата
 - Compaction строится text-моделью (gpt-realtime-\* не поддерживает json_schema)
@@ -61,6 +63,7 @@
 
 - `scene-selection` на native iOS/Android использует тот же `NativeAudioService`/MediaGrid route, что и медитации; web/legacy остаётся на WebAudio для loop-сцен и HTMLAudio fallback для non-loop
 - При старте медитации `useMeditationPlayer` вызывает `useSceneAudio().suspend()`: native-сцена жёстко останавливается и уничтожается, web/iOS legacy ставится на паузу
+- Любая голосовая диктовка через `speechStore.isListening` и realtime voice используют общий `sceneAudioFocus` reference-counted lock, чтобы несколько mic-сценариев не ломали друг другу возврат фоновой сцены
 - После остановки/паузы медитации layout watcher вызывает `sceneAudio.resume()` и возвращает сцену, если до suspend она играла, пользователь всё ещё в active state и громкость сцены больше 0
 - Resume сцены после медитации отложен и отменяем через `playbackActionId`/`resumeAfterSuspendActionId`: быстрый `pause → play` в медитации не должен поднимать scene-source параллельно с meditation-source
 - На iOS native meditation `pause` не оставляет MediaGrid/AVPlayer source в paused-состоянии: позиция сохраняется в JS, source останавливается/уничтожается, следующий `play` создаёт новый `audioId` и стартует с сохранённой позиции. Android остаётся на штатном `pause()`/`resume()`
@@ -70,11 +73,15 @@
 
 - Web/legacy: и voice, и `sounds/*` дыхательных практик идут через `Howler` с `html5: true`; отдельный Web Audio route для дыхания не используется
 - Native iOS/Android: основная практика идёт через отдельный `NativeBreathSessionService`, который управляет MediaGrid breathing-session поверх плагина, а intro-voice остаётся отдельным коротким source
+- Для native breathing нельзя строить source из локального bundle-origin (`http://localhost` / WebView origin) в production release: MediaGrid/Media3/AVPlayer должны получать публичный `appUrl`/`apiBase` origin (`https://my.mentala.app/.../breath/*`), потому что `mediaBaseUrl` для `breath/*` не используется и локальный WebView origin доступен не всем native playback route
+- Для native breathing в development наоборот используем текущий WebView origin как source base, включая `http://localhost:3000` через `adb reverse`: это нужно, чтобы Android device не ходил в `local.mentala.app`/другой desktop-only host и не падал с `UnknownHostException`
 - В native breathing-session primary source всегда один: cue-loop с `useForNotification: true`, либо voice-клип, если `sounds/*` выключены. Дополнительный voice при `sounds + voice` идёт параллельно на secondary source с `useForNotification: false`, иначе Android падает с `There can only be one`
 - Плагин пропатчен дополнительными командами `startBreathingSession`, `pauseBreathingSession`, `resumeBreathingSession`, `stopBreathingSession`, `updateBreathingSessionConfig`; они сами переключают фазы по native timers и не зависят от JS `setInterval`
-- Включённые одновременно `voice + sounds` стартуют в одной фазе параллельно без последовательности `voice -> cue`; по `pause/resume` current phase не пересоздаётся через JS, а продолжается внутри native session
+- Включённые одновременно `voice + sounds` в native breathing стартуют почти одновременно, но не строго одним вызовом: `cue` запускается первым, а `voice` получает только микрокомпенсацию старта (`~45ms`) на входе новой фазы, чтобы нивелировать prepare/buffer lag у `sounds/*`; по `pause/resume` current phase не пересоздаётся через JS, а продолжается внутри native session
 - Если `sounds/*` выключены, остаётся только voice-клип как primary; если voice выключен, текущий voice source просто гасится, а cue остаётся primary. Обратное включение канала вступает только со следующей фазы, без дубля текущей voice-фразы
 - Cue-треки дыхательных практик (`public/breath/sounds/*`) на native уходят в короткий phase-end fadeout перед переключением шага; voice-клипы не фейдятся. Web-ветка дыхательных cue сейчас играет без phase-end fadeout
+  На native fade держим мягче (`~280ms`, `8` steps), чтобы переход между фазами не звучал как жёсткий обрыв
+- Cue-файлы `public/breath/sounds/*` для Android держим в AAC LC с частотой не выше `48 kHz`: Android platform docs гарантируют стандартные sampling rates `8–48 kHz` для AAC, а `96 kHz` cue могут молча ломать playback в release WebView / Media3 route
 - Таймер дыхательной практики хранит абсолютный `endsAt` в UI для синхронизации прогресса и одновременно уходит в native breathing-session; фактическая остановка практики в фоне / под локскрином не зависит от живого WebView
 - Для Android pool нужно поднимать выше дефолтного (`html5PoolSize > 10`), потому что web-route дыхания держит несколько отдельных HTML5 Audio nodes для voice/cue
 - Любой toggle voice/cue и `unmount` в web-route обязан делать `Howl.unload()`, а не только `stop()`, иначе ноды не возвращаются в pool и следующие фазы начинают теряться

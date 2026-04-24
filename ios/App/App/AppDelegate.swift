@@ -92,10 +92,13 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             // Добавляем bluetooth/airplay, чтобы не ломать маршруты вывода.
             try session.setCategory(.playback, mode: .default, options: [.allowBluetoothA2DP, .allowAirPlay])
 
-            // Предпочитаемые параметры. Это снижает шанс «первый старт тихий/молчание»
-            // в WKWebView/WebAudio на некоторых iPhone.
-            try session.setPreferredSampleRate(48_000)
-            try session.setPreferredIOBufferDuration(0.005)
+            if reason == "didFinishLaunching" {
+                // Предпочитаемые параметры задаём только на холодном старте.
+                // Повторная перенастройка во время lifecycle-переходов может давать
+                // OSStatus -50, особенно рядом с playAndRecord / speech recognition.
+                try? session.setPreferredSampleRate(48_000)
+                try? session.setPreferredIOBufferDuration(0.005)
+            }
 
             // Делаем сессию активной. Если она уже активна, iOS просто подтвердит состояние.
             try session.setActive(true, options: [])

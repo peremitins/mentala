@@ -13,6 +13,10 @@ function isNativePlatform(): boolean {
   return platform === 'ios' || platform === 'android';
 }
 
+function isNativeIosPlatform(): boolean {
+  return Capacitor.getPlatform() === 'ios';
+}
+
 function resolveStandalonePwa(): boolean {
   if (!isDocumentAvailable() || typeof window === 'undefined') {
     return false;
@@ -84,7 +88,10 @@ function isNativePermissionDeniedError(error: unknown): boolean {
   return (
     errorCode === 'PERMISSION_DENIED' ||
     normalized.includes('permission denied') ||
-    normalized.includes('microphone permission denied')
+    normalized.includes('microphone permission denied') ||
+    normalized.includes('user denied access to microphone') ||
+    normalized.includes('user denied access to speech recognition') ||
+    normalized.includes('missing permission')
   );
 }
 
@@ -151,10 +158,21 @@ export function useMicPermissionGate() {
   ): Promise<boolean> {
     if (isNativePlatform()) {
       if ((error as any)?.code === 'PERMISSION_DENIED_FIRST') {
+        // На iOS после системного prompt отказ может прилетать в разных формах
+        // (speech plugin / WKWebView getUserMedia), поэтому всегда даём
+        // fallback-инструкцию, даже если это первый отказ в текущей попытке.
+        if (isNativeIosPlatform()) {
+          showMicDeniedModal.value = true;
+          return true;
+        }
+
         return false;
       }
 
-      if (isNativePermissionDeniedError(error)) {
+      if (
+        isNativePermissionDeniedError(error) ||
+        (isNativeIosPlatform() && isWebPermissionDeniedError(error))
+      ) {
         showMicDeniedModal.value = true;
         return true;
       }

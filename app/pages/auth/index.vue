@@ -387,6 +387,7 @@ import { Checkbox } from '@/app/components/ui/shadcn/checkbox';
 import { Tabs, TabsList, TabsTrigger } from '@/app/components/ui/shadcn/tabs';
 import { useToast } from '@/app/composables/useToast';
 import { getErrorDiagnosticsLog } from '@/app/utils/errorDiagnostics';
+import { sanitizePublicErrorMessage } from '@/app/utils/errorMessage';
 import {
   normalizePendingAccessCode,
   usePendingAccessCode,
@@ -571,7 +572,7 @@ async function submit() {
         locale: locale.value,
       });
     } else {
-      await auth.registerEmail({
+      const response = await auth.registerEmail({
         email: email.value,
         password: password.value,
         name: name.value || undefined,
@@ -581,6 +582,16 @@ async function submit() {
         acceptPrivacy: agree.value,
         marketingConsent: marketingConsent.value,
       });
+
+      if (response.verificationEmailSent === false) {
+        useToast(
+          'Письмо не отправлено',
+          response.verificationEmailMessage,
+          'error'
+        );
+        return;
+      }
+
       startVerificationFlow();
     }
   } catch (e: any) {
@@ -598,11 +609,12 @@ async function submit() {
     }
 
     const payload = e?.data || e?.response?._data || {};
-    const message =
+    const message = sanitizePublicErrorMessage(
       payload?.message ||
-      payload?.statusMessage ||
-      (e instanceof Error ? e.message : '') ||
-      'Не удалось войти. Проверь подключение и попробуй ещё раз.';
+        payload?.statusMessage ||
+        (e instanceof Error ? e.message : ''),
+      'Не удалось войти. Проверь подключение и попробуй ещё раз.'
+    );
     useToast('Ошибка входа', String(message), 'error');
     console.error('[Auth] Signin error:', getErrorDiagnosticsLog(e));
   } finally {

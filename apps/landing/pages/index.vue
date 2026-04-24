@@ -115,6 +115,52 @@
                 {{ t('LANDING.HERO.SECONDARY_CTA') }}
               </button>
             </div>
+
+            <div
+              class="reveal-item flex flex-col w-max gap-3 items-center rounded-lg"
+            >
+              <!-- На телефонах QR не показываем: там он избыточен, нужен только CTA. -->
+              <a
+                :href="androidInstallHref"
+                target="_blank"
+                class="hidden lg:flex items-center justify-center transition hover:border-white/20 hover:bg-white/[0.07]"
+                :aria-label="t('LANDING.ANDROID_PROMO.QR_LINK_ARIA')"
+                @click="trackAndroidPromoClick('hero_qr')"
+              >
+                <div
+                  class="overflow-hidden rounded-lg bg-white p-4 shadow-[0_20px_44px_rgba(0,0,0,0.24)]"
+                >
+                  <img
+                    src="/qr-codes/android.svg"
+                    :alt="t('LANDING.ANDROID_PROMO.QR_ALT')"
+                    class="h-[130px] w-[130px] rounded-[16px]"
+                    loading="lazy"
+                    decoding="async"
+                    width="130"
+                    height="130"
+                  />
+                </div>
+              </a>
+
+              <div class="flex min-w-0">
+                <!-- Ведём на стабильный first-party путь, чтобы потом не перевыпускать QR. -->
+                <a
+                  :href="androidInstallHref"
+                  target="_blank"
+                  class="inline-flex transition hover:border-white/20 hover:bg-white/[0.06]"
+                  :aria-label="t('LANDING.ANDROID_PROMO.BADGE_LINK_ARIA')"
+                  @click="trackAndroidPromoClick('hero_primary')"
+                >
+                  <img
+                    src="/store-badges/google-play-badge.svg"
+                    :alt="t('LANDING.ANDROID_PROMO.GOOGLE_PLAY_BADGE_ALT')"
+                    class="h-auto w-full max-w-[160px]"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                </a>
+              </div>
+            </div>
           </div>
 
           <div class="relative reveal-item order-1 lg:order-2">
@@ -630,6 +676,68 @@
         </div>
       </section>
 
+      <section
+        id="android-download"
+        class="reveal-item scroll-mt-header mt-20 lg:mt-28"
+      >
+        <div class="landing-container flex items-center">
+          <div
+            class="flex w-full justify-center reveal-item glass-panel relative overflow-hidden rounded-2xl border-white/20 p-6 sm:p-8 lg:p-10"
+          >
+            <div
+              class="pointer-events-none absolute -right-20 top-0 h-48 w-48 rounded-full bg-emerald-300/12 blur-3xl"
+              aria-hidden="true"
+            />
+            <div
+              class="pointer-events-none absolute -left-12 bottom-0 h-40 w-40 rounded-full bg-sky-300/10 blur-3xl"
+              aria-hidden="true"
+            />
+
+            <div class="relative w-max flex flex-col gap-5">
+              <a
+                :href="androidInstallHref"
+                target="_blank"
+                class="hidden lg:flex items-center justify-center transition hover:border-white/20 hover:bg-white/[0.07]"
+                :aria-label="t('LANDING.ANDROID_PROMO.QR_LINK_ARIA')"
+                @click="trackAndroidPromoClick('bottom_qr')"
+              >
+                <div
+                  class="mx-auto overflow-hidden rounded-lg bg-white shadow-[0_20px_44px_rgba(0,0,0,0.24)]"
+                >
+                  <img
+                    src="/qr-codes/android.svg"
+                    :alt="t('LANDING.ANDROID_PROMO.QR_ALT')"
+                    class="h-[220px] w-[220px] rounded-[16px]"
+                    loading="lazy"
+                    decoding="async"
+                    width="220"
+                    height="220"
+                  />
+                </div>
+              </a>
+
+              <div class="flex flex-wrap items-center gap-3 w-full">
+                <a
+                  :href="androidInstallHref"
+                  target="_blank"
+                  class="w-full inline-flex transition hover:border-white/20 hover:bg-white/[0.06]"
+                  :aria-label="t('LANDING.ANDROID_PROMO.BADGE_LINK_ARIA')"
+                  @click="trackAndroidPromoClick('bottom_primary')"
+                >
+                  <img
+                    src="/store-badges/google-play-badge.svg"
+                    :alt="t('LANDING.ANDROID_PROMO.GOOGLE_PLAY_BADGE_ALT')"
+                    class="h-auto w-[220px]"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <footer class="mt-20 sm:mt-28">
         <div class="landing-container">
           <div
@@ -925,6 +1033,11 @@ import { useLandingAnalytics } from '../composables/useLandingAnalytics';
 import { useLandingLocale } from '../composables/useLandingLocale';
 import { useLandingSiteUrl } from '../composables/useLandingSiteUrl';
 import type { SupportedLocale } from '../composables/useLandingLocale';
+import {
+  GOOGLE_PLAY_WEB_URL,
+  LANDING_ANDROID_QR_PATH,
+  buildLandingAndroidQrUrl,
+} from '../../../shared/utils/mobileAppLinks';
 
 type FeatureStep = {
   key: string;
@@ -1332,6 +1445,8 @@ const ctaUrl = computed(
   () => landingConfig.value?.ctaUrl || runtimeConfig.public.appAuthUrl
 );
 const isReducedMotion = computed(() => reducedMotion.value === 'reduce');
+const androidInstallHref = LANDING_ANDROID_QR_PATH;
+const androidQrUrl = computed(() => buildLandingAndroidQrUrl(siteUrl.value));
 
 const primaryCtaText = computed(() =>
   isReleased.value
@@ -1419,6 +1534,11 @@ function openPrimaryCTA() {
   }
   reachGoal('landing_cta_click');
   waitlistOpen.value = true;
+}
+
+function trackAndroidPromoClick(location: string) {
+  // Отдельно помечаем install CTA, чтобы видеть разницу между hero и нижним блоком.
+  reachGoal('landing_android_store_click', { location });
 }
 
 async function onLocaleChange(nextLocale: SupportedLocale) {
@@ -1683,6 +1803,21 @@ useHead(() => ({
             text: item.answer,
           },
         })),
+      }),
+    },
+    {
+      key: 'ld-software-application',
+      type: 'application/ld+json',
+      textContent: JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'SoftwareApplication',
+        name: String(t('LANDING.STRUCTURED_DATA.SOFTWARE_APPLICATION_NAME')),
+        operatingSystem: 'Android',
+        applicationCategory: 'HealthApplication',
+        url: androidQrUrl.value,
+        installUrl: androidQrUrl.value,
+        downloadUrl: GOOGLE_PLAY_WEB_URL,
+        description: String(t('LANDING.ANDROID_PROMO.STRUCTURED_DESCRIPTION')),
       }),
     },
   ],

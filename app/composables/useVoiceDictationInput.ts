@@ -1,9 +1,14 @@
-import { computed, nextTick, onScopeDispose, ref, watch, type Ref } from 'vue';
+import { computed, nextTick, onScopeDispose, ref, watch } from 'vue';
+import { Capacitor } from '@capacitor/core';
 import { useSpeechEngine } from '@/app/composables/useSpeechEngine';
 import {
   useMicPermissionGate,
   type MicPermissionState,
 } from '@/app/composables/useMicPermissionGate';
+import {
+  useSceneAudioFocus,
+  type SceneAudioFocusLock,
+} from '@/app/composables/useSceneAudioFocus';
 import { useSpeechStore } from '@/app/stores/speech';
 
 interface VoiceDictationFinalPayload {
@@ -14,7 +19,6 @@ interface VoiceDictationFinalPayload {
 interface UseVoiceDictationInputOptions {
   getValue: () => string | null | undefined;
   setValue: (value: string) => void;
-  isBlocked?: Ref<boolean>;
   separator?: string;
   onStartError?: (error: unknown) => void;
   onFinalTranscription?: (
@@ -41,18 +45,60 @@ export function useVoiceDictationInput(options: UseVoiceDictationInputOptions) {
   const { settings, start, stop, onPartial, onFinal, onError } =
     useSpeechEngine();
   const micPermissionGate = useMicPermissionGate();
+  const sceneAudioFocus = useSceneAudioFocus();
   const isApplyingVoiceInput = ref(false);
   const baseText = ref('');
   const isDisposed = ref(false);
   const separator = options.separator ?? ' ';
   const lastStartPermissionState = ref<MicPermissionState>(null);
+  const sessionId = ref(0);
+  const activeSessionId = ref<number | null>(null);
+  const dictationAudioLock = ref<SceneAudioFocusLock | null>(null);
 
-  function isBlocked(): boolean {
-    return options.isBlocked?.value === true;
+  const shouldDisableFadeForIosDictation =
+    Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'ios';
+
+  function hasActiveSession(): boolean {
+    return activeSessionId.value !== null;
+  }
+
+  function isCurrentSessionActive(): boolean {
+    return hasActiveSession() && activeSessionId.value === sessionId.value;
+  }
+
+  async function acquireDictationAudioFocus(): Promise<void> {
+    if (dictationAudioLock.value) {
+      return;
+    }
+
+    dictationAudioLock.value = await sceneAudioFocus.acquire(
+      'speech-dictation',
+      {
+        // На iOS длинный fade во время старта диктовки засыпает bridge
+        // вызовами setVolume и конфликтует с запуском speech recognition.
+        withFade: !shouldDisableFadeForIosDictation,
+      }
+    );
+  }
+
+  async function releaseDictationAudioFocus(): Promise<void> {
+    const lock = dictationAudioLock.value;
+    if (!lock) {
+      return;
+    }
+
+    dictationAudioLock.value = null;
+    await lock.release();
   }
 
   onPartial((partial) => {
-    if (isDisposed.value || !speechStore.isListening || isBlocked()) return;
+    if (
+      isDisposed.value ||
+      !speechStore.isListening ||
+      !isCurrentSessionActive()
+    ) {
+      return;
+    }
 
     isApplyingVoiceInput.value = true;
     options.setValue(mergeWithBase(baseText.value, partial, separator));
@@ -63,7 +109,7 @@ export function useVoiceDictationInput(options: UseVoiceDictationInputOptions) {
   });
 
   onFinal((finalText) => {
-    if (isDisposed.value || isBlocked()) return;
+    if (isDisposed.value || !isCurrentSessionActive()) return;
 
     const normalizedFinal = normalizeText(finalText);
     if (!normalizedFinal) return;
@@ -95,7 +141,9 @@ export function useVoiceDictationInput(options: UseVoiceDictationInputOptions) {
   onError((error) => {
     if (isDisposed.value) return;
 
+    activeSessionId.value = null;
     speechStore.isListening = false;
+    void releaseDictationAudioFocus();
     void micPermissionGate.handleStartFailure(error, {
       priorPermissionState: lastStartPermissionState.value,
     });
@@ -110,6 +158,18 @@ export function useVoiceDictationInput(options: UseVoiceDictationInputOptions) {
       if (nextValue.length === 0) {
         baseText.value = '';
       }
+    }
+  );
+
+  watch(
+    () => speechStore.isListening,
+    (isListening) => {
+      if (isListening) {
+        return;
+      }
+
+      activeSessionId.value = null;
+      void releaseDictationAudioFocus();
     }
   );
 
@@ -129,11 +189,18 @@ export function useVoiceDictationInput(options: UseVoiceDictationInputOptions) {
     }
 
     try {
+      await acquireDictationAudioFocus();
+      // Помечаем новую сессию до native/browser start, чтобы не потерять
+      // самые ранние partial callbacks после системного prompt.
+      sessionId.value += 1;
+      activeSessionId.value = sessionId.value;
       await start();
     } catch (error) {
       console.error('[VoiceDictationInput] Failed to start dictation:', error);
+      activeSessionId.value = null;
       speechStore.isListening = false;
       baseText.value = '';
+      await releaseDictationAudioFocus();
       const permissionHandled = await micPermissionGate.handleStartFailure(
         error,
         {
@@ -151,9 +218,14 @@ export function useVoiceDictationInput(options: UseVoiceDictationInputOptions) {
   }
 
   async function stopListening(): Promise<void> {
-    await stop();
-    if (!normalizeText(options.getValue())) {
-      baseText.value = '';
+    activeSessionId.value = null;
+    try {
+      await stop();
+    } finally {
+      await releaseDictationAudioFocus();
+      if (!normalizeText(options.getValue())) {
+        baseText.value = '';
+      }
     }
   }
 
@@ -163,6 +235,8 @@ export function useVoiceDictationInput(options: UseVoiceDictationInputOptions) {
 
   onScopeDispose(() => {
     isDisposed.value = true;
+    activeSessionId.value = null;
+    void releaseDictationAudioFocus();
   });
 
   return {

@@ -547,6 +547,20 @@
       "when": 1776187784746,
       "tag": "0080_funny_shinobi_shaw",
       "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1776866579481,
+      "tag": "0081_blushing_maestro",
+      "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1777023765952,
+      "tag": "0082_freezing_major_mapleleaf",
+      "breakpoints": true
     }
   ]
 }

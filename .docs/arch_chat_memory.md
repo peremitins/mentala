@@ -17,7 +17,10 @@
 ## Lifecycle текстовой сессии
 - Внутри сессии: `previous_response_id` (Responses API) + `truncation: auto`
 - Привязка к `chatSessionId`: новый `chatSessionId` = новый lifecycle, сервер закрывает предыдущую session
-- При завершении: BullMQ job `chat-session-summary` строит handoff-summary + обновляет durable profile одним LLM-вызовом, затем чистит transcript
+- Для text chat server-side transient transcript пишется на каждом завершённом turn даже если `enablePreviousResponseId=false`; это источник истины для `sessionSummaryUser`
+- При cold start `/chat` клиент восстанавливает весь несуммаризованный backlog пользователя из server transcript; если последняя billing-сессия уже ended/stale, история всё равно показывается, но новые сообщения стартуют новую `therapySession`
+- При hide/pagehide/app background клиент всегда пытается отправить `therapy/session/end`; при сетевой ошибке request не теряется, а попадает в persistent retry queue и добивается после следующего startup/online/foreground
+- При завершении: BullMQ job `chat-session-summary` строит handoff-summary + обновляет durable profile одним LLM-вызовом, но transcript удаляется только когда user summary уже завершена или точно не нужна
 - Inline fallback если Redis/BullMQ недоступны
 
 ## Runtime token guard
@@ -28,6 +31,7 @@
 ## Prompt assembly
 - **Session bootstrap** (первый ход chain): system + developer bootstrap + memory blocks (durable profile / handoff / compact state)
 - **Per-turn**: только developer context + user-message (без дублирования стабильных слоёв)
+- Если `previous_response_id` уже недоступен, но клиент прислал восстановленный несуммаризованный backlog, bootstrap строится от `active backlog context` текущего диалога; он имеет приоритет над `handoff` прошлой завершённой сессии и над durable profile, чтобы `продолжим` не уводило модель в старые темы
 
 ## Durable profile memory
 - Short JSON: `facts<=3`, `preferences<=3`, `context<=2`, `name<=40 chars`, `item<=80 chars`
@@ -47,6 +51,11 @@
 ## Хранение
 - Encrypted по умолчанию: AES-256-GCM (`SUMMARY_AES_KEY`), plaintext только через `SUMMARY_ENCRYPTION_DISABLED=true` (dev)
 - Все memory-payload versioned (`schemaVersion`)
+- Пользовательский `sessionSummaryUser` prompt персонализируется по `users.locale`, `user_preferences.addressing` и `users.gender`; если пол не задан, prompt требует нейтральные формулировки без предположений о роде
+- `sessionSummaryUser` в текущем client lifecycle реально запускается вручную (`manual`) и nightly cron; logout больше не триггерит user-summary, а только отправляет `therapy/session/end`
+- Client-side auto-summary на `pagehide/beforeunload` для web отключён: browser refresh должен восстанавливать историю, а не завершать сессию перед restore
+- После успешной `sessionSummaryUser` очищается только тот unsummarized backlog, который реально вошёл в итог; более новая параллельная сессия пользователя не затрагивается
+- Старый `not_eligible` backlog чистится nightly retention-проходом, если он не стал summary-worthy и завис дольше нескольких дней
 
 ## AI Relay
 - Внутренний стрим: дельты текста, SSE в `server/api/chat/stream.post.ts`

@@ -66,7 +66,7 @@ async function handoffFromText(params: {
     : null;
 
   if (!enableMemory) {
-    await cleanupTransientTherapySessionMemory(therapySessionId);
+    await cleanupTransientTherapySessionMemory(therapySessionId, params.userId);
   }
 
   return {
@@ -133,7 +133,7 @@ async function handoffFromRealtimeVoice(params: {
     : null;
 
   if (!enableMemory) {
-    await cleanupTransientTherapySessionMemory(session.therapySessionId);
+    await cleanupTransientTherapySessionMemory(session.therapySessionId, params.userId);
   }
 
   return {
