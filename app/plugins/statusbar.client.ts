@@ -9,7 +9,8 @@ import { Capacitor } from '@capacitor/core';
  *   полагаться на overlaysWebView=false и тем более на фиксированную высоту status bar.
  * - Insets для контента берём из CSS env(safe-area-inset-*) и Android WindowInsets bridge,
  *   чтобы они были реальными для конкретного устройства, эмулятора и режима системных баров.
- * - На iOS явно оставляем overlay=true, чтобы WebView корректно отдавал safe area.
+ * - На iOS overlay/layout настраивается ранним native-кодом в MainViewController,
+ *   чтобы не вызывать поздний JS-пересчёт геометрии и не ломать Android config.
  */
 export default defineNuxtPlugin(async () => {
   if (!Capacitor.isNativePlatform()) {
@@ -18,15 +19,10 @@ export default defineNuxtPlugin(async () => {
 
   try {
     const { StatusBar, Style } = await import('@capacitor/status-bar');
-    const platform = Capacitor.getPlatform();
 
     await StatusBar.setStyle({
       style: Style.Dark,
     });
-
-    if (platform === 'ios') {
-      await StatusBar.setOverlaysWebView({ overlay: true });
-    }
   } catch (error) {
     console.warn('[StatusBar] Failed to initialize:', error);
   }

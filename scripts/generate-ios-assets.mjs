@@ -8,7 +8,8 @@
  *
  * Результат:
  * - ios/App/App/Assets.xcassets/AppIcon.appiconset/favicon_ios.png
- * - ios/App/App/Assets.xcassets/Splash.imageset/splash-2732x2732*.png
+ * - ios/App/App/Assets.xcassets/SplashBackdrop.imageset/splash-backdrop*.png
+ * - ios/App/App/Assets.xcassets/SplashMark.imageset/splash-mark*.png
  */
 import { Buffer } from 'node:buffer';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -30,18 +31,29 @@ const IOS_APP_ICON_PATH = path.join(
   ROOT_DIR,
   'ios/App/App/Assets.xcassets/AppIcon.appiconset/favicon_ios.png'
 );
-const IOS_SPLASH_DIR = path.join(
+const IOS_SPLASH_BACKDROP_DIR = path.join(
   ROOT_DIR,
-  'ios/App/App/Assets.xcassets/Splash.imageset'
+  'ios/App/App/Assets.xcassets/SplashBackdrop.imageset'
+);
+const IOS_SPLASH_MARK_DIR = path.join(
+  ROOT_DIR,
+  'ios/App/App/Assets.xcassets/SplashMark.imageset'
 );
 
 const APP_ICON_SIZE = 1024;
+const IOS_APP_ICON_MARK_SCALE = 0.94;
 const SPLASH_SIZE = 2732;
-const SPLASH_MARK_SIZE = 864;
-const SPLASH_TARGETS = [
-  'splash-2732x2732.png',
-  'splash-2732x2732-1.png',
-  'splash-2732x2732-2.png',
+const SPLASH_MARK_SIZE = 560;
+const SPLASH_MARK_ASSET_SIZE = 1024;
+const SPLASH_BACKDROP_TARGETS = [
+  'splash-backdrop.png',
+  'splash-backdrop-1.png',
+  'splash-backdrop-2.png',
+];
+const SPLASH_MARK_TARGETS = [
+  'splash-mark.png',
+  'splash-mark-1.png',
+  'splash-mark-2.png',
 ];
 
 function createSplashBackdropSvg(size) {
@@ -95,6 +107,9 @@ function createSplashBackdropSvg(size) {
  */
 async function renderAppIcon(markSvg) {
   const appIconBuffer = await renderLauncherBitmap(markSvg, APP_ICON_SIZE, {
+    // На iPhone итоговая маска и визуальные поля читаются строже, чем на Android.
+    // Чуть увеличиваем знак, чтобы иконка выглядела ближе к Android launcher.
+    markScale: IOS_APP_ICON_MARK_SCALE,
     removeAlpha: true,
   });
 
@@ -115,23 +130,27 @@ async function renderSplash(markSvg) {
     .png(PNG_OUTPUT_OPTIONS)
     .toBuffer();
 
-  const inset = Math.round((SPLASH_SIZE - SPLASH_MARK_SIZE) / 2);
-  const splashBuffer = await sharp(splashBackdropBuffer)
-    .composite([
-      {
-        input: splashMarkBuffer,
-        left: inset,
-        top: inset,
-      },
-    ])
+  await mkdir(IOS_SPLASH_BACKDROP_DIR, { recursive: true });
+  await Promise.all(
+    SPLASH_BACKDROP_TARGETS.map((filename) =>
+      writeFile(
+        path.join(IOS_SPLASH_BACKDROP_DIR, filename),
+        splashBackdropBuffer
+      )
+    )
+  );
+
+  const splashMarkAssetBuffer = await sharp(Buffer.from(markSvg))
+    .resize(SPLASH_MARK_ASSET_SIZE, SPLASH_MARK_ASSET_SIZE, {
+      fit: 'contain',
+    })
     .png(PNG_OUTPUT_OPTIONS)
     .toBuffer();
 
-  await mkdir(IOS_SPLASH_DIR, { recursive: true });
-
+  await mkdir(IOS_SPLASH_MARK_DIR, { recursive: true });
   await Promise.all(
-    SPLASH_TARGETS.map((filename) =>
-      writeFile(path.join(IOS_SPLASH_DIR, filename), splashBuffer)
+    SPLASH_MARK_TARGETS.map((filename) =>
+      writeFile(path.join(IOS_SPLASH_MARK_DIR, filename), splashMarkAssetBuffer)
     )
   );
 }
@@ -142,10 +161,6 @@ async function main() {
 
   await renderAppIcon(markSvg);
   await renderSplash(markSvg);
-
-  console.log('✓ iOS AppIcon and Splash assets generated');
-  console.log(`  - AppIcon: ${IOS_APP_ICON_PATH}`);
-  console.log(`  - Splash: ${IOS_SPLASH_DIR}`);
 }
 
 await main();
