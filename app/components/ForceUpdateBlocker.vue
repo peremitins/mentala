@@ -79,7 +79,7 @@ const displayMessage = computed(
 }
 
 .force-update-icon {
-  color: var(--color-primary, #9b78ff);
+  color: var(--color-primary, #f1f4fa);
   margin-bottom: 8px;
   opacity: 0.9;
 }
@@ -104,8 +104,8 @@ const displayMessage = computed(
   padding: 14px 40px;
   border-radius: 12px;
   border: none;
-  background: var(--color-primary, #9b78ff);
-  color: var(--color-primary-foreground, #ffffff);
+  background: var(--color-primary, #f1f4fa);
+  color: var(--color-primary-foreground, #101828);
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;

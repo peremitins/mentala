@@ -239,6 +239,7 @@
                         <a
                           :href="termsOfServiceUrl"
                           class="underline text-primary-ui hover:text-primary-ui/80"
+                          @click.prevent="openLegalDocument(termsOfServiceUrl)"
                         >
                           Условия использования
                         </a>
@@ -246,6 +247,7 @@
                         <a
                           :href="privacyPolicyUrl"
                           class="underline text-primary-ui hover:text-primary-ui/80"
+                          @click.prevent="openLegalDocument(privacyPolicyUrl)"
                         >
                           Политику конфиденциальности
                         </a>
@@ -354,6 +356,7 @@
             <a
               :href="termsOfServiceUrl"
               class="underline text-primary-ui hover:text-primary-ui/80"
+              @click.prevent="openLegalDocument(termsOfServiceUrl)"
             >
               Условиями использования
             </a>
@@ -361,6 +364,7 @@
             <a
               :href="privacyPolicyUrl"
               class="underline text-primary-ui hover:text-primary-ui/80"
+              @click.prevent="openLegalDocument(privacyPolicyUrl)"
             >
               Политикой конфиденциальности
             </a>
@@ -375,6 +379,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick } from 'vue';
 import { useCountdown } from '@vueuse/core';
+import { useRuntimeConfig } from '#imports';
 import { useAuthStore } from '@/app/stores/auth';
 import GoogleIcon from '~icons/logos/google-icon';
 import AppleIcon from '~icons/logos/apple';
@@ -388,6 +393,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/app/components/ui/shadcn/tabs';
 import { useToast } from '@/app/composables/useToast';
 import { getErrorDiagnosticsLog } from '@/app/utils/errorDiagnostics';
 import { sanitizePublicErrorMessage } from '@/app/utils/errorMessage';
+import { openExternalBrowser } from '@/app/utils/openExternalBrowser';
 import {
   normalizePendingAccessCode,
   usePendingAccessCode,
@@ -429,16 +435,23 @@ const langCookie = useCookie<string | null>('mentai.lang', {
   path: '/',
 });
 const locale = computed(() => langCookie.value || 'ru');
+const runtimeConfig = useRuntimeConfig();
 const legalLocale = computed(() => {
   const normalizedLocale = String(locale.value || 'ru').toLowerCase();
   return normalizedLocale.startsWith('en') ? 'en' : 'ru';
 });
+const publicAppUrl = computed(() =>
+  String(runtimeConfig.public.appUrl || 'https://my.mentala.app').replace(
+    /\/$/,
+    ''
+  )
+);
 
 const termsOfServiceUrl = computed(
-  () => `/legal/terms-of-service-${legalLocale.value}.html`
+  () => `${publicAppUrl.value}/legal/terms-of-service-${legalLocale.value}.html`
 );
 const privacyPolicyUrl = computed(
-  () => `/legal/privacy-policy-${legalLocale.value}.html`
+  () => `${publicAppUrl.value}/legal/privacy-policy-${legalLocale.value}.html`
 );
 
 const brandLogoComponent = computed(() => {
@@ -451,6 +464,10 @@ const { pendingAccessCode, setPendingAccessCode } = usePendingAccessCode();
 
 function normalizeAccessCodeInput() {
   accessCode.value = normalizePendingAccessCode(accessCode.value);
+}
+
+async function openLegalDocument(url: string) {
+  await openExternalBrowser(url);
 }
 
 function startResendTimer(seconds = 60) {
