@@ -113,17 +113,15 @@
         <div class="flex flex-wrap gap-2">
           <a
             :href="privacyPolicyUrl"
-            target="_blank"
-            rel="noopener noreferrer"
             class="support-secondary-link"
+            @click.prevent="openLegalDocument(privacyPolicyUrl)"
           >
             {{ t('SUPPORT.LEGAL.PRIVACY') }}
           </a>
           <a
             :href="termsOfServiceUrl"
-            target="_blank"
-            rel="noopener noreferrer"
             class="support-secondary-link"
+            @click.prevent="openLegalDocument(termsOfServiceUrl)"
           >
             {{ t('SUPPORT.LEGAL.TERMS') }}
           </a>
@@ -135,11 +133,14 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useRuntimeConfig } from '#imports';
 import { useI18n } from 'vue-i18n';
 import { useIosReviewBillingUi } from '@/app/composables/useIosReviewBillingUi';
+import { openExternalBrowser } from '@/app/utils/openExternalBrowser';
 
 const { t, locale } = useI18n();
 const { shouldHideIosReviewBillingUi } = useIosReviewBillingUi();
+const runtimeConfig = useRuntimeConfig();
 
 const supportEmail = 'support@mentala.app';
 const supportMailto = `mailto:${supportEmail}`;
@@ -150,6 +151,9 @@ const supportLocale = computed(() => {
   const normalizedLocale = String(locale.value || 'ru').toLowerCase();
   return normalizedLocale.startsWith('en') ? 'en' : 'ru';
 });
+const publicAppUrl = computed(() =>
+  String(runtimeConfig.public.appUrl || webAppUrl).replace(/\/$/, '')
+);
 const supportSubtitle = computed(() => {
   if (shouldHideIosReviewBillingUi.value) {
     return 'Здесь вы можете быстро связаться с нами и получить помощь по приложению.';
@@ -159,10 +163,11 @@ const supportSubtitle = computed(() => {
 });
 
 const privacyPolicyUrl = computed(
-  () => `/legal/privacy-policy-${supportLocale.value}.html`
+  () => `${publicAppUrl.value}/legal/privacy-policy-${supportLocale.value}.html`
 );
 const termsOfServiceUrl = computed(
-  () => `/legal/terms-of-service-${supportLocale.value}.html`
+  () =>
+    `${publicAppUrl.value}/legal/terms-of-service-${supportLocale.value}.html`
 );
 
 const appleCancelHelpUrl = computed(() =>
@@ -178,6 +183,10 @@ const googleCancelHelpUrl = computed(
 
 function goBack() {
   navigateTo('/settings');
+}
+
+async function openLegalDocument(url: string) {
+  await openExternalBrowser(url);
 }
 </script>
 
