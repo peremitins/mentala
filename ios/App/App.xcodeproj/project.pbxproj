@@ -15,7 +15,6 @@
 		504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC3101FED79650016851F /* LaunchScreen.storyboard */; };
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
 		7B8B2DB5C7E24FC394BFC07F /* AppleIapPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B8B2DB4C7E24FC394BFC07F /* AppleIapPlugin.swift */; };
-		D4A1B2C3D4E5F60123456789 /* RealtimeVoiceAudioPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4A1B2C3D4E5F6012345678A /* RealtimeVoiceAudioPlugin.swift */; };
 		9059E5422F4C43D000AD9A6D /* MentalaNotificationService.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 9059E53B2F4C43D000AD9A6D /* MentalaNotificationService.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		907434802F5997F200A40EF7 /* Mentala.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 9074347F2F5997F200A40EF7 /* Mentala.storekit */; };
 		907434812F5997F200A40EF7 /* Mentala.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 9074347F2F5997F200A40EF7 /* Mentala.storekit */; };
@@ -24,6 +23,7 @@
 		A52C18379574560C6E559A62 /* StorefrontPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83A4CA7636EFA2099045582F /* StorefrontPlugin.swift */; };
 		B725F1A2E0C0D59AEBA546FD /* Pods_MentalaNotificationService.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 37F02C7109A4C287BB664F8F /* Pods_MentalaNotificationService.framework */; };
 		C5B07ACAA4FE2FA10563F725 /* MainViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C24C2D647D436A1D9E70F7F /* MainViewController.swift */; };
+		D4A1B2C3D4E5F60123456789 /* RealtimeVoiceAudioPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4A1B2C3D4E5F6012345678A /* RealtimeVoiceAudioPlugin.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -66,13 +66,13 @@
 		6C24C2D647D436A1D9E70F7F /* MainViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainViewController.swift; sourceTree = "<group>"; };
 		7B8B2DB4C7E24FC394BFC07F /* AppleIapPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleIapPlugin.swift; sourceTree = "<group>"; };
 		83A4CA7636EFA2099045582F /* StorefrontPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorefrontPlugin.swift; sourceTree = "<group>"; };
-		D4A1B2C3D4E5F6012345678A /* RealtimeVoiceAudioPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealtimeVoiceAudioPlugin.swift; sourceTree = "<group>"; };
 		9059E53B2F4C43D000AD9A6D /* MentalaNotificationService.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MentalaNotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		9074347F2F5997F200A40EF7 /* Mentala.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = Mentala.storekit; sourceTree = "<group>"; };
 		907BDF242F4B1C0B008D03B3 /* App.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
 		90A1F00130A1F00100AD9A6D /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		AF277DCFFFF123FFC6DF26C7 /* Pods_App.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_App.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		AF51FD2D460BCFE21FA515B2 /* Pods-App.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-App.release.xcconfig"; path = "Pods/Target Support Files/Pods-App/Pods-App.release.xcconfig"; sourceTree = "<group>"; };
+		D4A1B2C3D4E5F6012345678A /* RealtimeVoiceAudioPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealtimeVoiceAudioPlugin.swift; sourceTree = "<group>"; };
 		FC68EB0AF532CFC21C3344DD /* Pods-App.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-App.debug.xcconfig"; path = "Pods/Target Support Files/Pods-App/Pods-App.debug.xcconfig"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -87,18 +87,7 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		9059E53C2F4C43D000AD9A6D /* MentalaNotificationService */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				9059E5462F4C43D000AD9A6D /* PBXFileSystemSynchronizedBuildFileExceptionSet */,
-			);
-			explicitFileTypes = {
-			};
-			explicitFolders = (
-			);
-			path = MentalaNotificationService;
-			sourceTree = "<group>";
-		};
+		9059E53C2F4C43D000AD9A6D /* MentalaNotificationService */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (9059E5462F4C43D000AD9A6D /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = MentalaNotificationService; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -533,7 +522,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1.14;
+				MARKETING_VERSION = 1.1.15;
 				OTHER_SWIFT_FLAGS = "$(inherited) \"-D\" \"COCOAPODS\" \"-DDEBUG\"";
 				PRODUCT_BUNDLE_IDENTIFIER = com.mentala.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -565,7 +554,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1.14;
+				MARKETING_VERSION = 1.1.15;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mentala.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
