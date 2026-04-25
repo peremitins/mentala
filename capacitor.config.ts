@@ -30,7 +30,7 @@ const config: CapacitorConfig = {
       launchFadeOutDuration: 200,
       backgroundColor: '#090B12',
       androidSplashResourceName: 'splash',
-      androidScaleType: 'CENTER_CROP',
+      androidScaleType: 'CENTER_INSIDE',
       showSpinner: false,
       androidSpinnerStyle: 'large',
       spinnerColor: '#999999',
@@ -44,10 +44,6 @@ const config: CapacitorConfig = {
       // iOS overlay настраивается отдельно ранним native layout в MainViewController,
       // чтобы не ломать Android нижние inset'ы.
       overlaysWebView: false,
-      // На Android < 15 Capacitor ещё может отдать WebView ниже status bar.
-      // На Android 15+ / 16+ система навязывает edge-to-edge, поэтому layout
-      // всё равно обязан учитывать реальные safe insets через CSS env().
-      androidOverlaysWebView: false,
     },
     PushNotifications: {
       // Используем стандартный native foreground-показ Capacitor/iOS.

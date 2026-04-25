@@ -79,7 +79,7 @@ public class MentalaRealtimeVoiceForegroundService extends Service {
         Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(title)
             .setContentText(subtitle)
-            .setSmallIcon(R.drawable.ic_stat_mentala)
+            .setSmallIcon(R.mipmap.ic_launcher)
             .setContentIntent(contentIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
