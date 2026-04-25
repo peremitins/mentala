@@ -135,6 +135,7 @@
     "zod": "^3.25.8"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
     "@commitlint/cli": "19.5.0",
     "@commitlint/config-conventional": "19.5.0",
     "@iconify-json/logos": "^1.2.9",
