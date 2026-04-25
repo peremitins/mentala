@@ -1,6 +1,10 @@
 <template>
   <div class="h-dvh overflow-y-auto pb-[100px] space-y-2 rounded-lg">
-    <PageHeader title="Промокоды и Referral" :show-back-button="true" />
+    <PageHeader
+      title="Промокоды и Referral"
+      :show-back-button="true"
+      @go-back="goBack"
+    />
 
     <section class="space-y-2">
       <div class="glass-deep rounded-xl border border-border/70 p-4 space-y-2">
@@ -619,6 +623,7 @@ definePageMeta({
 });
 
 import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/shadcn/input';
 import { Badge } from '@/app/components/ui/shadcn/badge';
@@ -633,6 +638,7 @@ import {
 type Campaign = any;
 type ReferralRedemption = any;
 
+const router = useRouter();
 const campaigns = ref<Campaign[]>([]);
 const referrals = ref<ReferralRedemption[]>([]);
 const saving = ref(false);
@@ -765,6 +771,17 @@ const filteredCampaigns = computed(() => {
     return matchesSearch && matchesStatus && matchesType;
   });
 });
+
+async function goBack() {
+  // Для прямого входа на админ-страницу нужен fallback, иначе history.back()
+  // может оставить пользователя на пустом экране или вообще ничего не сделать.
+  if (window.history.length > 1) {
+    await router.back();
+    return;
+  }
+
+  await navigateTo('/settings');
+}
 
 function buildCampaignPayload() {
   if (form.campaignType === 'free_access_days') {

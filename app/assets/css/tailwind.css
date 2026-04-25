@@ -34,11 +34,12 @@
     --surface-inactive-foreground: 0 0% 98%;
 
     /* === Семантические цвета === */
-    --primary: 265 55% 50%;
-    --primary-foreground: 0 0% 98%;
+    /* Светлый акцент: все filled CTA и selected-state должны читать текст через primary-foreground */
+    --primary: 220 20% 96%;
+    --primary-foreground: 222 47% 11%;
 
-    /* === UI элементы (белый цвет для интерактивных элементов) === */
-    --primary-ui: 0 0% 100%;
+    /* === UI элементы === */
+    --primary-ui: 220 20% 96%;
 
     --secondary: 240 3.7% 15.9%;
     --secondary-foreground: 0 0% 98%;
