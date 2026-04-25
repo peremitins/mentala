@@ -16,6 +16,7 @@ import {
   isRelayEnabled,
   relayRealtimeCall,
 } from '@/server/infrastructure/llm/relayClient';
+import type { RealtimeVoiceClientPlatform } from '@/shared/dto';
 
 const OPENAI_REALTIME_CALLS_URL = 'https://api.openai.com/v1/realtime/calls';
 
@@ -250,15 +251,29 @@ export type OpenAiRealtimeSessionConfig = {
 
 const REALTIME_VOICE_CONTEXT_RETENTION_RATIO = 0.8;
 
-function buildRealtimeTurnDetectionConfig(): OpenAiRealtimeSessionConfig['audio']['input']['turn_detection'] {
-  if (REALTIME_VOICE_TURN_DETECTION_MODE === 'server_vad') {
+function buildServerVadTurnDetectionConfig(): Extract<
+  OpenAiRealtimeSessionConfig['audio']['input']['turn_detection'],
+  { type: 'server_vad' }
+> {
+  return {
+    type: 'server_vad',
+    threshold: REALTIME_VOICE_TURN_THRESHOLD,
+    prefix_padding_ms: REALTIME_VOICE_PREFIX_PADDING_MS,
+    silence_duration_ms: REALTIME_VOICE_SILENCE_DURATION_MS,
+    create_response: true,
+    interrupt_response: false,
+  };
+}
+
+function buildRealtimeTurnDetectionConfig(params?: {
+  clientPlatform?: RealtimeVoiceClientPlatform | string | null;
+}): OpenAiRealtimeSessionConfig['audio']['input']['turn_detection'] {
+  if (
+    REALTIME_VOICE_TURN_DETECTION_MODE === 'server_vad' ||
+    String(params?.clientPlatform || '').toLowerCase() === 'ios'
+  ) {
     return {
-      type: 'server_vad',
-      threshold: REALTIME_VOICE_TURN_THRESHOLD,
-      prefix_padding_ms: REALTIME_VOICE_PREFIX_PADDING_MS,
-      silence_duration_ms: REALTIME_VOICE_SILENCE_DURATION_MS,
-      create_response: true,
-      interrupt_response: false,
+      ...buildServerVadTurnDetectionConfig(),
     };
   }
 
@@ -288,6 +303,7 @@ function getOpenAiProviderHeaders(apiKey: string): Record<string, string> {
 export function buildOpenAiRealtimeSessionConfig(params: {
   instructions: string;
   voice?: string;
+  clientPlatform?: RealtimeVoiceClientPlatform | string | null;
 }) {
   return {
     type: 'realtime',
@@ -305,7 +321,9 @@ export function buildOpenAiRealtimeSessionConfig(params: {
         noise_reduction: {
           type: 'near_field',
         },
-        turn_detection: buildRealtimeTurnDetectionConfig(),
+        turn_detection: buildRealtimeTurnDetectionConfig({
+          clientPlatform: params.clientPlatform,
+        }),
         transcription: {
           model: REALTIME_VOICE_TRANSCRIPTION_MODEL,
         },

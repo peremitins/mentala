@@ -93,6 +93,7 @@ import { useMeditationsStore } from '@/app/stores/meditations';
 import { useSceneSettingsStore } from '@/app/stores/sceneSettings';
 import { useUiSettingsStore } from '@/app/stores/uiSettings';
 import { useSceneAudio } from '@/app/composables/useSceneAudio';
+import { useSceneAudioFocusState } from '@/app/composables/useSceneAudioFocus';
 import { useSos } from '@/app/composables/useSos';
 import { findSceneTrack } from '@/app/lib/sceneSelectionCatalog';
 import { resolveMediaUrl } from '@/app/utils/media';
@@ -239,6 +240,7 @@ function tryRequestWebPushPermission() {
 }
 const uiSettings = useUiSettingsStore();
 const sceneAudio = useSceneAudio();
+const sceneAudioFocusState = useSceneAudioFocusState();
 const RESUME_SCENE_AFTER_MEDITATION_DELAY_MS = 450;
 const SOS_TECHNIQUE_STEPS = [
   'panic-grounding',
@@ -410,7 +412,8 @@ const shouldMuteSceneAudio = computed(() => {
   return (
     isMeditationAudioActive.value ||
     isBreathPracticePlayerPage.value ||
-    isSosTechniqueActive.value
+    isSosTechniqueActive.value ||
+    sceneAudioFocusState.isLocked.value
   );
 });
 

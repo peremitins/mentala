@@ -23,6 +23,7 @@ USE_ADB_REVERSE=false
 MOBILE_ENV_FILE=".env.development"
 MOBILE_BUILD_MODE="development"
 MOBILE_NUXT_BUILD_DIR=""
+MOBILE_PUBLIC_API_BASE_URL=""
 MOBILE_RELEASE_EXCLUDED_PUBLIC_DIRS_RAW="${MENTALA_MOBILE_RELEASE_EXCLUDE_PUBLIC_DIRS:-meditations notifications}"
 
 read_release_excluded_public_dirs() {
@@ -41,6 +42,25 @@ clean_nuxt_static_build_cache() {
   if [ -n "$MOBILE_NUXT_BUILD_DIR" ]; then
     rm -rf "$MOBILE_NUXT_BUILD_DIR" "node_modules/.cache/nuxt/$MOBILE_NUXT_BUILD_DIR"
   fi
+}
+
+generate_mobile_static_bundle() {
+  clean_nuxt_static_build_cache
+  if [ -n "$MOBILE_PUBLIC_API_BASE_URL" ]; then
+    NUXT_PUBLIC_API_SERVER_URL="$MOBILE_PUBLIC_API_BASE_URL" \
+      BULLMQ_ENABLE_WORKERS=false \
+      ENABLE_NOTIFICATIONS_WORKER=false \
+      MENTALA_STATIC_GENERATE=true \
+      MENTALA_NUXT_BUILD_DIR="$MOBILE_NUXT_BUILD_DIR" \
+      pnpm exec nuxt generate --dotenv "$MOBILE_ENV_FILE"
+    return
+  fi
+
+  BULLMQ_ENABLE_WORKERS=false \
+    ENABLE_NOTIFICATIONS_WORKER=false \
+    MENTALA_STATIC_GENERATE=true \
+    MENTALA_NUXT_BUILD_DIR="$MOBILE_NUXT_BUILD_DIR" \
+    pnpm exec nuxt generate --dotenv "$MOBILE_ENV_FILE"
 }
 
 prune_mobile_release_generated_assets() {
@@ -294,13 +314,16 @@ elif [ "$DEVICE_TYPE" = "device" ]; then
 
   # iOS: WKWebView не предоставляет navigator.mediaDevices на HTTP non-localhost origin.
   # У iOS нет аналога adb reverse (iproxy туннелирует Mac→Device, а не Device→Mac).
-  # Поэтому в device-режиме iOS использует LAN IP — всё работает кроме Realtime Voice.
+  # Поэтому в device-режиме iOS использует локальный static bundle из .env.development:
+  # origin остаётся доверенным для WebRTC/getUserMedia, а API ходит в dev backend.
+  IOS_SERVER_URL=""
+  MOBILE_NUXT_BUILD_DIR=".nuxt-capacitor-device"
+  MOBILE_PUBLIC_API_BASE_URL="$SERVER_URL"
+  echo "   iOS: Realtime Voice использует локальный development bundle без server.url."
   # Для iOS без кабеля отдельный режим device-wireless использует LAN live reload.
   # Это удобно для обычной разработки, но secure-context для Realtime Voice
   # на HTTP origin там не гарантируется.
-  echo "   ℹ️  iOS: Realtime Voice в device-режиме недоступен (WKWebView ограничение)."
   echo "   Для обычной wireless-разработки без кабеля используй: pnpm cap:sync:device:wireless"
-  echo "   Для Realtime Voice на iOS понадобится отдельный secure dev-origin (HTTPS/localhost)."
 
   echo "   Убедись, что dev-сервер запущен: pnpm dev"
 elif [ "$DEVICE_TYPE" = "device-wireless" ]; then
@@ -349,6 +372,10 @@ node scripts/sync-ios-oauth-config.js \
 # Выполняем синхронизацию
 if [ "$DEVICE_TYPE" = "device" ]; then
   ensure_dev_server_is_available "http://127.0.0.1:${DEV_SERVER_PORT}"
+  if [ -z "$IOS_SERVER_URL" ]; then
+    echo "📦 Собираю iOS development bundle для Realtime Voice..."
+    generate_mobile_static_bundle
+  fi
   echo "📦 Синхронизация с dev-сервером..."
   run_capacitor_sync && \
     CAPACITOR_SERVER_URL="$SERVER_URL" \
@@ -378,10 +405,7 @@ elif [ -n "$SERVER_URL" ]; then
     node scripts/fix-capacitor-config.js
 else
   echo "📦 Синхронизация со статическими файлами..."
-  clean_nuxt_static_build_cache
-  MENTALA_STATIC_GENERATE=true \
-    MENTALA_NUXT_BUILD_DIR="$MOBILE_NUXT_BUILD_DIR" \
-    pnpm exec nuxt generate --dotenv "$MOBILE_ENV_FILE"
+  generate_mobile_static_bundle
   prune_mobile_release_generated_assets
   run_capacitor_sync && CAPACITOR_SERVER_URL="" node scripts/fix-capacitor-config.js
   prune_mobile_release_native_assets

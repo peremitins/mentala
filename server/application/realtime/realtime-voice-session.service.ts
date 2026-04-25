@@ -577,6 +577,7 @@ export async function startRealtimeVoiceSession(params: {
       sessionConfig: buildOpenAiRealtimeSessionConfig({
         instructions,
         voice: provider.voice,
+        clientPlatform: persistedSession.clientPlatform,
       }),
       maxDurationSeconds,
     });

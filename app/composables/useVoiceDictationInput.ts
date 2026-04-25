@@ -1,5 +1,4 @@
 import { computed, nextTick, onScopeDispose, ref, watch } from 'vue';
-import { Capacitor } from '@capacitor/core';
 import { useSpeechEngine } from '@/app/composables/useSpeechEngine';
 import {
   useMicPermissionGate,
@@ -55,9 +54,6 @@ export function useVoiceDictationInput(options: UseVoiceDictationInputOptions) {
   const activeSessionId = ref<number | null>(null);
   const dictationAudioLock = ref<SceneAudioFocusLock | null>(null);
 
-  const shouldDisableFadeForIosDictation =
-    Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'ios';
-
   function hasActiveSession(): boolean {
     return activeSessionId.value !== null;
   }
@@ -74,9 +70,9 @@ export function useVoiceDictationInput(options: UseVoiceDictationInputOptions) {
     dictationAudioLock.value = await sceneAudioFocus.acquire(
       'speech-dictation',
       {
-        // На iOS длинный fade во время старта диктовки засыпает bridge
-        // вызовами setVolume и конфликтует с запуском speech recognition.
-        withFade: !shouldDisableFadeForIosDictation,
+        // Микрофон должен получать фокус сразу. Fade сцены создаёт гонки:
+        // пользователь уже начал запись, а фон ещё доигрывает или возвращается.
+        withFade: false,
       }
     );
   }

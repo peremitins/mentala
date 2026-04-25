@@ -68,6 +68,25 @@ function computeMessagesCount(params: {
   );
 }
 
+function resolveSummarySessionStartedAt(params: {
+  dbMessages: Array<{ createdAt?: Date | null }>;
+  backlog: Awaited<ReturnType<typeof loadUnsummarizedTextBacklogForUser>>;
+  clientSessionStartedAt?: Date | null;
+  fallbackSessionStartedAt?: Date | null;
+}) {
+  const firstMessageCreatedAt = params.dbMessages.find(
+    (message) => message.createdAt instanceof Date
+  )?.createdAt;
+
+  return (
+    firstMessageCreatedAt ??
+    params.backlog?.sessions[0]?.startedAt ??
+    params.clientSessionStartedAt ??
+    params.fallbackSessionStartedAt ??
+    null
+  );
+}
+
 function getOpenAiTransportConfig() {
   const useRelay = isRelayEnabled();
   const apiKey = useRelay ? undefined : process.env.NUXT_OPENAI_API_KEY;
@@ -189,6 +208,7 @@ export async function createSessionSummaryUser(params: {
     qualifyingUserMessagesCount: number;
     durationSeconds: number;
   };
+  clientSessionStartedAt?: Date | null;
   /**
    * Сообщения из клиентского стора — fallback для LLM когда transcript в БД пустой.
    * Используется при realtime voice (transient messages) или memory-off кейсе.
@@ -244,9 +264,15 @@ export async function createSessionSummaryUser(params: {
   const dbMessages =
     backlog?.messages && backlog.messages.length > 0 ? backlog.messages : [];
   const endedAt = session.endedAt ?? new Date();
+  const summarySessionStartedAt = resolveSummarySessionStartedAt({
+    dbMessages,
+    backlog,
+    clientSessionStartedAt: params.clientSessionStartedAt,
+    fallbackSessionStartedAt: session.startedAt,
+  });
   const serverMetrics = computeEligibilityFromTranscript(
     dbMessages,
-    session.startedAt ?? null,
+    summarySessionStartedAt,
     endedAt
   );
 
@@ -318,7 +344,7 @@ export async function createSessionSummaryUser(params: {
         clientSessionId: session.clientSessionId ?? null,
         therapySessionId: session.id,
         model: params.model ?? config.llm.openai.defaultModel ?? null,
-        sessionStartedAt: session.startedAt ?? null,
+        sessionStartedAt: summarySessionStartedAt,
         sessionEndedAt: endedAt,
         durationSeconds: metrics.durationSeconds,
         messagesCount,
@@ -343,7 +369,7 @@ export async function createSessionSummaryUser(params: {
         clientSessionId: session.clientSessionId ?? null,
         therapySessionId: session.id,
         model: params.model ?? config.llm.openai.defaultModel ?? null,
-        sessionStartedAt: session.startedAt ?? null,
+        sessionStartedAt: summarySessionStartedAt,
         sessionEndedAt: endedAt,
         durationSeconds: metrics.durationSeconds,
         messagesCount,

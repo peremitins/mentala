@@ -95,6 +95,12 @@ export function useBreathPracticePhaseAudio() {
     return Boolean(nativeSessionService?.isActive());
   }
 
+  function getNativePlatform() {
+    return typeof Capacitor.getPlatform === 'function'
+      ? Capacitor.getPlatform()
+      : null;
+  }
+
   function resolveAudioUrl(path: string) {
     if (!path) return '';
     if (isHttpUrl(path)) return path;
@@ -108,6 +114,7 @@ export function useBreathPracticePhaseAudio() {
     const baseUrl = resolveAppAssetBaseUrl({
       isDev: publicConfig?.isDev === true,
       isNativeRuntime: Capacitor.isNativePlatform(),
+      platform: getNativePlatform(),
       origin,
       apiBaseUrl: publicConfig?.apiBase,
       appUrl: publicConfig?.appUrl,

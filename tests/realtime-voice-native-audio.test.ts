@@ -74,4 +74,33 @@ describe('realtime voice native audio bridge', () => {
     );
     expect(activateMock).not.toHaveBeenCalled();
   });
+
+  it('на iOS вызывает локальный bridge для AVAudioSession voiceChat', async () => {
+    const activateMock = vi.fn().mockResolvedValue({
+      platform: 'ios',
+      category: 'AVAudioSessionCategoryPlayAndRecord',
+      mode: 'AVAudioSessionModeVoiceChat',
+      speakerPinned: true,
+    });
+
+    vi.doMock('@capacitor/core', () => ({
+      Capacitor: {
+        isNativePlatform: () => true,
+        getPlatform: () => 'ios',
+      },
+      registerPlugin: () => ({
+        activate: activateMock,
+        deactivate: vi.fn().mockResolvedValue(undefined),
+      }),
+    }));
+
+    setWindow({});
+
+    const { activateRealtimeVoiceNativeAudioSession } = await import(
+      '../app/services/realtime/realtimeVoiceNativeAudio'
+    );
+
+    await expect(activateRealtimeVoiceNativeAudioSession()).resolves.toBe(true);
+    expect(activateMock).toHaveBeenCalledTimes(1);
+  });
 });
