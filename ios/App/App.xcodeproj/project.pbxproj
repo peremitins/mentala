@@ -15,6 +15,7 @@
 		504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC3101FED79650016851F /* LaunchScreen.storyboard */; };
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
 		7B8B2DB5C7E24FC394BFC07F /* AppleIapPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B8B2DB4C7E24FC394BFC07F /* AppleIapPlugin.swift */; };
+		D4A1B2C3D4E5F60123456789 /* RealtimeVoiceAudioPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4A1B2C3D4E5F6012345678A /* RealtimeVoiceAudioPlugin.swift */; };
 		9059E5422F4C43D000AD9A6D /* MentalaNotificationService.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 9059E53B2F4C43D000AD9A6D /* MentalaNotificationService.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		907434802F5997F200A40EF7 /* Mentala.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 9074347F2F5997F200A40EF7 /* Mentala.storekit */; };
 		907434812F5997F200A40EF7 /* Mentala.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 9074347F2F5997F200A40EF7 /* Mentala.storekit */; };
@@ -65,6 +66,7 @@
 		6C24C2D647D436A1D9E70F7F /* MainViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainViewController.swift; sourceTree = "<group>"; };
 		7B8B2DB4C7E24FC394BFC07F /* AppleIapPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleIapPlugin.swift; sourceTree = "<group>"; };
 		83A4CA7636EFA2099045582F /* StorefrontPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorefrontPlugin.swift; sourceTree = "<group>"; };
+		D4A1B2C3D4E5F6012345678A /* RealtimeVoiceAudioPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealtimeVoiceAudioPlugin.swift; sourceTree = "<group>"; };
 		9059E53B2F4C43D000AD9A6D /* MentalaNotificationService.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MentalaNotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		9074347F2F5997F200A40EF7 /* Mentala.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = Mentala.storekit; sourceTree = "<group>"; };
 		907BDF242F4B1C0B008D03B3 /* App.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
@@ -148,6 +150,7 @@
 				6C24C2D647D436A1D9E70F7F /* MainViewController.swift */,
 				7B8B2DB4C7E24FC394BFC07F /* AppleIapPlugin.swift */,
 				83A4CA7636EFA2099045582F /* StorefrontPlugin.swift */,
+				D4A1B2C3D4E5F6012345678A /* RealtimeVoiceAudioPlugin.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -352,6 +355,7 @@
 				C5B07ACAA4FE2FA10563F725 /* MainViewController.swift in Sources */,
 				7B8B2DB5C7E24FC394BFC07F /* AppleIapPlugin.swift in Sources */,
 				A52C18379574560C6E559A62 /* StorefrontPlugin.swift in Sources */,
+				D4A1B2C3D4E5F60123456789 /* RealtimeVoiceAudioPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

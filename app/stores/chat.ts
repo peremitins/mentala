@@ -66,14 +66,23 @@ type ChatApiMessage = {
 // Пороги для eligibility "содержательной сессии" (ТЗ п.7.2, 7.3).
 // Проверки дублируются на сервере — см. server/application/sessionSummaryUser.service.
 // В dev-режиме — сниженные пороги для быстрого тестирования.
-export const SESSION_SUMMARY_MIN_USER_MESSAGES = import.meta.dev ? 1 : 5;
-export const SESSION_SUMMARY_MIN_DURATION_SECONDS = import.meta.dev
+// Для iOS `cap:sync:device` собирает static bundle без Nuxt dev-server,
+// поэтому `import.meta.dev` там false. Учитываем public env-флаг сборки.
+const IS_DEVELOPMENT_RUNTIME =
+  import.meta.dev || process.env.NUXT_PUBLIC_IS_DEV === 'true';
+
+export const SESSION_SUMMARY_MIN_USER_MESSAGES = IS_DEVELOPMENT_RUNTIME ? 1 : 5;
+export const SESSION_SUMMARY_MIN_DURATION_SECONDS = IS_DEVELOPMENT_RUNTIME
   ? 60
   : 4 * 60;
 // Минимум символов без пробелов для "содержательного" сообщения.
 // В dev снижаем до 5 чтобы любая фраза типа "привет" считалась qualifying.
-export const SESSION_SUMMARY_QUALIFYING_MIN_CHARS = import.meta.dev ? 5 : 80;
-export const SESSION_SUMMARY_MIN_QUALIFYING_MESSAGES = import.meta.dev ? 1 : 3;
+export const SESSION_SUMMARY_QUALIFYING_MIN_CHARS = IS_DEVELOPMENT_RUNTIME
+  ? 5
+  : 80;
+export const SESSION_SUMMARY_MIN_QUALIFYING_MESSAGES = IS_DEVELOPMENT_RUNTIME
+  ? 1
+  : 3;
 export const SESSION_SUMMARY_FORCE_MIN_USER_MESSAGES = 15;
 
 const PENDING_THERAPY_SESSION_ENDS_STORAGE_KEY =
@@ -657,7 +666,8 @@ export const useChatStore = defineStore('chat', {
 
       // Пингуем сервер, чтобы обновлять last_activity_at в БД.
       // Это нужно для корректного подсчёта минут на сервере и nightly-обработки idle-сессий.
-      if (!this.therapySessionId) return;
+      const pingSessionId = this.therapySessionId;
+      if (!pingSessionId) return;
 
       const now = Date.now();
       // Троттлинг: не чаще 1 раза в 10 секунд
@@ -668,7 +678,20 @@ export const useChatStore = defineStore('chat', {
         const { $api } = useNuxtApp();
         void $api('/api/therapy/session/ping', {
           method: 'POST',
-          body: { sessionId: this.therapySessionId },
+          body: { sessionId: pingSessionId },
+          suppressErrorToast: true,
+        }).catch((error: any) => {
+          const status =
+            Number(error?.statusCode) ||
+            Number(error?.status) ||
+            Number(error?.response?.status);
+
+          if (status === 404 || status === 409) {
+            this.resetTherapySessionState(pingSessionId);
+            return;
+          }
+
+          console.error('[Chat Store] Failed to ping therapy session:', error);
         });
       } catch {
         // Игнорируем: ping не должен ломать чат

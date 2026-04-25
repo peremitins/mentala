@@ -3,6 +3,7 @@ import {
   buildDeveloperContext,
   buildSuggestedChipsUserPrompt,
   buildWelcomePrompt,
+  systemCore,
 } from '../server/application/prompts';
 
 describe('prompt personalization', () => {
@@ -74,5 +75,11 @@ describe('prompt personalization', () => {
     expect(prompt).toContain('справиться со стрессом');
     expect(prompt).not.toContain('Недавние чипы');
     expect(prompt).not.toContain('Тема:');
+  });
+
+  it('запрещает вводное согласие на прямые вопросы и просьбы', () => {
+    expect(systemCore).toContain(
+      'На прямые вопросы и просьбы отвечай сразу по сути, без вводного "понимаю/слышу/вижу, что ты хочешь".'
+    );
   });
 });

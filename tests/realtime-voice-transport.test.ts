@@ -4,6 +4,8 @@ const getRealtimeVoiceSupportMock = vi.fn();
 const getRealtimeVoicePeerConnectionCtorMock = vi.fn();
 const requestRealtimeVoiceUserMediaMock = vi.fn();
 
+let audioTrack: { enabled: boolean; stop: ReturnType<typeof vi.fn> };
+
 vi.mock('@/app/services/realtime/realtimeVoiceBrowser', () => ({
   getRealtimeVoiceSupport: () => getRealtimeVoiceSupportMock(),
   getRealtimeVoicePeerConnectionCtor: () =>
@@ -93,6 +95,7 @@ class FakeAudio {
   preload = '';
   srcObject: MediaStream | null = null;
   src = '';
+  load = vi.fn();
   play = vi.fn().mockResolvedValue(undefined);
   pause = vi.fn();
 
@@ -133,12 +136,13 @@ describe('realtime voice transport', () => {
       isSupported: true,
     });
     getRealtimeVoicePeerConnectionCtorMock.mockReturnValue(FakePeerConnection);
+    audioTrack = {
+      enabled: true,
+      stop: vi.fn(),
+    };
     requestRealtimeVoiceUserMediaMock.mockResolvedValue({
-      getTracks: () => [
-        {
-          stop: vi.fn(),
-        },
-      ],
+      getAudioTracks: () => [audioTrack],
+      getTracks: () => [audioTrack],
     } as unknown as MediaStream);
 
     setWindow({
@@ -198,8 +202,9 @@ describe('realtime voice transport', () => {
 
     expect(FakeAudio.instances).toHaveLength(1);
     expect(FakeAudio.instances[0]?.srcObject).toBe(remoteStream);
+    expect(FakeAudio.instances[0]?.load).toHaveBeenCalledTimes(1);
     expect(FakeAudio.instances[0]?.play).toHaveBeenCalledTimes(1);
-    expect((navigator as any).audioSession.type).toBe('playback');
+    expect((navigator as any).audioSession.type).toBe('play-and-record');
 
     await transport.stop();
 
@@ -248,5 +253,28 @@ describe('realtime voice transport', () => {
     ).resolves.toBeUndefined();
 
     expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('позволяет временно выключать и возвращать локальный микрофонный track', async () => {
+    const { RealtimeVoiceTransport } = await import(
+      '../app/services/realtime/realtimeVoiceTransport'
+    );
+
+    const transport = new RealtimeVoiceTransport();
+
+    await transport.start({
+      webrtcUrl: 'https://api.openai.com/v1/realtime/calls',
+      onEvent: vi.fn(),
+    });
+
+    transport.setMicrophoneEnabled(false);
+    expect(audioTrack.enabled).toBe(false);
+
+    transport.setMicrophoneEnabled(true);
+    expect(audioTrack.enabled).toBe(true);
+
+    await transport.stop();
+    expect(audioTrack.enabled).toBe(true);
+    expect(audioTrack.stop).toHaveBeenCalledTimes(1);
   });
 });

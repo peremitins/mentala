@@ -162,6 +162,54 @@ describe('openai realtime SDP exchange', () => {
     });
   });
 
+  it('для iOS использует server_vad с автоматическим ответом провайдера', async () => {
+    const { buildOpenAiRealtimeSessionConfig } = await import(
+      '../server/infrastructure/llm/openai-realtime'
+    );
+
+    expect(
+      buildOpenAiRealtimeSessionConfig({
+        instructions: 'Отвечай спокойно.',
+        clientPlatform: 'ios',
+      })
+    ).toMatchObject({
+      audio: {
+        input: {
+          turn_detection: {
+            type: 'server_vad',
+            threshold: 0.7,
+            prefix_padding_ms: 300,
+            silence_duration_ms: 1_000,
+            create_response: true,
+            interrupt_response: false,
+          },
+        },
+      },
+    });
+  });
+
+  it('для Android сохраняет semantic_vad с автоматическим ответом провайдера', async () => {
+    const { buildOpenAiRealtimeSessionConfig } = await import(
+      '../server/infrastructure/llm/openai-realtime'
+    );
+
+    expect(
+      buildOpenAiRealtimeSessionConfig({
+        instructions: 'Отвечай спокойно.',
+        clientPlatform: 'android',
+      })
+    ).toMatchObject({
+      audio: {
+        input: {
+          turn_detection: {
+            create_response: true,
+            interrupt_response: false,
+          },
+        },
+      },
+    });
+  });
+
   it('строит rollback-конфиг с server_vad 0.7/1000, когда режим переключён через env', async () => {
     realtimeConfigMock.REALTIME_VOICE_TURN_DETECTION_MODE = 'server_vad';
 

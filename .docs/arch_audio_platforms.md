@@ -38,11 +38,18 @@
 ## Realtime Voice
 
 - OpenAI Realtime API через WebRTC
-- При запуске realtime voice фон `scene-selection` захватывается через общий `sceneAudioFocus` lock: сцена уходит в `useSceneAudio().suspend({ withFade: true })`, а после `stop/page_leave/error` возвращается через `resume()` только когда больше не осталось других активных mic-lock'ов
+- При запуске realtime voice фон `scene-selection` захватывается через общий `sceneAudioFocus` lock: сцена уходит в `useSceneAudio().suspend({ withFade: false })`, а после `stop/page_leave/error` возвращается через `resume()` только когда больше не осталось других активных mic-lock'ов
 - Основной `turn_detection` — `semantic_vad` с `eagerness=low`, чтобы уменьшить ложные срабатывания на короткий шум и шорохи
 - Rollback через env остаётся на `server_vad` с консервативными параметрами `threshold=0.7` и `silence_duration_ms=1000`
 - В `audio.input` всегда включено `noise_reduction: near_field`
 - На mobile (`iOS/Android`) client-side `response.cancel` по `speech_started` отключён; barge-in сохраняется только на `web`
+- На iOS используется provider-side auto-response, но вместо `semantic_vad` включается консервативный `server_vad` (`threshold=0.7`, `silence_duration_ms=1000`), чтобы первый ответ не стартовал на слишком раннем semantic-turn.
+- На iOS WebRTC mic-track отключается на время ответа ассистента. Входные user-события (`input_audio_buffer.*`, `conversation.item.input_audio_transcription.*`, user `conversation.item.created`), появившиеся во время mute/playback и не относящиеся к уже начатому user item, считаются echo от динамика и не попадают в UI; transcript уже начатого user item всегда пропускается и сохраняется.
+- На iOS перед стартом WebRTC realtime voice локальный `MentalaRealtimeVoiceAudio`
+  переводит `AVAudioSession` в `.playAndRecord` + `.voiceChat` и закрепляет вывод на speaker; фоновая сцена при этом глушится без fade, чтобы playback-сессия/хвост сцены не попадали обратно во входной микрофон.
+- Во время `output_audio_buffer.started` повторное закрепление native audio route выполняется только на Android. На iOS `AVAudioSession` нельзя переактивировать на старте каждого ответа ассистента: это может съедать первые слова playback и провоцировать route-change гонки.
+- Для iOS real device локальный `pnpm cap:sync:device` не должен оставлять `server.url`
+  на HTTP LAN-origin: WKWebView может скрыть `navigator.mediaDevices`, поэтому этот режим собирает development static bundle из `.env.development` и подставляет локальный dev backend в `NUXT_PUBLIC_API_SERVER_URL`; LAN live reload остаётся только в `cap:sync:device:wireless` и не гарантирует Realtime Voice.
 - На native iOS любой отказ в доступе к микрофону, включая первый отказ в системном prompt и повторный отказ из WKWebView/getUserMedia, обязан открывать общий `MicPermissionDeniedDialog`; Android сохраняет прежний flow без принудительного показа модалки после первого системного отказа
 - Если пользователь отклонил доступ к микрофону в `web` или `PWA`, следующий запуск voice/dictation обязан открывать общий `MicPermissionDeniedDialog` с инструкцией по ручному восстановлению разрешения; на native по-прежнему используется переход в системные настройки приложения
 - Runtime compaction по бюджетам текстового чата
@@ -63,7 +70,7 @@
 
 - `scene-selection` на native iOS/Android использует тот же `NativeAudioService`/MediaGrid route, что и медитации; web/legacy остаётся на WebAudio для loop-сцен и HTMLAudio fallback для non-loop
 - При старте медитации `useMeditationPlayer` вызывает `useSceneAudio().suspend()`: native-сцена жёстко останавливается и уничтожается, web/iOS legacy ставится на паузу
-- Любая голосовая диктовка через `speechStore.isListening` и realtime voice используют общий `sceneAudioFocus` reference-counted lock, чтобы несколько mic-сценариев не ломали друг другу возврат фоновой сцены
+- Любая голосовая диктовка через `speechStore.isListening` и realtime voice используют общий `sceneAudioFocus` reference-counted lock, чтобы несколько mic-сценариев не ломали друг другу возврат фоновой сцены. Layout также смотрит на reactive-состояние этого lock'а, поэтому при foreground-resume фоновая сцена не поднимается поверх активного realtime/mic.
 - После остановки/паузы медитации layout watcher вызывает `sceneAudio.resume()` и возвращает сцену, если до suspend она играла, пользователь всё ещё в active state и громкость сцены больше 0
 - Resume сцены после медитации отложен и отменяем через `playbackActionId`/`resumeAfterSuspendActionId`: быстрый `pause → play` в медитации не должен поднимать scene-source параллельно с meditation-source
 - На iOS native meditation `pause` не оставляет MediaGrid/AVPlayer source в paused-состоянии: позиция сохраняется в JS, source останавливается/уничтожается, следующий `play` создаёт новый `audioId` и стартует с сохранённой позиции. Android остаётся на штатном `pause()`/`resume()`
@@ -75,6 +82,8 @@
 - Native iOS/Android: основная практика идёт через отдельный `NativeBreathSessionService`, который управляет MediaGrid breathing-session поверх плагина, а intro-voice остаётся отдельным коротким source
 - Для native breathing нельзя строить source из локального bundle-origin (`http://localhost` / WebView origin) в production release: MediaGrid/Media3/AVPlayer должны получать публичный `appUrl`/`apiBase` origin (`https://my.mentala.app/.../breath/*`), потому что `mediaBaseUrl` для `breath/*` не используется и локальный WebView origin доступен не всем native playback route
 - Для native breathing в development наоборот используем текущий WebView origin как source base, включая `http://localhost:3000` через `adb reverse`: это нужно, чтобы Android device не ходил в `local.mentala.app`/другой desktop-only host и не падал с `UnknownHostException`
+- Исключение для iOS dev: если WebView поднят с HTTP LAN-origin, native `AVPlayer`
+  для breath voice/cue берёт HTTPS `appUrl`/`apiBase` вместо `http://<LAN_IP>`, иначе короткие voice/cue клипы могут молча не стартовать.
 - В native breathing-session primary source всегда один: cue-loop с `useForNotification: true`, либо voice-клип, если `sounds/*` выключены. Дополнительный voice при `sounds + voice` идёт параллельно на secondary source с `useForNotification: false`, иначе Android падает с `There can only be one`
 - Плагин пропатчен дополнительными командами `startBreathingSession`, `pauseBreathingSession`, `resumeBreathingSession`, `stopBreathingSession`, `updateBreathingSessionConfig`; они сами переключают фазы по native timers и не зависят от JS `setInterval`
 - Включённые одновременно `voice + sounds` в native breathing стартуют почти одновременно, но не строго одним вызовом: `cue` запускается первым, а `voice` получает только микрокомпенсацию старта (`~45ms`) на входе новой фазы, чтобы нивелировать prepare/buffer lag у `sounds/*`; по `pause/resume` current phase не пересоздаётся через JS, а продолжается внутри native session

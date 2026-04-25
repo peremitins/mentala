@@ -32,6 +32,7 @@
 - **Session bootstrap** (первый ход chain): system + developer bootstrap + memory blocks (durable profile / handoff / compact state)
 - **Per-turn**: только developer context + user-message (без дублирования стабильных слоёв)
 - Если `previous_response_id` уже недоступен, но клиент прислал восстановленный несуммаризованный backlog, bootstrap строится от `active backlog context` текущего диалога; он имеет приоритет над `handoff` прошлой завершённой сессии и над durable profile, чтобы `продолжим` не уводило модель в старые темы
+- `systemCore` запрещает вводное "понимаю/слышу/вижу, что ты хочешь" на прямые вопросы и просьбы; фраза валидации нужна для эмоциональных сообщений без прямой просьбы.
 
 ## Durable profile memory
 - Short JSON: `facts<=3`, `preferences<=3`, `context<=2`, `name<=40 chars`, `item<=80 chars`
@@ -41,6 +42,10 @@
 ## Handoff Text ↔ Voice
 - `/api/session/handoff` закрывает source-session, строит handoff summary, target-mode стартует как новая session
 - Realtime Voice: runtime compaction по тем же бюджетам, compaction строится text-моделью (не realtime)
+- После realtime→text handoff клиент обязан сбросить активный `therapySessionId`
+  в chat store: source voice-session уже закрыта, а следующий текстовый ход
+  должен открыть новую therapy-session с тем же client chat lifecycle.
+- Фоновый `therapy/session/ping` не показывает toast на 404/409 и всегда сбрасывает только тот `therapySessionId`, который был отправлен в конкретном ping-запросе. Это защищает realtime→text переключение от stale-ответа старой сессии.
 - Summary строится по всему transcript сессии, не только по хвосту после compaction
 - WebRTC handshake для Realtime Voice должен деградировать fail-soft:
   - transient ошибки relay / OpenAI / сети классифицируются отдельно
@@ -53,6 +58,7 @@
 - Все memory-payload versioned (`schemaVersion`)
 - Пользовательский `sessionSummaryUser` prompt персонализируется по `users.locale`, `user_preferences.addressing` и `users.gender`; если пол не задан, prompt требует нейтральные формулировки без предположений о роде
 - `sessionSummaryUser` в текущем client lifecycle реально запускается вручную (`manual`) и nightly cron; logout больше не триггерит user-summary, а только отправляет `therapy/session/end`
+- Дата пользовательского итога берётся из начала обобщённого backlog (`sessionStartedAt` / первое transcript-сообщение), а не из `createdAt` ночной генерации; в UI показывается только дата без точного времени
 - Client-side auto-summary на `pagehide/beforeunload` для web отключён: browser refresh должен восстанавливать историю, а не завершать сессию перед restore
 - После успешной `sessionSummaryUser` очищается только тот unsummarized backlog, который реально вошёл в итог; более новая параллельная сессия пользователя не затрагивается
 - Старый `not_eligible` backlog чистится nightly retention-проходом, если он не стал summary-worthy и завис дольше нескольких дней

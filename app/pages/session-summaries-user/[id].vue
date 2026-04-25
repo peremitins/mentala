@@ -80,7 +80,7 @@
           <div class="flex items-center justify-between gap-3">
             <div>
               <p class="text-xs text-foreground/60">
-                {{ formatDate(item.sessionEndedAt || item.createdAt) }}
+                {{ formatSessionSummaryDisplayDate(item) }}
               </p>
               <p class="text-xs text-foreground/60 mt-1">
                 {{ item.messagesCount }} сообщений
@@ -178,6 +178,7 @@ import type {
   GetSessionSummaryUserResponseDtoType,
   SessionSummaryUserItemDtoType,
 } from '@/shared/dto/sessionSummaryUser';
+import { formatSessionSummaryDisplayDate } from '@/app/utils/session-summary-date';
 
 // Доступ проверяется глобальным auth.global.ts — отдельная middleware не нужна.
 
@@ -307,20 +308,6 @@ function goBack() {
     router.back();
   } else {
     void router.push('/session-summaries-user');
-  }
-}
-
-function formatDate(iso: string): string {
-  try {
-    const date = new Date(iso);
-    return new Intl.DateTimeFormat('ru-RU', {
-      day: 'numeric',
-      month: 'long',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(date);
-  } catch {
-    return iso;
   }
 }
 

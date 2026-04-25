@@ -2,27 +2,28 @@ import { Capacitor, registerPlugin } from '@capacitor/core';
 
 type MentalaRealtimeVoiceAudioPlugin = {
   activate(): Promise<{
+    platform?: string;
+    category?: string;
     mode?: string;
     volumeStream?: string;
+    speakerPinned?: boolean;
   }>;
   deactivate(): Promise<void>;
 };
 
 const MentalaRealtimeVoiceAudio =
-  registerPlugin<MentalaRealtimeVoiceAudioPlugin>(
-    'MentalaRealtimeVoiceAudio'
-  );
+  registerPlugin<MentalaRealtimeVoiceAudioPlugin>('MentalaRealtimeVoiceAudio');
 
 function shouldAttemptRealtimeVoiceNativeAudioBridge() {
   if (typeof window === 'undefined') return false;
   if (!Capacitor.isNativePlatform()) return false;
-  if (Capacitor.getPlatform() !== 'android') return false;
+  const platform = Capacitor.getPlatform();
+  if (platform !== 'android' && platform !== 'ios') return false;
 
   // Локальные Android plugins, которые регистрируются через MainActivity,
-  // не обязаны попадать в Capacitor PluginHeaders.
-  // Поэтому isPluginAvailable() здесь даёт ложный false и блокирует
-  // реальный вызов bridge. Для realtime voice просто пробуем нативный вызов
-  // и считаем недоступность по факту reject/error.
+  // и iOS plugins из MainViewController не обязаны попадать в Capacitor
+  // PluginHeaders. Поэтому isPluginAvailable() здесь может дать ложный false:
+  // для realtime voice пробуем вызов и считаем недоступность по факту reject.
   return true;
 }
 
@@ -34,16 +35,19 @@ export async function activateRealtimeVoiceNativeAudioSession() {
   try {
     const result = await MentalaRealtimeVoiceAudio.activate();
     console.info(
-      '[RealtimeVoiceNativeAudio] Android communication speaker route activated:',
+      '[RealtimeVoiceNativeAudio] Native realtime audio session activated:',
       {
+        platform: result?.platform || Capacitor.getPlatform(),
+        category: result?.category || 'unknown',
         mode: result?.mode || 'unknown',
         volumeStream: result?.volumeStream || 'unknown',
+        speakerPinned: result?.speakerPinned ?? null,
       }
     );
     return true;
   } catch (error) {
     console.error(
-      '[RealtimeVoiceNativeAudio] Failed to activate Android communication speaker route:',
+      '[RealtimeVoiceNativeAudio] Failed to activate native realtime audio session:',
       error
     );
     return false;
@@ -59,7 +63,7 @@ export async function deactivateRealtimeVoiceNativeAudioSession() {
     await MentalaRealtimeVoiceAudio.deactivate();
   } catch (error) {
     console.error(
-      '[RealtimeVoiceNativeAudio] Failed to restore Android realtime audio state:',
+      '[RealtimeVoiceNativeAudio] Failed to restore native realtime audio state:',
       error
     );
   }

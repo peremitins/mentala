@@ -60,7 +60,7 @@
         >
           <div class="flex items-center justify-between gap-3 mb-2">
             <p class="text-xs text-foreground/60">
-              {{ formatDate(item.sessionEndedAt || item.createdAt) }}
+              {{ formatSessionSummaryDisplayDate(item) }}
             </p>
             <UnreadSummaryBadge v-if="!item.viewedAt" />
           </div>
@@ -88,6 +88,7 @@ import type {
   ListSessionSummariesUserResponseDtoType,
   SessionSummaryUserItemDtoType,
 } from '@/shared/dto/sessionSummaryUser';
+import { formatSessionSummaryDisplayDate } from '@/app/utils/session-summary-date';
 import IconSend from '~icons/lucide/send';
 
 // Доступ проверяется глобальным auth.global.ts — отдельная middleware не нужна.
@@ -125,21 +126,6 @@ function goBack() {
     router.back();
   } else {
     void router.push('/');
-  }
-}
-
-// "22 апр, 14:30" — коротко и читаемо.
-function formatDate(iso: string): string {
-  try {
-    const date = new Date(iso);
-    return new Intl.DateTimeFormat('ru-RU', {
-      day: 'numeric',
-      month: 'short',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(date);
-  } catch {
-    return iso;
   }
 }
 

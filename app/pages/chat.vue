@@ -440,6 +440,7 @@ import { useMarkdown } from '@/app/composables/useMarkdown';
 import { useRealtimeVoiceSession } from '@/app/composables/useRealtimeVoiceSession';
 import { useRealtimeVoiceCallFeedback } from '@/app/composables/useRealtimeVoiceCallFeedback';
 import { useVoiceDictationInput } from '@/app/composables/useVoiceDictationInput';
+import { useIsDev } from '@/app/composables/useIsDev';
 import {
   useChatStore,
   SESSION_SUMMARY_FORCE_MIN_USER_MESSAGES,
@@ -551,7 +552,9 @@ const DEV_MIN_QUALIFYING = SESSION_SUMMARY_MIN_QUALIFYING_MESSAGES;
 const FORCE_MIN_MESSAGES = SESSION_SUMMARY_FORCE_MIN_USER_MESSAGES;
 
 // Флаг для шаблона — показывать ли dev-счётчик eligibility.
-const isDev = import.meta.dev;
+// На iOS device-сборке для Realtime Voice используется static bundle без
+// Nuxt dev-server, поэтому `import.meta.dev` там false. Берём runtime-флаг.
+const isDev = useIsDev();
 
 const DEV_MIN_DURATION_LABEL = (() => {
   const m = Math.floor(DEV_MIN_DURATION_SECONDS / 60);

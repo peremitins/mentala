@@ -51,3 +51,15 @@ export function shouldInterruptRealtimeAssistantOnSpeechStart(params: {
 
   return true;
 }
+
+export function shouldSuppressRealtimeInputDuringAssistantPlayback(params: {
+  platform: Platform;
+  isAssistantAudioPlaying: boolean;
+  isKnownUserInputItem?: boolean;
+}) {
+  if (params.isKnownUserInputItem) {
+    return false;
+  }
+
+  return params.platform === 'ios' && params.isAssistantAudioPlaying;
+}

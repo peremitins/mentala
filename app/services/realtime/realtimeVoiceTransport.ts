@@ -192,6 +192,7 @@ export class RealtimeVoiceTransport {
   private inputAudioSource: MediaStreamAudioSourceNode | null = null;
   private inputActivityInterval: number | null = null;
   private lastInputActivityAtMs = 0;
+  private isLocalMicrophoneEnabled = true;
 
   get isConnected(): boolean {
     return (
@@ -218,6 +219,33 @@ export class RealtimeVoiceTransport {
     return this.remoteAudioElement;
   }
 
+  private primeRemoteAudioElement() {
+    const remoteAudioElement = this.ensureRemoteAudioElement();
+    if (!remoteAudioElement) {
+      return;
+    }
+
+    ensureRealtimeVoicePlaybackAudioSessionType();
+    remoteAudioElement.muted = false;
+    remoteAudioElement.volume = 1;
+    remoteAudioElement.preload = 'auto';
+    try {
+      remoteAudioElement.load();
+    } catch {
+      // MediaStream будет назначен позже в track-event; load() здесь только
+      // прогревает HTMLAudioElement в user-initiated цепочке старта.
+    }
+  }
+
+  private async playRemoteAudioElement(remoteAudioElement: HTMLAudioElement) {
+    await remoteAudioElement.play().catch((error) => {
+      console.warn(
+        '[RealtimeVoiceTransport] Remote audio autoplay was delayed:',
+        error
+      );
+    });
+  }
+
   private async attachRemoteAudioStream(stream: MediaStream) {
     const remoteAudioElement = this.ensureRemoteAudioElement();
     if (!remoteAudioElement) {
@@ -229,10 +257,17 @@ export class RealtimeVoiceTransport {
     remoteAudioElement.muted = false;
     remoteAudioElement.volume = 1;
 
-    await remoteAudioElement.play().catch(() => {
-      // Автоплей может быть ограничен браузером. Повторное воспроизведение
-      // произойдёт автоматически после следующего user gesture.
-    });
+    await this.playRemoteAudioElement(remoteAudioElement);
+
+    for (const track of stream.getAudioTracks?.() || []) {
+      track.addEventListener?.(
+        'unmute',
+        () => {
+          void this.playRemoteAudioElement(remoteAudioElement);
+        },
+        { once: true }
+      );
+    }
   }
 
   private startInputActivityMonitor(
@@ -374,6 +409,7 @@ export class RealtimeVoiceTransport {
 
     const peerConnection = new PeerConnection();
     const dataChannel = peerConnection.createDataChannel('oai-events');
+    this.primeRemoteAudioElement();
 
     // Устанавливаем audioSession = 'play-and-record' ДО getUserMedia.
     // На iOS WebKit в PWA, если session в режиме 'playback' (например, после медитации),
@@ -510,6 +546,18 @@ export class RealtimeVoiceTransport {
     this.dataChannel.send(JSON.stringify(event));
   }
 
+  setMicrophoneEnabled(enabled: boolean) {
+    if (this.isLocalMicrophoneEnabled === enabled) {
+      return;
+    }
+
+    this.isLocalMicrophoneEnabled = enabled;
+
+    for (const track of this.localStream?.getAudioTracks?.() || []) {
+      track.enabled = enabled;
+    }
+  }
+
   interrupt(responseId?: string | null) {
     this.sendEvent({
       type: 'response.cancel',
@@ -546,6 +594,7 @@ export class RealtimeVoiceTransport {
     this.stopInputActivityMonitor();
 
     if (this.localStream) {
+      this.setMicrophoneEnabled(true);
       for (const track of this.localStream.getTracks()) {
         try {
           track.stop();
@@ -558,6 +607,7 @@ export class RealtimeVoiceTransport {
       }
       this.localStream = null;
     }
+    this.isLocalMicrophoneEnabled = true;
 
     if (this.remoteAudioElement) {
       try {
