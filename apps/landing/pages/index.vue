@@ -605,7 +605,7 @@
             </h2>
           </div>
 
-          <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div class="mt-6 grid gap-4 sm:grid-cols-2">
             <article
               v-for="item in privacyCards"
               :key="item.id"
@@ -1225,6 +1225,17 @@ const featureSteps = computed<FeatureStep[]>(() => [
     ],
     image: '/landing/features/breathing.webp',
   },
+  {
+    key: 'diary',
+    title: String(t('LANDING.FEATURES.STEPS.DIARY.TITLE')),
+    description: String(t('LANDING.FEATURES.STEPS.DIARY.DESCRIPTION')),
+    chips: [
+      String(t('LANDING.FEATURES.STEPS.DIARY.CHIPS.CHIP_1')),
+      String(t('LANDING.FEATURES.STEPS.DIARY.CHIPS.CHIP_2')),
+      String(t('LANDING.FEATURES.STEPS.DIARY.CHIPS.CHIP_3')),
+    ],
+    image: '/landing/features/diary.webp',
+  },
 ]);
 
 const scenarios = computed<ScenarioCard[]>(() => [
@@ -1320,12 +1331,6 @@ const privacyCards = computed<PrivacyCard[]>(() => [
     icon: String(t('LANDING.PRIVACY.CARDS.DATA_PROTECTION.ICON')),
     title: String(t('LANDING.PRIVACY.CARDS.DATA_PROTECTION.TITLE')),
     text: String(t('LANDING.PRIVACY.CARDS.DATA_PROTECTION.TEXT')),
-  },
-  {
-    id: String(t('LANDING.PRIVACY.CARDS.GOOGLE_SIGN_IN.ID')),
-    icon: String(t('LANDING.PRIVACY.CARDS.GOOGLE_SIGN_IN.ICON')),
-    title: String(t('LANDING.PRIVACY.CARDS.GOOGLE_SIGN_IN.TITLE')),
-    text: String(t('LANDING.PRIVACY.CARDS.GOOGLE_SIGN_IN.TEXT')),
   },
 ]);
 

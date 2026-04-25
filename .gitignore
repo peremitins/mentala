@@ -2,6 +2,7 @@
 .output
 .data
 .nuxt
+.nuxt-capacitor-device
 .nuxt-capacitor-release
 .nuxt-capacitor-standalone
 .nitro

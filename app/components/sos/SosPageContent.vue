@@ -46,7 +46,7 @@
       </div>
 
       <div class="w-full space-y-2">
-        <div class="glass-deep rounded-xl p-4">
+        <div class="rounded-2xl border border-white/10 bg-background/20 p-3">
           <p class="text-sm text-center text-foreground/80">
             {{ groundingCurrent.description }}
           </p>

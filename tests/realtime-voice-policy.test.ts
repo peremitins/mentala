@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildRealtimeVoiceAudioConstraints,
   shouldInterruptRealtimeAssistantOnSpeechStart,
+  shouldSuppressRealtimeInputDuringAssistantPlayback,
 } from '../app/services/realtime/realtimeVoicePolicy';
 
 describe('realtime voice policy', () => {
@@ -56,5 +57,38 @@ describe('realtime voice policy', () => {
         isAssistantAudioPlaying: true,
       })
     ).toBe(true);
+  });
+
+  it('глушит iOS echo-input только во время playback ассистента', () => {
+    expect(
+      shouldSuppressRealtimeInputDuringAssistantPlayback({
+        platform: 'ios',
+        isAssistantAudioPlaying: true,
+      })
+    ).toBe(true);
+
+    expect(
+      shouldSuppressRealtimeInputDuringAssistantPlayback({
+        platform: 'ios',
+        isAssistantAudioPlaying: false,
+      })
+    ).toBe(false);
+
+    expect(
+      shouldSuppressRealtimeInputDuringAssistantPlayback({
+        platform: 'android',
+        isAssistantAudioPlaying: true,
+      })
+    ).toBe(false);
+  });
+
+  it('не глушит уже начатый user item, даже если iOS playback ассистента уже стартовал', () => {
+    expect(
+      shouldSuppressRealtimeInputDuringAssistantPlayback({
+        platform: 'ios',
+        isAssistantAudioPlaying: true,
+        isKnownUserInputItem: true,
+      })
+    ).toBe(false);
   });
 });

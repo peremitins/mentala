@@ -24,7 +24,11 @@ type TranscriptBacklogSession = {
 export type UnsummarizedTextBacklog = {
   latestSession: TranscriptBacklogSession;
   sessions: TranscriptBacklogSession[];
-  messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+  messages: Array<{
+    role: 'user' | 'assistant';
+    content: string;
+    createdAt: Date;
+  }>;
 };
 
 async function listTranscriptBacklogSessions(
@@ -94,6 +98,7 @@ export async function loadUnsummarizedTextBacklogForUser(
     messages: mergedMessages.map((message) => ({
       role: message.role,
       content: message.content,
+      createdAt: message.createdAt,
     })),
   };
 }

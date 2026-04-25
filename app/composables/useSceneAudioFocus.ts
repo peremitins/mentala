@@ -1,4 +1,4 @@
-import { onScopeDispose } from 'vue';
+import { computed, onScopeDispose, ref } from 'vue';
 import { useSceneAudio } from '@/app/composables/useSceneAudio';
 
 interface SceneAudioFocusAcquireOptions {
@@ -18,6 +18,7 @@ const activeLocks = new Map<
     withFade: boolean;
   }
 >();
+const activeLockCount = ref(0);
 
 let focusLockSequence = 0;
 let focusOperationChain = Promise.resolve();
@@ -26,6 +27,10 @@ function enqueueFocusOperation(task: () => Promise<void>) {
   focusOperationChain = focusOperationChain.catch(() => undefined).then(task);
 
   return focusOperationChain;
+}
+
+function syncActiveLockCount() {
+  activeLockCount.value = activeLocks.size;
 }
 
 async function acquireSceneAudioFocusLock(
@@ -39,6 +44,7 @@ async function acquireSceneAudioFocusLock(
     reason,
     withFade: options.withFade !== false,
   });
+  syncActiveLockCount();
 
   if (shouldSuspend) {
     await enqueueFocusOperation(async () => {
@@ -67,6 +73,7 @@ async function releaseSceneAudioFocusLock(lockId: string) {
   }
 
   activeLocks.delete(lockId);
+  syncActiveLockCount();
 
   if (activeLocks.size > 0) {
     return;
@@ -120,5 +127,12 @@ export function useSceneAudioFocus() {
   return {
     acquire,
     releaseAll,
+  };
+}
+
+export function useSceneAudioFocusState() {
+  return {
+    isLocked: computed(() => activeLockCount.value > 0),
+    activeLockCount: computed(() => activeLockCount.value),
   };
 }
