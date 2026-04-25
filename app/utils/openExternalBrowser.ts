@@ -1,4 +1,11 @@
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, registerPlugin } from '@capacitor/core';
+
+type ExternalBrowserPlugin = {
+  open(options: { url: string }): Promise<void>;
+};
+
+const NativeExternalBrowser =
+  registerPlugin<ExternalBrowserPlugin>('ExternalBrowser');
 
 export async function openExternalBrowser(url: string) {
   if (typeof window === 'undefined') return;
@@ -17,6 +24,18 @@ export async function openExternalBrowser(url: string) {
     return;
   }
 
+  if (Capacitor.getPlatform() === 'ios') {
+    try {
+      await NativeExternalBrowser.open({ url: resolvedUrl });
+      return;
+    } catch (error) {
+      console.warn(
+        '[openExternalBrowser] Failed to open URL via iOS native bridge:',
+        error
+      );
+    }
+  }
+
   try {
     const { InAppBrowser } = await import('@capacitor/inappbrowser');
     await InAppBrowser.openInExternalBrowser({ url: resolvedUrl });
@@ -31,4 +50,3 @@ export async function openExternalBrowser(url: string) {
     }
   }
 }
-

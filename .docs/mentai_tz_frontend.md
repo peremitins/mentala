@@ -23,6 +23,7 @@ shared/dto/        # Zod-схемы (общие с бэком)
 
 - Glassmorphism: backdrop-blur, bg-white/10, мягкие тени, радиусы 16-24px
 - Цвета — только CSS-переменные из tailwind.css, `dark:` классы запрещены
+- Семантические интерактивные токены `primary` и `primary-ui` задаются в `app/assets/css/tailwind.css`; для filled-кнопок и selected-state текст всегда брать через `primary-foreground`, а не через `text-white`
 - Компоненты: shadcn-vue как база
 - Иконки: Lucide (основные), Tabler/Phosphor через Iconify
 

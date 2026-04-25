@@ -138,7 +138,10 @@
 - Native iOS/AppIcon генерировать отдельно из Apple-safe мастера без предскругления
 - Native Android launcher icon и splash генерировать отдельно из Apple-safe мастера: launcher через adaptive icon layers, splash — как отдельный тёмный launch screen со знаком бренда
 - Native iOS single-size AppIcon: `ios/App/App/Assets.xcassets/AppIcon.appiconset/favicon_ios.png`
-- Native iOS launch splash: `ios/App/App/Assets.xcassets/Splash.imageset/splash-2732x2732*.png`
-- iOS native-ассеты пересобирать командой `pnpm assets:ios`: `AppIcon` собирается той же светлой launcher-композицией, что и квадратный Android launcher icon (единая фон-подложка + тот же знак бренда), а splash — из того же мастера, но только со знаком бренда без фоновой карточки
-- Для `SplashScreen` в Capacitor не включать spinner и не держать искусственно длинный показ: визуал должен быть чистым и без ощущения дефолтного Capacitor
+- Native iOS launch splash: `ios/App/App/Assets.xcassets/SplashBackdrop.imageset/*` + `ios/App/App/Assets.xcassets/SplashMark.imageset/*`
+- iOS native-ассеты пересобирать командой `pnpm assets:ios`: `AppIcon` собирается той же светлой launcher-композицией, что и квадратный Android launcher icon (единая фон-подложка + тот же знак бренда), а launch splash состоит из отдельных backdrop/mark ассетов для storyboard
+- Для iPhone launch screen не должен быть одним полноэкранным bitmap со встроенным знаком: стабильный вариант для `LaunchScreen -> Capacitor SplashScreen` — раздельные `SplashBackdrop` и центрированный `SplashMark` в storyboard, иначе возможен заметный сдвиг знака из-за различий `scaleAspectFill`
+- Для iOS рабочая схема сейчас такая: launch splash оставляем включённым, но скрываем вручную после готовности первого кадра через `SplashScreen.hide(...)`; вариант с `launchShowDuration: 0` даёт тёмный старт без логотипа и не использовать его как основную конфигурацию
+- Для iOS `StatusBar.overlaysWebView` нельзя задавать как `false` в native config и потом переключать на `true` из JS: это даёт поздний пересчёт стартовой геометрии и визуальный скачок splash/logo
+- Для `SplashScreen` в Capacitor не включать spinner и не держать искусственно длинный показ: на iPhone допустима короткая минимальная выдержка для аккуратного старта, на Android искусственную задержку лучше не добавлять и скрывать splash сразу после готовности первого кадра
 - Android native-ассеты пересобирать командой `pnpm assets:android`: adaptive icon собирается из светлого брендового background layer + foreground знака, а splash заменяет дефолтный Capacitor во всех `drawable*`

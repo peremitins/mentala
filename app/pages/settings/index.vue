@@ -240,21 +240,31 @@
           </p>
           <div class="">
             <!-- Ссылки на каноничные HTML-документы из public/legal -->
-            <a :href="termsOfServiceUrl" class="px-4 py-3" :class="rowClass()">
+            <button
+              type="button"
+              class="px-4 py-3"
+              :class="rowClass()"
+              @click="openLegalDocument(termsOfServiceUrl)"
+            >
               <div class="">
                 <p class="text-sm font-medium">Условия использования</p>
               </div>
               <IconChevronRight class="h-4 w-4 text-muted-foreground" />
-            </a>
+            </button>
 
             <Separator class="w-auto mx-4" />
 
-            <a :href="privacyPolicyUrl" class="px-4 py-3" :class="rowClass()">
+            <button
+              type="button"
+              class="px-4 py-3"
+              :class="rowClass()"
+              @click="openLegalDocument(privacyPolicyUrl)"
+            >
               <div class="">
                 <p class="text-sm font-medium">Политика конфиденциальности</p>
               </div>
               <IconChevronRight class="h-4 w-4 text-muted-foreground" />
-            </a>
+            </button>
           </div>
         </div>
 
@@ -474,6 +484,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
+import { useRuntimeConfig } from '#imports';
 import { useI18n } from 'vue-i18n';
 import { useAuthStore } from '@/app/stores/auth';
 import { useChatSettingsStore } from '@/app/stores/chatSettings';
@@ -524,6 +535,7 @@ import {
   getAssistantVoicePresentation,
   resolveAssistantVoiceCatalogItem,
 } from '@/shared/constants/assistantVoiceCatalog';
+import { openExternalBrowser } from '@/app/utils/openExternalBrowser';
 import IconChevronRight from '~icons/lucide/chevron-right';
 
 const auth = useAuthStore();
@@ -533,6 +545,7 @@ const { fetchGlobalPreferences } = useNotificationsSettings();
 const { copy } = useCopyToClipboard();
 const { locale } = useI18n();
 const { shouldHideIosReviewBillingUi } = useIosReviewBillingUi();
+const runtimeConfig = useRuntimeConfig();
 
 const preferences = ref<UserPreferencesDto | null>(null);
 const loadingUser = ref(true);
@@ -734,18 +747,28 @@ const legalLocale = computed(() => {
   const value = (auth.user?.locale || locale.value || 'ru').toString();
   return value.toLowerCase().startsWith('en') ? 'en' : 'ru';
 });
+const publicAppUrl = computed(() =>
+  String(runtimeConfig.public.appUrl || 'https://my.mentala.app').replace(
+    /\/$/,
+    ''
+  )
+);
 
 const termsOfServiceUrl = computed(
-  () => `/legal/terms-of-service-${legalLocale.value}.html`
+  () => `${publicAppUrl.value}/legal/terms-of-service-${legalLocale.value}.html`
 );
 const privacyPolicyUrl = computed(
-  () => `/legal/privacy-policy-${legalLocale.value}.html`
+  () => `${publicAppUrl.value}/legal/privacy-policy-${legalLocale.value}.html`
 );
 
 const rowBaseClass =
   'group flex w-full items-center justify-between gap-3  text-left text-sm text-foreground transition-all duration-200 hover:bg-white/10 scroll-mt-24';
 
 const rowClass = () => rowBaseClass;
+
+async function openLegalDocument(url: string) {
+  await openExternalBrowser(url);
+}
 
 onMounted(async () => {
   loadingUser.value = true;
