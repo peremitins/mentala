@@ -11,5 +11,7 @@ class MainViewController: CAPBridgeViewController {
         bridge?.registerPluginInstance(StorefrontPlugin())
         // Регистрируем AppleIapPlugin (StoreKit 2) для iOS purchase/restore flow.
         bridge?.registerPluginInstance(AppleIapPlugin())
+        // Регистрируем realtime voice audio bridge для duplex AVAudioSession.
+        bridge?.registerPluginInstance(MentalaRealtimeVoiceAudioPlugin())
     }
 }

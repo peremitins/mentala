@@ -31,6 +31,7 @@ import {
 import {
   buildRealtimeVoiceAudioConstraints,
   shouldInterruptRealtimeAssistantOnSpeechStart,
+  shouldSuppressRealtimeInputDuringAssistantPlayback,
 } from '@/app/services/realtime/realtimeVoicePolicy';
 import {
   resolveRuntimeApiBaseUrl,
@@ -384,6 +385,9 @@ export function useRealtimeVoiceSession(options?: {
   let userSpeechStartMsByItemId = new Map<string, number>();
   let assistantAudioStartedAtMsByResponseId = new Map<string, number>();
   let assistantAudioSecondsByResponseId = new Map<string, number>();
+  let assistantMicrophoneMuteResponseIds = new Set<string>();
+  let activeUserInputItemIds = new Set<string>();
+  let suppressedInputItemIds = new Set<string>();
   let conversationItemIds = new Set<string>();
   let pendingRuntimeCompactionEventIds = new Set<string>();
   let interruptedResponseIds = new Set<string>();
@@ -529,6 +533,9 @@ export function useRealtimeVoiceSession(options?: {
     userSpeechStartMsByItemId = new Map<string, number>();
     assistantAudioStartedAtMsByResponseId = new Map<string, number>();
     assistantAudioSecondsByResponseId = new Map<string, number>();
+    assistantMicrophoneMuteResponseIds = new Set<string>();
+    activeUserInputItemIds = new Set<string>();
+    suppressedInputItemIds = new Set<string>();
     conversationItemIds = new Set<string>();
     pendingRuntimeCompactionEventIds = new Set<string>();
     interruptedResponseIds = new Set<string>();
@@ -600,6 +607,117 @@ export function useRealtimeVoiceSession(options?: {
     idleStopTimer = setTimeout(() => {
       void stop('timeout');
     }, idleTimeoutMs);
+  }
+
+  function isRealtimeUserInputItemEvent(event: {
+    type?: string;
+    [key: string]: any;
+  }) {
+    if (event.type === 'conversation.item.created') {
+      return String(event.item?.role || '') === 'user';
+    }
+
+    return (
+      event.type === 'input_audio_buffer.speech_started' ||
+      event.type === 'input_audio_buffer.speech_stopped' ||
+      event.type === 'conversation.item.input_audio_transcription.delta' ||
+      event.type === 'conversation.item.input_audio_transcription.completed' ||
+      event.type === 'conversation.item.input_audio_transcription.failed'
+    );
+  }
+
+  function isRealtimeUserInputTerminalEvent(event: {
+    type?: string;
+    [key: string]: any;
+  }) {
+    return (
+      event.type === 'conversation.item.input_audio_transcription.completed' ||
+      event.type === 'conversation.item.input_audio_transcription.failed'
+    );
+  }
+
+  function isRealtimeUserInputTrackingEvent(event: {
+    type?: string;
+    [key: string]: any;
+  }) {
+    return (
+      event.type === 'conversation.item.created' ||
+      event.type === 'input_audio_buffer.speech_started' ||
+      event.type === 'input_audio_buffer.speech_stopped'
+    );
+  }
+
+  function getUserInputItemIdFromEvent(event: {
+    type?: string;
+    [key: string]: any;
+  }) {
+    if (!isRealtimeUserInputItemEvent(event)) {
+      return '';
+    }
+
+    const directItemId = String(event.item_id || '').trim();
+    if (directItemId) {
+      return directItemId;
+    }
+
+    if (
+      event.type === 'conversation.item.created' &&
+      String(event.item?.role || '') === 'user'
+    ) {
+      return String(event.item?.id || '').trim();
+    }
+
+    return '';
+  }
+
+  function shouldSuppressIncomingInputItem(itemId: string) {
+    return shouldSuppressRealtimeInputDuringAssistantPlayback({
+      platform: clientPlatform.value,
+      isKnownUserInputItem: activeUserInputItemIds.has(itemId),
+      isAssistantAudioPlaying:
+        assistantAudioStartedAtMsByResponseId.size > 0 ||
+        assistantMicrophoneMuteResponseIds.size > 0,
+    });
+  }
+
+  function updateAssistantMicrophoneMute() {
+    if (clientPlatform.value !== 'ios') {
+      return;
+    }
+
+    transport?.setMicrophoneEnabled(
+      assistantMicrophoneMuteResponseIds.size < 1
+    );
+  }
+
+  function muteMicrophoneForAssistantResponse(responseId: string) {
+    if (clientPlatform.value !== 'ios' || !responseId) {
+      return;
+    }
+
+    assistantMicrophoneMuteResponseIds.add(responseId);
+    updateAssistantMicrophoneMute();
+  }
+
+  function unmuteMicrophoneForAssistantResponse(responseId: string) {
+    if (clientPlatform.value !== 'ios' || !responseId) {
+      return;
+    }
+
+    assistantMicrophoneMuteResponseIds.delete(responseId);
+    updateAssistantMicrophoneMute();
+  }
+
+  function suppressInputItem(itemId: string) {
+    if (!itemId) {
+      return;
+    }
+
+    suppressedInputItemIds.add(itemId);
+    activeUserInputItemIds.delete(itemId);
+    userSpeechStartMsByItemId.delete(itemId);
+    forgetConversationItemId(itemId);
+    adapter?.removeUserMessage(itemId);
   }
 
   function rememberConversationItemId(value: unknown) {
@@ -907,7 +1025,40 @@ export function useRealtimeVoiceSession(options?: {
       forgetConversationItemId(event.item_id);
     }
 
+    const inputItemId = getUserInputItemIdFromEvent(event);
+    if (inputItemId && suppressedInputItemIds.has(inputItemId)) {
+      if (isRealtimeUserInputTerminalEvent(event)) {
+        suppressedInputItemIds.delete(inputItemId);
+      }
+      touchActivity();
+      return;
+    }
+
+    if (
+      inputItemId &&
+      isRealtimeUserInputItemEvent(event) &&
+      shouldSuppressIncomingInputItem(inputItemId)
+    ) {
+      // iOS иногда возвращает первые слова ассистента во входной VAD как
+      // новый user-turn. На mobile barge-in отключён, поэтому такой item
+      // не должен попадать в локальный UI и метрики realtime-сессии.
+      suppressInputItem(inputItemId);
+      if (isRealtimeUserInputTerminalEvent(event)) {
+        suppressedInputItemIds.delete(inputItemId);
+      }
+      touchActivity();
+      return;
+    }
+
+    if (inputItemId && isRealtimeUserInputTrackingEvent(event)) {
+      activeUserInputItemIds.add(inputItemId);
+    }
+
     adapter?.handleServerEvent(event);
+
+    if (inputItemId && isRealtimeUserInputTerminalEvent(event)) {
+      activeUserInputItemIds.delete(inputItemId);
+    }
 
     switch (event.type) {
       case 'input_audio_buffer.speech_started': {
@@ -1001,6 +1152,7 @@ export function useRealtimeVoiceSession(options?: {
         activeResponseId = responseId;
         interruptedResponseIds.delete(responseId);
         assistantAudioSecondsByResponseId.set(responseId, 0);
+        muteMicrophoneForAssistantResponse(responseId);
 
         void sendSessionEvent({
           type: 'response_started',
@@ -1018,10 +1170,14 @@ export function useRealtimeVoiceSession(options?: {
           return;
         }
 
-        // На Android Chromium/WebView может заново перехватывать audio route.
-        // На каждом assistant playback повторно закрепляем communication-mode
-        // на основном динамике, не ломая duplex-захват микрофона.
-        void activateRealtimeVoiceNativeAudioSession();
+        if (clientPlatform.value === 'android') {
+          // На Android Chromium/WebView может заново перехватывать audio route.
+          // На каждом assistant playback повторно закрепляем communication-mode
+          // на основном динамике, не ломая duplex-захват микрофона.
+          // На iOS этого делать нельзя: смена AVAudioSession ровно на старте
+          // output-аудио может съедать первые слова ассистента.
+          void activateRealtimeVoiceNativeAudioSession();
+        }
         assistantAudioStartedAtMsByResponseId.set(
           responseId,
           performance.now()
@@ -1050,6 +1206,7 @@ export function useRealtimeVoiceSession(options?: {
           );
         }
         assistantAudioStartedAtMsByResponseId.delete(responseId);
+        unmuteMicrophoneForAssistantResponse(responseId);
         touchActivity();
         return;
       }
@@ -1069,6 +1226,7 @@ export function useRealtimeVoiceSession(options?: {
 
         assistantAudioStartedAtMsByResponseId.delete(responseId);
         assistantAudioSecondsByResponseId.delete(responseId);
+        unmuteMicrophoneForAssistantResponse(responseId);
 
         if (event.response?.status === 'failed') {
           void sendSessionEvent({
@@ -1219,13 +1377,21 @@ export function useRealtimeVoiceSession(options?: {
       // (store.therapySessionId остаётся null для чистого voice-flow)
       // и тихо пропускает POST /api/session-summaries-user.
       chat.therapySessionId = parsed.session.therapySessionId;
+      chat.historyAnchorTherapySessionId = parsed.session.therapySessionId;
       clientPlatform.value = parsed.session.clientPlatform;
       weeklyQuota.value = parsed.weeklyAi;
 
       adapter = buildChatAdapter(parsed.session.therapySessionId);
       resetRuntimeMaps();
       transport = new RealtimeVoiceTransport();
-      realtimeSceneAudioLock = await sceneAudioFocus.acquire('realtime-voice');
+      realtimeSceneAudioLock = await sceneAudioFocus.acquire('realtime-voice', {
+        // Realtime voice должен получать аудио-фокус сразу. Fade фоновой сцены
+        // рядом со стартом WebRTC даёт акустическую петлю и гонки resume/suspend.
+        withFade: false,
+      });
+      if (parsed.session.clientPlatform === 'ios') {
+        await activateRealtimeVoiceNativeAudioSession();
+      }
       await transport.start({
         clientSecret: parsed.openai.clientSecret || null,
         webrtcUrl: parsed.openai.webrtcUrl,
@@ -1249,7 +1415,9 @@ export function useRealtimeVoiceSession(options?: {
           }
         },
       });
-      await activateRealtimeVoiceNativeAudioSession();
+      if (parsed.session.clientPlatform !== 'ios') {
+        await activateRealtimeVoiceNativeAudioSession();
+      }
       await startRealtimeVoiceForegroundService({
         title: 'Ментала',
         subtitle: 'Идёт голосовой разговор',
@@ -1319,8 +1487,12 @@ export function useRealtimeVoiceSession(options?: {
       // поэтому это безопасно даже после handoff/realtime end.
       const therapySessionIdToFinalize =
         handoffResponse?.sourceTherapySessionId ?? activeTherapySessionId;
-      if (typeof therapySessionIdToFinalize === 'number') {
+      if (!handoffResponse && typeof therapySessionIdToFinalize === 'number') {
         await finalizeTherapySessionOnServer(therapySessionIdToFinalize);
+      }
+      if (typeof therapySessionIdToFinalize === 'number') {
+        chat.resetTherapySessionState(therapySessionIdToFinalize);
+        chat.historyAnchorTherapySessionId = therapySessionIdToFinalize;
       }
 
       await options?.onAfterStop?.(reason);

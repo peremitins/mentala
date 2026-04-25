@@ -22,11 +22,13 @@ npx cap open ios          # или: open ios/App/App.xcworkspace
 
 ```bash
 pnpm dev
-pnpm cap:sync:device      # определит LAN-IP, выставит CAPACITOR_SERVER_URL, синхронизирует
+pnpm cap:sync:device      # Android: live reload; iOS: local dev bundle для Realtime Voice
 ```
 
-- iPhone и Mac в одной сети (без client isolation)
-- `DEV_ALLOWED_ORIGINS` в `.env.development` должен содержать LAN-origin, который реально использует mobile runtime: `http://<LAN_IP>` через Caddy или `http://<LAN_IP>:3000` при прямом входе в Nuxt
+- Для iOS real device `cap:sync:device` собирает static bundle из `.env.development`, удаляет `server.url` и подставляет `NUXT_PUBLIC_API_SERVER_URL` на локальный dev backend: это сохраняет доверенный WebView origin для WebRTC/getUserMedia и позволяет локально тестировать Realtime Voice без поломки авторизации/API. Такой bundle не является Nuxt dev-server (`import.meta.dev=false`), поэтому dev-only UI должен ориентироваться на `runtimeConfig.public.isDev`.
+- Для Android real device `cap:sync:device` продолжает использовать live reload через `http://localhost:3000` + `adb reverse`.
+- iPhone и Mac должны быть подключены для установки/запуска из Xcode; после frontend-изменений для iOS Realtime Voice нужно повторить `pnpm cap:sync:device`, потому что это static bundle, а не live reload.
+- `DEV_ALLOWED_ORIGINS` в `.env.development` нужен для Android/LAN runtime: `http://<LAN_IP>` через Caddy или `http://<LAN_IP>:3000` при прямом входе в Nuxt
 - ATS: в `Info.plist` добавить исключение для локального IP (убрать перед релизом):
 
 ```xml

@@ -8,6 +8,15 @@ import { createSessionSummaryUser } from '@/server/application/sessionSummaryUse
 
 type ErrorCode = 'E_VALIDATION' | 'E_AUTH' | 'E_UNKNOWN';
 
+function parseOptionalDate(value: string | undefined): Date | null {
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? date : null;
+}
+
 function errorResponse(
   event: Parameters<typeof setResponseStatus>[0],
   statusCode: number,
@@ -73,6 +82,7 @@ export default defineEventHandler(async (event) => {
               durationSeconds: body.durationSeconds ?? 0,
             }
           : undefined,
+      clientSessionStartedAt: parseOptionalDate(body.sessionStartedAt),
       // Сообщения из клиентского стора — fallback для LLM.
       clientMessages: body.clientMessages,
     });

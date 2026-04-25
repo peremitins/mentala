@@ -16,6 +16,7 @@ export function resolveAppAssetBaseUrl(params: {
   origin?: string | null;
   apiBaseUrl?: string | null;
   appUrl?: string | null;
+  platform?: string | null;
 }) {
   const origin =
     typeof params.origin === 'string' && isHttpUrl(params.origin)
@@ -24,11 +25,31 @@ export function resolveAppAssetBaseUrl(params: {
   const apiBaseUrl =
     typeof params.apiBaseUrl === 'string' ? params.apiBaseUrl.trim() : '';
   const appUrl = typeof params.appUrl === 'string' ? params.appUrl.trim() : '';
+  const platform = String(params.platform || '').toLowerCase();
+  const secureNativeBaseUrl = isHttpUrl(apiBaseUrl)
+    ? apiBaseUrl
+    : isHttpUrl(appUrl)
+      ? appUrl
+      : '';
 
   // Для native dev route ассетов приложения должен идти в текущий origin
   // WebView, даже если это localhost через adb reverse. Иначе Android-device
   // подставляет appUrl (например, local.mentala.app), который на телефоне
   // может не резолвиться и ломает playback у локальной сборки.
+  //
+  // iOS — исключение: native AVPlayer для дыхательных практик не должен
+  // получать HTTP LAN-origin. В dev берём HTTPS app/api origin, если он задан.
+  if (
+    params.isDev &&
+    params.isNativeRuntime &&
+    platform === 'ios' &&
+    origin.startsWith('http://') &&
+    !isLocalBundleOrigin(origin) &&
+    secureNativeBaseUrl.startsWith('https://')
+  ) {
+    return normalizeBaseUrl(secureNativeBaseUrl);
+  }
+
   if (params.isDev && params.isNativeRuntime && origin) {
     return normalizeBaseUrl(origin);
   }
