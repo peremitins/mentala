@@ -7,7 +7,12 @@
       @go-back="goBackToHome"
     >
       <template #custom>
-        <div class="flex items-center gap-2 px-4">
+        <div class="flex items-center gap-2">
+          <img
+            src="../assets/images/ai_terapist.webp"
+            alt="ИИ-ассистент"
+            class="h-7 w-7 object-cover select-none"
+          />
           <h1 class="text-xl font-bold text-foreground">Ассистент</h1>
         </div>
       </template>
