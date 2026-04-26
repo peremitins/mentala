@@ -43,12 +43,27 @@
 
         <div class="flex flex-wrap gap-2">
           <NuxtLink
+            v-if="chatAssistantAccess.available"
             to="/chat"
             class="inline-flex items-center gap-2 rounded-full bg-foreground/90 px-5 py-2.5 text-sm font-medium text-background transition hover:bg-foreground"
           >
             <IconSend class="h-4 w-4" />
             <span>{{ chatButtonLabel }}</span>
           </NuxtLink>
+          <button
+            v-else
+            type="button"
+            class="relative inline-flex items-center gap-2 rounded-full bg-foreground/90 px-5 py-2.5 text-sm font-medium text-background transition hover:bg-foreground"
+            @click="openPaywall('chat.assistant')"
+          >
+            <span
+              class="absolute -right-1 -top-1 inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/25 bg-black/70 text-xs leading-none"
+              aria-hidden="true"
+              >{{ getPlanBadgeEmoji(chatAssistantAccess.requiredPlan) }}</span
+            >
+            <IconSend class="h-4 w-4" />
+            <span>{{ chatButtonLabel }}</span>
+          </button>
 
           <NuxtLink
             to="/session-summaries-user"
@@ -331,6 +346,7 @@ const chatButtonLabel = computed(() =>
 const paywallOpen = ref(false);
 const paywallFeatureKey = ref<string | null>(null);
 
+const chatAssistantAccess = computed(() => getFeatureAccess('chat.assistant'));
 const meditationsAccess = computed(() =>
   getFeatureAccess('meditations.library.full')
 );
