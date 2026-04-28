@@ -72,6 +72,7 @@
     "@capacitor/cli": "^7.4.4",
     "@capacitor/clipboard": "^7.0.2",
     "@capacitor/core": "^7.4.3",
+    "@capacitor/device": "^7.0.5",
     "@capacitor/haptics": "^7.0.2",
     "@capacitor/inappbrowser": "^2.5.4",
     "@capacitor/ios": "^7.4.4",

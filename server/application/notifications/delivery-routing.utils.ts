@@ -4,6 +4,11 @@ type DeliveryDevice = typeof userDevices.$inferSelect;
 
 type DeliveryPriority = 0 | 1 | 2 | 3;
 
+export type DeliveryTargetGroup = {
+  deviceKey: string;
+  candidates: DeliveryDevice[];
+};
+
 function isDeviceActive(device: DeliveryDevice): boolean {
   return device.isActive === true || device.isActive === null;
 }
@@ -54,35 +59,131 @@ function compareDeliveryDevices(a: DeliveryDevice, b: DeliveryDevice): number {
   return getDeviceTimestamp(b) - getDeviceTimestamp(a);
 }
 
+function resolveDeviceKey(device: DeliveryDevice): string {
+  const platformFamily = String(
+    device.platformFamily || device.platform || 'unknown'
+  ).toLowerCase();
+  const installationId =
+    typeof device.installationId === 'string'
+      ? device.installationId.trim()
+      : '';
+
+  if (installationId) {
+    return `${platformFamily}:${installationId}`;
+  }
+
+  // Legacy-записи без installationId нельзя надежно склеивать между собой:
+  // это могут быть разные физические устройства одного пользователя.
+  return `legacy:${device.id || device.token}`;
+}
+
+function resolvePlatformFamilyKey(device: DeliveryDevice): string {
+  return String(device.platformFamily || device.platform || '').toLowerCase();
+}
+
+function isMobilePlatformFamily(platformFamily: string): boolean {
+  return platformFamily === 'ios' || platformFamily === 'android';
+}
+
+function isNativeChannel(device: DeliveryDevice): boolean {
+  const channelType = String(device.channelType || '').toLowerCase();
+  return channelType === 'native' || channelType === '';
+}
+
+function hasInstallationId(device: DeliveryDevice): boolean {
+  return (
+    typeof device.installationId === 'string' &&
+    device.installationId.trim().length > 0
+  );
+}
+
+function compareDeliveryGroups(
+  a: DeliveryTargetGroup,
+  b: DeliveryTargetGroup
+): number {
+  const aTop = a.candidates[0];
+  const bTop = b.candidates[0];
+  if (!aTop || !bTop) return 0;
+
+  const deviceDelta = compareDeliveryDevices(aTop, bTop);
+  if (deviceDelta !== 0) return deviceDelta;
+
+  return a.deviceKey.localeCompare(b.deviceKey);
+}
+
+export function buildDeliveryTargetGroups(
+  allDevices: DeliveryDevice[]
+): DeliveryTargetGroup[] {
+  const activeDevices = allDevices.filter(isDeviceActive);
+  if (activeDevices.length === 0) return [];
+
+  const groups = new Map<string, DeliveryDevice[]>();
+  const nativeAnchorByFamily = new Map<string, DeliveryDevice>();
+
+  for (const device of activeDevices) {
+    const platformFamily = resolvePlatformFamilyKey(device);
+    if (
+      !isMobilePlatformFamily(platformFamily) ||
+      !isNativeChannel(device) ||
+      !hasInstallationId(device)
+    ) {
+      continue;
+    }
+
+    const currentAnchor = nativeAnchorByFamily.get(platformFamily);
+    if (!currentAnchor || compareDeliveryDevices(device, currentAnchor) < 0) {
+      nativeAnchorByFamily.set(platformFamily, device);
+    }
+  }
+
+  for (const device of activeDevices) {
+    const platformFamily = resolvePlatformFamilyKey(device);
+    const nativeAnchor = nativeAnchorByFamily.get(platformFamily);
+    const shouldUseNativeAnchor =
+      Boolean(nativeAnchor) &&
+      isMobilePlatformFamily(platformFamily) &&
+      (!isNativeChannel(device) || !hasInstallationId(device));
+    const deviceKey =
+      shouldUseNativeAnchor && nativeAnchor
+        ? resolveDeviceKey(nativeAnchor)
+        : resolveDeviceKey(device);
+    const existing = groups.get(deviceKey) ?? [];
+    existing.push(device);
+    groups.set(deviceKey, existing);
+  }
+
+  return [...groups.entries()]
+    .map(([deviceKey, devices]) => ({
+      deviceKey,
+      candidates: [...devices].sort(compareDeliveryDevices),
+    }))
+    .sort(compareDeliveryGroups);
+}
+
 /**
- * Возвращает ровно один endpoint для доставки по глобальному приоритету:
- * native > pwa > browser > legacy.
+ * Возвращает по одному endpoint для каждого физического устройства.
  *
- * Это соответствует продуктовому инварианту: пользователю показываем
- * только одно push-уведомление, даже если он авторизован сразу в нескольких
- * клиентах и на нескольких каналах.
+ * Внутри устройства применяется приоритет native > pwa > browser > legacy,
+ * но разные устройства одного пользователя получают уведомления независимо.
  */
 export function selectDeliveryTargets(
   allDevices: DeliveryDevice[]
 ): DeliveryDevice[] {
-  const activeDevices = allDevices.filter(isDeviceActive);
-  if (activeDevices.length === 0) return [];
-
-  const sortedDevices = [...activeDevices].sort(compareDeliveryDevices);
-  return sortedDevices[0] ? [sortedDevices[0]] : [];
+  return buildDeliveryTargetGroups(allDevices)
+    .map((group) => group.candidates[0])
+    .filter((device): device is DeliveryDevice => Boolean(device));
 }
 
 /**
- * Возвращает все активные endpoint'ы в порядке глобального приоритета.
+ * Возвращает все активные endpoint'ы, сгруппированные по устройствам.
  *
- * Используется для failover: если лучший endpoint не доставился
- * (невалидный/протухший токен и т.п.), можно попробовать следующий,
- * не разваливая инвариант "не больше одного успешного уведомления".
+ * Используется для failover внутри каждого устройства: если лучший канал
+ * не доставился, можно попробовать следующий, не делая дубль на том же устройстве.
  */
 export function orderDeliveryTargetsByPriority(
   allDevices: DeliveryDevice[]
 ): DeliveryDevice[] {
-  const activeDevices = allDevices.filter(isDeviceActive);
-  if (activeDevices.length === 0) return [];
-  return [...activeDevices].sort(compareDeliveryDevices);
+  return buildDeliveryTargetGroups(allDevices).flatMap(
+    (group) => group.candidates
+  );
 }
