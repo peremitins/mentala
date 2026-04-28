@@ -3,19 +3,33 @@
     <DialogContent class="glass-deep max-w-sm">
       <DialogHeader>
         <DialogTitle>{{ title }}</DialogTitle>
-        <DialogDescription>
-          {{ description }}
-        </DialogDescription>
       </DialogHeader>
 
       <div class="space-y-3 px-1 text-sm text-muted-foreground">
-        <template v-if="reason === 'unsupported'">
+        <template v-if="isIos && isStandaloneMode">
+          <div
+            class="rounded-md border border-amber-500/20 bg-amber-500/10 p-3"
+          >
+            <p class="mb-1 font-medium text-foreground">
+              {{ iosStandaloneHeading }}
+            </p>
+            <ol class="list-inside list-decimal space-y-1 text-xs">
+              <li>Откройте системные «Настройки» iOS.</li>
+              <li>Перейдите в «Уведомления».</li>
+              <li>Найдите «Ментала» в списке приложений.</li>
+              <li>Включите «Допуск уведомлений».</li>
+              <li>Закройте Ментала и откройте её снова с экрана Домой.</li>
+            </ol>
+          </div>
+        </template>
+
+        <template v-else-if="reason === 'unsupported'">
           <div
             v-if="isIos && !isStandaloneMode"
             class="rounded-md border border-amber-500/20 bg-amber-500/10 p-3"
           >
             <p class="mb-1 font-medium text-foreground">
-              На iPhone откройте Ментала с экрана Домой
+              На iOS откройте Ментала с экрана Домой
             </p>
             <ol class="list-inside list-decimal space-y-1 text-xs">
               <li>Откройте сайт в Safari.</li>
@@ -32,6 +46,22 @@
             <ol class="list-inside list-decimal space-y-1">
               <li>Откройте Ментала в Chrome, Edge или Safari.</li>
               <li>Обновите страницу и включите напоминания снова.</li>
+            </ol>
+          </div>
+        </template>
+
+        <template v-else-if="reason === 'registration_failed'">
+          <div
+            class="rounded-md border border-amber-500/20 bg-amber-500/10 p-3"
+          >
+            <p class="mb-1 font-medium text-foreground">
+              Не удалось подключить push-уведомления
+            </p>
+            <ol class="list-inside list-decimal space-y-1 text-xs">
+              <li>Полностью закройте Ментала.</li>
+              <li>Откройте её снова с экрана Домой.</li>
+              <li>Проверьте подключение к интернету.</li>
+              <li>Попробуйте включить напоминания ещё раз.</li>
             </ol>
           </div>
         </template>
@@ -186,15 +216,19 @@ const platformFamily = computed<'ios' | 'android' | 'desktop'>(() => {
 const isIos = computed(() => platformFamily.value === 'ios');
 const isAndroid = computed(() => platformFamily.value === 'android');
 
-const title = computed(() =>
-  props.reason === 'unsupported'
-    ? 'Уведомления недоступны'
-    : 'Уведомления заблокированы'
+const iosStandaloneHeading = computed(() =>
+  props.reason === 'registration_failed'
+    ? 'Разрешение есть, но токен не зарегистрировался'
+    : 'Проверьте уведомления в настройках iOS'
 );
 
-const description = computed(() =>
-  props.reason === 'unsupported'
-    ? 'В текущем режиме приложение не может включить напоминания. Попробуйте открыть Ментала в поддерживаемом браузере или с экрана Домой.'
-    : 'Уведомления запрещены для этого сайта или приложения. Автоматически разблокировать их нельзя.'
+const title = computed(() =>
+  props.reason === 'registration_failed'
+    ? 'Не удалось включить уведомления'
+    : isIos.value && isStandaloneMode.value
+      ? 'Уведомления отключены'
+      : props.reason === 'unsupported'
+        ? 'Уведомления недоступны'
+        : 'Уведомления заблокированы'
 );
 </script>
