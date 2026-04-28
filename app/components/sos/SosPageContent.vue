@@ -175,7 +175,7 @@
 
             <button
               type="button"
-              class="flex h-12 items-center justify-center rounded-full bg-primary/80 text-primary-foreground shadow-lg transition hover:bg-primary disabled:cursor-not-allowed disabled:opacity-70"
+              class="flex h-12 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20 opacity-100"
               :disabled="Boolean(tensionPrepCountdown)"
               @click="toggleTensionPlayback"
             >
