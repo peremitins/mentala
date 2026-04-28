@@ -203,7 +203,7 @@
                     class="block text-sm mb-1 text-foreground"
                     for="auth-access-code"
                   >
-                    Код доступа
+                    Промокод
                   </label>
                   <Input
                     id="auth-access-code"
@@ -728,44 +728,8 @@ async function loginWithGoogle() {
   }
 }
 
-const handleSvg = () => {
-  const svg = document.querySelector(
-    '.signin__form-brand-logo-img'
-  ) as SVGSVGElement;
-  if (!svg) return;
-
-  const GAP_HUGE = 999999;
-  const textPath = svg.querySelector<SVGPathElement>('path.logo-text');
-  const iconPaths = svg.querySelectorAll<SVGPathElement>(
-    'path:not(.logo-text)'
-  );
-
-  try {
-    iconPaths.forEach((path) => path.classList.add('logo-icon'));
-    if (textPath) {
-      const len = textPath.getTotalLength();
-      textPath.style.setProperty('--path-length', String(len));
-      textPath.style.strokeDasharray = `${len} ${GAP_HUGE}`;
-      textPath.style.strokeDashoffset = String(len);
-      textPath.classList.add('logo-text-draw');
-    }
-  } catch (error) {
-    console.error('[Auth] SVG stroke setup error:', error);
-  }
-};
-
-const checkSvgLoaded = () => {
-  const svg = document.querySelector('.signin__form-brand-logo-img');
-  if (svg && svg.getClientRects().length > 0) {
-    handleSvg();
-  } else {
-    setTimeout(checkSvgLoaded, 50);
-  }
-};
-
 onMounted(async () => {
   await nextTick();
-  checkSvgLoaded();
 
   // Определяем iOS после гидрации, чтобы избежать SSR-мисматча
   try {
@@ -816,49 +780,5 @@ onMounted(async () => {
 .signin__form-brand-logo-img {
   width: 100%;
   height: 100%;
-
-  path.logo-icon {
-    opacity: 0;
-    animation: logoFadeIn 2.7s ease-out forwards;
-  }
-
-  path.logo-text-draw {
-    fill: #f2f2f2;
-    fill-opacity: 0;
-    stroke: #f2f2f2;
-    stroke-width: 2px;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-    animation:
-      drawStroke 2.7s ease-in-out forwards 0.9s,
-      logoTextFillReveal 2.25s ease-out forwards 1.7s;
-  }
-}
-
-@keyframes logoFadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes drawStroke {
-  from {
-    stroke-dashoffset: var(--path-length, 0);
-  }
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-
-@keyframes logoTextFillReveal {
-  from {
-    fill-opacity: 0;
-  }
-  to {
-    fill-opacity: 1;
-  }
 }
 </style>
