@@ -804,11 +804,19 @@ export const useAuthStore = defineStore('auth', {
         const sessionToken = window.localStorage.getItem(SESSION_TOKEN_KEY);
         if (!sessionToken) return;
 
+        const { resolveNativePushInstallationId } = await import(
+          '@/app/utils/pushDeviceIdentity'
+        );
+        const installationId = await resolveNativePushInstallationId(platform);
+
         await useAPI('/api/notifications/register-token', {
           method: 'POST',
           body: {
             token,
             platform,
+            channelType: 'native',
+            platformFamily: platform,
+            ...(installationId ? { installationId } : {}),
           },
           headers: {
             'X-Session-Token': sessionToken,
