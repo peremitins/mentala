@@ -6,13 +6,13 @@
       <p class="text-sm text-white" v-html="description" />
     </div>
 
-    <div v-if="mentaiMode === 'habits'" class="px-2">
+    <div v-if="mentaiMode === 'habits'" class="">
       <Tabs
         :model-value="selectedIntent"
         @update:model-value="onIntentChange"
         class="w-full"
       >
-        <TabsList class="grid grid-cols-2">
+        <TabsList class="grid grid-cols-2 glass-deep">
           <TabsTrigger value="build">Приобрести</TabsTrigger>
           <TabsTrigger value="quit">Избавиться</TabsTrigger>
         </TabsList>
