@@ -24,6 +24,44 @@ RUN pnpm config set fetch-retries 5 \
   && pnpm config set fetch-timeout 600000 \
   && pnpm install --frozen-lockfile
 
+# Публичный Firebase Web config нужен именно во время сборки:
+# Vite статически подставляет import.meta.env в клиентский bundle и service worker.
+ARG MENTALA_REQUIRE_WEB_PUSH_BUILD_CONFIG=false
+ARG VITE_FIREBASE_API_KEY
+ARG VITE_FIREBASE_AUTH_DOMAIN
+ARG VITE_FIREBASE_PROJECT_ID
+ARG VITE_FIREBASE_STORAGE_BUCKET
+ARG VITE_FIREBASE_MESSAGING_SENDER_ID
+ARG VITE_FIREBASE_APP_ID
+ARG VITE_FIREBASE_VAPID_PUBLIC_KEY
+
+ENV VITE_FIREBASE_API_KEY="${VITE_FIREBASE_API_KEY}" \
+    VITE_FIREBASE_AUTH_DOMAIN="${VITE_FIREBASE_AUTH_DOMAIN}" \
+    VITE_FIREBASE_PROJECT_ID="${VITE_FIREBASE_PROJECT_ID}" \
+    VITE_FIREBASE_STORAGE_BUCKET="${VITE_FIREBASE_STORAGE_BUCKET}" \
+    VITE_FIREBASE_MESSAGING_SENDER_ID="${VITE_FIREBASE_MESSAGING_SENDER_ID}" \
+    VITE_FIREBASE_APP_ID="${VITE_FIREBASE_APP_ID}" \
+    VITE_FIREBASE_VAPID_PUBLIC_KEY="${VITE_FIREBASE_VAPID_PUBLIC_KEY}"
+
+RUN if [ "$MENTALA_REQUIRE_WEB_PUSH_BUILD_CONFIG" = "true" ]; then \
+      missing=0; \
+      for name in \
+        VITE_FIREBASE_API_KEY \
+        VITE_FIREBASE_AUTH_DOMAIN \
+        VITE_FIREBASE_PROJECT_ID \
+        VITE_FIREBASE_STORAGE_BUCKET \
+        VITE_FIREBASE_MESSAGING_SENDER_ID \
+        VITE_FIREBASE_APP_ID \
+        VITE_FIREBASE_VAPID_PUBLIC_KEY; do \
+        eval "value=\${$name:-}"; \
+        if [ -z "$value" ]; then \
+          echo "Missing required web push build arg: $name" >&2; \
+          missing=1; \
+        fi; \
+      done; \
+      [ "$missing" -eq 0 ]; \
+    fi
+
 # Копируем весь проект
 COPY . .
 
