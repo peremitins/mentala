@@ -58,20 +58,24 @@ function resolvePlatformFamily(
 async function updatePrimaryEndpoints(
   userId: number,
   platformFamily: PlatformFamily,
-  appEnv: 'dev' | 'prod'
+  appEnv: 'dev' | 'prod',
+  installationId: string
 ): Promise<void> {
-  // Получаем все активные устройства пользователя для данной платформы
   const devices = await db
     .select({
       id: userDevices.id,
       channelType: userDevices.channelType,
       isPrimary: userDevices.isPrimary,
+      lastSeen: userDevices.lastSeen,
+      createdAt: userDevices.createdAt,
+      updatedAt: userDevices.updatedAt,
     })
     .from(userDevices)
     .where(
       and(
         eq(userDevices.userId, userId),
         eq(userDevices.platformFamily, platformFamily),
+        eq(userDevices.installationId, installationId),
         eq(userDevices.appEnv, appEnv),
         eq(userDevices.isActive, true)
       )
@@ -79,19 +83,32 @@ async function updatePrimaryEndpoints(
 
   if (devices.length === 0) return;
 
-  // Определяем primary по канальному приоритету.
   const priorityMap: Record<string, number> = {
     native: 3,
     pwa: 2,
     browser: 1,
   };
-  const topPriority = devices.reduce((maxPriority, device) => {
-    return Math.max(maxPriority, priorityMap[device.channelType] ?? 0);
-  }, 0);
+  const [primaryDevice] = [...devices].sort((a, b) => {
+    const priorityDelta =
+      (priorityMap[b.channelType] ?? 0) - (priorityMap[a.channelType] ?? 0);
+    if (priorityDelta !== 0) return priorityDelta;
+
+    const getTimestamp = (device: {
+      lastSeen: Date | null;
+      updatedAt: Date;
+      createdAt: Date;
+    }) =>
+      device.lastSeen?.getTime() ??
+      device.updatedAt.getTime() ??
+      device.createdAt.getTime();
+
+    return getTimestamp(b) - getTimestamp(a);
+  });
+
+  if (!primaryDevice) return;
 
   for (const device of devices) {
-    const shouldBePrimary =
-      (priorityMap[device.channelType] ?? 0) === topPriority;
+    const shouldBePrimary = device.id === primaryDevice.id;
 
     if (device.isPrimary !== shouldBePrimary) {
       await db
@@ -209,11 +226,10 @@ export default defineEventHandler(async (event): Promise<UserDeviceDto> => {
     appEnv: device.appEnv,
   });
 
-  // Деактивируем старые токены того же типа (user + platformFamily + channelType + appEnv).
-  // При переустановке приложения/PWA FCM выдаёт новый токен — старый становится
-  // дублём и приводит к нескольким уведомлениям на одно устройство.
-  // Исключаем только что зарегистрированный токен через ne(token).
-  if (device.platformFamily) {
+  // Деактивируем старые токены только внутри той же установки устройства.
+  // Это сохраняет доставку на iPhone+iPad/Android-планшет, но убирает дубли
+  // после ротации FCM token на конкретном устройстве.
+  if (device.platformFamily && device.installationId) {
     const deactivated = await db
       .update(userDevices)
       .set({ isActive: false, updatedAt: new Date() })
@@ -222,6 +238,7 @@ export default defineEventHandler(async (event): Promise<UserDeviceDto> => {
           eq(userDevices.userId, userId),
           eq(userDevices.platformFamily, device.platformFamily),
           eq(userDevices.channelType, device.channelType),
+          eq(userDevices.installationId, device.installationId),
           eq(userDevices.appEnv, appEnv),
           ne(userDevices.token, device.token)
         )
@@ -233,15 +250,21 @@ export default defineEventHandler(async (event): Promise<UserDeviceDto> => {
         userId,
         platformFamily: device.platformFamily,
         channelType: device.channelType,
+        installationId: '***',
         count: deactivated.length,
       });
     }
   }
 
-  // Пересчитываем isPrimary для mobile-платформ (native > pwa)
+  // Пересчитываем primary только внутри одного физического устройства.
   const resolvedFamily = device.platformFamily as PlatformFamily | null;
-  if (resolvedFamily && ['ios', 'android'].includes(resolvedFamily)) {
-    await updatePrimaryEndpoints(userId, resolvedFamily, appEnv);
+  if (resolvedFamily && device.installationId) {
+    await updatePrimaryEndpoints(
+      userId,
+      resolvedFamily,
+      appEnv,
+      device.installationId
+    );
   }
 
   return {

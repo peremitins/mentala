@@ -70,10 +70,9 @@ if (
       payload.notification?.image || payload.data?.imageUrl || null;
     const notificationOptions: NotificationOptions = {
       body: payload.notification?.body || payload.data?.body || '',
-      icon: '/brand-mark-192.png',
-      // badge — монохромная иконка для строки состояния Android.
-      // Цветная иконка рендерится как белый квадрат → нужен отдельный монохромный файл.
-      badge: '/brand-mark-96.png',
+      icon: '/notification-icon-192.png',
+      // Android маскирует badge, поэтому используем простой контрастный силуэт.
+      badge: '/notification-badge-96.png',
       data: payload.data || {},
       tag: payload.data?.slotId ? `slot-${payload.data.slotId}` : undefined,
     };

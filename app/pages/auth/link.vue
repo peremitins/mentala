@@ -30,7 +30,7 @@
             </div>
 
             <Tabs v-model="tab" class="w-full">
-              <TabsList class="grid grid-cols-2">
+              <TabsList class="grid grid-cols-2 glass-border">
                 <TabsTrigger value="password">Пароль</TabsTrigger>
                 <TabsTrigger value="code">Код на email</TabsTrigger>
               </TabsList>

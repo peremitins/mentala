@@ -26,7 +26,7 @@ import {
   dispatchPushDeliverySampleEvent,
 } from '@/server/application/events/app-events.dispatchers';
 import {
-  orderDeliveryTargetsByPriority,
+  buildDeliveryTargetGroups,
   selectDeliveryTargets,
 } from './delivery-routing.utils';
 import { getUserTimezone, toLocalTime } from './timezone.utils';
@@ -591,18 +591,18 @@ export async function sendToUser(
     .from(userDevices)
     .where(and(eq(userDevices.userId, userId), eq(userDevices.appEnv, appEnv)));
 
-  // Основной selected endpoint нужен для понятных логов и тестирования инварианта:
-  // по нормальному пути должен победить ровно один top-priority endpoint.
   const selectedTopTarget = selectDeliveryTargets(allDevices);
-  // Для runtime failover держим полный список кандидатов в порядке приоритета.
-  // Это позволяет не терять доставку, если верхний endpoint протух/невалиден.
-  const deliveryCandidates = orderDeliveryTargetsByPriority(allDevices);
-
-  console.log(
-    `[FCM] Found ${allDevices.length} device(s) total, top=${selectedTopTarget.length}, candidates=${deliveryCandidates.length} for user ${userId} (env=${appEnv})`
+  const deliveryTargetGroups = buildDeliveryTargetGroups(allDevices);
+  const totalCandidates = deliveryTargetGroups.reduce(
+    (sum, group) => sum + group.candidates.length,
+    0
   );
 
-  if (deliveryCandidates.length === 0) {
+  console.log(
+    `[FCM] Found ${allDevices.length} endpoint(s) total, deviceGroups=${deliveryTargetGroups.length}, top=${selectedTopTarget.length}, candidates=${totalCandidates} for user ${userId} (env=${appEnv})`
+  );
+
+  if (deliveryTargetGroups.length === 0) {
     console.warn(`[FCM] No devices found for user ${userId}`);
     return {
       deviceCount: 0,
@@ -617,35 +617,38 @@ export async function sendToUser(
   let mockCount = 0;
   let failedCount = 0;
 
-  for (const device of deliveryCandidates) {
-    console.log(
-      `[FCM] Sending to device: ${device.platform}/${device.channelType ?? 'legacy'} (token: ${device.token.substring(0, 20)}...)`
-    );
-    const result = await sendFCMNotification(
-      device.token,
-      payload,
-      device.platform
-    );
+  for (const [groupIndex, group] of deliveryTargetGroups.entries()) {
+    for (const device of group.candidates) {
+      console.log(
+        `[FCM] Sending to device: ${device.platform}/${device.channelType ?? 'legacy'} group=${groupIndex + 1}/${deliveryTargetGroups.length} (token: ${device.token.substring(0, 20)}...)`
+      );
+      const result = await sendFCMNotification(
+        device.token,
+        payload,
+        device.platform
+      );
 
-    if (result === 'sent') {
-      sentCount++;
-      break;
-    } else if (result === 'mock') {
-      mockCount++;
-      break;
-    } else {
-      failedCount++;
-      console.warn('[FCM] Delivery candidate failed, trying next fallback', {
-        userId,
-        platform: device.platform,
-        channelType: device.channelType ?? 'legacy',
-        tokenPrefix: device.token.substring(0, 20),
-      });
+      if (result === 'sent') {
+        sentCount++;
+        break;
+      } else if (result === 'mock') {
+        mockCount++;
+        break;
+      } else {
+        failedCount++;
+        console.warn('[FCM] Delivery candidate failed, trying next fallback', {
+          userId,
+          deviceGroupIndex: groupIndex + 1,
+          platform: device.platform,
+          channelType: device.channelType ?? 'legacy',
+          tokenPrefix: device.token.substring(0, 20),
+        });
+      }
     }
   }
 
   console.log(
-    `[FCM] Delivery summary for user ${userId}: sent=${sentCount}, mock=${mockCount}, failed=${failedCount}, totalCandidates=${deliveryCandidates.length}`
+    `[FCM] Delivery summary for user ${userId}: sent=${sentCount}, mock=${mockCount}, failed=${failedCount}, deviceGroups=${deliveryTargetGroups.length}, totalCandidates=${totalCandidates}`
   );
 
   dispatchPushDeliverySampleEvent({
@@ -655,7 +658,7 @@ export async function sendToUser(
   });
 
   return {
-    deviceCount: deliveryCandidates.length,
+    deviceCount: deliveryTargetGroups.length,
     sentCount,
     mockCount,
     failedCount,

@@ -167,7 +167,7 @@
               <Switch
                 :checked="unifiedPushChecked"
                 class="flex-shrink-0"
-                :disabled="!isPushSupported"
+                :disabled="isPushNative && !isPushSupported"
                 :loading="unifiedPushLoading"
                 @update:checked="handleUnifiedPushToggle"
               />
@@ -297,104 +297,11 @@
           @update:open="pushPermissionGate.setPushDeniedModalOpen"
           @open-settings="handleOpenPushSystemSettings"
         />
-
-        <!-- Диалог для web push (permission denied в браузере) -->
-        <Dialog v-model:open="showWebPushDeniedDialog" :modal="true">
-          <DialogContent class="glass-deep max-w-sm">
-            <DialogHeader>
-              <DialogTitle>Уведомления заблокированы</DialogTitle>
-              <DialogDescription>
-                Уведомления запрещены в настройках для этого сайта. Нужно
-                разблокировать вручную, автоматически это сделать нельзя.
-              </DialogDescription>
-            </DialogHeader>
-            <div class="text-sm text-muted-foreground space-y-3 px-1">
-              <!-- Если запущено как установленное PWA — показываем специальные инструкции -->
-              <template v-if="isStandaloneMode">
-                <div
-                  class="rounded-md bg-amber-500/10 border border-amber-500/20 p-3"
-                >
-                  <p class="font-medium text-foreground mb-1">
-                    📱 Приложение установлено на экран
-                  </p>
-                  <p class="text-xs mb-2">
-                    Разрешения управляются на уровне Android OS, а не Chrome.
-                    Нужно включить в системных настройках:
-                  </p>
-                  <ol class="list-decimal list-inside space-y-1 text-xs">
-                    <li>Откройте <strong>Настройки Android</strong></li>
-                    <li>Приложения → найдите <strong>«Ментала»</strong></li>
-                    <li>Уведомления → включите</li>
-                    <li>Вернитесь в приложение и снова включите уведомления</li>
-                  </ol>
-                </div>
-                <div>
-                  <p class="font-medium text-foreground mb-1">
-                    Если не получилось, попробуйте через Chrome:
-                  </p>
-                  <ol class="list-decimal list-inside space-y-1">
-                    <li>
-                      Откройте Chrome, а не ярлык приложения на главном экране
-                    </li>
-                    <li>
-                      Перейдите на сайт и нажмите на значок настроек сайта слева
-                      от адреса
-                    </li>
-                    <li>Откройте «Уведомления» и выберите «Сбросить»</li>
-                    <li>
-                      После этого снова откройте приложение с главного экрана
-                    </li>
-                  </ol>
-                </div>
-              </template>
-              <!-- Обычный браузер (не standalone) -->
-              <template v-else>
-                <div>
-                  <p class="font-medium text-foreground mb-1">
-                    Android, браузер Chrome:
-                  </p>
-                  <ol class="list-decimal list-inside space-y-1">
-                    <li>Нажмите на значок настроек сайта слева от адреса</li>
-                    <li>Откройте раздел «Уведомления»</li>
-                    <li>Выберите «Сбросить» или «Разрешить»</li>
-                    <li>Обновите страницу и включите уведомления снова</li>
-                  </ol>
-                  <p class="text-xs text-muted-foreground/70 mt-1">
-                    Если значок не виден, откройте меню Chrome, затем:
-                    «Настройки» → «Настройки сайтов» → «Уведомления».
-                  </p>
-                </div>
-                <div>
-                  <p class="font-medium text-foreground mb-1">
-                    Компьютер, браузер Chrome:
-                  </p>
-                  <ol class="list-decimal list-inside space-y-1">
-                    <li>Нажмите на значок настроек сайта слева от адреса</li>
-                    <li>Откройте «Настройки сайта»</li>
-                    <li>В пункте «Уведомления» выберите «Разрешить»</li>
-                    <li>Обновите страницу и включите уведомления снова</li>
-                  </ol>
-                </div>
-                <div>
-                  <p class="font-medium text-foreground mb-1">
-                    Mac, браузер Safari:
-                  </p>
-                  <ol class="list-decimal list-inside space-y-1">
-                    <li>Откройте Safari → «Настройки» → «Веб-сайты»</li>
-                    <li>Перейдите в раздел «Уведомления»</li>
-                    <li>Найдите этот сайт и выберите «Разрешить»</li>
-                    <li>Обновите страницу и включите уведомления снова</li>
-                  </ol>
-                </div>
-              </template>
-            </div>
-            <DialogFooter>
-              <Button @click="showWebPushDeniedDialog = false">
-                Понятно
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <WebPushPermissionDialog
+          :open="pushPermissionGate.showWebPushPermissionDialog.value"
+          :reason="pushPermissionGate.webPushPermissionDialogReason.value"
+          @update:open="pushPermissionGate.setWebPushPermissionDialogOpen"
+        />
 
         <Dialog v-model:open="showPushDisableConfirmModal" :modal="true">
           <DialogContent class="glass-deep max-w-sm">
@@ -501,6 +408,7 @@ import ReferralShareCompactCard from '@/app/components/subscription/ReferralShar
 import Skeleton from '@/app/components/ui/Skeleton.vue';
 import ButtonLoader from '@/app/components/ui/ButtonLoader.vue';
 import PushPermissionDeniedDialog from '@/app/components/notifications/PushPermissionDeniedDialog.vue';
+import WebPushPermissionDialog from '@/app/components/notifications/WebPushPermissionDialog.vue';
 import { Switch } from '@/app/components/ui/shadcn/switch';
 import {
   Dialog,
@@ -579,7 +487,6 @@ const webPush = useWebPush();
 const webPushAvailable = ref(false);
 const webPushChecked = ref(false);
 const webPushLoading = ref(false);
-const showWebPushDeniedDialog = ref(false);
 
 onMounted(() => {
   // Показываем строку если браузер умеет Web Push — независимо от Firebase конфига
@@ -599,19 +506,6 @@ onMounted(() => {
 
 /** Показываем строку Push всегда — обработка несовместимых браузеров внутри */
 const showPushRow = computed(() => true);
-
-/**
- * Запущено ли приложение в standalone-режиме (установлено на домашний экран как PWA).
- * Используется для показа правильных инструкций в диалоге "уведомления заблокированы".
- * На Android PWA: разрешения управляются на уровне Android OS, а не Chrome site settings.
- */
-const isStandaloneMode = computed(() => {
-  if (typeof window === 'undefined') return false;
-  return (
-    (window.navigator as any).standalone === true ||
-    window.matchMedia('(display-mode: standalone)').matches
-  );
-});
 
 /** Push полностью поддерживается на этой платформе */
 const isPushSupported = computed(
@@ -648,29 +542,9 @@ async function handleUnifiedPushToggle(checked: boolean) {
     return;
   }
 
-  // === Включение ===
-  // КРИТИЧНО: requestPermission() должен быть ПЕРВЫМ await в обработчике клика.
-  // Любой await перед ним (dynamic import, fetch и т.д.) разрывает user gesture chain —
-  // Chrome на Android не покажет диалог разрешений.
-  //
-  // Если permission уже 'granted' → вернёт 'granted' мгновенно (без диалога).
-  // Если 'denied' → вернёт 'denied' мгновенно (без диалога) → покажем инструкцию.
-  // Если 'default' → покажет диалог браузера → ждём выбора.
-  const permissionResult = await webPush.requestPermission();
-
-  if (permissionResult !== 'granted') {
-    webPushChecked.value = false;
-    if (permissionResult === 'denied') {
-      showWebPushDeniedDialog.value = true;
-    }
-    // 'default' = закрыл диалог без выбора, просто сбрасываем тоггл
-    return;
-  }
-
-  // Разрешение получено — регистрируем токен (не запрашиваем разрешение повторно)
   webPushLoading.value = true;
   try {
-    const success = await webPush.enableWebPushWithPermission();
+    const success = await pushPermissionGate.ensureAppPushEnabled();
     webPushChecked.value = success;
   } finally {
     webPushLoading.value = false;

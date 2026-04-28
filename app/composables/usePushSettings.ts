@@ -287,11 +287,20 @@ export function usePushSettings() {
           ).Capacitor.getPlatform();
           if (platform !== 'ios' && platform !== 'android') return;
 
+          const { resolveNativePushInstallationId } = await import(
+            '@/app/utils/pushDeviceIdentity'
+          );
+          const installationId =
+            await resolveNativePushInstallationId(platform);
+
           await useAPI('/api/notifications/register-token', {
             method: 'POST',
             body: {
               token: token.trim(),
               platform: platform as 'ios' | 'android',
+              channelType: 'native',
+              platformFamily: platform as 'ios' | 'android',
+              ...(installationId ? { installationId } : {}),
             },
           });
           return;

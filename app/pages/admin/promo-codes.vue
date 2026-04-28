@@ -23,7 +23,7 @@
       </div>
 
       <Tabs default-value="codes" class="space-y-2">
-        <TabsList class="grid w-full grid-cols-2">
+        <TabsList class="grid w-full grid-cols-2 glass-deep">
           <TabsTrigger value="codes">Промокоды</TabsTrigger>
           <TabsTrigger value="referral">Referral</TabsTrigger>
         </TabsList>

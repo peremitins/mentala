@@ -286,7 +286,8 @@ export interface RegisterTokenDto {
   token: string;
   platform: Platform;
   appEnv?: AppEnv;
-  // Опциональные поля для web push (PWA). Нативные клиенты могут не передавать.
+  // Поля канала и установки нужны для device-level маршрутизации.
+  // Оставлены опциональными для обратной совместимости со старыми клиентами.
   channelType?: ChannelType;
   platformFamily?: PlatformFamily;
   installationId?: string;
