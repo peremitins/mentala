@@ -142,6 +142,11 @@
       @update:open="pushPermissionGate.setPushDeniedModalOpen"
       @open-settings="handleOpenPushSystemSettings"
     />
+    <WebPushPermissionDialog
+      :open="pushPermissionGate.showWebPushPermissionDialog.value"
+      :reason="pushPermissionGate.webPushPermissionDialogReason.value"
+      @update:open="pushPermissionGate.setWebPushPermissionDialogOpen"
+    />
 
     <FeaturePaywallModal
       v-model:open="paywallOpen"
@@ -161,6 +166,7 @@ import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/shadcn/input';
 import InputComponent from '@/app/components/ui/shadcn/input/Input.vue';
 import PushPermissionDeniedDialog from '@/app/components/notifications/PushPermissionDeniedDialog.vue';
+import WebPushPermissionDialog from '@/app/components/notifications/WebPushPermissionDialog.vue';
 import IconMessageCircle from '~icons/lucide/message-circle';
 import IconLeaf from '~icons/lucide/leaf';
 import IconWind from '~icons/lucide/wind';

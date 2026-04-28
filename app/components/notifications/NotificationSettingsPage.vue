@@ -517,6 +517,11 @@
         @update:open="pushPermissionGate.setPushDeniedModalOpen"
         @open-settings="handleOpenPushSystemSettings"
       />
+      <WebPushPermissionDialog
+        :open="pushPermissionGate.showWebPushPermissionDialog.value"
+        :reason="pushPermissionGate.webPushPermissionDialogReason.value"
+        @update:open="pushPermissionGate.setWebPushPermissionDialogOpen"
+      />
     </div>
   </div>
 </template>
@@ -549,6 +554,7 @@ import InputComponent from '@/app/components/ui/shadcn/input/Input.vue';
 import TextareaResize from '@/app/components/ui/TextareaResize.vue';
 import ButtonLoader from '@/app/components/ui/ButtonLoader.vue';
 import PushPermissionDeniedDialog from '@/app/components/notifications/PushPermissionDeniedDialog.vue';
+import WebPushPermissionDialog from '@/app/components/notifications/WebPushPermissionDialog.vue';
 import PushRecoveryBanner from '@/app/components/notifications/PushRecoveryBanner.vue';
 import { usePushRecovery } from '@/app/composables/usePushRecovery';
 import { Switch } from '@/app/components/ui/shadcn/switch';
