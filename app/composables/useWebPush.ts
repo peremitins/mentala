@@ -18,6 +18,7 @@ import {
   getToken,
   deleteToken,
   onMessage,
+  isSupported as isFirebaseMessagingSupported,
   type Messaging,
 } from 'firebase/messaging';
 
@@ -33,6 +34,15 @@ const WEB_PUSH_ACTIVE_KEY = 'mentala.web.push_active';
 
 let _firebaseApp: FirebaseApp | null = null;
 let _messaging: Messaging | null = null;
+
+export type WebPushEnableFailureReason =
+  | 'denied'
+  | 'unsupported'
+  | 'registration_failed';
+
+export type WebPushEnableResult =
+  | { enabled: true }
+  | { enabled: false; reason: WebPushEnableFailureReason };
 
 function getFirebaseConfig() {
   return {
@@ -61,10 +71,8 @@ function initFirebase(): FirebaseApp | null {
 
   try {
     const existingApps = getApps();
-    _firebaseApp =
-      existingApps.length > 0
-        ? existingApps[0]
-        : initializeApp(getFirebaseConfig());
+    const existingApp = existingApps[0];
+    _firebaseApp = existingApp ?? initializeApp(getFirebaseConfig());
     return _firebaseApp;
   } catch (e) {
     console.error('[WebPush] Firebase init error:', e);
@@ -177,7 +185,7 @@ export function useWebPush() {
    * Проверяет, поддерживается ли Web Push полностью (браузер + Firebase конфиг).
    * Используется перед фактической регистрацией токена.
    */
-  function isSupported(): boolean {
+  async function isSupported(): Promise<boolean> {
     if (!isBrowserCapable()) return false;
     if (!isFirebaseConfigured()) {
       console.warn(
@@ -190,7 +198,38 @@ export function useWebPush() {
       console.warn('[WebPush] VITE_FIREBASE_VAPID_PUBLIC_KEY not set');
       return false;
     }
-    return true;
+    try {
+      const supported = await isFirebaseMessagingSupported();
+      if (!supported) {
+        console.warn('[WebPush] Firebase Messaging is not supported here');
+      }
+      return supported;
+    } catch (e) {
+      console.warn('[WebPush] Firebase Messaging support check failed:', e);
+      return false;
+    }
+  }
+
+  /**
+   * Дожидается активного Service Worker.
+   * На iOS PWA после установки/обновления регистрация может быть найдена,
+   * но сам worker ещё не готов к выдаче FCM-токена.
+   */
+  async function waitForReadyServiceWorker(
+    reg: ServiceWorkerRegistration
+  ): Promise<ServiceWorkerRegistration | null> {
+    if (reg.active) return reg;
+
+    try {
+      const ready = await Promise.race<ServiceWorkerRegistration | null>([
+        navigator.serviceWorker.ready,
+        new Promise((resolve) => setTimeout(() => resolve(null), 4000)),
+      ]);
+      return ready?.active ? ready : null;
+    } catch (e) {
+      console.warn('[WebPush] Waiting for active SW failed:', e);
+      return null;
+    }
   }
 
   /**
@@ -293,25 +332,28 @@ export function useWebPush() {
    * Полный цикл: запрос разрешения → регистрация SW → получение FCM токена → отправка на сервер.
    * Вызывать только после явного согласия пользователя.
    *
-   * @returns true если токен успешно зарегистрирован
+   * @returns результат регистрации токена
    */
-  async function enableWebPush(): Promise<boolean> {
-    if (!isSupported()) return false;
-    if (await isNativePlatform()) return false;
+  async function enableWebPush(): Promise<WebPushEnableResult> {
+    if (!(await isSupported()))
+      return { enabled: false, reason: 'unsupported' };
+    if (await isNativePlatform()) {
+      return { enabled: false, reason: 'unsupported' };
+    }
 
     // 1. Запрашиваем разрешение
     const permission = await requestPermission();
     if (permission !== 'granted') {
       console.log('[WebPush] Permission denied');
-      return false;
+      return { enabled: false, reason: 'denied' };
     }
 
-    const ok = await _registerToken();
-    if (ok) {
+    const result = await _registerToken();
+    if (result.enabled) {
       setUserActivated(true);
       setupForegroundListener();
     }
-    return ok;
+    return result;
   }
 
   /**
@@ -319,55 +361,66 @@ export function useWebPush() {
    * Использовать когда requestPermission() был вызван ДО этой функции
    * (чтобы не разрывать user gesture chain в браузере).
    *
-   * @returns true если токен успешно зарегистрирован
+   * @returns результат регистрации токена
    */
-  async function enableWebPushWithPermission(): Promise<boolean> {
-    if (!isSupported()) return false;
-    if (await isNativePlatform()) return false;
+  async function enableWebPushWithPermission(): Promise<WebPushEnableResult> {
+    if (!(await isSupported()))
+      return { enabled: false, reason: 'unsupported' };
+    if (await isNativePlatform()) {
+      return { enabled: false, reason: 'unsupported' };
+    }
     // Разрешение уже проверено вызывающим кодом — сразу идём к регистрации
-    if (getPermissionStatus() !== 'granted') return false;
+    if (getPermissionStatus() !== 'granted') {
+      return { enabled: false, reason: 'denied' };
+    }
 
-    const ok = await _registerToken();
-    if (ok) {
+    const result = await _registerToken();
+    if (result.enabled) {
       setUserActivated(true);
       setupForegroundListener();
     }
-    return ok;
+    return result;
   }
 
   /**
    * Внутренняя функция: регистрирует SW, получает FCM токен и отправляет на сервер.
    * Вызывается при login (если разрешение уже выдано) и при enableWebPush.
    */
-  async function _registerToken(): Promise<boolean> {
+  async function _registerToken(): Promise<WebPushEnableResult> {
     // Регистрируем/получаем SW
     const swReg = await registerServiceWorker();
     if (!swReg) {
       console.error('[WebPush] Cannot register without SW');
-      return false;
+      return { enabled: false, reason: 'registration_failed' };
+    }
+
+    const readySwReg = await waitForReadyServiceWorker(swReg);
+    if (!readySwReg) {
+      console.error('[WebPush] Service Worker is not active yet');
+      return { enabled: false, reason: 'registration_failed' };
     }
 
     // Получаем FCM токен
     const messaging = getFirebaseMessaging();
     if (!messaging) {
       console.error('[WebPush] Firebase messaging not available');
-      return false;
+      return { enabled: false, reason: 'registration_failed' };
     }
 
     let token: string;
     try {
       token = await getToken(messaging, {
         vapidKey,
-        serviceWorkerRegistration: swReg,
+        serviceWorkerRegistration: readySwReg,
       });
     } catch (e) {
       console.error('[WebPush] getToken error:', e);
-      return false;
+      return { enabled: false, reason: 'registration_failed' };
     }
 
     if (!token) {
       console.error('[WebPush] Empty FCM token received');
-      return false;
+      return { enabled: false, reason: 'registration_failed' };
     }
 
     // Кешируем токен локально
@@ -386,10 +439,10 @@ export function useWebPush() {
         },
       });
       console.log('[WebPush] Token registered on server');
-      return true;
+      return { enabled: true };
     } catch (e) {
       console.error('[WebPush] Failed to register token on server:', e);
-      return false;
+      return { enabled: false, reason: 'registration_failed' };
     }
   }
 
@@ -451,14 +504,16 @@ export function useWebPush() {
    * Не запрашивает разрешение — только переregister если permission уже granted.
    */
   async function ensureRegisteredAfterLogin(): Promise<void> {
-    if (!isSupported()) return;
+    if (!(await isSupported())) return;
     if (await isNativePlatform()) return;
     if (getPermissionStatus() !== 'granted') return;
     // Регистрируем только если пользователь явно включал push на этом устройстве
     if (!isUserActivated()) return;
 
-    await _registerToken();
-    setupForegroundListener();
+    const result = await _registerToken();
+    if (result.enabled) {
+      setupForegroundListener();
+    }
   }
 
   /**

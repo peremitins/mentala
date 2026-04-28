@@ -3,7 +3,10 @@ import { usePushSettings } from '@/app/composables/usePushSettings';
 import { useWebPush } from '@/app/composables/useWebPush';
 
 type PendingEnableHandler = (() => Promise<void>) | null;
-export type WebPushPermissionDialogReason = 'denied' | 'unsupported';
+export type WebPushPermissionDialogReason =
+  | 'denied'
+  | 'unsupported'
+  | 'registration_failed';
 
 export function usePushPermissionGate() {
   const pushSettings = usePushSettings();
@@ -31,7 +34,7 @@ export function usePushPermissionGate() {
   }
 
   async function ensureWebPushEnabled(): Promise<boolean> {
-    if (!webPush.isBrowserCapable() || !webPush.isSupported()) {
+    if (!webPush.isBrowserCapable() || !(await webPush.isSupported())) {
       openWebPushPermissionDialog('unsupported');
       return false;
     }
@@ -50,9 +53,9 @@ export function usePushPermissionGate() {
       return false;
     }
 
-    const enabled = await webPush.enableWebPushWithPermission();
-    if (!enabled) {
-      openWebPushPermissionDialog('unsupported');
+    const result = await webPush.enableWebPushWithPermission();
+    if (!result.enabled) {
+      openWebPushPermissionDialog(result.reason);
       return false;
     }
 
