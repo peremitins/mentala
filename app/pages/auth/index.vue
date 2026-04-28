@@ -125,7 +125,7 @@
                 @update:model-value="(v) => (mode = v as 'signin' | 'signup')"
                 class="w-full mb-6"
               >
-                <TabsList class="grid grid-cols-2">
+                <TabsList class="grid grid-cols-2 glass-border">
                   <TabsTrigger value="signin">Вход</TabsTrigger>
                   <TabsTrigger value="signup">Регистрация</TabsTrigger>
                 </TabsList>
