@@ -1,11 +1,17 @@
 import { ref } from 'vue';
 import { usePushSettings } from '@/app/composables/usePushSettings';
+import { useWebPush } from '@/app/composables/useWebPush';
 
 type PendingEnableHandler = (() => Promise<void>) | null;
+export type WebPushPermissionDialogReason = 'denied' | 'unsupported';
 
 export function usePushPermissionGate() {
   const pushSettings = usePushSettings();
+  const webPush = useWebPush();
   const showPushDeniedModal = ref(false);
+  const showWebPushPermissionDialog = ref(false);
+  const webPushPermissionDialogReason =
+    ref<WebPushPermissionDialogReason>('denied');
   let pendingEnableHandler: PendingEnableHandler = null;
 
   function setPushDeniedModalOpen(value: boolean) {
@@ -13,6 +19,45 @@ export function usePushPermissionGate() {
     if (!value) {
       pendingEnableHandler = null;
     }
+  }
+
+  function setWebPushPermissionDialogOpen(value: boolean) {
+    showWebPushPermissionDialog.value = value;
+  }
+
+  function openWebPushPermissionDialog(reason: WebPushPermissionDialogReason) {
+    webPushPermissionDialogReason.value = reason;
+    showWebPushPermissionDialog.value = true;
+  }
+
+  async function ensureWebPushEnabled(): Promise<boolean> {
+    if (!webPush.isBrowserCapable() || !webPush.isSupported()) {
+      openWebPushPermissionDialog('unsupported');
+      return false;
+    }
+
+    let permission = webPush.getPermissionStatus();
+
+    if (permission === 'default') {
+      // В web/PWA этот вызов должен оставаться первым await после клика.
+      permission = await webPush.requestPermission();
+    }
+
+    if (permission !== 'granted') {
+      if (permission === 'denied') {
+        openWebPushPermissionDialog('denied');
+      }
+      return false;
+    }
+
+    const enabled = await webPush.enableWebPushWithPermission();
+    if (!enabled) {
+      openWebPushPermissionDialog('unsupported');
+      return false;
+    }
+
+    showWebPushPermissionDialog.value = false;
+    return true;
   }
 
   /**
@@ -23,7 +68,12 @@ export function usePushPermissionGate() {
     onGrantedFromSettings?: () => Promise<void>;
   }): Promise<boolean> {
     if (!pushSettings.isNative.value) {
-      return true;
+      pendingEnableHandler = options?.onGrantedFromSettings ?? null;
+      const enabled = await ensureWebPushEnabled();
+      if (enabled) {
+        pendingEnableHandler = null;
+      }
+      return enabled;
     }
 
     await pushSettings.refreshPermissionStatus();
@@ -117,7 +167,10 @@ export function usePushPermissionGate() {
   return {
     pushSettings,
     showPushDeniedModal,
+    showWebPushPermissionDialog,
+    webPushPermissionDialogReason,
     setPushDeniedModalOpen,
+    setWebPushPermissionDialogOpen,
     ensureAppPushEnabled,
     openSystemSettings,
   };

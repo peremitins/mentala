@@ -18,6 +18,7 @@ import {
 import { useAppNavigation } from '@/app/composables/useAppNavigation';
 import { useAuthStore } from '@/app/stores/auth';
 import { useMeditationPlayer } from '@/app/composables/useMeditationPlayer';
+import { resolveNativePushInstallationId } from '@/app/utils/pushDeviceIdentity';
 
 export default defineNuxtPlugin({
   name: 'push-notifications',
@@ -128,17 +129,24 @@ export default defineNuxtPlugin({
         return;
       }
 
+      const installationId =
+        await resolveNativePushInstallationId(platformHeader);
+
       await nuxtApp.$api('/api/notifications/register-token', {
         method: 'POST',
         body: {
           token,
           platform: platformHeader,
+          channelType: 'native',
+          platformFamily: platformHeader,
+          ...(installationId ? { installationId } : {}),
         },
       });
 
       console.log('[PushPlugin] Token registered on server:', {
         platform: platformHeader,
         tokenPrefix: maskToken(token),
+        installationId: installationId ? 'present' : 'missing',
         reason,
       });
     }

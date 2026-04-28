@@ -9,7 +9,7 @@
       <!-- Лоадер во время запроса -->
       <IconLoader2
         v-if="loading"
-        class="h-2.5 w-2.5 shrink-0 text-primary animate-spin"
+        class="h-2.5 w-2.5 shrink-0 text-neutral-500 animate-spin"
         aria-hidden="true"
       />
       <!-- Галочка во включённом состоянии (сразу после завершения запроса, без задержки) -->
