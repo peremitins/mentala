@@ -11,7 +11,7 @@
           <img
             src="../assets/images/ai_terapist.webp"
             alt="ИИ-ассистент"
-            class="h-7 w-7 object-cover select-none"
+            class="h-7 w-7 select-none object-contain"
           />
           <h1 class="text-xl font-bold text-foreground">Ассистент</h1>
         </div>
