@@ -117,7 +117,7 @@
             </div>
 
             <div
-              class="reveal-item flex flex-col w-max gap-3 items-center rounded-lg"
+              class="android-promo-surface reveal-item flex flex-col w-max gap-3 items-center rounded-lg"
             >
               <!-- На телефонах QR не показываем: там он избыточен, нужен только CTA. -->
               <a
@@ -678,7 +678,7 @@
 
       <section
         id="android-download"
-        class="reveal-item scroll-mt-header mt-20 lg:mt-28"
+        class="android-promo-surface reveal-item scroll-mt-header mt-20 lg:mt-28"
       >
         <div class="landing-container flex items-center">
           <div
@@ -1021,7 +1021,7 @@ import { Swiper, SwiperSlide } from 'swiper/vue';
 import { onClickOutside, usePreferredReducedMotion } from '@vueuse/core';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import { useRuntimeConfig } from 'nuxt/app';
+import { onPrehydrate, useRuntimeConfig } from 'nuxt/app';
 import { useI18n } from 'vue-i18n';
 import { Badge } from '../components/ui/shadcn/badge';
 import { Button } from '../components/ui/shadcn/button';
@@ -1078,6 +1078,11 @@ type PrivacyCard = {
 type ComparisonPoint = {
   text: string;
   tooltip?: string;
+};
+type NavigatorWithUserAgentData = Navigator & {
+  userAgentData?: {
+    platform?: string;
+  };
 };
 
 const { t } = useI18n();
@@ -1474,6 +1479,64 @@ const pricingCtaText = computed(() =>
 const activeFeature = computed<FeatureStep>(
   () => featureSteps.value[activeFeatureIndex.value] ?? featureSteps.value[0]!
 );
+
+function isAppleClientPlatform(): boolean {
+  if (typeof navigator === 'undefined') {
+    return false;
+  }
+
+  const clientNavigator = navigator as NavigatorWithUserAgentData;
+  const userAgent = clientNavigator.userAgent || '';
+  const platform = clientNavigator.platform || '';
+  const userAgentDataPlatform =
+    'userAgentData' in clientNavigator
+      ? String(clientNavigator.userAgentData?.platform || '')
+      : '';
+
+  // iPadOS может маскироваться под macOS в Safari desktop mode.
+  const isIpadDesktopMode =
+    platform === 'MacIntel' &&
+    'maxTouchPoints' in clientNavigator &&
+    clientNavigator.maxTouchPoints > 1;
+
+  return (
+    /iPad|iPhone|iPod|Macintosh|Mac OS X/i.test(userAgent) ||
+    /Mac|iPhone|iPad|iPod/i.test(platform) ||
+    /macOS|iOS|iPadOS/i.test(userAgentDataPlatform) ||
+    isIpadDesktopMode
+  );
+}
+
+onPrehydrate(() => {
+  const clientNavigator = navigator as NavigatorWithUserAgentData;
+  const userAgent = clientNavigator.userAgent || '';
+  const platform = clientNavigator.platform || '';
+  const userAgentDataPlatform =
+    'userAgentData' in clientNavigator
+      ? String(clientNavigator.userAgentData?.platform || '')
+      : '';
+  const isIpadDesktopMode =
+    platform === 'MacIntel' &&
+    'maxTouchPoints' in clientNavigator &&
+    clientNavigator.maxTouchPoints > 1;
+  const isApplePlatform =
+    /iPad|iPhone|iPod|Macintosh|Mac OS X/i.test(userAgent) ||
+    /Mac|iPhone|iPad|iPod/i.test(platform) ||
+    /macOS|iOS|iPadOS/i.test(userAgentDataPlatform) ||
+    isIpadDesktopMode;
+
+  document.documentElement.classList.toggle(
+    'is-apple-client-platform',
+    isApplePlatform
+  );
+});
+
+onMounted(() => {
+  document.documentElement.classList.toggle(
+    'is-apple-client-platform',
+    isAppleClientPlatform()
+  );
+});
 
 function getYearlySavings(plan: PricingPlan): number {
   // Экономия считается как разница между оплатой 12 месяцев и ценой за год.
