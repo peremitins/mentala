@@ -107,9 +107,11 @@
 - В SEO-формулировках про тарифы и доступ избегать неестественного CTA-стиля; писать фактически и кратко: бесплатный режим доступен сразу, новым пользователям можно сообщать про `7 дней Premium`
 - В секции `Приватность и безопасность` есть короткий публичный disclosure про Google Sign-In: только базовые данные аккаунта для входа, без доступа к Gmail/Drive/Calendar
 - FAQ на лендинге рендерится полностью закрытым по умолчанию; раскрытие только по явному клику пользователя
+- Android promo-блоки на лендинге не отображаются на Apple-устройствах (`macOS`, `iOS`, `iPadOS`, включая iPadOS desktop mode), пока Android-приложение является единственным нативным install-сценарием
 - `mentala.app` хранит основной SEO-контур: canonical, hreflang, JSON-LD, sitemap, robots и verification meta
 - Для RU-рынка корневой URL `/` всегда отдаёт русский контент; locale autodetect по cookie, `Accept-Language` и browser locale для SEO-страниц запрещён
 - `?lang=en` остаётся только как явный UI-режим и должен быть закрыт от индексации через `noindex`
+- Marketing attribution: `mentala.app` читает whitelisted UTM/click-id (`utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, `utm_term`, `gclid`, `yclid`, `fbclid`, `ttclid`), хранит latest touch 90 дней в localStorage и передаёт их на `my.mentala.app`; продуктовый клиент удерживает pending attribution и backend пишет append-only историю в `user_marketing_attributions`.
 
 ## SEO продуктового хоста (`my.mentala.app`)
 

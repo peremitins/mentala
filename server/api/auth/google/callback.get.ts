@@ -8,6 +8,7 @@ import {
   waitForGoogleOAuthReplayRedirect,
 } from '@/server/application/auth/oauth';
 import { resolveAppUrl } from '@/server/application/auth/oauth-redirect';
+import { extractMarketingAttributionFromSearchParams } from '@/shared/utils/marketingAttribution';
 
 const isProd = process.env.NODE_ENV === 'production';
 
@@ -111,6 +112,17 @@ export default defineEventHandler(async (event) => {
     return sendRedirect(event, replayRedirect, 303);
   }
 
+  const redirectUrl = redirect
+    ? new URL(redirect, appUrl)
+    : new URL('/', appUrl);
+  const marketingAttribution = extractMarketingAttributionFromSearchParams(
+    redirectUrl.searchParams,
+    {
+      landingUrl: redirectUrl.toString(),
+      capturedAt: new Date().toISOString(),
+    }
+  );
+
   const result = await upsertUserWithOAuth(event, 'google', {
     providerUserId,
     email,
@@ -118,15 +130,15 @@ export default defineEventHandler(async (event) => {
     name,
     avatarUrl,
     locale: locale ?? null,
+    marketingAttribution,
   });
 
   if (result.status === 'linking_required') {
     console.log('[OAuth] Linking required for email:', result.email);
-    const backUrl = redirect ? new URL(redirect, appUrl) : new URL('/', appUrl);
     const linkUrl = new URL('/auth/link', appUrl);
     linkUrl.searchParams.set('token', result.linkingToken);
     linkUrl.searchParams.set('email', result.email);
-    linkUrl.searchParams.set('back', backUrl.toString());
+    linkUrl.searchParams.set('back', redirectUrl.toString());
     console.log('[OAuth] Redirecting to:', linkUrl.toString());
     await storeGoogleOAuthReplayRedirect(stateValue, linkUrl.toString());
     return sendRedirect(event, linkUrl.toString(), 303);

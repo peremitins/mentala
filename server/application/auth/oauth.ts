@@ -24,6 +24,8 @@ import {
 } from './cookie-names';
 import { dispatchUserRegisteredEvent } from '@/server/application/events/app-events.dispatchers';
 import { redisConnection } from '@/server/infrastructure/redis/bullmqClient';
+import type { MarketingAttributionDto } from '@/shared/dto/marketing-attribution';
+import { recordUserMarketingAttributionSafe } from '@/server/application/marketing-attribution/marketing-attribution.service';
 
 const isProd = process.env.NODE_ENV === 'production';
 const GOOGLE_OAUTH_REPLAY_TTL_SECONDS = 5 * 60;
@@ -229,6 +231,7 @@ export async function upsertUserWithOAuth(
     name?: string | null;
     avatarUrl?: string | null;
     locale?: string | null;
+    marketingAttribution?: MarketingAttributionDto | null;
   }
 ): Promise<OAuthResult> {
   const acc = await db
@@ -378,6 +381,7 @@ export async function upsertUserWithOAuth(
         name: profile.name ?? null,
         avatarUrl: profile.avatarUrl ?? null,
         locale: profile.locale ?? null,
+        marketingAttribution: profile.marketingAttribution ?? null,
       });
       return {
         status: 'linking_required',
@@ -435,6 +439,13 @@ export async function upsertUserWithOAuth(
   }
 
   await createSession(event, userId!, profile.locale ?? undefined);
+
+  await recordUserMarketingAttributionSafe({
+    userId: userId!,
+    touchpoint: isNewUser ? 'oauth_signup' : 'oauth_login',
+    authProvider: provider,
+    marketingAttribution: profile.marketingAttribution,
+  });
 
   if (isNewUser) {
     dispatchUserRegisteredEvent({

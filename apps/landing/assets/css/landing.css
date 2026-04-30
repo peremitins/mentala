@@ -94,6 +94,11 @@ a {
   }
 }
 
+/* На Apple-устройствах не показываем Android install CTA, пока iOS/macOS install-сценария нет. */
+.is-apple-client-platform .android-promo-surface {
+  display: none;
+}
+
 /* Тултипы (floating-vue): переопределяем стили модуля (!important — его style.css грузится позже) */
 .v-popper--theme-tooltip .v-popper__inner {
   max-width: min(300px, calc(100vw - 32px)) !important;

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MarketingAttributionDto } from './marketing-attribution';
 
 export const AuthRegisterDto = z.object({
   email: z.string().email(),
@@ -11,6 +12,7 @@ export const AuthRegisterDto = z.object({
   acceptPrivacy: z.literal(true),
   // Маркетинговое согласие опционально
   marketingConsent: z.boolean().optional(),
+  marketingAttribution: MarketingAttributionDto.optional(),
 });
 
 // Ответ на регистрацию (breaking change)
@@ -36,6 +38,7 @@ export const AuthLoginDto = z.object({
   password: z.string().min(1),
   locale: z.string().min(2).max(8).optional(),
   timezone: z.string().optional(),
+  marketingAttribution: MarketingAttributionDto.optional(),
 });
 
 export const EmailVerifyDto = z.object({
@@ -82,6 +85,7 @@ export const OAuthLinkCancelDto = z.object({
 
 export const GoogleNativeAuthDto = z.object({
   idToken: z.string().min(10),
+  marketingAttribution: MarketingAttributionDto.optional(),
 });
 
 export const AppleNativeAuthDto = z.object({
@@ -89,6 +93,7 @@ export const AppleNativeAuthDto = z.object({
   // Apple возвращает имя только при первом входе
   firstName: z.string().optional(),
   lastName: z.string().optional(),
+  marketingAttribution: MarketingAttributionDto.optional(),
 });
 
 export const PasswordForgotDto = z.object({

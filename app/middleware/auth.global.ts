@@ -1,6 +1,17 @@
 import { useAuthStore } from '@/app/stores/auth';
 import { useChatSettingsStore } from '@/app/stores/chatSettings';
 import { useSubscriptionStore } from '@/app/stores/subscription';
+import {
+  buildMarketingAttributionQueryParams,
+  extractMarketingAttributionFromQuery,
+} from '@/shared/utils/marketingAttribution';
+
+function buildAuthRedirectPath(query: Record<string, unknown>): string {
+  const attribution = extractMarketingAttributionFromQuery(query);
+  const params = buildMarketingAttributionQueryParams(attribution);
+  const search = params.toString();
+  return search ? `/auth?${search}` : '/auth';
+}
 
 export default defineNuxtRouteMiddleware(async (to) => {
   // Публичные маршруты, не требующие авторизации
@@ -51,7 +62,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
     }
   }
 
-  if (!auth.user) return navigateTo('/auth');
+  if (!auth.user) return navigateTo(buildAuthRedirectPath(to.query));
 
   if (!auth.user.onboarding) {
     try {

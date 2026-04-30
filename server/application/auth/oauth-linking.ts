@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { redisConnection } from '@/server/infrastructure/redis/bullmqClient';
 import type { Provider } from './oauth';
+import type { MarketingAttributionDto } from '@/shared/dto/marketing-attribution';
 
 const LINK_TTL_SECONDS = 15 * 60;
 const MAX_LINK_ATTEMPTS = 5;
@@ -12,6 +13,7 @@ export type OAuthLinkData = {
   name?: string | null;
   avatarUrl?: string | null;
   locale?: string | null;
+  marketingAttribution?: MarketingAttributionDto | null;
   attempts: number;
   createdAt: string;
 };
