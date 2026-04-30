@@ -1,4 +1,22 @@
 import { z } from 'zod';
+import { MarketingAttributionDto } from './marketing-attribution';
+
+function optionalTrimmedString(maxLength: number) {
+  return z
+    .preprocess((value) => {
+      if (typeof value !== 'string') {
+        return undefined;
+      }
+
+      const trimmed = value.trim();
+      if (!trimmed || trimmed.length > maxLength) {
+        return undefined;
+      }
+
+      return trimmed;
+    }, z.string().optional())
+    .optional();
+}
 
 export const LandingGoalKeyEnum = z.enum([
   'reduce_anxiety',
@@ -23,9 +41,16 @@ export const LandingLeadRequestDto = z.object({
   email: z.string().trim().email().max(255),
   /** Мультивыбор целей; сохраняется в БД как JSON в goal_key */
   goalKeys: z.array(LandingGoalKeyEnum).optional(),
-  utmSource: z.string().trim().max(120).optional(),
-  utmMedium: z.string().trim().max(120).optional(),
-  utmCampaign: z.string().trim().max(120).optional(),
+  utmSource: optionalTrimmedString(120),
+  utmMedium: optionalTrimmedString(120),
+  utmCampaign: optionalTrimmedString(120),
+  utmContent: optionalTrimmedString(120),
+  utmTerm: optionalTrimmedString(120),
+  gclid: optionalTrimmedString(255),
+  yclid: optionalTrimmedString(255),
+  fbclid: optionalTrimmedString(255),
+  ttclid: optionalTrimmedString(255),
+  marketingAttribution: MarketingAttributionDto.optional(),
   honeypot: z.string().trim().max(120).optional(),
 });
 

@@ -415,6 +415,13 @@ export const landingLeads = pgTable(
     utmSource: varchar('utm_source', { length: 120 }),
     utmMedium: varchar('utm_medium', { length: 120 }),
     utmCampaign: varchar('utm_campaign', { length: 120 }),
+    utmContent: varchar('utm_content', { length: 120 }),
+    utmTerm: varchar('utm_term', { length: 120 }),
+    gclid: varchar('gclid', { length: 255 }),
+    yclid: varchar('yclid', { length: 255 }),
+    fbclid: varchar('fbclid', { length: 255 }),
+    ttclid: varchar('ttclid', { length: 255 }),
+    rawAttribution: jsonb('raw_attribution').$type<Record<string, string>>(),
     referrer: text('referrer'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
@@ -425,6 +432,47 @@ export const landingLeads = pgTable(
       table.emailHash
     ),
     createdAtIdx: index('idx_landing_leads_created_at').on(table.createdAt),
+  })
+);
+
+export const userMarketingAttributions = pgTable(
+  'user_marketing_attributions',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    touchpoint: varchar('touchpoint', { length: 64 }).notNull(),
+    authProvider: varchar('auth_provider', { length: 32 }),
+    utmSource: varchar('utm_source', { length: 120 }),
+    utmMedium: varchar('utm_medium', { length: 120 }),
+    utmCampaign: varchar('utm_campaign', { length: 120 }),
+    utmContent: varchar('utm_content', { length: 120 }),
+    utmTerm: varchar('utm_term', { length: 120 }),
+    gclid: varchar('gclid', { length: 255 }),
+    yclid: varchar('yclid', { length: 255 }),
+    fbclid: varchar('fbclid', { length: 255 }),
+    ttclid: varchar('ttclid', { length: 255 }),
+    landingUrl: text('landing_url'),
+    referrer: text('referrer'),
+    rawParams: jsonb('raw_params').$type<Record<string, string>>().default({}),
+    capturedAt: timestamp('captured_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    userCreatedIdx: index('idx_user_marketing_attr_user_created').on(
+      table.userId,
+      table.createdAt
+    ),
+    campaignIdx: index('idx_user_marketing_attr_campaign').on(
+      table.utmCampaign
+    ),
+    sourceMediumIdx: index('idx_user_marketing_attr_source_medium').on(
+      table.utmSource,
+      table.utmMedium
+    ),
   })
 );
 

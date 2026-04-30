@@ -1038,6 +1038,14 @@ import {
   LANDING_ANDROID_QR_PATH,
   buildLandingAndroidQrUrl,
 } from '../../../shared/utils/mobileAppLinks';
+import type { MarketingAttributionDto } from '../../../shared/dto/marketing-attribution';
+import {
+  MARKETING_ATTRIBUTION_STORAGE_KEY,
+  MARKETING_ATTRIBUTION_TTL_MS,
+  appendMarketingAttributionToUrl,
+  extractMarketingAttributionFromQuery,
+  normalizeMarketingAttribution,
+} from '../../../shared/utils/marketingAttribution';
 
 type FeatureStep = {
   key: string;
@@ -1129,6 +1137,7 @@ const submitStatus = ref<'idle' | 'created' | 'duplicate' | 'error'>('idle');
 const submitErrorText = ref('');
 const activeFeatureIndex = ref(0);
 const faqOpenIndex = ref<number | null>(null);
+const landingMarketingAttribution = ref<MarketingAttributionDto | undefined>();
 
 const featureRefs = ref<Array<HTMLElement | null>>([]);
 const featurePhoneRef = ref<HTMLElement | null>(null);
@@ -1454,6 +1463,12 @@ const isReleased = computed(() => landingConfig.value?.isReleased ?? false);
 const ctaUrl = computed(
   () => landingConfig.value?.ctaUrl || runtimeConfig.public.appAuthUrl
 );
+const ctaUrlWithAttribution = computed(() =>
+  appendMarketingAttributionToUrl(
+    String(ctaUrl.value),
+    landingMarketingAttribution.value
+  )
+);
 const isReducedMotion = computed(() => reducedMotion.value === 'reduce');
 const androidInstallHref = LANDING_ANDROID_QR_PATH;
 const androidQrUrl = computed(() => buildLandingAndroidQrUrl(siteUrl.value));
@@ -1554,11 +1569,68 @@ const ogImageUrl = computed(
   () => new URL('/landing/features/hero_bg.jpg', ruHomeUrl.value).href
 );
 
-function toSingleQueryValue(value: unknown): string | undefined {
-  if (Array.isArray(value)) {
-    return typeof value[0] === 'string' ? value[0] : undefined;
+function readStoredMarketingAttribution(): MarketingAttributionDto | undefined {
+  if (typeof window === 'undefined') {
+    return undefined;
   }
-  return typeof value === 'string' ? value : undefined;
+
+  try {
+    const storage = window.localStorage;
+    const raw = storage.getItem(MARKETING_ATTRIBUTION_STORAGE_KEY);
+    if (!raw) return undefined;
+
+    const parsed = JSON.parse(raw) as {
+      value?: MarketingAttributionDto;
+      expiresAt?: number;
+    };
+    if (!parsed.value || !parsed.expiresAt || parsed.expiresAt <= Date.now()) {
+      storage.removeItem(MARKETING_ATTRIBUTION_STORAGE_KEY);
+      return undefined;
+    }
+
+    return normalizeMarketingAttribution(parsed.value);
+  } catch {
+    try {
+      window.localStorage.removeItem(MARKETING_ATTRIBUTION_STORAGE_KEY);
+    } catch {
+      // localStorage может быть недоступен в приватном режиме или WebView.
+    }
+    return undefined;
+  }
+}
+
+function captureLandingMarketingAttribution(): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const captured = extractMarketingAttributionFromQuery(route.query, {
+    landingUrl: window.location.href,
+    referrer:
+      typeof document !== 'undefined' && document.referrer
+        ? document.referrer
+        : undefined,
+    capturedAt: new Date().toISOString(),
+  });
+
+  const attribution = captured ?? readStoredMarketingAttribution();
+  landingMarketingAttribution.value = attribution;
+
+  if (!captured) {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(
+      MARKETING_ATTRIBUTION_STORAGE_KEY,
+      JSON.stringify({
+        value: captured,
+        expiresAt: Date.now() + MARKETING_ATTRIBUTION_TTL_MS,
+      })
+    );
+  } catch {
+    // Attribution всё равно останется в памяти страницы и попадёт в текущий CTA/lead.
+  }
 }
 
 function setFeatureRef(index: number, element: Element | null) {
@@ -1596,7 +1668,7 @@ function openPrimaryCTA() {
   if (isReleased.value) {
     reachGoal('landing_auth_redirect_click');
     if (typeof window !== 'undefined') {
-      window.location.href = ctaUrl.value;
+      window.open(ctaUrlWithAttribution.value, '_blank', 'noopener,noreferrer');
     }
     return;
   }
@@ -1641,9 +1713,16 @@ async function submitLead() {
         name: leadForm.name,
         email: leadForm.email,
         goalKeys: leadForm.goalKeys.length > 0 ? leadForm.goalKeys : undefined,
-        utmSource: toSingleQueryValue(route.query.utm_source),
-        utmMedium: toSingleQueryValue(route.query.utm_medium),
-        utmCampaign: toSingleQueryValue(route.query.utm_campaign),
+        utmSource: landingMarketingAttribution.value?.utmSource,
+        utmMedium: landingMarketingAttribution.value?.utmMedium,
+        utmCampaign: landingMarketingAttribution.value?.utmCampaign,
+        utmContent: landingMarketingAttribution.value?.utmContent,
+        utmTerm: landingMarketingAttribution.value?.utmTerm,
+        gclid: landingMarketingAttribution.value?.gclid,
+        yclid: landingMarketingAttribution.value?.yclid,
+        fbclid: landingMarketingAttribution.value?.fbclid,
+        ttclid: landingMarketingAttribution.value?.ttclid,
+        marketingAttribution: landingMarketingAttribution.value,
         honeypot: leadForm.website,
       },
     });
@@ -1682,6 +1761,8 @@ watch(waitlistOpen, (open) => {
 });
 
 onMounted(() => {
+  captureLandingMarketingAttribution();
+
   // Аналитика v1: просмотр лендинга и глубина скролла
   reachGoal('landing_view');
   trackScrollDepth();

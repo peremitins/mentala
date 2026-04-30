@@ -62,15 +62,15 @@ export default defineEventHandler(async (event) => {
   if (!email) {
     throw createError({
       statusCode: 400,
-      statusMessage: 'Apple не вернул email. Убедитесь, что вы разрешили доступ к email при входе.',
+      statusMessage:
+        'Apple не вернул email. Убедитесь, что вы разрешили доступ к email при входе.',
     });
   }
 
   // Имя приходит только при первом входе — берём из тела запроса (плагин его передаёт)
   const firstName = body.firstName?.trim() || null;
   const lastName = body.lastName?.trim() || null;
-  const name =
-    [firstName, lastName].filter(Boolean).join(' ').trim() || null;
+  const name = [firstName, lastName].filter(Boolean).join(' ').trim() || null;
 
   const result = await upsertUserWithOAuth(event, 'apple', {
     providerUserId: payload.sub,
@@ -79,6 +79,7 @@ export default defineEventHandler(async (event) => {
     name,
     avatarUrl: null, // Apple не отдаёт аватар
     locale: null,
+    marketingAttribution: body.marketingAttribution,
   });
 
   if (result.status === 'linking_required') {

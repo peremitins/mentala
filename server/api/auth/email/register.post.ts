@@ -22,6 +22,7 @@ import { checkRateLimit } from '@/server/application/auth/rate-limit';
 import { AuthRegisterDto } from '@/shared/dto/auth';
 import { issueVerificationCode } from '@/server/application/auth/email-verification.service';
 import { getDefaultUserSceneSettings } from '@/server/utils/sceneSettings';
+import { recordUserMarketingAttributionSafe } from '@/server/application/marketing-attribution/marketing-attribution.service';
 
 function detectAcceptanceSource(event: any): 'web' | 'ios' | 'android' {
   const userAgent = getHeader(event, 'user-agent') || '';
@@ -143,6 +144,13 @@ export default defineEventHandler(async (event) => {
       }
     }
 
+    await recordUserMarketingAttributionSafe({
+      userId: existing[0].id,
+      touchpoint: 'email_register_started',
+      authProvider: 'email',
+      marketingAttribution: body.marketingAttribution,
+    });
+
     setResponseStatus(event, 201, 'Created');
     return {
       userId: existing[0].id,
@@ -204,6 +212,13 @@ export default defineEventHandler(async (event) => {
   if (!createdUser) {
     throw new Error('Не удалось получить данные созданного пользователя.');
   }
+
+  await recordUserMarketingAttributionSafe({
+    userId: createdUser.id,
+    touchpoint: 'email_register_started',
+    authProvider: 'email',
+    marketingAttribution: body.marketingAttribution,
+  });
 
   setResponseStatus(event, 201, 'Created');
   return {

@@ -398,6 +398,7 @@ import {
   normalizePendingAccessCode,
   usePendingAccessCode,
 } from '@/app/composables/usePendingAccessCode';
+import { useMarketingAttribution } from '@/app/composables/useMarketingAttribution';
 
 definePageMeta({
   layout: 'auth',
@@ -461,6 +462,12 @@ const brandLogoComponent = computed(() => {
 });
 
 const { pendingAccessCode, setPendingAccessCode } = usePendingAccessCode();
+const { captureFromCurrentRoute, getPendingMarketingAttribution } =
+  useMarketingAttribution();
+
+function getCurrentMarketingAttribution() {
+  return captureFromCurrentRoute() ?? getPendingMarketingAttribution();
+}
 
 function normalizeAccessCodeInput() {
   accessCode.value = normalizePendingAccessCode(accessCode.value);
@@ -582,11 +589,13 @@ async function submit() {
   try {
     loading.value = true;
     setPendingAccessCode(accessCode.value);
+    const marketingAttribution = getCurrentMarketingAttribution();
     if (mode.value === 'signin') {
       await auth.loginEmail({
         email: email.value,
         password: password.value,
         locale: locale.value,
+        marketingAttribution,
       });
     } else {
       const response = await auth.registerEmail({
@@ -598,6 +607,7 @@ async function submit() {
         acceptTerms: agree.value,
         acceptPrivacy: agree.value,
         marketingConsent: marketingConsent.value,
+        marketingAttribution,
       });
 
       if (response.verificationEmailSent === false) {
@@ -697,7 +707,7 @@ async function loginWithApple() {
   try {
     appleLoading.value = true;
     oauthLoading.value = true;
-    await auth.loginWithApple();
+    await auth.loginWithApple(getCurrentMarketingAttribution());
   } catch (e: any) {
     const message =
       e instanceof Error && e.message
@@ -715,7 +725,7 @@ async function loginWithGoogle() {
   try {
     oauthLoading.value = true;
     setPendingAccessCode(accessCode.value);
-    await auth.loginWithGoogle(locale.value);
+    await auth.loginWithGoogle(locale.value, getCurrentMarketingAttribution());
   } catch (e: any) {
     const message =
       e instanceof Error && e.message
@@ -730,6 +740,7 @@ async function loginWithGoogle() {
 
 onMounted(async () => {
   await nextTick();
+  captureFromCurrentRoute();
 
   // Определяем iOS после гидрации, чтобы избежать SSR-мисматча
   try {
