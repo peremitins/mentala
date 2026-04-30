@@ -137,6 +137,7 @@ export default defineEventHandler(async (event) => {
     name: payload.name || null,
     avatarUrl: payload.picture || null,
     locale: payload.locale || null,
+    marketingAttribution: body.marketingAttribution,
   });
 
   if (result.status === 'linking_required') {

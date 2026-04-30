@@ -14,6 +14,7 @@ import { checkRateLimit } from '@/server/application/auth/rate-limit';
 import { normalizeEmail } from '@/server/application/auth/verification';
 import { AuthLoginDto } from '@/shared/dto/auth';
 import { toIsoString } from '@/server/utils/serialize';
+import { recordUserMarketingAttributionSafe } from '@/server/application/marketing-attribution/marketing-attribution.service';
 
 export default defineEventHandler(async (event) => {
   const body = AuthLoginDto.parse(await readBody(event as any));
@@ -129,6 +130,12 @@ export default defineEventHandler(async (event) => {
   const sessionId = await rotateSessionId(event, existing[0].id, body.locale);
   // После логина проверяем расписание уведомлений в фоне, чтобы не блокировать ответ
   scheduleNotificationSlotsAfterLogin(existing[0].id);
+  await recordUserMarketingAttributionSafe({
+    userId: existing[0].id,
+    touchpoint: 'email_login',
+    authProvider: 'email',
+    marketingAttribution: body.marketingAttribution,
+  });
 
   // Определяем, является ли запрос от native платформы (Capacitor)
   const platform = String(getHeader(event, 'x-platform') || '').toLowerCase();

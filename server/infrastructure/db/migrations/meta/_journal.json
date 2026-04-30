@@ -561,6 +561,13 @@
       "when": 1777023765952,
       "tag": "0082_freezing_major_mapleleaf",
       "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1777564520901,
+      "tag": "0083_sturdy_eddie_brock",
+      "breakpoints": true
     }
   ]
 }

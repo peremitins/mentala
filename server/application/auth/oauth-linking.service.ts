@@ -1,13 +1,22 @@
 import { createError, getHeader } from 'h3';
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/server/infrastructure/db/client';
-import { oauthAccounts, securityEvents, users } from '@/server/infrastructure/db/schema';
-import { deleteLinkingData, getLinkCodeKey, OAuthLinkData } from './oauth-linking';
+import {
+  oauthAccounts,
+  securityEvents,
+  users,
+} from '@/server/infrastructure/db/schema';
+import {
+  deleteLinkingData,
+  getLinkCodeKey,
+  OAuthLinkData,
+} from './oauth-linking';
 import { deleteRedisKey } from './verification';
 import { createSession, getSessionUser } from './session';
 import { getClientIp } from '@/server/utils/ip';
 import { scheduleNotificationSlotsAfterLogin } from '@/server/application/notifications/login-slots.service';
 import { toIsoString } from '@/server/utils/serialize';
+import { recordUserMarketingAttributionSafe } from '@/server/application/marketing-attribution/marketing-attribution.service';
 
 export async function finalizeOAuthLink(
   event: any,
@@ -50,7 +59,11 @@ export async function finalizeOAuthLink(
     });
   }
 
-  const user = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  const user = await db
+    .select()
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
   if (user.length) {
     const updates: Partial<typeof users.$inferInsert> = {
       updatedAt: new Date(),
@@ -71,6 +84,13 @@ export async function finalizeOAuthLink(
 
   await deleteLinkingData(linkingToken);
   await deleteRedisKey(getLinkCodeKey(linkingToken));
+
+  await recordUserMarketingAttributionSafe({
+    userId,
+    touchpoint: 'oauth_link',
+    authProvider: linkingData.provider,
+    marketingAttribution: linkingData.marketingAttribution,
+  });
 }
 
 export async function buildOAuthAuthResponse(event: any, userId: number) {

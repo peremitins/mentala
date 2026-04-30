@@ -20,6 +20,7 @@ import {
   getLandingAllowedOrigins,
   normalizeLandingOrigin,
 } from '@/server/utils/landing-cors';
+import { normalizeMarketingAttribution } from '@/shared/utils/marketingAttribution';
 
 type RateLimitResult = {
   allowed: boolean;
@@ -160,10 +161,21 @@ export default defineEventHandler(
     }
 
     const now = new Date();
-    const goalKeyJson =
-      body.goalKeys?.length ?
-        JSON.stringify(body.goalKeys)
+    const goalKeyJson = body.goalKeys?.length
+      ? JSON.stringify(body.goalKeys)
       : null;
+    const marketingAttribution = normalizeMarketingAttribution({
+      ...(body.marketingAttribution ?? {}),
+      utmSource: body.marketingAttribution?.utmSource ?? body.utmSource,
+      utmMedium: body.marketingAttribution?.utmMedium ?? body.utmMedium,
+      utmCampaign: body.marketingAttribution?.utmCampaign ?? body.utmCampaign,
+      utmContent: body.marketingAttribution?.utmContent ?? body.utmContent,
+      utmTerm: body.marketingAttribution?.utmTerm ?? body.utmTerm,
+      gclid: body.marketingAttribution?.gclid ?? body.gclid,
+      yclid: body.marketingAttribution?.yclid ?? body.yclid,
+      fbclid: body.marketingAttribution?.fbclid ?? body.fbclid,
+      ttclid: body.marketingAttribution?.ttclid ?? body.ttclid,
+    });
 
     const inserted = await db
       .insert(landingLeads)
@@ -173,9 +185,16 @@ export default defineEventHandler(
         emailNormalized,
         emailHash,
         goalKey: goalKeyJson,
-        utmSource: body.utmSource,
-        utmMedium: body.utmMedium,
-        utmCampaign: body.utmCampaign,
+        utmSource: marketingAttribution?.utmSource ?? body.utmSource,
+        utmMedium: marketingAttribution?.utmMedium ?? body.utmMedium,
+        utmCampaign: marketingAttribution?.utmCampaign ?? body.utmCampaign,
+        utmContent: marketingAttribution?.utmContent ?? body.utmContent,
+        utmTerm: marketingAttribution?.utmTerm ?? body.utmTerm,
+        gclid: marketingAttribution?.gclid ?? body.gclid,
+        yclid: marketingAttribution?.yclid ?? body.yclid,
+        fbclid: marketingAttribution?.fbclid ?? body.fbclid,
+        ttclid: marketingAttribution?.ttclid ?? body.ttclid,
+        rawAttribution: marketingAttribution ?? null,
         referrer: getHeader(event, 'referer') || null,
         createdAt: now,
       })
@@ -192,18 +211,30 @@ export default defineEventHandler(
           name: body.name,
           email: body.email,
           goalKeys: body.goalKeys,
-          utmSource: body.utmSource,
-          utmMedium: body.utmMedium,
-          utmCampaign: body.utmCampaign,
+          utmSource: marketingAttribution?.utmSource ?? body.utmSource,
+          utmMedium: marketingAttribution?.utmMedium ?? body.utmMedium,
+          utmCampaign: marketingAttribution?.utmCampaign ?? body.utmCampaign,
+          utmContent: marketingAttribution?.utmContent ?? body.utmContent,
+          utmTerm: marketingAttribution?.utmTerm ?? body.utmTerm,
+          gclid: marketingAttribution?.gclid ?? body.gclid,
+          yclid: marketingAttribution?.yclid ?? body.yclid,
+          fbclid: marketingAttribution?.fbclid ?? body.fbclid,
+          ttclid: marketingAttribution?.ttclid ?? body.ttclid,
           createdAt: now,
         }),
         sendLandingLeadTelegram({
           name: body.name,
           email: body.email,
           goalKeys: body.goalKeys,
-          utmSource: body.utmSource,
-          utmMedium: body.utmMedium,
-          utmCampaign: body.utmCampaign,
+          utmSource: marketingAttribution?.utmSource ?? body.utmSource,
+          utmMedium: marketingAttribution?.utmMedium ?? body.utmMedium,
+          utmCampaign: marketingAttribution?.utmCampaign ?? body.utmCampaign,
+          utmContent: marketingAttribution?.utmContent ?? body.utmContent,
+          utmTerm: marketingAttribution?.utmTerm ?? body.utmTerm,
+          gclid: marketingAttribution?.gclid ?? body.gclid,
+          yclid: marketingAttribution?.yclid ?? body.yclid,
+          fbclid: marketingAttribution?.fbclid ?? body.fbclid,
+          ttclid: marketingAttribution?.ttclid ?? body.ttclid,
           createdAt: now,
         }),
       ]);

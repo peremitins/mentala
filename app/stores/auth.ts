@@ -18,6 +18,8 @@ import { useMeditationPlayer } from '@/app/composables/useMeditationPlayer';
 import { useSceneAudio } from '@/app/composables/useSceneAudio';
 import { getErrorDiagnosticsLog } from '@/app/utils/errorDiagnostics';
 import { AuthRegisterResponseDto } from '@/shared/dto/auth';
+import type { MarketingAttributionDto } from '@/shared/dto/marketing-attribution';
+import { appendMarketingAttributionToUrl } from '@/shared/utils/marketingAttribution';
 import type { UserBilling, UserMeDto } from '@/shared/dto/user';
 
 type AuthUser = NonNullable<UserMeDto['user']>;
@@ -161,6 +163,7 @@ export const useAuthStore = defineStore('auth', {
       email: string;
       password: string;
       locale?: string;
+      marketingAttribution?: MarketingAttributionDto;
     }) {
       this.loading = true;
       try {
@@ -210,7 +213,10 @@ export const useAuthStore = defineStore('auth', {
         this.loading = false;
       }
     },
-    async loginWithGoogle(locale?: string) {
+    async loginWithGoogle(
+      locale?: string,
+      marketingAttribution?: MarketingAttributionDto
+    ) {
       if (typeof window === 'undefined') return;
 
       const { Capacitor } = await import('@capacitor/core');
@@ -218,7 +224,7 @@ export const useAuthStore = defineStore('auth', {
       const platform = Capacitor.getPlatform();
 
       if (!isCapacitor) {
-        this.oauth('google', locale);
+        this.oauth('google', locale, marketingAttribution);
         return;
       }
 
@@ -299,7 +305,7 @@ export const useAuthStore = defineStore('auth', {
 
         const response: any = await useAPI('/api/auth/google/native', {
           method: 'POST',
-          body: { idToken },
+          body: { idToken, marketingAttribution },
         });
 
         if (response?.requiresAccountLinking) {
@@ -352,7 +358,7 @@ export const useAuthStore = defineStore('auth', {
         this.loading = false;
       }
     },
-    async loginWithApple() {
+    async loginWithApple(marketingAttribution?: MarketingAttributionDto) {
       if (typeof window === 'undefined') return;
 
       const { Capacitor } = await import('@capacitor/core');
@@ -396,6 +402,7 @@ export const useAuthStore = defineStore('auth', {
             identityToken,
             firstName: givenName,
             lastName: familyName,
+            marketingAttribution,
           },
         });
 
@@ -451,6 +458,7 @@ export const useAuthStore = defineStore('auth', {
       acceptPrivacy: boolean;
       // Маркетинговое согласие опционально
       marketingConsent?: boolean;
+      marketingAttribution?: MarketingAttributionDto;
     }) {
       this.loading = true;
       try {
@@ -967,14 +975,23 @@ export const useAuthStore = defineStore('auth', {
         }
       }
     },
-    oauth(provider: string, locale?: string) {
+    oauth(
+      provider: string,
+      locale?: string,
+      marketingAttribution?: MarketingAttributionDto
+    ) {
       if (typeof window === 'undefined') return;
-      const back = `${window.location.origin}/`; // вернёмся на главную
+      const back = appendMarketingAttributionToUrl(
+        `${window.location.origin}/`,
+        marketingAttribution
+      ); // вернёмся на главную
       const base =
         provider === 'vk' ? '/api/auth/vk/start' : '/api/auth/google/start';
-      window.location.assign(
-        `${base}?redirect_uri=${encodeURIComponent(back)}&locale=${locale}`
-      );
+      const params = new URLSearchParams({ redirect_uri: back });
+      if (locale) {
+        params.set('locale', locale);
+      }
+      window.location.assign(`${base}?${params.toString()}`);
     },
   },
 });
