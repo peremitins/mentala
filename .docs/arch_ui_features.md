@@ -111,6 +111,7 @@
 - `mentala.app` хранит основной SEO-контур: canonical, hreflang, JSON-LD, sitemap, robots и verification meta
 - Для RU-рынка корневой URL `/` всегда отдаёт русский контент; locale autodetect по cookie, `Accept-Language` и browser locale для SEO-страниц запрещён
 - `?lang=en` остаётся только как явный UI-режим и должен быть закрыт от индексации через `noindex`
+- Marketing attribution: `mentala.app` читает whitelisted UTM/click-id (`utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, `utm_term`, `gclid`, `yclid`, `fbclid`, `ttclid`), хранит latest touch 90 дней в localStorage и передаёт их на `my.mentala.app`; продуктовый клиент удерживает pending attribution и backend пишет append-only историю в `user_marketing_attributions`.
 
 ## SEO продуктового хоста (`my.mentala.app`)
 

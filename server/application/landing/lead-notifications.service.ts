@@ -9,6 +9,12 @@ type LeadNotificationPayload = {
   utmSource?: string;
   utmMedium?: string;
   utmCampaign?: string;
+  utmContent?: string;
+  utmTerm?: string;
+  gclid?: string;
+  yclid?: string;
+  fbclid?: string;
+  ttclid?: string;
   createdAt: Date;
 };
 
@@ -93,7 +99,21 @@ export async function sendLandingLeadTeamEmail(
   });
 
   const goalText = formatGoals(payload.goalKeys);
-  const utmText = [payload.utmSource, payload.utmMedium, payload.utmCampaign]
+  const utmText = [
+    payload.utmSource,
+    payload.utmMedium,
+    payload.utmCampaign,
+    payload.utmContent,
+    payload.utmTerm,
+  ]
+    .filter(Boolean)
+    .join(' / ');
+  const clickIdText = [
+    payload.gclid && `gclid=${payload.gclid}`,
+    payload.yclid && `yclid=${payload.yclid}`,
+    payload.fbclid && `fbclid=${payload.fbclid}`,
+    payload.ttclid && `ttclid=${payload.ttclid}`,
+  ]
     .filter(Boolean)
     .join(' / ');
 
@@ -107,6 +127,7 @@ export async function sendLandingLeadTeamEmail(
       `Email: ${payload.email}`,
       `Цели: ${goalText}`,
       `UTM: ${utmText || '—'}`,
+      `Click ID: ${clickIdText || '—'}`,
       `Дата: ${formatDate(payload.createdAt)}`,
     ].join('\n'),
   });
@@ -126,7 +147,21 @@ export async function sendLandingLeadTelegram(
   }
 
   const goalText = formatGoals(payload.goalKeys);
-  const utmText = [payload.utmSource, payload.utmMedium, payload.utmCampaign]
+  const utmText = [
+    payload.utmSource,
+    payload.utmMedium,
+    payload.utmCampaign,
+    payload.utmContent,
+    payload.utmTerm,
+  ]
+    .filter(Boolean)
+    .join(' / ');
+  const clickIdText = [
+    payload.gclid && `gclid=${payload.gclid}`,
+    payload.yclid && `yclid=${payload.yclid}`,
+    payload.fbclid && `fbclid=${payload.fbclid}`,
+    payload.ttclid && `ttclid=${payload.ttclid}`,
+  ]
     .filter(Boolean)
     .join(' / ');
 
@@ -136,6 +171,7 @@ export async function sendLandingLeadTelegram(
     `Email: ${payload.email}`,
     `Цели: ${goalText}`,
     `UTM: ${utmText || '—'}`,
+    `Click ID: ${clickIdText || '—'}`,
     `Дата: ${formatDate(payload.createdAt)}`,
   ].join('\n');
 
