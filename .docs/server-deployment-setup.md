@@ -60,35 +60,27 @@
 
 #### 0.1. Залить файлы репо на сервер
 
-С локальной машины (можно сразу для двух серверов параллельно):
+`mentala-yc-dev` и `mentala-yc-prod` — это алиасы на **один и тот же сервер** (`158.160.94.97`). disk-guard — системный сервис (systemd), живёт на уровне хоста, не на уровне окружения. Поэтому rsync и install.sh нужно выполнить **один раз**:
 
 ```bash
-# DEV
 rsync -avz --delete \
   scripts/server/disk-guard/ \
   mentala-yc-dev:/tmp/disk-guard/
-
-# PROD
-rsync -avz --delete \
-  scripts/server/disk-guard/ \
-  mentala-yc-prod:/tmp/disk-guard/
 ```
-
-rsync понимает алиасы из `~/.ssh/config` так же как и `ssh`, так что `mentala-yc-dev`/`mentala-yc-prod` работают напрямую.
 
 #### 0.2. На сервере прогнать install.sh
 
 ```bash
 ssh mentala-yc-dev
 cd /tmp/disk-guard
-sudo ./install.sh           # перезапишет скрипт и unit-файлы, .env НЕ трогает
-sudo ./install.sh --status  # убедиться что таймер активный (Active: active (waiting))
+sudo ./install.sh             # перезапишет скрипт и unit-файлы, .env НЕ трогает
+sudo ./install.sh --status    # убедиться что таймер активный (Active: active (waiting))
 sudo ./install.sh --run-once  # принудительный запуск с FORCE_NOTIFY=1 — должно прийти TG-сообщение
 rm -rf /tmp/disk-guard
 exit
 ```
 
-То же самое на prod-сервере.
+Отдельно на prod-сервере делать **не нужно** — это тот же хост.
 
 После `--run-once` в Telegram должно прийти `✅ Mentala. Диск в норме` (так как used=11%). Это подтверждает, что:
 - скрипт установлен корректно;
@@ -142,95 +134,50 @@ docker compose ps   # проверить что Status: healthy
 
 ---
 
-### Шаг 2 (опционально). Уровень 1 — zero-downtime через Caddy
+### Шаг 2 (опционально). Уровень 1 — zero-downtime через blue/green
 
-Если 5–10 секунд недопустимы, перед `web` ставится Caddy в том же compose-стеке. Внешний nginx на хосте трогать **не надо** — он как и раньше будет ходить на `127.0.0.1:3000`, но за этим адресом теперь окажется Caddy, который балансит на 1–2 реплики `web`.
+> ⚠️ **Важно:** реверс-прокси здесь — **Traefik**, а не nginx. Caddy не нужен — Traefik сам балансирует между контейнерами через Docker-сеть `proxy`. Когда `--scale web=2`, Traefik автоматически видит оба контейнера и роутит на них. Единственное что нужно — убрать `container_name` у `web`, потому что Docker не может запустить два контейнера с одинаковым именем.
 
-#### 2.1. Создать `/opt/mentala/dev/Caddyfile` (и `/opt/mentala/prod/Caddyfile`)
+#### 2.1. Убрать `container_name` из сервиса `web`
 
-```caddy
-{
-  # TLS терминируется внешним nginx на хосте — здесь только plain HTTP.
-  auto_https off
-  admin off
-}
-
-:3000 {
-  reverse_proxy web:3000 {
-    lb_policy round_robin
-    lb_try_duration 10s
-    lb_try_interval 250ms
-
-    health_uri /api/health
-    health_interval 5s
-    health_timeout 3s
-    health_status 2xx
-
-    header_up Host {host}
-    header_up X-Real-IP {remote}
-  }
-}
-```
-
-#### 2.2. Обновить `docker-compose.yml`
-
-У сервиса `web`:
-- **Убрать** `container_name` (иначе scale=2 не сработает).
-- **Убрать** `ports` (наружу его выпускает только Caddy).
-- Оставить healthcheck из шага 1.
-
-Добавить сервис `caddy`:
+В `/opt/mentala/dev/docker-compose.yml` и `/opt/mentala/prod/docker-compose.yml` найди строку:
 
 ```yaml
-  caddy:
-    image: caddy:2-alpine
-    container_name: mentala-caddy-dev   # на prod: mentala-caddy-prod
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:3000:3000"   # тот же порт, что раньше слушал web
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy-data:/data
-      - caddy-config:/config
-    depends_on:
-      - web
+    container_name: mentala-web-dev   # (или mentala-web-prod на prod)
 ```
 
-В блок `volumes:` добавить:
+и удали её. Больше ничего в compose-файлах менять не нужно — `ports`, `volumes`, `networks`, `labels` остаются как есть.
 
-```yaml
-volumes:
-  redis-data:
-  postgres-data:    # если уже есть
-  caddy-data:
-  caddy-config:
-```
-
-#### 2.3. Обновить `.env`
+#### 2.2. Обновить `.env`
 
 ```bash
 echo 'DEPLOY_STRATEGY=bluegreen' >> /opt/mentala/dev/.env
 echo 'DEPLOY_STRATEGY=bluegreen' >> /opt/mentala/prod/.env
 ```
 
-Без этой переменной workflow по умолчанию использует обычный recreate (но уже с healthcheck-ожиданием и rollback'ом — это лучше чем было). С `bluegreen` — поднимает второй контейнер, ждёт healthy, потом убирает старый.
+Без этой переменной workflow использует обычный recreate (с healthcheck-ожиданием и rollback'ом). С `bluegreen` — поднимает второй контейнер, ждёт healthy, потом убирает старый. Traefik всё время роутит запросы на живые контейнеры.
 
-#### 2.4. Первичный накат
+#### 2.3. Первичный накат
+
+После правки compose-файла вручную пересоздай web один раз:
 
 ```bash
+# dev
 cd /opt/mentala/dev
-docker compose pull web
-docker compose up -d --no-deps caddy   # запустили Caddy
-docker compose up -d --no-deps web     # web без container_name пересоздаётся один раз
-docker compose ps                       # caddy слушает :3000, web healthy
-curl -i http://127.0.0.1:3000/api/health  # 200 {"ok":true,...}
+docker compose up -d --no-deps --force-recreate web
+docker compose ps   # Status: healthy
+
+# prod
+cd /opt/mentala/prod
+docker compose up -d --no-deps --force-recreate web
+docker compose ps   # Status: healthy
 ```
 
-Дальше следующие деплои через push идут уже по blue/green — без даунтайма.
+Дальше деплои через push идут по blue/green — без даунтайма.
 
-#### 2.5. Откат
+#### 2.4. Откат
 
-Просто убери `DEPLOY_STRATEGY=bluegreen` из `.env` — workflow перейдёт обратно в recreate-режим. Caddy при этом останется работать как простой proxy на одну реплику.
+Убери `DEPLOY_STRATEGY=bluegreen` из `.env` — workflow перейдёт обратно в recreate-режим.
 
 ---
 
@@ -247,13 +194,13 @@ curl -i http://127.0.0.1:3000/api/health  # 200 {"ok":true,...}
 
 ### Нужно ли куда-то добавлять переменные?
 
-**Если у тебя приложение уже шлёт ops-алерты в Telegram** (5xx-spike и т.д. приходят) — значит `TELEGRAM_ALERTS_BOT_TOKEN` и `TELEGRAM_ALERTS_CHAT_ID` в `/opt/mentala/*/.env` **уже есть**. Тогда мои workflow подхватят их автоматически. Ничего добавлять не надо.
+**Если у тебя приложение уже шлёт ops-алерты в Telegram** (5xx-spike и т.д. приходят) — значит `NUXT_TELEGRAM_ALERTS_BOT_TOKEN` и `NUXT_TELEGRAM_ALERTS_CHAT_ID` в `/opt/mentala/*/.env` **уже есть**. Тогда мои workflow подхватят их автоматически. Ничего добавлять не надо.
 
 **Если приложение алерты не шлёт** — добавь в `/opt/mentala/{dev,prod}/.env`:
 
 ```env
-TELEGRAM_ALERTS_BOT_TOKEN=<тот же токен что у disk-guard>
-TELEGRAM_ALERTS_CHAT_ID=<тот же chat id>
+NUXT_TELEGRAM_ALERTS_BOT_TOKEN=<тот же токен что у disk-guard>
+NUXT_TELEGRAM_ALERTS_CHAT_ID=<тот же chat id>
 ```
 
 Можно использовать те же значения, что в `/etc/mentala/telegram.env`. Уведомления о деплое и cleanup пойдут в тот же чат, что и алерты disk-guard. Удобно — все ops-сообщения в одном месте.
@@ -264,10 +211,10 @@ TELEGRAM_ALERTS_CHAT_ID=<тот же chat id>
 
 ```bash
 cd /opt/mentala/dev
-TG_TOKEN=$(grep -E '^TELEGRAM_ALERTS_BOT_TOKEN=' .env | cut -d= -f2- | tr -d '"')
-TG_CHAT=$(grep -E '^TELEGRAM_ALERTS_CHAT_ID=' .env | cut -d= -f2- | tr -d '"')
-[ -z "$TG_TOKEN" ] && echo "❌ TELEGRAM_ALERTS_BOT_TOKEN не найден в .env" || echo "✓ token есть"
-[ -z "$TG_CHAT" ] && echo "❌ TELEGRAM_ALERTS_CHAT_ID не найден в .env" || echo "✓ chat есть"
+TG_TOKEN=$(grep -E '^NUXT_TELEGRAM_ALERTS_BOT_TOKEN=' .env | cut -d= -f2- | tr -d '"')
+TG_CHAT=$(grep -E '^NUXT_TELEGRAM_ALERTS_CHAT_ID=' .env | cut -d= -f2- | tr -d '"')
+[ -z "$TG_TOKEN" ] && echo "❌ NUXT_TELEGRAM_ALERTS_BOT_TOKEN не найден в .env" || echo "✓ token есть"
+[ -z "$TG_CHAT" ] && echo "❌ NUXT_TELEGRAM_ALERTS_CHAT_ID не найден в .env" || echo "✓ chat есть"
 
 # Если оба есть — тестовая отправка
 curl -fsS -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
@@ -285,7 +232,7 @@ curl -fsS -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
 - [ ] `ssh mentala-yc-dev` → `cd /tmp/disk-guard && sudo ./install.sh`
 - [ ] `sudo ./install.sh --status` → `Active: active (waiting)`
 - [ ] `sudo ./install.sh --run-once` → пришло TG-сообщение `✅ Mentala. Диск в норме`
-- [ ] То же самое на prod-сервере
+- [ ] _(на prod отдельно не нужно — dev и prod на одном хосте)_
 
 ### Шаг 1. Уровень 0 — healthcheck (обязательно)
 - [ ] Push текущих изменений в ветку `dev` → workflow выкатил образ с `/api/health`
@@ -294,17 +241,62 @@ curl -fsS -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
 - [ ] `docker compose up -d --no-deps web` → `docker compose ps` показывает `healthy`
 - [ ] Push в `main` → проверка тех же шагов на prod
 
-### Шаг 2. Уровень 1 — Caddy + blue/green (опционально)
-- [ ] Создать `/opt/mentala/{dev,prod}/Caddyfile`
-- [ ] В обоих compose: убрать у `web` `container_name` и `ports`, добавить сервис `caddy` и тома `caddy-data`/`caddy-config`
-- [ ] В обоих `.env`: `echo 'DEPLOY_STRATEGY=bluegreen' >> .env`
-- [ ] `docker compose up -d --no-deps caddy && docker compose up -d --no-deps web`
+### Шаг 2. Уровень 1 — blue/green через Traefik (опционально)
+- [ ] В `/opt/mentala/dev/docker-compose.yml`: убрать строку `container_name: mentala-web-dev` у сервиса `web`
+- [ ] В `/opt/mentala/prod/docker-compose.yml`: убрать строку `container_name: mentala-web-prod` у сервиса `web`
+- [ ] `echo 'DEPLOY_STRATEGY=bluegreen' >> /opt/mentala/dev/.env`
+- [ ] `echo 'DEPLOY_STRATEGY=bluegreen' >> /opt/mentala/prod/.env`
+- [ ] На dev: `docker compose up -d --no-deps --force-recreate web` → `docker compose ps` показывает `healthy`
+- [ ] На prod: то же самое
 - [ ] Следующий push не вызывает downtime — проверить через `while true; do curl -s -o /dev/null -w "%{http_code}\n" https://dev.mentala.app/api/health; sleep 0.2; done` во время деплоя
 
 ### Telegram (если ещё не настроено)
-- [ ] Проверить что в `/opt/mentala/{dev,prod}/.env` есть `TELEGRAM_ALERTS_BOT_TOKEN` и `TELEGRAM_ALERTS_CHAT_ID` (если приложение уже шлёт алерты — оба есть)
+- [ ] Проверить что в `/opt/mentala/{dev,prod}/.env` есть `NUXT_TELEGRAM_ALERTS_BOT_TOKEN` и `NUXT_TELEGRAM_ALERTS_CHAT_ID` (если приложение уже шлёт алерты — оба есть)
 - [ ] Если нет — добавить, можно использовать те же значения что в `/etc/mentala/telegram.env`
 - [ ] Тестовая отправка через curl (см. выше)
+
+---
+
+## Ручной перезапуск (после правок на сервере)
+
+Когда ты что-то изменил руками на сервере — переменную в `.env`, строку в `docker-compose.yml` — нужно пересоздать контейнер. **`docker compose down` для этого не нужен** — он убивает postgres и redis тоже, создавая лишний даунтайм.
+
+### Сценарии
+
+| Что изменил | Команда |
+|---|---|
+| Переменную в `.env` | `docker compose up -d --no-deps --force-recreate web` |
+| Что-то в `docker-compose.yml` | `docker compose up -d --no-deps web` |
+| Хочешь принудительно перезапустить с тем же образом | `docker compose up -d --no-deps --force-recreate web` |
+| Полный сброс (крайний случай) | `docker compose down && docker compose up -d` |
+
+**`--no-deps`** — не трогает postgres и redis. Без него compose может пересоздать зависимости.
+
+**`--force-recreate`** — пересоздаёт контейнер даже если compose считает что ничего не изменилось. Нужен при правке `.env`, потому что compose не отслеживает содержимое env-файлов — только сам `docker-compose.yml`.
+
+Без `--force-recreate` достаточно при правке `docker-compose.yml` — compose сам видит изменения в файле и пересоздаёт контейнер.
+
+### Проверка после перезапуска
+
+```bash
+docker compose ps                    # STATUS: Up (healthy)
+docker compose logs web --tail=30    # нет ошибок при старте
+```
+
+### Примеры
+
+```bash
+# Добавил DEPLOY_STRATEGY=bluegreen в .env
+cd /opt/mentala/dev
+docker compose up -d --no-deps --force-recreate web
+
+# Поправил healthcheck в docker-compose.yml
+cd /opt/mentala/prod
+docker compose up -d --no-deps web
+
+# Проверка
+docker compose ps
+```
 
 ---
 
@@ -350,5 +342,5 @@ A: На сервере билдер не строит образы (build дел
 **Q: Что будет если у меня `sudo` спрашивает пароль?**
 A: Это нормально для интерактивных сессий — для них пароль ввести можно. install.sh запрашивает sudo один раз на старте через `require_root`. Workflow в GH Actions заходит как `ubuntu` и **не лезет в `/etc/mentala/telegram.env`** — он читает только `/opt/mentala/*/.env`, у которого права на чтение есть.
 
-**Q: А если внешний nginx на хосте уже настроен? Перенастраивать?**
-A: Не надо. Внешний nginx как ходил на `127.0.0.1:3000`, так и продолжит. На уровне 0 за этим адресом стоит web-контейнер (как сейчас). На уровне 1 — Caddy внутри docker, которая балансит на web. Внешнему nginx разница невидима.
+**Q: Как работает маршрутизация без Caddy?**
+A: Реверс-прокси — Traefik, запущен в Docker в сети `proxy`. Он видит контейнеры через Docker labels и роутит трафик напрямую по внутренней сети — без проброса портов на хост. При `--scale web=2` Traefik автоматически добавляет второй контейнер в балансировку, при `--scale web=1` убирает старый. Ничего настраивать не нужно, кроме удаления `container_name`.
