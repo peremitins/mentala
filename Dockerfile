@@ -84,5 +84,10 @@ ENV PORT=3000
 ENV NITRO_PORT=3000
 EXPOSE 3000
 
+# Liveness-пробник для Docker / reverse-proxy.
+# wget из busybox уже есть в alpine, /api/health не дёргает БД.
+HEALTHCHECK --interval=10s --timeout=3s --start-period=30s --retries=5 \
+  CMD wget --quiet --spider --tries=1 http://127.0.0.1:3000/api/health || exit 1
+
 # Запуск Nitro-сервера
 CMD ["node", ".output/server/index.mjs"]
