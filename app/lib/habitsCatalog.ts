@@ -1,3 +1,5 @@
+import type { OnboardingHabitTopicKey } from '@/shared/constants/onboardingTopics';
+
 /**
  * Справочник привычек (Habits Catalog)
  * Версия: 1.0 (2025-11-13)
@@ -5,17 +7,7 @@
  * Каталог всех доступных привычек для формирования полезных привычек и отказа от вредных
  */
 
-export type HabitKey =
-  | 'water'
-  | 'steps'
-  | 'meditation'
-  | 'nutrition'
-  | 'gratitude'
-  | 'smoking'
-  | 'alcohol'
-  | 'sugar'
-  | 'procrastination'
-  | 'caffeine';
+export type HabitKey = OnboardingHabitTopicKey;
 
 export type HabitIntent = 'build' | 'quit';
 

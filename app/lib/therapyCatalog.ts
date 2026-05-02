@@ -1,3 +1,5 @@
+import type { OnboardingTherapyTopicKey } from '@/shared/constants/onboardingTopics';
+
 /**
  * Справочник тем терапии (Therapy Topics)
  * Версия: 2.7 (2026-03-09)
@@ -6,13 +8,7 @@
  * (каталог используется для текстовых уведомлений: названия и описания короткие и “узнаваемые”)
  */
 
-export type TherapyTopicKey =
-  | 'anxiety'
-  | 'phobias'
-  | 'stress'
-  | 'anger'
-  | 'selfesteem'
-  | 'relations';
+export type TherapyTopicKey = OnboardingTherapyTopicKey;
 
 export interface TherapyTopic {
   key: TherapyTopicKey;

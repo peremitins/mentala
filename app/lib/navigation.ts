@@ -10,10 +10,12 @@ import {
 import { MeditationTopicKeyEnum } from '@/shared/dto/meditations';
 
 const BASIC_FREE_BREATH_SLUGS = new Set(['4-7-8', 'box-breathing']);
-const CATALOG_HABIT_KEYS = new Set(
+const CATALOG_HABIT_KEYS = new Set<string>(
   HABITS_CATALOG.map((habit) => habit.habitKey)
 );
-const CATALOG_THERAPY_KEYS = new Set(THERAPY_TOPICS.map((topic) => topic.key));
+const CATALOG_THERAPY_KEYS = new Set<string>(
+  THERAPY_TOPICS.map((topic) => topic.key)
+);
 
 function readStringParam(value: unknown): string | null {
   if (Array.isArray(value)) {
@@ -36,24 +38,25 @@ export function resolveAppNavigationTargetFromRoute(
   if (path === '/meditations' || path.startsWith('/meditations/')) {
     const trackId = readStringParam(route.query.trackId);
     const topicKey = readStringParam(route.query.topic);
+    const parsedTopicKey = MeditationTopicKeyEnum.safeParse(topicKey);
+    const meditationTopicKey = parsedTopicKey.success
+      ? parsedTopicKey.data
+      : undefined;
 
     if (trackId) {
       const target = {
         type: 'meditation_track',
         trackId,
-        topicKey:
-          topicKey && MeditationTopicKeyEnum.safeParse(topicKey).success
-            ? topicKey
-            : undefined,
+        topicKey: meditationTopicKey,
       } satisfies AppNavigationTarget;
 
       return AppNavigationTargetDto.parse(target);
     }
 
-    if (topicKey && MeditationTopicKeyEnum.safeParse(topicKey).success) {
+    if (meditationTopicKey) {
       return {
         type: 'meditation_collection',
-        topicKey,
+        topicKey: meditationTopicKey,
       };
     }
 

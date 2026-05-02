@@ -1,5 +1,11 @@
 import { z } from 'zod';
 import { AssistantToneWithUnknownEnum } from '../constants/assistantTone';
+import {
+  getOnboardingTopicIdentity,
+  ONBOARDING_HABIT_TOPIC_KEYS,
+  ONBOARDING_THERAPY_TOPIC_KEYS,
+  type OnboardingSelectedTopic,
+} from '../constants/onboardingTopics';
 
 export const ONBOARDING_REASON_VALUES = [
   'stress',
@@ -15,6 +21,41 @@ export const GenderEnum = z.enum(['male', 'female']);
 export const AgeRangeEnum = z.enum(['under_30', '30_45', '45_plus', 'unknown']);
 export const OnboardingToneEnum = AssistantToneWithUnknownEnum;
 export const OnboardingReasonEnum = z.enum(ONBOARDING_REASON_VALUES);
+export const OnboardingTherapyTopicKeyEnum = z.enum(
+  ONBOARDING_THERAPY_TOPIC_KEYS
+);
+export const OnboardingHabitTopicKeyEnum = z.enum(ONBOARDING_HABIT_TOPIC_KEYS);
+export const OnboardingSelectedTopicDto = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('therapy'),
+    entityKey: OnboardingTherapyTopicKeyEnum,
+  }),
+  z.object({
+    kind: z.literal('habits'),
+    entityKey: OnboardingHabitTopicKeyEnum,
+  }),
+]);
+export const OnboardingSelectedTopicsDto = z
+  .array(OnboardingSelectedTopicDto)
+  .min(1)
+  .max(5)
+  .superRefine((topics, ctx) => {
+    const seen = new Set<string>();
+
+    topics.forEach((topic, index) => {
+      const identity = getOnboardingTopicIdentity(topic);
+      if (!seen.has(identity)) {
+        seen.add(identity);
+        return;
+      }
+
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [index],
+        message: 'Selected onboarding topics must be unique',
+      });
+    });
+  });
 export const OnboardingReasonsEnum = z
   .array(OnboardingReasonEnum)
   .min(1)
@@ -27,12 +68,13 @@ export const WelcomeSetupDataDto = z
     // Поддерживаем legacy `reason`, пока все клиенты не перейдут на `reasons`.
     reason: OnboardingReasonEnum.optional(),
     reasons: OnboardingReasonsEnum.optional(),
+    selectedTopics: OnboardingSelectedTopicsDto.optional(),
     gender: GenderEnum,
     ageRange: AgeRangeEnum.optional().default('unknown'),
     tone: OnboardingToneEnum.optional().default('unknown'),
   })
   .superRefine((data, ctx) => {
-    if (data.reason || data.reasons?.length) {
+    if (data.selectedTopics?.length || data.reason || data.reasons?.length) {
       return;
     }
 
@@ -118,11 +160,58 @@ export function areOnboardingReasonListsEqual(
   );
 }
 
+export function normalizeOnboardingSelectedTopics(
+  value: unknown
+): OnboardingSelectedTopic[] {
+  const parsed = OnboardingSelectedTopicsDto.safeParse(value);
+  return parsed.success ? parsed.data : [];
+}
+
+export function resolveOnboardingTopics(input: {
+  selectedTopics?: unknown;
+}): OnboardingSelectedTopic[] {
+  return normalizeOnboardingSelectedTopics(input.selectedTopics);
+}
+
+export function mapOnboardingTopicsToLegacyReasons(
+  topics: readonly OnboardingSelectedTopic[]
+): OnboardingReason[] {
+  const reasonByTopic = new Map<string, OnboardingReason>([
+    ['therapy:anxiety', 'anxiety'],
+    ['therapy:phobias', 'anxiety'],
+    ['therapy:stress', 'stress'],
+    ['therapy:anger', 'mood'],
+    ['therapy:selfesteem', 'support'],
+    ['therapy:relations', 'support'],
+  ]);
+  const seen = new Set<OnboardingReason>();
+  const reasons: OnboardingReason[] = [];
+
+  for (const topic of topics) {
+    const nextReason =
+      topic.kind === 'habits'
+        ? 'habits'
+        : reasonByTopic.get(getOnboardingTopicIdentity(topic)) || 'support';
+
+    if (seen.has(nextReason)) {
+      continue;
+    }
+
+    seen.add(nextReason);
+    reasons.push(nextReason);
+  }
+
+  return reasons;
+}
+
 export type Gender = z.infer<typeof GenderEnum>;
 export type AgeRange = z.infer<typeof AgeRangeEnum>;
 export type OnboardingTone = z.infer<typeof OnboardingToneEnum>;
 export type OnboardingReason = z.infer<typeof OnboardingReasonEnum>;
 export type OnboardingReasons = z.infer<typeof OnboardingReasonsEnum>;
+export type OnboardingSelectedTopics = z.infer<
+  typeof OnboardingSelectedTopicsDto
+>;
 export type OnboardingFlow = z.infer<typeof OnboardingFlowEnum>;
 export type WelcomeSetupDataDto = z.infer<typeof WelcomeSetupDataDto>;
 export type OnboardingCompleteRequestDto = z.infer<

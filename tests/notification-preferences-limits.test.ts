@@ -8,6 +8,10 @@ import {
 } from '../server/application/notifications/preferences-limits.utils';
 
 describe('notification preferences limits', () => {
+  it('использует 2 напоминания в день как дефолт для новых настроек', () => {
+    expect(DEFAULT_NOTIFICATION_TIMES_PER_DAY).toBe(2);
+  });
+
   it('ограничивает timesPerDay диапазоном 1..5', () => {
     expect(clampNotificationTimesPerDay(0)).toBe(
       MIN_NOTIFICATION_TIMES_PER_DAY

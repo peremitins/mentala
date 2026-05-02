@@ -1,16 +1,116 @@
 import { defineEventHandler, readBody, createError } from 'h3';
 import { nanoid } from 'nanoid';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db } from '@/server/infrastructure/db/client';
-import { users, userPreferences } from '@/server/infrastructure/db/schema';
+import {
+  notificationPreferences,
+  users,
+  userPreferences,
+} from '@/server/infrastructure/db/schema';
 import { getSessionUser } from '@/server/application/auth/session';
 import {
   OnboardingCompleteRequestDto,
   areOnboardingReasonListsEqual,
+  mapOnboardingTopicsToLegacyReasons,
   resolveOnboardingReasons,
+  resolveOnboardingTopics,
 } from '@/shared/dto/onboarding';
+import type { OnboardingSelectedTopic } from '@/shared/constants/onboardingTopics';
 import { enqueueAiRegenerationForUser } from '@/server/application/notifications/ai-text-regeneration.service';
 import { DEFAULT_ASSISTANT_TONE } from '@/shared/constants/assistantTone';
+import {
+  DEFAULT_NOTIFICATION_TIMES_PER_DAY,
+  clampNotificationTimesPerDay,
+} from '@/server/application/notifications/preferences-limits.utils';
+import {
+  DEFAULT_NOTIFICATION_TIME_RANGE_END,
+  DEFAULT_NOTIFICATION_TIME_RANGE_START,
+  DEFAULT_NOTIFICATION_TIMEZONE,
+} from '@/server/application/notifications/slots-scaling.config';
+import { ensureAiNotificationAccessConsistency } from '@/server/application/notifications/notification-source-access.service';
+import { getDefaultNotificationTextSource } from '@/shared/utils/notificationTextSource';
+import { generateAllSlotsForUser } from '@/server/application/notifications/scheduler.service';
+
+type OnboardingNotificationPreferenceResult = {
+  touchedCount: number;
+  hasImmediateSlotSource: boolean;
+};
+
+async function ensureOnboardingNotificationPreferences(params: {
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0];
+  userId: number;
+  selectedTopics: readonly OnboardingSelectedTopic[];
+  canUseAiNotifications: boolean;
+}): Promise<OnboardingNotificationPreferenceResult> {
+  const textSource = getDefaultNotificationTextSource(
+    params.canUseAiNotifications
+  );
+  let touchedCount = 0;
+  let hasImmediateSlotSource = false;
+
+  for (const topic of params.selectedTopics) {
+    const [existing] = await params.tx
+      .select()
+      .from(notificationPreferences)
+      .where(
+        and(
+          eq(notificationPreferences.userId, params.userId),
+          eq(notificationPreferences.kind, topic.kind),
+          eq(notificationPreferences.entityKey, topic.entityKey)
+        )
+      )
+      .limit(1);
+
+    if (existing) {
+      if (!existing.enabled) {
+        const existingTextSource =
+          (existing.meta as { textSource?: string } | null)?.textSource === 'ai'
+            ? 'ai'
+            : 'templates';
+        await params.tx
+          .update(notificationPreferences)
+          .set({
+            enabled: true,
+            updatedAt: new Date(),
+          })
+          .where(eq(notificationPreferences.id, existing.id));
+        touchedCount++;
+        if (existingTextSource === 'templates') {
+          hasImmediateSlotSource = true;
+        }
+      }
+      continue;
+    }
+
+    await params.tx.insert(notificationPreferences).values({
+      id: nanoid(),
+      userId: params.userId,
+      kind: topic.kind,
+      entityKey: topic.entityKey,
+      enabled: true,
+      timesPerDay: clampNotificationTimesPerDay(
+        DEFAULT_NOTIFICATION_TIMES_PER_DAY
+      ),
+      directness: 'moderate',
+      timezone: DEFAULT_NOTIFICATION_TIMEZONE,
+      subtype: 'mixed',
+      activeDays: [0, 1, 2, 3, 4, 5, 6],
+      timeRangeStart: DEFAULT_NOTIFICATION_TIME_RANGE_START,
+      timeRangeEnd: DEFAULT_NOTIFICATION_TIME_RANGE_END,
+      customSlotTimes: null,
+      meta: { textSource },
+    });
+    touchedCount++;
+    if (textSource === 'templates') {
+      hasImmediateSlotSource = true;
+    }
+  }
+
+  return {
+    touchedCount,
+    hasImmediateSlotSource,
+  };
+}
 
 export default defineEventHandler(async (event) => {
   const sessionResult = await getSessionUser(event);
@@ -43,10 +143,16 @@ export default defineEventHandler(async (event) => {
   const ageRange = parsed.data.ageRange ?? 'unknown';
   const tone = parsed.data.tone ?? 'unknown';
   const storedTone = tone === 'unknown' ? DEFAULT_ASSISTANT_TONE : tone;
-  const onboardingReasons = resolveOnboardingReasons({
-    reasons: parsed.data.reasons,
-    reason: parsed.data.reason,
+  const selectedTopics = resolveOnboardingTopics({
+    selectedTopics: parsed.data.selectedTopics,
   });
+  const onboardingReasons =
+    selectedTopics.length > 0
+      ? mapOnboardingTopicsToLegacyReasons(selectedTopics)
+      : resolveOnboardingReasons({
+          reasons: parsed.data.reasons,
+          reason: parsed.data.reason,
+        });
   const userId = Number(sessionResult.user.id);
 
   if (onboardingReasons.length === 0) {
@@ -59,6 +165,15 @@ export default defineEventHandler(async (event) => {
   let toneChanged = false;
   let genderChanged = false;
   let onboardingReasonsChanged = false;
+  let notificationPreferencesTouched = false;
+  let hasImmediateSlotNotificationSource = false;
+
+  const { canUseAiNotifications } = await ensureAiNotificationAccessConsistency(
+    {
+      userId,
+      userRole: (sessionResult.user as any)?.roleId ?? null,
+    }
+  );
 
   await db.transaction(async (tx) => {
     const [current] = await tx
@@ -73,6 +188,9 @@ export default defineEventHandler(async (event) => {
         : {};
 
     onboarding.welcome = true;
+    if (selectedTopics.length > 0) {
+      onboarding.selectedTopics = selectedTopics;
+    }
 
     if (current?.gender !== gender) {
       genderChanged = true;
@@ -133,9 +251,25 @@ export default defineEventHandler(async (event) => {
         onboardingReasons,
       });
     }
+
+    if (selectedTopics.length > 0) {
+      const result = await ensureOnboardingNotificationPreferences({
+        tx,
+        userId,
+        selectedTopics,
+        canUseAiNotifications,
+      });
+      notificationPreferencesTouched = result.touchedCount > 0;
+      hasImmediateSlotNotificationSource = result.hasImmediateSlotSource;
+    }
   });
 
-  if (toneChanged || genderChanged || onboardingReasonsChanged) {
+  if (
+    toneChanged ||
+    genderChanged ||
+    onboardingReasonsChanged ||
+    notificationPreferencesTouched
+  ) {
     // Запускаем асинхронно, чтобы не блокировать ответ онбординга
     void enqueueAiRegenerationForUser({
       userId,
@@ -144,6 +278,18 @@ export default defineEventHandler(async (event) => {
     }).catch((error) => {
       console.error(
         `[Onboarding] ❌ Не удалось поставить регенерацию AI-текстов:`,
+        error
+      );
+    });
+  }
+
+  if (notificationPreferencesTouched && hasImmediateSlotNotificationSource) {
+    void generateAllSlotsForUser(userId, {
+      forceTodaySlots: true,
+      reason: 'prefs_changed',
+    }).catch((error) => {
+      console.error(
+        `[Onboarding] ❌ Не удалось пересоздать слоты уведомлений:`,
         error
       );
     });
