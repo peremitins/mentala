@@ -568,6 +568,13 @@
       "when": 1777564520901,
       "tag": "0083_sturdy_eddie_brock",
       "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1777726267044,
+      "tag": "0084_friendly_blindfold",
+      "breakpoints": true
     }
   ]
 }

@@ -388,7 +388,7 @@
                   <AlertDialogCancel :disabled="isDeleting">
                     Отмена
                   </AlertDialogCancel>
-                  <AlertDialogAction
+                  <Button
                     :class="[
                       buttonVariants({ variant: 'destructive' }),
                       'relative',
@@ -400,7 +400,7 @@
                     <span :class="isDeleting ? 'invisible' : ''">
                       Удалить навсегда
                     </span>
-                  </AlertDialogAction>
+                  </Button>
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
@@ -621,7 +621,7 @@ const supportDescription = computed(() => {
 });
 
 const displayName = computed(() => auth.user?.name?.trim() || 'Пользователь');
-const displayEmail = computed(() => auth.user?.email || 'Не указан');
+const displayEmail = computed(() => auth.user?.emailOriginal || auth.user?.email || 'Не указан');
 const userInitials = computed(() => {
   const source = displayName.value || displayEmail.value || '?';
   const parts = source.trim().split(/\s+/).filter(Boolean);
