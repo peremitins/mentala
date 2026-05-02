@@ -8,7 +8,8 @@
 - `active_days`, `time_range_start/end`, `custom_slot_times` (до 5), `entity_key`
 - `text_source_normalized`: templates | ai
 - `custom_prompt_notification` — пожелания пользователя (только для шаблонных тем, только AI)
-- `timesPerDay`: 1..5, `customSlotTimes` в пределах этого лимита
+- `timesPerDay`: 1..5, дефолт для новых настроек — 2 раза в день, `customSlotTimes` в пределах этого лимита
+- Welcome-онбординг может создать активные настройки по выбранным каталоговым темам терапии/привычек. `notification_preferences.enabled=true` означает, что тема настроена в продукте; фактическая доставка всё равно требует активного native/PWA/browser endpoint с системным разрешением.
 
 ## Генерация текстов
 - **Templates**: готовые шаблоны из `notification_text_presets` → персональные копии в `notification_texts` (lazy init)

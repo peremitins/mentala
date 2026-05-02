@@ -73,9 +73,12 @@
 
 ## Онбординг (`/onboarding`)
 
-- 5 шагов: имя, причина, возраст, пол, tone
-- `users`: `gender`, `age_range`, `onboarding` (jsonb)
-- `user_preferences.onboarding_reasons` — мультивыбор, порядок = приоритет
+- Шаги: имя, выбор тем, предложение напоминаний, возраст, пол, tone
+- Выбор тем идёт после имени и использует каталоги `THERAPY_TOPICS` и `HABITS_CATALOG`: эмоциональное состояние, полезные привычки, отказ от вредных привычек
+- `users.onboarding.selectedTopics` — структурный стартовый фокус пользователя: `{ kind: 'therapy' | 'habits', entityKey }[]`, максимум 5 тем
+- `user_preferences.onboarding_reasons` остаётся legacy-слоем для текущей персонализации промптов и старого onboarding payload
+- Экран напоминаний запрашивает системное push-разрешение только по явному нажатию `Включить уведомления`; выбранные темы всё равно сохраняются и активируют настройки напоминаний
+- Незавершённый welcome-онбординг сохраняет draft формы и текущий шаг в `persistentStorage`: web использует `localStorage`, iOS/Android — Capacitor Preferences. Draft очищается после успешного завершения.
 - `tone`: gentle | balanced | uplifting | direct
 - Отдельный фоновый слой из `public/onboarding/welcome`
 

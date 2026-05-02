@@ -65,6 +65,11 @@
     </div>
 
     <div v-else class="flex-1 overflow-y-auto space-y-2">
+      <PushRecoveryBanner
+        v-if="preference?.enabled && pushRecovery.showRecoveryBanner.value"
+        @enable="pushRecovery.attemptRecovery()"
+      />
+
       <div class="glass-deep p-5" :class="heroGradient">
         <div class="space-y-3">
           <p class="text-sm text-foreground">
@@ -181,6 +186,7 @@ import { useRoute } from 'vue-router';
 import PageHeader from '@/app/components/PageHeader.vue';
 import StateBlock from '@/app/components/StateBlock.vue';
 import NotificationsSummaryCard from '@/app/components/notifications/NotificationsSummaryCard.vue';
+import PushRecoveryBanner from '@/app/components/notifications/PushRecoveryBanner.vue';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/shadcn/input';
 import InputComponent from '@/app/components/ui/shadcn/input/Input.vue';
@@ -192,6 +198,7 @@ import IconWind from '~icons/lucide/wind';
 import IconSquarePen from '~icons/lucide/square-pen';
 import { useNotificationsSettings } from '@/app/composables/useNotificationsSettings';
 import { usePushPermissionGate } from '@/app/composables/usePushPermissionGate';
+import { usePushRecovery } from '@/app/composables/usePushRecovery';
 import { useChatStore } from '@/app/stores/chat';
 import { useToast } from '@/app/composables/useToast';
 import { useNuxtApp, navigateTo } from '#app';
@@ -231,6 +238,7 @@ const entityLoading = ref(false);
 const entityError = ref<string | null>(null);
 const { $api } = useNuxtApp();
 const pushPermissionGate = usePushPermissionGate();
+const pushRecovery = usePushRecovery();
 
 const preference = ref<NotificationPreferencesDto | null>(null);
 const prefLoading = ref(true);

@@ -5,7 +5,7 @@
 
 export const MIN_NOTIFICATION_TIMES_PER_DAY = 1;
 export const MAX_NOTIFICATION_TIMES_PER_DAY = 5;
-export const DEFAULT_NOTIFICATION_TIMES_PER_DAY = 3;
+export const DEFAULT_NOTIFICATION_TIMES_PER_DAY = 2;
 
 /**
  * Нормализует количество уведомлений в сутки:
