@@ -123,7 +123,7 @@
               <Tabs
                 :model-value="mode"
                 @update:model-value="(v) => (mode = v as 'signin' | 'signup')"
-                class="w-full mb-6"
+                class="w-full mb-3"
               >
                 <TabsList class="grid grid-cols-2 glass-border">
                   <TabsTrigger value="signin">Вход</TabsTrigger>
@@ -132,7 +132,7 @@
               </Tabs>
 
               <form
-                class="space-y-4"
+                class="space-y-3"
                 method="post"
                 autocomplete="on"
                 @submit.prevent="submit"
