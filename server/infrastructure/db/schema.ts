@@ -45,6 +45,9 @@ export const users = pgTable(
     // Настройки фоновой сцены (обои, звук, анимация).
     sceneSettings: jsonb('scene_settings').notNull().default({}),
     email: varchar('email', { length: 255 }).unique().notNull(),
+    // Оригинальный email как ввёл пользователь (до нормализации).
+    // Нужен для отображения в UI — normalizeEmail убирает точки у Gmail-адресов.
+    emailOriginal: varchar('email_original', { length: 255 }),
     emailVerifiedAt: timestamp('email_verified_at'),
     passwordHash: text('password_hash'),
     avatarUrl: text('avatar_url'),
@@ -2293,3 +2296,46 @@ export const sessionSummariesUser = pgTable(
     ),
   })
 );
+
+// Анонимный статистический слепок удалённого пользователя.
+// Создаётся один раз при удалении, не содержит PII, хранится вечно.
+// Используется для честного подсчёта метрик: LTV, churn, конверсия, когорты.
+export const deletedUserStats = pgTable('deleted_user_stats', {
+  id: serial('id').primaryKey(),
+
+  // Временные метки жизни аккаунта
+  registeredAt: timestamp('registered_at', { withTimezone: true }).notNull(),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }).notNull(),
+  daysAlive: integer('days_alive'),
+
+  // Демография (агрегатный уровень — не PII)
+  country: varchar('country', { length: 100 }),
+  locale: varchar('locale', { length: 8 }),
+  gender: varchar('gender', { length: 10 }),
+  ageRange: varchar('age_range', { length: 20 }),
+
+  // Первая платформа
+  platform: varchar('platform', { length: 20 }), // 'ios' | 'android' | 'web'
+
+  // Атрибуция (первое касание)
+  acquisitionChannel: varchar('acquisition_channel', { length: 120 }),
+  utmSource: varchar('utm_source', { length: 120 }),
+  utmMedium: varchar('utm_medium', { length: 120 }),
+  utmCampaign: varchar('utm_campaign', { length: 120 }),
+
+  // Триал
+  hadTrial: boolean('had_trial').notNull().default(false),
+  trialStartedAt: timestamp('trial_started_at', { withTimezone: true }),
+
+  // Подписки
+  hadPaidSubscription: boolean('had_paid_subscription').notNull().default(false),
+  lastPlanId: varchar('last_plan_id', { length: 50 }),
+  subscriptionCount: integer('subscription_count').notNull().default(0),
+  totalRevenue: numeric('total_revenue', { precision: 10, scale: 2 }).notNull().default('0'),
+
+  // Активность
+  totalDaysActive: integer('total_days_active').notNull().default(0),
+  totalAiSessions: integer('total_ai_sessions').notNull().default(0),
+
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});

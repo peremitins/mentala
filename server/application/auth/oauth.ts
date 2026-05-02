@@ -248,6 +248,8 @@ export async function upsertUserWithOAuth(
   let userId: number | null = null;
   let isNewUser = false;
   const normalizedEmail = profile.email ? normalizeEmail(profile.email) : null;
+  const originalEmail = profile.email ? profile.email.trim().toLowerCase() : null;
+  const emailOriginalIfDiffers = originalEmail && normalizedEmail && originalEmail !== normalizedEmail ? originalEmail : null;
 
   if (acc.length) {
     userId = acc[0].userId as number;
@@ -300,6 +302,7 @@ export async function upsertUserWithOAuth(
           .insert(users)
           .values({
             email: normalizedEmail,
+            emailOriginal: emailOriginalIfDiffers,
             emailVerifiedAt: profile.emailVerified ? new Date() : null,
             name: profile.name ?? null,
             avatarUrl: profile.avatarUrl ?? null,
@@ -394,6 +397,7 @@ export async function upsertUserWithOAuth(
       .insert(users)
       .values({
         email: normalizedEmail,
+        emailOriginal: emailOriginalIfDiffers,
         emailVerifiedAt: profile.emailVerified ? new Date() : null,
         name: profile.name ?? null,
         avatarUrl: profile.avatarUrl ?? null,
