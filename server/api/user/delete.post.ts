@@ -19,21 +19,18 @@ import {
   notificationSlots,
   notificationTexts,
   oauthAccounts,
-  payments,
   profiles,
   securityEvents,
   sessionSummaries,
   sessions,
-  subscriptionEvents,
-  trialUsageTracking,
+  telegramAccounts,
   therapySessions,
   therapySessionMessages,
   therapyTopicsCustom,
-  telegramAccounts,
+  trialUsageTracking,
   userDevices,
   userPrompts,
   userResponseIds,
-  userSubscriptions,
   userPreferences,
   users,
   welcomePrompts,
@@ -46,14 +43,20 @@ import {
   normalizeEmail,
 } from '@@/server/application/auth/verification';
 import { dispatchUserDeletionRequestedEvent } from '@/server/application/events/app-events.dispatchers';
+import { snapshotDeletedUserStats } from '@/server/application/users/user-stats-snapshot.service';
 
 /**
  * 2-фазное удаление пользователя
  * Фаза A: Мгновенное отключение (синхронно, <300ms)
- * - Soft-delete пользователя
+ * - Снепшот статистики в deleted_user_stats (без PII)
+ * - Soft-delete: анонимизация PII в users (email, имя, IP и т.д.)
  * - Ревокнуть все сессии
- * - Остановить пуши (удалить devices, slots, выключить preferences)
+ * - Остановить пуши (удалить devices, slots)
  * - Поставить задачу в BullMQ с delay 7 days
+ *
+ * Финансовые таблицы (payments, subscription_events, user_subscriptions,
+ * apple_transactions) НЕ удаляются — это бухгалтерские записи.
+ * user_id в них остаётся валидным FK, т.к. строка users сохраняется (soft delete).
  */
 export default defineEventHandler(async (event) => {
   const cfg = useRuntimeConfig(event);
@@ -120,6 +123,14 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
+    // Снепшот статистики — вызывается до любых изменений данных,
+    // пока все оригинальные данные ещё доступны.
+    try {
+      await snapshotDeletedUserStats(userId);
+    } catch (error) {
+      console.error('[UserDeletion] Failed to create stats snapshot:', error);
+    }
+
     if (!restoreEnabled) {
       await db.transaction(async (tx) => {
         const aiSessionRows = await tx
@@ -175,13 +186,6 @@ export default defineEventHandler(async (event) => {
           tx
             .delete(userResponseIds)
             .where(eq(userResponseIds.userId, String(userId))),
-          tx.delete(payments).where(eq(payments.userId, userId)),
-          tx
-            .delete(subscriptionEvents)
-            .where(eq(subscriptionEvents.userId, userId)),
-          tx
-            .delete(userSubscriptions)
-            .where(eq(userSubscriptions.userId, userId)),
           tx.delete(therapySessions).where(eq(therapySessions.userId, userId)),
           tx.delete(idempotencyKeys).where(eq(idempotencyKeys.userId, userId)),
           tx.delete(securityEvents).where(eq(securityEvents.userId, userId)),
@@ -193,7 +197,26 @@ export default defineEventHandler(async (event) => {
           tx.delete(profiles).where(eq(profiles.userId, userId)),
         ]);
 
-        await tx.delete(users).where(eq(users.id, userId));
+        // Анонимизация PII вместо hard delete.
+        // Строка users сохраняется, чтобы FK в финансовых таблицах
+        // (payments, subscription_events, user_subscriptions, apple_transactions)
+        // оставался валидным. Данные подписок и платежей нельзя удалять —
+        // они нужны для аналитики и финансовой отчётности.
+        await tx
+          .update(users)
+          .set({
+            email: `deleted_${userId}@deleted.mentala`,
+            emailOriginal: null,
+            name: null,
+            passwordHash: null,
+            avatarUrl: null,
+            lastLoginIp: null,
+            acceptanceIp: null,
+            acceptanceUserAgent: null,
+            deletionRequestedAt: now,
+            deletedAt: now,
+          })
+          .where(eq(users.id, userId));
       });
 
       try {
@@ -230,10 +253,8 @@ export default defineEventHandler(async (event) => {
     await revokeAllUserSessions(userId);
 
     // 3. Остановить пуши
-    // Удалить user_devices
     await db.delete(userDevices).where(eq(userDevices.userId, userId));
 
-    // Удалить notification_slots со статусами planned и queued
     await db
       .delete(notificationSlots)
       .where(
@@ -243,10 +264,7 @@ export default defineEventHandler(async (event) => {
         )
       );
 
-    // НЕ трогаем notification_preferences.enabled - сохраняем предыдущее состояние
-    // Вместо этого исключаем deleted users в планировщиках/генерации
-
-    // 4. Поставить задачу в BullMQ с delay 7 days
+    // 4. Поставить задачу в BullMQ с delay
     const jobId = `user-delete-${userId}`;
     const delayMs = graceDays * 24 * 60 * 60 * 1000;
 
@@ -267,7 +285,7 @@ export default defineEventHandler(async (event) => {
       );
     }
 
-    // 5. Удалить файлы пользователя (chat_settings)
+    // 5. Удалить файлы пользователя
     try {
       deleteAll(String(userId));
     } catch (error) {
@@ -280,7 +298,6 @@ export default defineEventHandler(async (event) => {
       email: userEmail,
     });
 
-    // 6. Вернуть ответ
     setResponseStatus(event, 202);
     return {
       ok: true,

@@ -9,7 +9,7 @@
           <div class="space-y-2">
             <label class="text-sm font-medium text-foreground"> Email </label>
             <Input
-              :model-value="user.email || 'Не указан'"
+              :model-value="user.emailOriginal || user.email || 'Не указан'"
               type="email"
               disabled
               :show-clear-button="false"
