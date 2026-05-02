@@ -2,10 +2,11 @@
   <Dialog :open="open" :modal="true" @update:open="emit('update:open', $event)">
     <DialogContent class="glass-deep max-w-sm">
       <DialogHeader>
-        <DialogTitle>Напоминания не приходят</DialogTitle>
+        <DialogTitle>Включите уведомления</DialogTitle>
         <DialogDescription>
-          После переустановки приложения уведомления нужно включить заново. Без
-          них напоминания не будут приходить.
+          Уведомления отключены — напоминания по выбранным темам не будут
+          приходить. Включите их, чтобы Ментала могла поддерживать вас в течение
+          дня.
         </DialogDescription>
       </DialogHeader>
       <DialogFooter>

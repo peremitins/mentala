@@ -34,17 +34,30 @@
     ></div>
 
     <div
-      class="relative z-10 flex h-full w-full items-center justify-center overflow-y-auto overflow-x-hidden overscroll-none px-4 py-6 sm:px-6"
+      :class="
+        cn(
+          'relative z-10 flex h-full w-full overflow-y-auto overflow-x-hidden overscroll-none px-4 sm:px-6',
+          isCompactChoiceStep
+            ? 'items-stretch justify-start'
+            : 'items-center justify-center py-6'
+        )
+      "
+      :style="compactStepViewportStyle"
     >
       <Transition v-bind="contentTransitionProps" mode="out-in" appear>
         <div
           v-if="!loading && currentStep"
           :key="currentStep"
-          class="mx-auto flex w-full max-w-2xl flex-col gap-4"
+          :class="
+            cn(
+              'mx-auto flex w-full max-w-2xl flex-col gap-4',
+              isCompactChoiceStep ? 'min-h-0 flex-1' : ''
+            )
+          "
         >
           <div
             v-if="showProgress"
-            class="glass-deep rounded-[24px] px-4 py-3 text-sm text-foreground"
+            class="glass-deep shrink-0 rounded-[24px] px-4 py-3 text-sm text-foreground"
           >
             <div class="flex items-center justify-between font-medium">
               <span
@@ -67,7 +80,7 @@
               cn(
                 'glass-deep relative overflow-hidden rounded-[28px]',
                 isCompactChoiceStep
-                  ? 'px-4 py-5 sm:px-6 sm:py-6'
+                  ? 'flex min-h-0 flex-1 flex-col px-4 py-5 sm:px-6 sm:py-6'
                   : 'px-5 py-7 sm:px-8'
               )
             "
@@ -78,13 +91,18 @@
 
             <div
               :class="
-                cn('relative', isCompactChoiceStep ? 'space-y-4' : 'space-y-6')
+                cn(
+                  'relative',
+                  isCompactChoiceStep
+                    ? 'flex min-h-0 flex-1 flex-col gap-4'
+                    : 'space-y-6'
+                )
               "
             >
               <button
                 v-if="showBack"
                 type="button"
-                class="inline-flex items-center gap-2 text-xs font-medium text-white/85 transition-colors hover:text-white"
+                class="inline-flex shrink-0 items-center gap-2 text-xs font-medium text-white/85 transition-colors hover:text-white"
                 @click="goBack"
               >
                 <IconArrowLeft class="h-4 w-4" />
@@ -139,52 +157,137 @@
                 </Button>
               </div>
 
-              <div v-else-if="currentStep === 'reason'" class="space-y-3.5">
+              <div
+                v-else-if="currentStep === 'topics'"
+                class="flex min-h-0 flex-1 flex-col gap-4"
+              >
+                <div class="shrink-0 space-y-2">
+                  <div class="flex items-start justify-between gap-3">
+                    <h2 class="text-xl font-semibold text-foreground">
+                      Что сейчас важно для вас?
+                    </h2>
+                    <span
+                      class="shrink-0 rounded-full border border-white/14 bg-white/[0.08] px-2.5 py-1 text-xs font-semibold text-white/80"
+                    >
+                      {{ selectedTopics.length }}/{{ MAX_SELECTED_TOPICS }}
+                    </span>
+                  </div>
+                  <p class="max-w-xl text-sm leading-6 text-white/82">
+                    Выберите до 5 тем, с которых хотите начать. Это поможет
+                    Ментала точнее подбирать поддержку.
+                  </p>
+                </div>
+
+                <div
+                  class="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pr-1 [-webkit-overflow-scrolling:touch]"
+                >
+                  <div
+                    v-for="group in topicGroups"
+                    :key="group.title"
+                    class="space-y-2.5"
+                  >
+                    <p class="text-sm font-semibold text-white/90">
+                      {{ group.title }}
+                    </p>
+
+                    <div class="grid gap-2 sm:grid-cols-2">
+                      <button
+                        v-for="option in group.items"
+                        :key="getTopicIdentity(option)"
+                        type="button"
+                        :aria-pressed="isTopicSelected(option)"
+                        :class="
+                          getTopicChoiceButtonClasses(isTopicSelected(option))
+                        "
+                        @click="toggleTopic(option)"
+                      >
+                        <span class="text-xl leading-none">
+                          {{ option.emoji }}
+                        </span>
+                        <span class="min-w-0 flex-1 text-left">
+                          <span
+                            class="block text-sm font-semibold leading-5 text-foreground"
+                          >
+                            {{ option.label }}
+                          </span>
+                          <span
+                            class="mt-0.5 line-clamp-2 block text-xs leading-4 text-white/68"
+                          >
+                            {{ option.description }}
+                          </span>
+                        </span>
+                        <span
+                          class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-all duration-300"
+                          :class="
+                            isTopicSelected(option)
+                              ? 'border-white/70 bg-white/[0.16] text-white'
+                              : 'border-white/24 bg-transparent text-transparent'
+                          "
+                        >
+                          <IconCheck class="h-3.5 w-3.5" />
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="shrink-0 border-t border-white/10 pt-3">
+                  <Button
+                    size="lg"
+                    class="w-full"
+                    :disabled="!isTopicSelectionValid"
+                    @click="goNext"
+                  >
+                    Продолжить
+                  </Button>
+                </div>
+              </div>
+
+              <div v-else-if="currentStep === 'reminders'" class="space-y-4">
                 <div class="space-y-2">
                   <h2 class="text-xl font-semibold text-foreground">
-                    Что привело вас в Ментала?
+                    Включить поддержку в течение дня?
                   </h2>
+                  <p class="max-w-xl text-sm leading-6 text-white/88">
+                    Получайте короткие напоминания по выбранным темам. Они
+                    помогут закреплять полезные привычки, сохранять фокус и
+                    двигаться вперёд.
+                  </p>
                 </div>
 
                 <div class="grid gap-2.5">
-                  <button
-                    v-for="option in reasonOptions"
-                    :key="option.value"
-                    type="button"
-                    :aria-pressed="isReasonSelected(option.value)"
-                    :class="
-                      getCompactChoiceButtonClasses(
-                        isReasonSelected(option.value)
-                      )
-                    "
-                    @click="toggleReason(option.value)"
+                  <div
+                    v-for="topic in selectedTopicSummaries"
+                    :key="getTopicIdentity(topic)"
+                    class="inline-flex items-center gap-2 rounded-[16px] border border-white/16 bg-black/10 px-3 py-2 text-sm font-medium text-white/86"
                   >
-                    <span
-                      class="max-w-full whitespace-normal text-left text-[15px] font-semibold leading-5 text-foreground"
-                    >
-                      {{ option.label }}
-                    </span>
-                    <span
-                      class="ml-3 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-all duration-300"
-                      :class="
-                        isReasonSelected(option.value)
-                          ? 'border-white/70 bg-white/[0.16] text-white'
-                          : 'border-white/24 bg-transparent text-transparent'
-                      "
-                    >
-                      <IconCheck class="h-3.5 w-3.5" />
-                    </span>
-                  </button>
+                    <span>{{ topic.emoji }}</span>
+                    <span>{{ topic.label }}</span>
+                  </div>
                 </div>
 
-                <Button
-                  size="lg"
-                  class="w-full"
-                  :disabled="reasons.length === 0"
-                  @click="goNext"
-                >
-                  Продолжить
-                </Button>
+                <div class="grid gap-2.5">
+                  <Button
+                    size="lg"
+                    class="relative w-full"
+                    :disabled="pushPermissionLoading"
+                    @click="handleEnableReminders"
+                  >
+                    <ButtonLoader v-if="pushPermissionLoading" />
+                    <span :class="pushPermissionLoading ? 'invisible' : ''">
+                      Включить уведомления
+                    </span>
+                  </Button>
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    class="w-full"
+                    :disabled="pushPermissionLoading"
+                    @click="handleSkipReminders"
+                  >
+                    Не сейчас
+                  </Button>
+                </div>
               </div>
 
               <div v-else-if="currentStep === 'age'" class="space-y-4">
@@ -303,6 +406,17 @@
               </div>
             </div>
           </section>
+
+          <PushPermissionDeniedDialog
+            :open="pushPermissionGate.showPushDeniedModal.value"
+            @update:open="pushPermissionGate.setPushDeniedModalOpen"
+            @open-settings="handleOpenPushSystemSettings"
+          />
+          <WebPushPermissionDialog
+            :open="pushPermissionGate.showWebPushPermissionDialog.value"
+            :reason="pushPermissionGate.webPushPermissionDialogReason.value"
+            @update:open="pushPermissionGate.setWebPushPermissionDialogOpen"
+          />
         </div>
       </Transition>
     </div>
@@ -310,22 +424,38 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useMediaQuery, useStepper } from '@vueuse/core';
+import { Capacitor } from '@capacitor/core';
 import { Button } from '@/app/components/ui/button';
 import ButtonLoader from '@/app/components/ui/ButtonLoader.vue';
 import { Input } from '@/app/components/ui/shadcn/input';
 import AssistantToneGrid from '@/app/components/settings/AssistantToneGrid.vue';
+import PushPermissionDeniedDialog from '@/app/components/notifications/PushPermissionDeniedDialog.vue';
+import WebPushPermissionDialog from '@/app/components/notifications/WebPushPermissionDialog.vue';
 import { useViewportOrientation } from '@/app/composables/useViewportOrientation';
+import { usePushPermissionGate } from '@/app/composables/usePushPermissionGate';
+import { usePushRecovery } from '@/app/composables/usePushRecovery';
 import { useAuthStore } from '@/app/stores/auth';
 import { useToast } from '@/app/composables/useToast';
 import { cn } from '@/app/lib/utils';
 import { getOrientationMediaCandidates } from '@/app/utils/orientationMedia';
-import type {
-  AgeRange,
-  Gender,
-  OnboardingReason,
-  OnboardingTone,
+import {
+  getPersistentItem,
+  removePersistentItem,
+  setPersistentItem,
+} from '@/app/utils/persistentStorage';
+import { THERAPY_TOPICS } from '@/app/lib/therapyCatalog';
+import { HABITS_CATALOG } from '@/app/lib/habitsCatalog';
+import {
+  getOnboardingTopicIdentity,
+  type OnboardingSelectedTopic,
+} from '@/shared/constants/onboardingTopics';
+import {
+  normalizeOnboardingSelectedTopics,
+  type AgeRange,
+  type Gender,
+  type OnboardingTone,
 } from '@/shared/dto/onboarding';
 import IconArrowLeft from '~icons/lucide/arrow-left';
 import IconCheck from '~icons/lucide/check';
@@ -337,7 +467,8 @@ definePageMeta({
 type StepKey =
   | 'welcome'
   | 'name'
-  | 'reason'
+  | 'topics'
+  | 'reminders'
   | 'age'
   | 'gender'
   | 'tone'
@@ -348,60 +479,126 @@ interface StepOption<T> {
   label: string;
 }
 
+interface TopicOption {
+  kind: OnboardingSelectedTopic['kind'];
+  entityKey: OnboardingSelectedTopic['entityKey'];
+  label: string;
+  description: string;
+  emoji: string;
+}
+
+interface TopicGroup {
+  title: string;
+  items: TopicOption[];
+}
+
+interface OnboardingDraft {
+  userId: number;
+  step: StepKey;
+  name: string;
+  selectedTopics: OnboardingSelectedTopic[];
+  gender: Gender | null;
+  ageRange: AgeRange;
+  tone: OnboardingTone;
+  updatedAt: number;
+}
+
+const MAX_SELECTED_TOPICS = 5;
+const ONBOARDING_DRAFT_STORAGE_KEY = 'onboarding.welcome_setup.v1';
+
 const INTERACTIVE_STEPS: StepKey[] = [
   'name',
-  'reason',
+  'topics',
+  'reminders',
   'age',
   'gender',
   'tone',
+];
+const ONBOARDING_STEPS: StepKey[] = [
+  'welcome',
+  'name',
+  'topics',
+  'reminders',
+  'age',
+  'gender',
+  'tone',
+  'final',
 ];
 
 const BACKGROUND_INDEX_BY_STEP: Record<StepKey, number> = {
   welcome: 1,
   name: 2,
-  reason: 3,
-  age: 4,
-  gender: 5,
-  tone: 6,
+  topics: 3,
+  reminders: 4,
+  age: 5,
+  gender: 6,
+  tone: 7,
   final: 1,
 };
 
 const auth = useAuthStore();
 const { isPortraitMode } = useViewportOrientation();
 const prefersReducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
+const pushPermissionGate = usePushPermissionGate();
+const pushRecovery = usePushRecovery();
+const isNativeIos = computed(
+  () => Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'ios'
+);
 
 const loading = ref(true);
 const completing = ref(false);
+const pushPermissionLoading = ref(false);
 
 const name = ref('');
 const nameTouched = ref(false);
-const reasons = ref<OnboardingReason[]>([]);
+const selectedTopics = ref<OnboardingSelectedTopic[]>([]);
 const gender = ref<Gender | null>(null);
 const ageRange = ref<AgeRange>('unknown');
 const tone = ref<OnboardingTone>('unknown');
 
 const failedBackgrounds = ref<Set<string>>(new Set());
+let draftHydrated = false;
+let draftSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
-const stepper = useStepper([
-  'welcome',
-  'name',
-  'reason',
-  'age',
-  'gender',
-  'tone',
-  'final',
-]);
+const stepper = useStepper(ONBOARDING_STEPS);
 
 const currentStep = computed(() => stepper.current.value as StepKey);
 
-const reasonOptions: StepOption<OnboardingReason>[] = [
-  { value: 'stress', label: 'Справиться со стрессом' },
-  { value: 'anxiety', label: 'Снизить тревожность' },
-  { value: 'thoughts', label: 'Разобраться в мыслях' },
-  { value: 'mood', label: 'Улучшить настроение' },
-  { value: 'habits', label: 'Работать с привычками' },
-  { value: 'support', label: 'Получить поддержку' },
-  { value: 'other', label: 'Другое' },
+const topicGroups: TopicGroup[] = [
+  {
+    title: 'Эмоциональное состояние',
+    items: THERAPY_TOPICS.map((topic) => ({
+      kind: 'therapy' as const,
+      entityKey: topic.key,
+      label: topic.name,
+      description: topic.description,
+      emoji: topic.emoji,
+    })),
+  },
+  {
+    title: 'Полезные привычки',
+    items: HABITS_CATALOG.filter((habit) => habit.intent === 'build').map(
+      (habit) => ({
+        kind: 'habits' as const,
+        entityKey: habit.habitKey,
+        label: habit.name,
+        description: habit.description,
+        emoji: habit.emoji,
+      })
+    ),
+  },
+  {
+    title: 'От чего хотите отказаться',
+    items: HABITS_CATALOG.filter((habit) => habit.intent === 'quit').map(
+      (habit) => ({
+        kind: 'habits' as const,
+        entityKey: habit.habitKey,
+        label: habit.name,
+        description: habit.description,
+        emoji: habit.emoji,
+      })
+    ),
+  },
 ];
 
 const genderOptions: StepOption<Gender>[] = [
@@ -427,7 +624,24 @@ const totalProgressSteps = INTERACTIVE_STEPS.length;
 const showProgress = computed(() =>
   INTERACTIVE_STEPS.includes(currentStep.value)
 );
-const isCompactChoiceStep = computed(() => currentStep.value === 'reason');
+const isCompactChoiceStep = computed(() => currentStep.value === 'topics');
+const compactStepViewportStyle = computed(() => {
+  if (!isCompactChoiceStep.value) {
+    return undefined;
+  }
+
+  // На iOS WKWebView иногда отдаёт env(safe-area-inset-top)=0, хотя статус-бар
+  // визуально наложен поверх WebView. Поэтому для native iOS держим минимальный
+  // системный зазор, а для web/Android используем общий CSS inset проекта.
+  const topInset = isNativeIos.value
+    ? 'max(var(--safe-area-inset-top), 44px)'
+    : 'var(--safe-area-inset-top)';
+
+  return {
+    paddingTop: `calc(${topInset} + 1rem)`,
+    paddingBottom: 'calc(var(--safe-area-inset-bottom) + 1rem)',
+  };
+});
 const currentProgressStep = computed(() => {
   const index = INTERACTIVE_STEPS.indexOf(currentStep.value);
   return index >= 0 ? index + 1 : 0;
@@ -437,6 +651,24 @@ const progressPercent = computed(() => {
   return Math.round((currentProgressStep.value / totalProgressSteps) * 100);
 });
 const showBack = computed(() => currentStep.value !== 'welcome');
+const isTopicSelectionValid = computed(
+  () =>
+    selectedTopics.value.length > 0 &&
+    selectedTopics.value.length <= MAX_SELECTED_TOPICS
+);
+const selectedTopicSummaries = computed(() => {
+  const optionByIdentity = new Map<string, TopicOption>();
+
+  for (const group of topicGroups) {
+    for (const option of group.items) {
+      optionByIdentity.set(getTopicIdentity(option), option);
+    }
+  }
+
+  return selectedTopics.value
+    .map((topic) => optionByIdentity.get(getTopicIdentity(topic)))
+    .filter((topic): topic is TopicOption => Boolean(topic));
+});
 
 const currentBackgroundBasePath = computed(() => {
   if (!currentStep.value) return '';
@@ -516,24 +748,50 @@ function getChoiceButtonClasses(
   );
 }
 
-function getCompactChoiceButtonClasses(selected: boolean) {
+function getTopicChoiceButtonClasses(selected: boolean) {
   return cn(
-    'group inline-flex w-full items-center justify-between rounded-[18px] border px-4 py-2.5 transition-colors duration-300',
+    'group flex min-h-[64px] w-full items-center gap-3 rounded-[18px] border px-3 py-2.5 transition-colors duration-300',
     selected
       ? 'border-white/60 bg-white/[0.15] shadow-[inset_0_1px_0_rgba(255,255,255,0.16)]'
       : 'border-white/24 bg-black/10 hover:border-white/40 hover:bg-white/[0.06]'
   );
 }
 
-function isReasonSelected(value: OnboardingReason) {
-  return reasons.value.includes(value);
+function getTopicIdentity(topic: {
+  kind: OnboardingSelectedTopic['kind'];
+  entityKey: string;
+}) {
+  return getOnboardingTopicIdentity(topic);
 }
 
-function toggleReason(value: OnboardingReason) {
-  // Сохраняем порядок выбора: первые ответы считаем более приоритетными для персонализации.
-  reasons.value = isReasonSelected(value)
-    ? reasons.value.filter((reasonValue) => reasonValue !== value)
-    : [...reasons.value, value];
+function isTopicSelected(topic: TopicOption | OnboardingSelectedTopic) {
+  const identity = getTopicIdentity(topic);
+  return selectedTopics.value.some(
+    (selectedTopic) => getTopicIdentity(selectedTopic) === identity
+  );
+}
+
+function toggleTopic(topic: TopicOption) {
+  const identity = getTopicIdentity(topic);
+  if (isTopicSelected(topic)) {
+    selectedTopics.value = selectedTopics.value.filter(
+      (selectedTopic) => getTopicIdentity(selectedTopic) !== identity
+    );
+    return;
+  }
+
+  if (selectedTopics.value.length >= MAX_SELECTED_TOPICS) {
+    useToast('Лимит выбора', 'Можно выбрать до 5 тем', 'info');
+    return;
+  }
+
+  selectedTopics.value = [
+    ...selectedTopics.value,
+    {
+      kind: topic.kind,
+      entityKey: topic.entityKey,
+    } as OnboardingSelectedTopic,
+  ];
 }
 
 function preloadBackgrounds() {
@@ -565,7 +823,180 @@ function handleBackgroundError(src: string) {
   failedBackgrounds.value = new Set([...failedBackgrounds.value, src]);
 }
 
-function goNext() {
+function isStepKey(value: unknown): value is StepKey {
+  return (
+    typeof value === 'string' && ONBOARDING_STEPS.includes(value as StepKey)
+  );
+}
+
+function isGender(value: unknown): value is Gender {
+  return value === 'male' || value === 'female';
+}
+
+function isAgeRange(value: unknown): value is AgeRange {
+  return (
+    value === 'under_30' ||
+    value === '30_45' ||
+    value === '45_plus' ||
+    value === 'unknown'
+  );
+}
+
+function isOnboardingTone(value: unknown): value is OnboardingTone {
+  return (
+    value === 'gentle' ||
+    value === 'balanced' ||
+    value === 'uplifting' ||
+    value === 'direct' ||
+    value === 'unknown'
+  );
+}
+
+function getOnboardingDraftStorageKey() {
+  return `${ONBOARDING_DRAFT_STORAGE_KEY}.${auth.user?.id ?? 'anonymous'}`;
+}
+
+function resolveRestorableStep(value: unknown): StepKey {
+  const requestedStep = isStepKey(value) ? value : 'welcome';
+  const requestedIndex = ONBOARDING_STEPS.indexOf(requestedStep);
+
+  if (
+    requestedIndex >= ONBOARDING_STEPS.indexOf('topics') &&
+    !isNameValid.value
+  ) {
+    return 'name';
+  }
+
+  if (
+    requestedIndex >= ONBOARDING_STEPS.indexOf('reminders') &&
+    !isTopicSelectionValid.value
+  ) {
+    return 'topics';
+  }
+
+  if (
+    requestedIndex >= ONBOARDING_STEPS.indexOf('gender') &&
+    ageRange.value === 'unknown'
+  ) {
+    return 'age';
+  }
+
+  if (requestedIndex >= ONBOARDING_STEPS.indexOf('tone') && !gender.value) {
+    return 'gender';
+  }
+
+  if (
+    requestedIndex >= ONBOARDING_STEPS.indexOf('final') &&
+    tone.value === 'unknown'
+  ) {
+    return 'tone';
+  }
+
+  return requestedStep;
+}
+
+function buildOnboardingDraft(
+  step: StepKey = currentStep.value
+): OnboardingDraft | null {
+  const userId = Number(auth.user?.id);
+  if (!Number.isFinite(userId)) {
+    return null;
+  }
+
+  return {
+    userId,
+    step,
+    name: name.value,
+    selectedTopics: selectedTopics.value,
+    gender: gender.value,
+    ageRange: ageRange.value,
+    tone: tone.value,
+    updatedAt: Date.now(),
+  };
+}
+
+async function persistOnboardingDraft(step: StepKey = currentStep.value) {
+  if (!draftHydrated || auth.user?.onboarding?.welcome) {
+    return;
+  }
+
+  const draft = buildOnboardingDraft(step);
+  if (!draft) {
+    return;
+  }
+
+  await setPersistentItem(
+    getOnboardingDraftStorageKey(),
+    JSON.stringify(draft)
+  );
+}
+
+function scheduleOnboardingDraftSave() {
+  if (!draftHydrated) {
+    return;
+  }
+
+  if (draftSaveTimer) {
+    clearTimeout(draftSaveTimer);
+  }
+
+  draftSaveTimer = setTimeout(() => {
+    draftSaveTimer = null;
+    void persistOnboardingDraft();
+  }, 120);
+}
+
+async function clearOnboardingDraft() {
+  if (draftSaveTimer) {
+    clearTimeout(draftSaveTimer);
+    draftSaveTimer = null;
+  }
+
+  await removePersistentItem(getOnboardingDraftStorageKey());
+}
+
+async function restoreOnboardingDraft() {
+  const rawDraft = await getPersistentItem(getOnboardingDraftStorageKey());
+  if (!rawDraft) {
+    return;
+  }
+
+  let parsedDraft: Partial<OnboardingDraft> | null = null;
+  try {
+    parsedDraft = JSON.parse(rawDraft);
+  } catch {
+    await removePersistentItem(getOnboardingDraftStorageKey());
+    return;
+  }
+
+  if (!parsedDraft || parsedDraft.userId !== auth.user?.id) {
+    await removePersistentItem(getOnboardingDraftStorageKey());
+    return;
+  }
+
+  if (typeof parsedDraft.name === 'string') {
+    name.value = parsedDraft.name.slice(0, 40);
+  }
+
+  selectedTopics.value = normalizeOnboardingSelectedTopics(
+    parsedDraft.selectedTopics
+  );
+  gender.value = isGender(parsedDraft.gender) ? parsedDraft.gender : null;
+  ageRange.value = isAgeRange(parsedDraft.ageRange)
+    ? parsedDraft.ageRange
+    : 'unknown';
+  tone.value = isOnboardingTone(parsedDraft.tone)
+    ? parsedDraft.tone
+    : 'unknown';
+
+  stepper.goTo(resolveRestorableStep(parsedDraft.step));
+}
+
+function goNext(expectedStep?: StepKey) {
+  if (typeof expectedStep === 'string' && currentStep.value !== expectedStep) {
+    return;
+  }
+
   stepper.goToNext();
 }
 
@@ -584,12 +1015,41 @@ function handleNameNext() {
   goNext();
 }
 
+function handleSkipReminders() {
+  // Откладываем показ recovery-диалога до следующего холодного запуска.
+  pushRecovery.deferToNextLaunch();
+  goNext();
+}
+
+async function handleEnableReminders() {
+  if (pushPermissionLoading.value) return;
+
+  pushPermissionLoading.value = true;
+  try {
+    await persistOnboardingDraft('reminders');
+    const enabled = await pushPermissionGate.ensureAppPushEnabled({
+      onGrantedFromSettings: async () => {
+        goNext('reminders');
+      },
+    });
+    if (enabled) {
+      goNext('reminders');
+    }
+  } finally {
+    pushPermissionLoading.value = false;
+  }
+}
+
+async function handleOpenPushSystemSettings() {
+  await pushPermissionGate.openSystemSettings();
+}
+
 async function completeOnboarding() {
   if (completing.value) return;
 
   if (
     !isNameValid.value ||
-    reasons.value.length === 0 ||
+    !isTopicSelectionValid.value ||
     !gender.value ||
     ageRange.value === 'unknown' ||
     tone.value === 'unknown'
@@ -607,7 +1067,7 @@ async function completeOnboarding() {
         flow: 'welcome_setup',
         data: {
           name: name.value.trim(),
-          reasons: reasons.value,
+          selectedTopics: selectedTopics.value,
           gender: gender.value,
           ageRange: ageRange.value,
           tone: tone.value,
@@ -615,6 +1075,8 @@ async function completeOnboarding() {
       },
     });
 
+    draftHydrated = false;
+    await clearOnboardingDraft();
     await auth.me();
     await navigateTo('/');
   } catch (error: any) {
@@ -638,6 +1100,14 @@ watch(currentBackgroundBasePath, () => {
   failedBackgrounds.value = new Set();
 });
 
+watch(
+  [name, selectedTopics, gender, ageRange, tone, currentStep],
+  () => {
+    scheduleOnboardingDraftSave();
+  },
+  { deep: true }
+);
+
 onMounted(async () => {
   try {
     if (!auth.user) {
@@ -650,24 +1120,40 @@ onMounted(async () => {
     }
 
     if (auth.user.onboarding?.welcome) {
+      await clearOnboardingDraft();
       await navigateTo('/');
       return;
     }
 
     name.value = auth.user.name || '';
-    gender.value = auth.user.gender || null;
+    gender.value =
+      auth.user.gender === 'male' || auth.user.gender === 'female'
+        ? auth.user.gender
+        : null;
     ageRange.value =
       auth.user.ageRange === 'under_30' ||
       auth.user.ageRange === '30_45' ||
       auth.user.ageRange === '45_plus'
         ? auth.user.ageRange
         : 'unknown';
+
+    await restoreOnboardingDraft();
+    draftHydrated = true;
   } catch (error) {
     console.error('Не удалось загрузить онбординг:', error);
     useToast('Ошибка', 'Не удалось загрузить онбординг', 'error');
   } finally {
     loading.value = false;
   }
+});
+
+onBeforeUnmount(() => {
+  if (draftSaveTimer) {
+    clearTimeout(draftSaveTimer);
+    draftSaveTimer = null;
+  }
+
+  void persistOnboardingDraft();
 });
 </script>
 

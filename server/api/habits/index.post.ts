@@ -13,6 +13,7 @@ import {
   toFeaturePlanRequiredPayload,
 } from '@/server/application/subscriptions/entitlements.service';
 import { getDefaultNotificationTextSource } from '@/shared/utils/notificationTextSource';
+import { DEFAULT_NOTIFICATION_TIMES_PER_DAY } from '@/server/application/notifications/preferences-limits.utils';
 
 /**
  * POST /api/habits
@@ -75,6 +76,13 @@ export default defineEventHandler(async (event): Promise<HabitDto> => {
     })
     .returning();
 
+  if (!created) {
+    throw createError({
+      statusCode: 500,
+      message: 'Не удалось создать привычку',
+    });
+  }
+
   // Автоматически создаем настройки уведомлений с включенными уведомлениями
   // Только для кастомных привычек (intent === 'custom' или привычка найдена в БД)
   if (body.intent === 'custom' || !body.habitKey) {
@@ -98,7 +106,7 @@ export default defineEventHandler(async (event): Promise<HabitDto> => {
         kind: 'habits',
         entityKey: created.id, // Используем ID для кастомных сущностей (стабильность)
         enabled: true, // Уведомления включены по умолчанию
-        timesPerDay: 3, // Значение по умолчанию
+        timesPerDay: DEFAULT_NOTIFICATION_TIMES_PER_DAY, // Значение по умолчанию
         directness: 'moderate',
         timezone,
         subtype: null, // Для кастомных привычек subtype всегда null

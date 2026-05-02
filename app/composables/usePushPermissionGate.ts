@@ -124,8 +124,20 @@ export function usePushPermissionGate() {
     showPushDeniedModal.value = false;
     const deferredEnableHandler = pendingEnableHandler;
     pendingEnableHandler = null;
+    let returnHandled = false;
+    let removeVisibilityHandler: (() => void) | null = null;
+    let removeAppStateHandler: (() => void) | null = null;
 
     const refreshOnReturn = async () => {
+      if (returnHandled) {
+        return;
+      }
+      returnHandled = true;
+      removeVisibilityHandler?.();
+      removeVisibilityHandler = null;
+      removeAppStateHandler?.();
+      removeAppStateHandler = null;
+
       await new Promise((resolve) => setTimeout(resolve, 500));
       await pushSettings.refreshPermissionStatus();
 
@@ -144,10 +156,12 @@ export function usePushPermissionGate() {
         if (document.visibilityState !== 'visible') {
           return;
         }
-        document.removeEventListener('visibilitychange', handler);
         void refreshOnReturn();
       };
       document.addEventListener('visibilitychange', handler);
+      removeVisibilityHandler = () => {
+        document.removeEventListener('visibilitychange', handler);
+      };
     }
 
     if (pushSettings.isNative.value) {
@@ -158,10 +172,12 @@ export function usePushPermissionGate() {
           if (!isActive) {
             return;
           }
-          listener.remove();
           void refreshOnReturn();
         }
       );
+      removeAppStateHandler = () => {
+        listener.remove();
+      };
     }
 
     await pushSettings.openAppSettings();

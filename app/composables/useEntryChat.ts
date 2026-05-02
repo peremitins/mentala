@@ -6,10 +6,12 @@ import { HABITS_CATALOG } from '@/app/lib/habitsCatalog';
 import { THERAPY_TOPICS } from '@/app/lib/therapyCatalog';
 import { useAiChatConsentGate } from '@/app/composables/useAiChatConsentGate';
 
-const CATALOG_HABIT_KEYS = new Set(
+const CATALOG_HABIT_KEYS = new Set<string>(
   HABITS_CATALOG.map((habit) => habit.habitKey)
 );
-const CATALOG_THERAPY_KEYS = new Set(THERAPY_TOPICS.map((topic) => topic.key));
+const CATALOG_THERAPY_KEYS = new Set<string>(
+  THERAPY_TOPICS.map((topic) => topic.key)
+);
 
 export function useEntryChat() {
   const chat = useChatStore();

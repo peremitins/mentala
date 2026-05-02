@@ -16,6 +16,7 @@ import {
   toFeaturePlanRequiredPayload,
 } from '@/server/application/subscriptions/entitlements.service';
 import { getDefaultNotificationTextSource } from '@/shared/utils/notificationTextSource';
+import { DEFAULT_NOTIFICATION_TIMES_PER_DAY } from '@/server/application/notifications/preferences-limits.utils';
 
 /**
  * POST /api/therapy/custom
@@ -65,6 +66,13 @@ export default defineEventHandler(async (event): Promise<TherapyTopicDto> => {
     })
     .returning();
 
+  if (!created) {
+    throw createError({
+      statusCode: 500,
+      message: 'Не удалось создать тему терапии',
+    });
+  }
+
   // Автоматически создаем настройки уведомлений с включенными уведомлениями
   try {
     // Получаем timezone пользователя из существующих preferences или используем fallback
@@ -86,7 +94,7 @@ export default defineEventHandler(async (event): Promise<TherapyTopicDto> => {
       kind: 'therapy',
       entityKey: created.id, // Используем ID для кастомных сущностей (стабильность)
       enabled: true, // Уведомления включены по умолчанию
-      timesPerDay: 3, // Значение по умолчанию
+      timesPerDay: DEFAULT_NOTIFICATION_TIMES_PER_DAY, // Значение по умолчанию
       directness: 'moderate',
       timezone,
       subtype: null,
