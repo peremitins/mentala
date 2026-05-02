@@ -198,6 +198,87 @@
                   />
                 </div>
 
+                <Transition name="slide-down">
+                  <div v-if="mode === 'signup'" key="password-confirm">
+                    <label
+                      class="block text-sm mb-1 text-foreground"
+                      for="auth-password-confirm"
+                    >
+                      Повторите пароль
+                    </label>
+                    <div class="relative">
+                      <Input
+                        id="auth-password-confirm"
+                        v-model="passwordConfirm"
+                        name="password-confirm"
+                        type="password"
+                        autocomplete="new-password"
+                        required
+                        minlength="8"
+                        :show-clear-button="false"
+                        :class="[
+                          'pr-10 transition-colors',
+                          passwordMatchStatus === 'mismatch'
+                            ? 'border-destructive focus-visible:ring-destructive/30'
+                            : passwordMatchStatus === 'match'
+                              ? 'border-green-500 focus-visible:ring-green-500/30'
+                              : '',
+                        ]"
+                      />
+                      <Transition name="fade">
+                        <span
+                          v-if="passwordMatchStatus"
+                          class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                        >
+                          <svg
+                            v-if="passwordMatchStatus === 'match'"
+                            xmlns="http://www.w3.org/2000/svg"
+                            class="w-4 h-4 text-green-500"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2.5"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          >
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                          <svg
+                            v-else
+                            xmlns="http://www.w3.org/2000/svg"
+                            class="w-4 h-4 text-destructive"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2.5"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          >
+                            <line x1="18" y1="6" x2="6" y2="18" />
+                            <line x1="6" y1="6" x2="18" y2="18" />
+                          </svg>
+                        </span>
+                      </Transition>
+                    </div>
+                    <Transition name="fade" mode="out-in">
+                      <p
+                        v-if="passwordMatchStatus === 'mismatch'"
+                        key="mismatch"
+                        class="mt-1 text-xs text-destructive"
+                      >
+                        Пароли не совпадают
+                      </p>
+                      <p
+                        v-else-if="passwordMatchStatus === 'match'"
+                        key="match"
+                        class="mt-1 text-xs text-green-500"
+                      >
+                        Пароли совпадают
+                      </p>
+                    </Transition>
+                  </div>
+                </Transition>
+
                 <div>
                   <label
                     class="block text-sm mb-1 text-foreground"
@@ -269,7 +350,11 @@
 
                 <button
                   type="submit"
-                  :disabled="loading || (mode === 'signup' && !agree)"
+                  :disabled="
+                    loading ||
+                    (mode === 'signup' && !agree) ||
+                    (mode === 'signup' && passwordMatchStatus === 'mismatch')
+                  "
                   class="relative w-full py-2.5 rounded-xl bg-primary text-primary-foreground hover:opacity-90 active:opacity-80 transition font-medium disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   <ButtonLoader v-if="loading" />
@@ -377,7 +462,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick } from 'vue';
+import { ref, computed, watch, onMounted, nextTick } from 'vue';
 import { useCountdown } from '@vueuse/core';
 import { useRuntimeConfig } from '#imports';
 import { useAuthStore } from '@/app/stores/auth';
@@ -411,6 +496,7 @@ const mode = ref<'signin' | 'signup'>('signin');
 const step = ref<'form' | 'verify'>('form');
 const email = ref('');
 const password = ref('');
+const passwordConfirm = ref('');
 const name = ref('');
 const agree = ref(false);
 const marketingConsent = ref(false);
@@ -454,6 +540,15 @@ const termsOfServiceUrl = computed(
 const privacyPolicyUrl = computed(
   () => `${publicAppUrl.value}/legal/privacy-policy-${legalLocale.value}.html`
 );
+
+const passwordMatchStatus = computed<'match' | 'mismatch' | null>(() => {
+  if (!passwordConfirm.value) return null;
+  return password.value === passwordConfirm.value ? 'match' : 'mismatch';
+});
+
+watch(mode, () => {
+  passwordConfirm.value = '';
+});
 
 const brandLogoComponent = computed(() => {
   // Логотип выбирается по текущей локали интерфейса.
@@ -581,8 +676,11 @@ async function submit() {
     return;
   }
   if (mode.value === 'signup' && !agree.value) {
-    // Без согласия с документами регистрацию не продолжаем.
     useToast('Нужно согласие', 'Подтвердите условия и политику', 'warning');
+    return;
+  }
+  if (mode.value === 'signup' && password.value !== passwordConfirm.value) {
+    useToast('Пароли не совпадают', 'Повторите пароль правильно', 'error');
     return;
   }
 
@@ -791,5 +889,21 @@ onMounted(async () => {
 .signin__form-brand-logo-img {
   width: 100%;
   height: 100%;
+}
+
+.slide-down-enter-active,
+.slide-down-leave-active {
+  transition:
+    opacity 0.2s ease,
+    max-height 0.25s ease,
+    margin-top 0.2s ease;
+  overflow: hidden;
+  max-height: 120px;
+}
+.slide-down-enter-from,
+.slide-down-leave-to {
+  opacity: 0;
+  max-height: 0;
+  margin-top: 0;
 }
 </style>
