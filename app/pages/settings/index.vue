@@ -811,6 +811,10 @@ async function handleDeleteAccount() {
   isDeleting.value = true;
 
   try {
+    // Останавливаем медиа и закрываем therapy-сессию ДО удаления,
+    // пока сессия ещё валидна — иначе эти запросы вернут 401.
+    await auth.prepareForAccountDeletion();
+
     const response = await useAPI<{
       ok?: boolean;
       error?: boolean;
@@ -827,7 +831,7 @@ async function handleDeleteAccount() {
 
     if (response.ok && response.loggedOut) {
       useToast('Аккаунт удалён');
-      await auth.logout();
+      await auth.logoutAfterDeletion();
     }
   } catch (error: any) {
     const message =

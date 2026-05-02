@@ -23,41 +23,14 @@
             </DialogDescription>
           </DialogHeader>
 
-          <div class="grid gap-3 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
-            <section class="rounded-2xl border border-white/12 bg-white/7 p-4">
-              <div class="mb-3 text-sm font-medium text-white/95">
-                {{ t('AI_CHAT_CONSENT.DATA_TITLE') }}
-              </div>
-              <ul class="space-y-2 text-sm leading-5 text-slate-200/82">
-                <li class="rounded-xl bg-black/12 px-3 py-2">
-                  {{ t('AI_CHAT_CONSENT.DATA_MESSAGES') }}
-                </li>
-
-                <li class="rounded-xl bg-black/12 px-3 py-2">
-                  {{ t('AI_CHAT_CONSENT.DATA_TECHNICAL') }}
-                </li>
-              </ul>
-            </section>
-
-            <section
-              class="relative rounded-2xl border border-cyan-300/14 bg-cyan-400/8 p-4"
-            >
-              <div class="mb-3 text-sm font-medium text-white/95">
-                {{ t('AI_CHAT_CONSENT.NOTE_TITLE') }}
-              </div>
-              <p class="text-sm leading-6 text-slate-200/82">
-                {{ t('AI_CHAT_CONSENT.NOTE_BODY') }}
-              </p>
-              <button
-                type="button"
-                class="relative z-10 mt-4 inline-flex touch-manipulation select-none text-xs font-medium text-cyan-200 underline transition hover:text-cyan-100"
-                @click.stop.prevent="openPrivacyPolicy"
-                @pointerdown.stop
-              >
-                {{ t('AI_CHAT_CONSENT.PRIVACY_LINK') }}
-              </button>
-            </section>
-          </div>
+          <button
+            type="button"
+            class="inline-flex touch-manipulation select-none text-sm font-medium text-cyan-200 underline transition hover:text-cyan-100"
+            @click.stop.prevent="openPrivacyPolicy"
+            @pointerdown.stop
+          >
+            {{ t('AI_CHAT_CONSENT.PRIVACY_LINK') }}
+          </button>
 
           <DialogFooter
             class="flex-col-reverse gap-3 sm:flex-row sm:justify-end"
