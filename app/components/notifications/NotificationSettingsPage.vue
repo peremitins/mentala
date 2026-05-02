@@ -741,7 +741,7 @@ const defaultTextSource = computed(() =>
 );
 
 const enabled = ref(false);
-const timesPerDay = ref(3);
+const timesPerDay = ref(2);
 const timesPerDaySlider = computed({
   get: () => [timesPerDay.value],
   set: (value) => {
