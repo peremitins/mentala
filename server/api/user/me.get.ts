@@ -28,6 +28,7 @@ export default defineEventHandler(async (event) => {
       user: {
         id: user.id,
         email: user.email,
+        emailOriginal: (user as any)?.emailOriginal ?? null,
         name: user.name,
         // Возвращаем addressing в профиле, чтобы фронт не делал отдельный запрос.
         addressing: resolveAddressing(prefs[0]?.addressing),

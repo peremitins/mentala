@@ -52,6 +52,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const body = bodyResult.data;
+  const emailOriginal = body.email.trim().toLowerCase();
   const email = normalizeEmail(body.email);
   const ip = getClientIp(event) || 'unknown';
   const userAgent = getHeader(event, 'user-agent') || null;
@@ -169,6 +170,7 @@ export default defineEventHandler(async (event) => {
     .values({
       name: body.name ?? null,
       email,
+      emailOriginal: emailOriginal !== email ? emailOriginal : null,
       emailVerifiedAt: null,
       passwordHash: null,
       locale: body.locale ?? null,

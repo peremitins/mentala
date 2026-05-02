@@ -2,8 +2,12 @@ import { defineEventHandler, getRouterParam, createError } from 'h3';
 import { db } from '../../infrastructure/db/client';
 import { users } from '../../infrastructure/db/schema';
 import { eq, sql } from 'drizzle-orm';
-import { getSessionUserWithRole, requireCanEditUser } from '@/server/utils/require-role';
+import {
+  getSessionUserWithRole,
+  requireCanEditUser,
+} from '@/server/utils/require-role';
 import { cleanupAuthArtifactsForUsers } from '@/server/application/auth/user-cleanup';
+import { snapshotDeletedUserStats } from '@/server/application/users/user-stats-snapshot.service';
 
 export default defineEventHandler(async (event) => {
   const user = await getSessionUserWithRole(event);
@@ -51,10 +55,38 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  await cleanupAuthArtifactsForUsers([id]);
-  const deleted = await db.delete(users).where(eq(users.id, id)).returning();
+  const now = new Date();
 
-  if (!deleted.length) {
+  try {
+    await snapshotDeletedUserStats(id);
+  } catch (error) {
+    console.error(
+      `[AdminDelete] Failed to create stats snapshot for user ${id}:`,
+      error
+    );
+  }
+
+  await cleanupAuthArtifactsForUsers([id]);
+
+  // Анонимизация PII вместо hard delete — сохраняем финансовую историю
+  const anonymized = await db
+    .update(users)
+    .set({
+      email: `deleted_${id}@deleted.mentala`,
+      emailOriginal: null,
+      name: null,
+      passwordHash: null,
+      avatarUrl: null,
+      lastLoginIp: null,
+      acceptanceIp: null,
+      acceptanceUserAgent: null,
+      deletionRequestedAt: now,
+      deletedAt: now,
+    })
+    .where(eq(users.id, id))
+    .returning({ id: users.id });
+
+  if (!anonymized.length) {
     throw createError({ statusCode: 404, statusMessage: 'Not found' });
   }
 

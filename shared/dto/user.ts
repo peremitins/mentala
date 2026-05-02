@@ -32,6 +32,7 @@ export const UserMeDto = z.object({
     .object({
       id: z.number(),
       email: z.string().email(),
+      emailOriginal: z.string().nullable().optional(),
       name: z.string().nullable(),
       addressing: z.enum(['informal', 'formal']).optional(),
       gender: z.string().nullable().optional(),
