@@ -363,13 +363,64 @@
                       buttonVariants({ variant: 'destructive' }),
                       'relative',
                     ]"
+                    @click="openDeleteConfirmDialog"
+                  >
+                    Да, удалить аккаунт
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+
+            <!-- Вторая модалка: детальное подтверждение удаления -->
+            <AlertDialog
+              :open="showDeleteConfirmDialog"
+              @update:open="showDeleteConfirmDialog = $event"
+            >
+              <AlertDialogContent class="glass-deep">
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Это действие необратимо</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Все данные вашего аккаунта будут удалены безвозвратно.
+                    Восстановить их после удаления невозможно.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel :disabled="isDeleting">
+                    Отмена
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    :class="[
+                      buttonVariants({ variant: 'destructive' }),
+                      'relative',
+                    ]"
                     :disabled="isDeleting"
                     @click="handleDeleteAccount"
                   >
                     <ButtonLoader v-if="isDeleting" />
                     <span :class="isDeleting ? 'invisible' : ''">
-                      Да, удалить аккаунт
+                      Удалить навсегда
                     </span>
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+
+            <!-- Модалка подтверждения выхода -->
+            <AlertDialog
+              :open="showLogoutDialog"
+              @update:open="showLogoutDialog = $event"
+            >
+              <AlertDialogContent class="glass-deep">
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Выйти из аккаунта?</AlertDialogTitle>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Отмена</AlertDialogCancel>
+                  <AlertDialogAction
+                    :class="buttonVariants({ variant: 'secondary' })"
+                    @click="handleLogout"
+                  >
+                    Выйти
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
@@ -378,7 +429,7 @@
             <button
               type="button"
               class="whitespace-nowrap"
-              @click="handleLogout"
+              @click="showLogoutDialog = true"
             >
               <span class="text-sm font-medium">Выйти из аккаунта</span>
             </button>
@@ -459,6 +510,8 @@ const preferences = ref<UserPreferencesDto | null>(null);
 const loadingUser = ref(true);
 const loadingPreferences = ref(true);
 const showDeleteDialog = ref(false);
+const showDeleteConfirmDialog = ref(false);
+const showLogoutDialog = ref(false);
 const isDeleting = ref(false);
 const referralPanelRefreshKey = ref(0);
 const marketingConsent = ref(false);
@@ -744,6 +797,11 @@ async function copyUserId() {
   await copy(String(auth.user.id));
 }
 
+function openDeleteConfirmDialog() {
+  showDeleteDialog.value = false;
+  showDeleteConfirmDialog.value = true;
+}
+
 async function handleLogout() {
   await auth.logout();
 }
@@ -780,6 +838,7 @@ async function handleDeleteAccount() {
   } finally {
     isDeleting.value = false;
     showDeleteDialog.value = false;
+    showDeleteConfirmDialog.value = false;
   }
 }
 </script>
