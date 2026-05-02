@@ -916,6 +916,52 @@ export const useAuthStore = defineStore('auth', {
       this.isLoggedIn = false;
     },
 
+    /**
+     * Подготовка к удалению аккаунта — вызывать ДО запроса /api/user/delete,
+     * пока сессия ещё валидна.
+     *
+     * Останавливает медиа/TTS/микрофон и корректно закрывает therapy-сессию
+     * (чтобы сработал биллинговый stop-таймер).
+     * Серверный delete.post.ts сам удаляет все токены и отзывает сессии —
+     * повторно вызывать logout/unregister-token не нужно.
+     */
+    async prepareForAccountDeletion() {
+      try {
+        await this._stopAllActiveRequests();
+        await this._endChatSessionBeforeLogout();
+      } catch (error) {
+        console.error('[Auth Store] prepareForAccountDeletion error:', error);
+      }
+    },
+
+    /**
+     * Локальный logout без серверных запросов — вызывать ПОСЛЕ успешного
+     * /api/user/delete, когда сессия уже уничтожена на сервере.
+     *
+     * Серверный delete.post.ts делает:
+     *   - revokeAllUserSessions  → /api/auth/logout не нужен
+     *   - удаляет user_devices   → /api/notifications/unregister-token не нужен
+     * Поэтому здесь только локальная очистка.
+     */
+    async logoutAfterDeletion() {
+      this.isLoggingOut = true;
+      try {
+        this._resetAuthState();
+        this._resetAllStores();
+        this._clearSessionToken();
+        await navigateTo('/auth');
+      } catch (error) {
+        console.error('[Auth Store] logoutAfterDeletion error:', error);
+        try {
+          await navigateTo('/auth');
+        } catch {
+          // ignore
+        }
+      } finally {
+        this.isLoggingOut = false;
+      }
+    },
+
     async logout() {
       this.isLoggingOut = true;
       let logoutRequest: Promise<void> | null = null;
