@@ -1,47 +1,22 @@
 import { setHeader } from 'h3';
-import { eq } from 'drizzle-orm';
-import { db } from '@/server/infrastructure/db/client';
-import { landingConfig } from '@/server/infrastructure/db/schema';
 import type { LandingConfigDto } from '@/shared/dto/landing';
 
 const DEFAULT_CTA_URL = 'https://my.mentala.app/auth';
+// Эндпоинт оставлен ради старых закэшированных HTML-лендингов: они могут
+// дёргать /api/landing/config, чтобы переключить кнопку на released-режим.
+// Конфигурируемого waitlist больше нет — всегда отвечаем «релиз состоялся».
+const RELEASE_DATE = new Date('2026-02-16T00:00:00.000Z').toISOString();
 
-export default defineEventHandler(async (event): Promise<LandingConfigDto> => {
-  // Единая кэш-политика release-флага для SSR+SWR.
+export default defineEventHandler((event): LandingConfigDto => {
   setHeader(
     event,
     'Cache-Control',
-    'public, max-age=60, stale-while-revalidate=120'
+    'public, max-age=300, stale-while-revalidate=600'
   );
 
-  let rows = await db
-    .select()
-    .from(landingConfig)
-    .where(eq(landingConfig.id, 1))
-    .limit(1);
-
-  if (!rows.length) {
-    await db
-      .insert(landingConfig)
-      .values({
-        id: 1,
-        isReleased: false,
-        ctaUrl: DEFAULT_CTA_URL,
-      })
-      .onConflictDoNothing();
-
-    rows = await db
-      .select()
-      .from(landingConfig)
-      .where(eq(landingConfig.id, 1))
-      .limit(1);
-  }
-
-  const row = rows[0];
-
   return {
-    isReleased: row?.isReleased ?? false,
-    ctaUrl: row?.ctaUrl || DEFAULT_CTA_URL,
-    updatedAt: row?.updatedAt?.toISOString() || new Date().toISOString(),
+    isReleased: true,
+    ctaUrl: DEFAULT_CTA_URL,
+    updatedAt: RELEASE_DATE,
   };
 });

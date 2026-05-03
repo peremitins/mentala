@@ -105,6 +105,19 @@ export function useBreathPracticePhaseAudio() {
     if (!path) return '';
     if (isHttpUrl(path)) return path;
 
+    // iOS native: используем bundle-файлы для дыхательных практик. Файлы маленькие
+    // и УЖЕ лежат в App.app/public, грузить их с CDN нет смысла. Серверный AVPlayer
+    // на prod не поддерживает Range requests, поэтому AVPlayerLooper для cue с loop
+    // не может работать с HTTPS-стримом. Патч AudioSource.swift перехватывает
+    // capacitor://localhost/* и резолвит в file:///<bundle>/public/* для AVPlayer.
+    if (
+      Capacitor.isNativePlatform() &&
+      getNativePlatform() === 'ios' &&
+      path.startsWith('/')
+    ) {
+      return `capacitor://localhost${path}`;
+    }
+
     const config = useRuntimeConfig();
     const publicConfig = config?.public;
     const origin =
