@@ -25,7 +25,7 @@ def capacitor_pods
   pod 'CapacitorSplashScreen', :path => '../../node_modules/.pnpm/@capacitor+splash-screen@7.0.3_@capacitor+core@7.4.3/node_modules/@capacitor/splash-screen'
   pod 'CapacitorStatusBar', :path => '../../node_modules/.pnpm/@capacitor+status-bar@7.0.3_@capacitor+core@7.4.3/node_modules/@capacitor/status-bar'
   pod 'CapgoCapacitorSocialLogin', :path => '../../node_modules/.pnpm/@capgo+capacitor-social-login@7.20.0_patch_hash=494f63e7b7f9e31eb1bfe9f162a2ac49a717948_09f6fb5a1db32fd44b4bf5e71e6fb80f/node_modules/@capgo/capacitor-social-login'
-  pod 'MediagridCapacitorNativeAudio', :path => '../../node_modules/.pnpm/@mediagrid+capacitor-native-audio@2.3.2_patch_hash=4bc2c25b48894d417cf89e3b3a800acb5a24_4ad0ca218fac7cdc2cafef4a7b717307/node_modules/@mediagrid/capacitor-native-audio'
+  pod 'MediagridCapacitorNativeAudio', :path => '../../node_modules/.pnpm/@mediagrid+capacitor-native-audio@2.3.2_patch_hash=e7c60006e1c64474089b0d09fe9525125be4_f85347b0a8ccd856bda6926750b34c17/node_modules/@mediagrid/capacitor-native-audio'
   pod 'CapacitorNativeSettings', :path => '../../node_modules/.pnpm/capacitor-native-settings@7.0.2_@capacitor+core@7.4.3/node_modules/capacitor-native-settings'
 end
 
