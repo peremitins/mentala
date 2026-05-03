@@ -41,7 +41,7 @@ const CYRILLIC_SURNAME_SUFFIXES = [
   'ын',
   'ова',
   'ева',
-  'ина',
+  // 'ина' намеренно исключён: совпадает с популярными женскими именами (Марина, Ирина, Арина, Полина и др.)
   'ына',
   'ский',
   'ская',
@@ -540,25 +540,20 @@ export function extractGreetingName(rawName?: string | null): string | null {
     return null;
   }
 
-  let candidate = tokens[0];
-  if (tokens.length >= 2 && looksLikeSurname(tokens[0])) {
-    candidate = tokens[1];
+  // Ищем первый токен, который проходит базовую валидацию и не похож на фамилию.
+  // Это позволяет корректно обрабатывать любой порядок: «Имя Фамилия»,
+  // «Фамилия Имя», «Фамилия Имя Отчество», и т.д.
+  for (const token of tokens) {
+    const lettersOnly = token.replace(/-/g, '');
+    if (lettersOnly.length < 2 || lettersOnly.length > 32) continue;
+    if (!NAME_VOWELS.test(token)) continue;
+    if (STOP_WORDS.has(token.toLowerCase())) continue;
+    if (looksLikeSurname(token)) continue;
+    return formatNameCase(token);
   }
 
-  const lettersOnly = candidate.replace(/-/g, '');
-  if (lettersOnly.length < 2 || lettersOnly.length > 32) {
-    return null;
-  }
-
-  if (!NAME_VOWELS.test(candidate)) {
-    return null;
-  }
-
-  if (STOP_WORDS.has(candidate.toLowerCase())) {
-    return null;
-  }
-
-  return formatNameCase(candidate);
+  // Все токены похожи на фамилии или не прошли валидацию — не обращаемся по имени.
+  return null;
 }
 
 export function resolveUserTimezone(rawTimezone?: string | null): string {

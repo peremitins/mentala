@@ -21,20 +21,20 @@
 
 ## 2. Реалии проекта (что уже есть и переиспользуется)
 
-| Что | Где | Статус |
-|---|---|---|
-| Список медитаций | `server/api/meditations/index.get.ts`, схема `meditationTracks` (`server/infrastructure/db/schema.ts`) | Используем как есть, не меняем формат ответа |
-| Карточка/плеер/избранное | `app/components/meditations/*`, `app/pages/meditations/*` | Переиспользуем для персональных треков |
-| Storage | Yandex Object Storage + CDN `media.mentala.app` (`server/infrastructure/storage/s3-client.ts`) | Готов |
-| LLM | OpenAI `gpt-4o-mini` через `server/application/llm.service.ts` | Используем для генерации сценария |
-| Очереди | BullMQ + воркеры (`server/plugins/bullmq-workers.ts`, `ai-generation.service.ts` как пример) | Создаём новую очередь `personal-meditation-generation` + отдельный воркер |
-| Crisis-protocol | `server/application/chat/crisis-protocol.service.ts` (RU/EN regex, уровни `none/crisis_watch/crisis_high`) | Переиспользуем как первый слой safety, не пишем заново |
-| Entitlements / paywall | `server/application/subscriptions/entitlements.service.ts`, `featureAccessPolicies` (DB), `useEntitlements()` (фронт), `FeaturePaywallModal.vue` | Регистрируем новый `featureKey = personal_meditation` |
-| Подписки | `subscription_plans`: PRO 399 ₽/мес, Premium 899 ₽/мес | Финмодель строим на этих ценах |
-| Push-уведомления | Существующая инфраструктура `server/application/notifications/*` | Используем для пуша «медитация готова» |
-| **Yandex SpeechKit** | **НЕ интегрирован.** Есть только Yandex GPT и OpenAI TTS | **Нужен новый infrastructure-адаптер `YandexSpeechKitTtsAdapter`** |
-| **ffmpeg** | **Не используется в проекте.** Нет в `package.json`, нет в среде | **Нужен `ffmpeg-static` + новая зависимость `fluent-ffmpeg`**, отдельный воркер с rate-limit |
-| TTS-провайдер выбран | — | **Yandex SpeechKit** (lera для женского, ermil/filipp для мужского — см. §6) |
+| Что                      | Где                                                                                                                                              | Статус                                                                                       |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| Список медитаций         | `server/api/meditations/index.get.ts`, схема `meditationTracks` (`server/infrastructure/db/schema.ts`)                                           | Используем как есть, не меняем формат ответа                                                 |
+| Карточка/плеер/избранное | `app/components/meditations/*`, `app/pages/meditations/*`                                                                                        | Переиспользуем для персональных треков                                                       |
+| Storage                  | Yandex Object Storage + CDN `media.mentala.app` (`server/infrastructure/storage/s3-client.ts`)                                                   | Готов                                                                                        |
+| LLM                      | OpenAI `gpt-4o-mini` через `server/application/llm.service.ts`                                                                                   | Используем для генерации сценария                                                            |
+| Очереди                  | BullMQ + воркеры (`server/plugins/bullmq-workers.ts`, `ai-generation.service.ts` как пример)                                                     | Создаём новую очередь `personal-meditation-generation` + отдельный воркер                    |
+| Crisis-protocol          | `server/application/chat/crisis-protocol.service.ts` (RU/EN regex, уровни `none/crisis_watch/crisis_high`)                                       | Переиспользуем как первый слой safety, не пишем заново                                       |
+| Entitlements / paywall   | `server/application/subscriptions/entitlements.service.ts`, `featureAccessPolicies` (DB), `useEntitlements()` (фронт), `FeaturePaywallModal.vue` | Регистрируем новый `featureKey = personal_meditation`                                        |
+| Подписки                 | `subscription_plans`: PRO 399 ₽/мес, Premium 899 ₽/мес                                                                                           | Финмодель строим на этих ценах                                                               |
+| Push-уведомления         | Существующая инфраструктура `server/application/notifications/*`                                                                                 | Используем для пуша «медитация готова»                                                       |
+| **Yandex SpeechKit**     | **НЕ интегрирован.** Есть только Yandex GPT и OpenAI TTS                                                                                         | **Нужен новый infrastructure-адаптер `YandexSpeechKitTtsAdapter`**                           |
+| **ffmpeg**               | **Не используется в проекте.** Нет в `package.json`, нет в среде                                                                                 | **Нужен `ffmpeg-static` + новая зависимость `fluent-ffmpeg`**, отдельный воркер с rate-limit |
+| TTS-провайдер выбран     | —                                                                                                                                                | **Yandex SpeechKit** (lera для женского, ermil/filipp для мужского — см. §6)                 |
 
 ---
 
@@ -76,27 +76,33 @@ Mentala создаст медитацию с голосом и фоном под
 ### Поля формы (последовательность с макета)
 
 1. **Название практики** (обязательное, до 60 символов)
+
    - Placeholder: `Например: «Мягкое расслабление перед сном»`
    - Подпись: `Будет отображаться на карточке`
    - Счётчик `0/60`
    - **Важно:** это поле сохраняется в `personal_meditations.title` и **рендерится в общем списке** через тот же `MeditationCard`-компонент. Структура DTO унифицирована с `MeditationTrackDto` (см. §9).
 
 2. **Что вы сейчас чувствуете?** (множественный выбор, 1–3)
+
    - Подпись: `Выберите 1–3 варианта`
    - Чипы: `Тревога`, `Напряжение`, `Усталость`, `Раздражение`, `Поток мыслей`, `Не могу уснуть`, `Грусть`, `Нет сил`, `Хочу собраться`
 
 3. **Что хотите получить после практики?** (одиночный выбор)
+
    - Чипы: `Успокоиться`, `Расслабиться`, `Заснуть`, `Собраться`, `Отпустить мысли`, `Вернуться в тело`, `Снизить напряжение`, `Мягко поддержать себя`
 
 4. **Длительность** (одиночный выбор)
+
    - `2 мин`, `5 мин`, `10 мин Premium`
    - На PRO вариант `10 мин` визуально доступен с `💎 Premium` индикатором; при тапе — стандартная `FeaturePaywallModal` с переходом на апгрейд
 
 5. **Голос** (одиночный выбор)
+
    - `Женский` (по умолчанию, Yandex SpeechKit voice = `lera`)
-   - `Мужской` (Yandex SpeechKit voice = `filipp` — спокойный, тёплый; вариант `ermil` рассмотреть на этапе подбора голоса QA)
+   - `Мужской` (Yandex SpeechKit voice = `ermil`)
 
 6. **Фон** (одиночный выбор)
+
    - `Без фона`, `Дождь`, `Лес`, `Море`, `Камин`
    - Файлы фонов лежат в Yandex Object Storage по фиксированным ключам, см. §13
 
@@ -236,13 +242,31 @@ worker (отдельный процесс/воркер с rate-limit):
 import { z } from 'zod';
 export const personalMeditationCreateSchema = z.object({
   title: z.string().trim().min(1).max(60),
-  state: z.array(z.enum([
-    'anxiety', 'tension', 'fatigue', 'irritation', 'racing_thoughts',
-    'cant_sleep', 'sadness', 'no_energy', 'gather_focus',
-  ])).min(1).max(3),
+  state: z
+    .array(
+      z.enum([
+        'anxiety',
+        'tension',
+        'fatigue',
+        'irritation',
+        'racing_thoughts',
+        'cant_sleep',
+        'sadness',
+        'no_energy',
+        'gather_focus',
+      ])
+    )
+    .min(1)
+    .max(3),
   goal: z.enum([
-    'calm_down', 'relax', 'fall_asleep', 'gather', 'release_thoughts',
-    'return_to_body', 'reduce_tension', 'self_support',
+    'calm_down',
+    'relax',
+    'fall_asleep',
+    'gather',
+    'release_thoughts',
+    'return_to_body',
+    'reduce_tension',
+    'self_support',
   ]),
   durationSeconds: z.union([z.literal(120), z.literal(300), z.literal(600)]),
   voice: z.enum(['female', 'male']),
@@ -296,6 +320,7 @@ user_context: """
 `POST /api/meditations/personal`
 
 Request:
+
 ```json
 {
   "title": "Мягкое расслабление перед сном",
@@ -309,6 +334,7 @@ Request:
 ```
 
 Response (201):
+
 ```json
 { "id": "med_pers_abc123", "status": "queued" }
 ```
@@ -318,11 +344,18 @@ Response (201):
 `GET /api/meditations/personal/{id}`
 
 Во время генерации:
+
 ```json
-{ "id": "med_pers_abc123", "status": "processing", "progress": 45, "title": "Мягкое расслабление перед сном" }
+{
+  "id": "med_pers_abc123",
+  "status": "processing",
+  "progress": 45,
+  "title": "Мягкое расслабление перед сном"
+}
 ```
 
 Готовая (DTO **унифицирован с `MeditationTrackDto`** — это критично, чтобы фронт рендерил персональные треки тем же `MeditationCard`/плеером):
+
 ```json
 {
   "id": "med_pers_abc123",
@@ -361,7 +394,13 @@ Response (201):
 ### Формат ошибок (стандартный для проекта)
 
 ```json
-{ "error": { "code": "E_LIMIT_REACHED", "message": "Достигнут месячный лимит", "details": { "limit": 10, "used": 10 } } }
+{
+  "error": {
+    "code": "E_LIMIT_REACHED",
+    "message": "Достигнут месячный лимит",
+    "details": { "limit": 10, "used": 10 }
+  }
+}
 ```
 
 Коды: стандартные `E_VALIDATION`, `E_AUTH`, `E_FORBIDDEN`, `E_RATE`, `E_NOT_FOUND`, `E_UPSTREAM`, `E_UNKNOWN` + новый `E_LIMIT_REACHED` (для месячного лимита).
@@ -465,7 +504,10 @@ user_context: """
 {
   "title": "Мягкое расслабление перед сном",
   "segments": [
-    { "text": "Устройтесь удобно. Можно закрыть глаза или просто смягчить взгляд.", "pauseAfterSeconds": 4 },
+    {
+      "text": "Устройтесь удобно. Можно закрыть глаза или просто смягчить взгляд.",
+      "pauseAfterSeconds": 4
+    },
     { "text": "Сделайте спокойный вдох.", "pauseAfterSeconds": 5 },
     { "text": "И медленный выдох.", "pauseAfterSeconds": 7 }
   ]
@@ -477,10 +519,10 @@ user_context: """
 ### Требования к сегментам
 
 | Длительность | Сегментов | `pauseAfterSeconds` |
-|---|---|---|
-| 2 мин | 8–14 | 3–8 |
-| 5 мин | 18–32 | 3–12 |
-| 10 мин | 35–60 | 4–15 |
+| ------------ | --------- | ------------------- |
+| 2 мин        | 8–14      | 3–8                 |
+| 5 мин        | 18–32     | 3–12                |
+| 10 мин       | 35–60     | 4–15                |
 
 - Каждый `text` ≤ 220 символов (укладывается в один SpeechKit-запрос до 250 символов).
 - Не использовать SSML, markdown, эмодзи.
@@ -503,7 +545,7 @@ user_context: """
 
 - API: SpeechKit Synthesis **v3** (`tts.api.cloud.yandex.net:443`, gRPC).
 - Лимит обычного запроса: 250 символов / 24 секунды → озвучиваем **по сегменту**, не одной строкой.
-- Голос: `lera` (female, default), `filipp` (male) — оба `general` voices, нейтрально-спокойные.
+- Голос: `lera` (female, default), `ermil` (male) — оба `general` voices, нейтрально-спокойные.
 - Параметры: `speed=1.0`, `format=oggOpus`/`mp3`, `sampleRate=48000`. На выходе сохраняем в WAV/MP3.
 - Авторизация: IAM-token из service account ключа, кешируется в Redis с TTL 11 часов (рекомендация Яндекса).
 - НЕ используем SSML с `<break>` — паузы делает ffmpeg (это ключевое архитектурное решение, см. §13).
@@ -514,7 +556,11 @@ user_context: """
 
 ```ts
 interface TtsPort {
-  synthesize(input: { text: string; voice: 'lera' | 'filipp'; outputPath: string }): Promise<{ durationSeconds: number; sizeBytes: number }>;
+  synthesize(input: {
+    text: string;
+    voice: 'lera' | 'ermil';
+    outputPath: string;
+  }): Promise<{ durationSeconds: number; sizeBytes: number }>;
 }
 ```
 
@@ -531,6 +577,7 @@ interface TtsPort {
 ### Зависимости
 
 Добавить в `package.json`:
+
 - `ffmpeg-static` — кросс-платформенный бинарь;
 - `fluent-ffmpeg` — node-обёртка.
 
@@ -559,6 +606,7 @@ sumVoiceSeconds + sumPauseSeconds + 3s (intro fade-in) + 5s (outro fade-out)
 ```
 
 Допустимый диапазон относительно запрошенной:
+
 - 2 мин: 1:45 – 2:20
 - 5 мин: 4:30 – 5:40
 - 10 мин: 9:00 – 11:00
@@ -571,11 +619,11 @@ sumVoiceSeconds + sumPauseSeconds + 3s (intro fade-in) + 5s (outro fade-out)
 
 ### Доступность
 
-| Тариф | Доступ | Длительности | Лимит/мес |
-|---|---|---|---|
-| Free | 🚫 | — | — (см. поведение ниже) |
-| PRO 399 ₽/мес | ✅ | 2, 5 мин | **10 практик** |
-| Premium 899 ₽/мес | ✅ | 2, 5, **10 мин** | **20 практик** |
+| Тариф             | Доступ | Длительности     | Лимит/мес              |
+| ----------------- | ------ | ---------------- | ---------------------- |
+| Free              | 🚫     | —                | — (см. поведение ниже) |
+| PRO 399 ₽/мес     | ✅     | 2, 5 мин         | **10 практик**         |
+| Premium 899 ₽/мес | ✅     | 2, 5, **10 мин** | **20 практик**         |
 
 ### Поведение Free
 
@@ -589,7 +637,7 @@ sumVoiceSeconds + sumPauseSeconds + 3s (intro fade-in) + 5s (outro fade-out)
 
 ```
 Заголовок: Достигнут лимит на этот месяц
-Текст: На вашем тарифе можно создавать до {limit} персональных медитаций в месяц. 
+Текст: На вашем тарифе можно создавать до {limit} персональных медитаций в месяц.
 Чтобы создать новую, удалите ненужные из вашего списка или попробуйте в следующем месяце.
 Кнопки: [ К списку медитаций ]   [ Закрыть ]
 ```
@@ -636,11 +684,11 @@ Push-уведомление с диплинком `mentala://meditations/persona
 
 ### Сводная таблица поведения
 
-| Клиент | Видит блок «Персональная» | Может создавать | Видит свои персональные в списке | Получает push «готова» |
-|---|---|---|---|---|
-| Web (последний) | ✅ | ✅ | ✅ | ❌ (нет push на web) |
-| iOS/Android **новый** билд | ✅ | ✅ | ✅ | ✅ |
-| iOS/Android **старый** билд | ❌ (UI не обновлён) | ❌ | ❌ | ❌ |
+| Клиент                      | Видит блок «Персональная» | Может создавать | Видит свои персональные в списке | Получает push «готова» |
+| --------------------------- | ------------------------- | --------------- | -------------------------------- | ---------------------- |
+| Web (последний)             | ✅                        | ✅              | ✅                               | ❌ (нет push на web)   |
+| iOS/Android **новый** билд  | ✅                        | ✅              | ✅                               | ✅                     |
+| iOS/Android **старый** билд | ❌ (UI не обновлён)       | ❌              | ❌                               | ❌                     |
 
 Старый билд продолжает работать с курируемыми треками без любых отличий — функция для них **просто не существует**, и это не баг, а корректное поведение во время раскатки.
 
@@ -650,28 +698,28 @@ Push-уведомление с диплинком `mentala://meditations/persona
 
 ### Себестоимость одной практики
 
-| Длительность | Голос (симв.) | SpeechKit (₽) | LLM gpt-4o-mini (₽) | Storage+CDN (₽) | Итого (₽) |
-|---|---|---|---|---|---|
-| 2 мин | 500–900 | 0,42–0,76 | ~0,05 | ~0,03 | **0,5–0,9** |
-| 5 мин | 1200–2200 | 1,02–1,86 | ~0,10 | ~0,05 | **1,2–2,0** |
-| 10 мин | 2500–4500 | 2,12–3,81 | ~0,15 | ~0,10 | **2,4–4,1** |
+| Длительность | Голос (симв.) | SpeechKit (₽) | LLM gpt-4o-mini (₽) | Storage+CDN (₽) | Итого (₽)   |
+| ------------ | ------------- | ------------- | ------------------- | --------------- | ----------- |
+| 2 мин        | 500–900       | 0,42–0,76     | ~0,05               | ~0,03           | **0,5–0,9** |
+| 5 мин        | 1200–2200     | 1,02–1,86     | ~0,10               | ~0,05           | **1,2–2,0** |
+| 10 мин       | 2500–4500     | 2,12–3,81     | ~0,15               | ~0,10           | **2,4–4,1** |
 
 Курс/входные данные: SpeechKit — `0,000846 ₽/символ` (general voices, актуальный прайс 2026), LLM — `gpt-4o-mini` ~$0.15/M input, $0.6/M output, Yandex Object Storage Standard ~1,84 ₽/ГБ/мес, средний размер mp3 5 мин/128 kbps ≈ 5 МБ.
 
 ### Worst-case на пользователя в месяц
 
-| Тариф | Лимит/мес | Worst-case (10-мин на Premium / 5-мин на PRO) | % от выручки |
-|---|---|---|---|
-| PRO 399 ₽ | 10 × 5 мин | 10 × 2,0 = **20 ₽** | **5,0%** |
-| Premium 899 ₽ | 20 × 10 мин | 20 × 4,1 = **82 ₽** | **9,1%** |
+| Тариф         | Лимит/мес   | Worst-case (10-мин на Premium / 5-мин на PRO) | % от выручки |
+| ------------- | ----------- | --------------------------------------------- | ------------ |
+| PRO 399 ₽     | 10 × 5 мин  | 10 × 2,0 = **20 ₽**                           | **5,0%**     |
+| Premium 899 ₽ | 20 × 10 мин | 20 × 4,1 = **82 ₽**                           | **9,1%**     |
 
 ### На 1000 практик (ориентир для прогнозирования OPEX)
 
-| Длительность | SpeechKit | LLM | Storage (5 ГБ ≈ 9 ₽/мес) | CDN (трафик пренебрежимо) | Итого |
-|---|---|---|---|---|---|
-| 1000 × 2 мин | 420–760 | 50 | 4 | <10 | ~480–820 ₽ |
-| 1000 × 5 мин | 1020–1860 | 100 | 9 | <10 | ~1130–1980 ₽ |
-| 1000 × 10 мин | 2120–3810 | 150 | 18 | <10 | ~2300–3990 ₽ |
+| Длительность  | SpeechKit | LLM | Storage (5 ГБ ≈ 9 ₽/мес) | CDN (трафик пренебрежимо) | Итого        |
+| ------------- | --------- | --- | ------------------------ | ------------------------- | ------------ |
+| 1000 × 2 мин  | 420–760   | 50  | 4                        | <10                       | ~480–820 ₽   |
+| 1000 × 5 мин  | 1020–1860 | 100 | 9                        | <10                       | ~1130–1980 ₽ |
+| 1000 × 10 мин | 2120–3810 | 150 | 18                       | <10                       | ~2300–3990 ₽ |
 
 ### Вывод
 
@@ -685,14 +733,14 @@ Push-уведомление с диплинком `mentala://meditations/persona
 
 ## 17. Поведение при ошибках
 
-| Этап | UI |
-|---|---|
-| safety_rejected (crisis_high) | Карточка с переходом в «Быструю помощь» |
-| LLM-сценарий невалиден после retry | `Не получилось создать сценарий. Попробуйте упростить запрос или повторить позже.` |
-| SpeechKit недоступен | `Не удалось озвучить практику. Мы сохранили сценарий — попробуйте ещё раз позже.` (job можно re-run) |
-| ffmpeg/сборка | `Не удалось собрать аудио. Попробуйте позже.` |
-| Превышен месячный лимит | Модалка из §14 |
-| Network/timeout на фронте | Стандартный snackbar + retry-кнопка |
+| Этап                               | UI                                                                                                   |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| safety_rejected (crisis_high)      | Карточка с переходом в «Быструю помощь»                                                              |
+| LLM-сценарий невалиден после retry | `Не получилось создать сценарий. Попробуйте упростить запрос или повторить позже.`                   |
+| SpeechKit недоступен               | `Не удалось озвучить практику. Мы сохранили сценарий — попробуйте ещё раз позже.` (job можно re-run) |
+| ffmpeg/сборка                      | `Не удалось собрать аудио. Попробуйте позже.`                                                        |
+| Превышен месячный лимит            | Модалка из §14                                                                                       |
+| Network/timeout на фронте          | Стандартный snackbar + retry-кнопка                                                                  |
 
 ---
 
@@ -766,11 +814,10 @@ Push-уведомление с диплинком `mentala://meditations/persona
 
 ## 21. Открытые вопросы (требуют решения до старта)
 
-1. **Голос мужской по умолчанию**: `filipp` или `ermil`? Нужен короткий blind-test на двух одинаковых сценариях. До решения — заглушка `filipp`.
-2. **Cover-image** для персональных треков: одна общая (как в макете — серый градиент с искрой), или генерировать процедурно по `background`? MVP — одна общая.
+1. **Голос мужской по умолчанию**: `ermil`
+2. **Cover-image** Подбирать из уже готовых, эти картинки есть в медитациях. Например: выбрали "камин" - тогда cover-image будет "fireplace-warmth.webp" и так далее.
 3. **Min-supported-build для пуша «готова»** — фиксируем в константе или вытаскиваем в `app_version_policy`? Предложение: константа в коде сервиса, без админки.
-4. **Куда падают ошибки воркера** — текущий паттерн логирования (`pino`)? Алёртинг? На MVP достаточно логов + Sentry, если он подключён.
-5. **Soft delete vs hard delete** — пока в схеме есть `deleted_at`, но `DELETE`-handler делает hard remove S3 и hard remove row. Уточнить — нужен ли soft delete для recovery? MVP — hard delete.
+4. **Куда падают ошибки воркера** — в процессе выполнения предложить лучший вариант.
 
 ---
 
