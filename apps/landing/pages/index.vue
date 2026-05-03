@@ -75,7 +75,7 @@
           </Button>
 
           <Button class="sm:hidden" size="sm" @click="openPrimaryCTA">
-            {{ primaryCtaTextMobile }}
+            {{ primaryCtaText }}
           </Button>
         </div>
       </div>
@@ -807,228 +807,21 @@
       />
     </div>
 
-    <Transition
-      enter-active-class="transition duration-250 ease-out"
-      enter-from-class="opacity-0"
-      enter-to-class="opacity-100"
-      leave-active-class="transition duration-200 ease-in"
-      leave-from-class="opacity-100"
-      leave-to-class="opacity-0"
-    >
-      <div
-        v-if="waitlistOpen"
-        class="fixed inset-0 z-[90] p-3 sm:p-6 grid place-items-center"
-      >
-        <button
-          class="absolute inset-0 bg-black/70 backdrop-blur-sm"
-          type="button"
-          :aria-label="t('LANDING.WAITLIST.CLOSE_ARIA')"
-          @click="closeWaitlist"
-        />
-
-        <section
-          class="relative w-full max-w-xl glass-panel rounded-3xl p-6 sm:p-7 border-white/30"
-        >
-          <button
-            class="absolute right-4 top-4 rounded-lg px-2 py-1 text-white/70 hover:bg-white/10 hover:text-white"
-            type="button"
-            :aria-label="t('LANDING.WAITLIST.CLOSE_ARIA')"
-            @click="closeWaitlist"
-          >
-            ✕
-          </button>
-
-          <h3 class="font-display text-2xl font-bold mb-2">
-            {{ t('LANDING.WAITLIST.TITLE') }}
-          </h3>
-          <p class="text-sm text-white/72 mb-6">
-            {{ t('LANDING.WAITLIST.SUBTITLE') }}
-          </p>
-
-          <form class="space-y-4" @submit.prevent="submitLead">
-            <div class="space-y-1.5">
-              <label class="text-xs text-white/70" for="lead-name">
-                {{ t('LANDING.WAITLIST.NAME_LABEL') }}
-              </label>
-              <Input
-                id="lead-name"
-                v-model="leadForm.name"
-                :placeholder="t('LANDING.WAITLIST.NAME_PLACEHOLDER')"
-                autocomplete="name"
-                required
-              />
-            </div>
-
-            <div class="space-y-1.5">
-              <label class="text-xs text-white/70" for="lead-email">
-                {{ t('LANDING.WAITLIST.EMAIL_LABEL') }}
-              </label>
-              <Input
-                id="lead-email"
-                v-model="leadForm.email"
-                type="email"
-                :placeholder="t('LANDING.WAITLIST.EMAIL_PLACEHOLDER')"
-                autocomplete="email"
-                required
-              />
-            </div>
-
-            <div class="space-y-1.5">
-              <label class="text-xs text-white/70" for="lead-goal">
-                {{ t('LANDING.WAITLIST.GOALS_LABEL') }}
-              </label>
-
-              <div ref="goalDropdownRef" class="relative">
-                <button
-                  id="lead-goal"
-                  type="button"
-                  class="h-11 w-full rounded-xl border border-white/20 bg-white/5 px-4 text-left text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
-                  :aria-expanded="goalDropdownOpen"
-                  aria-haspopup="listbox"
-                  @click="goalDropdownOpen = !goalDropdownOpen"
-                  @keydown.esc.stop.prevent="goalDropdownOpen = false"
-                >
-                  <span class="block truncate pr-7">{{
-                    selectedGoalsText
-                  }}</span>
-                  <span
-                    class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-white/70"
-                    aria-hidden="true"
-                  >
-                    <svg
-                      width="18"
-                      height="18"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path
-                        d="M6 9l6 6 6-6"
-                        stroke="currentColor"
-                        stroke-width="1.7"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                      />
-                    </svg>
-                  </span>
-                </button>
-
-                <div
-                  v-if="goalDropdownOpen"
-                  class="absolute z-50 mt-2 w-full rounded-xl border border-white/15 bg-[#0b1222] p-2 shadow-[0_18px_60px_rgba(0,0,0,0.55)]"
-                  role="listbox"
-                  :aria-label="t('LANDING.WAITLIST.GOALS_LIST_ARIA')"
-                  @keydown.esc.stop.prevent="goalDropdownOpen = false"
-                >
-                  <div class="max-h-56 overflow-auto">
-                    <label
-                      v-for="option in goalOptions"
-                      :key="option.value"
-                      class="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-sm text-white transition hover:bg-white/5"
-                    >
-                      <input
-                        v-model="leadForm.goalKeys"
-                        type="checkbox"
-                        :value="option.value"
-                        class="h-4 w-4 rounded border-white/30 bg-white/5 text-primary focus-visible:ring-2 focus-visible:ring-white/70"
-                      />
-                      <span>{{ option.label }}</span>
-                    </label>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <input
-              v-model="leadForm.website"
-              class="hidden"
-              tabindex="-1"
-              autocomplete="off"
-              aria-hidden="true"
-            />
-
-            <Button
-              type="submit"
-              class="relative w-full"
-              :disabled="submittingLead"
-            >
-              <ButtonLoader v-if="submittingLead" />
-              <span :class="submittingLead ? 'invisible' : ''">
-                {{ t('LANDING.WAITLIST.SUBMIT') }}
-              </span>
-            </Button>
-
-            <p
-              v-if="submitStatus === 'duplicate'"
-              class="text-sm text-white/75"
-            >
-              {{ t('LANDING.WAITLIST.DUPLICATE') }}
-            </p>
-            <p
-              v-else-if="submitStatus === 'error'"
-              class="text-sm text-[#ffd6d6]"
-            >
-              {{ submitErrorText }}
-            </p>
-          </form>
-        </section>
-      </div>
-    </Transition>
-
-    <!-- Маленькая модалка об успехе после отправки лида -->
-    <Transition
-      enter-active-class="transition duration-200 ease-out"
-      enter-from-class="opacity-0"
-      enter-to-class="opacity-100"
-      leave-active-class="transition duration-150 ease-in"
-      leave-from-class="opacity-100"
-      leave-to-class="opacity-0"
-    >
-      <div
-        v-if="successModalOpen"
-        class="fixed inset-0 z-[91] p-4 grid place-items-center"
-      >
-        <button
-          class="absolute inset-0 bg-black/70 backdrop-blur-sm"
-          type="button"
-          :aria-label="t('LANDING.SUCCESS_MODAL.CLOSE_ARIA')"
-          @click="successModalOpen = false"
-        />
-        <div
-          class="relative w-full max-w-sm rounded-2xl border border-white/20 bg-[#0b1222]/95 backdrop-blur p-6 shadow-xl"
-          role="dialog"
-          aria-labelledby="success-modal-title"
-          aria-modal="true"
-        >
-          <p
-            id="success-modal-title"
-            class="text-center text-base text-white mb-5"
-          >
-            {{ t('LANDING.SUCCESS_MODAL.TITLE') }}
-          </p>
-          <Button class="w-full" @click="successModalOpen = false">
-            {{ t('LANDING.SUCCESS_MODAL.ACTION') }}
-          </Button>
-        </div>
-      </div>
-    </Transition>
+    <!-- waitlist/success модалки удалены: лендинг постоянно работает в released-режиме, лиды не собираем. -->
   </div>
 </template>
 
 <script setup lang="ts">
 import { Autoplay, Pagination, A11y } from 'swiper/modules';
 import { Swiper, SwiperSlide } from 'swiper/vue';
-import { onClickOutside, usePreferredReducedMotion } from '@vueuse/core';
+import { usePreferredReducedMotion } from '@vueuse/core';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { onPrehydrate, useRuntimeConfig } from 'nuxt/app';
 import { useI18n } from 'vue-i18n';
 import { Badge } from '../components/ui/shadcn/badge';
 import { Button } from '../components/ui/shadcn/button';
-import ButtonLoader from '../components/ui/ButtonLoader.vue';
 import LanguageSelect from '../components/ui/LanguageSelect.vue';
-import { Input } from '../components/ui/shadcn/input';
-import { useLandingConfig } from '../composables/useLandingConfig';
 import { useLandingAnalytics } from '../composables/useLandingAnalytics';
 import { useLandingLocale } from '../composables/useLandingLocale';
 import { useLandingSiteUrl } from '../composables/useLandingSiteUrl';
@@ -1107,7 +900,6 @@ const {
 const siteUrl = useLandingSiteUrl();
 const reducedMotion = usePreferredReducedMotion();
 
-const { data: landingConfig } = await useLandingConfig();
 const { reachGoal, trackScrollDepth } = useLandingAnalytics();
 
 const supportEmail = 'support@mentala.app';
@@ -1129,12 +921,6 @@ const accountDeletionUrl = computed(() =>
   getLocalizedPath('/account-deletion', selectedLocale.value)
 );
 const billingPeriod = ref<'month' | 'year'>('month');
-const waitlistOpen = ref(false);
-/** Маленькая модалка «Успех» после отправки лида */
-const successModalOpen = ref(false);
-const submittingLead = ref(false);
-const submitStatus = ref<'idle' | 'created' | 'duplicate' | 'error'>('idle');
-const submitErrorText = ref('');
 const activeFeatureIndex = ref(0);
 const faqOpenIndex = ref<number | null>(null);
 const landingMarketingAttribution = ref<MarketingAttributionDto | undefined>();
@@ -1144,42 +930,10 @@ const featurePhoneRef = ref<HTMLElement | null>(null);
 let gsapContext: gsap.Context | null = null;
 let gsapMedia: gsap.MatchMedia | null = null;
 
-const leadForm = reactive<{
-  name: string;
-  email: string;
-  goalKeys: string[];
-  website: string;
-}>({
-  name: '',
-  email: '',
-  goalKeys: [],
-  website: '', // honeypot
-});
-
-const goalDropdownOpen = ref(false);
-const goalDropdownRef = ref<HTMLElement | null>(null);
 const currentYear = new Date().getFullYear();
 const numberFormatLocale = computed(() =>
   locale.value === 'ru' ? 'ru-RU' : 'en-US'
 );
-
-const selectedGoalsText = computed(() => {
-  if (!leadForm.goalKeys.length) {
-    return String(t('LANDING.WAITLIST.GOALS_PLACEHOLDER'));
-  }
-
-  const selected = goalOptions.value
-    .filter((option) => leadForm.goalKeys.includes(option.value))
-    .map((option) => option.label);
-
-  return selected.length
-    ? selected.join(', ')
-    : String(t('LANDING.WAITLIST.GOALS_PLACEHOLDER'));
-});
-
-onClickOutside(goalDropdownRef, () => {
-  goalDropdownOpen.value = false;
-});
 
 const featureSteps = computed<FeatureStep[]>(() => [
   {
@@ -1418,50 +1172,10 @@ const faq = computed<FaqItem[]>(() => [
   },
 ]);
 
-const goalOptions = computed(() => [
-  {
-    value: 'reduce_anxiety',
-    label: String(t('LANDING.WAITLIST.GOAL_OPTIONS.REDUCE_ANXIETY')),
-  },
-  {
-    value: 'sleep_better',
-    label: String(t('LANDING.WAITLIST.GOAL_OPTIONS.SLEEP_BETTER')),
-  },
-  {
-    value: 'reduce_stress',
-    label: String(t('LANDING.WAITLIST.GOAL_OPTIONS.REDUCE_STRESS')),
-  },
-  {
-    value: 'quit_smoking',
-    label: String(t('LANDING.WAITLIST.GOAL_OPTIONS.QUIT_SMOKING')),
-  },
-  {
-    value: 'reduce_alcohol',
-    label: String(t('LANDING.WAITLIST.GOAL_OPTIONS.REDUCE_ALCOHOL')),
-  },
-  {
-    value: 'reduce_caffeine',
-    label: String(t('LANDING.WAITLIST.GOAL_OPTIONS.REDUCE_CAFFEINE')),
-  },
-  {
-    value: 'build_habits',
-    label: String(t('LANDING.WAITLIST.GOAL_OPTIONS.BUILD_HABITS')),
-  },
-  {
-    value: 'try_ai_support',
-    label: String(t('LANDING.WAITLIST.GOAL_OPTIONS.TRY_AI_SUPPORT')),
-  },
-  {
-    value: 'other',
-    label: String(t('LANDING.WAITLIST.GOAL_OPTIONS.OTHER')),
-  },
-]);
-
 const swiperModules = [Autoplay, Pagination, A11y];
 
-const isReleased = computed(() => landingConfig.value?.isReleased ?? false);
-const ctaUrl = computed(
-  () => landingConfig.value?.ctaUrl || runtimeConfig.public.appAuthUrl
+const ctaUrl = computed(() =>
+  String(runtimeConfig.public.appAuthUrl || 'https://my.mentala.app/auth')
 );
 const ctaUrlWithAttribution = computed(() =>
   appendMarketingAttributionToUrl(
@@ -1473,22 +1187,14 @@ const isReducedMotion = computed(() => reducedMotion.value === 'reduce');
 const androidInstallHref = LANDING_ANDROID_QR_PATH;
 const androidQrUrl = computed(() => buildLandingAndroidQrUrl(siteUrl.value));
 
+// CTA-тексты жёстко зафиксированы в released-режиме: приложение опубликовано,
+// форма waitlist выпилена, дополнительной ветки EARLY_ACCESS больше нет.
 const primaryCtaText = computed(() =>
-  isReleased.value
-    ? String(t('LANDING.HERO.PRIMARY_CTA_RELEASED'))
-    : String(t('LANDING.HERO.PRIMARY_CTA_EARLY_ACCESS'))
-);
-
-const primaryCtaTextMobile = computed(() =>
-  isReleased.value
-    ? String(t('LANDING.HERO.PRIMARY_CTA_RELEASED'))
-    : String(t('LANDING.HEADER.CTA_MOBILE'))
+  String(t('LANDING.HERO.PRIMARY_CTA_RELEASED'))
 );
 
 const pricingCtaText = computed(() =>
-  isReleased.value
-    ? String(t('LANDING.PRICING.CTA_RELEASED'))
-    : String(t('LANDING.PRICING.CTA_EARLY_ACCESS'))
+  String(t('LANDING.PRICING.CTA_RELEASED'))
 );
 
 const activeFeature = computed<FeatureStep>(
@@ -1665,15 +1371,10 @@ function scrollToSection(sectionId: string) {
 }
 
 function openPrimaryCTA() {
-  if (isReleased.value) {
-    reachGoal('landing_auth_redirect_click');
-    if (typeof window !== 'undefined') {
-      window.open(ctaUrlWithAttribution.value, '_blank', 'noopener,noreferrer');
-    }
-    return;
+  reachGoal('landing_auth_redirect_click');
+  if (typeof window !== 'undefined') {
+    window.open(ctaUrlWithAttribution.value, '_blank', 'noopener,noreferrer');
   }
-  reachGoal('landing_cta_click');
-  waitlistOpen.value = true;
 }
 
 function trackAndroidPromoClick(location: string) {
@@ -1685,80 +1386,9 @@ async function onLocaleChange(nextLocale: SupportedLocale) {
   await switchLocale(nextLocale);
 }
 
-function closeWaitlist() {
-  waitlistOpen.value = false;
-}
-
 function toggleFaq(index: number) {
   faqOpenIndex.value = faqOpenIndex.value === index ? null : index;
 }
-
-async function submitLead() {
-  if (submittingLead.value) {
-    return;
-  }
-
-  submitStatus.value = 'idle';
-  submitErrorText.value = '';
-  submittingLead.value = true;
-
-  try {
-    const response = await $fetch<{
-      ok: boolean;
-      status: 'created' | 'duplicate';
-    }>('/api/landing/lead', {
-      baseURL: runtimeConfig.public.landingApiBase,
-      method: 'POST',
-      body: {
-        name: leadForm.name,
-        email: leadForm.email,
-        goalKeys: leadForm.goalKeys.length > 0 ? leadForm.goalKeys : undefined,
-        utmSource: landingMarketingAttribution.value?.utmSource,
-        utmMedium: landingMarketingAttribution.value?.utmMedium,
-        utmCampaign: landingMarketingAttribution.value?.utmCampaign,
-        utmContent: landingMarketingAttribution.value?.utmContent,
-        utmTerm: landingMarketingAttribution.value?.utmTerm,
-        gclid: landingMarketingAttribution.value?.gclid,
-        yclid: landingMarketingAttribution.value?.yclid,
-        fbclid: landingMarketingAttribution.value?.fbclid,
-        ttclid: landingMarketingAttribution.value?.ttclid,
-        marketingAttribution: landingMarketingAttribution.value,
-        honeypot: leadForm.website,
-      },
-    });
-
-    submitStatus.value = response.status;
-
-    if (response.status === 'created') {
-      reachGoal('landing_lead_submit_success');
-      leadForm.name = '';
-      leadForm.email = '';
-      leadForm.goalKeys = [];
-      leadForm.website = '';
-      waitlistOpen.value = false;
-      await nextTick();
-      successModalOpen.value = true;
-    } else {
-      reachGoal('landing_lead_submit_duplicate');
-    }
-  } catch (error: any) {
-    submitStatus.value = 'error';
-    reachGoal('landing_lead_submit_error', {
-      message: error?.data?.message || error?.message || 'unknown',
-    });
-    submitErrorText.value =
-      error?.data?.message ||
-      error?.message ||
-      String(t('LANDING.WAITLIST.ERROR_DEFAULT'));
-  } finally {
-    submittingLead.value = false;
-  }
-}
-
-// Аналитика: открытие модалки waitlist
-watch(waitlistOpen, (open) => {
-  if (open) reachGoal('landing_modal_open');
-});
 
 onMounted(() => {
   captureLandingMarketingAttribution();
