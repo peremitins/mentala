@@ -17,7 +17,7 @@ export const SESSION_SUMMARY_USER_MIN_QUALIFYING_MESSAGES =
   process.env.NODE_ENV === 'development' ? 1 : 3;
 // Отдельный bypass-порог: если пользователь накопил 15 сообщений в текущем
 // backlog, summary разрешаем даже без набора временного критерия.
-export const SESSION_SUMMARY_USER_FORCE_MIN_USER_MESSAGES = 15;
+export const SESSION_SUMMARY_USER_FORCE_MIN_USER_MESSAGES = 7;
 
 function countCharsWithoutSpaces(text: string): number {
   if (typeof text !== 'string') return 0;
