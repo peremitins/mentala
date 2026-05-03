@@ -16,7 +16,7 @@ patchedDependencies:
     hash: 494f63e7b7f9e31eb1bfe9f162a2ac49a7179480cc7c75ac130ec34c5e53b838
     path: patches/@capgo__capacitor-social-login@7.20.0.patch
   '@mediagrid/capacitor-native-audio@2.3.2':
-    hash: 4bc2c25b48894d417cf89e3b3a800acb5a24537fe2eeba956fd57b90ea7a38e8
+    hash: e7c60006e1c64474089b0d09fe9525125be44b34fb949879e352775d71366d22
     path: patches/@mediagrid__capacitor-native-audio@2.3.2.patch
 
 importers:
@@ -88,7 +88,7 @@ importers:
         version: 3.9.0
       '@mediagrid/capacitor-native-audio':
         specifier: 2.3.2
-        version: 2.3.2(patch_hash=4bc2c25b48894d417cf89e3b3a800acb5a24537fe2eeba956fd57b90ea7a38e8)(@capacitor/core@7.4.3)
+        version: 2.3.2(patch_hash=e7c60006e1c64474089b0d09fe9525125be44b34fb949879e352775d71366d22)(@capacitor/core@7.4.3)
       '@nuxtjs/tailwindcss':
         specifier: 6.14.0
         version: 6.14.0(magicast@0.3.5)(ts-node@10.9.2(@types/node@24.5.2)(typescript@5.6.3))
@@ -14918,7 +14918,7 @@ snapshots:
 
   '@marijn/find-cluster-break@1.0.2': {}
 
-  '@mediagrid/capacitor-native-audio@2.3.2(patch_hash=4bc2c25b48894d417cf89e3b3a800acb5a24537fe2eeba956fd57b90ea7a38e8)(@capacitor/core@7.4.3)':
+  '@mediagrid/capacitor-native-audio@2.3.2(patch_hash=e7c60006e1c64474089b0d09fe9525125be44b34fb949879e352775d71366d22)(@capacitor/core@7.4.3)':
     dependencies:
       '@capacitor/core': 7.4.3
 
