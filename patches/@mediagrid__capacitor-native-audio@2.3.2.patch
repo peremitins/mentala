@@ -1630,7 +1630,7 @@ index 106fa303401b10c051786ef6d5820b15ab30320b..e8decfbfef5a719f42ebfcbab6f344f2
          guard let audioId = call.getString("audioId") else {
              throw AudioPlayerError.invalidAudioId
 diff --git a/ios/Sources/AudioPlayerPlugin/AudioSource.swift b/ios/Sources/AudioPlayerPlugin/AudioSource.swift
-index 5a65e690c55308c4991f7f0ee268ff1155a93d42..464d01f72d992b205dd715c6351544a437066f38 100644
+index 5a65e690c55308c4991f7f0ee268ff1155a93d42..4867a3e9915b0a13235d0396f0645d3273fdd631 100644
 --- a/ios/Sources/AudioPlayerPlugin/AudioSource.swift
 +++ b/ios/Sources/AudioPlayerPlugin/AudioSource.swift
 @@ -18,6 +18,7 @@ public class AudioSource: NSObject, AVAudioPlayerDelegate {
@@ -1832,7 +1832,49 @@ index 5a65e690c55308c4991f7f0ee268ff1155a93d42..464d01f72d992b205dd715c6351544a4
          return player.rate > 0
              || player.timeControlStatus == AVPlayer.TimeControlStatus.playing
              || player.timeControlStatus
-@@ -327,7 +368,7 @@ public class AudioSource: NSObject, AVAudioPlayerDelegate {
+@@ -252,15 +293,37 @@ public class AudioSource: NSObject, AVAudioPlayerDelegate {
+     }
+ 
+     private func createPlayerItem() throws -> AVPlayerItem {
+-        let url = URL.init(string: source)
++        // Сначала пробуем зарезолвить bundle-ассет: для capacitor://localhost/<path>
++        // используем file:// URL прямо из App.app/public, чтобы AVPlayer/AVPlayerLooper
++        // не зависели от Range-support удалённого сервера и стартовали мгновенно.
++        if let bundleUrl = resolveLocalBundleUrl(from: source) {
++            return AVPlayerItem(url: bundleUrl)
++        }
+ 
+-        if url == nil {
++        guard let url = URL(string: source) else {
+             throw AudioPlayerError.invalidPath
+         }
+ 
+-        let player = AVPlayerItem.init(url: url.unsafelyUnwrapped)
++        return AVPlayerItem(url: url)
++    }
++
++    private func resolveLocalBundleUrl(from rawSource: String) -> URL? {
++        let prefix = "capacitor://localhost/"
++        guard rawSource.hasPrefix(prefix) else { return nil }
+ 
+-        return player
++        let relativePath = String(rawSource.dropFirst(prefix.count))
++        guard !relativePath.isEmpty,
++              let bundleResourcePath = Bundle.main.resourcePath
++        else {
++            return nil
++        }
++
++        let absolutePath = "\(bundleResourcePath)/public/\(relativePath)"
++        guard FileManager.default.fileExists(atPath: absolutePath) else {
++            return nil
++        }
++
++        return URL(fileURLWithPath: absolutePath)
+     }
+ 
+     private func setupInterruptionNotifications() {
+@@ -327,7 +390,7 @@ public class AudioSource: NSObject, AVAudioPlayerDelegate {
              audioReadyObservation = observe(
                  \.playerQueue?.currentItem?.status
              ) { _, _ in
@@ -1841,7 +1883,7 @@ index 5a65e690c55308c4991f7f0ee268ff1155a93d42..464d01f72d992b205dd715c6351544a4
                      == AVPlayerItem.Status.readyToPlay {
                      self.makePluginCall(callbackId: self.onReadyCallbackId)
                      self.observeOnEnd()
-@@ -350,6 +391,10 @@ public class AudioSource: NSObject, AVAudioPlayerDelegate {
+@@ -350,6 +413,10 @@ public class AudioSource: NSObject, AVAudioPlayerDelegate {
              return
          }
  
@@ -1852,7 +1894,7 @@ index 5a65e690c55308c4991f7f0ee268ff1155a93d42..464d01f72d992b205dd715c6351544a4
          if player.currentItem?.duration == CMTime.indefinite {
              return
          }
-@@ -383,6 +428,8 @@ public class AudioSource: NSObject, AVAudioPlayerDelegate {
+@@ -383,6 +450,8 @@ public class AudioSource: NSObject, AVAudioPlayerDelegate {
              return
          }
  
@@ -1861,7 +1903,7 @@ index 5a65e690c55308c4991f7f0ee268ff1155a93d42..464d01f72d992b205dd715c6351544a4
          let commandCenter = MPRemoteCommandCenter.shared()
  
          commandCenter.playCommand.addTarget {
-@@ -405,7 +452,7 @@ public class AudioSource: NSObject, AVAudioPlayerDelegate {
+@@ -405,7 +474,7 @@ public class AudioSource: NSObject, AVAudioPlayerDelegate {
  
          commandCenter.pauseCommand.addTarget {
              [unowned self] _ -> MPRemoteCommandHandlerStatus in
@@ -1870,7 +1912,7 @@ index 5a65e690c55308c4991f7f0ee268ff1155a93d42..464d01f72d992b205dd715c6351544a4
  
              if self.isPlaying() {
                  self.pause()
-@@ -423,6 +470,31 @@ public class AudioSource: NSObject, AVAudioPlayerDelegate {
+@@ -423,6 +492,31 @@ public class AudioSource: NSObject, AVAudioPlayerDelegate {
              return .commandFailed
          }
  
@@ -1902,7 +1944,7 @@ index 5a65e690c55308c4991f7f0ee268ff1155a93d42..464d01f72d992b205dd715c6351544a4
          if showSeekBackward {
              commandCenter.skipBackwardCommand.addTarget {
                  [unowned self] _ -> MPRemoteCommandHandlerStatus in
-@@ -472,10 +544,14 @@ public class AudioSource: NSObject, AVAudioPlayerDelegate {
+@@ -472,10 +566,14 @@ public class AudioSource: NSObject, AVAudioPlayerDelegate {
  
          commandCenter.playCommand.isEnabled = true
          commandCenter.pauseCommand.isEnabled = true
@@ -1917,7 +1959,7 @@ index 5a65e690c55308c4991f7f0ee268ff1155a93d42..464d01f72d992b205dd715c6351544a4
      }
  
      private func removeRemoteTransportControls() {
-@@ -487,8 +563,20 @@ public class AudioSource: NSObject, AVAudioPlayerDelegate {
+@@ -487,8 +585,20 @@ public class AudioSource: NSObject, AVAudioPlayerDelegate {
  
          commandCenter.playCommand.removeTarget(nil)
          commandCenter.pauseCommand.removeTarget(nil)
@@ -1938,7 +1980,7 @@ index 5a65e690c55308c4991f7f0ee268ff1155a93d42..464d01f72d992b205dd715c6351544a4
      }
  
      private func updateMetadata() {
-@@ -508,10 +596,21 @@ public class AudioSource: NSObject, AVAudioPlayerDelegate {
+@@ -508,10 +618,21 @@ public class AudioSource: NSObject, AVAudioPlayerDelegate {
          nowPlayingInfo[MPMediaItemPropertyAlbumTitle] = audioMetadata.albumTitle
          nowPlayingInfo[MPMediaItemPropertyArtist] = audioMetadata.artistName
          nowPlayingInfo[MPMediaItemPropertyTitle] = audioMetadata.songTitle
@@ -1964,7 +2006,7 @@ index 5a65e690c55308c4991f7f0ee268ff1155a93d42..464d01f72d992b205dd715c6351544a4
  
          let artwork = getNowPlayingArtwork()
  
-@@ -564,7 +663,8 @@ public class AudioSource: NSObject, AVAudioPlayerDelegate {
+@@ -564,7 +685,8 @@ public class AudioSource: NSObject, AVAudioPlayerDelegate {
              return
          }
  
@@ -1974,7 +2016,7 @@ index 5a65e690c55308c4991f7f0ee268ff1155a93d42..464d01f72d992b205dd715c6351544a4
              guard
                  let baseAppPath = pluginOwner.bridge?.config.appLocation
                      .absoluteString,
-@@ -608,12 +708,33 @@ public class AudioSource: NSObject, AVAudioPlayerDelegate {
+@@ -608,12 +730,33 @@ public class AudioSource: NSObject, AVAudioPlayerDelegate {
              return
          }
  

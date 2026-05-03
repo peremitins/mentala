@@ -28,6 +28,25 @@ import {
   resolveAddressing,
 } from '../../../shared/utils/addressing';
 
+/**
+ * Подставляет имя в плейсхолдер {{greeting_name}}.
+ * Когда имя пустое — убирает плейсхолдер вместе с прилегающей пунктуацией,
+ * чтобы не получалось «Привет, !» или «Здравствуй, , как дела?».
+ */
+function replaceGreetingNamePlaceholder(
+  prompt: string,
+  greetingName: string | null | undefined
+): string {
+  if (greetingName) {
+    return prompt.replace(/{{greeting_name}}/g, greetingName);
+  }
+  return prompt
+    .replace(/,\s*{{greeting_name}}/g, '')
+    .replace(/{{greeting_name}}\s*,\s*/g, '')
+    .replace(/\s+{{greeting_name}}/g, '')
+    .replace(/{{greeting_name}}\s*/g, '');
+}
+
 export type PromptTemplate = string;
 
 export interface PromptPack {
@@ -897,7 +916,7 @@ export function buildWelcomePrompt(options: {
     prompt = prompt.replace(/{{user_name}}/g, options.user_name || '');
     prompt = prompt.replace(/{{user_gender}}/g, options.user_gender || '');
     prompt = prompt.replace(/{{user_locale}}/g, options.user_locale || '');
-    prompt = prompt.replace(/{{greeting_name}}/g, options.greetingName || '');
+    prompt = replaceGreetingNamePlaceholder(prompt, options.greetingName);
     prompt = prompt.replace(/{{lang}}/g, lang);
 
     if (!isFirst && sessionMemoryText) {
@@ -990,7 +1009,7 @@ export function buildWelcomePrompt(options: {
   prompt = prompt.replace(/{{user_name}}/g, options.user_name || '');
   prompt = prompt.replace(/{{user_gender}}/g, options.user_gender || '');
   prompt = prompt.replace(/{{user_locale}}/g, options.user_locale || '');
-  prompt = prompt.replace(/{{greeting_name}}/g, options.greetingName || '');
+  prompt = replaceGreetingNamePlaceholder(prompt, options.greetingName);
   prompt = prompt.replace(/{{lang}}/g, lang);
 
   if (!isFirst && sessionMemoryText) {
