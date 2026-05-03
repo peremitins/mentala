@@ -83,7 +83,7 @@ export const SESSION_SUMMARY_QUALIFYING_MIN_CHARS = IS_DEVELOPMENT_RUNTIME
 export const SESSION_SUMMARY_MIN_QUALIFYING_MESSAGES = IS_DEVELOPMENT_RUNTIME
   ? 1
   : 3;
-export const SESSION_SUMMARY_FORCE_MIN_USER_MESSAGES = 15;
+export const SESSION_SUMMARY_FORCE_MIN_USER_MESSAGES = 7;
 
 const PENDING_THERAPY_SESSION_ENDS_STORAGE_KEY =
   'chat.pending-therapy-session-ends';
@@ -680,7 +680,7 @@ export const useChatStore = defineStore('chat', {
           method: 'POST',
           body: { sessionId: pingSessionId },
           suppressErrorToast: true,
-        }).catch((error: any) => {
+        } as any).catch((error: any) => {
           const status =
             Number(error?.statusCode) ||
             Number(error?.status) ||
