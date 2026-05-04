@@ -26,8 +26,8 @@ const ADDRESSING_COPY = {
     formal: 'Начните новый диалог и попробуйте снова',
   },
   realtimeReadyHint: {
-    informal: 'Я на связи. Можешь говорить, я слушаю.',
-    formal: 'Я на связи. Можете говорить, я слушаю.',
+    informal: 'Я на связи. Можно говорить, я слушаю.',
+    formal: 'Я на связи. Можно говорить, я слушаю.',
   },
   habitsPageDescription: {
     informal:
