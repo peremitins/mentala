@@ -276,26 +276,26 @@ export async function createSessionSummaryUser(params: {
     endedAt
   );
 
-  // Если transcript в БД пустой (chat memory off или voice events ещё не
-  // записались), используем клиентские метрики как fallback.
-  // Берём максимум по каждому полю чтобы не занижать серверные данные.
-  const metrics: EligibilityMetrics =
-    serverMetrics.userMessagesCount === 0 && params.clientMetrics
-      ? {
-          userMessagesCount: Math.max(
-            serverMetrics.userMessagesCount,
-            params.clientMetrics.userMessagesCount
-          ),
-          qualifyingUserMessagesCount: Math.max(
-            serverMetrics.qualifyingUserMessagesCount,
-            params.clientMetrics.qualifyingUserMessagesCount
-          ),
-          durationSeconds: Math.max(
-            serverMetrics.durationSeconds,
-            params.clientMetrics.durationSeconds
-          ),
-        }
-      : serverMetrics;
+  // Всегда берём максимум из серверных и клиентских метрик.
+  // Клиентские могут быть выше из-за гонки: transcript в БД мог ещё не
+  // сохранить все сообщения (voice events, запись в полёте и т.п.),
+  // поэтому доверяем клиенту для eligibility, при этом не занижая сервер.
+  const metrics: EligibilityMetrics = params.clientMetrics
+    ? {
+        userMessagesCount: Math.max(
+          serverMetrics.userMessagesCount,
+          params.clientMetrics.userMessagesCount
+        ),
+        qualifyingUserMessagesCount: Math.max(
+          serverMetrics.qualifyingUserMessagesCount,
+          params.clientMetrics.qualifyingUserMessagesCount
+        ),
+        durationSeconds: Math.max(
+          serverMetrics.durationSeconds,
+          params.clientMetrics.durationSeconds
+        ),
+      }
+    : serverMetrics;
 
   // Выбираем источник сообщений для LLM:
   // 1. Transcript из БД — приоритет (полный сохранённый диалог)
@@ -311,10 +311,8 @@ export async function createSessionSummaryUser(params: {
     dbMessagesCount: dbMessages.length,
     clientMessagesCount: params.clientMessages?.length ?? 0,
     usingSource: dbMessages.length > 0 ? 'db_transcript' : 'client_fallback',
-    metricsSource:
-      serverMetrics.userMessagesCount === 0 && params.clientMetrics
-        ? 'client_fallback'
-        : 'server',
+    metricsSource: params.clientMetrics ? 'max(server,client)' : 'server',
+    serverMetrics,
     metrics,
   });
 
