@@ -1,0 +1,425 @@
+@charset "UTF-8";
+html,
+body,
+#__nuxt {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100dvh;
+  box-sizing: border-box;
+  /*
+   * Запрещаем WebKit (iOS Safari, WKWebView) автоматически масштабировать
+   * шрифты «для улучшения читаемости». Без этой настройки iOS самостоятельно
+   * увеличивает font-size, из-за чего UI выглядит крупнее чем на Android.
+   * Значение 100% = «рендери шрифты ровно так, как задано в CSS».
+   */
+  -webkit-text-size-adjust: 100%;
+  -moz-text-size-adjust: 100%;
+       text-size-adjust: 100%;
+}
+
+body {
+  max-width: 768px;
+  margin: 0 auto;
+}
+
+:root {
+  /* WebView env() работает не на всех Android-устройствах одинаково, особенно на планшетах. */
+  --safe-area-env-top: env(safe-area-inset-top, 0px);
+  --safe-area-env-right: env(safe-area-inset-right, 0px);
+  --safe-area-env-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-env-left: env(safe-area-inset-left, 0px);
+  /* Native fallback приходит из Android WindowInsets bridge. */
+  --native-safe-area-inset-top: 0px;
+  --native-safe-area-inset-right: 0px;
+  --native-safe-area-inset-bottom: 0px;
+  --native-safe-area-inset-left: 0px;
+  /* Берём максимум, чтобы не было ни потери inset'а, ни двойного сложения. */
+  --safe-area-inset-top: max(
+    var(--safe-area-env-top),
+    var(--native-safe-area-inset-top)
+  );
+  --safe-area-inset-right: max(
+    var(--safe-area-env-right),
+    var(--native-safe-area-inset-right)
+  );
+  --safe-area-inset-bottom: max(
+    var(--safe-area-env-bottom),
+    var(--native-safe-area-inset-bottom)
+  );
+  --safe-area-inset-left: max(
+    var(--safe-area-env-left),
+    var(--native-safe-area-inset-left)
+  );
+}
+
+/* Базовый app-shell: держим декоративный верхний отступ и добавляем реальный top inset устройства. */
+.safe-area-layout {
+  padding-top: calc(0.25rem + var(--safe-area-inset-top));
+}
+
+/* Для экранов без декоративного зазора используем только системный inset. */
+.safe-area-top {
+  padding-top: var(--safe-area-inset-top);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+button,
+a {
+  cursor: pointer;
+}
+
+/* Placeholder в input/textarea делаем менее ярким и единым по приложению */
+input::-moz-placeholder, textarea::-moz-placeholder {
+  color: hsl(var(--foreground));
+  opacity: 0.6;
+}
+input::placeholder,
+textarea::placeholder {
+  color: hsl(var(--foreground));
+  opacity: 0.6;
+}
+
+.glass {
+  border-radius: var(--radius-lg);
+  @apply border border-border/15 bg-background/10 shadow-lg backdrop-blur-md;
+}
+
+.glass-border {
+  box-shadow: inset 1px 1px 0.12px rgba(255, 255, 255, 0.4), 1px 1px 3px rgba(0, 0, 0, 0.1);
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+/* Deeper glass for panels */
+.glass-deep {
+  box-shadow: inset 1px 1px 0.12px rgba(255, 255, 255, 0.4), 1px 1px 3px rgba(0, 0, 0, 0.1);
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background-color: rgba(0, 0, 0, 0.8);
+  background-image: linear-gradient(0deg, hsl(var(--background)/0.08), hsl(var(--background)/0.08)), linear-gradient(0deg, rgba(0, 0, 0, 0.36), rgba(0, 0, 0, 0.36)), linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.015));
+  background-clip: padding-box;
+}
+
+.glass-deep-bottom {
+  box-shadow: inset 1px 1px 0.12px rgba(255, 255, 255, 0.4), 1px 1px 3px rgba(0, 0, 0, 0.1);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-bottom: none;
+  background-color: rgba(0, 0, 0, 0.8);
+  background-image: linear-gradient(0deg, hsl(var(--background)/0.08), hsl(var(--background)/0.08)), linear-gradient(0deg, rgba(0, 0, 0, 0.36), rgba(0, 0, 0, 0.36)), linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.015));
+  background-clip: padding-box;
+}
+
+@supports (backdrop-filter: blur(1px)) {
+  .glass-deep,
+  .glass-deep-bottom {
+    backdrop-filter: blur(10px);
+    background-color: rgba(0, 0, 0, 0.22);
+    background-image: linear-gradient(0deg, hsl(var(--background)/0.07), hsl(var(--background)/0.07)), linear-gradient(0deg, rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0.28)), linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.012));
+  }
+}
+.chat-fade {
+  -webkit-mask-image: linear-gradient(to top, rgb(0, 0, 0) 0%, rgb(0, 0, 0) 0%, rgba(0, 0, 0, 0) 60%, rgba(0, 0, 0, 0) 100%);
+          mask-image: linear-gradient(to top, rgb(0, 0, 0) 0%, rgb(0, 0, 0) 0%, rgba(0, 0, 0, 0) 60%, rgba(0, 0, 0, 0) 100%);
+}
+
+/* Глобальный стиль tooltip в эстетике glass-deep. */
+.v-popper--theme-tooltip,
+.plan-feature-tooltip,
+.landing-tooltip-theme {
+  max-width: calc(100vw - 32px);
+}
+
+.v-popper--theme-tooltip .v-popper__inner,
+.plan-feature-tooltip .v-popper__inner,
+.landing-tooltip-theme .v-popper__inner {
+  max-width: min(300px, 100vw - 32px) !important;
+  white-space: normal !important;
+  word-break: break-word !important;
+  padding: 10px 12px !important;
+  font-size: 13px !important;
+  line-height: 1.4 !important;
+  border-radius: 12px !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  /* Fallback для сред без blur/filter: повторяем базовую логику glass-deep. */
+  background-color: rgba(0, 0, 0, 0.8) !important;
+  background-image: linear-gradient(0deg, hsl(var(--background)/0.08), hsl(var(--background)/0.08)), linear-gradient(0deg, rgba(0, 0, 0, 0.36), rgba(0, 0, 0, 0.36)), linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.015)) !important;
+  background-clip: padding-box !important;
+  color: #f1f5f9 !important;
+  box-shadow: inset 1px 1px 0.12px rgba(255, 255, 255, 0.4), 1px 1px 3px rgba(0, 0, 0, 0.1), 0 10px 24px rgba(0, 0, 0, 0.35) !important;
+}
+
+.v-popper--theme-tooltip .v-popper__arrow-inner,
+.plan-feature-tooltip .v-popper__arrow-inner,
+.landing-tooltip-theme .v-popper__arrow-inner {
+  border-color: rgba(0, 0, 0, 0.72) !important;
+}
+
+.v-popper--theme-tooltip .v-popper__arrow-outer,
+.plan-feature-tooltip .v-popper__arrow-outer,
+.landing-tooltip-theme .v-popper__arrow-outer {
+  border-color: rgba(255, 255, 255, 0.18) !important;
+}
+
+/* Если blur доступен, включаем его через webkit+standard проверку совместимости. */
+@supports (backdrop-filter: blur(1px)) {
+  .v-popper--theme-tooltip .v-popper__inner,
+  .plan-feature-tooltip .v-popper__inner,
+  .landing-tooltip-theme .v-popper__inner {
+    backdrop-filter: blur(10px);
+    background-color: rgba(0, 0, 0, 0.22) !important;
+    background-image: linear-gradient(0deg, hsl(var(--background)/0.07), hsl(var(--background)/0.07)), linear-gradient(0deg, rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0.28)), linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.012)) !important;
+  }
+}
+/* Стрелки тултипов отключаем глобально: без них блок выглядит чище и стабильнее по центровке. */
+.v-popper--theme-tooltip .v-popper__arrow-container,
+.v-popper--theme-tooltip .v-popper__arrow-inner,
+.v-popper--theme-tooltip .v-popper__arrow-outer,
+.plan-feature-tooltip .v-popper__arrow-container,
+.plan-feature-tooltip .v-popper__arrow-inner,
+.plan-feature-tooltip .v-popper__arrow-outer,
+.landing-tooltip-theme .v-popper__arrow-container,
+.landing-tooltip-theme .v-popper__arrow-inner,
+.landing-tooltip-theme .v-popper__arrow-outer {
+  display: none !important;
+}
+
+/* Fade transitions */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+/* Page transitions - основная анимация (плавное затухание) */
+.page-enter-active,
+.page-leave-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.page-enter-from {
+  opacity: 0;
+}
+
+.page-leave-to {
+  opacity: 0;
+}
+
+/* Welcome screen animations */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fade-in {
+  animation: fade-in 0.4s ease-out;
+}
+
+.animate-slide-up {
+  animation: slide-up 0.5s ease-out;
+}
+
+/* Input container */
+.icon-disc {
+  border-radius: var(--radius-icon);
+  @apply border border-border/10 backdrop-blur-xl grid place-items-center;
+  background: hsl(var(--background)/0.07);
+  width: 44px;
+  height: 44px;
+  transition: all 0.3s ease;
+}
+
+/* Нижняя навигация: неактивные — opacity 0.6, активные — opacity 1 */
+.icon-disc-wrapper .icon-disc {
+  opacity: 0.7;
+  transition: opacity 0.25s ease;
+}
+
+.icon-disc-wrapper .icon-disc.icon-disc-active {
+  opacity: 1;
+}
+
+/* Кнопки действий чата — более выразительные, с мягкой глубиной */
+.chat-action-button {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-icon);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: hsl(var(--foreground)/0.92);
+  position: relative;
+  overflow: visible;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.03));
+  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+}
+
+.chat-action-button:hover {
+  border-color: rgba(255, 255, 255, 0.22);
+  box-shadow: 0 14px 22px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.chat-action-button:active {
+  transform: translateY(1px) scale(0.98);
+}
+
+.chat-action-button:disabled {
+  cursor: not-allowed;
+  border-color: rgba(255, 255, 255, 0.08);
+  color: hsl(var(--foreground)/0.5);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.015));
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.chat-action-button:disabled:hover,
+.chat-action-button:disabled:active {
+  transform: none;
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.chat-action-button-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(8, 8, 10, 0.82);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  font-size: 10px;
+  line-height: 1;
+}
+
+.chat-action-button-call.is-call-active {
+  border-color: rgba(248, 113, 113, 0.5);
+  color: rgba(255, 228, 230, 0.98);
+  background: linear-gradient(145deg, rgba(239, 68, 68, 0.24), rgba(127, 29, 29, 0.16));
+  box-shadow: 0 14px 22px rgba(127, 29, 29, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.chat-action-button-call.is-call-connecting {
+  border-color: rgba(255, 255, 255, 0.3);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.05));
+  box-shadow: 0 14px 22px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  animation: chat-call-connecting-pulse 1.2s ease-in-out infinite;
+}
+
+.chat-action-button-call.is-call-stopping {
+  border-color: rgba(255, 255, 255, 0.16);
+  color: hsl(var(--foreground)/0.7);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.025));
+}
+
+.chat-action-button-call.is-call-locked {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.025));
+}
+
+/* Индикатор записи на микрофоне через ::after/::before */
+.chat-action-button.is-recording::after {
+  content: "";
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 11px;
+  height: 11px;
+  border-radius: 9999px;
+  background: #ef4444;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.55);
+}
+
+.chat-action-button.is-recording::before {
+  content: "";
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  width: 19px;
+  height: 19px;
+  border-radius: 9999px;
+  border: 2px solid rgba(239, 68, 68, 0.5);
+  animation: chat-recording-ping 1.2s ease-out infinite;
+}
+
+@keyframes chat-recording-ping {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.8;
+  }
+  70% {
+    transform: scale(1);
+    opacity: 0.2;
+  }
+  100% {
+    transform: scale(1.1);
+    opacity: 0;
+  }
+}
+@keyframes chat-call-connecting-pulse {
+  0%, 100% {
+    box-shadow: 0 14px 22px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+  50% {
+    box-shadow: 0 16px 26px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 0 0 4px rgba(255, 255, 255, 0.06);
+  }
+}
+.icon-disc-wrapper:hover .icon-disc, .icon-disc-wrapper.router-link-active .icon-disc {
+  color: hsl(var(--primary-ui));
+}
+
+/* Глобальный класс для скрытия скроллбаров при сохранении прокрутки */
+.no-scrollbar {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none; /* Chrome, Safari */
+}
+
+/* Универсальные текстовые тени для читаемости на ярких фото/видео */
+.text-elevated {
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.35), 0 0 1px rgba(0, 0, 0, 0.5);
+}
+
+.text-elevated-strong {
+  text-shadow: 0 3px 14px rgb(0, 0, 0), 0 1px 4px rgb(0, 0, 0), 0 0 1px rgb(0, 0, 0);
+}
+
+/* Global hover rules for buttons/links (excluding bottom nav) */
+button,
+.glass,
+.btn,
+a[href] {
+  transition: all 0.5s ease;
+}
+
+.router-link-active span {
+  color: hsl(var(--primary-ui));
+}
