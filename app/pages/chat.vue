@@ -679,7 +679,14 @@ const showSessionFinishedModal = ref(false); // Модалка «Сессия з
 
 async function handleFinishSession() {
   if (isFinishingSession.value) return;
-  if (!isEligibleForSummary.value) return;
+  if (!isEligibleForSummary.value) {
+    useToast(
+      'Недостаточно сообщений',
+      'Продолжайте общение, чтобы подвести итог',
+      'warning'
+    );
+    return;
+  }
   isFinishingSession.value = true;
   try {
     // Если активна голосовая сессия — сначала корректно её завершаем.
@@ -691,13 +698,27 @@ async function handleFinishSession() {
       await realtimeVoice.stop('user_stop');
     }
     const result = await chat.endSessionAndSummarize({ trigger: 'manual' });
-    // Показываем модалку только если сервер подтвердил eligible —
-    // т.е. итог действительно был запущен на генерацию.
-    if (result?.eligible) {
+    if (result?.eligible && result?.triggered) {
+      // Сервер подтвердил — итог запущен на генерацию.
       showSessionFinishedModal.value = true;
+    } else if (result?.eligible && !result?.triggered) {
+      // Клиент считал eligible, но запрос не дошёл / сервер отклонил.
+      useToast(
+        'Что-то пошло не так',
+        'Не удалось отправить запрос на создание итога',
+        'error'
+      );
+    } else {
+      // Стор вернул eligible=false — недостаточно данных на момент завершения.
+      useToast(
+        'Недостаточно сообщений',
+        'Продолжайте общение, чтобы подвести итог',
+        'warning'
+      );
     }
   } catch (error) {
     console.error('[Chat] Failed to finish session:', error);
+    useToast('Что-то пошло не так', 'Не удалось подвести итог сессии', 'error');
   } finally {
     isFinishingSession.value = false;
   }
