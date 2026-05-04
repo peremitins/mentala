@@ -423,10 +423,18 @@ export const useChatStore = defineStore('chat', {
           });
         } else {
           const { $api } = useNuxtApp();
-          await $api('/api/session-summaries-user', {
-            method: 'POST',
-            body: payload,
-          });
+          const response = await $api<{ eligible?: boolean }>(
+            '/api/session-summaries-user',
+            {
+              method: 'POST',
+              body: payload,
+            }
+          );
+          // Сервер может вернуть eligible=false (например, не нашёл сессию
+          // или не набрал пороговые значения). Не считаем это triggered.
+          if (response?.eligible === false) {
+            return false;
+          }
         }
         return true;
       } catch (error) {
