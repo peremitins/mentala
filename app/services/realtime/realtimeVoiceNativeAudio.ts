@@ -7,6 +7,10 @@ type MentalaRealtimeVoiceAudioPlugin = {
     mode?: string;
     volumeStream?: string;
     speakerPinned?: boolean;
+    // Android: фактически выбранный communication device для realtime voice
+    // (bluetooth_sco, ble_headset, wired_headset, builtin_speaker и т.д.).
+    // Полезно для диагностики проблем с роутингом по логам.
+    route?: string;
   }>;
   deactivate(): Promise<void>;
 };
@@ -42,6 +46,7 @@ export async function activateRealtimeVoiceNativeAudioSession() {
         mode: result?.mode || 'unknown',
         volumeStream: result?.volumeStream || 'unknown',
         speakerPinned: result?.speakerPinned ?? null,
+        route: result?.route || 'unknown',
       }
     );
     return true;

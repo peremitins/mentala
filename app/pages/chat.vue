@@ -220,32 +220,6 @@
             <div class="flex items-center">
               <button
                 type="button"
-                @click="toggleMic"
-                class="chat-action-button relative flex items-center justify-center cursor-pointer flex-none disabled:cursor-not-allowed disabled:opacity-45"
-                :class="
-                  speechStore.isListening && !isDictationMicDisabled
-                    ? 'is-recording ring-2 ring-red-400/60 bg-red-500/15 shadow-[0_0_20px_rgba(239,68,68,0.35)]'
-                    : ''
-                "
-                :style="{ borderRadius: 'var(--radius-icon)' }"
-                :aria-pressed="speechStore.isListening"
-                :aria-disabled="isDictationMicDisabled"
-                aria-label="Запись голоса"
-                :disabled="isDictationMicDisabled"
-              >
-                <IconMic
-                  :class="
-                    speechStore.isListening && !isDictationMicDisabled
-                      ? 'text-red-300'
-                      : 'text-foreground'
-                  "
-                  class="w-5 h-5"
-                />
-              </button>
-            </div>
-            <div class="flex items-center">
-              <button
-                type="button"
                 class="chat-action-button chat-action-button-call relative flex items-center justify-center cursor-pointer flex-none disabled:cursor-not-allowed disabled:opacity-45"
                 :class="realtimeVoiceCallButtonClass"
                 :style="{ borderRadius: 'var(--radius-icon)' }"
@@ -277,6 +251,32 @@
                 >
                   {{ getPlanBadgeEmoji(realtimeVoiceAccess.requiredPlan) }}
                 </span>
+              </button>
+            </div>
+            <div class="flex items-center">
+              <button
+                type="button"
+                @click="toggleMic"
+                class="chat-action-button relative flex items-center justify-center cursor-pointer flex-none disabled:cursor-not-allowed disabled:opacity-45"
+                :class="
+                  speechStore.isListening && !isDictationMicDisabled
+                    ? 'is-recording ring-2 ring-red-400/60 bg-red-500/15 shadow-[0_0_20px_rgba(239,68,68,0.35)]'
+                    : ''
+                "
+                :style="{ borderRadius: 'var(--radius-icon)' }"
+                :aria-pressed="speechStore.isListening"
+                :aria-disabled="isDictationMicDisabled"
+                aria-label="Запись голоса"
+                :disabled="isDictationMicDisabled"
+              >
+                <IconMic
+                  :class="
+                    speechStore.isListening && !isDictationMicDisabled
+                      ? 'text-red-300'
+                      : 'text-foreground'
+                  "
+                  class="w-5 h-5"
+                />
               </button>
             </div>
             <button

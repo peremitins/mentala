@@ -1,4 +1,4 @@
-import { computed, onScopeDispose, ref } from 'vue';
+import { computed, onScopeDispose, ref, watch } from 'vue';
 import { nanoid } from 'nanoid';
 import { useRuntimeConfig } from '#imports';
 import {
@@ -18,6 +18,7 @@ import {
 import { getRealtimeVoiceSupport } from '@/app/services/realtime/realtimeVoiceBrowser';
 import { RealtimeVoiceChatAdapter } from '@/app/services/realtime/realtimeVoiceChatAdapter';
 import { useChatStore } from '@/app/stores/chat';
+import { useRealtimeVoiceUiStore } from '@/app/stores/realtimeVoiceUi';
 import { getCsrfTokenForHeader } from '@/app/utils/csrf';
 import { RealtimeVoiceTransport } from '@/app/services/realtime/realtimeVoiceTransport';
 import {
@@ -405,6 +406,30 @@ export function useRealtimeVoiceSession(options?: {
   const isBusy = computed(
     () => status.value === 'starting' || status.value === 'stopping'
   );
+
+  // Зеркалим UI-статус в глобальный стор, чтобы оверлеи (амбиентная рамка)
+  // могли реагировать на realtime voice независимо от страницы.
+  const realtimeVoiceUi = useRealtimeVoiceUiStore();
+  watch(
+    status,
+    (next) => {
+      if (
+        next === 'idle' ||
+        next === 'starting' ||
+        next === 'active' ||
+        next === 'stopping'
+      ) {
+        realtimeVoiceUi.setStatus(next);
+      } else {
+        // 'error' и любые нестандартные — гасим оверлей.
+        realtimeVoiceUi.setStatus('idle');
+      }
+    },
+    { immediate: true }
+  );
+  onScopeDispose(() => {
+    realtimeVoiceUi.reset();
+  });
   const blocksTextInput = computed(
     () =>
       status.value === 'starting' ||
