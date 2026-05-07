@@ -851,7 +851,7 @@ export const notificationSlots = pgTable(
   {
     id: text('id').primaryKey(),
     userId: integer('user_id').notNull(),
-    kind: varchar('kind', { length: 20 }).notNull(), // 'therapy' | 'habits'
+    kind: varchar('kind', { length: 20 }).notNull(), // 'therapy' | 'habits' | 'system'
     entityKey: varchar('entity_key', { length: 255 }), // Единое поле для идентификации источника (ID для кастомных, ключ шаблона для шаблонных)
     entityDisplayName: varchar('entity_display_name', { length: 255 }), // Читаемое название сущности (для удобства разработчиков, не участвует в логике)
     scheduledAt: timestamp('scheduled_at', { withTimezone: true }).notNull(), // UTC с джиттером
@@ -943,6 +943,44 @@ export const userDevices = pgTable('user_devices', {
     .notNull(),
 });
 
+// Состояние вовлечённости пользователя для системных follow-up уведомлений.
+// Не заменяет user_devices.last_seen: здесь хранится продуктовая активность
+// аккаунта, а не свежесть конкретного push endpoint.
+export const userEngagementState = pgTable(
+  'user_engagement_state',
+  {
+    userId: integer('user_id')
+      .primaryKey()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
+    lastBackgroundedAt: timestamp('last_backgrounded_at', {
+      withTimezone: true,
+    }),
+    timezone: varchar('timezone', { length: 100 }),
+    reengagementStage: integer('reengagement_stage').notNull().default(0),
+    lastReengagementPushSentAt: timestamp('last_reengagement_push_sent_at', {
+      withTimezone: true,
+    }),
+    reengagementSuppressedUntil: timestamp('reengagement_suppressed_until', {
+      withTimezone: true,
+    }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    lastSeenIdx: index('idx_user_engagement_state_last_seen').on(
+      table.lastSeenAt
+    ),
+    suppressedIdx: index(
+      'idx_user_engagement_state_reengagement_suppressed'
+    ).on(table.reengagementSuppressedUntil),
+  })
+);
+
 // Факты взаимодействия с уведомлениями
 export const notificationInteractions = pgTable('notification_interactions', {
   id: text('id').primaryKey(),
@@ -951,7 +989,7 @@ export const notificationInteractions = pgTable('notification_interactions', {
   action: varchar('action', { length: 20 }).notNull(), // 'yes' | 'no' | 'later' | 'dismissed' | 'unanswered'
   actionAt: timestamp('action_at', { withTimezone: true }).defaultNow(),
   meta: jsonb('meta'),
-  kind: varchar('kind', { length: 20 }).notNull(), // 'therapy' | 'habits'
+  kind: varchar('kind', { length: 20 }).notNull(), // 'therapy' | 'habits' | 'system'
   type: varchar('type', { length: 50 }), // breath_cue | grounding | body_scan | ...
   metric: varchar('metric', { length: 50 }), // steps | breath | ... (training объединён со steps)
   createdAt: timestamp('created_at', { withTimezone: true })
@@ -2271,6 +2309,11 @@ export const sessionSummariesUser = pgTable(
     errorMessage: text('error_message'),
     // Момент, когда пользователь увидел/закрыл модалку (для логики "непрочитанного итога").
     viewedAt: timestamp('viewed_at', { withTimezone: true }),
+    // Системный push о готовом итоге: планирование и реальная доставка.
+    readyPushScheduledAt: timestamp('ready_push_scheduled_at', {
+      withTimezone: true,
+    }),
+    readyPushSentAt: timestamp('ready_push_sent_at', { withTimezone: true }),
     // Trigger, породивший саммари: manual | logout | app-hidden | cron-nightly.
     trigger: varchar('trigger', { length: 32 }),
     createdAt: timestamp('created_at', { withTimezone: true })
@@ -2328,14 +2371,20 @@ export const deletedUserStats = pgTable('deleted_user_stats', {
   trialStartedAt: timestamp('trial_started_at', { withTimezone: true }),
 
   // Подписки
-  hadPaidSubscription: boolean('had_paid_subscription').notNull().default(false),
+  hadPaidSubscription: boolean('had_paid_subscription')
+    .notNull()
+    .default(false),
   lastPlanId: varchar('last_plan_id', { length: 50 }),
   subscriptionCount: integer('subscription_count').notNull().default(0),
-  totalRevenue: numeric('total_revenue', { precision: 10, scale: 2 }).notNull().default('0'),
+  totalRevenue: numeric('total_revenue', { precision: 10, scale: 2 })
+    .notNull()
+    .default('0'),
 
   // Активность
   totalDaysActive: integer('total_days_active').notNull().default(0),
   totalAiSessions: integer('total_ai_sessions').notNull().default(0),
 
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
 });

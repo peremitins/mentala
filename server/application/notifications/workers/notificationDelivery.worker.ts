@@ -19,6 +19,11 @@ import { getCustomNotificationSourceAccessByKind } from '@/server/application/no
 import { db } from '@/server/infrastructure/db/client';
 import { notificationSlots } from '@/server/infrastructure/db/schema';
 import { eq, and } from 'drizzle-orm';
+import type { NotificationPayload } from '@/shared/dto/notifications';
+import {
+  guardSystemNotificationSlot,
+  markSystemNotificationSent,
+} from '@/server/application/notifications/system-notifications.service';
 
 /**
  * Запускает воркер для обработки задач отправки уведомлений
@@ -41,6 +46,9 @@ export function startNotificationDeliveryWorker() {
             kind: notificationSlots.kind,
             entityKey: notificationSlots.entityKey,
             userId: notificationSlots.userId,
+            payload: notificationSlots.payload,
+            templateId: notificationSlots.templateId,
+            createdAt: notificationSlots.createdAt,
           })
           .from(notificationSlots)
           .where(eq(notificationSlots.id, slotId))
@@ -51,6 +59,34 @@ export function startNotificationDeliveryWorker() {
             `[Notification Delivery Worker] ⏭️ Slot ${slotId} missing or not queued (status: ${slot?.status ?? 'missing'}), skipping send`
           );
           return { skipped: true, reason: 'slot_not_queued' };
+        }
+
+        if (slot.kind === 'system') {
+          const guard = await guardSystemNotificationSlot({
+            userId: slot.userId,
+            templateId: slot.templateId,
+            payload: slot.payload as NotificationPayload,
+            slotCreatedAt: slot.createdAt,
+          });
+
+          if (!guard.send) {
+            const updateResult = await db
+              .update(notificationSlots)
+              .set({ status: 'skipped' })
+              .where(
+                and(
+                  eq(notificationSlots.id, slotId),
+                  eq(notificationSlots.status, 'queued')
+                )
+              );
+            const rowsAffected = updateResult.rowCount || 0;
+            if (rowsAffected > 0) {
+              console.warn(
+                `[Notification Delivery Worker] ⏭️ System slot ${slotId} skipped: ${guard.reason}`
+              );
+            }
+            return { skipped: true, reason: guard.reason };
+          }
         }
 
         if (
@@ -122,6 +158,14 @@ export function startNotificationDeliveryWorker() {
               devicesCount: deliveryResult.sentCount,
               alreadyProcessed: true,
             };
+          }
+
+          if (slot.kind === 'system') {
+            await markSystemNotificationSent({
+              userId,
+              templateId: slot.templateId,
+              payload: slot.payload as NotificationPayload,
+            });
           }
 
           console.log(

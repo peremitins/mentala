@@ -1,10 +1,12 @@
 # Уведомления
 
 ## Терминология в UI
+
 - В пользовательском интерфейсе привычек и терапии используем термин `напоминания`, когда речь идёт о поддерживающих сообщениях и их расписании.
 - Термин `уведомления` оставляем для системного уровня: push-разрешений ОС, delivery-механики, FCM/APNs и внутренних технических сущностей.
 
 ## Настройки (`notification_preferences`)
+
 - `active_days`, `time_range_start/end`, `custom_slot_times` (до 5), `entity_key`
 - `text_source_normalized`: templates | ai
 - `custom_prompt_notification` — пожелания пользователя (только для шаблонных тем, только AI)
@@ -12,6 +14,7 @@
 - Welcome-онбординг может создать активные настройки по выбранным каталоговым темам терапии/привычек. `notification_preferences.enabled=true` означает, что тема настроена в продукте; фактическая доставка всё равно требует активного native/PWA/browser endpoint с системным разрешением.
 
 ## Генерация текстов
+
 - **Templates**: готовые шаблоны из `notification_text_presets` → персональные копии в `notification_texts` (lazy init)
 - **AI**: Buffer Pool — до 50 текстов за раз, хранятся в `ai_generated_notification_texts`, автопополнение при <2 дней запаса
 - AI debounce-dedup через BullMQ `ai-text-generation`, лимит 3 задачи на пользователя
@@ -19,19 +22,43 @@
 - `tone`/`addressing` влияют на генерацию; при изменении → регенерация AI-пулов
 
 ## Слоты (`notification_slots`)
+
 - Состояния: planned → queued → sent/failed/skipped
 - Запрещён переход queued → planned
 - Генерация: sharded enqueue с cursor/cycle, backpressure по queue lag
 - Регенерация: только при почти пустом горизонте (<2ч), `queued` не удаляются
 - Inter-process lock: `pg_try_advisory_xact_lock`
 - Жёсткий инвариант: слот с `scheduledAt <= now` не вставляется
+- `kind=system` используется для продуктовых follow-up push:
+  - `session_summary_ready` — push о готовом непрочитанном `session_summaries_user`;
+  - `reengagement_inactive` — мягкий возврат после отсутствия пользователя.
+    Такие слоты идут через тот же delivery pipeline, что и therapy/habits, но перед отправкой проходят system guard.
+
+## Activity / follow-up
+
+- `POST /api/activity/ping` фиксирует продуктовую активность аккаунта в `user_engagement_state`.
+- `startup` обновляет `last_seen_at`, timezone и сбрасывает `reengagement_stage=0`.
+- `foreground` и `heartbeat` обновляют `last_seen_at` только при `clientVisible=true` и `clientFocused=true`; это защищает re-engagement от web/PWA push-доставки, которая может разбудить скрытую страницу без фактического возврата пользователя.
+- Любой `startup`/`foreground`/`heartbeat` в течение 2 минут после `notification_slots.status=sent` не считается возвратом, если нет явного `source=notification_click` или `notification_interactions.action=open`. Это закрывает iOS/PWA wake, где браузер может считать документ видимым даже при заблокированном телефоне.
+- `background` обновляет только `last_backgrounded_at`.
+- Клиент отправляет ping на startup, web `visibilitychange/focus/blur/pagehide`, native Capacitor `App.appStateChange` и active heartbeat раз в 15 минут. Foreground/heartbeat-события имеют debounce 60 секунд.
+- System scheduler запускается каждые 15 минут:
+  - summary-ready планируется на 12:00 local time; текст: `Итог сессии готов` / `Сводка готова: главные мысли и следующие шаги ждут внутри.`;
+  - re-engagement стартует после 36 часов отсутствия, затем 72 часа и 7 дней, с daily/weekly cap и приоритетом summary-ready.
+- При `POST /api/session-summaries-user/:id/viewed` активные `session_summary_ready` слоты для этого итога переводятся в `skipped`; delivery guard дополнительно проверяет `viewed_at` прямо перед отправкой.
+- В локальном `NODE_ENV=development` re-engagement ускоряется для проверки: stage 1/2/3 наступают через 1/2/3 часа отсутствия, слот ставится на ближайшую минуту, recent caps сокращаются до 5 минут, upcoming window — до 10 минут, лимит окна — 3 re-engagement за 3 часа. Override: `SYSTEM_NOTIFICATIONS_FAST_REENGAGEMENT=true|false`.
+- Для timezone используется последний IANA timezone из `X-Timezone`; fallback — `Europe/Moscow`.
 
 ## Delivery
+
 - Scheduler: симметричное окно `now ± lookahead`, delayed jobs в BullMQ
 - Stale: протухшие planned старше `NOTIFICATION_MAX_SLOT_AGE_HOURS_BEFORE_SKIP` → skipped
 - Для custom-источников: entitlement-check, без доступа → skipped
+- Для system-слотов delivery worker повторно проверяет актуальность перед отправкой:
+  непрочитанный summary всё ещё существует, пользователь не вернулся до re-engagement, не нарушены приоритеты и лимиты.
 
 ## Push (FCM)
+
 - **Android**: data-only сообщения, `MentalaMessagingService` строит системное уведомление. Один обработчик `MESSAGING_EVENT`
 - **Android**: не используем `full-screen intent` и permission `USE_FULL_SCREEN_INTENT`; push показываются как обычные high-priority системные уведомления через `contentIntent`
 - **iOS**: FCM token через `@capacitor-community/fcm`, APNs только для диагностики. Rich-image через `MentalaNotificationService` (UNNotificationServiceExtension)
@@ -56,12 +83,14 @@
 - Xcode app console не гарантирует видимость логов `UNNotificationServiceExtension` и системной доставки, поэтому для проверки rich push и фоновой доставки полезнее смотреть device logs через macOS Console.app / Xcode Devices
 
 ## Изображения
+
 - Runtime-подбор: `rules + score` с порогом `MATCH_SCORE_THRESHOLD=0.65`
 - Приоритет: `{kind}/{entity}/{tag}` → `common/{tag}`
 - Для templates: изображение только при платной подписке
 - Валидация: только https + jpg/png, <1MB
 
 ## Навигация по push
+
 - Payload: `deepLink`, `navigation`, `data.action` + параметры
 - Приоритет: deepLink → data.action → navigation → `/`
 - Client: очередь с TTL, дедупликация по messageId, retry до router.isReady()
@@ -69,6 +98,7 @@
 - Для темы `Дневник благодарности` target/deepLink форсируется по `title`/`entityKey=gratitude`, даже если `actionHint` отсутствует или в старом payload записан `home`
 
 ## Unified Navigation v1
+
 - `AppNavigationTarget` в `shared/navigation/index.ts` — канонический контракт
 - Server: `chat-navigation.service.ts` строит action chips детерминированно
 - Client: `useAppNavigation` + entitlement-gate + `FeaturePaywallModal`

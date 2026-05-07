@@ -17,7 +17,7 @@ import type {
 export const MAX_NOTIFICATION_TEXT_LENGTH = 150;
 export const MAX_CUSTOM_PROMPT_NOTIFICATION_LENGTH = 400;
 
-export type NotificationKind = 'therapy' | 'habits';
+export type NotificationKind = 'therapy' | 'habits' | 'system';
 export type NotificationTextSource = 'default' | 'user';
 export type Addressing = 'informal' | 'formal';
 export type Tone = AssistantToneWithUnknown;
@@ -27,7 +27,7 @@ export type Platform = 'ios' | 'android' | 'web';
 export type ChannelType = 'native' | 'pwa' | 'browser';
 // Семейство платформы для маршрутизации (более точное, чем Platform)
 export type PlatformFamily = 'ios' | 'android' | 'desktop';
-export type SlotStatus = 'planned' | 'sent' | 'skipped' | 'failed';
+export type SlotStatus = 'planned' | 'queued' | 'sent' | 'skipped' | 'failed';
 export type InteractionAction =
   | 'yes'
   | 'no'
