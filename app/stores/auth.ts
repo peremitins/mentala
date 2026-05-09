@@ -27,6 +27,7 @@ type AuthUser = NonNullable<UserMeDto['user']>;
 const SESSION_TOKEN_KEY = 'mentai.session.token';
 const GOOGLE_WEB_CLIENT_ID_REGEX = /\.apps\.googleusercontent\.com$/i;
 const GOOGLE_IOS_CLIENT_ID_REGEX = /\.apps\.googleusercontent\.com$/i;
+const LOGOUT_QUIET_WINDOW_MS = 15_000;
 
 function normalizeErrorPart(value: unknown): string {
   if (typeof value === 'string') return value.trim();
@@ -130,6 +131,7 @@ export const useAuthStore = defineStore('auth', {
     isLoggedIn: false,
     // Флаг, чтобы безопасно блокировать фоновые эффекты во время logout.
     isLoggingOut: false,
+    logoutQuietUntil: 0,
   }),
   actions: {
     setBillingSnapshot(billing: UserBilling | null) {
@@ -140,16 +142,27 @@ export const useAuthStore = defineStore('auth', {
       };
     },
     async me() {
+      if (this._isLogoutQuietPeriod()) return null;
+      const logoutQuietUntilAtStart = this.logoutQuietUntil;
+
       try {
         const response: any = await useAPI('/api/user/me', {
           method: 'GET',
         });
+
+        if (
+          this._isLogoutQuietPeriod() ||
+          this.logoutQuietUntil !== logoutQuietUntilAtStart
+        ) {
+          return null;
+        }
 
         this.user = response?.user ?? null;
         this.isLoggedIn = !!this.user;
 
         return this.user;
       } catch (error) {
+        if (this._isLogoutQuietPeriod()) return null;
         this.user = null;
         this.isLoggedIn = false;
         console.warn(
@@ -165,6 +178,7 @@ export const useAuthStore = defineStore('auth', {
       locale?: string;
       marketingAttribution?: MarketingAttributionDto;
     }) {
+      this._clearLogoutQuietPeriod();
       this.loading = true;
       try {
         const response = await useAPI('/api/auth/email/login', {
@@ -218,6 +232,7 @@ export const useAuthStore = defineStore('auth', {
       marketingAttribution?: MarketingAttributionDto
     ) {
       if (typeof window === 'undefined') return;
+      this._clearLogoutQuietPeriod();
 
       const { Capacitor } = await import('@capacitor/core');
       const isCapacitor = Capacitor.isNativePlatform();
@@ -360,6 +375,7 @@ export const useAuthStore = defineStore('auth', {
     },
     async loginWithApple(marketingAttribution?: MarketingAttributionDto) {
       if (typeof window === 'undefined') return;
+      this._clearLogoutQuietPeriod();
 
       const { Capacitor } = await import('@capacitor/core');
       if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== 'ios') {
@@ -460,6 +476,7 @@ export const useAuthStore = defineStore('auth', {
       marketingConsent?: boolean;
       marketingAttribution?: MarketingAttributionDto;
     }) {
+      this._clearLogoutQuietPeriod();
       this.loading = true;
       try {
         const response = await useAPI('/api/auth/email/register', {
@@ -478,6 +495,7 @@ export const useAuthStore = defineStore('auth', {
       payload: { email: string; code: string },
       options?: { redirect?: string | null }
     ) {
+      this._clearLogoutQuietPeriod();
       this.loading = true;
       try {
         const response = await useAPI('/api/auth/email/verify', {
@@ -543,6 +561,7 @@ export const useAuthStore = defineStore('auth', {
       linkingToken: string;
       password: string;
     }) {
+      this._clearLogoutQuietPeriod();
       this.loading = true;
       try {
         const response = await useAPI('/api/auth/oauth/link-verify-password', {
@@ -598,6 +617,7 @@ export const useAuthStore = defineStore('auth', {
       password: string;
       confirmPassword: string;
     }) {
+      this._clearLogoutQuietPeriod();
       this.loading = true;
       try {
         const response = await useAPI('/api/auth/password/reset', {
@@ -645,6 +665,7 @@ export const useAuthStore = defineStore('auth', {
       });
     },
     async linkOAuthVerifyCode(payload: { linkingToken: string; code: string }) {
+      this._clearLogoutQuietPeriod();
       this.loading = true;
       try {
         const response = await useAPI('/api/auth/oauth/link-verify-code', {
@@ -796,6 +817,51 @@ export const useAuthStore = defineStore('auth', {
       }
     },
 
+    _getSessionToken() {
+      if (typeof window === 'undefined') return null;
+      return localStorage.getItem(SESSION_TOKEN_KEY);
+    },
+
+    _startLogoutQuietPeriod() {
+      this.logoutQuietUntil = Date.now() + LOGOUT_QUIET_WINDOW_MS;
+    },
+
+    _clearLogoutQuietPeriod() {
+      this.logoutQuietUntil = 0;
+    },
+
+    _isLogoutQuietPeriod() {
+      return this.isLoggingOut || Date.now() < this.logoutQuietUntil;
+    },
+
+    async _clearAppLockRuntimeForLogout() {
+      try {
+        const { useAppLockStore } = await import('@/app/stores/appLock');
+        // Обычный logout не удаляет PIN-record: при повторном входе этот же userId
+        // должен разблокировать существующую локальную защиту, а не создавать новую.
+        useAppLockStore().clearRuntime();
+      } catch (error) {
+        console.error(
+          '[Auth Store] Не удалось очистить runtime локального lock:',
+          error
+        );
+      }
+    },
+
+    async _removeAppLockRecord(userId: number | null | undefined) {
+      try {
+        const { useAppLockStore } = await import('@/app/stores/appLock');
+        // Деструктивная очистка допустима только для явного сброса кода
+        // или после удаления аккаунта.
+        await useAppLockStore().removeLocalRecord(userId ?? null);
+      } catch (error) {
+        console.error(
+          '[Auth Store] Не удалось удалить локальный lock-record:',
+          error
+        );
+      }
+    },
+
     /**
      * Регистрирует push-токен для текущей сессии (только native)
      */
@@ -862,6 +928,8 @@ export const useAuthStore = defineStore('auth', {
           headers: {
             'X-Session-Token': sessionToken,
           },
+          suppressErrorToast: true,
+          suppressAuthRedirect: true,
         });
       } catch (error) {
         console.error(
@@ -945,7 +1013,9 @@ export const useAuthStore = defineStore('auth', {
      */
     async logoutAfterDeletion() {
       this.isLoggingOut = true;
+      this._startLogoutQuietPeriod();
       try {
+        await this._removeAppLockRecord(this.user?.id);
         this._resetAuthState();
         this._resetAllStores();
         this._clearSessionToken();
@@ -959,14 +1029,21 @@ export const useAuthStore = defineStore('auth', {
         }
       } finally {
         this.isLoggingOut = false;
+        this._startLogoutQuietPeriod();
       }
     },
 
-    async logout() {
+    async logout(options: { resetLocalAppLockRecord?: boolean } = {}) {
       this.isLoggingOut = true;
+      this._startLogoutQuietPeriod();
       let logoutRequest: Promise<void> | null = null;
+      const logoutUserId = this.user?.id ?? null;
 
       try {
+        // Скрываем app-lock сразу: pre-logout запросы могут занять время, но UI уже
+        // не должен показывать проверку локальной защиты.
+        await this._clearAppLockRuntimeForLogout();
+
         // 1. Останавливаем все активные запросы и озвучки
         await this._stopAllActiveRequests();
 
@@ -979,11 +1056,23 @@ export const useAuthStore = defineStore('auth', {
         // 4. Деактивируем web push токен (PWA) до разлогина
         await this._deactivateWebPushToken();
 
+        if (options.resetLocalAppLockRecord) {
+          await this._removeAppLockRecord(logoutUserId);
+        }
+
         // 5. Делаем запрос на разлогин в фоне, чтобы UI не зависал.
         logoutRequest = (async () => {
           try {
+            const sessionToken = this._getSessionToken();
             await useAPI('/api/auth/logout', {
               method: 'POST',
+              headers: sessionToken
+                ? {
+                    'X-Session-Token': sessionToken,
+                  }
+                : undefined,
+              suppressErrorToast: true,
+              suppressAuthRedirect: true,
             });
           } catch (error) {
             console.error(
@@ -1016,6 +1105,7 @@ export const useAuthStore = defineStore('auth', {
         }
       } finally {
         this.isLoggingOut = false;
+        this._startLogoutQuietPeriod();
         if (logoutRequest) {
           void logoutRequest;
         }

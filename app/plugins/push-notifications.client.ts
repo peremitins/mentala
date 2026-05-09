@@ -919,6 +919,7 @@ export default defineNuxtPlugin({
     }
 
     async function ensureAuthReady(): Promise<void> {
+      if (auth._isLogoutQuietPeriod()) return;
       if (auth.user || auth.isLoggedIn) return;
       if (authEnsureInFlight) {
         await authEnsureInFlight;

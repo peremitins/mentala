@@ -1012,17 +1012,13 @@ async function handleSaveCampaign() {
         method: 'PATCH',
         body: payload,
       });
-      useToast('Кампания обновлена', 'Изменения сохранены.', 'success');
+      useToast('Кампания обновлена', 'Изменения сохранены.');
     } else {
       await useAPI('/api/admin/promo-codes', {
         method: 'POST',
         body: payload,
       });
-      useToast(
-        'Кампания создана',
-        'Промокод готов к использованию.',
-        'success'
-      );
+      useToast('Кампания создана', 'Промокод готов к использованию.');
     }
 
     resetForm();
@@ -1077,7 +1073,7 @@ async function saveReferralProgram() {
       },
     });
 
-    useToast('Referral обновлён', 'Новые условия сохранены.', 'success');
+    useToast('Referral обновлён', 'Новые условия сохранены.');
     await loadReferralData();
   } catch (error: any) {
     useToast(
@@ -1097,7 +1093,7 @@ async function revokeReferralReward(id: number) {
     await useAPI(`/api/admin/referrals/${id}/revoke-reward`, {
       method: 'POST',
     });
-    useToast('Награды отозваны', 'Состояние referral обновлено.', 'success');
+    useToast('Награды отозваны', 'Состояние referral обновлено.');
     await loadReferralData();
   } catch (error: any) {
     useToast(

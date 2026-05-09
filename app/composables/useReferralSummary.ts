@@ -64,7 +64,7 @@ export function useReferralSummary(options: UseReferralSummaryOptions = {}) {
 
     const copied = await copyToClipboard(summary.value.myCode);
     if (copied) {
-      useToast('Код скопирован', 'Можно отправить другу.', 'success');
+      useToast('Код скопирован', 'Можно отправить другу.');
       return;
     }
 
@@ -89,8 +89,7 @@ export function useReferralSummary(options: UseReferralSummaryOptions = {}) {
     if (result === 'copied') {
       useToast(
         'Текст приглашения скопирован',
-        'На этом устройстве системный share-sheet недоступен, поэтому текст просто скопирован.',
-        'success'
+        'На этом устройстве системный share-sheet недоступен, поэтому текст просто скопирован.'
       );
       return;
     }

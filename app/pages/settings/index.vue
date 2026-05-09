@@ -193,7 +193,7 @@
           </div>
         </div>
 
-        <!-- Блок "Конфиденциальность": только Память и данные -->
+        <!-- Блок "Конфиденциальность": память, данные и обязательная локальная защита -->
         <div class="glass-deep">
           <p
             class="text-xs font-semibold text-muted-foreground tracking-wide pt-4 pb-1 px-4"
@@ -210,6 +210,65 @@
               </div>
               <IconChevronRight class="h-4 w-4 text-muted-foreground" />
             </NuxtLink>
+
+            <Separator class="w-auto mx-4" />
+
+            <div class="px-4 py-3 space-y-3">
+              <div class="flex items-start justify-between gap-3">
+                <div>
+                  <p class="text-sm font-medium">Защита входа</p>
+                  <p class="text-xs text-muted-foreground">
+                    {{ appLockStatusLabel }}
+                  </p>
+                </div>
+                <IconLockKeyhole class="h-4 w-4 text-muted-foreground" />
+              </div>
+
+              <div class="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  class="w-full"
+                  @click="handleChangeAppLockCode"
+                >
+                  Изменить код
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  class="w-full"
+                  @click="handleManualLock"
+                >
+                  Заблокировать сейчас
+                </Button>
+              </div>
+
+              <div class="space-y-2">
+                <p class="text-xs font-medium text-muted-foreground">
+                  Запрашивать повторно
+                </p>
+                <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <button
+                    v-for="option in appLockRepeatOptions"
+                    :key="option.value"
+                    type="button"
+                    class="rounded-lg border px-3 py-2 text-xs font-medium transition-colors"
+                    :class="
+                      appLock.lockAfterSeconds === option.value
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'border-border bg-transparent text-muted-foreground hover:border-primary/60 hover:text-foreground'
+                    "
+                    @click="handleLockAfterChange(option.value)"
+                  >
+                    {{ option.label }}
+                  </button>
+                </div>
+              </div>
+
+              <p class="text-xs text-muted-foreground">
+                Биометрия: {{ appLockBiometryLabel }}
+              </p>
+            </div>
           </div>
         </div>
 
@@ -445,6 +504,7 @@ import { computed, onMounted, ref } from 'vue';
 import { useRuntimeConfig } from '#imports';
 import { useI18n } from 'vue-i18n';
 import { useAuthStore } from '@/app/stores/auth';
+import { useAppLockStore } from '@/app/stores/appLock';
 import { useChatSettingsStore } from '@/app/stores/chatSettings';
 import { useSubscriptionStore } from '@/app/stores/subscription';
 import { useNotificationsSettings } from '@/app/composables/useNotificationsSettings';
@@ -495,9 +555,12 @@ import {
   resolveAssistantVoiceCatalogItem,
 } from '@/shared/constants/assistantVoiceCatalog';
 import { openExternalBrowser } from '@/app/utils/openExternalBrowser';
+import type { AppLockAfterSeconds } from '@/app/utils/appLockCrypto';
 import IconChevronRight from '~icons/lucide/chevron-right';
+import IconLockKeyhole from '~icons/lucide/lock-keyhole';
 
 const auth = useAuthStore();
+const appLock = useAppLockStore();
 const chatSettings = useChatSettingsStore();
 const subscriptionStore = useSubscriptionStore();
 const { fetchGlobalPreferences } = useNotificationsSettings();
@@ -517,6 +580,15 @@ const referralPanelRefreshKey = ref(0);
 const marketingConsent = ref(false);
 const marketingConsentLoading = ref(false);
 const showPushDisableConfirmModal = ref(false);
+const appLockRepeatOptions: Array<{
+  value: AppLockAfterSeconds;
+  label: string;
+}> = [
+  { value: 0, label: 'Сразу' },
+  { value: 60, label: '1 мин' },
+  { value: 300, label: '5 мин' },
+  { value: 900, label: '15 мин' },
+];
 
 const pushPermissionGate = usePushPermissionGate();
 const pushSettings = pushPermissionGate.pushSettings;
@@ -621,7 +693,9 @@ const supportDescription = computed(() => {
 });
 
 const displayName = computed(() => auth.user?.name?.trim() || 'Пользователь');
-const displayEmail = computed(() => auth.user?.emailOriginal || auth.user?.email || 'Не указан');
+const displayEmail = computed(
+  () => auth.user?.emailOriginal || auth.user?.email || 'Не указан'
+);
 const userInitials = computed(() => {
   const source = displayName.value || displayEmail.value || '?';
   const parts = source.trim().split(/\s+/).filter(Boolean);
@@ -670,6 +744,14 @@ const localeLabel = computed(() => {
   return value.toUpperCase();
 });
 
+const appLockStatusLabel = computed(() =>
+  appLock.record ? 'Код активен на этом устройстве' : 'Код обязателен'
+);
+
+const appLockBiometryLabel = computed(() =>
+  appLock.biometric.available ? appLock.biometric.label : 'PIN-код'
+);
+
 const legalLocale = computed(() => {
   const value = (auth.user?.locale || locale.value || 'ru').toString();
   return value.toLowerCase().startsWith('en') ? 'en' : 'ru';
@@ -704,6 +786,7 @@ onMounted(async () => {
       await auth.me();
     }
   } catch (error) {
+    if (auth._isLogoutQuietPeriod()) return;
     console.error('Не удалось загрузить пользователя:', error);
     useToast('Ошибка', 'Не удалось загрузить профиль', 'error');
   } finally {
@@ -711,6 +794,7 @@ onMounted(async () => {
   }
 
   marketingConsent.value = Boolean(auth.user?.marketingConsent);
+  if (auth._isLogoutQuietPeriod()) return;
 
   if (isPushNative.value) {
     void pushSettings.refreshPermissionStatus();
@@ -751,8 +835,7 @@ async function handleMarketingConsentChange(value: boolean) {
       value ? 'Маркетинг включён' : 'Маркетинг выключен',
       value
         ? 'Вы будете получать новости и предложения'
-        : 'Мы не будем отправлять промо‑сообщения',
-      'success'
+        : 'Мы не будем отправлять промо‑сообщения'
     );
   } catch (error) {
     console.error('Не удалось обновить маркетинговое согласие:', error);
@@ -790,6 +873,24 @@ async function confirmDisablePush() {
 async function handleOpenPushSystemSettings() {
   settingsAnalytics.trackOpenSystemSettings();
   await pushPermissionGate.openSystemSettings();
+}
+
+function handleChangeAppLockCode() {
+  appLock.startSetup('change');
+}
+
+function handleManualLock() {
+  appLock.lockNow();
+}
+
+async function handleLockAfterChange(value: AppLockAfterSeconds) {
+  try {
+    await appLock.setLockAfterSeconds(value);
+    useToast('Сохранено', 'Период повторной проверки обновлён');
+  } catch (error) {
+    console.error('Не удалось обновить период блокировки:', error);
+    useToast('Ошибка', 'Не удалось сохранить настройку', 'error');
+  }
 }
 
 async function copyUserId() {

@@ -26,7 +26,7 @@ export default defineNuxtPlugin({
       options: { force?: boolean; source?: ActivityPingSourceType } = {}
     ) {
       const userId = auth.user?.id;
-      if (!userId || auth.isLoggingOut) return;
+      if (!userId || auth._isLogoutQuietPeriod()) return;
 
       const now = Date.now();
       const updatesLastSeen = event !== 'background';

@@ -74,6 +74,21 @@ function resetAllLoaders() {
   }
 }
 
+function isAuthLogoutQuietPeriod() {
+  try {
+    if (typeof window === 'undefined') return false;
+    const pinia = getActivePinia();
+    const authStore = (pinia as any)?._s?.get('auth');
+    if (typeof authStore?._isLogoutQuietPeriod === 'function') {
+      return Boolean(authStore._isLogoutQuietPeriod());
+    }
+    const quietUntil = Number(authStore?.logoutQuietUntil || 0);
+    return Boolean(authStore?.isLoggingOut || Date.now() < quietUntil);
+  } catch {
+    return false;
+  }
+}
+
 export default defineNuxtPlugin(() => {
   const config = useRuntimeConfig();
   const router = useRouter();
@@ -316,8 +331,16 @@ export default defineNuxtPlugin(() => {
         return;
       }
 
+      const suppressAuthRedirect =
+        (options as any)?.suppressAuthRedirect === true;
+      const suppressErrorToast = (options as any)?.suppressErrorToast === true;
+      const isExpectedLogoutAuthError =
+        response?.status === 401 &&
+        (isAuthLogoutQuietPeriod() ||
+          (suppressAuthRedirect && suppressErrorToast));
+
       // Детальное логирование ошибок в Capacitor
-      if (isCapacitor) {
+      if (isCapacitor && !isExpectedLogoutAuthError) {
         console.error('[API] Error:', {
           url: request,
           status: response?.status,
@@ -366,15 +389,20 @@ export default defineNuxtPlugin(() => {
       }
 
       // Авто‑тост ошибок
-      if ((options as any)?.suppressErrorToast !== true) {
+      if (!suppressErrorToast && !isExpectedLogoutAuthError) {
         useToast('Ошибка запроса', String(message), 'error');
       }
 
       if (response?.status === 401) {
         // Очищаем токен при 401 ошибке (неавторизован)
-        if (isCapacitor && typeof window !== 'undefined') {
+        if (
+          isCapacitor &&
+          typeof window !== 'undefined' &&
+          !isExpectedLogoutAuthError
+        ) {
           localStorage.removeItem(SESSION_TOKEN_KEY);
         }
+        if (suppressAuthRedirect || isAuthLogoutQuietPeriod()) return;
         // Не редиректим на /auth для публичных маршрутов
         const currentPath = router.currentRoute.value?.path || '';
         const publicRoutes = [

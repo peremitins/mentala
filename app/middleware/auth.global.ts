@@ -63,6 +63,10 @@ export default defineNuxtRouteMiddleware(async (to) => {
   }
 
   if (!auth.user) return navigateTo(buildAuthRedirectPath(to.query));
+  if (auth.isLoggingOut) return;
+
+  // App-lock инициализирует плагин app-lock.client.ts по смене userId/route.path —
+  // дублировать вызов из middleware не нужно, иначе возникает race с clearRuntime.
 
   if (!auth.user.onboarding) {
     try {
