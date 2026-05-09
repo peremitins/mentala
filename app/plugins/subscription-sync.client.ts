@@ -165,114 +165,122 @@ function resolvePaymentReturnPath(rawUrl: string): string | null {
   return null;
 }
 
-export default defineNuxtPlugin(() => {
-  // Работаем только на клиенте
-  if (process.server) return;
+export default defineNuxtPlugin({
+  name: 'subscription-sync',
+  dependsOn: ['pinia'],
+  setup() {
+    // Работаем только на клиенте
+    if (process.server) return;
 
-  const subscriptionStore = useSubscriptionStore();
-  const auth = useAuthStore();
-  const router = useRouter();
-  const { refreshEntitlements } = useEntitlements();
-  let activePollingPromise: Promise<void> | null = null;
-  let activeDeepLinkSyncPromise: Promise<void> | null = null;
+    const subscriptionStore = useSubscriptionStore();
+    const auth = useAuthStore();
+    const router = useRouter();
+    const { refreshEntitlements } = useEntitlements();
+    let activePollingPromise: Promise<void> | null = null;
+    let activeDeepLinkSyncPromise: Promise<void> | null = null;
 
-  const refreshBillingAccessSnapshot = async () => {
-    if (!auth.isLoggedIn || auth.loading) return;
-    await refreshEntitlements().catch(() => {
-      // Ошибки entitlement-refresh не должны ломать фоновой sync.
-    });
-    await auth.me().catch(() => {
-      // Ошибки полного user-refresh не должны ломать фоновой sync.
-    });
-  };
+    const refreshBillingAccessSnapshot = async () => {
+      if (!auth.isLoggedIn || auth.loading || auth._isLogoutQuietPeriod())
+        return;
+      await refreshEntitlements().catch(() => {
+        // Ошибки entitlement-refresh не должны ломать фоновой sync.
+      });
+      await auth.me().catch(() => {
+        // Ошибки полного user-refresh не должны ломать фоновой sync.
+      });
+    };
 
-  const refreshSubscriptionOnce = async () => {
-    if (!auth.isLoggedIn || auth.loading) return null;
-    subscriptionStore.invalidateCache();
-    const data = await subscriptionStore.fetchCurrentSubscription(true);
-    return data?.subscription?.paymentStatus || null;
-  };
+    const refreshSubscriptionOnce = async () => {
+      if (!auth.isLoggedIn || auth.loading || auth._isLogoutQuietPeriod()) {
+        return null;
+      }
+      subscriptionStore.invalidateCache();
+      const data = await subscriptionStore.fetchCurrentSubscription(true);
+      return data?.subscription?.paymentStatus || null;
+    };
 
-  const runPendingPolling = async () => {
-    if (!auth.isLoggedIn || auth.loading) return;
-    if (activePollingPromise) return activePollingPromise;
+    const runPendingPolling = async () => {
+      if (!auth.isLoggedIn || auth.loading || auth._isLogoutQuietPeriod())
+        return;
+      if (activePollingPromise) return activePollingPromise;
 
-    activePollingPromise = (async () => {
-      const result = await runSubscriptionShortPolling(async () => {
-        const data = await subscriptionStore.fetchCurrentSubscription(true);
-        return data?.subscription?.paymentStatus || null;
+      activePollingPromise = (async () => {
+        const result = await runSubscriptionShortPolling(async () => {
+          const data = await subscriptionStore.fetchCurrentSubscription(true);
+          return data?.subscription?.paymentStatus || null;
+        });
+
+        if (result.status === 'active') {
+          await subscriptionStore.fetchUsage(true).catch(() => {
+            // Ошибки фонового обновления usage не блокируют flow.
+          });
+          await refreshBillingAccessSnapshot();
+        }
+      })().finally(() => {
+        activePollingPromise = null;
       });
 
-      if (result.status === 'active') {
-        await subscriptionStore.fetchUsage(true).catch(() => {
-          // Ошибки фонового обновления usage не блокируют flow.
-        });
+      return activePollingPromise;
+    };
+
+    const syncAfterPaymentReturn = async () => {
+      const status = await refreshSubscriptionOnce().catch(() => null);
+      if (status === 'active') {
         await refreshBillingAccessSnapshot();
       }
-    })().finally(() => {
-      activePollingPromise = null;
-    });
-
-    return activePollingPromise;
-  };
-
-  const syncAfterPaymentReturn = async () => {
-    const status = await refreshSubscriptionOnce().catch(() => null);
-    if (status === 'active') {
-      await refreshBillingAccessSnapshot();
-    }
-    if (status === 'pending') {
-      await runPendingPolling().catch(() => {
-        // Игнорируем ошибки polling в фоне.
-      });
-    }
-  };
-
-  const runDeepLinkSyncOnce = async () => {
-    if (activeDeepLinkSyncPromise) {
-      return activeDeepLinkSyncPromise;
-    }
-
-    activeDeepLinkSyncPromise = syncAfterPaymentReturn()
-      .catch(() => {
-        // Ошибки sync/polling в обработчике deeplink не должны ломать UX.
-      })
-      .finally(() => {
-        activeDeepLinkSyncPromise = null;
-      });
-
-    return activeDeepLinkSyncPromise;
-  };
-
-  if (typeof window !== 'undefined') {
-    // Динамически импортируем Capacitor App, если доступен
-    import('@capacitor/app')
-      .then(({ App }) => {
-        App.addListener('appUrlOpen', ({ url }) => {
-          const paymentReturnPath = resolvePaymentReturnPath(url);
-          if (!paymentReturnPath) {
-            return;
-          }
-
-          const currentFullPath = String(
-            router.currentRoute.value.fullPath || ''
-          );
-          if (currentFullPath === paymentReturnPath) {
-            void runDeepLinkSyncOnce();
-            return;
-          }
-
-          void router.replace(paymentReturnPath).catch((error) => {
-            console.warn(
-              '[SubscriptionSync] Failed to route deep link payment return path:',
-              error
-            );
-            void runDeepLinkSyncOnce();
-          });
+      if (status === 'pending') {
+        await runPendingPolling().catch(() => {
+          // Игнорируем ошибки polling в фоне.
         });
-      })
-      .catch(() => {
-        // Capacitor недоступен (веб-версия), это нормально
-      });
-  }
+      }
+    };
+
+    const runDeepLinkSyncOnce = async () => {
+      if (activeDeepLinkSyncPromise) {
+        return activeDeepLinkSyncPromise;
+      }
+
+      activeDeepLinkSyncPromise = syncAfterPaymentReturn()
+        .catch(() => {
+          // Ошибки sync/polling в обработчике deeplink не должны ломать UX.
+        })
+        .finally(() => {
+          activeDeepLinkSyncPromise = null;
+        });
+
+      return activeDeepLinkSyncPromise;
+    };
+
+    if (typeof window !== 'undefined') {
+      // Динамически импортируем Capacitor App, если доступен
+      import('@capacitor/app')
+        .then(({ App }) => {
+          App.addListener('appUrlOpen', ({ url }) => {
+            const paymentReturnPath = resolvePaymentReturnPath(url);
+            if (!paymentReturnPath) {
+              return;
+            }
+
+            const currentFullPath = String(
+              router.currentRoute.value.fullPath || ''
+            );
+            if (currentFullPath === paymentReturnPath) {
+              void runDeepLinkSyncOnce();
+              return;
+            }
+
+            void router.replace(paymentReturnPath).catch((error) => {
+              console.warn(
+                '[SubscriptionSync] Failed to route deep link payment return path:',
+                error
+              );
+              void runDeepLinkSyncOnce();
+            });
+          });
+        })
+        .catch(() => {
+          // Capacitor недоступен (веб-версия), это нормально
+        });
+    }
+  },
 });

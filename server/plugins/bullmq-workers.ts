@@ -67,6 +67,9 @@ export default defineNitroPlugin(async () => {
     const { startStaleSessionSummarizerWorker } = await import(
       '@/server/application/sessionSummaryUser/workers/staleSessionSummarizer.worker'
     );
+    const { startSystemNotificationsWorker } = await import(
+      '@/server/application/notifications/workers/systemNotifications.worker'
+    );
 
     // 1. AI Text Pool Worker
     startAiTextPoolWorker();
@@ -89,6 +92,9 @@ export default defineNitroPlugin(async () => {
     // 7. Nightly Session Summarizer Worker (cron: ежедневно закрывает idle
     //    therapy-сессии и пытается создать пользовательский итог).
     startStaleSessionSummarizerWorker();
+
+    // 8. System Notifications Worker (summary-ready и re-engagement push).
+    startSystemNotificationsWorker();
 
     console.log('[BullMQ] ✅ All workers started successfully!');
   } catch (error) {

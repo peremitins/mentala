@@ -116,7 +116,7 @@
                   :data-chat-role="(m as any).role"
                 >
                   <div
-                    class="items-center markdown-content"
+                    class="items-center markdown-content ym-hide-content"
                     v-html="
                       (m as any).role === 'assistant'
                         ? formatMessage(m.content)
@@ -199,11 +199,12 @@
                 :prevent-enter-default="true"
                 @enter-pressed="handleKeydown"
                 :placeholder="chatInputPlaceholder"
-                :class="
+                :class="[
+                  'ym-disable-keys',
                   isUserTextOverLimit
                     ? 'ring-2 ring-red-500/60 !border-red-500/70 transition-colors duration-200'
-                    : 'ring-0 ring-transparent transition-colors duration-200'
-                "
+                    : 'ring-0 ring-transparent transition-colors duration-200',
+                ]"
               />
               <div
                 v-if="isUserTextOverLimit"

@@ -96,11 +96,7 @@ export default defineNuxtPlugin({
             response?.kind === 'referral'
               ? 'Код активирован'
               : 'Промокод применён';
-          toast(
-            toastTitle,
-            response?.message || 'Код успешно активирован.',
-            'success'
-          );
+          toast(toastTitle, response?.message || 'Код успешно активирован.');
 
           subscriptionStore.invalidateCache();
           await Promise.allSettled([

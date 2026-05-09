@@ -87,7 +87,7 @@ export function useNotificationTexts(
 
       if (data) {
         texts.value = data.items;
-        useToast('Изменения сохранены', undefined, 'success');
+        useToast('Изменения сохранены', undefined);
         return true;
       }
       return false;
@@ -125,7 +125,7 @@ export function useNotificationTexts(
 
       // Перезагружаем тексты после reset (гарантированно выполнится POST запрос)
       await fetchTexts({});
-      useToast('Дефолтные тексты восстановлены', undefined, 'success');
+      useToast('Дефолтные тексты восстановлены', undefined);
       return true;
     } catch (error: any) {
       console.error('Failed to reset defaults:', error);

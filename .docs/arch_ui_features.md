@@ -89,6 +89,15 @@
 - У auth-полей должны быть стабильные `id`/`name`, отключённые `autocapitalize`/`spellcheck` для e-mail и валидные `type="email"` / `type="password"`
 - В Capacitor native-сборках поведение password manager зависит не только от HTML, но и от origin WebView: если приложение загружено с `server.url`, `http://localhost` или `capacitor://localhost`, iOS Keychain / Android credential sharing могут не связать форму с production-доменом сайта
 - Для Android-связки сайта и приложения `/.well-known/assetlinks.json` должен содержать не только `delegate_permission/common.handle_all_urls`, но и `delegate_permission/common.get_login_creds`
+- Локальная защита входа обязательна после авторизации: `appLock` хранит per-user PIN hash/salt только локально, `AppLockGate` в `app/app.vue` не рендерит приватный UI до setup/unlock, native использует `@capgo/capacitor-native-biometric` + `@aparajita/capacitor-secure-storage`, Web/PWA — PBKDF2 через Web Crypto и namespaced `localStorage`
+- Native app-lock не должен блокировать route middleware или splash: storage/biometry инициализируются с fallback/timeout, а biometric prompt запускается только по явному нажатию на кнопку `Биометрия устройства`, не автоматически при открытии/возврате приложения. PBKDF2 использует Web Crypto, а для native dev-origin без `crypto.subtle` — JS fallback `@noble/hashes`
+- Перед `createOrReplacePin`/`unlockWithPin` нужно дать Vue и браузеру отрисовать последнюю цифру OTP (`nextTick` + animation frame), иначе PBKDF2/verify может визуально подвесить клавиатуру до появления введённой цифры
+- На публичных auth routes (`/auth`, `/auth/*`, `/forgot`, `/reset-password`) `AppLockGate` и lifecycle-lock не запускаются даже если в store ещё есть stale `auth.user`; при возврате приложения на экран авторизации PIN/biometry не показываются
+- Во время `auth.isLoggingOut` и короткого logout quiet window `AppLockGate` не показывается, biometric prompt не запускается, in-flight `initializeForUser`/`auth.me` обязан игнорировать stale-result после `clearRuntime`, а logout-related `401` не должны давать toast/redirect; критичные pre-logout запросы отправляются до очистки session token, сам `/api/auth/logout` уходит в фоне с захваченным токеном
+- Android privacy-screen для внешних Activity (`Google Sign-In`, biometric prompt) должен использовать `privacyModeOnActivityHidden: 'dim'`, не `splash`, иначе plugin показывает drawable `splash` и может визуально растянуть брендовый знак
+- Обычный logout или временная смена `auth.user` не удаляют локальный app-lock record; удаление record допустимо только для явного “Забыли код?”/локального сброса или удаления аккаунта
+- В настройках локальной защиты нельзя показывать отключение/удаление кода или биометрический toggle; допустимы только `Изменить код`, выбор `lockAfterSeconds` без варианта `Никогда`, `Заблокировать сейчас` и read-only статус биометрии
+- App-lock PIN является per-device локальным секретом, а не серверным паролем аккаунта. Для старых native build без новых Capacitor plugins app-lock storage/biometry/privacy-screen должен graceful-fallback, иначе web-деплой может заблокировать вход до обновления приложения через сторы
 
 ## Дневник благодарности (`/practices/gratitude-diary`)
 
@@ -129,6 +138,7 @@
 - `ButtonLoader.vue` — спиннер внутри кнопки
 - Pinia stores: ui, user, chat
 - DTO: Zod, `shared/dto/index.ts`
+- `useToast` по умолчанию показывает синий `info`-тост; зелёный `success` нужно передавать явно только для подтверждений, где статус успеха важен визуально.
 - Referral share-кнопка должна открывать системный share-sheet на iOS/Android через `@capacitor/share`; если на web/browser шаринг недоступен, допустим fallback в copy с явным toast-сообщением, что текст именно скопирован
 
 ## Бренд-ассеты

@@ -13,6 +13,9 @@
         </KeepAlive>
       </div>
     </NuxtLayout>
+    <ClientOnly>
+      <AppLockGate />
+    </ClientOnly>
     <NuxtRouteAnnouncer />
     <Toaster
       theme="light"
@@ -53,6 +56,7 @@ import { Toaster } from 'vue-sonner';
 import { useAuthStore } from '@/app/stores/auth';
 import { useSceneSettingsStore } from '@/app/stores/sceneSettings';
 import { useUiSettingsStore } from '@/app/stores/uiSettings';
+import AppLockGate from '@/app/components/app-lock/AppLockGate.vue';
 import GlobalNavigationPaywall from '@/app/components/navigation/GlobalNavigationPaywall.vue';
 import ForceUpdateBlocker from '@/app/components/ForceUpdateBlocker.vue';
 import AiChatConsentModal from '@/app/components/privacy/AiChatConsentModal.vue';

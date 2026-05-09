@@ -75,6 +75,9 @@ server/
 - `notification-delivery` — отправка через FCM
 - `ai-text-pool-refill` — пополнение AI-текстов уведомлений
 - `chat-session-summary` — summary сессий чата
+- `stale-session-summarizer` — nightly user-summary для idle text-сессий
+- `system-notifications` — follow-up push для готовых итогов и inactive users
+- Локальная разработка system follow-up может ускорять inactive-сценарий через `SYSTEM_NOTIFICATIONS_FAST_REENGAGEMENT=true`; production cadence остаётся в днях/часах из продуктового ТЗ
 - Production: обязателен process split (scheduler / slots worker / delivery worker)
 - Production Docker Compose: web-контейнер ходит в Redis по `REDIS_HOST=redis`, `REDIS_PORT=6379`
 - Production Redis требует аутентификацию через `REDIS_PASSWORD`; тот же секрет должен быть включён в `redis-server --requirepass ...`

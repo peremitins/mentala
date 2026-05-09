@@ -18,6 +18,7 @@ import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { config } from '@/server/config';
 import { db } from '@/server/infrastructure/db/client';
 import {
+  notificationSlots,
   sessionSummariesUser,
   therapySessions,
   userPreferences,
@@ -55,6 +56,23 @@ import {
   isEligibleForSummary,
   type EligibilityMetrics,
 } from '@/server/application/sessionSummaryUser/sessionSummaryEligibility';
+
+async function skipPendingSummaryReadyPushes(params: {
+  userId: number;
+  id: number;
+}): Promise<void> {
+  await db
+    .update(notificationSlots)
+    .set({ status: 'skipped' })
+    .where(
+      and(
+        eq(notificationSlots.userId, params.userId),
+        eq(notificationSlots.kind, 'system'),
+        eq(notificationSlots.entityKey, `summary:${params.id}`),
+        sql`${notificationSlots.status} IN ('planned', 'queued')`
+      )
+    );
+}
 
 function computeMessagesCount(params: {
   dbMessagesCount: number;
@@ -651,6 +669,7 @@ export async function markSessionSummaryUserViewed(params: {
     .returning({ viewedAt: sessionSummariesUser.viewedAt });
 
   if (rows[0]?.viewedAt) {
+    await skipPendingSummaryReadyPushes(params);
     return rows[0].viewedAt;
   }
 
@@ -666,7 +685,12 @@ export async function markSessionSummaryUserViewed(params: {
     )
     .limit(1);
 
-  return existing[0]?.viewedAt ?? null;
+  const viewedAt = existing[0]?.viewedAt ?? null;
+  if (viewedAt) {
+    await skipPendingSummaryReadyPushes(params);
+  }
+
+  return viewedAt;
 }
 
 // Placeholder-шифрование для тестов/линтеров, чтобы tree-shake не выкинул импорт.
