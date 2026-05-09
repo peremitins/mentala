@@ -714,6 +714,26 @@ export default defineNuxtPlugin({
       };
     }
 
+    async function sendNotificationClickActivityPing(): Promise<void> {
+      try {
+        await nuxtApp.$api('/api/activity/ping', {
+          method: 'POST',
+          body: {
+            event: 'foreground',
+            occurredAt: new Date().toISOString(),
+            clientVisible: true,
+            clientFocused: true,
+            source: 'notification_click',
+          },
+        });
+      } catch (error) {
+        console.warn(
+          '[PushPlugin] Failed to track notification click activity:',
+          error
+        );
+      }
+    }
+
     async function handleNotificationAction(args: {
       actionId?: string | null;
       notification?: Record<string, any> | null;
@@ -785,6 +805,8 @@ export default defineNuxtPlugin({
       }
 
       if (!isTap) return;
+
+      await sendNotificationClickActivityPing();
 
       try {
         await meditationPlayer.registerUserGesture();
@@ -897,6 +919,7 @@ export default defineNuxtPlugin({
     }
 
     async function ensureAuthReady(): Promise<void> {
+      if (auth._isLogoutQuietPeriod()) return;
       if (auth.user || auth.isLoggedIn) return;
       if (authEnsureInFlight) {
         await authEnsureInFlight;

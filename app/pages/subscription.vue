@@ -1487,7 +1487,7 @@ async function startAppleIapPurchase(plan: Plan) {
     });
 
     if (response.status === 'active') {
-      useToast('Подписка активирована', 'Спасибо! Доступ обновлён.', 'success');
+      useToast('Подписка активирована', 'Спасибо! Доступ обновлён.');
     } else {
       useToast(
         'Покупка не подтверждена',
@@ -1520,11 +1520,7 @@ async function handleRestorePurchases() {
     });
 
     if (response.status === 'active') {
-      useToast(
-        'Покупки восстановлены',
-        'Подписка синхронизирована.',
-        'success'
-      );
+      useToast('Покупки восстановлены', 'Подписка синхронизирована.');
     } else {
       useToast(
         'Подписок не найдено',
@@ -1568,11 +1564,7 @@ async function handleReloadAppleIapProducts() {
     appleIapProductsLoadAttempted.value = true;
     await appleIap.loadProducts();
     appleIapPricesErrorMessage.value = null;
-    useToast(
-      'Цены обновлены',
-      'Данные App Store успешно загружены.',
-      'success'
-    );
+    useToast('Цены обновлены', 'Данные App Store успешно загружены.');
   } catch (error: any) {
     console.warn('[Subscription] Failed to reload Apple IAP products:', error);
     const message = resolveUserFacingErrorMessage(error);
@@ -1706,7 +1698,7 @@ async function runStatusPolling(targetSubscriptionId?: number | null) {
       pendingCheckoutSubscriptionId.value = null;
       isCheckoutWidgetDialogOpen.value = false;
       await destroyWidget();
-      useToast('Подписка активирована', 'Оплата подтверждена.', 'success');
+      useToast('Подписка активирована', 'Оплата подтверждена.');
       return;
     }
 
@@ -1738,7 +1730,7 @@ async function runStatusPolling(targetSubscriptionId?: number | null) {
       pendingCheckoutSubscriptionId.value = null;
       isCheckoutWidgetDialogOpen.value = false;
       await destroyWidget();
-      useToast('Подписка активирована', 'Оплата подтверждена.', 'success');
+      useToast('Подписка активирована', 'Оплата подтверждена.');
       return;
     }
 
@@ -1823,8 +1815,7 @@ async function resumeActiveSubscription() {
 
     useToast(
       'Автопродление включено',
-      'Подписка будет продлена автоматически.',
-      'success'
+      'Подписка будет продлена автоматически.'
     );
   } catch (error: any) {
     console.error('Failed to resume subscription:', error);
@@ -1889,7 +1880,7 @@ async function retryChargeNow() {
     await refreshBillingAccessSnapshot();
 
     if (response?.status === 'success') {
-      useToast('Оплата прошла', 'Подписка активирована.', 'success');
+      useToast('Оплата прошла', 'Подписка активирована.');
       return;
     }
 
@@ -2187,11 +2178,7 @@ async function startCheckout(): Promise<boolean> {
       pendingCheckoutSubscriptionId.value = null;
       await subscriptionStore.refreshSubscription();
       await refreshBillingAccessSnapshot();
-      useToast(
-        'Подписка активирована',
-        `К оплате: ${response.toPay} ₽`,
-        'success'
-      );
+      useToast('Подписка активирована', `К оплате: ${response.toPay} ₽`);
       return true;
     }
 
@@ -2203,8 +2190,7 @@ async function startCheckout(): Promise<boolean> {
         'Платеж запланирован',
         response.nextChargeAt
           ? `Первое списание будет ${formatDate(response.nextChargeAt)}. Сегодня списаний не будет.`
-          : 'Списание будет выполнено в конце пробного периода.',
-        'success'
+          : 'Списание будет выполнено в конце пробного периода.'
       );
       return true;
     }
@@ -2405,7 +2391,7 @@ onMounted(async () => {
         'info'
       );
     } else if (boundAfterReturn) {
-      useToast('Карта привязана', 'Способ оплаты обновлён.', 'success');
+      useToast('Карта привязана', 'Способ оплаты обновлён.');
     } else {
       useToast(
         'Привязка карты не завершена',

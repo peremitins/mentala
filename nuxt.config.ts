@@ -257,6 +257,9 @@ export default defineNuxtConfig({
     // host и port настраиваются через флаги --host 0.0.0.0 в package.json
   },
   vite: {
+    optimizeDeps: {
+      include: ['vue-input-otp'],
+    },
     plugins: [
       tailwindcss(),
       svgLoader(),

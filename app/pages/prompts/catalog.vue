@@ -89,6 +89,6 @@ function handleAdd(item: CatalogItem) {
     isActive: false,
   });
 
-  useToast('Добавлено', 'Промпт добавлен в мои', 'success');
+  useToast('Добавлено', 'Промпт добавлен в мои');
 }
 </script>

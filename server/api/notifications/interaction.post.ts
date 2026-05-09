@@ -106,7 +106,7 @@ export default defineEventHandler(
         | 'unanswered',
       actionAt: created.actionAt?.toISOString() ?? new Date().toISOString(),
       meta: created.meta as Record<string, any> | null,
-      kind: created.kind as 'therapy' | 'habits',
+      kind: created.kind as NotificationInteractionDto['kind'],
       type: created.type ?? null,
       metric: created.metric ?? null,
       createdAt: created.createdAt.toISOString(),

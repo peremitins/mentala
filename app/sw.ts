@@ -104,25 +104,32 @@ self.addEventListener('notificationclick', (event) => {
 
   const data = event.notification.data || {};
   const deepLink = data.deepLink || data.navigationTarget || '/';
+  const clickMessage = {
+    type: 'MENTALA_NOTIFICATION_CLICK',
+    slotId: typeof data.slotId === 'string' ? data.slotId : null,
+    deepLink: typeof deepLink === 'string' ? deepLink : '/',
+  };
 
   // Открываем или фокусируем окно приложения
   event.waitUntil(
     self.clients
       .matchAll({ type: 'window', includeUncontrolled: true })
-      .then((clientList) => {
+      .then(async (clientList) => {
         // Если приложение уже открыто — фокусируемся на нём
         for (const client of clientList) {
           if ('focus' in client) {
-            void client.focus();
+            client.postMessage(clickMessage);
+            await client.focus();
             if (deepLink && deepLink !== '/') {
-              void (client as WindowClient).navigate(deepLink);
+              await (client as WindowClient).navigate(deepLink);
             }
             return;
           }
         }
         // Иначе открываем новое окно
         if (self.clients.openWindow) {
-          return self.clients.openWindow(deepLink || '/');
+          const openedClient = await self.clients.openWindow(deepLink || '/');
+          openedClient?.postMessage(clickMessage);
         }
       })
   );

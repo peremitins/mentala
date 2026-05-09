@@ -328,7 +328,7 @@ async function saveCustom() {
   }));
 
   const created = await store.addCustom(trimmed, normalizedPhases);
-  useToast('Практика сохранена', 'Можно запускать сразу.', 'success');
+  useToast('Практика сохранена', 'Можно запускать сразу.');
   navigateTo(`/breath-practices/custom-${created.id}`);
 }
 
