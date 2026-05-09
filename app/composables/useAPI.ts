@@ -9,6 +9,7 @@ export function useAPI<T = unknown>(
   options: UseFetchOptions<T> & {
     useFetch?: boolean;
     suppressErrorToast?: boolean;
+    suppressAuthRedirect?: boolean;
   } = {}
 ) {
   const nuxtApp = useNuxtApp();

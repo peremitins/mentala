@@ -23,6 +23,9 @@ importers:
 
   .:
     dependencies:
+      '@aparajita/capacitor-secure-storage':
+        specifier: 7.1.6
+        version: 7.1.6
       '@aws-sdk/client-s3':
         specifier: ^3.1006.0
         version: 3.1006.0
@@ -65,6 +68,9 @@ importers:
       '@capacitor/preferences':
         specifier: ^7.0.2
         version: 7.0.2(@capacitor/core@7.4.3)
+      '@capacitor/privacy-screen':
+        specifier: 1.1.4
+        version: 1.1.4(@capacitor/core@7.4.3)
       '@capacitor/push-notifications':
         specifier: ^7.0.3
         version: 7.0.3(@capacitor/core@7.4.3)
@@ -77,6 +83,9 @@ importers:
       '@capacitor/status-bar':
         specifier: ^7.0.3
         version: 7.0.3(@capacitor/core@7.4.3)
+      '@capgo/capacitor-native-biometric':
+        specifier: 7.6.0
+        version: 7.6.0(@capacitor/core@7.4.3)
       '@capgo/capacitor-social-login':
         specifier: 7.20.0
         version: 7.20.0(patch_hash=494f63e7b7f9e31eb1bfe9f162a2ac49a7179480cc7c75ac130ec34c5e53b838)(@capacitor/core@7.4.3)
@@ -89,6 +98,9 @@ importers:
       '@mediagrid/capacitor-native-audio':
         specifier: 2.3.2
         version: 2.3.2(patch_hash=e7c60006e1c64474089b0d09fe9525125be44b34fb949879e352775d71366d22)(@capacitor/core@7.4.3)
+      '@noble/hashes':
+        specifier: ^1.8.0
+        version: 1.8.0
       '@nuxtjs/tailwindcss':
         specifier: 6.14.0
         version: 6.14.0(magicast@0.3.5)(ts-node@10.9.2(@types/node@24.5.2)(typescript@5.6.3))
@@ -224,6 +236,9 @@ importers:
       vue-i18n:
         specifier: ^11.1.12
         version: 11.1.12(vue@3.5.22(typescript@5.6.3))
+      vue-input-otp:
+        specifier: 0.3.2
+        version: 0.3.2(typescript@5.6.3)(vue@3.5.22(typescript@5.6.3))
       vue-router:
         specifier: ^4.5.1
         version: 4.5.1(vue@3.5.22(typescript@5.6.3))
@@ -428,6 +443,10 @@ packages:
 
   '@antfu/utils@9.2.1':
     resolution: {integrity: sha512-TMilPqXyii1AsiEii6l6ubRzbo76p6oshUSYPaKsmXDavyMLqjzVDkcp3pHp5ELMUNJHATcEOGxKTTsX9yYhGg==}
+
+  '@aparajita/capacitor-secure-storage@7.1.6':
+    resolution: {integrity: sha512-KIfLOm/oSciUiWsOMtMv2nzlnwW3LERid0DvZ3djt7UORBQvFqpvSefiLG5kkc8D34pGkb2ZqAz0ZprrI9LiTQ==}
+    engines: {node: '>=20.0.0'}
 
   '@apideck/better-ajv-errors@0.3.7':
     resolution: {integrity: sha512-TajUJwGWbDwkCx/CZi7tRE8PVB7simCvKJfHUsSdvps+aTM/PDPP4gkLmKnc+x3CE//y9i/nj74GqdL/hwk7Iw==}
@@ -1243,6 +1262,9 @@ packages:
   '@capacitor/core@7.4.3':
     resolution: {integrity: sha512-wCWr8fQ9Wxn0466vPg7nMn0tivbNVjNy1yL4GvDSIZuZx7UpU2HeVGNe9QjN/quEd+YLRFeKEBLBw619VqUiNg==}
 
+  '@capacitor/core@7.6.2':
+    resolution: {integrity: sha512-8HRKEUlYpCOeRec8bCHZwEA4o/E2q5dhHSd0v/Cr6+ume08fZY/gniF+ZCKF+6DO0T/nRaBeNRQn6Up+45J1mg==}
+
   '@capacitor/device@7.0.5':
     resolution: {integrity: sha512-tf6BYeQMBARNLKELQq2RGsvG3z03oM/ga+aqVhvE8M4IM8+h/516eeSz07Eqm4+yySGaQFT+2rIkpJrvA7gaAA==}
     peerDependencies:
@@ -1273,6 +1295,11 @@ packages:
     peerDependencies:
       '@capacitor/core': '>=7.0.0'
 
+  '@capacitor/privacy-screen@1.1.4':
+    resolution: {integrity: sha512-/bwBOmhXgkXdLJEYsUDwc3rbo6iJF2CoQsg0epkjiBKUpoN0wmGJ52t5A8GdDpvgNJc9YatPDXN2piDH7xKR7g==}
+    peerDependencies:
+      '@capacitor/core': '>=7.0.0'
+
   '@capacitor/push-notifications@7.0.3':
     resolution: {integrity: sha512-4qt5dRVBkHzq202NEoj3JC+S+zQCrZ1FJh7sjkICy/i1iEos+VaoB3bie8eWDQ2LTARktB4+k2xkdpu8pcVo/g==}
     peerDependencies:
@@ -1290,6 +1317,11 @@ packages:
 
   '@capacitor/status-bar@7.0.3':
     resolution: {integrity: sha512-JyRpVnKwHij9hgPWolF6PK+HT3e2HSPjN11/h2OmKxq8GAdPGARFLv+97eZl0pvuvm0Kka/LpiLb5whXISBg7Q==}
+    peerDependencies:
+      '@capacitor/core': '>=7.0.0'
+
+  '@capgo/capacitor-native-biometric@7.6.0':
+    resolution: {integrity: sha512-ZQ+Nc+uS2sT8TED/REYlmGV34ASFsBe30YdABBQIRL+A2iVbWtdiL0FbX+1sKKXzrS2DGf+mD657Qwl1jGSDLg==}
     peerDependencies:
       '@capacitor/core': '>=7.0.0'
 
@@ -6401,6 +6433,9 @@ packages:
   defu@6.1.4:
     resolution: {integrity: sha512-mEQCMmwJu317oSz8CwdIOdwf3xMif1ttiM8LTufzc3g6kR+9Pe236twL8j3IYT1F7GfRgGcW6MWxzZjLIkuHIg==}
 
+  defu@6.1.7:
+    resolution: {integrity: sha512-7z22QmUWiQ/2d0KkdYmANbRUVABpZ9SNYyH5vx6PZ+nE5bcC0l7uFvEfHlyld/HcGBFTL536ClDt3DEcSlEJAQ==}
+
   del@6.1.1:
     resolution: {integrity: sha512-ua8BhapfP0JUJKC/zV9yHHDW/rDoDxP4Zhn3AkA6/xT6gY7jYXJiaeyBZznYVujhZZET+UgcbZiQ7sN3WqcImg==}
     engines: {node: '>=10'}
@@ -10000,6 +10035,11 @@ packages:
     peerDependencies:
       vue: '>= 3.2.0'
 
+  reka-ui@2.9.7:
+    resolution: {integrity: sha512-aX7foYYR20v4+majO58OJJdBNfLMm0eJb448l9N4JVy8JB7GXOr4H/S4a+J1pkcoxZH8Cb7YHpJ855+miAm7sA==}
+    peerDependencies:
+      vue: '>= 3.4.0'
+
   remark-gfm@4.0.1:
     resolution: {integrity: sha512-1quofZ2RQ9EWdeN34S79+KExV1764+wCUGop5CPL1WGdD0ocPpu91lzPGbwWMECpEpd42kJGQwzRfyov9j4yNg==}
 
@@ -11598,6 +11638,11 @@ packages:
     peerDependencies:
       vue: ^3.0.0
 
+  vue-input-otp@0.3.2:
+    resolution: {integrity: sha512-QMl1842WB6uNAsK4+mZXIskb00TOfahH3AQt8rpRecbtQnOp+oHSUbL/Z3wekfy6pAl+hyN3e1rCUSkCMzbDLQ==}
+    peerDependencies:
+      vue: ^3.2.0
+
   vue-metamorph@3.3.3:
     resolution: {integrity: sha512-NPeDg2/ZL4lDJsC/PjEfFq+Ln3Rr7cX86AQo4bI5V6ziUTZOMY93HyIwKHW37BrIf4YB97llrGtvM+eMhwr1jw==}
     hasBin: true
@@ -12004,6 +12049,13 @@ snapshots:
       tinyexec: 1.0.1
 
   '@antfu/utils@9.2.1': {}
+
+  '@aparajita/capacitor-secure-storage@7.1.6':
+    dependencies:
+      '@capacitor/android': 7.4.4(@capacitor/core@7.6.2)
+      '@capacitor/app': 7.1.0(@capacitor/core@7.6.2)
+      '@capacitor/core': 7.6.2
+      '@capacitor/ios': 7.4.5(@capacitor/core@7.6.2)
 
   '@apideck/better-ajv-errors@0.3.7(ajv@8.17.1)':
     dependencies:
@@ -13274,9 +13326,17 @@ snapshots:
     dependencies:
       '@capacitor/core': 7.4.3
 
+  '@capacitor/android@7.4.4(@capacitor/core@7.6.2)':
+    dependencies:
+      '@capacitor/core': 7.6.2
+
   '@capacitor/app@7.1.0(@capacitor/core@7.4.3)':
     dependencies:
       '@capacitor/core': 7.4.3
+
+  '@capacitor/app@7.1.0(@capacitor/core@7.6.2)':
+    dependencies:
+      '@capacitor/core': 7.6.2
 
   '@capacitor/assets@3.0.5(@types/node@24.5.2)(typescript@5.6.3)':
     dependencies:
@@ -13355,6 +13415,10 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
+  '@capacitor/core@7.6.2':
+    dependencies:
+      tslib: 2.8.1
+
   '@capacitor/device@7.0.5(@capacitor/core@7.4.3)':
     dependencies:
       '@capacitor/core': 7.4.3
@@ -13371,11 +13435,19 @@ snapshots:
     dependencies:
       '@capacitor/core': 7.4.3
 
+  '@capacitor/ios@7.4.5(@capacitor/core@7.6.2)':
+    dependencies:
+      '@capacitor/core': 7.6.2
+
   '@capacitor/local-notifications@7.0.3(@capacitor/core@7.4.3)':
     dependencies:
       '@capacitor/core': 7.4.3
 
   '@capacitor/preferences@7.0.2(@capacitor/core@7.4.3)':
+    dependencies:
+      '@capacitor/core': 7.4.3
+
+  '@capacitor/privacy-screen@1.1.4(@capacitor/core@7.4.3)':
     dependencies:
       '@capacitor/core': 7.4.3
 
@@ -13392,6 +13464,10 @@ snapshots:
       '@capacitor/core': 7.4.3
 
   '@capacitor/status-bar@7.0.3(@capacitor/core@7.4.3)':
+    dependencies:
+      '@capacitor/core': 7.4.3
+
+  '@capgo/capacitor-native-biometric@7.6.0(@capacitor/core@7.4.3)':
     dependencies:
       '@capacitor/core': 7.4.3
 
@@ -15169,7 +15245,7 @@ snapshots:
       '@unhead/vue': 2.0.17(vue@3.5.22(typescript@5.6.3))
       '@vueuse/core': 14.2.1(vue@3.5.22(typescript@5.6.3))
       consola: 3.4.2
-      defu: 6.1.4
+      defu: 6.1.7
       h3: 1.15.5
       magic-string: 0.30.21
       ofetch: 1.5.1
@@ -19198,6 +19274,8 @@ snapshots:
 
   defu@6.1.4: {}
 
+  defu@6.1.7: {}
+
   del@6.1.1:
     dependencies:
       globby: 11.1.0
@@ -20537,7 +20615,7 @@ snapshots:
     dependencies:
       cookie-es: 1.2.2
       crossws: 0.3.5
-      defu: 6.1.4
+      defu: 6.1.7
       destr: 2.0.5
       iron-webcrypto: 1.2.1
       node-mock-http: 1.0.4
@@ -23650,6 +23728,22 @@ snapshots:
       - '@vue/composition-api'
       - typescript
 
+  reka-ui@2.9.7(vue@3.5.22(typescript@5.6.3)):
+    dependencies:
+      '@floating-ui/dom': 1.7.4
+      '@floating-ui/vue': 1.1.9(vue@3.5.22(typescript@5.6.3))
+      '@internationalized/date': 3.9.0
+      '@internationalized/number': 3.6.5
+      '@tanstack/vue-virtual': 3.13.12(vue@3.5.22(typescript@5.6.3))
+      '@vueuse/core': 14.2.1(vue@3.5.22(typescript@5.6.3))
+      '@vueuse/shared': 14.2.1(vue@3.5.22(typescript@5.6.3))
+      aria-hidden: 1.2.6
+      defu: 6.1.7
+      ohash: 2.0.11
+      vue: 3.5.22(typescript@5.6.3)
+    transitivePeerDependencies:
+      - '@vue/composition-api'
+
   remark-gfm@4.0.1:
     dependencies:
       '@types/mdast': 4.0.4
@@ -25485,6 +25579,15 @@ snapshots:
       '@intlify/shared': 11.1.12
       '@vue/devtools-api': 6.6.4
       vue: 3.5.22(typescript@5.6.3)
+
+  vue-input-otp@0.3.2(typescript@5.6.3)(vue@3.5.22(typescript@5.6.3)):
+    dependencies:
+      '@vueuse/core': 12.8.2(typescript@5.6.3)
+      reka-ui: 2.9.7(vue@3.5.22(typescript@5.6.3))
+      vue: 3.5.22(typescript@5.6.3)
+    transitivePeerDependencies:
+      - '@vue/composition-api'
+      - typescript
 
   vue-metamorph@3.3.3(eslint@8.57.1):
     dependencies:

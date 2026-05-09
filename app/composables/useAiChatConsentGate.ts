@@ -195,8 +195,7 @@ export function useAiChatConsentGate() {
 
       useToast(
         'Согласие отозвано',
-        'При следующем входе в ИИ-чат мы снова покажем disclosure.',
-        'success'
+        'При следующем входе в ИИ-чат мы снова покажем disclosure.'
       );
       return true;
     } catch (error) {

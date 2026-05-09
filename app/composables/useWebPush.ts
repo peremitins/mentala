@@ -531,7 +531,9 @@ export function useWebPush() {
       await $api('/api/notifications/unregister-token', {
         method: 'POST',
         body: { token },
-      });
+        suppressErrorToast: true,
+        suppressAuthRedirect: true,
+      } as any);
     } catch (e) {
       // Не блокируем logout при ошибке
       console.warn('[WebPush] Failed to unregister token on server:', e);

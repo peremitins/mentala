@@ -101,7 +101,10 @@ public class MentalaSafeAreaPlugin extends Plugin {
         }
 
         currentInsets = nextInsets;
-        notifyListeners("safeAreaChanged", toJsObject(nextInsets), true);
+        // Initial state клиент забирает через getInsets(), поэтому не держим
+        // retained event до регистрации JS-listener'а: на холодном старте
+        // Android WebView это может давать ранний Capacitor triggerEvent.
+        notifyListeners("safeAreaChanged", toJsObject(nextInsets), false);
     }
 
     @NonNull

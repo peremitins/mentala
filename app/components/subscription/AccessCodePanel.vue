@@ -202,7 +202,7 @@ async function handleRedeem() {
       response.kind === 'referral' ? 'Код активирован' : 'Промокод применён';
     preview.value = null;
     code.value = '';
-    useToast(toastTitle, successMessage.value, 'success');
+    useToast(toastTitle, successMessage.value);
     emit('changed');
   } catch (error: any) {
     errorMessage.value = extractErrorMessage(error);
