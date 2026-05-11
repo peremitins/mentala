@@ -1,7 +1,7 @@
 <template>
   <Transition name="slide-up">
     <div
-      v-if="visible"
+      v-if="visible && !isTourActive"
       class="fixed bottom-safe-area-inset left-4 right-4 z-[70] mb-4"
     >
       <section
@@ -94,6 +94,8 @@
 </template>
 
 <script setup lang="ts">
+import { useAppTour } from '@/app/composables/useAppTour';
+
 const props = defineProps<{
   visible: boolean;
   variant: 'open-app' | 'google-play';
@@ -104,6 +106,10 @@ defineEmits<{
   'open-store': [];
   close: [];
 }>();
+
+// Скрываем баннер на время онбординг-тура — иначе перекрывает интерфейс,
+// на который тур показывает.
+const { isActive: isTourActive } = useAppTour();
 
 const title = computed(() => {
   return props.variant === 'open-app'

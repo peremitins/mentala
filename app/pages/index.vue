@@ -9,10 +9,25 @@
       </template>
     </PageHeader>
 
-    <!-- Верхний крупный блок: ИИ-чат -->
+    <!-- Верхний крупный блок: ИИ-чат.
+         Вся карточка кликабельна — поведение совпадает с кнопкой «Начать /
+         Продолжить»: при наличии доступа ведёт в /chat, иначе открывает paywall.
+         На внутренних кнопках/ссылках стоит @click.stop, чтобы они работали
+         со своим собственным обработчиком и не дублировали навигацию. -->
     <section
-      class="glass-deep relative overflow-hidden p-5 animate-slide-up"
+      data-tour="home-hero"
+      class="glass-deep relative overflow-hidden p-5 animate-slide-up cursor-pointer"
       style="animation-delay: 0s; animation-fill-mode: both"
+      role="button"
+      tabindex="0"
+      :aria-label="
+        chatAssistantAccess.available
+          ? 'Открыть чат с ИИ-ассистентом'
+          : 'Узнать о доступе к ИИ-ассистенту'
+      "
+      @click="handleHeroCardClick"
+      @keydown.enter.prevent="handleHeroCardClick"
+      @keydown.space.prevent="handleHeroCardClick"
     >
       <div class="pointer-events-none absolute inset-0">
         <div
@@ -46,6 +61,7 @@
             v-if="chatAssistantAccess.available"
             to="/chat"
             class="inline-flex items-center gap-2 rounded-full bg-foreground/90 px-5 py-2.5 text-sm font-medium text-background transition hover:bg-foreground"
+            @click.stop
           >
             <IconSend class="h-4 w-4" />
             <span>{{ chatButtonLabel }}</span>
@@ -54,7 +70,7 @@
             v-else
             type="button"
             class="relative inline-flex items-center gap-2 rounded-full bg-foreground/90 px-5 py-2.5 text-sm font-medium text-background transition hover:bg-foreground"
-            @click="openPaywall('chat.assistant')"
+            @click.stop="openPaywall('chat.assistant')"
           >
             <span
               class="absolute -right-1 -top-1 inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/25 bg-black/70 text-xs leading-none"
@@ -69,6 +85,7 @@
             to="/session-summaries-user"
             :aria-label="sessionHistoryButtonAriaLabel"
             class="relative inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-5 py-2.5 text-sm font-medium text-foreground transition hover:border-white/30 hover:bg-white/10"
+            @click.stop
           >
             <UnreadSummaryIndicator
               v-if="hasUnseenSummary"
@@ -365,6 +382,20 @@ const sessionHistoryButtonAriaLabel = computed(() =>
 function openPaywall(featureKey: string) {
   paywallFeatureKey.value = featureKey;
   paywallOpen.value = true;
+}
+
+/**
+ * Клик по всей карточке ИИ-ассистента: повторяет поведение основной
+ * кнопки «Начать / Продолжить». Если фича доступна — навигируем в чат,
+ * иначе показываем paywall. На внутренних кнопках стоит @click.stop —
+ * они не пробрасывают клик сюда и обрабатываются сами.
+ */
+function handleHeroCardClick() {
+  if (chatAssistantAccess.value.available) {
+    void navigateTo('/chat');
+  } else {
+    openPaywall('chat.assistant');
+  }
 }
 
 function getPlanBadgeEmoji(plan: string) {

@@ -36,6 +36,7 @@ export default defineEventHandler(async (event) => {
         ageRange: (user as any)?.ageRange || null,
         onboarding: {
           welcome: Boolean(onboarding?.welcome),
+          appTour: Boolean(onboarding?.appTour),
         },
         locale: user.locale,
         role: user.role,

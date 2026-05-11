@@ -109,13 +109,17 @@
       <!-- Карточка персональных пожеланий -->
       <section
         v-if="showCustomPromptNotification"
+        data-tour="custom-prompt"
         class="glass-deep p-3 space-y-2"
       >
         <div class="flex items-center justify-between">
           <p class="flex items-center gap-2 text-sm font-semibold">
             <span>Мои пожелания</span>
+            <!-- Бейдж тарифа — только если юзер реально упирается в paywall.
+                 Для Premium в templates-режиме бейдж не показываем,
+                 потому что они уже на нужном тарифе. -->
             <span
-              v-if="!canUseCustomPrompt"
+              v-if="customPromptBlockedReason === 'paywall'"
               class="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/20 bg-black/45 text-[10px] leading-none"
             >
               {{ getPlanBadgeEmoji(customPromptAccess.requiredPlan) }}
@@ -135,17 +139,30 @@
             :placeholder="descriptionPlaceholder"
             :disabled="!canUseCustomPrompt"
           />
+          <!-- Кликабельный paywall-overlay только для юзеров без доступа.
+               Premium-юзерам в режиме шаблонов overlay не нужен — у них
+               вместо paywall показывается подсказка переключиться на ИИ. -->
           <button
-            v-if="!canUseCustomPrompt"
+            v-if="customPromptBlockedReason === 'paywall'"
             type="button"
             class="absolute inset-0 z-10 rounded-[15px]"
             aria-label="Открыть информацию о тарифе для блока «Мои пожелания»"
             @click="openPaywall('notifications.custom_prompt_ai')"
           />
         </div>
-        <p v-if="!canUseCustomPrompt" class="text-xs text-foreground/70">
+        <p
+          v-if="customPromptBlockedReason === 'paywall'"
+          class="text-xs text-foreground/70"
+        >
           Персональные пожелания доступны в
           {{ getPlanBadgeLabel(customPromptAccess.requiredPlan) }}.
+        </p>
+        <p
+          v-else-if="customPromptBlockedReason === 'switch-to-ai'"
+          class="text-xs text-foreground/70"
+        >
+          Чтобы пожелания применились к текстам напоминаний, выбери способ
+          создания «✨ ИИ» ниже.
         </p>
       </section>
 
@@ -773,10 +790,40 @@ const canUseCustomPrompt = computed(
     customPromptAccess.value.available &&
     textSource.value === 'ai'
 );
+/**
+ * Видимость блока «Мои пожелания».
+ * Показываем, если выполняется ХОТЯ БЫ одно:
+ *   1. textSource = 'ai' — режим «✨ ИИ» активен, блок полностью функционален.
+ *   2. У юзера есть customPromptAccess.available (Premium / админ) — блок
+ *      виден и в режиме шаблонов как «тизер»: даём понять, что возможность
+ *      существует, и приглашаем переключить «Способ создания» на ИИ.
+ *      Без этого админы и Premium-юзеры с историческим textSource='templates'
+ *      просто не видели функционал и не понимали, что он есть.
+ *   3. У юзера нет AI-доступа вообще — блок показывается как paywall-stub.
+ *
+ * Для кастомных сущностей (пользовательские темы/привычки) блок недоступен
+ * — у них своя текстовая модель.
+ */
 const showCustomPromptNotification = computed(
   () =>
     !isCustomEntity.value &&
-    (textSource.value === 'ai' || !canUseAiTextSource.value)
+    (textSource.value === 'ai' ||
+      customPromptAccess.value.available ||
+      !canUseAiTextSource.value)
+);
+/**
+ * Если блок виден, но юзер не может его использовать — что именно показать:
+ *   - 'paywall'       → у юзера нет тарифа, открываем paywall по клику.
+ *   - 'switch-to-ai'  → у юзера ЕСТЬ тариф, но он в режиме «Шаблоны»; нужно
+ *                       переключить «Способ создания» на ✨ ИИ.
+ *   - null            → блок полностью функционален, ничего блокировать не надо.
+ */
+const customPromptBlockedReason = computed<'paywall' | 'switch-to-ai' | null>(
+  () => {
+    if (canUseCustomPrompt.value) return null;
+    if (customPromptAccess.value.available) return 'switch-to-ai';
+    return 'paywall';
+  }
 );
 const canEditCustomEntity = computed(() => {
   if (isHabits.value) {

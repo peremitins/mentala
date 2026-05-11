@@ -40,6 +40,9 @@ export const UserMeDto = z.object({
       onboarding: z
         .object({
           welcome: z.boolean(),
+          // Продуктовый тур (App Tour) — второй этап онбординга после welcome.
+          // Опциональное поле для обратной совместимости со старыми клиентами.
+          appTour: z.boolean().optional(),
         })
         .optional(),
       locale: z.string().nullable().optional(),

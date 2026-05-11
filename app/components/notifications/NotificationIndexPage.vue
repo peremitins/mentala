@@ -27,6 +27,7 @@
       <div
         v-for="(item, index) in visibleItems"
         :key="item.id"
+        :data-tour="index === 0 ? 'therapy-card' : undefined"
         :class="[
           'glass-deep group relative w-full overflow-hidden rounded-xl border border-white/10 bg-card/40 text-left transition-all duration-200 hover:border-white/20 hover:shadow-lg',
           !wasSkeletonShown ? 'animate-slide-up' : '',
@@ -150,6 +151,7 @@
           >
             <Button
               v-if="shouldShowQuickChat(item)"
+              :data-tour="index === 0 ? 'therapy-quick-chat' : undefined"
               variant="outline"
               size="sm"
               class="relative flex-1 border-white/20 bg-white/5 pr-8 text-[8px] min-[375px]:text-xs text-foreground/80 hover:border-white/40 hover:bg-white/10"
@@ -179,6 +181,7 @@
 
             <Button
               v-if="shouldShowQuickMeditation(item)"
+              :data-tour="index === 0 ? 'therapy-quick-meditation' : undefined"
               variant="outline"
               size="sm"
               class="flex-1 border-white/20 bg-white/5 text-[8px] min-[375px]:text-xs text-foreground/80 hover:border-white/40 hover:bg-white/10"
@@ -190,6 +193,7 @@
 
             <Button
               v-if="shouldShowQuickBreath(item)"
+              :data-tour="index === 0 ? 'therapy-quick-breath' : undefined"
               variant="outline"
               size="sm"
               class="flex-1 border-white/20 bg-white/5 text-[8px] min-[375px]:text-xs text-foreground/80 hover:border-white/40 hover:bg-white/10"

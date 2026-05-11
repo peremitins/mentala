@@ -1,9 +1,13 @@
 <template>
-  <!-- Баннер установки PWA для Android и Desktop -->
+  <!-- Баннер установки PWA для Android и Desktop.
+       Позиция fixed относительно viewport, но ширина ограничена так же,
+       как основной контейнер приложения (body { max-width: 768px }):
+       на мобиле — на всю ширину минус 16px отступы по бокам,
+       на десктопе — центрирован через left:50% + translateX(-50%). -->
   <Transition name="slide-up">
     <div
-      v-if="visible"
-      class="fixed bottom-safe-area-inset left-4 right-4 z-50 mb-4 rounded-2xl bg-zinc-900 p-4 shadow-xl ring-1 ring-white/10"
+      v-if="visible && !isTourActive"
+      class="fixed bottom-safe-area-inset left-1/2 z-50 mb-4 w-[calc(100%-2rem)] max-w-[calc(768px-2rem)] -translate-x-1/2 rounded-2xl bg-zinc-900 p-4 shadow-xl ring-1 ring-white/10"
     >
       <!-- Заголовок с иконкой и кнопкой закрыть -->
       <div class="flex items-start gap-3">
@@ -116,6 +120,8 @@
 </template>
 
 <script setup lang="ts">
+import { useAppTour } from '@/app/composables/useAppTour';
+
 defineProps<{
   visible: boolean;
   /** true — доступен нативный beforeinstallprompt, false — показываем мануальный гайд */
@@ -127,6 +133,10 @@ defineEmits<{
   /** Закрыл баннер — скроем до следующих 10:00 */
   close: [];
 }>();
+
+// Скрываем баннер на время онбординг-тура — иначе перекрывает интерфейс,
+// на который тур показывает.
+const { isActive: isTourActive } = useAppTour();
 </script>
 
 <style scoped>

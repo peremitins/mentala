@@ -21,6 +21,7 @@
     <!-- Кнопка "Завершить сессию" — доступна только когда выполнены все 3 условия eligibility (ТЗ п.10.2) -->
     <div class="sticky top-[50px] z-40 flex flex-col items-end gap-1 mt-2">
       <button
+        data-tour="chat-summary"
         type="button"
         class="glass-deep inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-4 py-1.5 text-xs font-medium text-foreground transition hover:border-white/30 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
         :disabled="!isEligibleForSummary || isFinishingSession"
@@ -220,6 +221,7 @@
             </div>
             <div class="flex items-center">
               <button
+                data-tour="chat-realtime-voice"
                 type="button"
                 class="chat-action-button chat-action-button-call relative flex items-center justify-center cursor-pointer flex-none disabled:cursor-not-allowed disabled:opacity-45"
                 :class="realtimeVoiceCallButtonClass"
@@ -256,6 +258,7 @@
             </div>
             <div class="flex items-center">
               <button
+                data-tour="chat-mic"
                 type="button"
                 @click="toggleMic"
                 class="chat-action-button relative flex items-center justify-center cursor-pointer flex-none disabled:cursor-not-allowed disabled:opacity-45"

@@ -276,6 +276,32 @@
           <p
             class="text-xs font-semibold text-muted-foreground tracking-wide pt-4 pb-1 px-4"
           >
+            ОБУЧЕНИЕ
+          </p>
+          <div class="">
+            <button
+              type="button"
+              class="w-full px-4 py-3"
+              :class="rowClass()"
+              @click="handleReplayAppTour"
+            >
+              <div class="">
+                <p class="text-sm font-medium">
+                  Пройти обзор интерфейса заново
+                </p>
+                <p class="text-xs text-muted-foreground">
+                  Покажем, где что находится и как пользоваться приложением
+                </p>
+              </div>
+              <IconChevronRight class="h-4 w-4 text-muted-foreground" />
+            </button>
+          </div>
+        </div>
+
+        <div class="glass-deep">
+          <p
+            class="text-xs font-semibold text-muted-foreground tracking-wide pt-4 pb-1 px-4"
+          >
             ПОДДЕРЖКА
           </p>
           <div class="">
@@ -514,6 +540,7 @@ import { useToast } from '@/app/composables/useToast';
 import { usePushPermissionGate } from '@/app/composables/usePushPermissionGate';
 import { useWebPush } from '@/app/composables/useWebPush';
 import { useSettingsAnalytics } from '@/app/composables/useSettingsAnalytics';
+import { useAppTour } from '@/app/composables/useAppTour';
 import SubscriptionBlock from '@/app/components/settings/SubscriptionBlock.vue';
 import ReferralShareCompactCard from '@/app/components/subscription/ReferralShareCompactCard.vue';
 import Skeleton from '@/app/components/ui/Skeleton.vue';
@@ -593,6 +620,7 @@ const appLockRepeatOptions: Array<{
 const pushPermissionGate = usePushPermissionGate();
 const pushSettings = pushPermissionGate.pushSettings;
 const settingsAnalytics = useSettingsAnalytics();
+const appTour = useAppTour();
 
 /** Состояние свитчера Push берём из composable */
 const pushSwitchChecked = computed(
@@ -905,6 +933,16 @@ function openDeleteConfirmDialog() {
 
 async function handleLogout() {
   await auth.logout();
+}
+
+/**
+ * Запустить обзор интерфейса заново. Бэкенд не дёргаем (флаг appTour
+ * уже стоит, менять его незачем). startReplay сам навигирует на нужную
+ * страницу первого шага и ждёт появления target-селектора в DOM перед
+ * активацией overlay — иначе тур закрылся бы сразу из-за пустого DOM.
+ */
+async function handleReplayAppTour() {
+  await appTour.startReplay();
 }
 
 async function handleDeleteAccount() {

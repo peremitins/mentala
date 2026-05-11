@@ -1,5 +1,5 @@
 <template>
-  <div class="glass-deep p-5">
+  <div data-tour="therapy-reminders-card" class="glass-deep p-5">
     <div class="flex items-start justify-between gap-3">
       <div>
         <p class="text-xs uppercase tracking-[0.2em] text-foreground">
@@ -16,12 +16,14 @@
           Как напоминания усиливают прогресс
         </button>
       </div>
-      <Switch
-        :checked="preference?.enabled ?? false"
-        :disabled="loading"
-        :loading="toggleLoading"
-        @update:checked="$emit('toggle', $event)"
-      />
+      <div data-tour="therapy-reminders-toggle">
+        <Switch
+          :checked="preference?.enabled ?? false"
+          :disabled="loading"
+          :loading="toggleLoading"
+          @update:checked="$emit('toggle', $event)"
+        />
+      </div>
     </div>
 
     <div class="my-2 border-t border-border" aria-hidden="true" />
@@ -63,6 +65,7 @@
     </div>
 
     <Button
+      data-tour="therapy-reminders-edit"
       size="lg"
       variant="outline"
       class="mt-4 w-full justify-between !py-3 text-base font-semibold"

@@ -1,9 +1,12 @@
 <template>
-  <!-- Инструкция для добавления PWA на iOS экран Домой (Safari) -->
+  <!-- Инструкция для добавления PWA на iOS экран Домой (Safari).
+       Ширина ограничена шириной основного контейнера приложения
+       (body { max-width: 768px }): на мобиле — full-width минус 16px
+       отступы, на десктопе — центрирован и не растягивается. -->
   <Transition name="slide-up">
     <div
-      v-if="visible"
-      class="fixed bottom-safe-area-inset left-4 right-4 z-50 mb-4 rounded-2xl bg-zinc-900 p-4 shadow-xl ring-1 ring-white/10"
+      v-if="visible && !isTourActive"
+      class="fixed bottom-safe-area-inset left-1/2 z-50 mb-4 w-[calc(100%-2rem)] max-w-[calc(768px-2rem)] -translate-x-1/2 rounded-2xl bg-zinc-900 p-4 shadow-xl ring-1 ring-white/10"
     >
       <div class="flex items-start justify-between gap-2 mb-3">
         <p class="text-sm font-semibold text-white leading-tight">
@@ -101,6 +104,8 @@
 </template>
 
 <script setup lang="ts">
+import { useAppTour } from '@/app/composables/useAppTour';
+
 defineProps<{
   visible: boolean;
 }>();
@@ -109,6 +114,10 @@ defineEmits<{
   /** Закрыл — скроем до следующих 10:00 */
   close: [];
 }>();
+
+// Скрываем гайд на время онбординг-тура — иначе перекрывает интерфейс,
+// на который тур показывает.
+const { isActive: isTourActive } = useAppTour();
 </script>
 
 <style scoped>
