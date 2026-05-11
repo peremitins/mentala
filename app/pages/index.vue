@@ -50,7 +50,7 @@
             </div>
             <h2 class="text-xl font-semibold text-foreground">ИИ-ассистент</h2>
           </div>
-          <p class="text-sm text-foreground/80 leading-relaxed">
+          <p class="text-sm text-foreground/80">
             Поделитесь тем, что у вас на душе. Ассистент выслушает, поможет
             разобраться в чувствах и подскажет следующий шаг.
           </p>

@@ -56,7 +56,7 @@ interface Props {
   disabled?: boolean;
   preventEnterDefault?: boolean;
   variant?: 'form' | 'chat';
-  class?: string;
+  class?: string | string[];
 }
 
 const props = withDefaults(defineProps<Props>(), {

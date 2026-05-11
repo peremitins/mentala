@@ -12,10 +12,32 @@ const DEFAULT_AURORA_OPACITY = 0.85;
 const MIN_AURORA_OPACITY = 0;
 const MAX_AURORA_OPACITY = 1;
 
+const FONT_FAMILY_KEY = 'ui.font';
+export const FONT_OPTIONS = [
+  {
+    id: 'Nunito',
+    label: 'Nunito',
+    description: 'Мягкий и тёплый',
+  },
+  {
+    id: 'Bricolage Grotesque',
+    label: 'Bricolage',
+    description: 'Характерный',
+  },
+  {
+    id: 'Comfortaa',
+    label: 'Comfortaa',
+    description: 'Округлый, мягкий',
+  },
+] as const;
+export type FontId = (typeof FONT_OPTIONS)[number]['id'];
+const DEFAULT_FONT: FontId = 'Nunito';
+
 let saveTimeout: ReturnType<typeof setTimeout> | null = null;
 
 interface UiSettingsState {
   auroraOpacity: number;
+  fontFamily: FontId;
   loaded: boolean;
   saving: boolean;
   storageKey: string;
@@ -37,18 +59,27 @@ function parseOpacity(raw: string | null): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function isValidFont(value: string): value is FontId {
+  return FONT_OPTIONS.some((f) => f.id === value);
+}
+
 export const useUiSettingsStore = defineStore('uiSettings', {
   state: (): UiSettingsState => ({
-    // По умолчанию яркость фона 85%.
     auroraOpacity: DEFAULT_AURORA_OPACITY,
+    fontFamily: DEFAULT_FONT,
     loaded: false,
     saving: false,
     storageKey: AURORA_OPACITY_KEY,
   }),
   actions: {
-    applySettings(payload: Partial<Pick<UiSettingsState, 'auroraOpacity'>>) {
+    applySettings(
+      payload: Partial<Pick<UiSettingsState, 'auroraOpacity' | 'fontFamily'>>
+    ) {
       if (payload.auroraOpacity !== undefined) {
         this.auroraOpacity = clampOpacity(payload.auroraOpacity);
+      }
+      if (payload.fontFamily !== undefined) {
+        this.fontFamily = payload.fontFamily;
       }
     },
     async loadFromStorage(userId?: string | number | null) {
@@ -58,7 +89,6 @@ export const useUiSettingsStore = defineStore('uiSettings', {
       let raw: string | null = null;
       if (userId !== null && userId !== undefined) {
         raw = await getPersistentItem(key);
-        // Для новых пользователей не используем старый общий ключ.
         await removePersistentItem(AURORA_OPACITY_KEY);
       }
 
@@ -66,6 +96,13 @@ export const useUiSettingsStore = defineStore('uiSettings', {
       this.applySettings({
         auroraOpacity: parsed ?? DEFAULT_AURORA_OPACITY,
       });
+
+      const savedFont = await getPersistentItem(FONT_FAMILY_KEY);
+      this.applySettings({
+        fontFamily:
+          savedFont && isValidFont(savedFont) ? savedFont : DEFAULT_FONT,
+      });
+
       this.loaded = true;
     },
     async ensureLoaded(userId?: string | number | null) {
@@ -74,9 +111,16 @@ export const useUiSettingsStore = defineStore('uiSettings', {
       await this.loadFromStorage(userId);
     },
     updateAuroraOpacity(value: number) {
-      // Обновляем локально сразу, чтобы UI отвечал мгновенно.
       this.applySettings({ auroraOpacity: value });
       this.schedulePersist();
+    },
+    async updateFontFamily(font: FontId) {
+      this.applySettings({ fontFamily: font });
+      try {
+        await setPersistentItem(FONT_FAMILY_KEY, font);
+      } catch (error) {
+        console.error('[UiSettings] Не удалось сохранить шрифт:', error);
+      }
     },
     schedulePersist() {
       if (saveTimeout) {

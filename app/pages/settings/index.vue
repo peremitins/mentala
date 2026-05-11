@@ -133,6 +133,40 @@
           </div>
         </div>
 
+        <!-- Блок "Внешний вид": выбор шрифта -->
+        <div class="glass-deep">
+          <p
+            class="text-xs font-semibold text-muted-foreground tracking-wide pt-4 pb-1 px-4"
+          >
+            ВНЕШНИЙ ВИД
+          </p>
+          <div class="px-4 py-3">
+            <p class="text-sm font-medium mb-3">Шрифт</p>
+            <div class="grid grid-cols-3 gap-2">
+              <button
+                v-for="font in fontOptions"
+                :key="font.id"
+                type="button"
+                class="flex flex-col items-center gap-1 rounded-xl border px-2 py-3 transition-colors"
+                :class="
+                  uiSettings.fontFamily === font.id
+                    ? 'border-primary bg-primary/10 text-foreground'
+                    : 'border-border/30 text-muted-foreground hover:border-border/60 hover:text-foreground'
+                "
+                :style="{ fontFamily: `'${font.id}', sans-serif` }"
+                @click="uiSettings.updateFontFamily(font.id)"
+              >
+                <span class="text-base font-semibold leading-tight">{{
+                  font.label
+                }}</span>
+                <span class="text-[10px] opacity-60">{{
+                  font.description
+                }}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
         <!-- Блок "Уведомления": Push + Маркетинговые сообщения -->
         <div class="glass-deep">
           <p
@@ -213,62 +247,19 @@
 
             <Separator class="w-auto mx-4" />
 
-            <div class="px-4 py-3 space-y-3">
-              <div class="flex items-start justify-between gap-3">
-                <div>
-                  <p class="text-sm font-medium">Защита входа</p>
-                  <p class="text-xs text-muted-foreground">
-                    {{ appLockStatusLabel }}
-                  </p>
-                </div>
-                <IconLockKeyhole class="h-4 w-4 text-muted-foreground" />
-              </div>
-
-              <div class="grid grid-cols-2 gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  class="w-full"
-                  @click="handleChangeAppLockCode"
-                >
-                  Изменить код
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  class="w-full"
-                  @click="handleManualLock"
-                >
-                  Заблокировать сейчас
-                </Button>
-              </div>
-
-              <div class="space-y-2">
-                <p class="text-xs font-medium text-muted-foreground">
-                  Запрашивать повторно
+            <NuxtLink
+              to="/settings/app-lock"
+              class="px-4 py-3"
+              :class="rowClass()"
+            >
+              <div class="">
+                <p class="text-sm font-medium">Защита входа</p>
+                <p class="text-xs text-muted-foreground">
+                  {{ appLockStatusLabel }}
                 </p>
-                <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  <button
-                    v-for="option in appLockRepeatOptions"
-                    :key="option.value"
-                    type="button"
-                    class="rounded-lg border px-3 py-2 text-xs font-medium transition-colors"
-                    :class="
-                      appLock.lockAfterSeconds === option.value
-                        ? 'border-primary bg-primary text-primary-foreground'
-                        : 'border-border bg-transparent text-muted-foreground hover:border-primary/60 hover:text-foreground'
-                    "
-                    @click="handleLockAfterChange(option.value)"
-                  >
-                    {{ option.label }}
-                  </button>
-                </div>
               </div>
-
-              <p class="text-xs text-muted-foreground">
-                Биометрия: {{ appLockBiometryLabel }}
-              </p>
-            </div>
+              <IconChevronRight class="h-4 w-4 text-muted-foreground" />
+            </NuxtLink>
           </div>
         </div>
 
@@ -530,6 +521,7 @@ import { computed, onMounted, ref } from 'vue';
 import { useRuntimeConfig } from '#imports';
 import { useI18n } from 'vue-i18n';
 import { useAuthStore } from '@/app/stores/auth';
+import { useUiSettingsStore, FONT_OPTIONS } from '@/app/stores/uiSettings';
 import { useAppLockStore } from '@/app/stores/appLock';
 import { useChatSettingsStore } from '@/app/stores/chatSettings';
 import { useSubscriptionStore } from '@/app/stores/subscription';
@@ -582,11 +574,11 @@ import {
   resolveAssistantVoiceCatalogItem,
 } from '@/shared/constants/assistantVoiceCatalog';
 import { openExternalBrowser } from '@/app/utils/openExternalBrowser';
-import type { AppLockAfterSeconds } from '@/app/utils/appLockCrypto';
 import IconChevronRight from '~icons/lucide/chevron-right';
-import IconLockKeyhole from '~icons/lucide/lock-keyhole';
 
 const auth = useAuthStore();
+const uiSettings = useUiSettingsStore();
+const fontOptions = FONT_OPTIONS;
 const appLock = useAppLockStore();
 const chatSettings = useChatSettingsStore();
 const subscriptionStore = useSubscriptionStore();
@@ -607,15 +599,6 @@ const referralPanelRefreshKey = ref(0);
 const marketingConsent = ref(false);
 const marketingConsentLoading = ref(false);
 const showPushDisableConfirmModal = ref(false);
-const appLockRepeatOptions: Array<{
-  value: AppLockAfterSeconds;
-  label: string;
-}> = [
-  { value: 0, label: 'Сразу' },
-  { value: 60, label: '1 мин' },
-  { value: 300, label: '5 мин' },
-  { value: 900, label: '15 мин' },
-];
 
 const pushPermissionGate = usePushPermissionGate();
 const pushSettings = pushPermissionGate.pushSettings;
@@ -776,10 +759,6 @@ const appLockStatusLabel = computed(() =>
   appLock.record ? 'Код активен на этом устройстве' : 'Код обязателен'
 );
 
-const appLockBiometryLabel = computed(() =>
-  appLock.biometric.available ? appLock.biometric.label : 'PIN-код'
-);
-
 const legalLocale = computed(() => {
   const value = (auth.user?.locale || locale.value || 'ru').toString();
   return value.toLowerCase().startsWith('en') ? 'en' : 'ru';
@@ -901,24 +880,6 @@ async function confirmDisablePush() {
 async function handleOpenPushSystemSettings() {
   settingsAnalytics.trackOpenSystemSettings();
   await pushPermissionGate.openSystemSettings();
-}
-
-function handleChangeAppLockCode() {
-  appLock.startSetup('change');
-}
-
-function handleManualLock() {
-  appLock.lockNow();
-}
-
-async function handleLockAfterChange(value: AppLockAfterSeconds) {
-  try {
-    await appLock.setLockAfterSeconds(value);
-    useToast('Сохранено', 'Период повторной проверки обновлён');
-  } catch (error) {
-    console.error('Не удалось обновить период блокировки:', error);
-    useToast('Ошибка', 'Не удалось сохранить настройку', 'error');
-  }
 }
 
 async function copyUserId() {

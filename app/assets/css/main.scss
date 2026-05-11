@@ -6,6 +6,7 @@ body,
   width: 100%;
   height: 100dvh;
   box-sizing: border-box;
+  font-family: var(--app-font, 'Nunito', system-ui, sans-serif);
 
   /*
    * Запрещаем WebKit (iOS Safari, WKWebView) автоматически масштабировать

@@ -23,7 +23,7 @@
             </span>
             <span
               :class="[
-                'w-full text-center text-[10px] transition-all duration-300',
+                'w-full text-center text-[12px] transition-all duration-300',
                 isActive('/')
                   ? 'text-foreground font-medium opacity-100'
                   : 'text-foreground opacity-60 group-hover:opacity-80',
@@ -49,7 +49,7 @@
             </span>
             <span
               :class="[
-                'w-full text-center text-[10px] transition-all duration-300',
+                'w-full text-center text-[12px] transition-all duration-300',
                 isActive('/therapy')
                   ? 'text-foreground font-medium opacity-100'
                   : 'text-foreground opacity-60 group-hover:opacity-80',
@@ -75,7 +75,7 @@
             </span>
             <span
               :class="[
-                'w-full text-center text-[10px] transition-all duration-300',
+                'w-full text-center text-[12px] transition-all duration-300',
                 isActive('/habits')
                   ? 'text-foreground font-medium opacity-100'
                   : 'text-foreground opacity-60 group-hover:opacity-80',
@@ -101,7 +101,7 @@
             </span>
             <span
               :class="[
-                'w-full text-center text-[10px] transition-all duration-300',
+                'w-full text-center text-[12px] transition-all duration-300',
                 isActive('/settings')
                   ? 'text-foreground font-medium opacity-100'
                   : 'text-foreground opacity-60 group-hover:opacity-80',

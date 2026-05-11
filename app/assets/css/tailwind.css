@@ -69,6 +69,9 @@
 }
 
 @theme {
+  /* === Шрифт приложения === */
+  --font-app: var(--app-font, 'Nunito', system-ui, sans-serif);
+
   /* === Breakpoints === */
   --breakpoint-xxs: 375px;
   --breakpoint-xs: 480px;

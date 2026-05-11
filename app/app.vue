@@ -85,6 +85,17 @@ const showAurora = computed(() => {
 
 const auroraOpacity = computed(() => uiSettings.auroraOpacity);
 
+watch(
+  () => uiSettings.fontFamily,
+  (font) => {
+    document.documentElement.style.setProperty(
+      '--app-font',
+      `'${font}', system-ui, sans-serif`
+    );
+  },
+  { immediate: true }
+);
+
 onMounted(async () => {
   await Promise.all([
     sceneSettings.ensureLoaded(),
