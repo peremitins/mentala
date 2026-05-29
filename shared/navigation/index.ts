@@ -31,6 +31,7 @@ export const AppNavigationTargetTypeEnum = z.enum([
   'therapy_topic',
   'habits_list',
   'habit',
+  'program_step',
 ]);
 
 export const HomeNavigationTargetDto = z.object({
@@ -99,6 +100,11 @@ export const HabitNavigationTargetDto = z.object({
   habitKey: z.string().trim().min(1).max(160),
 });
 
+export const ProgramStepNavigationTargetDto = z.object({
+  type: z.literal('program_step'),
+  slug: z.string().trim().min(1).max(160),
+});
+
 export const AppNavigationTargetDto = z.discriminatedUnion('type', [
   HomeNavigationTargetDto,
   MeditationsListNavigationTargetDto,
@@ -114,6 +120,7 @@ export const AppNavigationTargetDto = z.discriminatedUnion('type', [
   TherapyTopicNavigationTargetDto,
   HabitsListNavigationTargetDto,
   HabitNavigationTargetDto,
+  ProgramStepNavigationTargetDto,
 ]);
 
 export const AppNavigationSourceEnum = z.enum([

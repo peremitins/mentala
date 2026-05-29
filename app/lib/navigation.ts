@@ -125,6 +125,17 @@ export function resolveAppNavigationTargetFromRoute(
     return { type: 'habits_list' };
   }
 
+  if (
+    path.startsWith('/programs/') &&
+    /^\/programs\/[^/]+\/steps\/\d+/.test(path)
+  ) {
+    const slug = readStringParam(route.params.slug);
+    if (slug) {
+      return { type: 'program_step', slug };
+    }
+    return null;
+  }
+
   return null;
 }
 
@@ -171,6 +182,8 @@ export function resolveNavigationFeatureKey(
       return CATALOG_HABIT_KEYS.has(target.habitKey)
         ? null
         : 'habits.custom.create';
+    case 'program_step':
+      return 'programs.roadmap.full';
     default:
       return null;
   }
@@ -193,6 +206,8 @@ export function buildBlockedNavigationFallbackRoute(
       return { path: '/therapy' };
     case 'habit':
       return { path: '/habits' };
+    case 'program_step':
+      return { path: `/programs/${target.slug}/map` };
     default:
       return { path: '/' };
   }

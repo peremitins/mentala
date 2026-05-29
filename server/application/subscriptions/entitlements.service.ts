@@ -218,6 +218,17 @@ const DEFAULT_FEATURE_ACCESS_POLICIES: FeatureAccessPolicy[] = [
     paywallCtaText: 'Перейти на Premium',
     paywallTargetPlan: 'premium',
   },
+  {
+    featureKey: 'programs.roadmap.full',
+    requiredPlan: 'pro',
+    trialUnlocked: true,
+    lockIcon: 'pro',
+    paywallTitle: 'Программы и сады доступны в PRO и Premium',
+    paywallDescription:
+      'Подключи PRO или Premium, чтобы проходить шаги программ и растить сады.',
+    paywallCtaText: 'Выбрать тариф',
+    paywallTargetPlan: 'pro',
+  },
 ];
 
 function isServiceRole(userRole?: string): boolean {
