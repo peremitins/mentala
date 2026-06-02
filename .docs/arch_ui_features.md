@@ -3,6 +3,7 @@
 ## Практики (хаб `/practices`)
 
 - Медитации, дыхательные практики, быстрая помощь, дневник благодарности
+- На хабе `/practices` платные медитации и дневник благодарности не закрываются заранее: карточки ведут внутрь разделов без badge/lock. Paywall показывается на потребляющем действии: запуск медитации, избранное/управление треком, сохранение записи дневника, premium-фото или кастомизация worksheet.
 - Дыхательные: каталог в `app/lib/breathPracticesCatalog.ts`, плеер `BreathPracticePlayer.vue` + `BreathOrb.vue`
 - Голосовые подсказки фаз из `public/breath/voice/{informal|formal}/*.mp3`
 - Web/legacy дыхательные voice/cue идут через `Howler` с `html5: true`; native iOS/Android используют отдельный `NativeBreathSessionService` поверх MediaGrid для основной практики и отдельный intro-source для prep countdown
@@ -146,7 +147,7 @@
 ## Дневник благодарности (`/practices/gratitude-diary`)
 
 - Overview (streak + история) и editor (вопрос + worksheet + composer)
-- Entitlement `gratitude.diary.full`, premium-ограничения для worksheet/photo
+- Entitlement `gratitude.diary.full` блокирует сохранение/изменение записей, но read-only overview, prompt catalog и editor preview доступны, чтобы пользователь мог увидеть устройство дневника. Premium-ограничения для worksheet/photo остаются отдельными gates.
 - API: GET/POST/PATCH `/api/gratitude-diary/*`, upload-photo staged-flow
 - Избранные промпты: `gratitude_diary_favorite_prompts` (catalog + custom, лимит 50)
 - Streak: timezone-aware, по локальному дню пользователя

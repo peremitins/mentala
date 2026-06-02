@@ -169,7 +169,8 @@ const pushRecovery = usePushRecovery();
 // показ только когда залогинен И приложение активно (foreground).
 const pendingReport = usePendingReportNotification({
   enabled: () =>
-    auth.isLoggedIn && (typeof document === 'undefined' || document.visibilityState === 'visible'),
+    auth.isLoggedIn &&
+    (typeof document === 'undefined' || document.visibilityState === 'visible'),
 });
 
 function handleOpenPendingReport(report: PendingReport) {

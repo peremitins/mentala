@@ -33,7 +33,9 @@
           >
             <div
               v-if="
-                currentSubscription && !subscriptionStore.loading.subscription
+                currentSubscription &&
+                !isLegacyBasicNoPaidAccess &&
+                !subscriptionStore.loading.subscription
               "
             >
               <p class="text-sm font-medium">
@@ -69,7 +71,7 @@
                   class="text-sm text-foreground mt-1"
                 >
                   <template v-if="currentSubscription.plan.name === 'basic'">
-                    Бесплатный план без срока окончания
+                    Нет активной подписки
                   </template>
                   <template v-else>
                     Действует до: {{ formatDate(currentSubscription.endDate) }}
@@ -98,7 +100,7 @@
               <div v-if="isPaidActiveSubscription" class="mt-3">
                 <div
                   v-if="isCurrentSubscriptionCancellationScheduled"
-                  class="space-y-2"
+                  class="xs:space-y-3 space-y-1"
                 >
                   <p class="text-xs text-foreground/80">
                     Автопродление отключено. Подписка останется активной до
@@ -127,7 +129,8 @@
             </div>
             <div
               v-else-if="
-                !currentSubscription && !subscriptionStore.loading.subscription
+                (!currentSubscription || isLegacyBasicNoPaidAccess) &&
+                !subscriptionStore.loading.subscription
               "
             >
               <p class="text-sm font-medium">
@@ -258,7 +261,10 @@
         </template>
       </div>
 
-      <div v-if="shouldShowInternalPromoControls" class="space-y-2">
+      <div
+        v-if="shouldShowInternalPromoControls"
+        class="xs:space-y-3 space-y-1"
+      >
         <AccessCodePanel @changed="handlePromoStateChanged" />
         <ActiveBonusesPanel :refresh-key="promoPanelsRefreshKey" />
       </div>
@@ -288,11 +294,11 @@
           isAppleIapPricesLoading ||
           isIosBillingFlowPending
         "
-        class="grid grid-cols-1 md:grid-cols-3 gap-2"
+        class="grid grid-cols-1 md:grid-cols-2 gap-2"
       >
         <Skeleton type="plan-card" :count="4" rounded-size="lg" />
       </div>
-      <div v-else class="grid grid-cols-1 md:grid-cols-3 gap-2">
+      <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-2">
         <PlanCard
           v-for="(plan, index) in subscriptionStore.visiblePlans"
           :key="plan.id"
@@ -303,9 +309,7 @@
           :is-scheduled="isScheduledPlan(plan.id)"
           :price-label="resolvePlanPriceLabel(plan)"
           :show-year-discount="!isIosAppleIapFlow"
-          :trial-active="
-            plan.name === 'basic' ? subscriptionStore.trialActive : false
-          "
+          :trial-active="subscriptionStore.trialActive"
           :style="`animation-delay: ${0.3 + index * 0.1}s`"
           class=""
           @update:billing-period="(period) => setBillingPeriod(plan.id, period)"
@@ -675,10 +679,16 @@ const APPLE_SUBSCRIPTIONS_MANAGE_URL =
 const now = useNow({ interval: 60_000 });
 
 // Computed для удобства доступа
-const plans = computed(() => subscriptionStore.plans);
+const plans = computed(() => subscriptionStore.visiblePlans);
 const currentSubscription = computed(
   () => subscriptionStore.currentSubscription
 );
+const isLegacyBasicNoPaidAccess = computed(() => {
+  return Boolean(
+    currentSubscription.value?.planId === 'basic' &&
+      !subscriptionStore.trialActive
+  );
+});
 const billingProviderHint = computed(
   () => subscriptionStore.subscriptionData?.billingProviderHint || null
 );
@@ -762,15 +772,7 @@ const shouldShowCurrentStatusCard = computed(() => {
     return true;
   }
 
-  if (!currentSubscription.value) {
-    return true;
-  }
-
-  return !(
-    currentSubscription.value.plan.name === 'basic' &&
-    currentSubscription.value.paymentStatus === 'active' &&
-    !trialActive.value
-  );
+  return true;
 });
 
 const isPaidActiveSubscription = computed(() => {
@@ -965,7 +967,7 @@ function getPlanDisplayName(name: string) {
     if (trialActive.value) {
       return getLocalizedTrialPlanLabel(t, trialTimeLeftLabel.value);
     }
-    return getLocalizedPlanName('basic', t);
+    return 'нет активной подписки';
   }
 
   return getLocalizedPlanName(name, t);
@@ -1042,12 +1044,6 @@ function getBillingPeriod(planId: string): 'month' | 'year' {
 }
 
 function setBillingPeriod(planId: string, period: 'month' | 'year') {
-  // Basic план всегда только 'month', нельзя выбрать 'year'
-  const plan = plans.value.find((p) => p.id === planId);
-  if (plan?.name === 'basic') {
-    planBillingPeriods.value.set(planId, 'month');
-    return;
-  }
   planBillingPeriods.value.set(planId, period);
 
   // При смене периода сбрасываем payload-подпись, чтобы при новой команде
@@ -1437,17 +1433,6 @@ async function startAppleIapPurchase(plan: Plan) {
   if (processing.value) return;
   if (shouldBlockAppleIapPurchase.value) {
     showAppleIapBlockedDialog.value = true;
-    return;
-  }
-
-  // Смена на Basic для Apple IAP — это отмена подписки, её делают в App Store.
-  if (plan.name === 'basic') {
-    useToast(
-      'Отмена подписки',
-      'Отмена подписки выполняется в App Store.',
-      'info'
-    );
-    await handleManageAppleSubscriptions();
     return;
   }
 
@@ -2326,7 +2311,10 @@ onMounted(async () => {
   }
 
   // По умолчанию выделяем текущий активный тариф
-  if (currentSubscription.value) {
+  if (
+    currentSubscription.value &&
+    currentSubscription.value.planId !== 'basic'
+  ) {
     selectedPlanId.value = currentSubscription.value.planId;
     // Инициализируем период для текущего тарифа из подписки
     const currentBillingPeriod =
@@ -2337,14 +2325,9 @@ onMounted(async () => {
     );
   }
 
-  // Инициализируем период для всех планов (по умолчанию месяц)
-  // Basic всегда только 'month'
+  // Инициализируем период для всех публичных планов (по умолчанию месяц).
   plans.value.forEach((plan: Plan) => {
     if (!planBillingPeriods.value.has(plan.id)) {
-      const period = plan.name === 'basic' ? 'month' : 'month';
-      planBillingPeriods.value.set(plan.id, period);
-    } else if (plan.name === 'basic') {
-      // Убеждаемся, что Basic всегда 'month'
       planBillingPeriods.value.set(plan.id, 'month');
     }
   });
@@ -2364,7 +2347,7 @@ onMounted(async () => {
     if (matchedPlan) {
       selectedPlanId.value = matchedPlan.id;
       const requestedPeriod = resolveRequestedPeriod();
-      if (requestedPeriod && matchedPlan.name !== 'basic') {
+      if (requestedPeriod) {
         planBillingPeriods.value.set(matchedPlan.id, requestedPeriod);
       }
     }

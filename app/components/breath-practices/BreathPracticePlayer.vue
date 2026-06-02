@@ -355,10 +355,6 @@ let appStateListener: { remove(): Promise<void> } | null = null;
 
 const player = useBreathPracticePlayer({
   onSessionStart: async () => {
-    if (!isNativeSessionEnabled()) {
-      return Date.now();
-    }
-
     return startSession({
       phases: props.practice.phases,
       addressing: prepAddressing.value,

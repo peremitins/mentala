@@ -1,12 +1,15 @@
 <template>
   <div
-    class="space-y-2 relative h-full overflow-y-auto rounded-lg"
+    class="xs:space-y-3 space-y-1 relative h-full overflow-y-auto rounded-lg"
     :class="selectedTrackId ? '' : 'pb-[100px]'"
   >
     <MeditationDetailView
-      v-if="selectedTrackId && meditationsAccess.available"
+      v-if="selectedTrackId"
       :track-id="selectedTrackId"
+      :locked="!meditationsAccess.available"
+      :required-plan="normalizedMeditationsRequiredPlan"
       @close="closeDetail"
+      @locked-action="openPaywall('meditations.library.full')"
       @practice-start="onMeditationPracticeStart"
       @practice-pause="onMeditationPracticePause"
       @practice-stop="onMeditationPracticeStop"
@@ -18,31 +21,6 @@
         :show-back-button="true"
         @go-back="goBack"
       />
-
-      <div
-        v-if="!meditationsAccess.available"
-        class="glass-deep mx-4 rounded-xl border border-white/15 px-4 py-3 text-sm text-white/80"
-      >
-        <div class="flex items-start justify-between gap-3">
-          <p>
-            {{
-              t('PLANS.FULL_MEDITATIONS_LIBRARY_AVAILABLE', {
-                plans: getPlanBadgeLabel(meditationsAccess.requiredPlan),
-              })
-            }}
-          </p>
-          <button
-            type="button"
-            class="inline-flex items-center gap-1 rounded-full border border-white/25 bg-white/10 px-2 py-1 text-[10px] text-white"
-            @click="openPaywall('meditations.library.full')"
-          >
-            <span aria-hidden="true">{{
-              getPlanBadgeEmoji(meditationsAccess.requiredPlan)
-            }}</span>
-            <span>{{ getPlanBadgeLabel(meditationsAccess.requiredPlan) }}</span>
-          </button>
-        </div>
-      </div>
 
       <Skeleton
         v-if="loaders.isSkeletonLoading"
@@ -70,6 +48,8 @@
               ? (section.key as MeditationTopicKey)
               : undefined
           "
+          :locked="!meditationsAccess.available"
+          :required-plan="normalizedMeditationsRequiredPlan"
           :class="!wasSkeletonShown ? 'animate-slide-up' : ''"
           :style="
             !wasSkeletonShown
@@ -79,6 +59,7 @@
           @open="openTrack($event, section.key, section.tracks)"
           @favorite="toggleFavorite"
           @view-all="openViewAll(section.key)"
+          @locked-action="openPaywall('meditations.library.full')"
         />
       </div>
 
@@ -95,11 +76,17 @@
               v-for="track in dialogTracks"
               :key="track.id"
               type="button"
-              class="group flex w-full items-center gap-3 rounded-2xl bg-white/5 p-3 text-left transition hover:bg-white/10"
+              class="group relative flex w-full items-center gap-3 rounded-2xl bg-white/5 p-3 text-left transition hover:bg-white/10"
               @click="
                 openTrack(track.id, dialogTopicKey || 'all', dialogTracks)
               "
             >
+              <span
+                v-if="!meditationsAccess.available"
+                class="absolute right-2 top-2 z-10 inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/20 bg-black/45 text-xs leading-none"
+              >
+                {{ getPlanBadgeEmoji(meditationsAccess.requiredPlan) }}
+              </span>
               <div class="relative h-16 w-16 overflow-hidden rounded-2xl">
                 <div
                   v-if="!track.coverPath"
@@ -133,20 +120,19 @@
           </div>
         </DialogContent>
       </Dialog>
-
-      <FeaturePaywallModal
-        v-model:open="paywallOpen"
-        :feature-key="paywallFeatureKey"
-        :required-plan="paywallAccess?.requiredPlan || null"
-        :paywall="paywallAccess?.paywall || null"
-      />
     </template>
+
+    <FeaturePaywallModal
+      v-model:open="paywallOpen"
+      :feature-key="paywallFeatureKey"
+      :required-plan="paywallAccess?.requiredPlan || null"
+      :paywall="paywallAccess?.paywall || null"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { formatInTimeZone } from 'date-fns-tz';
 import PageHeader from '@/app/components/PageHeader.vue';
@@ -174,7 +160,6 @@ import {
   DialogTitle,
 } from '@/app/components/ui/dialog';
 import { useEntitlements } from '@/app/composables/useEntitlements';
-import { getLocalizedRequiredPlanLabel } from '@/app/utils/planI18n';
 
 const route = useRoute();
 const router = useRouter();
@@ -267,7 +252,6 @@ watch(
   { immediate: false }
 );
 const { getFeatureAccess } = useEntitlements();
-const { t } = useI18n();
 
 const wasSkeletonShown = ref(false);
 const paywallOpen = ref(false);
@@ -275,6 +259,9 @@ const paywallFeatureKey = ref<string | null>(null);
 
 const meditationsAccess = computed(() =>
   getFeatureAccess('meditations.library.full')
+);
+const normalizedMeditationsRequiredPlan = computed(() =>
+  meditationsAccess.value.requiredPlan === 'premium' ? 'premium' : 'pro'
 );
 const paywallAccess = computed(() =>
   paywallFeatureKey.value ? getFeatureAccess(paywallFeatureKey.value) : null
@@ -433,9 +420,6 @@ watch(
     if (available && !prev && meditationsStore.error) {
       await meditationsStore.fetchAll(true);
     }
-    if (!available) {
-      dialogOpen.value = false;
-    }
   }
 );
 
@@ -468,10 +452,6 @@ watch(
   async (value) => {
     if (value) {
       dialogOpen.value = false;
-    }
-    if (value && !meditationsAccess.value.available) {
-      openPaywall('meditations.library.full');
-      await closeDetail();
     }
   }
 );
@@ -525,11 +505,6 @@ async function openTrack(
   sectionKey?: SectionKey,
   list?: MeditationTrackDto[]
 ) {
-  if (!meditationsAccess.value.available) {
-    openPaywall('meditations.library.full');
-    return;
-  }
-
   if (list?.length) {
     setQueue(
       list.map((t) => t.id),
@@ -581,19 +556,11 @@ function toggleFavorite(trackId: string) {
 }
 
 function openViewAll(key: SectionKey) {
-  if (!meditationsAccess.value.available) {
-    openPaywall('meditations.library.full');
-    return;
-  }
   dialogTopicKey.value = key;
   dialogOpen.value = true;
 }
 
 function getPlanBadgeEmoji(plan: string) {
   return plan === 'premium' ? '💎' : '⭐';
-}
-
-function getPlanBadgeLabel(plan: string) {
-  return getLocalizedRequiredPlanLabel(plan, t);
 }
 </script>

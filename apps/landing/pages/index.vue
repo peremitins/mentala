@@ -513,7 +513,7 @@
             </button>
           </div>
 
-          <div class="grid lg:grid-cols-3 gap-4">
+          <div class="grid lg:grid-cols-2 gap-4">
             <article
               v-for="plan in pricingPlans"
               :key="plan.id"
@@ -856,7 +856,7 @@ type ScenarioCard = {
 };
 
 type PricingPlan = {
-  id: 'basic' | 'pro' | 'premium';
+  id: 'pro' | 'premium';
   title: string;
   subtitle: string;
   monthlyPrice: number;
@@ -1103,19 +1103,6 @@ const privacyCards = computed<PrivacyCard[]>(() => [
 ]);
 
 const pricingPlans = computed<PricingPlan[]>(() => [
-  {
-    id: 'basic',
-    title: String(t('LANDING.PRICING.PLANS.BASIC.TITLE')),
-    subtitle: String(t('LANDING.PRICING.PLANS.BASIC.SUBTITLE')),
-    monthlyPrice: 0,
-    yearlyPrice: 0,
-    features: [
-      String(t('LANDING.PRICING.PLANS.BASIC.FEATURES.FEATURE_1')),
-      String(t('LANDING.PRICING.PLANS.BASIC.FEATURES.FEATURE_2')),
-      String(t('LANDING.PRICING.PLANS.BASIC.FEATURES.FEATURE_3')),
-      String(t('LANDING.PRICING.PLANS.BASIC.FEATURES.FEATURE_4')),
-    ],
-  },
   {
     id: 'pro',
     title: String(t('LANDING.PRICING.PLANS.PRO.TITLE')),

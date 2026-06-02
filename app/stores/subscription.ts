@@ -136,14 +136,14 @@ export const useSubscriptionStore = defineStore('subscription', {
 
   getters: {
     visiblePlans: (state) => {
-      // Фильтруем планы (Basic всегда показывается)
+      // Публичный продукт показывает только платные тарифы.
       const filtered = state.plans.filter((p) => {
-        if (p.name === 'basic') return true;
+        if (p.name === 'basic') return false;
         return p.isVisibleInUI !== false;
       });
 
-      // Сортируем по фиксированному порядку: Basic, Pro, Premium
-      const order = ['basic', 'pro', 'premium'];
+      // Сортируем по фиксированному порядку: Pro, Premium.
+      const order = ['pro', 'premium'];
       const sorted = filtered.sort((a, b) => {
         const aIndex = order.indexOf(a.name);
         const bIndex = order.indexOf(b.name);

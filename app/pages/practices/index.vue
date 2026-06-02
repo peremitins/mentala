@@ -45,7 +45,6 @@
       </NuxtLink>
 
       <NuxtLink
-        v-if="meditationsAccess.available"
         to="/meditations"
         class="glass-deep p-5 group relative overflow-hidden transition hover:-translate-y-1 animate-slide-up"
         style="animation-delay: 0.05s; animation-fill-mode: both"
@@ -77,52 +76,6 @@
           </div>
         </div>
       </NuxtLink>
-
-      <button
-        v-else
-        type="button"
-        class="glass-deep p-5 group relative overflow-hidden transition hover:-translate-y-1 animate-slide-up text-left"
-        style="animation-delay: 0.05s; animation-fill-mode: both"
-        @click="openPaywall('meditations.library.full')"
-      >
-        <div
-          class="pointer-events-none absolute inset-0 transition group-hover:opacity-100"
-        >
-          <div
-            class="tile-orb absolute -right-16 -bottom-8 h-44 w-44 rounded-full bg-gradient-to-br from-amber-400/35 via-rose-400/20 to-transparent blur-2xl"
-          />
-          <div
-            class="tile-orb tile-orb--delay absolute -left-14 top-0 h-32 w-32 rounded-full bg-gradient-to-br from-purple-500/25 via-fuchsia-500/20 to-transparent blur-2xl"
-          />
-        </div>
-        <div
-          class="absolute right-3 top-3 inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/25 bg-black/30 text-sm leading-none"
-        >
-          <span aria-hidden="true">{{
-            getPlanBadgeEmoji(meditationsAccess.requiredPlan)
-          }}</span>
-        </div>
-        <div class="relative z-10 space-y-3">
-          <div class="w-[60px]">
-            <img
-              src="../../assets/images/meditation.webp"
-              loading="lazy"
-              alt="icon meditation"
-            />
-          </div>
-          <div class="space-y-1">
-            <h2 class="text-lg font-semibold text-foreground">Медитации</h2>
-            <p class="text-sm text-foreground/80">
-              {{
-                getLockedFeatureLabel(
-                  'meditations',
-                  meditationsAccess.requiredPlan
-                )
-              }}
-            </p>
-          </div>
-        </div>
-      </button>
 
       <NuxtLink
         to="/breath-practices"
@@ -160,7 +113,6 @@
       </NuxtLink>
 
       <NuxtLink
-        v-if="gratitudeDiaryAccess.available"
         to="/practices/gratitude-diary"
         class="glass-deep p-5 group relative overflow-hidden transition hover:-translate-y-1 animate-slide-up"
         style="animation-delay: 0.15s; animation-fill-mode: both"
@@ -194,55 +146,6 @@
           </div>
         </div>
       </NuxtLink>
-
-      <button
-        v-else
-        type="button"
-        class="glass-deep p-5 group relative overflow-hidden text-left transition hover:-translate-y-1 animate-slide-up"
-        style="animation-delay: 0.15s; animation-fill-mode: both"
-        @click="openPaywall('gratitude.diary.full')"
-      >
-        <div
-          class="pointer-events-none absolute inset-0 transition group-hover:opacity-100"
-        >
-          <div
-            class="tile-orb absolute -right-14 -top-10 h-40 w-40 rounded-full bg-gradient-to-br from-fuchsia-400/35 via-pink-400/20 to-transparent blur-2xl"
-          />
-          <div
-            class="tile-orb tile-orb--delay absolute -left-10 bottom-0 h-32 w-32 rounded-full bg-gradient-to-br from-violet-500/30 via-rose-500/20 to-transparent blur-2xl"
-          />
-        </div>
-        <div
-          class="absolute right-3 top-3 inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/25 bg-black/30 text-sm leading-none"
-        >
-          <span aria-hidden="true">{{
-            getPlanBadgeEmoji(gratitudeDiaryAccess.requiredPlan)
-          }}</span>
-        </div>
-
-        <div class="relative z-10 space-y-3">
-          <div class="w-[60px]">
-            <img
-              src="../../assets/images/gratitude_diary.webp"
-              loading="lazy"
-              alt="icon gratitude diary"
-            />
-          </div>
-          <div class="space-y-1">
-            <h2 class="text-lg font-semibold text-foreground">
-              Дневник благодарности
-            </h2>
-            <p class="text-sm text-foreground/80">
-              {{
-                getLockedFeatureLabel(
-                  'gratitude',
-                  gratitudeDiaryAccess.requiredPlan
-                )
-              }}
-            </p>
-          </div>
-        </div>
-      </button>
     </div>
 
     <FeaturePaywallModal
@@ -256,25 +159,16 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { useI18n } from 'vue-i18n';
 import PageHeader from '@/app/components/PageHeader.vue';
 import PracticesAssistantHero from '@/app/components/practices/PracticesAssistantHero.vue';
 import FeaturePaywallModal from '@/app/components/subscription/FeaturePaywallModal.vue';
 import { useEntitlements } from '@/app/composables/useEntitlements';
-import { getLocalizedRequiredPlanLabel } from '@/app/utils/planI18n';
 
 const { getFeatureAccess } = useEntitlements();
-const { t } = useI18n();
 
 const paywallOpen = ref(false);
 const paywallFeatureKey = ref<string | null>(null);
 
-const meditationsAccess = computed(() =>
-  getFeatureAccess('meditations.library.full')
-);
-const gratitudeDiaryAccess = computed(() =>
-  getFeatureAccess('gratitude.diary.full')
-);
 const paywallAccess = computed(() =>
   paywallFeatureKey.value ? getFeatureAccess(paywallFeatureKey.value) : null
 );
@@ -282,21 +176,6 @@ const paywallAccess = computed(() =>
 function openPaywall(featureKey: string) {
   paywallFeatureKey.value = featureKey;
   paywallOpen.value = true;
-}
-
-function getPlanBadgeEmoji(plan: string) {
-  return plan === 'premium' ? '💎' : '⭐';
-}
-
-function getLockedFeatureLabel(
-  type: 'meditations' | 'gratitude',
-  plan: string
-) {
-  const plans = getLocalizedRequiredPlanLabel(plan, t);
-
-  return type === 'meditations'
-    ? t('PLANS.MEDITATIONS_LIBRARY_UNLOCK', { plans })
-    : t('PLANS.GRATITUDE_DIARY_UNLOCK', { plans });
 }
 </script>
 

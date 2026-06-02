@@ -17,7 +17,13 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
   }
 
   const featureKey = resolveNavigationFeatureKey(target);
+  const navigationStore = useAppNavigationStore();
   if (!featureKey) {
+    // Разрешённые preview-разделы не должны удерживать paywall,
+    // который мог быть открыт предыдущим route-level guard.
+    if (navigationStore.request?.source === 'route_guard') {
+      navigationStore.clearPaywall();
+    }
     return;
   }
 
@@ -42,7 +48,6 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
     return;
   }
 
-  const navigationStore = useAppNavigationStore();
   navigationStore.openPaywall(featureKey, {
     target,
     source: 'route_guard',

@@ -70,18 +70,25 @@
           <button
             type="button"
             class="flex h-12 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20 opacity-100"
-            @click="seekBy(-15)"
+            @click="handleSeekBy(-15)"
           >
             <IconUndo2 class="h-5 w-5" />
           </button>
           <button
             type="button"
-            class="flex h-12 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20 opacity-100"
+            class="relative flex h-12 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20 opacity-100"
             :class="{ 'opacity-80': isBuffering }"
             :disabled="isBuffering"
             :aria-busy="isBuffering"
             @click="togglePlay"
           >
+            <span
+              v-if="locked"
+              class="absolute -right-1 -top-1 inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/20 bg-black/65 text-[11px] leading-none"
+              aria-hidden="true"
+            >
+              {{ planBadge }}
+            </span>
             <svg
               v-if="isBuffering"
               class="h-6 w-6 animate-spin"
@@ -102,7 +109,7 @@
           <button
             type="button"
             class="flex h-12 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20 opacity-100"
-            @click="seekBy(15)"
+            @click="handleSeekBy(15)"
           >
             <IconRedo2 class="h-5 w-5" />
           </button>
@@ -146,9 +153,16 @@
 
           <button
             type="button"
-            class="rounded-full px-3 py-1 transition ml-auto"
+            class="relative rounded-full px-3 py-1 transition ml-auto"
             @click="toggleFavorite"
           >
+            <span
+              v-if="locked"
+              class="absolute -right-0.5 -top-0.5 text-[10px] leading-none"
+              aria-hidden="true"
+            >
+              {{ planBadge }}
+            </span>
             <IconHeart
               class="h-5 w-5"
               :class="
@@ -200,10 +214,13 @@ import type {
 
 const props = defineProps<{
   trackId: string;
+  locked?: boolean;
+  requiredPlan?: 'pro' | 'premium' | null;
 }>();
 
 const emit = defineEmits<{
   (e: 'close'): void;
+  (e: 'locked-action'): void;
   (
     e: 'practice-start',
     payload: { trackId: string; requiredSeconds: number }
@@ -249,6 +266,10 @@ const timerPickerValue = computed({
 
 const isActive = computed(() => currentTrack.value?.id === track.value?.id);
 const isLoopTrack = computed(() => Boolean(track.value?.isLoop));
+const locked = computed(() => Boolean(props.locked));
+const planBadge = computed(() =>
+  props.requiredPlan === 'premium' ? '💎' : '⭐'
+);
 
 const displayCurrentTime = computed(() =>
   isActive.value ? currentTime.value : 0
@@ -282,6 +303,12 @@ const timerTriggerLabel = computed(() => {
 
 function goBack() {
   emit('close');
+}
+
+function guardLockedAction() {
+  if (!locked.value) return false;
+  emit('locked-action');
+  return true;
 }
 
 function topicLabel(key: MeditationTopicKey) {
@@ -322,6 +349,7 @@ function formatPlaybackTime(value: number) {
 }
 
 function applyTimer(value: number | null) {
+  if (guardLockedAction()) return;
   // 00:00 или пустое значение = таймер выключен.
   const safeValue = Number.isFinite(value) ? (value as number) : 0;
   const clamped = Math.max(0, Math.floor(safeValue));
@@ -340,6 +368,7 @@ function applyTimer(value: number | null) {
 
 async function togglePlay() {
   if (!track.value) return;
+  if (guardLockedAction()) return;
   // Если играет другой трек, сразу запускаем текущий, а не ставим на паузу глобальный плеер.
   if (!isActive.value) {
     await play(track.value, preferredTimerMinutes.value);
@@ -431,6 +460,7 @@ async function replaceTrackQuery(nextTrack: MeditationTrackDto) {
 
 async function changeTrack(direction: 1 | -1) {
   if (!track.value) return;
+  if (guardLockedAction()) return;
   const target = findSiblingTrack(direction);
   if (!target) return;
 
@@ -471,6 +501,7 @@ function onProgressPointerDown(event: PointerEvent) {
 }
 
 function seekFromClientX(clientX: number) {
+  if (guardLockedAction()) return;
   if (!isActive.value || !progressRef.value || !displayDuration.value) return;
   const rect = progressRef.value.getBoundingClientRect();
   const percent = Math.min(Math.max(0, (clientX - rect.left) / rect.width), 1);
@@ -478,13 +509,20 @@ function seekFromClientX(clientX: number) {
 }
 
 function handleRepeat() {
+  if (guardLockedAction()) return;
   // Если трек бесконечный, кнопка повторения бессмысленна.
   if (isLoopTrack.value) return;
   toggleRepeat();
 }
 
+function handleSeekBy(seconds: number) {
+  if (guardLockedAction()) return;
+  seekBy(seconds);
+}
+
 function toggleFavorite() {
   if (!track.value) return;
+  if (guardLockedAction()) return;
   meditationsStore.toggleFavorite(track.value.id);
 }
 

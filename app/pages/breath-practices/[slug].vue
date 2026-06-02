@@ -158,8 +158,6 @@ const route = useRoute();
 const store = useBreathPracticesStore();
 const { getFeatureAccess } = useEntitlements();
 
-const BASIC_FREE_SLUGS = new Set(['4-7-8', 'box-breathing']);
-
 const fullCatalogAccess = computed(() =>
   getFeatureAccess('breath.catalog.full')
 );
@@ -225,11 +223,7 @@ const lockFeatureKey = computed<string | null>(() => {
     return 'breath.custom.manage';
   }
 
-  if (
-    builtInPractice.value &&
-    !fullCatalogAccess.value.available &&
-    !BASIC_FREE_SLUGS.has(builtInPractice.value.slug)
-  ) {
+  if (builtInPractice.value && !fullCatalogAccess.value.available) {
     return 'breath.catalog.full';
   }
 

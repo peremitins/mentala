@@ -10,15 +10,9 @@
     <div class="flex items-start justify-between gap-2">
       <h3 class="text-lg font-semibold whitespace-nowrap">
         {{ getPlanName() }}
-        {{ plan.name === 'premium' ? '💎' : plan.name === 'pro' ? '⭐' : '' }}
+        {{ plan.name === 'premium' ? '💎' : '⭐' }}
       </h3>
       <div class="flex items-center gap-2">
-        <span
-          v-if="plan.name === 'basic' && props.trialActive"
-          class="text-xs bg-primary-ui/10 text-primary-ui px-2 py-1 rounded font-medium text-end"
-        >
-          Пробный период
-        </span>
         <span
           v-if="plan.name === 'premium'"
           class="text-xs bg-primary-ui/10 text-primary-ui px-2 py-1 rounded"
@@ -34,8 +28,7 @@
       </div>
     </div>
 
-    <!-- Компактный переключатель месяц/год (только для платных тарифов) -->
-    <div v-if="plan.name !== 'basic'" class="flex items-center gap-1.5">
+    <div class="flex items-center gap-1.5">
       <button
         :class="[
           'px-2.5 py-1 text-xs rounded-md transition-colors border ',
@@ -73,9 +66,7 @@
           <template v-if="customPriceLabel">
             {{ customPriceLabel }}
           </template>
-          <template v-else>
-            {{ getPrice() }} {{ plan.name !== 'basic' ? '₽' : '' }}
-          </template>
+          <template v-else> {{ getPrice() }} ₽ </template>
         </p>
 
         <span
@@ -85,10 +76,9 @@
           Экономия: {{ savingsValue.toLocaleString('ru-RU') }} ₽
         </span>
       </div>
-      <p v-if="plan.name !== 'basic'" class="text-sm text-foreground">
+      <p class="text-sm text-foreground">
         {{ billingPeriod === 'year' ? 'в год' : 'в месяц' }}
       </p>
-      <p v-else class="text-sm text-foreground">бесплатно</p>
     </div>
 
     <ul class="space-y-2 text-sm">
@@ -202,10 +192,6 @@ function getPrice() {
 }
 
 const customPriceLabel = computed(() => {
-  if (props.plan.name === 'basic') {
-    return null;
-  }
-
   if (typeof props.priceLabel !== 'string') {
     return null;
   }
@@ -215,15 +201,11 @@ const customPriceLabel = computed(() => {
 });
 
 const isPricePending = computed(() => {
-  return props.plan.name !== 'basic' && props.priceLabel === null;
+  return props.priceLabel === null;
 });
 
 const savingsValue = computed(() => {
   // Экономия = 12 месяцев по базовой цене минус цена за год со скидкой.
-  if (props.plan.name === 'basic') {
-    return 0;
-  }
-
   const yearlyPrice = Math.round(props.plan.basePrice * 12 * 0.8);
   const savings = props.plan.basePrice * 12 - yearlyPrice;
   return savings > 0 ? savings : 0;
@@ -232,7 +214,6 @@ const savingsValue = computed(() => {
 const shouldShowSavingsBadge = computed(() => {
   return (
     props.showYearDiscount !== false &&
-    props.plan.name !== 'basic' &&
     props.billingPeriod === 'year' &&
     savingsValue.value > 0
   );
@@ -271,32 +252,14 @@ function getFeatures() {
     'Персональный промпт. Опишите свои пожелания, и ИИ будет писать их в вашем стиле.'
   );
 
-  if (props.plan.name === 'basic') {
-    if (props.trialActive) {
-      // Trial-период на базе Basic.
-      features.push({ label: 'Пробный период 7 дней' });
-      features.push({
-        label: t('PLANS.FULL_ACCESS_TO_FEATURES', {
-          plan: getLocalizedPlanName('premium', t),
-        }),
-      });
-      features.push({ label: 'Безлимитные ИИ-сессии' });
-    } else {
-      features.push({
-        label: 'SOS-техники для быстрой стабилизации',
-        tooltip: sosTooltip,
-      });
-      features.push({ label: 'Базовые дыхательные практики' });
-      features.push({
-        label: 'Стандартные напоминания',
-        tooltip: standardRemindersTooltip,
-      });
-    }
-  } else if (props.plan.name === 'pro') {
+  if (props.plan.name === 'pro') {
     features.push({
-      label: t('PLANS.ALL_FROM', {
-        plan: getLocalizedPlanName('basic', t),
-      }),
+      label: 'Быстрые практики для стабилизации',
+      tooltip: sosTooltip,
+    });
+    features.push({
+      label: 'Шаблонные напоминания',
+      tooltip: standardRemindersTooltip,
     });
     features.push({ label: 'ИИ-сессии для регулярной поддержки' });
     features.push({ label: 'До 100 минут в неделю' });
@@ -319,8 +282,8 @@ function getFeatures() {
       tooltip: personalAiStyleTooltip,
     });
     features.push({ label: 'Создание и управление своими практиками' });
-    features.push({ label: 'Создание своих привычек' });
-    features.push({ label: 'Создание личной терапии' });
+    features.push({ label: 'Свои темы привычек' });
+    features.push({ label: 'Свои темы терапии' });
     features.push({ label: 'Приоритетная поддержка' });
   }
 
@@ -332,6 +295,6 @@ function getButtonLabel() {
     return 'Выбрать';
   }
 
-  return props.plan.name === 'basic' ? 'Активный' : 'Текущий план';
+  return 'Текущий план';
 }
 </script>

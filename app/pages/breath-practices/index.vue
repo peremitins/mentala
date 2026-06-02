@@ -277,8 +277,6 @@ const pendingDeleteId = ref<string | null>(null);
 const paywallOpen = ref(false);
 const paywallFeatureKey = ref<string | null>(null);
 
-const BASIC_FREE_SLUGS = new Set(['4-7-8', 'box-breathing']);
-
 const fullCatalogAccess = computed(() =>
   getFeatureAccess('breath.catalog.full')
 );
@@ -304,9 +302,7 @@ const builtInSections = computed(() =>
       (practice) => ({
         practice,
         accentClass: TAG_GRADIENTS[section.key],
-        locked:
-          !fullCatalogAccess.value.available &&
-          !BASIC_FREE_SLUGS.has(practice.slug),
+        locked: !fullCatalogAccess.value.available,
         requiredPlan:
           fullCatalogAccess.value.requiredPlan === 'premium'
             ? 'premium'
@@ -343,9 +339,7 @@ const dialogItems = computed<BreathPracticeCardItem[]>(() => {
     (practice) => ({
       practice,
       accentClass: TAG_GRADIENTS[key],
-      locked:
-        !fullCatalogAccess.value.available &&
-        !BASIC_FREE_SLUGS.has(practice.slug),
+      locked: !fullCatalogAccess.value.available,
       requiredPlan:
         fullCatalogAccess.value.requiredPlan === 'premium' ? 'premium' : 'pro',
     })
@@ -369,7 +363,7 @@ function openPracticeInGroup(
     return;
   }
 
-  if (!fullCatalogAccess.value.available && !BASIC_FREE_SLUGS.has(slug)) {
+  if (!fullCatalogAccess.value.available) {
     openPaywall('breath.catalog.full');
     return;
   }

@@ -45,7 +45,7 @@ export function getLocalizedRequiredPlanLabel(
   }
 
   if (planId === 'basic') {
-    return getLocalizedPlanName(planId, t);
+    return t('PLANS.PRO_AND_PREMIUM');
   }
 
   return t('PLANS.PRO_AND_PREMIUM');

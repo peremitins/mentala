@@ -26,16 +26,6 @@
 
         <!-- Центральный блок: кольца + бейдж + текст -->
         <div class="ach-ov__stage" @click.stop>
-          <!-- Пульсирующие кольца -->
-          <div class="ach-ov__rings" aria-hidden="true">
-            <div class="ach-ov__ring ach-ov__ring--1" />
-            <div class="ach-ov__ring ach-ov__ring--2" />
-            <div class="ach-ov__ring ach-ov__ring--3" />
-          </div>
-
-          <!-- Лучи света -->
-          <div class="ach-ov__rays" aria-hidden="true" />
-
           <!-- Бейдж -->
           <div class="ach-ov__badge-wrap">
             <!-- Радиальная вспышка при материализации -->
@@ -49,7 +39,11 @@
                 class="ach-ov__badge-img"
                 draggable="false"
               />
-              <div v-else class="ach-ov__badge-placeholder" :style="placeholderStyle">
+              <div
+                v-else
+                class="ach-ov__badge-placeholder"
+                :style="placeholderStyle"
+              >
                 <span class="ach-ov__badge-letter">{{ titleLetter }}</span>
               </div>
             </div>
@@ -82,7 +76,10 @@
 
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue';
-import { getBadgeMeta, type MilestoneBadgeMeta } from '@/app/lib/milestoneBadges';
+import {
+  getBadgeMeta,
+  type MilestoneBadgeMeta,
+} from '@/app/lib/milestoneBadges';
 
 const props = defineProps<{
   show: boolean;
@@ -116,9 +113,7 @@ const CATEGORY_HUE: Record<string, number> = {
   return: 265,
 };
 
-const themeHue = computed(
-  () => CATEGORY_HUE[meta.value.category] ?? 145
-);
+const themeHue = computed(() => CATEGORY_HUE[meta.value.category] ?? 145);
 
 const cssVars = computed(() => ({
   '--ach-hue': String(themeHue.value),
@@ -148,7 +143,8 @@ const PLACEHOLDER_COLORS: Record<string, string> = {
 };
 
 const placeholderStyle = computed(() => ({
-  background: PLACEHOLDER_COLORS[meta.value.category] ?? PLACEHOLDER_COLORS.start,
+  background:
+    PLACEHOLDER_COLORS[meta.value.category] ?? PLACEHOLDER_COLORS.start,
 }));
 
 // ─── Частицы ──────────────────────────────────────────────────────────────
@@ -174,9 +170,10 @@ function buildParticles() {
   // Тип 1: мелкие быстрые частицы (20 штук)
   particles.value = Array.from({ length: 24 }, (_, i) => {
     const angle = (i / 24) * 360 + (Math.random() - 0.5) * 15;
-    const dist = i < 12
-      ? 80 + Math.random() * 100    // ближние
-      : 150 + Math.random() * 120;  // дальние
+    const dist =
+      i < 12
+        ? 80 + Math.random() * 100 // ближние
+        : 150 + Math.random() * 120; // дальние
     const tx = Math.cos((angle * Math.PI) / 180) * dist;
     const ty = Math.sin((angle * Math.PI) / 180) * dist;
     const size = i < 12 ? 3 + Math.random() * 5 : 5 + Math.random() * 9;
@@ -277,8 +274,7 @@ function dismiss() {
 .ach-ov__backdrop {
   position: absolute;
   inset: 0;
-  background:
-    radial-gradient(
+  background: radial-gradient(
       ellipse 60% 50% at 50% 50%,
       hsl(var(--ach-hue) 40% 18% / 0.55) 0%,
       transparent 70%
@@ -288,8 +284,12 @@ function dismiss() {
 }
 
 @keyframes ach-backdrop-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 /* ─── Частицы ─── */
@@ -309,7 +309,8 @@ function dismiss() {
   border-radius: 50%;
   background: var(--color);
   box-shadow: 0 0 6px var(--color);
-  animation: ach-particle-burst var(--dur) cubic-bezier(0.22, 1, 0.36, 1) var(--delay) both;
+  animation: ach-particle-burst var(--dur) cubic-bezier(0.22, 1, 0.36, 1)
+    var(--delay) both;
 }
 
 @keyframes ach-particle-burst {
@@ -336,16 +337,6 @@ function dismiss() {
   /* stage не перехватывает тапы снаружи */
 }
 
-/* ─── Пульсирующие кольца ─── */
-.ach-ov__rings {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-}
-
 .ach-ov__ring {
   position: absolute;
   width: 160px;
@@ -355,9 +346,15 @@ function dismiss() {
   animation: ach-ring-expand 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
-.ach-ov__ring--1 { animation-delay: 200ms; }
-.ach-ov__ring--2 { animation-delay: 660ms; }
-.ach-ov__ring--3 { animation-delay: 1120ms; }
+.ach-ov__ring--1 {
+  animation-delay: 200ms;
+}
+.ach-ov__ring--2 {
+  animation-delay: 660ms;
+}
+.ach-ov__ring--3 {
+  animation-delay: 1120ms;
+}
 
 @keyframes ach-ring-expand {
   0% {
@@ -370,48 +367,20 @@ function dismiss() {
   }
 }
 
-/* ─── Лучи света ─── */
-.ach-ov__rays {
-  position: absolute;
-  width: 320px;
-  height: 320px;
-  border-radius: 50%;
-  background: conic-gradient(
-    from 0deg,
-    transparent 0deg 6deg,
-    hsl(var(--ach-hue) 70% 80% / 0.12) 6deg 10deg,
-    transparent 10deg 26deg,
-    hsl(var(--ach-hue) 60% 75% / 0.07) 26deg 29deg,
-    transparent 29deg 50deg,
-    hsl(var(--ach-hue) 70% 80% / 0.1) 50deg 54deg,
-    transparent 54deg 78deg,
-    hsl(var(--ach-hue) 60% 75% / 0.08) 78deg 81deg,
-    transparent 81deg 110deg,
-    hsl(var(--ach-hue) 70% 80% / 0.12) 110deg 114deg,
-    transparent 114deg 150deg,
-    hsl(var(--ach-hue) 65% 78% / 0.07) 150deg 153deg,
-    transparent 153deg 190deg,
-    hsl(var(--ach-hue) 70% 80% / 0.1) 190deg 194deg,
-    transparent 194deg 230deg,
-    hsl(var(--ach-hue) 60% 75% / 0.08) 230deg 233deg,
-    transparent 233deg 270deg,
-    hsl(var(--ach-hue) 70% 80% / 0.12) 270deg 274deg,
-    transparent 274deg 310deg,
-    hsl(var(--ach-hue) 65% 78% / 0.07) 310deg 313deg,
-    transparent 313deg 360deg
-  );
-  pointer-events: none;
-  animation: ach-rays-spin 9s linear infinite;
-}
-
 @keyframes ach-rays-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
 }
 
 /* ─── Бейдж ─── */
 .ach-ov__badge-wrap {
   position: relative;
+  display: grid;
+  place-items: center;
   width: 160px;
   height: 160px;
   margin-bottom: 28px;
@@ -449,14 +418,22 @@ function dismiss() {
 }
 
 @keyframes ach-badge-float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-9px); }
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-9px);
+  }
 }
 
 /* Вспышка при материализации бейджа */
 .ach-ov__flash {
   position: absolute;
-  inset: -40px;
+  left: 50%;
+  top: 50%;
+  width: 240px;
+  height: 240px;
   border-radius: 50%;
   background: radial-gradient(
     circle,
@@ -466,17 +443,31 @@ function dismiss() {
   );
   animation: ach-flash-burst 600ms cubic-bezier(0.22, 1, 0.36, 1) 200ms both;
   pointer-events: none;
+  transform: translate(-50%, -50%);
+  transform-origin: center;
+  z-index: 1;
 }
 
 @keyframes ach-flash-burst {
-  0% { transform: scale(0.3); opacity: 0; }
-  30% { opacity: 1; }
-  100% { transform: scale(2.4); opacity: 0; }
+  0% {
+    transform: translate(-50%, -50%) scale(0.3);
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(2.4);
+    opacity: 0;
+  }
 }
 
 .ach-ov__badge-glow {
   position: absolute;
-  inset: -20px;
+  left: 50%;
+  top: 50%;
+  width: 200px;
+  height: 200px;
   border-radius: 50%;
   background: radial-gradient(
     circle,
@@ -485,20 +476,31 @@ function dismiss() {
     transparent 70%
   );
   animation: ach-glow-breathe 2.8s ease-in-out 1s infinite;
+  transform: translate(-50%, -50%);
+  transform-origin: center;
+  z-index: 1;
 }
 
 @keyframes ach-glow-breathe {
-  0%, 100% { opacity: 0.7; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.12); }
+  0%,
+  100% {
+    opacity: 0.7;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.12);
+  }
 }
 
 .ach-ov__badge-circle {
+  grid-area: 1 / 1;
   width: 160px;
   height: 160px;
   border-radius: 50%;
   overflow: hidden;
   position: relative;
-  z-index: 1;
+  z-index: 2;
   /* Отчётливое кольцо вокруг бейджа */
   box-shadow:
     0 0 0 2.5px hsl(var(--ach-hue) 55% 65% / 0.8),
@@ -550,15 +552,36 @@ function dismiss() {
   background: hsl(var(--ach-hue) 80% 80%);
   box-shadow: 0 0 4px hsl(var(--ach-hue) 80% 75% / 0.9);
   /* Форма звезды через clip-path */
-  clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+  clip-path: polygon(
+    50% 0%,
+    61% 35%,
+    98% 35%,
+    68% 57%,
+    79% 91%,
+    50% 70%,
+    21% 91%,
+    32% 57%,
+    2% 35%,
+    39% 35%
+  );
   transform: translate(var(--x), var(--y)) scale(0);
   animation: ach-sparkle-twinkle var(--dur) ease-in-out var(--delay) infinite;
 }
 
 @keyframes ach-sparkle-twinkle {
-  0%, 100% { opacity: 0; transform: translate(var(--x), var(--y)) scale(0) rotate(0deg); }
-  40% { opacity: 1; transform: translate(var(--x), var(--y)) scale(1) rotate(30deg); }
-  60% { opacity: 1; transform: translate(var(--x), var(--y)) scale(0.8) rotate(50deg); }
+  0%,
+  100% {
+    opacity: 0;
+    transform: translate(var(--x), var(--y)) scale(0) rotate(0deg);
+  }
+  40% {
+    opacity: 1;
+    transform: translate(var(--x), var(--y)) scale(1) rotate(30deg);
+  }
+  60% {
+    opacity: 1;
+    transform: translate(var(--x), var(--y)) scale(0.8) rotate(50deg);
+  }
 }
 
 /* ─── Тексты ─── */
@@ -597,8 +620,14 @@ function dismiss() {
 }
 
 @keyframes ach-text-up {
-  from { transform: translateY(18px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+  from {
+    transform: translateY(18px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 /* ─── Подсказка тапа ─── */
@@ -608,18 +637,29 @@ function dismiss() {
   font-size: 12px;
   color: hsl(0 0% 100% / 0.35);
   letter-spacing: 0.04em;
-  animation: ach-hint-appear 400ms ease 1100ms both, ach-hint-pulse 2s ease-in-out 1100ms infinite;
+  animation:
+    ach-hint-appear 400ms ease 1100ms both,
+    ach-hint-pulse 2s ease-in-out 1100ms infinite;
   pointer-events: none;
 }
 
 @keyframes ach-hint-appear {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes ach-hint-pulse {
-  0%, 100% { opacity: 0.35; }
-  50% { opacity: 0.65; }
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.65;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -644,8 +684,14 @@ function dismiss() {
 }
 
 @keyframes ach-badge-exit {
-  from { transform: scale(1) translateY(0); opacity: 1; }
-  to { transform: scale(0.7) translateY(-24px); opacity: 0; }
+  from {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: scale(0.7) translateY(-24px);
+    opacity: 0;
+  }
 }
 
 .ach-ov--exiting .ach-ov__text {
@@ -657,7 +703,10 @@ function dismiss() {
 }
 
 @keyframes ach-exit-fade {
-  to { opacity: 0; transform: translateY(8px); }
+  to {
+    opacity: 0;
+    transform: translateY(8px);
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -666,7 +715,6 @@ function dismiss() {
 @media (prefers-reduced-motion: reduce) {
   .ach-ov__particle,
   .ach-ov__ring,
-  .ach-ov__rays,
   .ach-ov__sparkle {
     display: none;
   }
@@ -680,8 +728,14 @@ function dismiss() {
   }
 
   @keyframes ach-simple-appear {
-    from { opacity: 0; transform: scale(0.9); }
-    to { opacity: 1; transform: scale(1); }
+    from {
+      opacity: 0;
+      transform: scale(0.9);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
   }
 
   .ach-ov__eyebrow,

@@ -59,6 +59,7 @@ import {
   applyAvailableBillingCredit,
   restoreAppliedBillingCredit,
 } from '@/server/application/subscriptions/billing-credit.service';
+import { isPublicSubscriptionPlanId } from '@/server/application/subscriptions/public-plans';
 
 type SourcePlatform = 'web' | 'ios' | 'android';
 type CheckoutStatus = 'pending' | 'active';
@@ -244,6 +245,13 @@ export default defineEventHandler(async (event) => {
     externalFlow,
     appUrl: requestedAppUrl || null,
   });
+
+  if (!isPublicSubscriptionPlanId(planId)) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Basic is a legacy internal plan and cannot be selected',
+    });
+  }
 
   const route = '/api/subscriptions/start-checkout';
   const idem = await startIdempotentRequest<StartCheckoutResponse>({

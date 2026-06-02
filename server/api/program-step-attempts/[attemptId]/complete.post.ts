@@ -5,6 +5,7 @@ import {
   getUserTimezone,
 } from '@/server/application/programs/retention-program.service';
 import { ProgramStepCompleteResponseDto } from '@/shared/dto/retention';
+import { assertFeatureAccess } from '@/server/application/subscriptions/feature-access-guard';
 
 export default defineEventHandler(async (event) => {
   const sessionUser = await getSessionUserWithRole(event);
@@ -20,8 +21,14 @@ export default defineEventHandler(async (event) => {
     });
   }
 
+  const userId = Number(sessionUser.id);
+  await assertFeatureAccess({
+    userId,
+    userRole: (sessionUser as any).role ?? (sessionUser as any).roleId ?? null,
+    featureKey: 'programs.roadmap.full',
+  });
+
   try {
-    const userId = Number(sessionUser.id);
     const timezone = await getUserTimezone(userId);
     return ProgramStepCompleteResponseDto.parse(
       await completeProgramStep({ userId, attemptId, timezone })

@@ -11,7 +11,6 @@ import {
   getBillingSnapshot,
   getFeatureAccessOrDefault,
 } from '@/server/application/subscriptions/entitlements.service';
-import { assertGratitudeDiaryAccess } from '@/server/application/gratitude-diary/access';
 import {
   GRATITUDE_PROMPT_CATEGORIES,
   GRATITUDE_WORKSHEET_TEMPLATE,
@@ -43,14 +42,9 @@ export default defineEventHandler(async (event) => {
     userId,
     sessionResult.user.roleId
   );
-  const billing = await assertGratitudeDiaryAccess({
-    userId,
-    roleId: sessionResult.user.roleId,
-    billing: billingSnapshot,
-  });
   const worksheetFeatureKey = 'gratitude.worksheet.customize';
   const worksheetAccess = getFeatureAccessOrDefault(
-    billing,
+    billingSnapshot,
     worksheetFeatureKey
   );
 

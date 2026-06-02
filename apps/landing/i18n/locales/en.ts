@@ -264,21 +264,11 @@ export default {
       CTA_RELEASED: 'Choose and start',
       CTA_EARLY_ACCESS: 'Get early access',
       PLANS: {
-        BASIC: {
-          TITLE: 'Basic',
-          SUBTITLE: 'Start for free',
-          FEATURES: {
-            FEATURE_1: 'SOS techniques for quick stabilization',
-            FEATURE_2: 'Basic breathing practices',
-            FEATURE_3: 'Standard reminders',
-            FEATURE_4: 'Trial: 7 days of Premium for new users',
-          },
-        },
         PRO: {
           TITLE: 'PRO',
           SUBTITLE: 'For regular support',
           FEATURES: {
-            FEATURE_1: 'Everything in Basic',
+            FEATURE_1: '7 days of Premium access for new users',
             FEATURE_2: 'AI sessions for regular support',
             FEATURE_3: 'Up to 100 minutes of AI sessions per week',
             FEATURE_4: 'Full meditation library',
@@ -351,7 +341,7 @@ export default {
         ITEM_3: {
           QUESTION: 'Do I need a subscription right away?',
           ANSWER:
-            'No, you can start with the free Basic plan. New users also get a 7-day Premium trial so you can evaluate all app features before deciding.',
+            'No. New users get a 7-day Premium trial. After the trial, continued access is available on Pro or Premium.',
         },
         ITEM_4: {
           QUESTION: 'How does the AI assistant choose responses and practices?',
@@ -405,14 +395,14 @@ export default {
       HOME: {
         TITLE: 'Mentala — AI chat, meditations, breathing, and habits',
         DESCRIPTION:
-          'AI chat, breathing, meditations, gratitude journaling, healthy habits, and breaking harmful ones. Free features included, plus 7 days of Premium for new users.',
+          'AI chat, breathing, meditations, gratitude journaling, healthy habits, and breaking harmful ones. New users get 7 days of Premium, while template reminders remain free.',
         OG_TITLE: 'Mentala — AI support, breathing, meditations, and habits',
         OG_DESCRIPTION:
-          '24/7 support with AI chat, SOS practices, breathing, meditations, gratitude journaling, and habit support. Free features are available right away, plus 7 days of Premium for new users.',
+          '24/7 support with AI chat, SOS practices, breathing, meditations, gratitude journaling, and habit support. New users get 7 days of Premium; template reminders remain free.',
         OG_IMAGE_ALT: 'Mentala — AI chat, meditations, breathing, and habits',
         TWITTER_TITLE: 'Mentala — AI chat, breathing, and meditations',
         TWITTER_DESCRIPTION:
-          'For anxiety, stress, sleep, healthier habits, and breaking harmful ones. Free features included, plus 7 days of Premium for new users.',
+          'For anxiety, stress, sleep, healthier habits, and breaking harmful ones. New users get 7 days of Premium, and template reminders remain free.',
         SITE_NAME: 'Mentala',
       },
     },

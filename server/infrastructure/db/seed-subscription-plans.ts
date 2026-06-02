@@ -39,7 +39,7 @@ const plans = [
     basePrice: '0',
     weeklyMinutesLimit: 0, // Без Trial = 0 минут, только уведомления
     avatarEnabled: false,
-    isVisibleInUI: true,
+    isVisibleInUI: false,
   },
   // PRO
   {
@@ -86,7 +86,7 @@ async function runSeed() {
         drizzleSql`DELETE FROM subscription_plans WHERE id = ${oldId}`
       );
       console.log(`🗑️  Deleted old plan: ${oldId}`);
-    } catch (error) {
+    } catch {
       // Игнорируем ошибки, если плана уже нет
       console.log(
         `ℹ️  Plan ${oldId} not found (already deleted or never existed)`

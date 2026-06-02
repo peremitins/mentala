@@ -30,7 +30,7 @@ export default {
     REVOKE_CONFIRM: 'Отозвать',
   },
   PLANS: {
-    BASIC: 'Базовый',
+    BASIC: 'Нет активной подписки',
     PRO: 'Про',
     PREMIUM: 'Премиум',
     TRIAL: 'Пробный период',
@@ -45,12 +45,13 @@ export default {
     FEATURE_AVAILABLE_IN: 'Эта функция доступна в {plans}',
     BASIC_LIMITED_ACCESS:
       'На тарифе {basic} функционал ограничен. Выберите тариф {plans}, чтобы открыть расширенные возможности приложения.',
+    NO_ACTIVE_SUBSCRIPTION_ACCESS:
+      'Нет активной подписки. Выберите тариф {plans}, чтобы открыть расширенные возможности приложения.',
     CUSTOM_HABITS_AVAILABLE: 'Кастомные привычки доступны в {plan}',
     CUSTOM_HABITS_CREATE_AVAILABLE:
       'Создание кастомных привычек доступно в {plan}',
     PERSONAL_THERAPY_AVAILABLE: 'Личная терапия доступна в {plan}',
-    PERSONAL_THERAPY_CREATE_AVAILABLE:
-      'Создание личной терапии доступно в {plan}',
+    PERSONAL_THERAPY_CREATE_AVAILABLE: 'Свои темы терапии доступно в {plan}',
     ALL_FROM: 'Всё из {plan}',
     FULL_ACCESS_TO_FEATURES: 'Полный доступ к функциям {plan}',
     SELECT_PLAN: 'Выбрать тариф',

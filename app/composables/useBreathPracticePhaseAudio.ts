@@ -12,6 +12,7 @@ import {
 } from '@/app/lib/breathPracticeVoiceAudio';
 import { useBreathPracticeAudio as useWebBreathPracticeCueAudio } from '@/app/composables/useBreathPracticeAudio';
 import { useBreathPracticeVoice as useWebBreathPracticeVoice } from '@/app/composables/useBreathPracticeVoice';
+import { useBreathPracticeContinuousAudio } from '@/app/composables/useBreathPracticeContinuousAudio';
 import { NativeAudioService } from '@/app/services/audio/nativeAudio.service';
 import {
   NativeBreathSessionService,
@@ -58,6 +59,7 @@ function normalizeCueVolume(raw: number) {
 export function useBreathPracticePhaseAudio() {
   const webCueAudio = useWebBreathPracticeCueAudio();
   const webVoiceAudio = useWebBreathPracticeVoice();
+  const webContinuousAudio = useBreathPracticeContinuousAudio();
 
   let introNativeService: NativeAudioService | null = null;
   let introNativeServicePromise: Promise<NativeAudioService | null> | null =
@@ -279,6 +281,12 @@ export function useBreathPracticePhaseAudio() {
       // На native основная фаза идёт внутри breathing-session.
       return;
     }
+    if (webContinuousAudio.isActive()) {
+      // На mobile Chrome hidden/background замораживает JS timers. Web-сессия
+      // поэтому звучит через один looped HTMLAudioElement, а phase callbacks
+      // используются только как fallback.
+      return;
+    }
 
     await playWebPhase(payload);
   }
@@ -290,7 +298,11 @@ export function useBreathPracticePhaseAudio() {
     };
 
     if (!shouldUseNativeAudio()) {
-      return;
+      webCueAudio.stopAll(0);
+      webVoiceAudio.stop();
+      return (
+        (await webContinuousAudio.startLoop(activeSessionConfig)) ?? Date.now()
+      );
     }
 
     const service = await ensureNativeSessionService();
@@ -348,12 +360,18 @@ export function useBreathPracticePhaseAudio() {
   }
 
   async function pauseSession() {
-    if (!shouldUseNativeAudio()) return;
+    if (!shouldUseNativeAudio()) {
+      await webContinuousAudio.pauseSession();
+      return;
+    }
     await nativeSessionService?.pauseSession();
   }
 
   async function resumeSession() {
-    if (!shouldUseNativeAudio()) return;
+    if (!shouldUseNativeAudio()) {
+      await webContinuousAudio.resumeSession();
+      return;
+    }
     await nativeSessionService?.resumeSession();
   }
 
@@ -385,6 +403,7 @@ export function useBreathPracticePhaseAudio() {
       return;
     }
 
+    webContinuousAudio.stopAll();
     webCueAudio.stopAll(fadeOutMs);
     webVoiceAudio.stop();
   }
@@ -402,6 +421,7 @@ export function useBreathPracticePhaseAudio() {
       return;
     }
 
+    webContinuousAudio.setVolume(level);
     webCueAudio.setVolume(level);
   }
 
@@ -442,6 +462,7 @@ export function useBreathPracticePhaseAudio() {
 
     webCueAudio.release();
     webVoiceAudio.release();
+    webContinuousAudio.release();
   }
 
   return {

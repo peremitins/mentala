@@ -2,7 +2,7 @@
 
 ## Таблицы
 
-- `subscription_plans` — тарифы (basic/pro/premium), лимиты, фичи
+- `subscription_plans` — тарифы (`basic` legacy/internal, публичные `pro/premium`), лимиты, фичи
 - `user_subscriptions` — периоды подписок + статус (active/pending/expired/canceled)
 - `subscription_events` — аудит (trial_started, purchase_success/failed, canceled...)
 - `payments` — идемпотентность webhook по `payment.id` YooKassa
@@ -11,16 +11,19 @@
 
 ## Тарифная матрица
 
-| План    | Цена | AI-чат                            | Уведомления          | Особенности                   |
-| ------- | ---- | --------------------------------- | -------------------- | ----------------------------- |
-| Basic   | 0₽   | отключён                          | только шаблонные     | SOS + 2 дыхательные           |
-| PRO     | 399₽ | 100 мин/нед                       | + AI-уведомления     | + полная библиотека медитаций |
-| Premium | 899₽ | безлимит\* (fair-use 900 мин/нед) | + персональный стиль | + свои практики               |
+| План    | Цена | AI-чат                            | Уведомления          | Особенности                             |
+| ------- | ---- | --------------------------------- | -------------------- | --------------------------------------- |
+| PRO     | 399₽ | 100 мин/нед                       | + AI-уведомления     | quick help, дыхание, медитации, Roadmap |
+| Premium | 899₽ | безлимит\* (fair-use 900 мин/нед) | + персональный стиль | + свои практики, привычки и терапия     |
+
+`basic` остаётся только как legacy/internal `no-paid-access` состояние для совместимости старых клиентов, FK, rollback/grace и trial billing flow. Он не должен показываться на landing, `/subscription`, checkout и `GET /api/subscriptions/plans`.
+
+Template push-уведомления остаются бесплатным retention-механизмом без AI-cost. AI-уведомления доступны с PRO, custom AI prompt — с Premium.
 
 ## Trial
 
 - Состояние пользователя: `users.has_used_trial`, `trial_started_at`, `trial_ended_at`
-- При регистрации: Basic подписка; Trial = полный AI-доступ уровня Premium на 7 дней
+- При регистрации: legacy Basic/no-paid-access запись + Trial = полный доступ уровня Premium на 7 дней
 - Идентификатор: `email_hash` (HMAC-SHA256 + pepper), email обязателен
 - Длительность: `TRIAL_DURATION_HOURS` (default 168)
 
@@ -64,16 +67,17 @@
 - `feature_access_policies` в БД, отдаются через entitlement API
 - Bootstrap: `GET /api/user/me` → `billing` (plan/trial/aiChatMode/entitlements)
 - Lock/paywall: иконка тарифа + `FeaturePaywallModal` при клике
+- Для discovery-разделов paywall ставится на потребляющее действие, а не на вход: `/practices` ведёт в медитации и дневник благодарности без раннего lock; read-only API медитации и дневника доступны как preview, запуск/сохранение остаются gated.
 - Авто-fallback: без entitlement на AI-уведомления → сервер переводит в templates
 - `roleId=support` трактуется как premium-equivalent доступ для review/QA: полный доступ к premium-фичам без покупки, но без административного доступа к чужим данным
 - Premium-equivalent для `support` применяется независимо от текущей записи подписки (`basic/pro/premium`) при расчёте AI gate и feature access
 - Для `native iOS` frontend во всех сборках отключает purchase-management surface: скрываются promo/referral, `/subscription`, `/settings/referral` и billing-подсказки в `Поддержке`. В `Настройки` блок `Подписка` остаётся видимым и показывает текст о переходе в веб-версию для изменения тарифа.
 - Effective entitlements теперь считаются не только по paid subscription и trial, но и по `billing_access_grants`
 
-### Срочно: server-side enforcement для Roadmap
+### Server-side enforcement для Roadmap
 
-- Известный gap: UI и route guard блокируют `programs.roadmap.full`, но write/action endpoint-ы Roadmap пока проверяют только авторизацию.
-- Перед релизом платного Roadmap обязательно добавить серверную проверку feature access `programs.roadmap.full` минимум в:
+- UI, route guard и write/action endpoint-ы Roadmap проверяют `programs.roadmap.full`.
+- Серверная проверка feature access обязательна минимум в:
   - `POST /api/programs/:slug/steps/:step/start`
   - `PATCH /api/program-step-attempts/:attemptId/actions/:actionId`
   - `POST /api/program-step-attempts/:attemptId/complete`

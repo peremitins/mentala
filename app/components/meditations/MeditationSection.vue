@@ -31,8 +31,11 @@
           :topic-label="topicLabel(sectionTopicKey ?? track.topicKey)"
           :gradient-class="topicGradient(sectionTopicKey ?? track.topicKey)"
           :active="isActive(track.id)"
+          :locked="locked"
+          :required-plan="requiredPlan"
           @open="emit('open', $event)"
           @favorite="emit('favorite', $event)"
+          @locked-action="emit('locked-action')"
         />
       </template>
     </HorizontalScroller>
@@ -57,12 +60,15 @@ const props = defineProps<{
   tracks: MeditationTrackDto[];
   activeId?: string | null;
   sectionTopicKey?: MeditationTopicKey;
+  locked?: boolean;
+  requiredPlan?: 'pro' | 'premium' | null;
 }>();
 
 const emit = defineEmits<{
   (e: 'open', id: string): void;
   (e: 'favorite', id: string): void;
   (e: 'view-all'): void;
+  (e: 'locked-action'): void;
 }>();
 
 function topicLabel(key: MeditationTopicKey) {

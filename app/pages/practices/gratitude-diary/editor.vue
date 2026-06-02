@@ -226,6 +226,13 @@
         />
 
         <Button class="w-full" :disabled="saveDisabled" @click="saveEntry">
+          <span
+            v-if="!gratitudeDiaryAccess.available"
+            class="mr-1.5 text-xs leading-none"
+            aria-hidden="true"
+          >
+            {{ getPlanBadgeEmoji(gratitudeDiaryAccess.requiredPlan) }}
+          </span>
           {{
             isSaving ? t('GRATITUDE_DIARY.SAVING') : t('GRATITUDE_DIARY.SAVE')
           }}
@@ -917,6 +924,9 @@ const paywallOpen = ref(false);
 const paywallFeatureKey = ref<string>('gratitude.worksheet.customize');
 
 // Доступ к платным функциям из entitlements (для иконок и paywall)
+const gratitudeDiaryAccess = computed(() =>
+  getFeatureAccess('gratitude.diary.full')
+);
 const worksheetAccess = computed(() =>
   getFeatureAccess(worksheetFeatureKey.value)
 );
@@ -1866,6 +1876,12 @@ async function saveEntry() {
   const textForSave = entryText.value.trim();
   if (!textForSave.trim() || isSaving.value) return;
 
+  if (!gratitudeDiaryAccess.value.available) {
+    paywallFeatureKey.value = 'gratitude.diary.full';
+    paywallOpen.value = true;
+    return;
+  }
+
   // Фиксируем способ ввода для аналитики/истории взаимодействий.
   const inputMethod: EntryInputMethod = voiceWasUsed.value
     ? entryText.value.trim() === textForSave.trim()
@@ -1948,7 +1964,11 @@ async function saveEntry() {
     }
 
     if (error?.statusCode === 402) {
-      paywallFeatureKey.value = 'gratitude.photo.upload';
+      const featureKey =
+        error?.data?.featureKey ||
+        error?.data?.data?.featureKey ||
+        'gratitude.diary.full';
+      paywallFeatureKey.value = featureKey;
       paywallOpen.value = true;
       return;
     }
@@ -1971,7 +1991,9 @@ onMounted(async () => {
     await loadEntryForEdit();
     autoResizeTextarea();
     // Однократная миграция данных из localStorage в БД (после загрузки каталога)
-    await migrateFromLocalStorage();
+    if (gratitudeDiaryAccess.value.available) {
+      await migrateFromLocalStorage();
+    }
   } catch (error: any) {
     useToast(
       t('GRATITUDE_DIARY.LOAD_FAILED'),

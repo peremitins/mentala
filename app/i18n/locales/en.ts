@@ -30,7 +30,7 @@ export default {
     REVOKE_CONFIRM: 'Revoke',
   },
   PLANS: {
-    BASIC: 'Basic',
+    BASIC: 'No active subscription',
     PRO: 'Pro',
     PREMIUM: 'Premium',
     TRIAL: 'Trial period',
@@ -45,6 +45,8 @@ export default {
     FEATURE_AVAILABLE_IN: 'This feature is available in {plans}',
     BASIC_LIMITED_ACCESS:
       'Features are limited on the {basic} plan. Choose {plans} to unlock the extended app experience.',
+    NO_ACTIVE_SUBSCRIPTION_ACCESS:
+      'There is no active subscription. Choose {plans} to unlock the extended app experience.',
     CUSTOM_HABITS_AVAILABLE: 'Custom habits are available in {plan}',
     CUSTOM_HABITS_CREATE_AVAILABLE:
       'Creating custom habits is available in {plan}',

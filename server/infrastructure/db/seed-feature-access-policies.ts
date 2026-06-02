@@ -50,6 +50,17 @@ const policies = [
     paywallTargetPlan: 'pro',
   },
   {
+    featureKey: 'quick_help.practice',
+    requiredPlan: 'pro',
+    trialUnlocked: true,
+    lockIcon: 'pro',
+    paywallTitle: 'Быстрые практики доступны в PRO и Premium',
+    paywallDescription:
+      'Подключи PRO или Premium, чтобы использовать быстрые техники поддержки после пробного периода.',
+    paywallCtaText: 'Выбрать тариф',
+    paywallTargetPlan: 'pro',
+  },
+  {
     featureKey: 'breath.custom.create',
     requiredPlan: 'premium',
     trialUnlocked: true,
@@ -76,7 +87,7 @@ const policies = [
     requiredPlan: 'premium',
     trialUnlocked: true,
     lockIcon: 'premium',
-    paywallTitle: 'Создание своих привычек в Premium',
+    paywallTitle: 'Свои темы привычек в Premium',
     paywallDescription:
       'Создавай и настраивай персональные привычки с собственными текстами и расписанием на тарифе Premium.',
     paywallCtaText: 'Открыть Premium',
@@ -87,7 +98,7 @@ const policies = [
     requiredPlan: 'premium',
     trialUnlocked: true,
     lockIcon: 'premium',
-    paywallTitle: 'Создание личной терапии в Premium',
+    paywallTitle: 'Свои темы терапии в Premium',
     paywallDescription:
       'Создавай личные темы терапии и управляй напоминаниями под свой запрос на тарифе Premium.',
     paywallCtaText: 'Открыть Premium',
@@ -180,6 +191,17 @@ const policies = [
       'Настраивай стиль и содержание ИИ-напоминаний под себя на тарифе Premium.',
     paywallCtaText: 'Перейти на Premium',
     paywallTargetPlan: 'premium',
+  },
+  {
+    featureKey: 'programs.roadmap.full',
+    requiredPlan: 'pro',
+    trialUnlocked: true,
+    lockIcon: 'pro',
+    paywallTitle: 'Программы и сады доступны в PRO и Premium',
+    paywallDescription:
+      'Подключи PRO или Premium, чтобы проходить шаги программ и растить сады.',
+    paywallCtaText: 'Выбрать тариф',
+    paywallTargetPlan: 'pro',
   },
 ] as const;
 

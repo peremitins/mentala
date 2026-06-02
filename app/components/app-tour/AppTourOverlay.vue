@@ -22,6 +22,7 @@
       :total-steps="tour.totalSteps.value"
       @next="tour.next"
       @prev="tour.prev"
+      @skip="tour.complete"
     />
 
     <!-- Tap-ripple -->
@@ -74,7 +75,7 @@ watch(
         // Перепроверяем условия после задержки — за это время юзер мог
         // снова свернуть приложение или перейти на /auth.
         if (tour.canStart.value && !tour.isActive.value) {
-          tour.start();
+          void tour.start();
         }
       }, 600);
     } else if (!canStart && tour.isActive.value) {
@@ -335,7 +336,7 @@ onMounted(() => {
     pendingStartTimeout = window.setTimeout(() => {
       pendingStartTimeout = null;
       if (tour.canStart.value && !tour.isActive.value) {
-        tour.start();
+        void tour.start();
       }
     }, 600);
   }

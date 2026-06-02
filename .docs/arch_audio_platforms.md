@@ -78,7 +78,7 @@
 
 ## Breath Practice Audio
 
-- Web/legacy: и voice, и `sounds/*` дыхательных практик идут через `Howler` с `html5: true`; отдельный Web Audio route для дыхания не используется
+- Web/legacy: основная дыхательная сессия рендерит один короткий cycle WAV через `OfflineAudioContext` и проигрывает его как looped `HTMLAudioElement`, по аналогии с медитацией. Это нужно для Chrome mobile background/lock screen: phase `setInterval` / `setTimeout` в hidden tab замораживаются, а continuous media playback продолжает звучать. Старые Howler phase clips остаются fallback, если cycle media не удалось собрать или запустить
 - Native iOS/Android: основная практика идёт через отдельный `NativeBreathSessionService`, который управляет MediaGrid breathing-session поверх плагина, а intro-voice остаётся отдельным коротким source
 - Для native breathing нельзя строить source из локального bundle-origin (`http://localhost` / WebView origin) в production release: MediaGrid/Media3/AVPlayer должны получать публичный `appUrl`/`apiBase` origin (`https://my.mentala.app/.../breath/*`), потому что `mediaBaseUrl` для `breath/*` не используется и локальный WebView origin доступен не всем native playback route
 - Для native breathing в development наоборот используем текущий WebView origin как source base, включая `http://localhost:3000` через `adb reverse`: это нужно, чтобы Android device не ходил в `local.mentala.app`/другой desktop-only host и не падал с `UnknownHostException`

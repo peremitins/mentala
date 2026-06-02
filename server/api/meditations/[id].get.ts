@@ -6,15 +6,10 @@ import {
 import { db } from '@/server/infrastructure/db/client';
 import { getSessionUserWithRole } from '@/server/utils/require-role';
 import { MeditationTrackDto } from '@/shared/dto/meditations';
-import {
-  getBillingSnapshot,
-  getFeatureAccessOrDefault,
-  toFeaturePlanRequiredPayload,
-} from '@/server/application/subscriptions/entitlements.service';
 
 /**
  * GET /api/meditations/:id
- * Деталка медитации
+ * Деталка медитации доступна как preview. Запуск аудио блокируется на клиенте.
  */
 export default defineEventHandler(async (event) => {
   const sessionUser = await getSessionUserWithRole(event);
@@ -25,18 +20,6 @@ export default defineEventHandler(async (event) => {
     });
   }
   const userId = sessionUser.id;
-
-  const featureKey = 'meditations.library.full';
-  const billing = await getBillingSnapshot(userId, sessionUser.role);
-  const access = getFeatureAccessOrDefault(billing, featureKey);
-
-  if (!access.available) {
-    throw createError({
-      statusCode: 402,
-      statusMessage: 'Feature requires higher plan',
-      data: toFeaturePlanRequiredPayload({ featureKey, access }),
-    });
-  }
 
   const id = getRouterParam(event, 'id');
   if (!id) {

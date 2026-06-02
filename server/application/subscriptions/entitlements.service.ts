@@ -44,7 +44,7 @@ export type BillingSnapshot = {
   features: Record<string, BillingFeatureAccess>;
 };
 
-type FeatureAccessPolicy = {
+export type FeatureAccessPolicy = {
   featureKey: string;
   requiredPlan: PlanId;
   trialUnlocked: boolean;
@@ -63,7 +63,19 @@ const PLAN_RANK: Record<PlanId, number> = {
   premium: 2,
 };
 
-const DEFAULT_FEATURE_ACCESS_POLICIES: FeatureAccessPolicy[] = [
+const DEFAULT_LOCKED_FEATURE_ACCESS: BillingFeatureAccess = {
+  available: false,
+  requiredPlan: 'pro',
+  paywall: {
+    title: 'Функция доступна в PRO и Premium',
+    description: 'Подключи PRO или Premium, чтобы открыть эту возможность.',
+    ctaText: 'Выбрать тариф',
+    targetPlan: 'pro',
+    lockIcon: 'pro',
+  },
+};
+
+export const DEFAULT_FEATURE_ACCESS_POLICIES: FeatureAccessPolicy[] = [
   {
     featureKey: 'meditations.library.full',
     requiredPlan: 'pro',
@@ -83,6 +95,17 @@ const DEFAULT_FEATURE_ACCESS_POLICIES: FeatureAccessPolicy[] = [
     paywallTitle: 'Полный каталог дыхательных практик в PRO и Premium',
     paywallDescription:
       'На текущем тарифе доступны только базовые практики. Подключи PRO или Premium, чтобы открыть весь каталог.',
+    paywallCtaText: 'Выбрать тариф',
+    paywallTargetPlan: 'pro',
+  },
+  {
+    featureKey: 'quick_help.practice',
+    requiredPlan: 'pro',
+    trialUnlocked: true,
+    lockIcon: 'pro',
+    paywallTitle: 'Быстрые практики доступны в PRO и Premium',
+    paywallDescription:
+      'Подключи PRO или Premium, чтобы использовать быстрые техники поддержки после пробного периода.',
     paywallCtaText: 'Выбрать тариф',
     paywallTargetPlan: 'pro',
   },
@@ -113,7 +136,7 @@ const DEFAULT_FEATURE_ACCESS_POLICIES: FeatureAccessPolicy[] = [
     requiredPlan: 'premium',
     trialUnlocked: true,
     lockIcon: 'premium',
-    paywallTitle: 'Создание своих привычек в Premium',
+    paywallTitle: 'Свои темы привычек в Premium',
     paywallDescription:
       'Создавай и настраивай персональные привычки с собственными текстами и расписанием на тарифе Premium.',
     paywallCtaText: 'Открыть Premium',
@@ -124,7 +147,7 @@ const DEFAULT_FEATURE_ACCESS_POLICIES: FeatureAccessPolicy[] = [
     requiredPlan: 'premium',
     trialUnlocked: true,
     lockIcon: 'premium',
-    paywallTitle: 'Создание личной терапии в Premium',
+    paywallTitle: 'Свои темы терапии в Premium',
     paywallDescription:
       'Создавай личные темы терапии и управляй напоминаниями под свой запрос на тарифе Premium.',
     paywallCtaText: 'Открыть Premium',
@@ -486,13 +509,7 @@ export function getFeatureAccessOrDefault(
   snapshot: BillingSnapshot,
   featureKey: string
 ): BillingFeatureAccess {
-  return (
-    snapshot.features[featureKey] || {
-      available: true,
-      requiredPlan: 'basic',
-      paywall: null,
-    }
-  );
+  return snapshot.features[featureKey] || DEFAULT_LOCKED_FEATURE_ACCESS;
 }
 
 export function toFeaturePlanRequiredPayload(params: {

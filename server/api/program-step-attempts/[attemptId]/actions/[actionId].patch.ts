@@ -5,6 +5,7 @@ import {
   ProgramStepActionPatchDto,
   ProgramStepActionPatchResponseDto,
 } from '@/shared/dto/retention';
+import { assertFeatureAccess } from '@/server/application/subscriptions/feature-access-guard';
 
 export default defineEventHandler(async (event) => {
   const sessionUser = await getSessionUserWithRole(event);
@@ -29,6 +30,12 @@ export default defineEventHandler(async (event) => {
       data: { issues: parsed.error.issues },
     });
   }
+
+  await assertFeatureAccess({
+    userId: Number(sessionUser.id),
+    userRole: (sessionUser as any).role ?? (sessionUser as any).roleId ?? null,
+    featureKey: 'programs.roadmap.full',
+  });
 
   try {
     return ProgramStepActionPatchResponseDto.parse(

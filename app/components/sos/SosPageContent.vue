@@ -22,12 +22,10 @@
               </p>
             </div>
             <span
-              v-if="
-                card.action.type === 'go_chat' && !chatHandoffAccess.available
-              "
+              v-if="getCardRequiredPlan(card)"
               class="inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-white/20 bg-black/45 text-sm leading-none"
             >
-              {{ getPlanBadgeEmoji(chatHandoffAccess.requiredPlan) }}
+              {{ getPlanBadgeEmoji(getCardRequiredPlan(card) || 'pro') }}
             </span>
           </div>
         </button>
@@ -516,6 +514,9 @@ const paywallAccess = computed(() =>
   paywallFeatureKey.value ? getFeatureAccess(paywallFeatureKey.value) : null
 );
 const chatHandoffAccess = computed(() => getFeatureAccess('sos.chat_handoff'));
+const quickHelpPracticeAccess = computed(() =>
+  getFeatureAccess('quick_help.practice')
+);
 
 const tensionOrbPhase = computed<BreathPhase>(() => {
   const isClench = tensionStepType.value === 'clench';
@@ -948,7 +949,34 @@ function getPlanBadgeEmoji(plan: string) {
   return plan === 'premium' ? '💎' : '⭐';
 }
 
+function isQuickHelpPracticeCard(card: QuickHelpCard) {
+  return card.action.type === 'set_step' || card.action.type === 'navigate';
+}
+
+function getCardRequiredPlan(card: QuickHelpCard) {
+  if (card.action.type === 'go_chat' && !chatHandoffAccess.value.available) {
+    return chatHandoffAccess.value.requiredPlan;
+  }
+
+  if (
+    isQuickHelpPracticeCard(card) &&
+    !quickHelpPracticeAccess.value.available
+  ) {
+    return quickHelpPracticeAccess.value.requiredPlan;
+  }
+
+  return null;
+}
+
 async function handleQuickHelpCardClick(card: QuickHelpCard) {
+  if (
+    isQuickHelpPracticeCard(card) &&
+    !quickHelpPracticeAccess.value.available
+  ) {
+    openPaywall('quick_help.practice');
+    return;
+  }
+
   if (card.action.type === 'set_step') {
     setStep(card.action.step);
     return;

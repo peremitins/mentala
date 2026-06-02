@@ -36,6 +36,8 @@ function isPublicRoute(path: string): boolean {
 // -------------------------------------------------------------------
 const isActive = ref(false);
 const currentIndex = ref(0);
+/** Блокирует повторный автозапуск, пока ждём роутинг и первый DOM-target. */
+const isStarting = ref(false);
 /** Блокирует кнопки на время tap-анимации + навигации + ожидания селектора */
 const isTransitioning = ref(false);
 const isCompleting = ref(false);
@@ -96,6 +98,25 @@ function waitForSelector(
       }
     }, SELECTOR_POLL_INTERVAL_MS);
   });
+}
+
+async function waitForTargetSelector(
+  selector: string,
+  timeoutMs = SELECTOR_WAIT_TIMEOUT_MS
+): Promise<boolean> {
+  const selectors = selector
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  for (const sel of selectors) {
+    const el = await waitForSelector(sel, timeoutMs);
+    if (el) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 /** Получить координаты центра элемента для tap-анимации. */
@@ -285,27 +306,54 @@ export function useAppTour() {
   });
 
   /** Запуск тура. */
-  function start() {
+  async function start() {
     if (isActive.value) return;
+    if (isStarting.value) return;
     if (!shouldStart()) return;
 
-    // Найти первый НЕ скипнутый шаг. Если все шаги скипнуты (например, у юзера
-    // нет ни одного доступного фичлета) — сразу помечаем тур пройденным.
-    const firstIdx = findNextEligibleIndex(0);
-    if (firstIdx === -1) {
-      void complete();
-      return;
-    }
+    isStarting.value = true;
+    try {
+      // Найти первый НЕ скипнутый шаг. Если все шаги скипнуты (например, у юзера
+      // нет ни одного доступного фичлета) — сразу помечаем тур пройденным.
+      const firstIdx = findNextEligibleIndex(0);
+      if (firstIdx === -1) {
+        void complete();
+        return;
+      }
 
-    currentIndex.value = firstIdx;
-    isActive.value = true;
+      const firstStep = APP_TOUR_STEPS[firstIdx];
+      if (!firstStep) return;
 
-    // Если первый шаг привязан к странице, на которой мы не находимся —
-    // навигируем туда. Welcome-онбординг заканчивается на /, и первый
-    // шаг тоже на /, так что обычно это не сработает, но на всякий.
-    const firstStep = APP_TOUR_STEPS[firstIdx];
-    if (firstStep && firstStep.page !== route.path) {
-      void navigateTo(firstStep.page);
+      // Если первый шаг привязан к странице, на которой мы не находимся —
+      // навигируем туда. Welcome-онбординг заканчивается на /, и первый
+      // шаг тоже на /, так что обычно это не сработает, но на всякий.
+      if (firstStep.page !== route.path) {
+        await navigateTo(firstStep.page);
+      }
+
+      // Главная сначала ждёт /api/today и только потом рендерит карточки
+      // daily loop. Не активируем overlay, пока первый target реально не
+      // появился, иначе driver.js мгновенно закроет тур как сломанный.
+      if (
+        firstStep.targetSelector &&
+        !(await waitForTargetSelector(firstStep.targetSelector, 6000))
+      ) {
+        console.warn(
+          `[AppTour] start: target ${firstStep.targetSelector} не появился, отмена`
+        );
+        return;
+      }
+
+      // Перепроверяем условия после ожидания DOM: за это время пользователь мог
+      // свернуть приложение, уйти на публичный route или потерять сессию.
+      if (!shouldStart()) return;
+
+      currentIndex.value = firstIdx;
+      isActive.value = true;
+    } catch (e) {
+      console.warn('[AppTour] start failed:', e);
+    } finally {
+      isStarting.value = false;
     }
   }
 
@@ -343,30 +391,23 @@ export function useAppTour() {
     // вызовет updateHighlight → querySelector вернёт null → forceClose,
     // и юзер увидит просто редирект без тура. Поэтому ждём появления
     // target-селектора (или его fallback'ов).
-    if (firstStep.targetSelector) {
-      const selectors = firstStep.targetSelector
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean);
-      let found = false;
-      for (const sel of selectors) {
-        const el = await waitForSelector(sel, 3000);
-        if (el) {
-          found = true;
-          break;
-        }
-      }
-      if (!found) {
-        console.warn(
-          `[AppTour] startReplay: target ${firstStep.targetSelector} не появился, отмена`
-        );
-        return;
-      }
+    if (
+      firstStep.targetSelector &&
+      !(await waitForTargetSelector(firstStep.targetSelector, 3000))
+    ) {
+      console.warn(
+        `[AppTour] startReplay: target ${firstStep.targetSelector} не появился, отмена`
+      );
+      return;
     }
 
     // Перепроверяем условия после ожидания — пока ждали DOM, юзер мог
     // свернуть приложение / уйти на /auth.
-    if (!auth.user || !appLock.canShowPrivateContent || isPublicRoute(route.path)) {
+    if (
+      !auth.user ||
+      !appLock.canShowPrivateContent ||
+      isPublicRoute(route.path)
+    ) {
       return;
     }
 

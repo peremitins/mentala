@@ -1,5 +1,6 @@
 <template>
   <section
+    data-tour="home-garden"
     class="glass-deep relative grid grid-cols-[minmax(0,1fr)_96px] items-center gap-4 overflow-hidden p-4 animate-slide-up cursor-pointer transition hover:border-white/20 hover:bg-white/[0.04]"
     role="button"
     tabindex="0"

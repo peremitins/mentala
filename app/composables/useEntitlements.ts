@@ -22,7 +22,7 @@ function getErrorData(error: any): any {
 }
 
 /**
- * Пытаемся вытащить payload seыrver-side paywall из ошибки API.
+ * Пытаемся вытащить payload server-side paywall из ошибки API.
  */
 export function extractFeaturePlanRequiredError(
   error: any
@@ -57,9 +57,15 @@ export function extractFeaturePlanRequiredError(
 }
 
 const DEFAULT_ACCESS: BillingFeatureAccess = {
-  available: true,
-  requiredPlan: 'basic',
-  paywall: null,
+  available: false,
+  requiredPlan: 'pro',
+  paywall: {
+    title: 'Функция доступна в PRO и Premium',
+    description: 'Подключи PRO или Premium, чтобы открыть эту возможность.',
+    ctaText: 'Выбрать тариф',
+    targetPlan: 'pro',
+    lockIcon: 'pro',
+  },
 };
 
 export function useEntitlements() {

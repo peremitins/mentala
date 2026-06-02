@@ -23,6 +23,12 @@
     <div
       class="absolute inset-0 bg-gradient-to-t from-black/55 via-black/35 to-black/5"
     />
+    <div
+      v-if="locked"
+      class="absolute right-2 top-2 z-20 inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/20 bg-black/55 text-sm leading-none text-white"
+    >
+      <span aria-hidden="true">{{ planBadge }}</span>
+    </div>
 
     <div class="relative z-10 flex h-full flex-col p-3 min-h-[120px]">
       <div class="flex items-start justify-between">
@@ -44,9 +50,9 @@
         <button
           type="button"
           data-no-drag-scroll
-          class="absolute right-2 top-2 z-20 rounded-full bg-black/55 p-2 text-white transition hover:bg-black/70"
+          class="absolute bottom-2 right-2 z-20 rounded-full bg-black/55 p-2 text-white transition hover:bg-black/70"
           :aria-label="`Добавить ${displayTitle} в избранное`"
-          @click.stop="emit('favorite', track.id)"
+          @click.stop="handleFavoriteClick"
         >
           <IconHeart
             class="h-4 w-4"
@@ -93,11 +99,14 @@ const props = defineProps<{
   topicLabel: string;
   gradientClass: string;
   active?: boolean;
+  locked?: boolean;
+  requiredPlan?: 'pro' | 'premium' | null;
 }>();
 
 const emit = defineEmits<{
   (e: 'open', id: string): void;
   (e: 'favorite', id: string): void;
+  (e: 'locked-action'): void;
 }>();
 
 const coverUrl = computed(() => {
@@ -109,11 +118,23 @@ const displayTitle = computed(() => {
   return normalizedTitle || 'Без названия';
 });
 
+const planBadge = computed(() => {
+  return props.requiredPlan === 'premium' ? '💎' : '⭐';
+});
+
 function handleCardKeydown(event: KeyboardEvent) {
   // Поддерживаем доступность карточки при управлении с клавиатуры.
   if (event.key !== 'Enter' && event.key !== ' ') return;
   event.preventDefault();
   emit('open', props.track.id);
+}
+
+function handleFavoriteClick() {
+  if (props.locked) {
+    emit('locked-action');
+    return;
+  }
+  emit('favorite', props.track.id);
 }
 
 function formatDuration(durationSeconds?: number | null) {

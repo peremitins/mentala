@@ -78,6 +78,14 @@
             </div>
             <div class="app-tour-bubble__actions">
               <button
+                type="button"
+                class="app-tour-btn app-tour-btn--ghost"
+                :disabled="isTransitioning"
+                @click="$emit('skip')"
+              >
+                Пропустить
+              </button>
+              <button
                 v-if="!isFirstStep"
                 type="button"
                 class="app-tour-btn app-tour-btn--ghost"
@@ -122,6 +130,7 @@ const props = defineProps<{
 defineEmits<{
   (e: 'next'): void;
   (e: 'prev'): void;
+  (e: 'skip'): void;
 }>();
 
 const bubbleRef = ref<HTMLElement | null>(null);

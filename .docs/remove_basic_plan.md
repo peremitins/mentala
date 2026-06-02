@@ -1,129 +1,69 @@
-# Удаление Basic и Full Paywall Implementation Plan
+# Удаление публичного Basic и full paywall
 
-> Целевой файл: `.docs/remove-basic-plan-and-full-paywall.md`
+**Статус:** реализуется как production-совместимое изменение без удаления legacy `basic` из контрактов.
 
-**Goal:** убрать Basic из публичного продукта, оставить только Pro/Premium, но сохранить бесплатные шаблонные push-уведомления для retention.
+## Продуктовое правило
 
-**Architecture:** `basic` остаётся внутренним legacy/no-paid-access состоянием для обратной совместимости API, FK и старых mobile-клиентов. В UI, landing и checkout Basic исчезает полностью. Все бесплатные практики закрываются paywall, кроме шаблонных уведомлений.
+Публичная тарифная модель Mentala состоит из двух платных тарифов:
 
-**Tech Stack:** Nuxt 4, Vue 3, Pinia, Nitro API, Drizzle, Zod DTO, Tailwind, shadcn-vue.
+- `pro`
+- `premium`
 
----
+После 7-дневного trial пользователь без оплаты:
 
-## 1. Продуктовое Решение
+- не видит Basic как тариф на landing, `/subscription`, checkout и pricing surfaces;
+- может открыть витрины практик, но запуск платных действий открывает `FeaturePaywallModal`;
+- может настраивать и получать template push-уведомления;
+- не может включить AI-уведомления (`notifications.text_source_ai`) без PRO/Premium;
+- не может использовать custom AI prompt (`notifications.custom_prompt_ai`) без Premium.
 
-После 7-дневного trial без оплаты пользователь:
+Template push-уведомления остаются бесплатным retention-механизмом, потому что не создают AI-cost.
 
-- не видит Basic как тариф;
-- не может запускать быстрые/дыхательные/медитационные/AI/садовые/дневниковые функции;
-- может получать и настраивать push-уведомления, но только из готовых шаблонов;
-- не может включать AI-генерацию уведомлений и Premium custom prompt.
+## Compatibility
 
-Важно: шаблонные уведомления остаются бесплатным retention-механизмом, потому что не создают AI-cost.
+`basic` остаётся внутренним `legacy/no-paid-access` состоянием:
 
-## 2. Текущие Бесплатные Поверхности
+- не удаляется из `subscription_plans`;
+- не удаляется из `user_subscriptions.planId`;
+- остаётся в DTO union `basic | pro | premium`;
+- может возвращаться старым mobile/web клиентам в `GET /api/subscriptions/current` и `GET /api/user/me`;
+- используется для rollback/grace/trial billing совместимости.
 
-Сейчас Basic даёт бесплатный доступ к:
+Полное удаление `basic` из контрактов возможно только отдельной cleanup-задачей после mobile rollout и повышения `minimumSupportedBuild`.
 
-- `/quick-help`: 5-4-3-2-1, box breathing, снятие напряжения, выгрузка мыслей.
-- `/breath-practices`: `4-7-8` и `box-breathing` через `BASIC_FREE_SLUGS`.
-- Шаблонным notification preferences и доставке push-уведомлений.
-- Catalog habits/therapy страницам и стандартным карточкам.
-- Техническому default-open поведению:
-  - frontend `DEFAULT_ACCESS`;
-  - backend `getFeatureAccessOrDefault()`.
+## Runtime правила доступа
 
-После изменения бесплатными остаются только template notifications.
+- `GET /api/subscriptions/plans` возвращает только `pro` и `premium`.
+- `POST /api/subscriptions/start-checkout` отклоняет `planId=basic`.
+- `getFeatureAccessOrDefault()` и frontend `DEFAULT_ACCESS` больше не открывают неизвестный feature key бесплатно: неизвестный ключ считается PRO-level locked.
+- `quick_help.practice` закрывает быстрые практики после trial.
+- `breath.catalog.full` закрывает все built-in дыхательные практики после trial; старые исключения `4-7-8` и `box-breathing` удалены.
+- `programs.roadmap.full` проверяется не только в UI, но и server-side в Roadmap action endpoints.
+- Template notification preferences, scheduler и delivery не требуют paid plan.
 
-## 3. Backend Changes
+## Публичные интерфейсы
 
-- В `server/infrastructure/db/seed-subscription-plans.ts` скрыть или не сидировать Basic как публичный тариф; `pro` и `premium` остаются видимыми.
-- В `server/api/subscriptions/plans.get.ts` явно отдавать только `pro` и `premium`.
-- В checkout/start-change flow запретить выбор `basic` как target plan.
-- В DTO временно оставить `basic | pro | premium`, чтобы не сломать старые клиенты.
-- В entitlements:
-  - убрать free fallback для неизвестных feature keys;
-  - оставить `basic` как no-paid-access state;
-  - trial продолжает давать Premium-level доступ.
-- Добавить policies:
-  - `quick_help.practice` или granular keys для быстрых практик, `requiredPlan: pro`;
-  - не добавлять paywall на `notifications.settings.manage`, если речь о шаблонных уведомлениях;
-  - оставить `notifications.text_source_ai` = Pro;
-  - оставить `notifications.custom_prompt_ai` = Premium.
-- Notification backend:
-  - `PUT /api/notifications/prefs/:kind` должен разрешать сохранение template-настроек без подписки;
-  - при отсутствии доступа к AI принудительно нормализовать `textSource` в `templates`;
-  - scheduler/delivery должны отправлять шаблонные уведомления без подписки;
-  - AI text generation jobs не должны создаваться без `notifications.text_source_ai`.
+- `GET /api/subscriptions/plans`
+  - response shape прежний;
+  - список планов: только `pro`, `premium`.
+- `GET /api/subscriptions/current`
+  - `plan`, `planId`, `currentEntitlementsPlan` сохраняют union `basic | pro | premium`.
+- `GET /api/user/me`
+  - `billing.requiredPlan` и `billing.planId` сохраняют union `basic | pro | premium`.
+- Feature keys:
+  - `quick_help.practice` — PRO;
+  - `programs.roadmap.full` — PRO;
+  - `notifications.text_source_ai` — PRO;
+  - `notifications.custom_prompt_ai` — Premium.
 
-## 4. Frontend And Landing Changes
+## Verification
 
-- `/subscription`:
-  - убрать Basic card;
-  - сетка тарифов: 2 карточки;
-  - состояние без оплаты показывать как “нет активной подписки”;
-  - trial показывать как “Пробный Premium-доступ до даты”.
-- `PlanCard.vue`:
-  - удалить Basic-ветки;
-  - в Pro убрать “Всё из Basic”;
-  - Premium оставить “Всё из Pro”.
-- `/breath-practices`:
-  - удалить `BASIC_FREE_SLUGS`;
-  - все built-in практики без Pro/Premium показывать с `⭐`;
-  - по клику открывать `FeaturePaywallModal`.
-- `/quick-help`:
-  - карточки практик остаются видимыми;
-  - без подписки показывают `⭐`;
-  - клик открывает paywall, не запускает практику.
-- `/quick-help/thought-dump`:
-  - прямой route без подписки должен открывать paywall и возвращать на `/quick-help`.
-- Notifications UI:
-  - настройки шаблонных уведомлений остаются доступными;
-  - `✨ ИИ` option остаётся paywalled;
-  - custom prompt остаётся paywalled Premium;
-  - при потере доступа UI показывает `templates`.
-- Landing:
-  - `apps/landing/pages/index.vue`: `PricingPlan.id` только `pro | premium`;
-  - удалить Basic pricing card;
-  - обновить RU/EN pricing copy;
-  - убрать все обещания бесплатного базового функционала;
-  - написать: “7 дней Premium-доступа, дальше Pro или Premium”.
+Минимальная проверка для этого изменения:
 
-## 5. Compatibility And Migration
+- `pnpm exec vitest run tests/remove-basic-plan-access.test.ts`
+- `pnpm exec vitest run tests/subscription-usage-reset.test.ts tests/promo.shared.test.ts`
+- `pnpm lint`
+- `pnpm build`
+- `pnpm landing:build`
 
-- Не удалять `basic` из DB schema, FK, DTO и старых API-ответов в этой итерации.
-- Не удалять существующие `user_subscriptions.planId = basic`.
-- Не ломать старые mobile builds: старый клиент может продолжать получить `plan: basic`.
-- Полное удаление `basic` из контрактов возможно отдельной cleanup-задачей после mobile rollout и повышения `minimumSupportedBuild`.
-- Если меняется `.docs/*`, выполнить `pnpm wiki:sync-docs` и точечно обновить релевантные wiki-страницы.
-
-## 6. Test Plan
-
-- Entitlements:
-  - expired trial + no paid subscription не имеет доступа к quick help, breath, meditations, gratitude, chat, programs;
-  - active trial имеет Premium-level доступ;
-  - template notifications доступны без подписки;
-  - AI notifications недоступны без Pro/Premium.
-- API:
-  - `GET /api/subscriptions/plans` возвращает только `pro`, `premium`;
-  - checkout с `basic` возвращает ошибку;
-  - notification prefs с `textSource=ai` без подписки сохраняются/нормализуются как `templates`.
-- UI:
-  - `/subscription` не показывает Basic;
-  - `/quick-help` и `/breath-practices` показывают badges и paywall;
-  - notification settings позволяют templates без оплаты.
-- Landing:
-  - pricing содержит только Pro/Premium в RU и EN.
-- Verification:
-  - `pnpm test`;
-  - `pnpm lint`;
-  - `pnpm build`;
-  - `pnpm landing:build` или `pnpm landing:generate`.
-
-## 7. Assumptions
-
-- Все ранее бесплатные практики становятся Pro-level.
-- Шаблонные push-уведомления остаются бесплатными намеренно.
-- AI-уведомления остаются Pro/Premium-only.
-- Premium-only различия не меняются.
-- `basic` в первой итерации скрывается, но не удаляется физически из контрактов.
+После изменения docs нужно выполнить `pnpm wiki:sync-docs`.

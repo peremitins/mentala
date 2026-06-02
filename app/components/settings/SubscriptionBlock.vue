@@ -58,7 +58,8 @@
             class="text-xs text-foreground mt-1"
           >
             <template v-if="subscription.plan.name === 'basic'">
-              Бесплатный план без срока окончания
+              Выберите PRO или Premium, чтобы продолжить пользоваться
+              расширенными функциями.
             </template>
             <template v-else>
               Действует до: {{ formatDate(subscription.endDate) }}
@@ -253,12 +254,16 @@ const planName = computed(() => {
   const effectivePlanId =
     subscriptionData.value?.currentEntitlementsPlan ||
     subscription.value.planId;
+
+  if (effectivePlanId === 'basic') {
+    return 'Нет активной подписки';
+  }
+
   return getLocalizedPlanName(effectivePlanId, t);
 });
 
 const limitedAccessLabel = computed(() =>
-  t('PLANS.BASIC_LIMITED_ACCESS', {
-    basic: getLocalizedPlanName('basic', t),
+  t('PLANS.NO_ACTIVE_SUBSCRIPTION_ACCESS', {
     plans: t('PLANS.PRO_AND_PREMIUM'),
   })
 );

@@ -1,5 +1,6 @@
 <template>
   <section
+    data-tour="home-roadmap"
     class="roadmap-hero glass-deep relative overflow-hidden border border-violet-200/35 p-4 animate-slide-up"
   >
     <!-- Декоративные орбы для «выделенного» сиреневого героя (Вариант A). -->
@@ -472,8 +473,8 @@ function handleStepClick(step: ProgramStepDto) {
 @keyframes cta-glow {
   0% {
     box-shadow:
-      0 0 6px 0px rgba(167, 139, 250, 0.0),
-      0 0 14px 0px rgba(129, 140, 248, 0.0),
+      0 0 6px 0 rgba(167, 139, 250, 0),
+      0 0 14px 0 rgba(129, 140, 248, 0),
       0 2px 8px rgba(0, 0, 0, 0.2);
   }
   45% {
@@ -484,13 +485,15 @@ function handleStepClick(step: ProgramStepDto) {
   }
   100% {
     box-shadow:
-      0 0 6px 0px rgba(167, 139, 250, 0.0),
-      0 0 14px 0px rgba(129, 140, 248, 0.0),
+      0 0 6px 0 rgba(167, 139, 250, 0),
+      0 0 14px 0 rgba(129, 140, 248, 0),
       0 2px 8px rgba(0, 0, 0, 0.2);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .roadmap-cta-btn { animation: none; }
+  .roadmap-cta-btn {
+    animation: none;
+  }
 }
 </style>

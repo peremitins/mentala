@@ -9,7 +9,6 @@ import {
 } from '@/shared/navigation';
 import { MeditationTopicKeyEnum } from '@/shared/dto/meditations';
 
-const BASIC_FREE_BREATH_SLUGS = new Set(['4-7-8', 'box-breathing']);
 const CATALOG_HABIT_KEYS = new Set<string>(
   HABITS_CATALOG.map((habit) => habit.habitKey)
 );
@@ -82,12 +81,26 @@ export function resolveAppNavigationTargetFromRoute(
     return { type: 'breath_practices_list' };
   }
 
+  if (path === '/quick-help/thought-dump') {
+    return {
+      type: 'quick_help_entry',
+      entry: 'thought_dump',
+    };
+  }
+
   if (path === '/quick-help') {
     const entry = readStringParam(route.query.entry);
-    if (entry && ['panic', 'tension', 'technique_picker'].includes(entry)) {
+    if (
+      entry &&
+      ['panic', 'tension', 'technique_picker', 'thought_dump'].includes(entry)
+    ) {
       return {
         type: 'quick_help_entry',
-        entry: entry as 'panic' | 'tension' | 'technique_picker',
+        entry: entry as
+          | 'panic'
+          | 'tension'
+          | 'technique_picker'
+          | 'thought_dump',
       };
     }
 
@@ -146,9 +159,9 @@ export function resolveNavigationFeatureKey(
     case 'meditations_list':
     case 'meditation_collection':
     case 'meditation_track':
-      return 'meditations.library.full';
+      return null;
     case 'gratitude_diary':
-      return 'gratitude.diary.full';
+      return null;
     case 'breath_practice': {
       if (target.slug === 'custom') {
         return 'breath.custom.create';
@@ -156,9 +169,7 @@ export function resolveNavigationFeatureKey(
       if (target.slug.startsWith('custom-')) {
         return 'breath.custom.manage';
       }
-      return BASIC_FREE_BREATH_SLUGS.has(target.slug)
-        ? null
-        : 'breath.catalog.full';
+      return 'breath.catalog.full';
     }
     case 'breath_practice_group': {
       if (target.groupKey === 'custom') {
@@ -170,9 +181,12 @@ export function resolveNavigationFeatureKey(
       if (!preferredSlug) {
         return null;
       }
-      return BASIC_FREE_BREATH_SLUGS.has(preferredSlug)
-        ? null
-        : 'breath.catalog.full';
+      return 'breath.catalog.full';
+    }
+    case 'quick_help':
+      return null;
+    case 'quick_help_entry': {
+      return 'quick_help.practice';
     }
     case 'therapy_topic':
       return CATALOG_THERAPY_KEYS.has(target.topicKey)
@@ -202,6 +216,9 @@ export function buildBlockedNavigationFallbackRoute(
       return { path: '/breath-practices' };
     case 'gratitude_diary':
       return { path: '/practices' };
+    case 'quick_help':
+    case 'quick_help_entry':
+      return { path: '/quick-help' };
     case 'therapy_topic':
       return { path: '/therapy' };
     case 'habit':
