@@ -1,7 +1,7 @@
 <template>
   <div
     v-if="!shouldHideIosReviewBillingUi"
-    class="space-y-2 h-full overflow-y-auto rounded-lg"
+    class="xs:space-y-3 space-y-1 h-full overflow-y-auto rounded-lg"
   >
     <PageHeader
       :title="'Управление подпиской'"
@@ -9,7 +9,7 @@
       @go-back="goBack()"
     />
 
-    <div class="space-y-2 pb-[100px]">
+    <div class="xs:space-y-3 space-y-1 pb-[100px]">
       <!-- Текущий статус -->
       <div
         v-if="shouldShowCurrentStatusCard"

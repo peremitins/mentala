@@ -3,6 +3,7 @@ import {
   buildDeveloperContext,
   buildEntryContextDescription,
 } from '../prompts';
+import { buildRoadmapDeveloperPrompt } from '../chat/roadmap-entry.service';
 import {
   type DurableUserMemory,
   type RuntimeCompactState,
@@ -42,6 +43,7 @@ export function composeRealtimeVoiceInstructions(
   const entryContextBlock = params.entryContext
     ? buildEntryContextDescription(params.entryContext)
     : '';
+  const roadmapContextBlock = buildRoadmapDeveloperPrompt(params.entryContext);
   const crisisGuidance = String(params.crisisGuidance || '').trim();
   const durableUserMemoryBlock = params.durableUserMemory
     ? serializeDurableUserMemoryForPrompt(params.durableUserMemory)
@@ -80,6 +82,7 @@ export function composeRealtimeVoiceInstructions(
     handoffSummaryBlock,
     runtimeCompactStateBlock,
     entryContextBlock,
+    roadmapContextBlock,
     // Детальный crisis guidance нельзя держать в постоянных session.instructions:
     // иначе Realtime ведёт себя так, будто кризис активен всегда.
     crisisGuidance,

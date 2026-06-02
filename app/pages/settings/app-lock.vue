@@ -1,12 +1,12 @@
 <template>
-  <div class="h-dvh overflow-y-auto pb-[100px] space-y-2">
+  <div class="h-dvh overflow-y-auto pb-[100px] xs:space-y-3 space-y-1">
     <PageHeader
       title="Защита входа"
       :show-back-button="true"
       @go-back="goBack"
     />
 
-    <section class="space-y-2">
+    <section class="xs:space-y-3 space-y-1">
       <div class="glass-deep p-4 space-y-4">
         <div class="flex items-start justify-between gap-3">
           <div>
@@ -38,7 +38,7 @@
         </div>
       </div>
 
-      <div class="glass-deep p-4 space-y-2">
+      <div class="glass-deep p-4 xs:space-y-3 space-y-1">
         <p class="text-sm font-medium">Запрашивать повторно</p>
         <p class="text-xs text-muted-foreground">
           Через какое время неактивности снова запросить код.

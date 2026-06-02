@@ -204,6 +204,12 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'close'): void;
+  (
+    e: 'practice-start',
+    payload: { trackId: string; requiredSeconds: number }
+  ): void;
+  (e: 'practice-pause'): void;
+  (e: 'practice-stop'): void;
 }>();
 
 const route = useRoute();
@@ -322,23 +328,47 @@ function applyTimer(value: number | null) {
   const normalized = clamped > 0 ? clamped : null;
   if (isActive.value) {
     setTimer(normalized);
+    if (track.value && normalized) {
+      emitPracticeStart(track.value);
+    } else {
+      emit('practice-stop');
+    }
     return;
   }
   setPreferredTimer(normalized);
 }
 
-function togglePlay() {
+async function togglePlay() {
   if (!track.value) return;
   // Если играет другой трек, сразу запускаем текущий, а не ставим на паузу глобальный плеер.
   if (!isActive.value) {
-    void play(track.value, preferredTimerMinutes.value);
+    await play(track.value, preferredTimerMinutes.value);
+    emitPracticeStart(track.value);
     return;
   }
   if (isPlaying.value) {
-    void pause();
+    await pause();
+    emit('practice-pause');
   } else {
-    void play(track.value, preferredTimerMinutes.value);
+    await play(track.value, preferredTimerMinutes.value);
+    emitPracticeStart(track.value);
   }
+}
+
+function getTimerRequiredSeconds() {
+  const minutes = preferredTimerMinutes.value;
+  if (!minutes) return null;
+  const seconds = Math.floor(minutes * 60);
+  return Number.isFinite(seconds) ? Math.max(1, seconds) : null;
+}
+
+function emitPracticeStart(sourceTrack: MeditationTrackDto) {
+  const requiredSeconds = getTimerRequiredSeconds();
+  if (!requiredSeconds) return;
+  emit('practice-start', {
+    trackId: sourceTrack.id,
+    requiredSeconds,
+  });
 }
 
 function trackTopics(source?: MeditationTrackDto | null): MeditationTopicKey[] {
@@ -413,11 +443,13 @@ async function changeTrack(direction: 1 | -1) {
   // Если воспроизведение было остановлено, не запускаем новый трек.
   if (!shouldAutoplay) {
     await stop(false);
+    emit('practice-stop');
     return;
   }
 
   // Автовоспроизведение, если уже играло.
   await play(target, preferredTimerMinutes.value);
+  emitPracticeStart(target);
 }
 
 function playNext() {
@@ -482,6 +514,7 @@ watch(
 onBeforeUnmount(() => {
   if (isActive.value && !isPlaying.value) {
     void stop(false);
+    emit('practice-stop');
   }
 });
 </script>

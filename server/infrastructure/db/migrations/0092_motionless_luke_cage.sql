@@ -1,0 +1,1 @@
+ALTER TABLE "programs" ADD COLUMN "status" varchar(16) DEFAULT 'published' NOT NULL;

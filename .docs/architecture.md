@@ -103,4 +103,4 @@ server/
 - [arch_notifications.md](arch_notifications.md) — уведомления, push
 - [arch_ui_features.md](arch_ui_features.md) — практики, медитации, UI
 - [arch_audio_platforms.md](arch_audio_platforms.md) — нативное аудио, платформы
-- [crysis_prompt.md](crysis_prompt.md) — кризисный протокол
+- [crisis_prompt.md](crisis_prompt.md) — кризисный протокол

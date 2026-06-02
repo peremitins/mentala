@@ -6,7 +6,7 @@
     <PageHeader title="Карта пути" show-back-button @go-back="goBack">
       <template #trailing>
         <NuxtLink
-          to="/programs"
+          to="/garden"
           class="inline-flex items-center gap-1 rounded-full border border-white/10 px-3 py-1.5 text-[11px] font-semibold text-foreground/80 transition hover:border-white/25 hover:text-foreground"
           aria-label="Все мои сады"
         >
@@ -18,7 +18,7 @@
 
     <!-- Баннер о достигнутом daily-лимите. Та же информация что в HomeRoadmapCard,
          дублируется здесь, потому что пользователь может попасть прямо на карту
-         через deep-link. См. retention_long_term_strategy.md §2.4. -->
+         через deep-link. См. retention/retention_long_term_strategy.md -->
     <section
       v-if="dailyLimit.isReached.value"
       class="glass-deep flex items-center gap-2 border border-amber-100/20 bg-amber-100/[0.04] p-3"
@@ -38,8 +38,11 @@
     <template v-if="overview">
       <!-- Шапка сада: бейдж статуса, название, прогресс. Заменяет
            accordion-кнопку из старой версии — теперь страница полностью
-           посвящена ОДНОМУ саду. -->
-      <section class="glass-deep px-4 py-3">
+           посвящена ОДНОМУ саду.
+           Sticky: липнет сразу под PageHeader (top-0, высота ~50px), оставляя
+           небольшой воздух. z ниже хедера (z-50), но выше тропы, которая
+           проскролливается под стеклом. -->
+      <section class="glass-deep sticky top-[56px] z-30 px-4 py-3">
         <p
           class="text-[10px] font-semibold uppercase tracking-wide"
           :class="
@@ -96,6 +99,7 @@
       v-model:open="sheetOpen"
       :step="selectedStep"
       :locked="!hasRoadmapAccess"
+      :in-progress="isSelectedStepInProgress"
       @start="startStep"
       @paywall="paywallOpen = true"
     />
@@ -165,10 +169,19 @@ const paywallOpen = ref(false);
 const roadmapAccess = computed(() => getFeatureAccess('programs.roadmap.full'));
 const hasRoadmapAccess = computed(() => roadmapAccess.value.available);
 
+// Шаг уже начат (есть пройденные под-этапы), но ещё не завершён — показываем
+// «Продолжить» вместо «Начать». Логика совпадает с HomeRoadmapCard.
+const isSelectedStepInProgress = computed(() => {
+  if (!selectedStep.value || selectedStep.value.status !== 'active') return false;
+  const progress = overview.value?.currentStepProgress;
+  if (!progress) return false;
+  return progress.doneCount > 0 && progress.doneCount < progress.totalCount;
+});
+
 const slug = computed(() => String(route.params.slug || '').trim());
 
-// Overview ТЕКУЩЕГО сада из URL slug. После рефактора Этапа 1 этот файл
-// показывает ровно ОДИН сад — список всех садов переехал в /programs/index.
+// Overview ТЕКУЩЕГО сада из URL slug. Этот файл показывает ровно ОДИН сад —
+// обзор всех садов живёт в Оранжерее (/garden).
 const overview = ref<ProgramOverviewDto | null>(null);
 
 // Полный список шагов программы (плоский). Передаётся в ProgramRoadmapPath
@@ -208,7 +221,7 @@ function continueToActive() {
  * URL slug, который недоступен пользователю — либо locked (в `lockedSilhouettes`),
  * либо available (в `available`, не стартованный). В обоих случаях map.vue
  * не должен показывать его карту: пользователь редиректится либо на активный
- * сад, либо на список всех садов /programs.
+ * сад, либо в Оранжерею /garden (единый обзор всех садов).
  */
 function classifyLockedAccess(
   garden: GardenResponseDto,
@@ -219,7 +232,7 @@ function classifyLockedAccess(
     return { kind: 'ok' };
 
   // Любой другой случай — недоступная программа: редиректим на активную;
-  // если активной нет — на список садов /programs.
+  // если активной нет — в Оранжерею /garden.
   return { kind: 'redirect-to', slug: garden.active?.programSlug ?? null };
 }
 
@@ -242,8 +255,8 @@ async function loadInitial() {
         void navigateTo(`/programs/${access.slug}/map`, { replace: true });
         return;
       }
-      // Активного сада нет — показываем список (там видны completed/available).
-      void navigateTo('/programs', { replace: true });
+      // Активного сада нет — ведём в Оранжерею (там виден весь обзор садов).
+      void navigateTo('/garden', { replace: true });
       return;
     }
   }

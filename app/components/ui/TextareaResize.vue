@@ -10,7 +10,7 @@
           cn(
             'w-full resize-none overflow-y-auto',
             'placeholder:text-muted-foreground',
-            'disabled:cursor-not-allowed disabled:opacity-50 placeholder:text-sm text-sm ',
+            'disabled:cursor-not-allowed disabled:opacity-50 xs:placeholder:text-sm placeholder:text-[10px] text-sm ',
             props.variant === 'form'
               ? [
                   'rounded-lg border-2 border-border bg-transparent px-3 py-2 text-sm',

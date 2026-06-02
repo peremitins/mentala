@@ -1,6 +1,6 @@
 <template>
   <div
-    class="safe-area-layout flex h-dvh min-h-dvh w-full flex-col overflow-hidden px-1 pb-0"
+    class="safe-area-layout mobile-compact-type flex h-dvh min-h-dvh w-full flex-col overflow-hidden px-1 pb-0"
   >
     <Transition name="scene-bg-fade" mode="out-in">
       <div
@@ -41,8 +41,18 @@
       <slot />
 
       <ClientOnly>
+        <!-- Глобальный overlay достижений: показывается поверх любой страницы.
+             Задержанные достижения (garden_completed) появятся после анимаций сада. -->
+        <MilestoneAchievementOverlay
+          v-if="currentCelebrationId"
+          :show="celebrationVisible"
+          :badge-id="currentCelebrationId"
+          @closed="onCelebrationClosed"
+          @continue="onCelebrationContinue"
+        />
+
         <MiniMeditationPlayer
-          v-if="currentTrack && !isMeditationDetail"
+          v-if="showMiniMeditationPlayer"
           :track="currentTrack"
           :progress="progressPercent"
           :is-playing="isPlaying"
@@ -71,6 +81,13 @@
           @close="handleMobilePromoClose"
         />
         <PwaIosGuide :visible="showIosGuide" @close="handleMobilePromoClose" />
+        <!-- In-app модалка про готовый отчёт. Показывается, когда приложение
+             активно (foreground) и есть непросмотренный готовый отчёт. -->
+        <PendingReportNotificationModal
+          :pending="pendingReport.pending.value"
+          @dismiss="pendingReport.dismiss"
+          @open="handleOpenPendingReport"
+        />
       </ClientOnly>
       <BottomNav />
     </div>
@@ -79,12 +96,19 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import MilestoneAchievementOverlay from '@/app/components/milestones/MilestoneAchievementOverlay.vue';
+import { useMilestoneBadges } from '@/app/composables/useMilestoneBadges';
 import { useRoute } from 'vue-router';
 import BottomNav from '@/app/components/BottomNav.vue';
 import MiniMeditationPlayer from '@/app/components/meditations/MiniMeditationPlayer.vue';
 import PushRecoveryDialog from '@/app/components/notifications/PushRecoveryDialog.vue';
 import AndroidAppPromoBanner from '@/app/components/pwa/AndroidAppPromoBanner.vue';
 import PwaIosGuide from '@/app/components/pwa/PwaIosGuide.vue';
+import PendingReportNotificationModal from '@/app/components/garden/PendingReportNotificationModal.vue';
+import {
+  usePendingReportNotification,
+  type PendingReport,
+} from '@/app/composables/usePendingReportNotification';
 import { useMobileAppPromo } from '@/app/composables/useMobileAppPromo';
 import { usePushRecovery } from '@/app/composables/usePushRecovery';
 import { useWebPush } from '@/app/composables/useWebPush';
@@ -101,6 +125,33 @@ import { useAuthStore } from '@/app/stores/auth';
 import { useViewportOrientation } from '@/app/composables/useViewportOrientation';
 import { pickOrientationMediaPath } from '@/app/utils/orientationMedia';
 
+// ─── Глобальные достижения ────────────────────────────────────────────────
+const { popNextCelebration, hasReadyCelebration } = useMilestoneBadges();
+const currentCelebrationId = ref<string | null>(null);
+const celebrationVisible = ref(false);
+
+function showNextCelebrationGlobal() {
+  if (celebrationVisible.value) return;
+  const next = popNextCelebration();
+  if (!next) return;
+  currentCelebrationId.value = next.badgeId;
+  celebrationVisible.value = true;
+}
+
+function onCelebrationContinue() {
+  celebrationVisible.value = false;
+}
+
+function onCelebrationClosed() {
+  currentCelebrationId.value = null;
+  // Небольшая пауза перед следующим
+  setTimeout(() => showNextCelebrationGlobal(), 300);
+}
+
+// Поллинг раз в 500ms — подхватывает отложенные достижения (garden)
+let celebrationPoller: ReturnType<typeof setInterval> | null = null;
+
+// ─── Meditation player ────────────────────────────────────────────────────
 const {
   currentTrack,
   currentTime,
@@ -113,6 +164,27 @@ const {
 const meditationsStore = useMeditationsStore();
 const { isPortraitMode } = useViewportOrientation();
 const pushRecovery = usePushRecovery();
+
+// In-app модалка про готовый отчёт: polling /api/garden/reports/pending,
+// показ только когда залогинен И приложение активно (foreground).
+const pendingReport = usePendingReportNotification({
+  enabled: () =>
+    auth.isLoggedIn && (typeof document === 'undefined' || document.visibilityState === 'visible'),
+});
+
+function handleOpenPendingReport(report: PendingReport) {
+  pendingReport.clear(report.id);
+  // Навигация в /garden с параметром, чтобы страница автоматически открыла
+  // соответствующий отчёт в GardenPlantReportSheet через timeline.
+  void navigateTo({
+    path: '/garden',
+    query: {
+      openReport: String(report.id),
+      step: String(report.checkpointStep),
+      slug: report.programSlug,
+    },
+  });
+}
 
 const route = useRoute();
 const auth = useAuthStore();
@@ -278,6 +350,11 @@ let removeAppStateListener: (() => Promise<void>) | null = null;
 // Проверяем recovery push-уведомлений через 5 секунд после mount
 // (после того как push-notifications.client.ts отработает за 3 секунды)
 onMounted(() => {
+  // Поллер для отложенных достижений (каждые 500ms)
+  celebrationPoller = setInterval(() => {
+    if (hasReadyCelebration()) showNextCelebrationGlobal();
+  }, 500);
+
   if (typeof document !== 'undefined') {
     const syncVisibilityState = () => {
       isAppActive.value = document.visibilityState === 'visible';
@@ -317,6 +394,11 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  if (celebrationPoller) {
+    clearInterval(celebrationPoller);
+    celebrationPoller = null;
+  }
+
   removeVisibilityListener?.();
   removeVisibilityListener = null;
 
@@ -343,6 +425,17 @@ const detailTrackId = computed(() => {
 const isMeditationDetail = computed(() => {
   const path = route.path || '';
   return path.startsWith('/meditations') && Boolean(detailTrackId.value);
+});
+
+const isProgramRoute = computed(() => {
+  return (route.path || '').startsWith('/programs/');
+});
+
+const showMiniMeditationPlayer = computed(() => {
+  // В roadmap медитация встроена в шаг, а глобальный mini-player перекрывает CTA.
+  return Boolean(
+    currentTrack.value && !isMeditationDetail.value && !isProgramRoute.value
+  );
 });
 
 const routeTrack = computed(() => {

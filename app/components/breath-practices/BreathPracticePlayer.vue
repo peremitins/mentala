@@ -1,7 +1,13 @@
 <template>
-  <div class="flex flex-col space-y-2 justify-between h-full">
-    <div class="glass-deep p-5 flex flex-col items-center gap-2 text-center">
-      <p class="max-w-xl text-sm text-white/85 text-elevated">
+  <div :class="rootClass">
+    <div
+      v-if="showIntroPanel"
+      class="glass-deep p-3 flex flex-col items-center gap-2 text-center"
+    >
+      <p
+        v-if="layout === 'full'"
+        class="max-w-xl text-sm text-white/85 text-elevated"
+      >
         {{ practice.description }}
       </p>
       <div
@@ -280,12 +286,16 @@ const props = withDefaults(
     overlayZIndex?: number;
     settingsDialogClass?: string;
     settingsOverlayClass?: string;
+    layout?: 'full' | 'embedded';
+    showIntroPanel?: boolean;
   }>(),
   {
     showNavigation: false,
     showSettings: true,
     showCompletionOverlay: true,
     overlayZIndex: 30,
+    layout: 'full',
+    showIntroPanel: true,
   }
 );
 
@@ -293,12 +303,21 @@ const emit = defineEmits<{
   (e: 'navigate-prev'): void;
   (e: 'navigate-next'): void;
   (e: 'complete'): void;
+  (e: 'start', payload?: { requiredSeconds: number }): void;
+  (e: 'pause'): void;
+  (e: 'stop'): void;
 }>();
 
 const showNavigation = computed(() => props.showNavigation);
 const showSettings = computed(() => props.showSettings);
 const showCompletionOverlay = computed(() => props.showCompletionOverlay);
 const overlayZIndex = computed(() => props.overlayZIndex);
+const showIntroPanel = computed(() => props.showIntroPanel);
+const rootClass = computed(() =>
+  props.layout === 'embedded'
+    ? 'flex min-h-[430px] flex-col justify-between gap-3'
+    : 'flex flex-col space-y-2 justify-between h-full'
+);
 const hasFixedSessionMinutes = computed(
   () => typeof props.sessionMinutes === 'number'
 );
@@ -452,25 +471,34 @@ function clampNumber(value: number, min: number, max: number) {
 async function togglePlayback() {
   if (!props.practice) return;
   if (!isRunning.value) {
+    emitStart();
     await player.start();
     return;
   }
   if (isPaused.value) {
+    emitStart();
     await resumeSession();
     player.resume();
   } else {
     await pauseSession();
     player.pause();
+    emit('pause');
   }
 }
 
 async function stopSession() {
   await stopAudio(0);
   player.stop();
+  emit('stop');
 }
 
 function restartSession() {
+  emitStart();
   void player.start();
+}
+
+function emitStart() {
+  emit('start', { requiredSeconds: sessionDurationSeconds.value });
 }
 
 async function onSoundEnabledChange(value: boolean) {
@@ -573,6 +601,7 @@ onMounted(async () => {
   player.setSessionDuration(sessionMinutesValue.value * 60);
 
   if (props.autoStart) {
+    emitStart();
     void player.start();
   }
 

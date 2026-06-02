@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-2 h-full overflow-y-auto rounded-lg">
+  <div class="xs:space-y-3 space-y-1 h-full overflow-y-auto rounded-lg">
     <PageHeader
       title="Тексты напоминаний"
       :show-back-button="true"

@@ -1,12 +1,41 @@
+import { computed, watch } from 'vue';
 import { Capacitor } from '@capacitor/core';
 import type { SpeechEngine, SpeechEngineId } from './speech/types';
 import { useSpeechStore } from '@/app/stores/speech';
 
-// Singleton state shared across all composable instances
+// Singleton state shared across all composable instances.
 let engineSingleton: SpeechEngine | null = null;
-const partialListeners: Array<(t: string) => void> = [];
-const finalListeners: Array<(t: string) => void> = [];
-const errorListeners: Array<(error: unknown) => void> = [];
+let currentEngineId: SpeechEngineId | null = null;
+const partialListeners = new Set<(text: string) => void>();
+const finalListeners = new Set<(text: string) => void>();
+const errorListeners = new Set<(error: unknown) => void>();
+
+function dispatchPartial(text: string) {
+  for (const cb of [...partialListeners]) {
+    cb(text);
+  }
+}
+
+function dispatchFinal(text: string) {
+  for (const cb of [...finalListeners]) {
+    cb(text);
+  }
+}
+
+function dispatchError(error: unknown) {
+  for (const cb of [...errorListeners]) {
+    cb(error);
+  }
+}
+
+function bindEngineDispatchers(engine: SpeechEngine) {
+  // Конкретные speech-движки держат один callback на тип события.
+  // Поэтому движок подписывается только на общий dispatcher, а уже он
+  // раздаёт события всем textarea/composer-инстансам.
+  engine.onPartial(dispatchPartial);
+  engine.onFinal(dispatchFinal);
+  engine.onError(dispatchError);
+}
 
 export function useSpeechEngine() {
   const speech = useSpeechStore();
@@ -16,10 +45,6 @@ export function useSpeechEngine() {
     language: speech.language,
     silenceMs: speech.silenceMs,
   }));
-
-  let engine: SpeechEngine | null = engineSingleton;
-  const currentEngineId = ref<SpeechEngineId | null>(null);
-  const isActive = ref(false);
 
   const resolveEngineId = (id: SpeechEngineId): SpeechEngineId =>
     id === 'whisper' ? 'auto' : id;
@@ -78,80 +103,59 @@ export function useSpeechEngine() {
 
   async function createAndBindEngine(id: SpeechEngineId) {
     const e = await pickEngine(id);
-    for (const cb of partialListeners) e.onPartial(cb);
-    for (const cb of finalListeners) e.onFinal(cb);
-    for (const cb of errorListeners) e.onError(cb);
+    bindEngineDispatchers(e);
     engineSingleton = e;
-    engine = e;
-    currentEngineId.value = id;
+    currentEngineId = id;
     return e;
   }
 
   async function ensureEngine() {
     const targetEngineId = resolveEngineId(settings.value.engine);
-    if (!engine || currentEngineId.value !== targetEngineId) {
-      if (engine) await engine.stop().catch(() => {});
+    if (!engineSingleton || currentEngineId !== targetEngineId) {
+      if (engineSingleton) await engineSingleton.stop().catch(() => {});
       await createAndBindEngine(targetEngineId);
     }
   }
 
-  async function start() {
+  async function start(opts?: { continuousMode?: boolean }) {
     await ensureEngine();
-    try {
-      await engine!.start({
-        language: settings.value.language,
-        silenceMs: settings.value.silenceMs,
-      });
-      isActive.value = true;
-    } catch (error) {
-      isActive.value = false;
-      // Временно не делаем fallback на Whisper.
-      // TODO: вернуть fallback через ai_relay.
-      // const { createWhisperEngine } = await import(
-      //   '@/app/composables/speech/engine.whisper'
-      // );
-      // engine = createWhisperEngine();
-      // for (const cb of partialListeners) engine.onPartial(cb);
-      // for (const cb of finalListeners) engine.onFinal(cb);
-      // await engine!.start({
-      //   language: settings.value.language,
-      //   silenceMs: settings.value.silenceMs,
-      // });
-      // speech.setEngine('whisper');
-      // currentEngineId.value = 'whisper';
-      // engineSingleton = engine;
-      // isActive.value = true;
-      throw error;
-    }
+    await engineSingleton!.start({
+      language: settings.value.language,
+      silenceMs: settings.value.silenceMs,
+      continuousMode: opts?.continuousMode,
+    });
   }
 
   async function stop() {
-    if (!engine) return;
+    if (!engineSingleton) return;
     try {
-      await engine.stop();
-      isActive.value = false;
+      await engineSingleton.stop();
     } catch (error) {
       console.error('[useSpeechEngine] Error stopping engine:', error);
-      isActive.value = false;
     }
   }
 
   function onPartial(cb: (t: string) => void) {
-    partialListeners.push(cb);
-    engine?.onPartial(cb);
+    partialListeners.add(cb);
+    return () => partialListeners.delete(cb);
   }
   function onFinal(cb: (t: string) => void) {
-    finalListeners.push(cb);
-    engine?.onFinal(cb);
+    finalListeners.add(cb);
+    return () => finalListeners.delete(cb);
   }
   function onError(cb: (error: unknown) => void) {
-    errorListeners.push(cb);
-    engine?.onError(cb);
+    errorListeners.add(cb);
+    return () => errorListeners.delete(cb);
   }
 
   async function setEngine(id: SpeechEngineId) {
     const target = resolveEngineId(id);
-    if (speech.engine === target && engine) return;
+    if (
+      speech.engine === target &&
+      engineSingleton &&
+      currentEngineId === target
+    )
+      return;
     if (id === 'whisper') {
       // Whisper отключен — мягко возвращаем на auto.
       // TODO: вернуть через ai_relay.
@@ -159,15 +163,14 @@ export function useSpeechEngine() {
       return;
     }
     speech.setEngine(target);
-    const wasActive = isActive.value;
-    if (engine) await engine.stop().catch(() => {});
+    const wasActive = speech.isListening;
+    if (engineSingleton) await engineSingleton.stop().catch(() => {});
     await createAndBindEngine(target);
     if (wasActive) {
-      await engine!.start({
+      await engineSingleton!.start({
         language: settings.value.language,
         silenceMs: settings.value.silenceMs,
       });
-      isActive.value = true;
     }
   }
   function setAutoSend(v: boolean) {
@@ -178,7 +181,7 @@ export function useSpeechEngine() {
   watch(
     () => speech.engine,
     async (next) => {
-      if (next && next !== currentEngineId.value) {
+      if (next && next !== currentEngineId) {
         await setEngine(next);
       }
     }

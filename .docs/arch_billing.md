@@ -70,6 +70,15 @@
 - Для `native iOS` frontend во всех сборках отключает purchase-management surface: скрываются promo/referral, `/subscription`, `/settings/referral` и billing-подсказки в `Поддержке`. В `Настройки` блок `Подписка` остаётся видимым и показывает текст о переходе в веб-версию для изменения тарифа.
 - Effective entitlements теперь считаются не только по paid subscription и trial, но и по `billing_access_grants`
 
+### Срочно: server-side enforcement для Roadmap
+
+- Известный gap: UI и route guard блокируют `programs.roadmap.full`, но write/action endpoint-ы Roadmap пока проверяют только авторизацию.
+- Перед релизом платного Roadmap обязательно добавить серверную проверку feature access `programs.roadmap.full` минимум в:
+  - `POST /api/programs/:slug/steps/:step/start`
+  - `PATCH /api/program-step-attempts/:attemptId/actions/:actionId`
+  - `POST /api/program-step-attempts/:attemptId/complete`
+- `GET /api/programs/:slug` можно оставить read-only видимым, если продуктово нужно показывать locked Roadmap, но выполнение шагов не должно обходиться прямым API-вызовом.
+
 ## Промокоды
 
 - Реализован internal promo/referral flow для `yookassa`: `.docs/arch_promo_codes.md`

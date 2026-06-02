@@ -36,7 +36,7 @@
 
     <section
       v-else-if="step === 'panic-grounding'"
-      class="glass-deep p-5 flex flex-col items-center justify-center space-y-4 w-full"
+      class="glass-deep p-3 flex flex-col items-center justify-center space-y-4 w-full"
     >
       <div class="space-y-1 text-center">
         <p class="text-sm text-foreground/70">5-4-3-2-1</p>
@@ -112,7 +112,7 @@
     >
       <div class="flex h-full flex-col justify-between space-y-2">
         <div
-          class="glass-deep p-5 flex flex-col items-center gap-2 text-center"
+          class="glass-deep p-3 flex flex-col items-center gap-2 text-center"
         >
           <p
             class="text-sm font-semibold text-foreground min-h-[40px] px-[5vw]"
@@ -192,7 +192,7 @@
 
     <section
       v-else-if="step === 'finish'"
-      class="glass-deep p-5 flex flex-col items-center justify-center space-y-4 w-full"
+      class="glass-deep p-3 flex flex-col items-center justify-center space-y-4 w-full"
     >
       <div class="space-y-1 text-center">
         <p class="text-sm text-foreground/70">Практика завершена</p>

@@ -3,7 +3,7 @@
     class="space-y-2 h-dvh overflow-y-auto no-scrollbar pb-[100px] rounded-lg"
   >
     <div
-      class="flex h-full flex-col justify-between space-y-4 overflow-y-auto no-scrollbar"
+      class="flex h-full flex-col justify-between space-y-2 overflow-y-auto no-scrollbar"
     >
       <PageHeader
         :title="headerTitle"
@@ -113,6 +113,10 @@
         :show-navigation="canNavigateGroup"
         @navigate-prev="goToPrevPractice"
         @navigate-next="goToNextPractice"
+        @start="onPracticeStart"
+        @pause="onPracticePause"
+        @stop="onPracticeStop"
+        @complete="onPracticeComplete"
       />
 
       <div v-else class="px-4">
@@ -134,6 +138,7 @@ import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/shadcn/input';
 import { ToggleGroup, ToggleGroupItem } from '@/app/components/ui/toggle-group';
 import { useToast } from '@/app/composables/useToast';
+import { useFreeTimedPracticeRecovery } from '@/app/composables/useFreeTimedPracticeRecovery';
 import { useBreathPracticesStore } from '@/app/stores/breathPractices';
 import { useEntitlements } from '@/app/composables/useEntitlements';
 import {
@@ -147,6 +152,7 @@ import {
 import { navigateTo } from '#app';
 
 const MAX_CUSTOM_SECONDS = 30;
+type TimedPracticeStartPayload = { requiredSeconds?: number };
 
 const route = useRoute();
 const store = useBreathPracticesStore();
@@ -244,6 +250,9 @@ const headerTitle = computed(() => {
 const phaseCount = ref<2 | 3 | 4>(3);
 const customPhases = ref<BreathPhase[]>(buildCustomPhases(3));
 const customName = ref('');
+const freeTimedRecovery = useFreeTimedPracticeRecovery({
+  persistOnUnmount: false,
+});
 
 const showHoldWarning = computed(() =>
   customPhases.value.some(
@@ -266,6 +275,62 @@ async function goToGroupSibling(direction: 1 | -1) {
   const nextSlug = list[nextIndex];
   const query = groupKey.value ? { group: groupKey.value } : undefined;
   await navigateTo({ path: `/breath-practices/${nextSlug}`, query });
+}
+
+function formatLocalDateKey(date = new Date()) {
+  return [
+    String(date.getFullYear()),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-');
+}
+
+function getBreathPracticeSourceId() {
+  const practiceId = practice.value?.slug || customId.value;
+  if (!practiceId) return null;
+  return `breath:${practiceId}:${formatLocalDateKey()}`;
+}
+
+function buildBreathRecoveryStart(payload?: TimedPracticeStartPayload) {
+  const sourceId = getBreathPracticeSourceId();
+  const requiredSeconds = Number(payload?.requiredSeconds);
+  if (!sourceId || !Number.isFinite(requiredSeconds)) return null;
+
+  return {
+    type: 'breath_practice',
+    source: 'breath_practice_completed' as const,
+    sourceId,
+    requiredSeconds,
+  };
+}
+
+function onPracticeStart(payload?: TimedPracticeStartPayload) {
+  const record = buildBreathRecoveryStart(payload);
+  if (!record) return;
+  void freeTimedRecovery.start(record);
+}
+
+function onPracticePause() {
+  void freeTimedRecovery.pause();
+}
+
+function onPracticeStop() {
+  void freeTimedRecovery.stop();
+}
+
+function onPracticeComplete() {
+  // Свободная дыхательная практика завершена — начисляем 1 каплю
+  // (rate-limit 3/день из свободных). См. retention/retention_long_term_strategy.md
+  // Если практика была пройдена внутри Roadmap-шага, ProgramBreathPracticeAction
+  // не использует этот handler, и здесь мы не дублируемся.
+  // sourceId включает локальную дату — за один календарный день одно sourceId,
+  // повторное прохождение той же практики на следующий день начислит каплю
+  // снова (если в этот день ещё есть слот в rate-limit'е).
+  const requiredSeconds =
+    freeTimedRecovery.activeRecord.value?.requiredSeconds ?? 1;
+  const record = buildBreathRecoveryStart({ requiredSeconds });
+  if (!record) return;
+  void freeTimedRecovery.complete(record);
 }
 
 function goToPrevPractice() {
@@ -355,6 +420,14 @@ onMounted(async () => {
     await store.load();
   }
 });
+
+watch(
+  () => practice.value?.slug ?? null,
+  async (nextSlug, previousSlug) => {
+    if (!previousSlug || nextSlug === previousSlug) return;
+    await onPracticeStop();
+  }
+);
 
 watch(
   () => lockFeatureKey.value,

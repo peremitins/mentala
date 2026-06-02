@@ -1,5 +1,7 @@
 <template>
-  <div class="h-dvh overflow-y-auto pb-[100px] space-y-2 rounded-lg">
+  <div
+    class="h-dvh overflow-y-auto pb-[100px] xs:space-y-3 space-y-1 rounded-lg"
+  >
     <PageHeader title="⚙️&nbsp;&nbsp;Настройки" />
 
     <section class="">
@@ -10,7 +12,7 @@
         :with-wrapper="false"
       />
 
-      <div v-else class="space-y-2">
+      <div v-else class="xs:space-y-3 space-y-1">
         <div v-if="isAdmin" class="glass-deep p-4">
           <button
             type="button"

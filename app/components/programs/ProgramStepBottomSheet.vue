@@ -72,6 +72,7 @@ const props = defineProps<{
   open: boolean;
   step: ProgramStepDto | null;
   locked?: boolean;
+  inProgress?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -89,9 +90,10 @@ const canStart = computed(
   () => props.step?.status === 'completed' || props.step?.status === 'active'
 );
 
-const primaryLabel = computed(() =>
-  props.step?.status === 'completed' ? 'Повторить' : 'Начать'
-);
+const primaryLabel = computed(() => {
+  if (props.step?.status === 'completed') return 'Повторить';
+  return props.inProgress ? 'Продолжить' : 'Начать';
+});
 
 const statusLabel = computed(() => {
   if (!props.step) return '';

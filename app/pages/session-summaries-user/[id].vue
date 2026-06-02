@@ -1,5 +1,7 @@
 <template>
-  <div class="space-y-3 relative h-full overflow-y-auto pb-[100px] rounded-lg">
+  <div
+    class="xs:space-y-3 space-y-1 relative h-full overflow-y-auto pb-[100px] rounded-lg"
+  >
     <PageHeader
       title="Итог сессии"
       :show-back-button="true"
@@ -8,7 +10,7 @@
 
     <div class="glass-deep p-3 space-y-4">
       <!-- Loading (первоначальная загрузка) -->
-      <div v-if="isLoading" class="space-y-3">
+      <div v-if="isLoading" class="xs:space-y-3 space-y-1">
         <div
           class="rounded-2xl border border-white/10 bg-background/20 p-3 animate-pulse"
         >
@@ -33,7 +35,7 @@
       </div>
 
       <!-- Pending: итог генерируется, ожидаем -->
-      <div v-else-if="isPending" class="space-y-3">
+      <div v-else-if="isPending" class="xs:space-y-3 space-y-1">
         <div
           class="rounded-2xl border border-white/10 bg-background/20 p-3 animate-pulse"
         >
@@ -57,7 +59,7 @@
       <!-- Failed: итог не удалось сформировать -->
       <div
         v-else-if="isFailed"
-        class="rounded-2xl border border-red-500/30 bg-background/20 p-4 space-y-3"
+        class="rounded-2xl border border-red-500/30 bg-background/20 p-4 xs:space-y-3 space-y-1"
       >
         <p class="text-sm font-medium text-foreground">
           Не удалось сформировать итог

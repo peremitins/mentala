@@ -1,14 +1,21 @@
 <template>
-  <div class="flex flex-col items-center gap-2 justify-center">
+  <div class="flex flex-col items-center justify-center">
     <div class="relative flex items-center justify-center">
       <div class="breath-orb" :class="phaseClass" :style="sphereStyle">
         <div class="breath-orb__glow" />
       </div>
-    </div>
-
-    <div v-if="isRunning" class="absolute text-center">
-      <div class="text-4xl font-semibold text-white">
-        {{ phaseRemainingLabel }}
+      <!-- Отсчёт ставим внутри того же `relative`-контейнера, что и сфера,
+           и центрируем через absolute inset-0 + flex. Так цифра всегда
+           остаётся ровно в геометрическом центре круга и не зависит от
+           масштабирования сферы (scale меняется только у самой .breath-orb,
+           а оверлей с цифрой остаётся 1:1). -->
+      <div
+        v-if="isRunning"
+        class="pointer-events-none absolute inset-0 flex items-center justify-center"
+      >
+        <div class="text-4xl font-semibold leading-none text-white">
+          {{ phaseRemainingLabel }}
+        </div>
       </div>
     </div>
   </div>

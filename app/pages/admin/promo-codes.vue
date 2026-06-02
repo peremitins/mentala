@@ -1,5 +1,7 @@
 <template>
-  <div class="h-dvh overflow-y-auto pb-[100px] space-y-2 rounded-lg">
+  <div
+    class="h-dvh overflow-y-auto pb-[100px] xs:space-y-3 space-y-1 rounded-lg"
+  >
     <PageHeader
       title="Промокоды и Referral"
       :show-back-button="true"

@@ -282,4 +282,29 @@ describe('useMeditationPlayer background behavior', () => {
     expect(player.currentTrack.value?.id).toBe(track.id);
     expect(player.timerMinutes.value).toBe(5);
   });
+
+  it('ставит roadmap sleep timer на 60 минут без изменения preferred timer', async () => {
+    const { player, getNativeService, getAppStateChangeListener } =
+      await setup();
+
+    player.setPreferredTimer(5);
+    await player.play(track, {
+      timerMinutes: 60,
+      persistPreferredTimer: false,
+    });
+    await flushAsyncWork();
+
+    const service = getNativeService();
+    expect(service.scheduleStopCalls[0]).toBeGreaterThan(3_599_000);
+    expect(player.timerMinutes.value).toBe(60);
+    expect(player.preferredTimerMinutes.value).toBe(5);
+    expect(player.currentTrack.value?.id).toBe(track.id);
+
+    await getAppStateChangeListener()({ isActive: false });
+    await flushAsyncWork();
+
+    expect(service.stopCalls).toBe(0);
+    expect(player.currentTrack.value?.id).toBe(track.id);
+    expect(player.isPlaying.value).toBe(true);
+  });
 });

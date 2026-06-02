@@ -1,8 +1,14 @@
 <template>
-  <div class="relative h-full overflow-y-auto space-y-2 pb-[100px]">
+  <div
+    class="relative h-full overflow-y-auto xs:space-y-3 space-y-1 pb-[100px]"
+  >
     <PageHeader title="Практики" />
 
-    <div class="grid gap-2 grid-cols-1 xxs:grid-cols-2">
+    <!-- Геро-блок ИИ-ассистента первым рядом (перенесён с главного экрана,
+         см. стратегию главного экрана, Вариант A). -->
+    <PracticesAssistantHero @paywall="openPaywall" />
+
+    <div class="grid xs:gap-2 gap-1 grid-cols-1 xxs:grid-cols-2">
       <NuxtLink
         to="/quick-help"
         class="glass-deep p-5 group relative overflow-hidden transition hover:-translate-y-1 animate-slide-up"
@@ -20,7 +26,13 @@
         </div>
 
         <div class="relative z-10 space-y-3">
-          <IconHeartPulse class="h-5 w-5 text-foreground" />
+          <div class="w-[60px]">
+            <img
+              src="../../assets/images/quick_help.webp"
+              loading="lazy"
+              alt="icon quick help"
+            />
+          </div>
           <div class="space-y-1">
             <h2 class="text-lg font-semibold text-foreground">
               Быстрая помощь
@@ -50,7 +62,13 @@
         </div>
 
         <div class="relative z-10 space-y-3">
-          <span class="text-3xl">🧘‍♀️</span>
+          <div class="w-[60px]">
+            <img
+              src="../../assets/images/meditation.webp"
+              loading="lazy"
+              alt="icon meditation"
+            />
+          </div>
           <div class="space-y-1">
             <h2 class="text-lg font-semibold text-foreground">Медитации</h2>
             <p class="text-sm text-foreground/80">
@@ -85,7 +103,13 @@
           }}</span>
         </div>
         <div class="relative z-10 space-y-3">
-          <span class="text-3xl">🧘‍♀️</span>
+          <div class="w-[60px]">
+            <img
+              src="../../assets/images/meditation.webp"
+              loading="lazy"
+              alt="icon meditation"
+            />
+          </div>
           <div class="space-y-1">
             <h2 class="text-lg font-semibold text-foreground">Медитации</h2>
             <p class="text-sm text-foreground/80">
@@ -117,7 +141,13 @@
         </div>
 
         <div class="relative z-10 space-y-3">
-          <span class="text-3xl">🌬️</span>
+          <div class="w-[60px]">
+            <img
+              src="../../assets/images/breath_practiсes.webp"
+              loading="lazy"
+              alt="icon breath practiсes"
+            />
+          </div>
           <div class="space-y-1">
             <h2 class="text-lg font-semibold text-foreground">
               Дыхательные практики
@@ -147,7 +177,13 @@
         </div>
 
         <div class="relative z-10 space-y-3">
-          <span class="text-3xl">📔</span>
+          <div class="w-[60px]">
+            <img
+              src="../../assets/images/gratitude_diary.webp"
+              loading="lazy"
+              alt="icon gratitude diary"
+            />
+          </div>
           <div class="space-y-1">
             <h2 class="text-lg font-semibold text-foreground">
               Дневник благодарности
@@ -185,7 +221,13 @@
         </div>
 
         <div class="relative z-10 space-y-3">
-          <span class="text-3xl">📔</span>
+          <div class="w-[60px]">
+            <img
+              src="../../assets/images/gratitude_diary.webp"
+              loading="lazy"
+              alt="icon gratitude diary"
+            />
+          </div>
           <div class="space-y-1">
             <h2 class="text-lg font-semibold text-foreground">
               Дневник благодарности
@@ -215,8 +257,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import IconHeartPulse from '~icons/lucide/heart-pulse';
 import PageHeader from '@/app/components/PageHeader.vue';
+import PracticesAssistantHero from '@/app/components/practices/PracticesAssistantHero.vue';
 import FeaturePaywallModal from '@/app/components/subscription/FeaturePaywallModal.vue';
 import { useEntitlements } from '@/app/composables/useEntitlements';
 import { getLocalizedRequiredPlanLabel } from '@/app/utils/planI18n';

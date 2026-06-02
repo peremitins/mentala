@@ -28,6 +28,12 @@ export default defineNuxtRouteMiddleware(async (to) => {
     return; // Пропускаем проверку авторизации
   }
 
+  // Публичные share-страницы: /share/garden/[slug] и т.п. Принимают
+  // получателей шеренных ссылок, поэтому авторизация не требуется.
+  if (to.path.startsWith('/share/')) {
+    return;
+  }
+
   if (publicRoutes.includes(to.path)) {
     return;
   }

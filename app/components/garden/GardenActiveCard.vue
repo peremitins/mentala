@@ -16,6 +16,22 @@
         >
           {{ plant.summaryText }}
         </p>
+        <!-- Прогресс по шагам программы. Переехал из бывшего /programs/index,
+             объединённого с Оранжереей. Догружается из overview-endpoint;
+             если недоступен — просто не показываем (карточка остаётся целой). -->
+        <div v-if="progress" class="space-y-1 pt-0.5">
+          <p class="text-[11px] text-foreground/55">
+            {{ progress.completedSteps }} из {{ progress.totalSteps }} ·
+            {{ progress.progressPercent }}%
+          </p>
+          <div class="h-1.5 overflow-hidden rounded-full bg-white/12">
+            <div
+              class="h-full rounded-full bg-emerald-300 transition-all duration-500"
+              :style="{ width: `${progress.progressPercent}%` }"
+            />
+          </div>
+        </div>
+
         <NuxtLink
           :to="`/programs/${plant.programSlug}/map`"
           class="mt-2 inline-flex items-center gap-1 text-xs font-medium text-emerald-200 hover:text-emerald-100"
@@ -52,13 +68,14 @@
       v-if="readyReportsCount > 0"
       type="button"
       class="relative mt-3 flex w-full items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-3.5 py-3 text-left transition hover:bg-white/[0.07] active:scale-[0.99]"
-      @click="emit('open-reports')"
+      @click="handleOpenReports"
     >
       <span
         v-if="props.locked"
         class="absolute -right-1 -top-1 inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/25 bg-black/70 text-xs leading-none"
         aria-hidden="true"
-      >⭐</span>
+        >⭐</span
+      >
       <div class="flex items-center gap-2.5">
         <span
           class="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-300/15 text-emerald-200"
@@ -85,9 +102,11 @@ import IconArrowRight from '~icons/lucide/arrow-right';
 import IconScroll from '~icons/lucide/scroll-text';
 import { useAPI } from '@/app/composables/useAPI';
 import { usePhotoSwipe } from '@/app/composables/usePhotoSwipe';
+import { useHaptics } from '@/app/composables/useHaptics';
 import { getRetentionPlantImageSrc } from '@/app/utils/retentionPlant';
 import type { GardenPlantItemDto } from '@/shared/dto/garden';
 import type { ProgramTimelineResponseDto } from '@/shared/dto/program-checkpoint';
+import type { ProgramOverviewDto } from '@/shared/dto/retention';
 
 const props = defineProps<{
   plant: GardenPlantItemDto;
@@ -99,6 +118,7 @@ const emit = defineEmits<{
 }>();
 
 const { openPhotoSwipe } = usePhotoSwipe();
+const { triggerLight } = useHaptics();
 
 const plantImageSrc = computed(() => {
   // stateIndex в Garden хранится 1..15 (1-based), helper использует 0-based.
@@ -114,6 +134,30 @@ const plantImageSrc = computed(() => {
 // один SELECT в `user_program_checkpoint_summaries` по userProgramId.
 // Если timeline-endpoint вернёт 404 (активной программы нет) — тихо игнорируем.
 const readyReportsCount = ref(0);
+
+// Прогресс по шагам активной программы для прогресс-бара. null — пока не
+// загрузилось или endpoint недоступен (тогда бар просто не рендерится).
+const progress = ref<{
+  completedSteps: number;
+  totalSteps: number;
+  progressPercent: number;
+} | null>(null);
+
+async function loadProgress() {
+  try {
+    const data = await useAPI<ProgramOverviewDto>(
+      `/api/programs/${encodeURIComponent(props.plant.programSlug)}`,
+      { method: 'GET', suppressErrorToast: true }
+    );
+    progress.value = {
+      completedSteps: data.completedSteps,
+      totalSteps: data.totalSteps,
+      progressPercent: data.progressPercent,
+    };
+  } catch {
+    progress.value = null;
+  }
+}
 
 async function loadReadyReportsCount() {
   try {
@@ -140,12 +184,14 @@ const reportsLabel = computed(() => {
 
 onMounted(() => {
   void loadReadyReportsCount();
+  void loadProgress();
 });
 
 watch(
   () => props.plant.programSlug,
   () => {
     void loadReadyReportsCount();
+    void loadProgress();
   }
 );
 
@@ -156,6 +202,7 @@ function onPlantImageError(event: Event) {
 
 function openZoom() {
   if (!plantImageSrc.value) return;
+  void triggerLight();
   void openPhotoSwipe([
     {
       src: plantImageSrc.value,
@@ -164,5 +211,10 @@ function openZoom() {
       alt: props.plant.title,
     },
   ]);
+}
+
+function handleOpenReports() {
+  void triggerLight();
+  emit('open-reports');
 }
 </script>

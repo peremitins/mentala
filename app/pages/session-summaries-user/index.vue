@@ -1,5 +1,7 @@
 <template>
-  <div class="space-y-3 relative h-full overflow-y-auto pb-[100px] rounded-lg">
+  <div
+    class="xs:space-y-3 space-y-1 relative h-full overflow-y-auto pb-[100px] rounded-lg"
+  >
     <PageHeader
       title="Итоги сессий"
       :show-back-button="true"
@@ -8,7 +10,7 @@
 
     <div class="">
       <!-- Loading skeleton -->
-      <div v-if="isLoading" class="space-y-3">
+      <div v-if="isLoading" class="xs:space-y-3 space-y-1">
         <div v-for="n in 3" :key="n" class="glass-deep p-4 animate-pulse">
           <div class="h-4 w-24 bg-white/10 rounded mb-3" />
           <div class="h-3 w-full bg-white/10 rounded mb-2" />
@@ -51,7 +53,7 @@
       </div>
 
       <!-- List -->
-      <ul v-else class="space-y-3">
+      <ul v-else class="xs:space-y-3 space-y-1">
         <li
           v-for="item in items"
           :key="item.id"

@@ -1,5 +1,7 @@
 <template>
-  <div class="relative h-full overflow-y-auto space-y-2 pb-[100px] rounded-lg">
+  <div
+    class="relative h-full overflow-y-auto xs:space-y-2 space-y-1 pb-[100px] rounded-lg"
+  >
     <!-- Шапка с брендовым логотипом -->
     <PageHeader title="Mentala">
       <template #custom>
@@ -9,317 +11,62 @@
       </template>
     </PageHeader>
 
-    <!-- Верхний крупный блок: ИИ-чат.
-         Вся карточка кликабельна — поведение совпадает с кнопкой «Начать /
-         Продолжить»: при наличии доступа ведёт в /chat, иначе открывает paywall.
-         На внутренних кнопках/ссылках стоит @click.stop, чтобы они работали
-         со своим собственным обработчиком и не дублировали навигацию. -->
-    <section
-      data-tour="home-hero"
-      class="glass-deep relative overflow-hidden p-5 animate-slide-up cursor-pointer"
-      style="animation-delay: 0s; animation-fill-mode: both"
-      role="button"
-      tabindex="0"
-      :aria-label="
-        chatAssistantAccess.available
-          ? 'Открыть чат с ИИ-ассистентом'
-          : 'Узнать о доступе к ИИ-ассистенту'
-      "
-      @click="handleHeroCardClick"
-      @keydown.enter.prevent="handleHeroCardClick"
-      @keydown.space.prevent="handleHeroCardClick"
-    >
-      <div class="pointer-events-none absolute inset-0">
-        <div
-          class="tile-orb absolute -right-20 -top-16 h-60 w-60 rounded-full bg-gradient-to-br from-violet-400/35 via-fuchsia-400/20 to-transparent blur-3xl"
-        />
-        <div
-          class="tile-orb tile-orb--delay absolute -left-16 bottom-0 h-48 w-48 rounded-full bg-gradient-to-br from-sky-500/30 via-indigo-500/20 to-transparent blur-3xl"
-        />
-      </div>
+    <!-- Приветствие по локальному времени пользователя (Доброе утро/день/
+         вечер/ночи) + дата. -->
+    <HomeGreeting />
 
-      <div class="relative z-10 space-y-4">
-        <div class="space-y-2">
-          <div class="flex items-center gap-2">
-            <div class="w-[60px]">
-              <img
-                src="../assets/images/ai_terapist.webp"
-                loading="lazy"
-                alt="icon AI-terapist"
-              />
-            </div>
-            <h2 class="text-xl font-semibold text-foreground">ИИ-ассистент</h2>
-          </div>
-          <p class="text-sm text-foreground/80">
-            Поделитесь тем, что у вас на душе. Ассистент выслушает, поможет
-            разобраться в чувствах и подскажет следующий шаг.
-          </p>
-        </div>
-
-        <div class="flex flex-wrap gap-2">
-          <NuxtLink
-            v-if="chatAssistantAccess.available"
-            to="/chat"
-            class="inline-flex items-center gap-2 rounded-full bg-foreground/90 px-5 py-2.5 text-sm font-medium text-background transition hover:bg-foreground"
-            @click.stop
-          >
-            <IconSend class="h-4 w-4" />
-            <span>{{ chatButtonLabel }}</span>
-          </NuxtLink>
-          <button
-            v-else
-            type="button"
-            class="relative inline-flex items-center gap-2 rounded-full bg-foreground/90 px-5 py-2.5 text-sm font-medium text-background transition hover:bg-foreground"
-            @click.stop="openPaywall('chat.assistant')"
-          >
-            <span
-              class="absolute -right-1 -top-1 inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/25 bg-black/70 text-xs leading-none"
-              aria-hidden="true"
-              >{{ getPlanBadgeEmoji(chatAssistantAccess.requiredPlan) }}</span
-            >
-            <IconSend class="h-4 w-4" />
-            <span>{{ chatButtonLabel }}</span>
-          </button>
-
-          <NuxtLink
-            to="/session-summaries-user"
-            :aria-label="sessionHistoryButtonAriaLabel"
-            class="relative inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-5 py-2.5 text-sm font-medium text-foreground transition hover:border-white/30 hover:bg-white/10"
-            @click.stop
-          >
-            <UnreadSummaryIndicator
-              v-if="hasUnseenSummary"
-              class="pointer-events-none absolute right-[8px] top-[8px] z-10"
-            />
-            <IconBookOpen class="h-4 w-4" />
-            <span>История сессий</span>
-          </NuxtLink>
-        </div>
-      </div>
-    </section>
-
-    <!-- Сетка 2x2: Быстрая помощь / Медитации / Дыхательные / Дневник благодарности -->
-    <div class="grid gap-2 grid-cols-2">
-      <!-- Быстрая помощь -->
-      <NuxtLink
-        to="/quick-help"
-        class="glass-deep p-4 group relative overflow-hidden transition hover:-translate-y-1 animate-slide-up"
+    <!-- Порядок блоков соответствует Варианту A стратегии главного экрана:
+         серия → настроение → герой-Roadmap → росток → компактный ИИ → мысль. -->
+    <template v-if="today">
+      <HomeStreakCard
+        :current="today.streak.current"
+        :best="today.streak.best"
+        :week="today.streak.week"
+        :status="today.streak.status"
+        :repair="today.streak.repair"
+        :paused-since="today.streak.pausedSince"
+        :notice="today.streak.notice"
+        :week-details="today.streak.weekDetails"
+        style="animation-delay: 0.06s; animation-fill-mode: both"
+      />
+      <HomeMoodCheckin
+        :selected-mood="today.mood?.mood || null"
+        :pending="isMoodPending"
         style="animation-delay: 0.1s; animation-fill-mode: both"
-      >
-        <div class="pointer-events-none absolute inset-0">
-          <div
-            class="tile-orb absolute -right-14 -top-10 h-40 w-40 rounded-full bg-gradient-to-br from-rose-400/35 via-red-400/20 to-transparent blur-2xl"
-          />
-          <div
-            class="tile-orb tile-orb--delay absolute -left-12 bottom-0 h-32 w-32 rounded-full bg-gradient-to-br from-orange-500/25 via-rose-500/20 to-transparent blur-2xl"
-          />
-        </div>
-        <div class="relative z-10">
-          <!-- <IconHeartPulse class="h-5 w-5 text-foreground" /> -->
-          <div class="w-[60px]">
-            <img
-              src="../assets/images/quick_help.webp"
-              loading="lazy"
-              alt="icon quick help"
-            />
-          </div>
-          <div class="space-y-1">
-            <h3 class="text-sm font-semibold text-foreground">
-              Быстрая помощь
-            </h3>
-            <p class="text-xs text-foreground/75">
-              Короткие техники для снятия тревоги и напряжения
-            </p>
-          </div>
-        </div>
-      </NuxtLink>
+        @select="handleMoodSelect"
+      />
+      <HomeRoadmapCard
+        :program="today.program"
+        :daily-limit="today.programDailyLimit"
+        :available-seeds="gardenSnapshot?.available ?? []"
+        style="animation-delay: 0.14s; animation-fill-mode: both"
+        @daily-limit-reset="handleDailyLimitReset"
+      />
+      <HomeEnergyPlantCard
+        :energy="today.energy"
+        :program="today.program"
+        :water-signal="plantWaterSignal"
+        :water-intensity="plantWaterIntensity"
+        style="animation-delay: 0.18s; animation-fill-mode: both"
+      />
+      <HomeAssistantCompact
+        style="animation-delay: 0.22s; animation-fill-mode: both"
+        @paywall="openPaywall"
+      />
+      <HomeThoughtCard
+        :thought="today.thought"
+        style="animation-delay: 0.26s; animation-fill-mode: both"
+        @saved-change="handleThoughtSavedChange"
+      />
+    </template>
 
-      <!-- Дыхательные практики -->
-      <NuxtLink
-        to="/breath-practices"
-        class="glass-deep p-4 group relative overflow-hidden transition hover:-translate-y-1 animate-slide-up"
-        style="animation-delay: 0.2s; animation-fill-mode: both"
-      >
-        <div class="pointer-events-none absolute inset-0">
-          <div
-            class="tile-orb tile-orb--slow absolute -right-14 -top-10 h-40 w-40 rounded-full bg-gradient-to-br from-cyan-400/40 via-sky-400/20 to-transparent blur-2xl"
-          />
-          <div
-            class="tile-orb tile-orb--delay absolute -left-12 bottom-0 h-32 w-32 rounded-full bg-gradient-to-br from-blue-500/30 via-indigo-500/20 to-transparent blur-2xl"
-          />
-        </div>
-        <div class="relative z-10">
-          <div class="w-[60px]">
-            <img
-              src="../assets/images/breath_practiсes.webp"
-              loading="lazy"
-              alt="icon breath practiсes"
-            />
-          </div>
-          <div class="space-y-1">
-            <h3 class="text-sm font-semibold text-foreground">
-              Дыхательные практики
-            </h3>
-            <p class="text-xs text-foreground/75">
-              Готовые упражнения и индивидуальные настройки
-            </p>
-          </div>
-        </div>
-      </NuxtLink>
-
-      <!-- Медитации -->
-      <NuxtLink
-        v-if="meditationsAccess.available"
-        to="/meditations"
-        class="glass-deep p-4 group relative overflow-hidden transition hover:-translate-y-1 animate-slide-up"
-        style="animation-delay: 0.15s; animation-fill-mode: both"
-      >
-        <div class="pointer-events-none absolute inset-0">
-          <div
-            class="tile-orb absolute -right-16 -bottom-8 h-44 w-44 rounded-full bg-gradient-to-br from-amber-400/35 via-rose-400/20 to-transparent blur-2xl"
-          />
-          <div
-            class="tile-orb tile-orb--delay absolute -left-14 top-0 h-32 w-32 rounded-full bg-gradient-to-br from-purple-500/25 via-fuchsia-500/20 to-transparent blur-2xl"
-          />
-        </div>
-        <div class="relative z-10">
-          <div class="w-[60px]">
-            <img
-              src="../assets/images/meditation.webp"
-              loading="lazy"
-              alt="icon meditation"
-            />
-          </div>
-          <div class="space-y-1">
-            <h3 class="text-sm font-semibold text-foreground">Медитации</h3>
-            <p class="text-xs text-foreground/75">
-              Музыка и звуки для отдыха и концентрации
-            </p>
-          </div>
-        </div>
-      </NuxtLink>
-      <button
-        v-else
-        type="button"
-        class="glass-deep p-4 group relative overflow-hidden transition hover:-translate-y-1 animate-slide-up text-left"
-        style="animation-delay: 0.15s; animation-fill-mode: both"
-        @click="openPaywall('meditations.library.full')"
-      >
-        <div class="pointer-events-none absolute inset-0">
-          <div
-            class="tile-orb absolute -right-16 -bottom-8 h-44 w-44 rounded-full bg-gradient-to-br from-amber-400/35 via-rose-400/20 to-transparent blur-2xl"
-          />
-          <div
-            class="tile-orb tile-orb--delay absolute -left-14 top-0 h-32 w-32 rounded-full bg-gradient-to-br from-purple-500/25 via-fuchsia-500/20 to-transparent blur-2xl"
-          />
-        </div>
-        <div
-          class="absolute right-2 top-2 inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/25 bg-black/30 text-sm leading-none"
-        >
-          <span aria-hidden="true">{{
-            getPlanBadgeEmoji(meditationsAccess.requiredPlan)
-          }}</span>
-        </div>
-        <div class="relative z-10">
-          <div class="w-[60px]">
-            <img
-              src="../assets/images/meditation.webp"
-              loading="lazy"
-              alt="icon meditation"
-            />
-          </div>
-          <div class="space-y-1">
-            <h3 class="text-sm font-semibold text-foreground">Медитации</h3>
-            <p class="text-xs text-foreground/75">
-              {{
-                getLockedFeatureLabel(
-                  'meditations',
-                  meditationsAccess.requiredPlan
-                )
-              }}
-            </p>
-          </div>
-        </div>
-      </button>
-
-      <!-- Дневник благодарности -->
-      <NuxtLink
-        v-if="gratitudeDiaryAccess.available"
-        to="/practices/gratitude-diary"
-        class="glass-deep p-4 group relative overflow-hidden transition hover:-translate-y-1 animate-slide-up"
-        style="animation-delay: 0.25s; animation-fill-mode: both"
-      >
-        <div class="pointer-events-none absolute inset-0">
-          <div
-            class="tile-orb absolute -right-14 -top-10 h-40 w-40 rounded-full bg-gradient-to-br from-fuchsia-400/35 via-pink-400/20 to-transparent blur-2xl"
-          />
-          <div
-            class="tile-orb tile-orb--delay absolute -left-10 bottom-0 h-32 w-32 rounded-full bg-gradient-to-br from-violet-500/30 via-rose-500/20 to-transparent blur-2xl"
-          />
-        </div>
-        <div class="relative z-10">
-          <div class="w-[60px]">
-            <img
-              src="../assets/images/gratitude_diary.webp"
-              loading="lazy"
-              alt="icon gratitude diary"
-            />
-          </div>
-          <div class="space-y-1">
-            <h3 class="text-sm font-semibold text-foreground">
-              Дневник благодарности
-            </h3>
-            <p class="text-xs text-foreground/75">
-              Записывайте хорошие моменты дня с подсказками
-            </p>
-          </div>
-        </div>
-      </NuxtLink>
-      <button
-        v-else
-        type="button"
-        class="glass-deep p-4 group relative overflow-hidden text-left transition hover:-translate-y-1 animate-slide-up"
-        style="animation-delay: 0.25s; animation-fill-mode: both"
-        @click="openPaywall('gratitude.diary.full')"
-      >
-        <div class="pointer-events-none absolute inset-0">
-          <div
-            class="tile-orb absolute -right-14 -top-10 h-40 w-40 rounded-full bg-gradient-to-br from-fuchsia-400/35 via-pink-400/20 to-transparent blur-2xl"
-          />
-          <div
-            class="tile-orb tile-orb--delay absolute -left-10 bottom-0 h-32 w-32 rounded-full bg-gradient-to-br from-violet-500/30 via-rose-500/20 to-transparent blur-2xl"
-          />
-        </div>
-        <div
-          class="absolute right-2 top-2 inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/25 bg-black/30 text-sm leading-none"
-        >
-          <span aria-hidden="true">{{
-            getPlanBadgeEmoji(gratitudeDiaryAccess.requiredPlan)
-          }}</span>
-        </div>
-        <div class="relative z-10">
-          <div class="w-[60px]">
-            <img
-              src="../assets/images/gratitude_diary.webp"
-              loading="lazy"
-              alt="icon gratitude diary"
-            />
-          </div>
-          <div class="space-y-1">
-            <h3 class="text-sm font-semibold text-foreground">
-              Дневник благодарности
-            </h3>
-            <p class="text-xs text-foreground/75">
-              {{
-                getLockedFeatureLabel(
-                  'gratitude',
-                  gratitudeDiaryAccess.requiredPlan
-                )
-              }}
-            </p>
-          </div>
-        </div>
-      </button>
+    <div v-else class="xs:space-y-3 space-y-1">
+      <section
+        v-for="height in [42, 118, 196, 132, 110, 88]"
+        :key="height"
+        class="glass-deep animate-pulse"
+        :style="{ height: `${height}px` }"
+      />
     </div>
 
     <!-- Paywall-модалка для карточек -->
@@ -337,46 +84,41 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { useI18n } from 'vue-i18n';
-import IconSend from '~icons/lucide/send';
-import IconBookOpen from '~icons/lucide/book-open';
 import PageHeader from '@/app/components/PageHeader.vue';
 import BrandLogo from '@/app/components/BrandLogo.vue';
-import UnreadSummaryIndicator from '@/app/components/sessionSummaries/UnreadSummaryIndicator.vue';
+import HomeGreeting from '@/app/components/home/HomeGreeting.vue';
+import HomeMoodCheckin from '@/app/components/home/HomeMoodCheckin.vue';
+import HomeEnergyPlantCard from '@/app/components/home/HomeEnergyPlantCard.vue';
+import HomeRoadmapCard from '@/app/components/home/HomeRoadmapCard.vue';
+import HomeStreakCard from '@/app/components/home/HomeStreakCard.vue';
+import HomeThoughtCard from '@/app/components/home/HomeThoughtCard.vue';
+import HomeAssistantCompact from '@/app/components/home/HomeAssistantCompact.vue';
 import FeaturePaywallModal from '@/app/components/subscription/FeaturePaywallModal.vue';
 import UnseenSummaryModal from '@/app/components/sessionSummaries/UnseenSummaryModal.vue';
+import { useAPI } from '@/app/composables/useAPI';
 import { useEntitlements } from '@/app/composables/useEntitlements';
 import { useUnseenSessionSummary } from '@/app/composables/useUnseenSessionSummary';
-import { getLocalizedRequiredPlanLabel } from '@/app/utils/planI18n';
-import { useChatStore } from '@/app/stores/chat';
+import type {
+  MoodCheckinMood,
+  MoodCheckinResponseDto,
+  ThoughtOfTheDaySaveResponseDto,
+  TodayResponseDto,
+} from '@/shared/dto/retention';
+import type { GardenResponseDto } from '@/shared/dto/garden';
 
 const { getFeatureAccess } = useEntitlements();
-const { hasUnseenSummary, loadUnseenSummary } = useUnseenSessionSummary();
-const { t } = useI18n();
-const chat = useChatStore();
-
-// Показываем "Продолжить" если в сторе есть сообщения (активная или недавняя сессия).
-const chatButtonLabel = computed(() =>
-  chat.messages.length > 0 ? 'Продолжить' : 'Начать'
-);
+const { loadUnseenSummary } = useUnseenSessionSummary();
 
 const paywallOpen = ref(false);
 const paywallFeatureKey = ref<string | null>(null);
+const today = ref<TodayResponseDto | null>(null);
+const gardenSnapshot = ref<GardenResponseDto | null>(null);
+const isMoodPending = ref(false);
+const plantWaterSignal = ref(0);
+const plantWaterIntensity = ref<'small' | 'medium' | 'large'>('medium');
 
-const chatAssistantAccess = computed(() => getFeatureAccess('chat.assistant'));
-const meditationsAccess = computed(() =>
-  getFeatureAccess('meditations.library.full')
-);
-const gratitudeDiaryAccess = computed(() =>
-  getFeatureAccess('gratitude.diary.full')
-);
 const paywallAccess = computed(() =>
   paywallFeatureKey.value ? getFeatureAccess(paywallFeatureKey.value) : null
-);
-const sessionHistoryButtonAriaLabel = computed(() =>
-  hasUnseenSummary.value
-    ? 'История сессий, есть новый непрочитанный итог сессии'
-    : 'История сессий'
 );
 
 function openPaywall(featureKey: string) {
@@ -384,36 +126,95 @@ function openPaywall(featureKey: string) {
   paywallOpen.value = true;
 }
 
-/**
- * Клик по всей карточке ИИ-ассистента: повторяет поведение основной
- * кнопки «Начать / Продолжить». Если фича доступна — навигируем в чат,
- * иначе показываем paywall. На внутренних кнопках стоит @click.stop —
- * они не пробрасывают клик сюда и обрабатываются сами.
- */
-function handleHeroCardClick() {
-  if (chatAssistantAccess.value.available) {
-    void navigateTo('/chat');
-  } else {
-    openPaywall('chat.assistant');
+function triggerPlantWater(intensity: 'small' | 'medium' | 'large') {
+  plantWaterIntensity.value = intensity;
+  plantWaterSignal.value += 1;
+}
+
+async function loadToday() {
+  await refreshTodayOnly();
+  // Параллельно подтягиваем garden snapshot — нужен для CTA «Посадить
+  // следующий сад» на HomeRoadmapCard, когда активная программа завершена,
+  // а в Оранжерее есть доступные семена.
+  try {
+    gardenSnapshot.value = await useAPI<GardenResponseDto>('/api/garden', {
+      suppressErrorToast: true,
+    });
+  } catch (error) {
+    // Garden snapshot не критичен для главной — если упал, продолжаем без него.
+    console.warn('[Home] garden snapshot fetch failed (non-blocking):', error);
   }
 }
 
-function getPlanBadgeEmoji(plan: string) {
-  return plan === 'premium' ? '💎' : '⭐';
+async function refreshTodayOnly() {
+  today.value = await useAPI<TodayResponseDto>('/api/today', {
+    suppressErrorToast: true,
+  });
 }
 
-function getLockedFeatureLabel(
-  type: 'meditations' | 'gratitude',
-  plan: string
-) {
-  const plans = getLocalizedRequiredPlanLabel(plan, t);
-  return type === 'meditations'
-    ? t('PLANS.MEDITATIONS_LIBRARY_UNLOCK', { plans })
-    : t('PLANS.GRATITUDE_DIARY_UNLOCK', { plans });
+async function handleDailyLimitReset() {
+  try {
+    await refreshTodayOnly();
+  } catch (error) {
+    console.warn('[Home] daily-limit refresh failed (non-blocking):', error);
+  }
+}
+
+async function handleMoodSelect(mood: MoodCheckinMood) {
+  if (isMoodPending.value) return;
+  isMoodPending.value = true;
+
+  try {
+    const response = await useAPI<MoodCheckinResponseDto>('/api/mood/checkin', {
+      method: 'POST',
+      body: { mood, source: 'home' },
+      suppressErrorToast: true,
+    });
+
+    if (response.rewardGranted) {
+      triggerPlantWater('medium');
+    }
+
+    if (today.value) {
+      today.value = {
+        ...today.value,
+        mood: response.item,
+        energy: {
+          ...today.value.energy,
+          today: response.energyToday,
+        },
+      };
+    }
+
+    await loadToday();
+  } catch (error) {
+    console.error('[Home] Не удалось сохранить mood check-in:', error);
+  } finally {
+    isMoodPending.value = false;
+  }
+}
+
+function handleThoughtSavedChange(response: ThoughtOfTheDaySaveResponseDto) {
+  if (!today.value) return;
+  if (response.rewardGranted) {
+    triggerPlantWater('small');
+  }
+  today.value = {
+    ...today.value,
+    thought: response.item,
+    energy: {
+      ...today.value.energy,
+      today: response.energyToday,
+      weekly: response.energyWeekly,
+    },
+  };
 }
 
 onMounted(() => {
   void loadUnseenSummary(true).catch(() => {});
+  void loadToday().catch((error) => {
+    console.error('[Home] Не удалось загрузить retention-сводку:', error);
+  });
 });
 </script>
 

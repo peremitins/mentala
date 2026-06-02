@@ -31,6 +31,7 @@ export type SessionSummaryUserStatus = z.infer<
 
 export const SessionSummaryUserTriggerEnum = z.enum([
   'manual',
+  'roadmap_next',
   'logout',
   'app-hidden',
   'cron-nightly',

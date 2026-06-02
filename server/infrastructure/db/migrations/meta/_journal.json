@@ -582,6 +582,69 @@
       "when": 1778076906850,
       "tag": "0085_talented_eternals",
       "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1778665184785,
+      "tag": "0086_faithful_logan",
+      "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1778911357989,
+      "tag": "0087_fantastic_manta",
+      "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1779178497481,
+      "tag": "0088_wide_radioactive_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1779604115442,
+      "tag": "0089_light_colleen_wing",
+      "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1779623025348,
+      "tag": "0090_yellow_ted_forrester",
+      "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1779802827562,
+      "tag": "0091_empty_blockbuster",
+      "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "7",
+      "when": 1780216242815,
+      "tag": "0092_motionless_luke_cage",
+      "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1780306656667,
+      "tag": "0093_freezing_bedlam",
+      "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1780327923950,
+      "tag": "0094_new_tenebrous",
+      "breakpoints": true
     }
   ]
 }

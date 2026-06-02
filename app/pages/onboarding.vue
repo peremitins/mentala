@@ -308,7 +308,7 @@
                         centered: true,
                       })
                     "
-                    @click="ageRange = option.value"
+                    @click="selectAge(option.value)"
                   >
                     <span class="text-sm font-semibold text-foreground">
                       {{ option.label }}
@@ -344,7 +344,7 @@
                         centered: true,
                       })
                     "
-                    @click="gender = option.value"
+                    @click="selectGender(option.value)"
                   >
                     <span class="text-sm font-semibold text-foreground">
                       {{ option.label }}
@@ -438,6 +438,7 @@ import { usePushPermissionGate } from '@/app/composables/usePushPermissionGate';
 import { usePushRecovery } from '@/app/composables/usePushRecovery';
 import { useAuthStore } from '@/app/stores/auth';
 import { useToast } from '@/app/composables/useToast';
+import { useHaptics } from '@/app/composables/useHaptics';
 import { cn } from '@/app/lib/utils';
 import { getOrientationMediaCandidates } from '@/app/utils/orientationMedia';
 import {
@@ -541,6 +542,7 @@ const { isPortraitMode } = useViewportOrientation();
 const prefersReducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
 const pushPermissionGate = usePushPermissionGate();
 const pushRecovery = usePushRecovery();
+const { triggerLight } = useHaptics();
 const isNativeIos = computed(
   () => Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'ios'
 );
@@ -774,6 +776,7 @@ function isTopicSelected(topic: TopicOption | OnboardingSelectedTopic) {
 function toggleTopic(topic: TopicOption) {
   const identity = getTopicIdentity(topic);
   if (isTopicSelected(topic)) {
+    void triggerLight();
     selectedTopics.value = selectedTopics.value.filter(
       (selectedTopic) => getTopicIdentity(selectedTopic) !== identity
     );
@@ -785,6 +788,7 @@ function toggleTopic(topic: TopicOption) {
     return;
   }
 
+  void triggerLight();
   selectedTopics.value = [
     ...selectedTopics.value,
     {
@@ -997,11 +1001,22 @@ function goNext(expectedStep?: StepKey) {
     return;
   }
 
+  void triggerLight();
   stepper.goToNext();
 }
 
 function goBack() {
   stepper.goToPrevious();
+}
+
+function selectAge(value: AgeRange) {
+  void triggerLight();
+  ageRange.value = value;
+}
+
+function selectGender(value: Gender) {
+  void triggerLight();
+  gender.value = value;
 }
 
 function handleNameNext() {

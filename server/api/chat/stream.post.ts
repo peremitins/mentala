@@ -26,6 +26,7 @@ import {
   buildCrisisGuidance,
   mergeDeveloperPrompts,
 } from '@/server/application/chat/crisis-protocol.service';
+import { buildRoadmapDeveloperPrompt } from '@/server/application/chat/roadmap-entry.service';
 import {
   buildPhobiasDeveloperPrompt,
   isPhobiasEntryContext,
@@ -234,12 +235,17 @@ export default defineEventHandler(async (event) => {
     }
 
     const phobiasPrompt = buildPhobiasDeveloperPrompt(phobiasState);
+    const roadmapPrompt = buildRoadmapDeveloperPrompt(body?.entryContext);
     const promptWithPhobias = mergeDeveloperPrompts(
       body?.userPrompt,
       phobiasPrompt
     );
-    const effectiveUserPrompt = mergeDeveloperPrompts(
+    const promptWithRoadmap = mergeDeveloperPrompts(
       promptWithPhobias,
+      roadmapPrompt
+    );
+    const effectiveUserPrompt = mergeDeveloperPrompts(
+      promptWithRoadmap,
       crisisGuidance.guidance
     );
 

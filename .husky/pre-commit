@@ -1,0 +1,20 @@
+#!/usr/bin/env sh
+
+# Если меняются (включая удаления) .docs/*.md, корневой CLAUDE.md или AGENTS.md —
+# автоматически синкаем project-wiki/raw/ и добавляем в коммит.
+# Так LLM Wiki никогда не отстаёт от источников.
+
+CHANGED=$(git diff --cached --name-only --diff-filter=ACMRTD \
+  | grep -E '^(\.docs/.*\.md|CLAUDE\.md|AGENTS\.md)$' || true)
+
+if [ -n "$CHANGED" ]; then
+  echo "[wiki] обнаружены изменения в источниках, синхронизирую raw/..."
+  pnpm wiki:sync-docs
+
+  CHANGED_RAW=$(git diff --name-only project-wiki/raw/ || true)
+  if [ -n "$CHANGED_RAW" ]; then
+    git add project-wiki/raw/
+    echo "[wiki] project-wiki/raw/ обновлён и добавлен в коммит."
+    echo "[wiki] не забудь /wiki-ingest для новых/изменённых источников (см. pnpm wiki:status)."
+  fi
+fi

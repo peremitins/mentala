@@ -4,7 +4,7 @@
 
 - Welcome-ответ при пустых `messages`; `entryContext` из `/habits`, `/therapy`, `/quick-help` учитывается в prompt
 - `onboarding_reasons` передаётся как мягкий вектор персонализации (не навязывается поверх актуальной темы)
-- Кризисный контур: server-side детектор в `crisis-protocol.service.ts` подмешивает safety prompt (`CRISIS_HIGH`/`CRISIS_WATCH`); LLM отвечает всегда, без short-circuit. Подробнее: `crysis_prompt.md`
+- Кризисный контур: server-side детектор в `crisis-protocol.service.ts` подмешивает safety prompt (`CRISIS_HIGH`/`CRISIS_WATCH`); LLM отвечает всегда, без short-circuit. Подробнее: `crisis_prompt.md`
 - Приветствие по имени — не чаще 1 раза в день, отметки в `chat_settings.last_greeting_at`
 - `tone` из user preferences влияет на стиль ответов LLM
 - Suggested chips: text-chips генерирует LLM, action-chips строятся детерминированно server-side
@@ -49,6 +49,7 @@
 
 - `/api/session/handoff` закрывает source-session, строит handoff summary, target-mode стартует как новая session
 - Realtime Voice: runtime compaction по тем же бюджетам, compaction строится text-моделью (не realtime)
+- Realtime Voice при старте получает `entryContext`; для `roadmap_step` в instructions добавляется тот же Roadmap developer-prompt, что и в текстовом чате, чтобы голосовая модель удерживала тему шага и `goal_hint`.
 - После realtime→text handoff клиент обязан сбросить активный `therapySessionId`
   в chat store: source voice-session уже закрыта, а следующий текстовый ход
   должен открыть новую therapy-session с тем же client chat lifecycle.
@@ -66,6 +67,8 @@
 - Все memory-payload versioned (`schemaVersion`)
 - Пользовательский `sessionSummaryUser` prompt персонализируется по `users.locale`, `user_preferences.addressing` и `users.gender`; если пол не задан, prompt требует нейтральные формулировки без предположений о роде
 - `sessionSummaryUser` в текущем client lifecycle реально запускается вручную (`manual`) и nightly cron; logout больше не триггерит user-summary, а только отправляет `therapy/session/end`
+- При ручном `manual`-итоге клиент очищает чат только после принятого сервером запроса на summary. Если eligibility ещё не выполнена или сервер вернул `eligible=false`, текущие сообщения остаются в активном диалоге.
+- Embedded AI-чат в Roadmap запускает пользовательский итог отдельным trigger `roadmap_next` при переходе «Дальше»: сервер применяет Roadmap-only eligibility (короткий диалог допустим, пустой диалог без user-message — нет), создаёт запись в `session_summaries_user` и после успешного итога чистит только вошедший backlog. Обычный `/chat` не получает auto-summary от этого механизма.
 - Дата пользовательского итога берётся из начала обобщённого backlog (`sessionStartedAt` / первое transcript-сообщение), а не из `createdAt` ночной генерации; в UI показывается только дата без точного времени
 - Готовый непрочитанный `sessionSummaryUser` может породить system push `session_summary_ready`.
   Планирование фиксируется в `ready_push_scheduled_at`, успешная реальная доставка — в `ready_push_sent_at`.

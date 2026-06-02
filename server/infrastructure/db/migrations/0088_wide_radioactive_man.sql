@@ -1,0 +1,1 @@
+ALTER TABLE "programs" ADD COLUMN "kind" varchar(16) DEFAULT 'regular' NOT NULL;

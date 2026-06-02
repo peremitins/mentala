@@ -52,8 +52,11 @@ import {
 } from '@/shared/dto/sessionSummaryUser';
 import { endTherapySession } from '@/server/application/subscriptions/session-time.service';
 import {
+  computeEligibilityMessageCounts,
   computeEligibilityFromTranscript,
+  isEligibleForRoadmapSummary,
   isEligibleForSummary,
+  ROADMAP_SUMMARY_USER_QUALIFYING_MIN_CHARS,
   type EligibilityMetrics,
 } from '@/server/application/sessionSummaryUser/sessionSummaryEligibility';
 
@@ -288,29 +291,65 @@ export async function createSessionSummaryUser(params: {
     clientSessionStartedAt: params.clientSessionStartedAt,
     fallbackSessionStartedAt: session.startedAt,
   });
+  const isRoadmapSummary = params.trigger === 'roadmap_next';
   const serverMetrics = computeEligibilityFromTranscript(
     dbMessages,
     summarySessionStartedAt,
-    endedAt
+    endedAt,
+    isRoadmapSummary
+      ? { qualifyingMinChars: ROADMAP_SUMMARY_USER_QUALIFYING_MIN_CHARS }
+      : undefined
   );
+
+  // Для Roadmap считаем "содержательность" по тем же мягким правилам,
+  // что и embedded ChatRoom. Это не влияет на обычный /chat.
+  const clientMessageCounts =
+    params.clientMessages && params.clientMessages.length > 0
+      ? computeEligibilityMessageCounts(
+          params.clientMessages,
+          isRoadmapSummary
+            ? { qualifyingMinChars: ROADMAP_SUMMARY_USER_QUALIFYING_MIN_CHARS }
+            : undefined
+        )
+      : null;
+  const clientMetrics = params.clientMetrics
+    ? {
+        userMessagesCount: Math.max(
+          params.clientMetrics.userMessagesCount,
+          clientMessageCounts?.userMessagesCount ?? 0
+        ),
+        qualifyingUserMessagesCount: Math.max(
+          params.clientMetrics.qualifyingUserMessagesCount,
+          clientMessageCounts?.qualifyingUserMessagesCount ?? 0
+        ),
+        durationSeconds: params.clientMetrics.durationSeconds,
+      }
+    : clientMessageCounts
+      ? {
+          userMessagesCount: clientMessageCounts.userMessagesCount,
+          qualifyingUserMessagesCount:
+            clientMessageCounts.qualifyingUserMessagesCount,
+          durationSeconds: 0,
+        }
+      : undefined;
 
   // Всегда берём максимум из серверных и клиентских метрик.
   // Клиентские могут быть выше из-за гонки: transcript в БД мог ещё не
   // сохранить все сообщения (voice events, запись в полёте и т.п.),
   // поэтому доверяем клиенту для eligibility, при этом не занижая сервер.
-  const metrics: EligibilityMetrics = params.clientMetrics
+  const metrics: EligibilityMetrics = clientMetrics
     ? {
         userMessagesCount: Math.max(
           serverMetrics.userMessagesCount,
-          params.clientMetrics.userMessagesCount
+          clientMetrics.userMessagesCount
         ),
         qualifyingUserMessagesCount: Math.max(
           serverMetrics.qualifyingUserMessagesCount,
-          params.clientMetrics.qualifyingUserMessagesCount
+          clientMetrics.qualifyingUserMessagesCount
         ),
         durationSeconds: Math.max(
           serverMetrics.durationSeconds,
-          params.clientMetrics.durationSeconds
+          clientMetrics.durationSeconds
         ),
       }
     : serverMetrics;
@@ -329,7 +368,8 @@ export async function createSessionSummaryUser(params: {
     dbMessagesCount: dbMessages.length,
     clientMessagesCount: params.clientMessages?.length ?? 0,
     usingSource: dbMessages.length > 0 ? 'db_transcript' : 'client_fallback',
-    metricsSource: params.clientMetrics ? 'max(server,client)' : 'server',
+    metricsSource: clientMetrics ? 'max(server,client)' : 'server',
+    eligibilityMode: isRoadmapSummary ? 'roadmap_next' : 'standard',
     serverMetrics,
     metrics,
   });
@@ -340,7 +380,14 @@ export async function createSessionSummaryUser(params: {
     userMessagesCount: metrics.userMessagesCount,
   });
 
-  if (!isEligibleForSummary(metrics)) {
+  const eligibleForSummary = isRoadmapSummary
+    ? isEligibleForRoadmapSummary({
+        ...metrics,
+        messagesCount,
+      })
+    : isEligibleForSummary(metrics);
+
+  if (!eligibleForSummary) {
     return {
       ok: true,
       eligible: false,

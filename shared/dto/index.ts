@@ -13,6 +13,9 @@ export * from './promo-code';
 export * from './referral';
 export * from './access-code';
 export * from './sessionSummaryUser';
+export * from './retention';
+export * from './garden';
+export * from './program-checkpoint';
 export * from '../navigation';
 
 const THOUGHT_DUMP_ENTRY_CONTEXT_MAX_CHARS = 2_500;
@@ -62,11 +65,27 @@ export const ThoughtDumpEntryContextDto = z.object({
   input_mode: z.enum(['text', 'voice', 'mixed']).optional(),
 });
 
+/**
+ * Контекст «AI-чат как тип action внутри Roadmap-шага программы»
+ * (retention/retention_long_term_strategy.md). Сервер использует topicPrompt и
+ * goalHint для построения system prompt'а, чтобы ассистент удерживал тему
+ * шага и не уезжал в посторонний разговор.
+ */
+export const RoadmapStepEntryContextDto = z.object({
+  type: z.literal('roadmap_step'),
+  program_slug: z.string().min(1).max(80),
+  step_number: z.number().int().positive(),
+  step_title: z.string().min(1).max(200),
+  topic_prompt: z.string().min(1).max(1000),
+  goal_hint: z.string().max(500).optional(),
+});
+
 export const ChatEntryContextDto = z.discriminatedUnion('type', [
   HabitEntryContextDto,
   TherapyTopicEntryContextDto,
   SosEntryContextDto,
   ThoughtDumpEntryContextDto,
+  RoadmapStepEntryContextDto,
 ]);
 
 export const ChatRequestDto = z.object({
@@ -526,10 +545,7 @@ export type TherapyApproach =
   | 'psychoanalysis'
   | 'existential'
   | 'positive';
-export type ResponseType =
-  | 'exploration'
-  | 'analytics'
-  | 'support';
+export type ResponseType = 'exploration' | 'analytics' | 'support';
 
 /**
  * Дополняем существующий ChatSession интерфейс

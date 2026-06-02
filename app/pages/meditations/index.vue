@@ -7,6 +7,9 @@
       v-if="selectedTrackId && meditationsAccess.available"
       :track-id="selectedTrackId"
       @close="closeDetail"
+      @practice-start="onMeditationPracticeStart"
+      @practice-pause="onMeditationPracticePause"
+      @practice-stop="onMeditationPracticeStop"
     />
 
     <template v-else>
@@ -154,6 +157,7 @@ import MeditationDetailView from '@/app/components/meditations/MeditationDetailV
 import { useMeditationsStore } from '@/app/stores/meditations';
 import { useLoadersStore } from '@/app/stores/loaders';
 import { useMeditationPlayer } from '@/app/composables/useMeditationPlayer';
+import { useFreeTimedPracticeRecovery } from '@/app/composables/useFreeTimedPracticeRecovery';
 import { MEDITATION_TOPICS } from '@/shared/constants/meditations';
 import { MEDITATION_TOPIC_GRADIENTS } from '@/app/lib/meditations';
 import { resolveMediaUrl } from '@/app/utils/media';
@@ -176,7 +180,92 @@ const route = useRoute();
 const router = useRouter();
 const meditationsStore = useMeditationsStore();
 const loaders = useLoadersStore();
-const { currentTrack, setQueue } = useMeditationPlayer();
+const { currentTrack, setQueue, sessionEnded } = useMeditationPlayer();
+const freeTimedRecovery = useFreeTimedPracticeRecovery();
+const lastAwardedMeditationKey = ref<string | null>(null);
+const activeMeditationPractice = ref<MeditationPracticeStartPayload | null>(
+  null
+);
+
+type MeditationPracticeStartPayload = {
+  trackId: string;
+  requiredSeconds: number;
+};
+
+function formatLocalDateKey(date = new Date()) {
+  return [
+    String(date.getFullYear()),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-');
+}
+
+function getMeditationSourceId(trackId: string) {
+  return `meditation:${trackId}:${formatLocalDateKey()}`;
+}
+
+function buildMeditationRecoveryStart(payload: MeditationPracticeStartPayload) {
+  return {
+    type: 'meditation',
+    source: 'meditation_completed' as const,
+    sourceId: getMeditationSourceId(payload.trackId),
+    requiredSeconds: payload.requiredSeconds,
+  };
+}
+
+function onMeditationPracticeStart(payload: MeditationPracticeStartPayload) {
+  activeMeditationPractice.value = payload;
+  void freeTimedRecovery.start(buildMeditationRecoveryStart(payload));
+}
+
+function onMeditationPracticePause() {
+  void freeTimedRecovery.pause();
+}
+
+function onMeditationPracticeStop() {
+  activeMeditationPractice.value = null;
+  void freeTimedRecovery.stop();
+}
+
+/**
+ * Завершение медитации = 1 капля (свободные практики, rate-limit 3/день).
+ * См. retention/retention_long_term_strategy.md
+ *
+ * `sessionEnded` становится true только когда трек реально доигрался
+ * (`onTimerFinished` или onended). `lastAwardedMeditationKey` защищает от
+ * двойного начисления внутри одного "сессионного" завершения — composable
+ * глобальный, watch может срабатывать дважды на быстрых переходах.
+ */
+watch(
+  [sessionEnded, currentTrack],
+  ([ended, track]) => {
+    if (!ended) return;
+    const activeRecord = freeTimedRecovery.activeRecord.value;
+    const payload =
+      activeMeditationPractice.value ??
+      (track?.id
+        ? {
+            trackId: track.id,
+            requiredSeconds: activeRecord?.requiredSeconds ?? 1,
+          }
+        : null);
+    const key =
+      activeRecord?.sourceId ||
+      (payload ? buildMeditationRecoveryStart(payload).sourceId : null);
+    if (!key) return;
+    if (lastAwardedMeditationKey.value === key) return;
+    lastAwardedMeditationKey.value = key;
+    activeMeditationPractice.value = null;
+    if (activeRecord) {
+      void freeTimedRecovery.complete();
+      return;
+    }
+    if (payload) {
+      void freeTimedRecovery.complete(buildMeditationRecoveryStart(payload));
+    }
+  },
+  { immediate: false }
+);
 const { getFeatureAccess } = useEntitlements();
 const { t } = useI18n();
 

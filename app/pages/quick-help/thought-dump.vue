@@ -130,6 +130,7 @@ import { navigateTo } from '#app';
 import { onBeforeRouteLeave, useRouter } from 'vue-router';
 import { useEntitlements } from '@/app/composables/useEntitlements';
 import { useToast } from '@/app/composables/useToast';
+import { useFreePracticeEnergy } from '@/app/composables/useFreePracticeEnergy';
 import { useChatStore } from '@/app/stores/chat';
 import { useVoiceDictationInput } from '@/app/composables/useVoiceDictationInput';
 import { useBreathPracticeHaptics } from '@/app/composables/useBreathPracticeHaptics';
@@ -291,12 +292,32 @@ async function insertChip(chip: ThoughtDumpChip) {
   await focusTextarea(true);
 }
 
+const { award: awardFreePracticeEnergy } = useFreePracticeEnergy();
+
+/**
+ * Начисляет каплю за «выгрузку мыслей» — одна капля в день, независимо от того,
+ * был ли это `clearThoughts` или `handoffToChat`. sourceId привязан к локальной
+ * дате, backend имеет идемпотентность по (userId, source, sourceId) +
+ * rate-limit 3 свободных капли/день.
+ */
+function awardThoughtDumpEnergy() {
+  const localDate = new Date().toISOString().slice(0, 10);
+  void awardFreePracticeEnergy(
+    'thought_dump_saved',
+    `thoughtdump:${localDate}`
+  );
+}
+
 async function clearThoughts() {
   if (!thoughtText.value.trim()) return;
 
   isClearing.value = true;
   await triggerHaptic();
   await new Promise((resolve) => setTimeout(resolve, 140));
+  // Свободная практика «выгрузка мыслей» завершена очисткой — начисляем 1 каплю.
+  // Backend идемпотентен по (userId, source, sourceId), повторные очистки в тот же
+  // день не дают двойного начисления. См. retention/retention_long_term_strategy.md
+  awardThoughtDumpEnergy();
   resetThoughtDumpState();
   isClearing.value = false;
   await focusTextarea();
@@ -316,6 +337,9 @@ async function handoffToChat() {
 
   // Ограничиваем handoff-контекст, чтобы не раздувать токены и стоимость.
   const handoffText = text.slice(0, MAX_CHAT_HANDOFF_LENGTH);
+  // Капля за свободную практику — handoff в чат тоже валидное завершение
+  // thought dump (см. retention/retention_long_term_strategy.md).
+  awardThoughtDumpEnergy();
   resetThoughtDumpState();
 
   // Передаем выгрузку как контекст для автозапроса, без показа user-сообщения.

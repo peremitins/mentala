@@ -616,6 +616,673 @@ export const gratitudeDiaryFavoritePrompts = pgTable(
   })
 );
 
+// === Retention Roadmap ===
+export type ProgramStepAction = {
+  id: string;
+  type:
+    | 'mood_checkin'
+    | 'breathing'
+    | 'meditation'
+    | 'quick_help_grounding'
+    | 'quick_help_breathing'
+    | 'quick_help_tension'
+    | 'thought_dump'
+    | 'ai_reflection'
+    | 'journal_entry'
+    | 'micro_reflection'
+    | 'rating_scale'
+    | 'next_route_choice'
+    | 'ai_chat_session'
+    | 'structured_form'
+    | 'guided_steps'
+    | 'weekly_check';
+  title: string;
+  subtitle?: string;
+  template?: string;
+  targetId?: string;
+  prompt?: string;
+  durationSeconds?: number;
+  estimatedDurationSeconds?: number;
+  completionDelaySeconds?: number | null;
+  energy?: number;
+  required?: boolean;
+  // AI-chat-specific (retention/retention_long_term_strategy.md).
+  topicPrompt?: string;
+  goalHint?: string;
+  minQualifyingMessages?: number;
+  minDurationSec?: number;
+  stopCondition?: {
+    text: string;
+    allowCompleteWithoutChat?: boolean;
+    safeExitQuestion?: string;
+    safeExitChipOptions?: string[];
+    skipRemainingActionsOnSafeExit?: boolean;
+  };
+  journalFormat?: 'oneLine' | 'short' | 'structured';
+  maxLength?: number;
+  preparedAnswers?: string[];
+  chipQuestion?: string;
+  chipOptions?: string[];
+  chipMode?: 'single' | 'multi';
+  scaleBeforeLabel?: string;
+  scaleAfterLabel?: string;
+  scaleMin?: number;
+  scaleMax?: number;
+  splitAroundActionIdSuffix?: string;
+  formKind?: string;
+  fields?: Array<{
+    id: string;
+    label: string;
+    type?:
+      | 'text'
+      | 'textarea'
+      | 'choice'
+      | 'rating_scale'
+      | 'experiment_status';
+    placeholder?: string;
+    helperText?: string;
+    required?: boolean;
+    maxLength?: number;
+    mode?: 'single' | 'multiple';
+    minSelected?: number;
+    maxSelected?: number;
+    exclusiveOptionIds?: string[];
+    options?: Array<{ id: string; label: string; helperText?: string }>;
+    min?: number;
+    max?: number;
+    minLabel?: string;
+    maxLabel?: string;
+    visibleWhen?: { fieldId: string; valueIn: string[] };
+  }>;
+  steps?: Array<{
+    id: string;
+    title: string;
+    text?: string;
+    helperText?: string;
+    required?: boolean;
+    durationSeconds?: number;
+  }>;
+  questions?: Array<{
+    id: string;
+    type?: 'rating_scale' | 'choice' | 'text';
+    question: string;
+    placeholder?: string;
+    required?: boolean;
+    mode?: 'single' | 'multiple';
+    minSelected?: number;
+    maxSelected?: number;
+    exclusiveOptionIds?: string[];
+    options?: Array<{ id: string; label: string; helperText?: string }>;
+    min?: number;
+    max?: number;
+    minLabel?: string;
+    maxLabel?: string;
+  }>;
+  placement?: 'inline' | 'after_completion' | 'before_final_completion';
+  // Подсказка-тултип «?» рядом с prompt: title + краткое описание метода
+  // + опциональные примеры. Используется в structured_form, guided_steps,
+  // journal_entry, micro_reflection, ai_reflection. Опционально.
+  helpHint?: {
+    title?: string;
+    description?: string;
+    examples?: string[];
+  };
+  // Кастомный placeholder для textarea журнала. Если задан, используется
+  // вместо дефолтного «Запиши коротко...». Полезен для journal_entry, где
+  // формулировка абстрактная и нужен живой пример в самом поле ввода.
+  placeholderText?: string;
+};
+
+export const moodCheckins = pgTable(
+  'mood_checkins',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    mood: varchar('mood', { length: 24 }).notNull(),
+    score: smallint('score').notNull(),
+    entryDate: varchar('entry_date', { length: 10 }).notNull(),
+    source: varchar('source', { length: 40 }).default('home').notNull(),
+    note: text('note'),
+    metadata: jsonb('metadata')
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    userDateIdx: index('idx_mood_checkins_user_date').on(
+      table.userId,
+      table.entryDate,
+      table.createdAt
+    ),
+  })
+);
+
+// Правило открытия программы в Оранжерее (см. retention/retention_long_term_strategy.md).
+// kind='always' — программа открыта сразу (стартовый пул).
+// kind='after_n_completed' — открывается после N завершённых других программ.
+export type ProgramUnlockRule =
+  | { kind: 'always' }
+  | { kind: 'after_n_completed'; n: number };
+
+export const programs = pgTable(
+  'programs',
+  {
+    id: serial('id').primaryKey(),
+    slug: varchar('slug', { length: 80 }).notNull(),
+    title: varchar('title', { length: 120 }).notNull(),
+    subtitle: text('subtitle'),
+    totalSteps: integer('total_steps').notNull().default(30),
+    themes: text('themes')
+      .array()
+      .notNull()
+      .default(sql`ARRAY[]::text[]`),
+    requiredPlan: varchar('required_plan', { length: 20 }),
+    // Слаг набора ассетов растения для этого Сада: 'orchid' | 'peony' | 'cyclamen' и т.д.
+    // Имена webp лежат в public/retention/plant/<plantSetSlug>/states/plant-NN.webp.
+    plantSetSlug: varchar('plant_set_slug', { length: 40 }),
+    // Опциональный маркер сложности для UI карточек Оранжереи.
+    difficulty: varchar('difficulty', { length: 20 }),
+    // Лор-текст для карточки растения в Оранжерее.
+    summaryText: text('summary_text'),
+    // Правило разблокировки Сада в Оранжерее.
+    unlockRule: jsonb('unlock_rule')
+      .$type<ProgramUnlockRule>()
+      .notNull()
+      .default(sql`'{"kind":"always"}'::jsonb`),
+    // Глобальная готовность контента Сада (отдельно от unlockRule, который
+    // отвечает за последовательную разблокировку по прогрессу юзера):
+    //  - 'published'   — контент шагов готов, Сад можно стартовать (если unlockRule выполнен);
+    //  - 'coming_soon' — тизер будущего Сада: показывается под замком с пометкой «Скоро»,
+    //                    стартовать нельзя независимо от unlockRule, пока не переведён в published.
+    // Дефолт 'published' — backward compat для существующих записей.
+    status: varchar('status', { length: 16 })
+      .$type<'published' | 'coming_soon'>()
+      .notNull()
+      .default('published'),
+    // Тип программы: regular — основной Сад с растением в коллекции;
+    // mini — сезонный челлендж 7-14 шагов с декор-наградой. См.
+    // retention/retention_long_term_strategy.md UI mini-программ отложен — поле
+    // существует для будущей раскатки (mini-program.service.ts skeleton).
+    kind: varchar('kind', { length: 16 })
+      .$type<'regular' | 'mini'>()
+      .notNull()
+      .default('regular'),
+    metadata: jsonb('metadata')
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    slugUniqueIdx: uniqueIndex('uk_programs_slug').on(table.slug),
+  })
+);
+
+export const programStepTemplates = pgTable(
+  'program_step_templates',
+  {
+    id: serial('id').primaryKey(),
+    programId: integer('program_id')
+      .notNull()
+      .references(() => programs.id, { onDelete: 'cascade' }),
+    step: integer('step').notNull(),
+    chapter: integer('chapter').notNull(),
+    title: varchar('title', { length: 160 }).notNull(),
+    subtitle: text('subtitle'),
+    nextHint: text('next_hint'),
+    durationMin: integer('duration_min').notNull().default(3),
+    energyReward: integer('energy_reward').notNull().default(5),
+    actions: jsonb('actions')
+      .$type<ProgramStepAction[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    metadata: jsonb('metadata')
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    programStepUniqueIdx: uniqueIndex('uk_program_step_templates_step').on(
+      table.programId,
+      table.step
+    ),
+    programChapterIdx: index('idx_program_step_templates_chapter').on(
+      table.programId,
+      table.chapter,
+      table.step
+    ),
+  })
+);
+
+export const userPrograms = pgTable(
+  'user_programs',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    programId: integer('program_id')
+      .notNull()
+      .references(() => programs.id, { onDelete: 'cascade' }),
+    currentStep: integer('current_step').notNull().default(1),
+    status: varchar('status', { length: 20 }).notNull().default('active'),
+    startedAt: timestamp('started_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    metadata: jsonb('metadata')
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    userProgramUniqueIdx: uniqueIndex('uk_user_programs_user_program').on(
+      table.userId,
+      table.programId
+    ),
+    userStatusIdx: index('idx_user_programs_user_status').on(
+      table.userId,
+      table.status
+    ),
+  })
+);
+
+export const userProgramStepProgress = pgTable(
+  'user_program_step_progress',
+  {
+    id: serial('id').primaryKey(),
+    userProgramId: integer('user_program_id')
+      .notNull()
+      .references(() => userPrograms.id, { onDelete: 'cascade' }),
+    stepTemplateId: integer('step_template_id')
+      .notNull()
+      .references(() => programStepTemplates.id, { onDelete: 'cascade' }),
+    status: varchar('status', { length: 20 }).notNull().default('locked'),
+    currentActionIndex: integer('current_action_index').notNull().default(0),
+    bestAttemptId: integer('best_attempt_id'),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    metadata: jsonb('metadata')
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    userProgramStepUniqueIdx: uniqueIndex(
+      'uk_user_program_step_progress_step'
+    ).on(table.userProgramId, table.stepTemplateId),
+    userProgramStatusIdx: index('idx_user_program_step_progress_status').on(
+      table.userProgramId,
+      table.status
+    ),
+  })
+);
+
+export const userProgramStepAttempts = pgTable(
+  'user_program_step_attempts',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    userProgramId: integer('user_program_id')
+      .notNull()
+      .references(() => userPrograms.id, { onDelete: 'cascade' }),
+    stepTemplateId: integer('step_template_id')
+      .notNull()
+      .references(() => programStepTemplates.id, { onDelete: 'cascade' }),
+    progressId: integer('progress_id').references(
+      () => userProgramStepProgress.id,
+      { onDelete: 'set null' }
+    ),
+    step: integer('step').notNull(),
+    status: varchar('status', { length: 20 }).notNull().default('started'),
+    replay: boolean('replay').default(false).notNull(),
+    actions: jsonb('actions')
+      .$type<Array<ProgramStepAction & { status?: string; output?: unknown }>>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    rewardGranted: boolean('reward_granted').default(false).notNull(),
+    startedAt: timestamp('started_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    metadata: jsonb('metadata')
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    userProgramStepIdx: index('idx_user_program_step_attempts_step').on(
+      table.userProgramId,
+      table.step,
+      table.createdAt
+    ),
+    userCreatedIdx: index('idx_user_program_step_attempts_user_created').on(
+      table.userId,
+      table.createdAt
+    ),
+    // Покрывает фильтр (userProgramId, stepTemplateId, status='started') —
+    // используется в getOrCreateProgramOverview для поиска незавершённой попытки текущего шага.
+    userProgramStepTemplateStatusIdx: index(
+      'idx_user_program_step_attempts_up_step_status'
+    ).on(table.userProgramId, table.stepTemplateId, table.status),
+  })
+);
+
+// Коллекция выращенных растений пользователя (Оранжерея).
+// Запись создаётся при первом completion программы: program → user_plants → отображается в /garden.
+export const userPlants = pgTable(
+  'user_plants',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    programId: integer('program_id')
+      .notNull()
+      .references(() => programs.id, { onDelete: 'cascade' }),
+    programSlug: varchar('program_slug', { length: 80 }).notNull(),
+    plantSetSlug: varchar('plant_set_slug', { length: 40 }).notNull(),
+    // Финальная стадия растения на момент завершения (обычно 16, последний state).
+    stateIndex: smallint('state_index').notNull(),
+    completedAt: timestamp('completed_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    // Лор-текст для карточки в Оранжерее (AI или fallback из summaryText программы).
+    userSummary: text('user_summary'),
+    // JSON со ссылками на 1-3 сохранённые «Мысли дня» периода: { ids: number[] }.
+    savedThoughts: jsonb('saved_thoughts')
+      .$type<{ ids: number[] }>()
+      .notNull()
+      .default(sql`'{"ids":[]}'::jsonb`),
+    metadata: jsonb('metadata')
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    userProgramUniqueIdx: uniqueIndex('uk_user_plants_user_program').on(
+      table.userId,
+      table.programId
+    ),
+    userCompletedIdx: index('idx_user_plants_user_completed').on(
+      table.userId,
+      table.completedAt
+    ),
+  })
+);
+
+export const energyEvents = pgTable(
+  'energy_events',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    amount: integer('amount').notNull(),
+    source: varchar('source', { length: 40 }).notNull(),
+    sourceId: varchar('source_id', { length: 120 }),
+    eventDate: varchar('event_date', { length: 10 }).notNull(),
+    metadata: jsonb('metadata')
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    userDateIdx: index('idx_energy_events_user_date').on(
+      table.userId,
+      table.eventDate
+    ),
+    sourceIdx: index('idx_energy_events_source').on(
+      table.source,
+      table.sourceId
+    ),
+  })
+);
+
+export const userStreaks = pgTable(
+  'user_streaks',
+  {
+    userId: integer('user_id')
+      .primaryKey()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    current: integer('current').default(0).notNull(),
+    best: integer('best').default(0).notNull(),
+    status: varchar('status', { length: 16 }).default('active').notNull(),
+    lastActivityDate: varchar('last_activity_date', { length: 10 }),
+    pausedSince: varchar('paused_since', { length: 10 }),
+    pauseReason: varchar('pause_reason', { length: 16 }),
+    repairPeriod: varchar('repair_period', { length: 7 })
+      .default('1970-01')
+      .notNull(),
+    repairUsed: integer('repair_used').default(0).notNull(),
+    metadata: jsonb('metadata')
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    statusIdx: index('idx_user_streaks_status').on(table.status),
+  })
+);
+
+export const userStreakEvents = pgTable(
+  'user_streak_events',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    type: varchar('type', { length: 32 }).notNull(),
+    eventDate: varchar('event_date', { length: 10 }).notNull(),
+    previousCurrent: integer('previous_current').default(0).notNull(),
+    current: integer('current').default(0).notNull(),
+    repairedDays: integer('repaired_days'),
+    missedDays: integer('missed_days'),
+    metadata: jsonb('metadata')
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    userDateIdx: index('idx_user_streak_events_user_date').on(
+      table.userId,
+      table.eventDate
+    ),
+    userTypeIdx: index('idx_user_streak_events_user_type').on(
+      table.userId,
+      table.type
+    ),
+  })
+);
+
+// Структура накопленных метрик и сигналов для одного чекпоинта программы.
+// Используется в jsonb-поле structured_data таблицы user_program_checkpoint_summaries.
+// LLM-промпт читает это как контекст; UI рендерит ApexCharts по anxietyTimeline/moodTimeline.
+export type CheckpointStructuredData = {
+  anxietyTimeline: Array<{
+    stepNumber: number;
+    label: string | null;
+    value: number;
+    min: number;
+    max: number;
+    createdAt: string;
+  }>;
+  moodTimeline: Array<{
+    date: string;
+    mood: string;
+    score: number;
+  }>;
+  weeklyCheckAnswer: {
+    anxiety: number | null;
+    // mainChange — для обратной совместимости со старыми клиентами (первая
+    // выбранная опция). Новые клиенты читают mainChangeIds (multi-select).
+    mainChange: string | null;
+    mainChangeIds?: string[] | null;
+    supportNeed: string | null;
+  } | null;
+  topChips: Array<{ label: string; count: number }>;
+  structuredFormHighlights: Array<{
+    stepNumber: number;
+    formKind: string;
+    quote: string;
+    fieldId: string;
+  }>;
+  metrics: {
+    stepsCompleted: number;
+    journalEntries: number;
+    aiChatSessions: number;
+    practicesCompleted: number;
+  };
+  periodStart: string;
+  periodEnd: string;
+};
+
+// Промежуточные и финальный отчёты программы. Создаются на чекпоинтах 7/14/21 (kind='weekly')
+// и 30 (kind='final'). См. план golden-sleeping-dolphin.md и сервисы garden-checkpoint-summary
+// / garden-summary. Доступны через /api/garden/plants/:id/timeline для UI Оранжереи.
+export const userProgramCheckpointSummaries = pgTable(
+  'user_program_checkpoint_summaries',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    userProgramId: integer('user_program_id')
+      .notNull()
+      .references(() => userPrograms.id, { onDelete: 'cascade' }),
+    programSlug: varchar('program_slug', { length: 80 }).notNull(),
+    checkpointStep: integer('checkpoint_step').notNull(),
+    kind: varchar('kind', { length: 20 }).$type<'weekly' | 'final'>().notNull(),
+    summaryText: text('summary_text').notNull(),
+    structuredData: jsonb('structured_data')
+      .$type<CheckpointStructuredData>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    modelUsed: varchar('model_used', { length: 40 }),
+    generationStatus: varchar('generation_status', { length: 20 })
+      .$type<'pending' | 'ready' | 'failed'>()
+      .notNull()
+      .default('ready'),
+    // Отметка просмотра. Используется для in-app модалки «готов отчёт» и
+    // для решения отправлять ли push (если viewedAt уже есть — не шлём).
+    viewedAt: timestamp('viewed_at', { withTimezone: true }),
+    // Push-уведомление о готовом отчёте отправлено (true) — чтобы не дублировать
+    // при повторных регенерациях. NULL если ещё не отправлено.
+    pushSentAt: timestamp('push_sent_at', { withTimezone: true }),
+    generatedAt: timestamp('generated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    uniqueCheckpoint: uniqueIndex(
+      'uk_checkpoint_summaries_user_program_step'
+    ).on(table.userProgramId, table.checkpointStep),
+    userIdx: index('idx_checkpoint_summaries_user').on(
+      table.userId,
+      table.generatedAt
+    ),
+    // Индекс для запроса «есть ли непросмотренный готовый отчёт у юзера».
+    userPendingIdx: index('idx_checkpoint_summaries_user_pending').on(
+      table.userId,
+      table.viewedAt,
+      table.generationStatus
+    ),
+  })
+);
+
+export const dailyThoughts = pgTable(
+  'daily_thoughts',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    entryDate: varchar('entry_date', { length: 10 }).notNull(),
+    text: text('text').notNull(),
+    source: varchar('source', { length: 24 }).default('fallback').notNull(),
+    programSlug: varchar('program_slug', { length: 80 }),
+    step: integer('step'),
+    savedAt: timestamp('saved_at', { withTimezone: true }),
+    metadata: jsonb('metadata')
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    userDateUniqueIdx: uniqueIndex('uk_daily_thoughts_user_date').on(
+      table.userId,
+      table.entryDate
+    ),
+    userCreatedIdx: index('idx_daily_thoughts_user_created').on(
+      table.userId,
+      table.createdAt
+    ),
+  })
+);
+
 // === Welcome Prompts ===
 // Стартовые промпты для приветствия ассистента на welcome-экране
 export const welcomePrompts = pgTable('welcome_prompts', {
@@ -2388,3 +3055,26 @@ export const deletedUserStats = pgTable('deleted_user_stats', {
     .notNull()
     .defaultNow(),
 });
+
+// === Milestone Badges ===
+// Вехи — награды за конкретные достижения пользователя (первый шаг, регулярность, сады и т.д.)
+export const userMilestones = pgTable(
+  'user_milestones',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    badgeId: varchar('badge_id', { length: 100 }).notNull(),
+    earnedAt: timestamp('earned_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    userBadgeUnique: uniqueIndex('uk_user_milestones_user_badge').on(
+      table.userId,
+      table.badgeId
+    ),
+    userIdx: index('idx_user_milestones_user').on(table.userId),
+  })
+);

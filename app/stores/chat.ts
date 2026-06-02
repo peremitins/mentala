@@ -63,6 +63,19 @@ type ChatApiMessage = {
   content: string;
 };
 
+type ChatSessionSummaryTrigger =
+  | 'manual'
+  | 'roadmap_next'
+  | 'logout'
+  | 'app-hidden';
+
+type ChatSessionSummaryMetricsOverride = {
+  userMessagesCount: number;
+  qualifyingUserMessagesCount: number;
+  durationSeconds: number;
+  sessionStartedAt?: string;
+};
+
 // Пороги для eligibility "содержательной сессии" (ТЗ п.7.2, 7.3).
 // Проверки дублируются на сервере — см. server/application/sessionSummaryUser.service.
 // В dev-режиме — сниженные пороги для быстрого тестирования.
@@ -188,7 +201,7 @@ function isTerminalEndSessionStatus(status: number): boolean {
   return [400, 401, 403, 404, 409].includes(status);
 }
 
-function countCharsWithoutSpaces(text: string): number {
+export function countCharsWithoutSpaces(text: string): number {
   if (typeof text !== 'string') return 0;
   return text.replace(/\s+/g, '').length;
 }
@@ -286,17 +299,36 @@ export const useChatStore = defineStore('chat', {
      *
      * Триггеры:
      *  - 'manual'      — пользователь нажал "Завершить сессию"
+     *  - 'roadmap_next' — пользователь завершил embedded AI-chat action в Roadmap
      *  - 'app-hidden'  — приложение сворачивается (visibilitychange/pagehide/Capacitor pause),
      *                    когда клиентский стор фактически зачищается.
      *  - 'logout'      — legacy trigger, который сервер ещё понимает, но текущий
      *                    клиент больше не использует для user-summary.
      *
      * Суммаризация выполняется на сервере асинхронно. Клиент лишь триггерит её
-     * вызовом endpoint'а, если выполнены все условия eligibility на момент вызова.
-     * Стор зачищается только после попытки триггера, чтобы не потерять контекст.
+     * вызовом endpoint'а, если выполнены условия eligibility на момент вызова.
+     * Для Roadmap действуют отдельные, более мягкие условия на сервере.
+     * Для ручного summary стор зачищается только после принятого сервером
+     * запроса. Если итог ещё рано подводить, пользователь должен продолжить
+     * текущий диалог без потери накопленных сообщений.
      */
     async endSessionAndSummarize(params: {
-      trigger: 'manual' | 'logout' | 'app-hidden';
+      trigger: ChatSessionSummaryTrigger;
+      /**
+       * Опциональный override eligibility. Нужен Roadmap-сценарию: у ai_chat
+       * action'а свои пороги (3 сообщения / 180 сек), а глобальный
+       * `isEligibleForSummary` использует prod-пороги 5/240. Без override
+       * Roadmap-eligibility выполнена, кнопка «Дальше» активна, но summary
+       * на сервер не уходит → саммари нет в истории сессий.
+       * См. ProgramAiChatAction.vue → useChatSession.finalize.
+       */
+      eligibilityOverride?: boolean;
+      /**
+       * Метрики под конкретный режим чата. Для Roadmap они считаются в
+       * useChatSession по мягким порогам embedded-action, а не по глобальным
+       * порогам обычного /chat.
+       */
+      metricsOverride?: ChatSessionSummaryMetricsOverride;
     }): Promise<{ eligible: boolean; triggered: boolean }> {
       if (this.isFinalizingSession) {
         return { eligible: false, triggered: false };
@@ -312,7 +344,10 @@ export const useChatStore = defineStore('chat', {
         this.lastActivityAt = new Date();
       }
 
-      const eligible = this.isEligibleForSummary;
+      const eligible =
+        params.eligibilityOverride !== undefined
+          ? params.eligibilityOverride
+          : this.isEligibleForSummary;
       const therapySessionId =
         this.therapySessionId ?? this.historyAnchorTherapySessionId;
       const clientSessionId = this.sessionId;
@@ -324,16 +359,28 @@ export const useChatStore = defineStore('chat', {
             therapySessionId,
             clientSessionId,
             trigger: params.trigger,
+            metricsOverride: params.metricsOverride,
           });
         }
 
-        // Завершаем therapy сессию и чистим клиентское состояние — независимо от
-        // результата суммаризации. Сервер продолжит работу в фоне.
-        if (this.therapySessionId && !this.isEndingSession) {
+        const shouldCloseClientSession =
+          params.trigger === 'manual' ? triggered : true;
+
+        // Ручное подведение итога не должно уничтожать текущий диалог, если
+        // сервер отказал по eligibility или запрос не ушёл. Остальные триггеры
+        // сохраняют прежнюю lifecycle-семантику: сессия закрывается при уходе,
+        // logout или завершении embedded Roadmap-шага.
+        if (
+          shouldCloseClientSession &&
+          this.therapySessionId &&
+          !this.isEndingSession
+        ) {
           await this.endTherapySession();
         }
 
-        this._hardClearChatClient();
+        if (shouldCloseClientSession) {
+          this._hardClearChatClient();
+        }
       } finally {
         this.isFinalizingSession = false;
       }
@@ -359,12 +406,13 @@ export const useChatStore = defineStore('chat', {
     /**
      * Отправляет запрос на генерацию итога сессии.
      * Для 'app-hidden' — через keepalive fetch, чтобы запрос не оборвался при закрытии вкладки.
-     * Для 'manual' и legacy 'logout' — через обычный $api.
+     * Для 'manual', 'roadmap_next' и legacy 'logout' — через обычный $api.
      */
     async _requestSessionSummary(params: {
       therapySessionId: number;
       clientSessionId: string;
-      trigger: 'manual' | 'logout' | 'app-hidden';
+      trigger: ChatSessionSummaryTrigger;
+      metricsOverride?: ChatSessionSummaryMetricsOverride;
     }): Promise<boolean> {
       // Собираем сообщения для fallback — на случай пустого transcript в БД
       // (realtime voice transient messages, memory-off и т.д.).
@@ -383,12 +431,19 @@ export const useChatStore = defineStore('chat', {
         trigger: params.trigger,
         // Метрики передаём плоско — так ждёт CreateSessionSummaryUserRequestDto.
         // Используются сервером как fallback когда transcript в БД пустой.
-        userMessagesCount: this.userMessagesCount,
-        qualifyingUserMessagesCount: this.qualifyingUserMessagesCount,
-        durationSeconds: this.sessionDurationSeconds,
-        sessionStartedAt: this.sessionStartedAt
-          ? new Date(this.sessionStartedAt).toISOString()
-          : undefined,
+        userMessagesCount:
+          params.metricsOverride?.userMessagesCount ?? this.userMessagesCount,
+        qualifyingUserMessagesCount:
+          params.metricsOverride?.qualifyingUserMessagesCount ??
+          this.qualifyingUserMessagesCount,
+        durationSeconds:
+          params.metricsOverride?.durationSeconds ??
+          this.sessionDurationSeconds,
+        sessionStartedAt: params.metricsOverride?.sessionStartedAt
+          ? params.metricsOverride.sessionStartedAt
+          : this.sessionStartedAt
+            ? new Date(this.sessionStartedAt).toISOString()
+            : undefined,
         // Сообщения из стора — fallback для LLM.
         clientMessages: clientMessages.length > 0 ? clientMessages : undefined,
       };

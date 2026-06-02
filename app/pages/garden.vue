@@ -40,8 +40,28 @@
       <GardenCompletedCollection
         :plants="garden.completedPlants.value"
         :locked="!hasRoadmapAccess"
-        @select="openLore"
+        @open-report="openLore"
+        @open-map="openMap"
       />
+
+      <!-- Ссылка на достижения — после завершённых садов, перед новыми семенами -->
+      <NuxtLink
+        to="/milestones"
+        class="glass-deep flex items-center justify-between gap-3 px-4 py-3"
+      >
+        <div class="flex items-center gap-3">
+          <div class="garden-achievements-icon">
+            <span>✦</span>
+          </div>
+          <div>
+            <p class="text-sm font-medium">Достижения</p>
+            <p class="text-xs text-muted-foreground">
+              {{ achievementsSubtitle }}
+            </p>
+          </div>
+        </div>
+        <IconChevronRight class="h-4 w-4 text-muted-foreground flex-shrink-0" />
+      </NuxtLink>
 
       <GardenAvailableSeeds
         :seeds="garden.availableSeeds.value"
@@ -60,7 +80,10 @@
         @started="onHandoffStarted"
       />
 
-      <GardenLockedSilhouettes :silhouettes="garden.lockedSilhouettes.value" />
+      <GardenLockedSilhouettes
+        :silhouettes="garden.lockedSilhouettes.value"
+        @select="openLockedProgram"
+      />
 
       <!-- Пустое состояние — у только что зарегистрированного пользователя
            ещё нет ни активного сада, ни завершений. Не должно встречаться
@@ -86,6 +109,14 @@
       :plant="selectedLorePlant"
     />
 
+    <!-- Модалка закрытого Сада: тап по карточке в «Что ждёт впереди».
+         Чисто информационная (без paywall) — рассказывает, когда сад
+         откроется или что он ещё в разработке. -->
+    <GardenLockedProgramModal
+      v-model:open="lockedModalOpen"
+      :silhouette="selectedLocked"
+    />
+
     <FeaturePaywallModal
       v-model:open="paywallOpen"
       feature-key="programs.roadmap.full"
@@ -96,12 +127,13 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import PageHeader from '@/app/components/PageHeader.vue';
 import GardenActiveCard from '@/app/components/garden/GardenActiveCard.vue';
 import GardenCompletedCollection from '@/app/components/garden/GardenCompletedCollection.vue';
 import GardenAvailableSeeds from '@/app/components/garden/GardenAvailableSeeds.vue';
 import GardenLockedSilhouettes from '@/app/components/garden/GardenLockedSilhouettes.vue';
+import GardenLockedProgramModal from '@/app/components/garden/GardenLockedProgramModal.vue';
 import GardenPlantReportSheet from '@/app/components/garden/GardenPlantReportSheet.vue';
 import GardenTransplantHandoff from '@/app/components/garden/GardenTransplantHandoff.vue';
 import { useGarden } from '@/app/composables/useGarden';
@@ -111,12 +143,23 @@ import FeaturePaywallModal from '@/app/components/subscription/FeaturePaywallMod
 import { useRoute, useRouter } from 'vue-router';
 import type {
   GardenAvailableProgramDto,
+  GardenLockedSilhouetteDto,
   GardenPlantItemDto,
 } from '@/shared/dto/garden';
+import { useMilestoneBadges } from '@/app/composables/useMilestoneBadges';
+import { ALL_BADGES_TOTAL } from '@/app/lib/milestoneBadges';
+import IconChevronRight from '~icons/lucide/chevron-right';
 
 const route = useRoute();
 const router = useRouter();
 const garden = useGarden();
+const { earnedMilestones, loadMilestones, isLoaded } = useMilestoneBadges();
+
+const achievementsSubtitle = computed(() => {
+  const earned = earnedMilestones.value.length;
+  if (earned === 0) return 'Открываются по ходу пути';
+  return `${earned} из ${ALL_BADGES_TOTAL} получено`;
+});
 const startingSlug = ref<string | null>(null);
 const { getFeatureAccess } = useEntitlements();
 const paywallOpen = ref(false);
@@ -125,6 +168,10 @@ const hasRoadmapAccess = computed(() => roadmapAccess.value.available);
 
 const loreOpen = ref(false);
 const selectedLorePlant = ref<GardenPlantItemDto | null>(null);
+
+// State модалки закрытого Сада.
+const lockedModalOpen = ref(false);
+const selectedLocked = ref<GardenLockedSilhouetteDto | null>(null);
 
 // State для handoff-модалки между садами.
 const handoffOpen = ref(false);
@@ -142,6 +189,22 @@ function openLore(plant: GardenPlantItemDto) {
   }
   selectedLorePlant.value = plant;
   loreOpen.value = true;
+}
+
+// Переход к карте пути завершённого сада (повторное прохождение / просмотр шагов).
+function openMap(plant: GardenPlantItemDto) {
+  if (!hasRoadmapAccess.value) {
+    paywallOpen.value = true;
+    return;
+  }
+  void router.push(`/programs/${plant.programSlug}/map`);
+}
+
+// Информационная модалка для закрытого/будущего сада. Доступ не проверяем —
+// это просто рассказ о том, когда сад откроется.
+function openLockedProgram(silhouette: GardenLockedSilhouetteDto) {
+  selectedLocked.value = silhouette;
+  lockedModalOpen.value = true;
 }
 
 // Открытие отчётного sheet'а для активной программы. Сейчас финального
@@ -189,6 +252,7 @@ function onHandoffStarted(programSlug: string) {
 
 onMounted(() => {
   void garden.load();
+  if (!isLoaded.value) void loadMilestones();
 });
 
 // При навигации с in-app модалки/push'а сюда приходим с query `openReport`
@@ -239,3 +303,22 @@ watch(
   { immediate: true }
 );
 </script>
+
+<style scoped>
+.garden-achievements-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(
+    135deg,
+    hsl(145 50% 55% / 0.25) 0%,
+    hsl(210 60% 65% / 0.2) 100%
+  );
+  border: 1px solid hsl(145 50% 65% / 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+</style>

@@ -52,14 +52,23 @@ function getAudioLoadTimeout() {
 }
 
 type PlaybackMode = 'html' | 'webaudio' | 'native';
+type MeditationPlayOptions = {
+  timerMinutes?: number | null;
+  persistPreferredTimer?: boolean;
+};
+type MeditationPlayInput = number | null | MeditationPlayOptions | undefined;
+type NormalizedMeditationPlayOptions = {
+  timerMinutes?: number | null;
+  persistPreferredTimer: boolean;
+};
 type PendingGesturePlay = {
   track: MeditationTrackDto;
-  timerMinutes?: number | null;
+  options: NormalizedMeditationPlayOptions;
 };
 
 type PendingBlockedPlay = {
   track: MeditationTrackDto;
-  timerMinutes?: number | null;
+  options: NormalizedMeditationPlayOptions;
 };
 
 function shouldPreferWebAudio(track: MeditationTrackDto) {
@@ -119,6 +128,22 @@ const globalState = {
   nativeServiceUnsubscribe: null as (() => void) | null,
   iosNativePausedPositionMs: null as number | null,
 };
+
+function normalizePlayOptions(
+  input?: MeditationPlayInput
+): NormalizedMeditationPlayOptions {
+  if (typeof input === 'number' || input === null) {
+    return {
+      timerMinutes: input,
+      persistPreferredTimer: true,
+    };
+  }
+
+  return {
+    timerMinutes: input?.timerMinutes,
+    persistPreferredTimer: input?.persistPreferredTimer !== false,
+  };
+}
 
 function isNativeMeditationAudioEnabled() {
   if (typeof window === 'undefined') return false;
@@ -379,7 +404,7 @@ async function setPlaybackAllowed(allowed: boolean) {
   const pending = globalState.pendingBlockedPlay;
   if (!pending) return;
   globalState.pendingBlockedPlay = null;
-  await play(pending.track, pending.timerMinutes ?? null);
+  await play(pending.track, pending.options);
 }
 
 async function unlockAudioContext(): Promise<boolean> {
@@ -412,9 +437,7 @@ function ensureGlobalGestureUnlock() {
       const pending = globalState.pendingGesturePlay;
       if (pending) {
         clearGestureUnlock();
-        // Передаём timerMinutes как есть: undefined = сохранить текущий таймер,
-        // null = таймер не нужен (был явно отключён), number = конкретное значение.
-        await play(pending.track, pending.timerMinutes);
+        await play(pending.track, pending.options);
       }
 
       if (globalState.globalUnlockCleanup) {
@@ -442,14 +465,14 @@ function ensureGlobalGestureUnlock() {
 
 function scheduleGestureUnlock(
   track: MeditationTrackDto,
-  timerMinutes?: number | null
+  playOptions: NormalizedMeditationPlayOptions
 ) {
   if (!isDocumentAvailable() || typeof window === 'undefined') return;
   if (!globalState.playbackAllowed.value) return;
   clearGestureUnlock();
   ensureGlobalGestureUnlock();
 
-  globalState.pendingGesturePlay = { track, timerMinutes };
+  globalState.pendingGesturePlay = { track, options: playOptions };
 
   const handler = () => {
     ensurePlaybackAudioSessionType();
@@ -459,22 +482,22 @@ function scheduleGestureUnlock(
       if (!pending) return;
       await unlockAudioContext();
       // Стартуем по первому пользовательскому жесту.
-      await play(pending.track, pending.timerMinutes ?? null);
+      await play(pending.track, pending.options);
     })();
   };
 
-  const options: AddEventListenerOptions = { passive: true };
-  window.addEventListener('pointerdown', handler, options);
-  window.addEventListener('touchend', handler, options);
-  window.addEventListener('click', handler, options);
-  window.addEventListener('touchstart', handler, options);
+  const listenerOptions: AddEventListenerOptions = { passive: true };
+  window.addEventListener('pointerdown', handler, listenerOptions);
+  window.addEventListener('touchend', handler, listenerOptions);
+  window.addEventListener('click', handler, listenerOptions);
+  window.addEventListener('touchstart', handler, listenerOptions);
   window.addEventListener('keydown', handler);
 
   globalState.gestureUnlockCleanup = () => {
-    window.removeEventListener('pointerdown', handler, options);
-    window.removeEventListener('touchend', handler, options);
-    window.removeEventListener('click', handler, options);
-    window.removeEventListener('touchstart', handler, options);
+    window.removeEventListener('pointerdown', handler, listenerOptions);
+    window.removeEventListener('touchend', handler, listenerOptions);
+    window.removeEventListener('click', handler, listenerOptions);
+    window.removeEventListener('touchstart', handler, listenerOptions);
     window.removeEventListener('keydown', handler);
   };
 }
@@ -574,7 +597,10 @@ async function maybeRecoverWebAudioPlayback() {
       // и планируем автозапуск при следующем касании экрана.
       if (globalState.isPlaying.value && globalState.currentTrack.value) {
         globalState.isPlaying.value = false;
-        scheduleGestureUnlock(globalState.currentTrack.value);
+        scheduleGestureUnlock(
+          globalState.currentTrack.value,
+          normalizePlayOptions(undefined)
+        );
       }
       return;
     }
@@ -601,7 +627,11 @@ function ensureVisibilityListener() {
 }
 
 function hasSleepTimerEnabled() {
-  return globalState.preferredTimerMinutes.value !== null;
+  return (
+    globalState.timerMinutes.value !== null ||
+    globalState.timerEndsAt.value !== null ||
+    globalState.timerRemainingMs.value !== null
+  );
 }
 
 async function stopPlaybackOnBackgroundWithoutTimer() {
@@ -1050,19 +1080,45 @@ function setPreferredTimer(minutes: number | null) {
   globalState.preferredTimerMinutes.value = minutes;
 }
 
-function setTimer(minutes: number | null) {
+function setTimer(
+  minutes: number | null,
+  options: { persistPreferredTimer?: boolean } = {}
+) {
+  const persistPreferredTimer = options.persistPreferredTimer !== false;
   if (!minutes) {
-    setPreferredTimer(null);
+    if (persistPreferredTimer) {
+      setPreferredTimer(null);
+    }
     clearTimer();
     return;
   }
-  setPreferredTimer(minutes);
+  if (persistPreferredTimer) {
+    setPreferredTimer(minutes);
+  }
   globalState.timerMinutes.value = minutes;
   globalState.timerRemainingMs.value = minutes * 60 * 1000;
   globalState.timerEndsAt.value =
     Date.now() + globalState.timerRemainingMs.value;
   startTimerCountdown();
   void scheduleNativeTimerStop();
+}
+
+function applyPlaybackTimerOptions(options: NormalizedMeditationPlayOptions) {
+  if (options.timerMinutes !== undefined) {
+    setTimer(options.timerMinutes, {
+      persistPreferredTimer: options.persistPreferredTimer,
+    });
+    return;
+  }
+
+  if (globalState.timerMinutes.value) {
+    resumeTimer();
+    return;
+  }
+
+  if (globalState.preferredTimerMinutes.value) {
+    setTimer(globalState.preferredTimerMinutes.value);
+  }
 }
 
 function pauseTimer() {
@@ -1083,7 +1139,7 @@ function resumeTimer() {
 
 async function playNative(
   track: MeditationTrackDto,
-  timerMinutes?: number | null
+  options: NormalizedMeditationPlayOptions
 ): Promise<boolean> {
   const service = await ensureNativeService();
   if (!service) {
@@ -1172,6 +1228,7 @@ async function playNative(
       snapshot.trackId === track.id
     ) {
       globalState.isBuffering.value = false;
+      applyPlaybackTimerOptions(options);
       return true;
     }
 
@@ -1195,13 +1252,7 @@ async function playNative(
     globalState.isBuffering.value = false;
     globalState.iosNativePausedPositionMs = null;
 
-    if (timerMinutes !== undefined) {
-      setTimer(timerMinutes);
-    } else if (globalState.timerMinutes.value) {
-      resumeTimer();
-    } else if (globalState.preferredTimerMinutes.value) {
-      setTimer(globalState.preferredTimerMinutes.value);
-    }
+    applyPlaybackTimerOptions(options);
   } catch (error) {
     if (isActionActive()) {
       globalState.isPlaying.value = false;
@@ -1428,14 +1479,15 @@ async function pause() {
   pauseTimer();
 }
 
-async function play(track: MeditationTrackDto, timerMinutes?: number | null) {
+async function play(track: MeditationTrackDto, input?: MeditationPlayInput) {
+  const playOptions = normalizePlayOptions(input);
   if (!isDocumentAvailable()) return;
   if (!globalState.playbackAllowed.value) {
     // Если guard временно не готов (например, холодный старт из push),
     // откладываем запуск и повторяем после setPlaybackAllowed(true).
     globalState.pendingBlockedPlay = {
       track,
-      timerMinutes: timerMinutes ?? null,
+      options: playOptions,
     };
     clearGestureUnlock();
     globalState.isBuffering.value = false;
@@ -1448,7 +1500,7 @@ async function play(track: MeditationTrackDto, timerMinutes?: number | null) {
   if (shouldUseNativePlayback()) {
     ensureAppStateListener();
     globalState.isBuffering.value = true;
-    const handledByNative = await playNative(track, timerMinutes);
+    const handledByNative = await playNative(track, playOptions);
     if (handledByNative) return;
   }
 
@@ -1474,7 +1526,7 @@ async function play(track: MeditationTrackDto, timerMinutes?: number | null) {
       // Для лупов не падаем на HTML, чтобы не было слышимого шва.
       globalState.isPlaying.value = false;
       globalState.isBuffering.value = false;
-      scheduleGestureUnlock(track, timerMinutes);
+      scheduleGestureUnlock(track, playOptions);
       return;
     }
   }
@@ -1674,7 +1726,7 @@ async function play(track: MeditationTrackDto, timerMinutes?: number | null) {
         globalState.isBuffering.value = false;
         if (isAutoplayBlockedError(playbackResult.error)) {
           // Браузер ждёт жест — ставим отложенный старт.
-          scheduleGestureUnlock(track, timerMinutes);
+          scheduleGestureUnlock(track, playOptions);
         } else if (playbackResult.timedOut) {
           console.error(
             '[MeditationPlayer] Playback timeout, file may be corrupted or too large'
@@ -1726,23 +1778,17 @@ async function play(track: MeditationTrackDto, timerMinutes?: number | null) {
   }
 
   if (started && isActionActive()) {
-    if (timerMinutes !== undefined) {
-      setTimer(timerMinutes);
-    } else if (globalState.timerMinutes.value) {
-      resumeTimer();
-    } else if (globalState.preferredTimerMinutes.value) {
-      setTimer(globalState.preferredTimerMinutes.value);
-    }
+    applyPlaybackTimerOptions(playOptions);
   }
 }
 
-async function toggle(track: MeditationTrackDto, timerMinutes?: number | null) {
+async function toggle(track: MeditationTrackDto, input?: MeditationPlayInput) {
   if (!globalState.playbackAllowed.value) return;
   if (globalState.isPlaying.value) {
     await pause();
     return;
   }
-  await play(track, timerMinutes);
+  await play(track, input);
 }
 
 function setRepeat(enabled: boolean) {

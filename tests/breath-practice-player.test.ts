@@ -104,4 +104,35 @@ describe('useBreathPracticePlayer', () => {
     expect(player.sessionRemainingSeconds.value).toBe(0);
     expect(completed).toHaveBeenCalledTimes(1);
   });
+
+  it('держит 60-минутную сессию после 10 минут и завершает по cap', async () => {
+    const completed = vi.fn();
+    const { useBreathPracticePlayer } = await import(
+      '../app/composables/useBreathPracticePlayer'
+    );
+
+    const player = useBreathPracticePlayer({
+      onSessionStart: () => Date.now(),
+      onSessionComplete: completed,
+    });
+
+    player.setPhases(phases);
+    player.setSessionDuration(60 * 60);
+    await player.start();
+
+    await vi.advanceTimersByTimeAsync(3000);
+    vi.setSystemTime(new Date('2026-04-17T10:10:04.000Z'));
+    player.sync();
+
+    expect(player.isRunning.value).toBe(true);
+    expect(player.isCompleted.value).toBe(false);
+    expect(completed).not.toHaveBeenCalled();
+
+    vi.setSystemTime(new Date('2026-04-17T11:00:04.000Z'));
+    player.sync();
+
+    expect(player.isRunning.value).toBe(false);
+    expect(player.isCompleted.value).toBe(true);
+    expect(completed).toHaveBeenCalledTimes(1);
+  });
 });

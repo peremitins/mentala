@@ -43,6 +43,36 @@ describe('realtime voice instructions service', () => {
     expect(instructions).toContain('РЕЖИМ БЕЗОПАСНОСТИ: CRISIS_HIGH');
   });
 
+  it('прокидывает Roadmap-тему в realtime voice instructions', () => {
+    const instructions = composeRealtimeVoiceInstructions({
+      userName: 'Анна',
+      userGender: 'female',
+      userLocale: 'ru-RU',
+      assistantPersona: {
+        voice: 'echo',
+        voiceLabel: 'Алексей',
+        gender: 'male',
+        displayName: 'Mentala',
+      },
+      entryContext: {
+        type: 'roadmap_step',
+        program_slug: 'calm_anxiety_30',
+        step_number: 19,
+        step_title: 'Разговор с тревогой',
+        topic_prompt:
+          'Если бы твоя тревога умела говорить словами — о чём, как тебе кажется, она сказала бы сейчас?',
+        goal_hint:
+          'Помочь пользователю услышать сигнал тревоги и отделить его от фактов.',
+      },
+    });
+
+    expect(instructions).toContain('## Режим Roadmap-шага программы');
+    expect(instructions).toContain('Разговор с тревогой');
+    expect(instructions).toContain('Если бы твоя тревога умела говорить');
+    expect(instructions).toContain('отделить его от фактов');
+    expect(instructions).toContain('не уезжай в посторонние темы');
+  });
+
   it('встраивает runtime compact block в существующие voice instructions и заменяет старый', () => {
     const baseInstructions = composeRealtimeVoiceInstructions({
       userName: 'Анна',

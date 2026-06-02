@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-2 h-full overflow-y-auto rounded-lg">
+  <div class="xs:space-y-3 space-y-1 h-full overflow-y-auto rounded-lg">
     <PageHeader :title="title" />
 
     <div class="glass-deep p-4">
@@ -23,7 +23,7 @@
     <Skeleton v-if="loading" type="list-item" :count="5" />
 
     <!-- Список элементов -->
-    <div v-else class="space-y-2 pb-[100px]">
+    <div v-else class="xs:space-y-3 space-y-1 pb-[100px]">
       <div
         v-for="(item, index) in visibleItems"
         :key="item.id"

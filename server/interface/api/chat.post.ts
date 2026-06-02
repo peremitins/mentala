@@ -41,6 +41,7 @@ import {
   resolvePhobiasConversationState,
   type PhobiasConversationState,
 } from '@/server/application/chat/phobias-entry.service';
+import { buildRoadmapDeveloperPrompt } from '@/server/application/chat/roadmap-entry.service';
 import { trackPhobiasEvent } from '@/server/application/chat/phobias-analytics.service';
 import { readChatSettings, writeChatSettings } from '@/server/utils/storage';
 import { getAssistantToneMeta } from '@/shared/constants/assistantTone';
@@ -214,12 +215,17 @@ export default defineEventHandler(async (event) => {
     }
 
     const phobiasPrompt = buildPhobiasDeveloperPrompt(phobiasState);
+    const roadmapPrompt = buildRoadmapDeveloperPrompt(parsed.entryContext);
     const promptWithPhobias = mergeDeveloperPrompts(
       parsed.userPrompt,
       phobiasPrompt
     );
-    const effectiveUserPrompt = mergeDeveloperPrompts(
+    const promptWithRoadmap = mergeDeveloperPrompts(
       promptWithPhobias,
+      roadmapPrompt
+    );
+    const effectiveUserPrompt = mergeDeveloperPrompts(
+      promptWithRoadmap,
       crisisGuidance.guidance
     );
 

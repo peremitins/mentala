@@ -1,0 +1,1 @@
+CREATE INDEX "idx_user_program_step_attempts_up_step_status" ON "user_program_step_attempts" USING btree ("user_program_id","step_template_id","status");

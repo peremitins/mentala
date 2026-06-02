@@ -764,12 +764,14 @@ import {
 } from '@/app/components/ui/shadcn/popover';
 import { useVoiceDictationInput } from '@/app/composables/useVoiceDictationInput';
 import { useToast } from '@/app/composables/useToast';
+import { useFreePracticeEnergy } from '@/app/composables/useFreePracticeEnergy';
 import { useEntitlements } from '@/app/composables/useEntitlements';
 import {
   useGratitudeDiaryFavorites,
   type FavoritePromptItem,
 } from '@/app/composables/useGratitudeDiaryFavorites';
 import { usePhotoSwipe } from '@/app/composables/usePhotoSwipe';
+import { useHaptics } from '@/app/composables/useHaptics';
 import { useAuthStore } from '@/app/stores/auth';
 import IconRefreshCw from '~icons/lucide/refresh-cw';
 import IconMic from '~icons/lucide/mic';
@@ -829,6 +831,8 @@ function normalizeCalendarLocale(value: string | null | undefined): string {
 
 const { t, locale } = useI18n();
 const { $api } = useNuxtApp();
+const { award: awardFreePracticeEnergy } = useFreePracticeEnergy();
+const { triggerLight } = useHaptics();
 const route = useRoute();
 const auth = useAuthStore();
 const { getFeatureAccess } = useEntitlements();
@@ -1250,6 +1254,7 @@ function toNonEmptyWorksheetRows(
 }
 
 function selectMood(mood: GratitudeDiaryMood) {
+  void triggerLight();
   selectedMood.value = mood;
   isMoodOpen.value = false;
 }
@@ -1893,23 +1898,37 @@ async function saveEntry() {
       });
       useToast(t('GRATITUDE_DIARY.UPDATED'));
     } else {
-      await $api('/api/gratitude-diary/entries', {
-        method: 'POST',
-        body: {
-          text: textForSave,
-          mood: selectedMood.value,
-          tags: selectedTags.value,
-          entryDate: selectedEntryDate.value,
-          photoUrl: photoPayload.photoUrl,
-          photoStorageKey: photoPayload.photoStorageKey,
-          inputMethod,
-          // Если вопрос был скрыт крестиком — сохраняем null, иначе текущий вопрос
-          promptText: isPromptVisible.value
-            ? (activePrompt.value?.text ?? null)
-            : null,
-        },
-      });
+      const created = await $api<{ item: { id: number } }>(
+        '/api/gratitude-diary/entries',
+        {
+          method: 'POST',
+          body: {
+            text: textForSave,
+            mood: selectedMood.value,
+            tags: selectedTags.value,
+            entryDate: selectedEntryDate.value,
+            photoUrl: photoPayload.photoUrl,
+            photoStorageKey: photoPayload.photoStorageKey,
+            inputMethod,
+            // Если вопрос был скрыт крестиком — сохраняем null, иначе текущий вопрос
+            promptText: isPromptVisible.value
+              ? (activePrompt.value?.text ?? null)
+              : null,
+          },
+        }
+      );
       useToast(t('GRATITUDE_DIARY.SAVED'));
+
+      // Новая запись дневника = 1 капля (свободные практики, rate-limit 3/день).
+      // sourceId через id записи: backend идемпотентен по `(userId, source, sourceId)`,
+      // повторные ретраи не дадут двойного начисления. На edit (PATCH выше) каплю
+      // не начисляем — это уже существующая запись.
+      if (created?.item?.id) {
+        void awardFreePracticeEnergy(
+          'gratitude_entry_saved',
+          `gratitude:${created.item.id}`
+        );
+      }
     }
 
     // После успешного сохранения запись уже ссылается на новое фото,

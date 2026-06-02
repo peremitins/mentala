@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-2 h-full overflow-y-auto rounded-lg">
+  <div class="xs:space-y-3 space-y-1 h-full overflow-y-auto rounded-lg">
     <PageHeader :title="entityName" :show-back-button="true" @go-back="goBack">
       <template #custom>
         <div class="flex items-center gap-2 flex-1 overflow-hidden">

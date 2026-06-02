@@ -63,6 +63,24 @@
     /* === Состояния === */
     --ring: 188 100% 55%;
 
+    /* === Карта пути (roadmap, Этап B) ===
+       Семантические токены для SVG-тропы и узлов. Используются в
+       компонентах app/components/programs/roadmap/*. Меняй только тут —
+       никаких хардкодов цветов в компонентах тропы. */
+    --roadmap-track-completed: 160 84% 60%; /* emerald-300 */
+    --roadmap-track-pending: 0 0% 100%; /* белый + opacity в самом stroke */
+    --roadmap-track-reaching: 45 96% 75%; /* amber-200 для in-progress сегмента */
+    --roadmap-node-completed-bg: 160 80% 55%;
+    --roadmap-node-completed-border: 160 84% 70%;
+    --roadmap-node-active-bg: 45 96% 60%;
+    --roadmap-node-active-border: 45 96% 80%;
+    --roadmap-node-locked-bg: 240 5% 18%;
+    --roadmap-node-locked-border: 0 0% 100%;
+    --roadmap-checkpoint-bg: 240 8% 16%;
+    --roadmap-checkpoint-border: 0 0% 100%;
+    --roadmap-glow-active: 45 96% 70%;
+    --roadmap-glow-celebration: 160 84% 65%;
+
     /* === Color scheme для браузеров === */
     color-scheme: dark;
   }
@@ -186,6 +204,23 @@
     position: relative;
     overflow: hidden;
     background-color: hsl(var(--skeleton));
+  }
+
+  @media (max-width: 480px) {
+    .mobile-compact-type :where(.text-3xl, .text-2xl, .text-xl, .text-lg) {
+      font-size: 0.875rem;
+      line-height: 1.25rem;
+    }
+
+    .mobile-compact-type :where(.text-base, .text-sm) {
+      font-size: 0.8125rem;
+      line-height: 1.125rem;
+    }
+
+    .mobile-compact-type :where(.text-xs) {
+      font-size: 0.6875rem;
+      line-height: 0.95rem;
+    }
   }
 }
 

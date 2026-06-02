@@ -63,6 +63,9 @@ export function createNativeEngine(): SpeechEngine {
     SpeechRecognition.addListener('result', (e: any) => {
       const text = e.matches?.[0] || '';
       finalCb?.(text);
+      // После настоящего final partial уже сохранён. Иначе auto-restart после
+      // короткой паузы повторно отправит тот же lastPartialText во второй final.
+      lastPartialText = '';
       // НЕ вызываем stop() автоматически - пусть микрофон продолжает слушать.
       resetSilence();
     });
@@ -100,6 +103,7 @@ export function createNativeEngine(): SpeechEngine {
 
     language = opts?.language || language;
     silenceMs = opts?.silenceMs ?? silenceMs;
+    lastPartialText = '';
     if (isIos) {
       // На iOS partial callbacks приходят менее стабильно, чем на web/android,
       // поэтому слишком короткий auto-stop обрубает запись прямо во время фразы.
@@ -175,12 +179,12 @@ export function createNativeEngine(): SpeechEngine {
     if (!SpeechRecognition || !speechStore.isListening || stopInFlight) return;
 
     try {
+      lastPartialText = '';
       await SpeechRecognition.start({
         language,
         popup: false,
         partialResults: true,
       });
-      resetSilence();
     } catch (error) {
       console.error('[NativeEngine] Auto-restart failed:', error);
     }
@@ -198,6 +202,7 @@ export function createNativeEngine(): SpeechEngine {
       // Игнорируем stop-ошибку при уже завершённом распознавании.
     } finally {
       speechStore.isListening = false;
+      lastPartialText = '';
       stopInFlight = false;
     }
   }

@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-3">
+  <div class="xs:space-y-3 space-y-1">
     <div
       v-for="i in count"
       :key="i"
