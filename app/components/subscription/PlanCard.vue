@@ -50,11 +50,8 @@
         @click.stop="handlePeriodChange('year')"
       >
         Год
-        <span
-          v-if="props.showYearDiscount !== false"
-          class="text-green-400 ml-0.5"
-        >
-          (-20%)
+        <span v-if="props.showYearDiscount !== false" class="ml-0.5">
+          (-{{ ANNUAL_DISCOUNT_PERCENT }}%)
         </span>
       </button>
     </div>
@@ -124,6 +121,11 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n';
 import { getLocalizedPlanName } from '@/app/utils/planI18n';
+import {
+  ANNUAL_DISCOUNT_PERCENT,
+  calculateAnnualSavings,
+  calculateSubscriptionPrice,
+} from '@/shared/utils/subscriptionPricing';
 
 interface Plan {
   id: string;
@@ -157,7 +159,7 @@ const props = defineProps<{
   // Для Apple IAP цены нельзя хардкодить. Если priceLabel === null, считаем, что цена еще грузится.
   // Если priceLabel === string, показываем ее как есть (например "$9.99" или "€5.99").
   priceLabel?: string | null;
-  // Скидка -20% релевантна только для рублёвых тарифов (YooKassa).
+  // Годовая скидка релевантна только для рублёвых тарифов (YooKassa).
   showYearDiscount?: boolean;
 }>();
 
@@ -183,11 +185,11 @@ function getPlanName() {
 }
 
 function getPrice() {
-  // Рассчитываем цену с учетом периода
-  const price =
-    props.billingPeriod === 'year'
-      ? Math.round(props.plan.basePrice * 12 * 0.8) // Годовая цена со скидкой 20%
-      : props.plan.basePrice; // Месячная цена
+  // Используем общую формулу, чтобы UI не расходился с checkout на backend.
+  const price = calculateSubscriptionPrice(
+    props.plan.basePrice,
+    props.billingPeriod
+  );
   return price.toLocaleString('ru-RU');
 }
 
@@ -206,9 +208,7 @@ const isPricePending = computed(() => {
 
 const savingsValue = computed(() => {
   // Экономия = 12 месяцев по базовой цене минус цена за год со скидкой.
-  const yearlyPrice = Math.round(props.plan.basePrice * 12 * 0.8);
-  const savings = props.plan.basePrice * 12 - yearlyPrice;
-  return savings > 0 ? savings : 0;
+  return calculateAnnualSavings(props.plan.basePrice);
 });
 
 const shouldShowSavingsBadge = computed(() => {

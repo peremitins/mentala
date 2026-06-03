@@ -561,6 +561,10 @@ import {
   type AppleIapProductId,
 } from '@/shared/constants/appleIap';
 import {
+  calculateAnnualSavings,
+  calculateSubscriptionPrice,
+} from '@/shared/utils/subscriptionPricing';
+import {
   getLocalizedPlanName,
   getLocalizedTrialPlanLabel,
 } from '@/app/utils/planI18n';
@@ -1140,13 +1144,13 @@ function getConfirmDialogDescription(): string {
   const newPlanName = getPlanDisplayName(pendingPlanChange.value.name);
   const billingPeriod = getBillingPeriod(pendingPlanChange.value.id);
 
-  const price =
-    billingPeriod === 'year'
-      ? Math.round(pendingPlanChange.value.basePrice * 12 * 0.8)
-      : pendingPlanChange.value.basePrice;
+  const price = calculateSubscriptionPrice(
+    pendingPlanChange.value.basePrice,
+    billingPeriod
+  );
   const savings =
     billingPeriod === 'year'
-      ? Math.max(0, pendingPlanChange.value.basePrice * 12 - price)
+      ? calculateAnnualSavings(pendingPlanChange.value.basePrice)
       : 0;
 
   const priceText = `Стоимость: ${price.toLocaleString('ru-RU')} ₽/${billingPeriod === 'year' ? 'год' : 'месяц'}${savings > 0 ? ` · Экономия: ${savings.toLocaleString('ru-RU')} ₽` : ''}`;

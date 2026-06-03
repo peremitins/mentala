@@ -1,13 +1,12 @@
-/**
- * Константы и функции для расчета цен подписок
- */
+import {
+  ANNUAL_DISCOUNT_FACTOR,
+  calculateSubscriptionPrice,
+  type SubscriptionBillingPeriod,
+} from '@/shared/utils/subscriptionPricing';
 
-/**
- * Константы для расчета цен
- */
-export const ANNUAL_DISCOUNT_FACTOR = 0.8; // Скидка 20% на годовой план
+export { ANNUAL_DISCOUNT_FACTOR };
 
-export type BillingPeriod = 'month' | 'year';
+export type BillingPeriod = SubscriptionBillingPeriod;
 
 export interface PlanPriceParams {
   baseMonthlyPrice: number;
@@ -18,11 +17,8 @@ export interface PlanPriceParams {
  * Рассчитывает итоговую цену плана с учетом периода оплаты
  */
 export function calculatePlanPrice(params: PlanPriceParams): number {
-  const monthlyPrice = params.baseMonthlyPrice;
-
-  if (params.billingPeriod === 'year') {
-    return Math.round(monthlyPrice * 12 * ANNUAL_DISCOUNT_FACTOR);
-  }
-
-  return Math.round(monthlyPrice);
+  return calculateSubscriptionPrice(
+    params.baseMonthlyPrice,
+    params.billingPeriod
+  );
 }

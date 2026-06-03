@@ -839,6 +839,7 @@ import {
   extractMarketingAttributionFromQuery,
   normalizeMarketingAttribution,
 } from '../../../shared/utils/marketingAttribution';
+import { calculateSubscriptionPrice } from '../../../shared/utils/subscriptionPricing';
 
 type FeatureStep = {
   key: string;
@@ -1108,7 +1109,7 @@ const pricingPlans = computed<PricingPlan[]>(() => [
     title: String(t('LANDING.PRICING.PLANS.PRO.TITLE')),
     subtitle: String(t('LANDING.PRICING.PLANS.PRO.SUBTITLE')),
     monthlyPrice: 399,
-    yearlyPrice: Math.round(399 * 12 * 0.8),
+    yearlyPrice: calculateSubscriptionPrice(399, 'year'),
     features: [
       String(t('LANDING.PRICING.PLANS.PRO.FEATURES.FEATURE_1')),
       String(t('LANDING.PRICING.PLANS.PRO.FEATURES.FEATURE_2')),
@@ -1123,7 +1124,7 @@ const pricingPlans = computed<PricingPlan[]>(() => [
     title: String(t('LANDING.PRICING.PLANS.PREMIUM.TITLE')),
     subtitle: String(t('LANDING.PRICING.PLANS.PREMIUM.SUBTITLE')),
     monthlyPrice: 899,
-    yearlyPrice: Math.round(899 * 12 * 0.8),
+    yearlyPrice: calculateSubscriptionPrice(899, 'year'),
     features: [
       String(t('LANDING.PRICING.PLANS.PREMIUM.FEATURES.FEATURE_1')),
       String(t('LANDING.PRICING.PLANS.PREMIUM.FEATURES.FEATURE_2')),

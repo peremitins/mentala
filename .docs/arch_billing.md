@@ -16,6 +16,11 @@
 | PRO     | 399₽ | 100 мин/нед                       | + AI-уведомления     | quick help, дыхание, медитации, Roadmap |
 | Premium | 899₽ | безлимит\* (fair-use 900 мин/нед) | + персональный стиль | + свои практики, привычки и терапия     |
 
+Годовой период считается от месячной цены со скидкой 30%:
+
+- PRO: 399 × 12 × 0.7 = 3 352 ₽/год, экономия 1 436 ₽.
+- Premium: 899 × 12 × 0.7 = 7 552 ₽/год, экономия 3 236 ₽.
+
 `basic` остаётся только как legacy/internal `no-paid-access` состояние для совместимости старых клиентов, FK, rollback/grace и trial billing flow. Он не должен показываться на landing, `/subscription`, checkout и `GET /api/subscriptions/plans`.
 
 Template push-уведомления остаются бесплатным retention-механизмом без AI-cost. AI-уведомления доступны с PRO, custom AI prompt — с Premium.

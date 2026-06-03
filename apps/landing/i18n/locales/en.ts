@@ -255,9 +255,9 @@ export default {
     PRICING: {
       TITLE: 'Pricing',
       DESCRIPTION:
-        'Choose your subscription format: monthly or yearly. Annual billing includes a 20% discount.',
+        'Choose your subscription format: monthly or yearly. Annual billing includes a 30% discount.',
       TAB_MONTH: 'Month',
-      TAB_YEAR: 'Year (-20%)',
+      TAB_YEAR: 'Year (-30%)',
       SAVINGS_LABEL: 'Savings:',
       PERIOD_YEAR: 'per year',
       PERIOD_MONTH: 'per month',
