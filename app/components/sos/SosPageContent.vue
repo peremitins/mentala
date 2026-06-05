@@ -1,10 +1,10 @@
 <template>
-  <div class="flex items-center justify-center min-h-0 flex-1 overflow-auto">
+  <div class="flex items-start justify-center min-h-0 flex-1 overflow-auto">
     <section
       v-if="step === 'select'"
       class="flex flex-col items-center justify-center space-y-4 w-full"
     >
-      <div class="w-full space-y-2">
+      <div class="w-full xs:space-y-3 space-y-1">
         <button
           v-for="card in quickHelpCards"
           :key="card.id"

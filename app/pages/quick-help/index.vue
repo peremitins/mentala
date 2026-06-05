@@ -1,6 +1,6 @@
 <template>
   <div
-    class="flex flex-col space-y-2 h-dvh overflow-y-auto pb-[100px] rounded-lg"
+    class="flex flex-col xs:space-y-2 space-y-1 h-dvh overflow-y-auto pb-[100px] rounded-lg"
   >
     <PageHeader
       title="Быстрая помощь"

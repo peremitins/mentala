@@ -1,6 +1,6 @@
 <template>
   <div
-    class="relative h-full overflow-y-auto xs:space-y-3 space-y-1 pb-[110px]"
+    class="relative h-full overflow-y-auto xs:space-y-3 space-y-1 pb-[110px] rounded-lg"
   >
     <PageHeader title="Серия" show-back-button @go-back="goBack" />
 

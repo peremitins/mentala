@@ -57,4 +57,35 @@ describe('garden summary structured form values', () => {
     );
     expect(formatWeeklyMainChangeForReport('worse')).toBe('стало тяжелее');
   });
+
+  it('форматирует связанные с садом результаты опросников для финального отчёта', async () => {
+    const { formatAssessmentResultsForPrompt } = await import(
+      '../server/application/garden/garden-summary.service'
+    );
+
+    expect(
+      formatAssessmentResultsForPrompt([
+        {
+          slug: 'anxiety_check_v1',
+          source: 'program_baseline',
+          score: 12,
+          bandId: 'moderate',
+          title: 'Тревога сейчас заметна',
+          shortText: 'Ответы показывают, что тревога может занимать внимание.',
+          scoreDirection: 'higher_is_worse',
+          completedAt: '2026-06-03T10:00:00.000Z',
+        },
+        {
+          slug: 'anxiety_check_v1',
+          source: 'program_final',
+          score: 6,
+          bandId: 'mild',
+          title: 'Тревога иногда заметна',
+          shortText: 'Ответы стали менее тревожными.',
+          scoreDirection: 'higher_is_worse',
+          completedAt: '2026-06-20T10:00:00.000Z',
+        },
+      ])
+    ).toContain('финальный замер сада (anxiety_check_v1');
+  });
 });

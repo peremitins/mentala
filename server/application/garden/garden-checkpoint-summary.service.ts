@@ -280,6 +280,9 @@ async function generateCheckpointLlmText(params: {
   const { systemPrompt, userPrompt } = buildCheckpointPrompt(params);
   try {
     const result = await chatWithFallback({
+      // Сводка 1500-2500 символов (~1000-1500 токенов). Дефолт провайдера (800)
+      // обрезал бы её на середине. Запас до 1800 на разметку.
+      maxOutputTokens: 1800,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },

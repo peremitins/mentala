@@ -2,6 +2,7 @@ import { and, asc, eq, gte, inArray, lte } from 'drizzle-orm';
 import { db } from '@/server/infrastructure/db/client';
 import {
   type CheckpointStructuredData,
+  assessmentAttempts,
   dailyThoughts,
   moodCheckins,
   programs,
@@ -184,7 +185,12 @@ async function fetchAiChatInsights(params: {
   programStartedAt: Date;
   programCompletedAt: Date | null;
 }): Promise<string[]> {
-  const endDate = params.programCompletedAt ?? new Date();
+  // Верхняя граница — не раньше «сейчас»: при пересборке отчёта после повторного
+  // прохождения (replay) нужно учитывать и данные, созданные уже после исходного
+  // завершения сада, иначе replay-дни выпали бы из выборки.
+  const endDate = new Date(
+    Math.max(params.programCompletedAt?.getTime() ?? 0, Date.now())
+  );
   const rows = await db
     .select({
       summaryIv: sessionSummariesUser.summaryIv,
@@ -391,6 +397,17 @@ export type CollectedUserSignals = {
   }>;
   // Какие практики (guided_steps) пройдены целиком — для finals.
   guidedStepsCompleted: Array<{ stepNumber: number; formKind: string | null }>;
+  // Стартовые/финальные опросники, связанные с текущим садом.
+  assessmentResults: Array<{
+    slug: string;
+    source: 'practice_page' | 'program_baseline' | 'program_final';
+    score: number;
+    bandId: string;
+    title: string;
+    shortText: string;
+    scoreDirection: 'higher_is_worse' | 'higher_is_better' | 'custom';
+    completedAt: string;
+  }>;
   // Финальный выбор маршрута (next_route_choice).
   nextRouteChoice: string | null;
   // Метрики периода — для KPI-карточек чекпоинт-отчёта.
@@ -418,6 +435,7 @@ export async function collectUserSignalsForProgram(params: {
   userProgramId: number | null;
   programStartedAt: Date | null;
   programCompletedAt: Date | null;
+  programSlug?: string | null;
   periodFromStep?: number;
 }): Promise<CollectedUserSignals> {
   const empty: CollectedUserSignals = {
@@ -431,6 +449,7 @@ export async function collectUserSignalsForProgram(params: {
     weeklyCheckAnswers: [],
     structuredFormHighlights: [],
     guidedStepsCompleted: [],
+    assessmentResults: [],
     nextRouteChoice: null,
     metrics: {
       stepsCompleted: 0,
@@ -441,12 +460,16 @@ export async function collectUserSignalsForProgram(params: {
   };
   if (!params.userProgramId || !params.programStartedAt) return empty;
 
-  const endDate = params.programCompletedAt ?? new Date();
+  // Верхняя граница — не раньше «сейчас»: при пересборке отчёта после replay
+  // нужно захватить mood/оценки, созданные после исходного завершения сада.
+  const endDate = new Date(
+    Math.max(params.programCompletedAt?.getTime() ?? 0, Date.now())
+  );
 
   // 1. Attempts и mood-чекины запрашиваем параллельно. Mood-чекины берём от
   // programStartedAt (а не periodStartDate), чтобы не ждать результата attempts.
   // В памяти после обработки attempts фильтруем до нужного periodStartDate.
-  const [attempts, allMoodRows] = await Promise.all([
+  const [attempts, allMoodRows, assessmentRows] = await Promise.all([
     db
       .select({
         step: userProgramStepAttempts.step,
@@ -463,7 +486,11 @@ export async function collectUserSignalsForProgram(params: {
       )
       .orderBy(asc(userProgramStepAttempts.step)),
     db
-      .select({ mood: moodCheckins.mood, createdAt: moodCheckins.createdAt })
+      .select({
+        mood: moodCheckins.mood,
+        createdAt: moodCheckins.createdAt,
+        entryDate: moodCheckins.entryDate,
+      })
       .from(moodCheckins)
       .where(
         and(
@@ -473,6 +500,27 @@ export async function collectUserSignalsForProgram(params: {
         )
       )
       .orderBy(asc(moodCheckins.createdAt)),
+    params.programSlug
+      ? db
+          .select({
+            assessmentSlug: assessmentAttempts.assessmentSlug,
+            source: assessmentAttempts.source,
+            totalScore: assessmentAttempts.totalScore,
+            bandId: assessmentAttempts.bandId,
+            resultSnapshot: assessmentAttempts.resultSnapshot,
+            completedAt: assessmentAttempts.completedAt,
+          })
+          .from(assessmentAttempts)
+          .where(
+            and(
+              eq(assessmentAttempts.userId, params.userId),
+              eq(assessmentAttempts.linkedProgramSlug, params.programSlug),
+              gte(assessmentAttempts.completedAt, params.programStartedAt),
+              lte(assessmentAttempts.completedAt, endDate)
+            )
+          )
+          .orderBy(asc(assessmentAttempts.completedAt))
+      : Promise.resolve([]),
   ]);
 
   const journalSnippets: string[] = [];
@@ -489,7 +537,25 @@ export async function collectUserSignalsForProgram(params: {
 
   const periodFromStep = params.periodFromStep ?? 0;
 
+  // На повторном прохождении (replay) шага создаётся новая завершённая попытка с
+  // тем же step. Для отчёта берём только ПОСЛЕДНЮЮ завершённую попытку каждого
+  // шага (max createdAt): свежие данные перезаписывают старые, а не суммируются
+  // с ними (иначе дневник/оценки/формы задвоятся). Остальные шаги остаются как
+  // были — их последняя попытка единственная.
+  const toMs = (value: Date | string) =>
+    value instanceof Date ? value.getTime() : new Date(value).getTime();
+  const latestAttemptByStep = new Map<number, (typeof attempts)[number]>();
   for (const row of attempts) {
+    const prev = latestAttemptByStep.get(row.step);
+    if (!prev || toMs(row.createdAt) >= toMs(prev.createdAt)) {
+      latestAttemptByStep.set(row.step, row);
+    }
+  }
+  const dedupedAttempts = Array.from(latestAttemptByStep.values()).sort(
+    (a, b) => a.step - b.step
+  );
+
+  for (const row of dedupedAttempts) {
     if (row.step < periodFromStep) continue;
     const actions = Array.isArray(row.actions)
       ? (row.actions as Array<{
@@ -723,11 +789,24 @@ export async function collectUserSignalsForProgram(params: {
       : allMoodRows;
 
   const moodDistribution: Record<string, number> = {};
-  const moodTimeline: CollectedUserSignals['moodTimeline'] = [];
+  // На графике динамики настроения держим одну точку за календарный день
+  // пользователя: если за день несколько отметок, истинной считаем последнюю.
+  // moodRows отсортированы по createdAt asc, поэтому при группировке по entryDate
+  // последняя запись дня перезаписывает предыдущие. Распределение (moodDistribution)
+  // при этом считаем по всем отметкам — оно отражает общий фон, а не график.
+  const moodTimelineByDay = new Map<
+    string,
+    CollectedUserSignals['moodTimeline'][number]
+  >();
   for (const row of moodRows) {
     const m = row.mood;
     moodDistribution[m] = (moodDistribution[m] ?? 0) + 1;
-    moodTimeline.push({
+    const dayKey =
+      row.entryDate ||
+      (row.createdAt instanceof Date
+        ? row.createdAt.toISOString().slice(0, 10)
+        : String(row.createdAt).slice(0, 10));
+    moodTimelineByDay.set(dayKey, {
       date:
         row.createdAt instanceof Date
           ? row.createdAt.toISOString()
@@ -736,12 +815,27 @@ export async function collectUserSignalsForProgram(params: {
       score: moodScoreMap[m] ?? 0,
     });
   }
+  const moodTimeline: CollectedUserSignals['moodTimeline'] = Array.from(
+    moodTimelineByDay.values()
+  );
 
   // metrics.stepsCompleted: уникальные step'ы attempts.
   const uniqueSteps = new Set<number>();
   for (const a of attempts) {
     if (a.step >= periodFromStep) uniqueSteps.add(a.step);
   }
+
+  // На replay финального шага мог появиться второй program_final attempt. Для
+  // отчёта берём последнюю попытку по каждой паре (опросник + источник):
+  // assessmentRows отсортированы по completedAt asc, значит последняя побеждает.
+  const latestAssessmentByKey = new Map<
+    string,
+    (typeof assessmentRows)[number]
+  >();
+  for (const row of assessmentRows) {
+    latestAssessmentByKey.set(`${row.assessmentSlug}:${row.source}`, row);
+  }
+  const dedupedAssessmentRows = Array.from(latestAssessmentByKey.values());
 
   return {
     journalSnippets: journalSnippets.slice(0, 8),
@@ -757,6 +851,19 @@ export async function collectUserSignalsForProgram(params: {
     weeklyCheckAnswers,
     structuredFormHighlights: structuredFormHighlights.slice(0, 12),
     guidedStepsCompleted,
+    assessmentResults: dedupedAssessmentRows.map((row) => ({
+      slug: row.assessmentSlug,
+      source: row.source,
+      score: row.totalScore,
+      bandId: row.bandId,
+      title: row.resultSnapshot.title,
+      shortText: row.resultSnapshot.shortText,
+      scoreDirection: row.resultSnapshot.scoreDirection,
+      completedAt:
+        row.completedAt instanceof Date
+          ? row.completedAt.toISOString()
+          : String(row.completedAt),
+    })),
     nextRouteChoice,
     metrics: {
       stepsCompleted: uniqueSteps.size,
@@ -854,6 +961,32 @@ function formatAnxietyTimelineForPrompt(
     .join('\n');
 }
 
+export function formatAssessmentResultsForPrompt(
+  results: CollectedUserSignals['assessmentResults']
+): string {
+  if (results.length === 0) return '';
+  const sourceLabels: Record<
+    CollectedUserSignals['assessmentResults'][number]['source'],
+    string
+  > = {
+    practice_page: 'самостоятельно из раздела оценки',
+    program_baseline: 'стартовый замер сада',
+    program_final: 'финальный замер сада',
+  };
+
+  return results
+    .map((result) => {
+      const direction =
+        result.scoreDirection === 'higher_is_better'
+          ? 'выше = навык доступнее'
+          : result.scoreDirection === 'higher_is_worse'
+            ? 'ниже = состояние легче'
+            : 'смотри интерпретацию результата';
+      return `${sourceLabels[result.source]} (${result.slug}, ${result.completedAt}): ${result.score} баллов, зона «${result.title}» (${direction}). ${result.shortText}`;
+    })
+    .join('\n');
+}
+
 function formatStructuredFormHighlightsForPrompt(
   highlights: CollectedUserSignals['structuredFormHighlights']
 ): string {
@@ -936,6 +1069,15 @@ async function generateLlmSummary(params: {
     );
   }
 
+  const assessmentBlock = formatAssessmentResultsForPrompt(
+    params.signals.assessmentResults
+  );
+  if (assessmentBlock) {
+    sections.push(
+      `### Опросники оценки состояния, связанные с садом\n${assessmentBlock}`
+    );
+  }
+
   if (params.aiChatInsights.length > 0) {
     sections.push(
       `### Саммари AI-разговоров пользователя (порядок хронологический)\n${params.aiChatInsights.map((s, i) => `${i + 1}. ${s}`).join('\n')}`
@@ -1011,7 +1153,7 @@ ${REPORT_HEADINGS.patterns}
 Один абзац (3-4 предложения): паттерны из journal_entry и reflection chips. Если есть chip-паттерны, отражающие конкретную технику — упоминай. Если в журнале повторяются темы — называй их. Если в weekly_check одна и та же графа «главное изменение» повторялась — это тоже паттерн (укажи).
 
 ${REPORT_HEADINGS.dynamics}
-Один-два абзаца (4-6 предложений). ОБЯЗАТЕЛЬНО используй данные из раздела «Динамика тревоги по шкале» И «Промежуточные отметки на контрольных точках», если они есть. Конкретные числа: «на старте 8/10, на первой контрольной точке 6, на финале 4 — снижение почти вдвое». Не «настроение улучшилось», а «mood-распределение показывает, что эпизоды very_bad концентрировались в первой половине». Если этих данных нет (< 3 точек) — отметь это как зону роста («регулярный mood-трек помог бы видеть динамику»). Категорически без обобщений «всё стало лучше» без чисел. НЕ привязывайся к календарю («за неделю», «через месяц»): говори о шагах и контрольных точках.
+Один-два абзаца (4-6 предложений). ОБЯЗАТЕЛЬНО используй данные из разделов «Динамика тревоги по шкале», «Промежуточные отметки на контрольных точках» и «Опросники оценки состояния, связанные с садом», если они есть. Конкретные числа: «на старте 8/10, на первой контрольной точке 6, на финале 4 — снижение почти вдвое». Не «настроение улучшилось», а «mood-распределение показывает, что эпизоды very_bad концентрировались в первой половине». Если этих данных нет (< 3 точек) — отметь это как зону роста («регулярный mood-трек помог бы видеть динамику»). Категорически без обобщений «всё стало лучше» без чисел. НЕ привязывайся к календарю («за неделю», «через месяц»): говори о шагах и контрольных точках.
 
 ${REPORT_HEADINGS.anchors}
 Один абзац (3-5 предложений): какие техники из методики, судя по сигналам, нашли отклик. Называй ИХ ПО ИМЕНИ: «техника СТОП», «дыхание 4-7-8», «заземление 5-4-3-2-1», «формула ACT-дефузии», «loving-kindness фраза», «self-soothing touch» и т.д. Используй **bold** для названий техник.
@@ -1041,6 +1183,11 @@ ${STYLE_RULES_PROMPT_BLOCK}`;
 
   try {
     const result = await chatWithFallback({
+      // Итоговый отчёт — 4000-6000 символов (~2500-3500 токенов на русском).
+      // Дефолт провайдера (800) обрывал текст на середине последней секции.
+      // Отчёт генерится один раз на завершение сада, поэтому больший лимит не
+      // бьёт по экономике. Запас до 3200 на маркдаун и заголовки.
+      maxOutputTokens: 3200,
       messages: [
         {
           role: 'system',
@@ -1220,6 +1367,7 @@ async function runGetOrGeneratePlantSummary(params: {
       userProgramId: userProgramRow?.id ?? null,
       programStartedAt: userProgramRow?.startedAt ?? null,
       programCompletedAt: userProgramRow?.completedAt ?? null,
+      programSlug: plant.programSlug,
     }),
     userProgramRow?.startedAt
       ? fetchAiChatInsights({

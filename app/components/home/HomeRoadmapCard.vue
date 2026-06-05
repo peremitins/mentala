@@ -385,6 +385,14 @@ function openCurrentStep() {
     limitDialogOpen.value = true;
     return;
   }
+  // Программа полностью пройдена, следующего сада нет — «Повторить» начинает с первого шага.
+  if (isProgramFullyCompleted.value) {
+    void navigateTo({
+      path: `/programs/${props.program.slug}/steps/1`,
+      query: { replay: '1' },
+    });
+    return;
+  }
   void navigateTo(
     `/programs/${props.program.slug}/steps/${currentStep.value.step}`
   );

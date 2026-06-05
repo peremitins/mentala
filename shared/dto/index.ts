@@ -16,6 +16,7 @@ export * from './sessionSummaryUser';
 export * from './retention';
 export * from './garden';
 export * from './program-checkpoint';
+export * from './assessments';
 export * from '../navigation';
 
 const THOUGHT_DUMP_ENTRY_CONTEXT_MAX_CHARS = 2_500;

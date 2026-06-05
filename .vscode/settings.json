@@ -21,7 +21,7 @@
   "prettier.tabWidth": 2,
   "prettier.vueIndentScriptAndStyle": true,
   "prettier.useTabs": false,
-  "diffEditor.ignoreTrimWhitespace": false,
+  "diffEditor.ignoreTrimWhitespace": true,
   "editor.renderWhitespace": "all",
   "editor.trimAutoWhitespace": false,
   "editor.multiCursorModifier": "ctrlCmd",

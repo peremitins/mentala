@@ -1,6 +1,6 @@
 <template>
   <div
-    class="relative h-full overflow-y-auto xs:space-y-3 space-y-1 pb-[100px]"
+    class="relative h-full overflow-y-auto xs:space-y-3 space-y-1 pb-[100px] rounded-lg"
   >
     <PageHeader title="Практики" />
 
@@ -142,6 +142,40 @@
             </h2>
             <p class="text-sm text-foreground/80">
               Записывайте хорошие моменты дня с подсказками
+            </p>
+          </div>
+        </div>
+      </NuxtLink>
+
+      <NuxtLink
+        to="/practices/assessments"
+        class="glass-deep p-5 group relative overflow-hidden transition hover:-translate-y-1 animate-slide-up"
+        style="animation-delay: 0.2s; animation-fill-mode: both"
+      >
+        <div
+          class="pointer-events-none absolute inset-0 transition group-hover:opacity-100"
+        >
+          <div
+            class="tile-orb tile-orb--slow absolute -right-14 -top-10 h-40 w-40 rounded-full bg-gradient-to-br from-emerald-400/35 via-cyan-400/20 to-transparent blur-2xl"
+          />
+          <div
+            class="tile-orb tile-orb--delay absolute -left-10 bottom-0 h-32 w-32 rounded-full bg-gradient-to-br from-teal-500/25 via-sky-500/20 to-transparent blur-2xl"
+          />
+        </div>
+
+        <div class="relative z-10 space-y-3">
+          <div
+            class="flex h-[60px] w-[60px] items-center justify-center rounded-2xl border border-white/40 bg-white/55 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]"
+          >
+            <span class="text-2xl font-semibold text-emerald-700">7</span>
+          </div>
+          <div class="space-y-1">
+            <h2 class="text-lg font-semibold text-foreground">
+              Оценка состояния
+            </h2>
+            <p class="text-sm text-foreground/80">
+              Короткие опросники, чтобы заметить состояние и выбрать следующий
+              шаг
             </p>
           </div>
         </div>

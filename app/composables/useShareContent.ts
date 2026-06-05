@@ -20,6 +20,49 @@ export type ShareContentOptions = {
 export type ShareContentResult = 'shared' | 'copied' | 'cancelled' | 'failed';
 
 /**
+ * Конвертирует image-blob в PNG через canvas. PNG/JPEG возвращаем как есть.
+ *
+ * Зачем: исходные картинки растений — webp. Telegram (и часть приложений) не
+ * принимает webp как фото через системный share-лист — он ассоциирует webp со
+ * стикерами, поэтому изображение «не прикреплялось», уходил только текст. PNG
+ * принимается везде как обычное фото.
+ */
+async function toShareableImageFile(
+  blob: Blob,
+  fileName: string
+): Promise<File> {
+  if (blob.type === 'image/png' || blob.type === 'image/jpeg') {
+    return new File([blob], fileName, { type: blob.type });
+  }
+  try {
+    if (
+      typeof createImageBitmap === 'function' &&
+      typeof document !== 'undefined'
+    ) {
+      const bitmap = await createImageBitmap(blob);
+      const canvas = document.createElement('canvas');
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(bitmap, 0, 0);
+        bitmap.close?.();
+        const pngBlob = await new Promise<Blob | null>((resolve) =>
+          canvas.toBlob(resolve, 'image/png')
+        );
+        if (pngBlob) {
+          const pngName = fileName.replace(/\.[a-z0-9]+$/i, '') + '.png';
+          return new File([pngBlob], pngName, { type: 'image/png' });
+        }
+      }
+    }
+  } catch (error) {
+    console.warn('[shareContent] webp→png conversion failed:', error);
+  }
+  return new File([blob], fileName, { type: blob.type || 'image/webp' });
+}
+
+/**
  * Загружает картинку с указанного URL и оборачивает её в File для Web Share API.
  * Возвращает null при любой ошибке (CORS, missing, и т.п.) — шеринг продолжится
  * без файла, основываясь на title/text/url.
@@ -37,8 +80,7 @@ async function fetchImageAsFile(
     const res = await fetch(absoluteUrl, { credentials: 'omit' });
     if (!res.ok) return null;
     const blob = await res.blob();
-    const type = blob.type || 'image/webp';
-    return new File([blob], fileName, { type });
+    return await toShareableImageFile(blob, fileName);
   } catch (error) {
     console.warn('[shareContent] fetchImageAsFile failed:', error);
     return null;
@@ -46,7 +88,15 @@ async function fetchImageAsFile(
 }
 
 /**
- * Собирает payload для Web Share API без platform-specific полей.
+ * Собирает payload для Web Share API.
+ *
+ * Ссылку встраиваем прямо в text, а не только в поле url. На десктопе (Chrome
+ * на macOS) системный share-лист и многие таргеты игнорируют поле url и берут
+ * только text — тогда ссылка терялась, уходил голый текст без превью. Со ссылкой
+ * в тексте link-preview таргеты (Telegram, Slack, заметки) сами подтягивают
+ * og:image со страницы /share/garden/[slug], поэтому картинка появляется даже
+ * когда файл-шеринг на десктопе недоступен. Поле url оставляем для таргетов,
+ * умеющих рендерить богатое превью из него.
  */
 function buildBrowserShareData(options: ShareContentOptions): ShareData {
   const shareData: ShareData = {};
@@ -55,8 +105,12 @@ function buildBrowserShareData(options: ShareContentOptions): ShareData {
     shareData.title = options.title;
   }
 
-  if (options.text) {
-    shareData.text = options.text;
+  const text =
+    options.text && options.url
+      ? `${options.text}\n${options.url}`
+      : options.text;
+  if (text) {
+    shareData.text = text;
   }
 
   if (options.url) {
@@ -138,9 +192,19 @@ async function tryNativeShare(
       return null;
     }
 
+    // На Android многие таргеты (мессенджеры, заметки) читают только EXTRA_TEXT
+    // и игнорируют поле url — тогда ссылка на сад терялась. Поэтому встраиваем
+    // ссылку прямо в текст. iOS по этой же ссылке в тексте подтягивает og:image
+    // превью со страницы /share/garden/[slug]. Поле url оставляем для таргетов,
+    // которые умеют рендерить богатое превью.
+    const nativeText =
+      options.text && options.url
+        ? `${options.text}\n${options.url}`
+        : options.text;
+
     await Share.share({
       title: options.title,
-      text: options.text,
+      text: nativeText,
       url: options.url,
       dialogTitle: options.dialogTitle,
     });
@@ -176,10 +240,17 @@ export async function shareContent(
     const fileName = options.imageFileName || 'mentala-garden.webp';
     const file = await fetchImageAsFile(options.imageUrl, fileName);
     if (file && typeof navigator !== 'undefined') {
+      // ВАЖНО: при шеринге файла НЕ передаём поле url. Web Share API во многих
+      // браузерах (в т.ч. Chrome на macOS) отклоняет canShare(), если в payload
+      // одновременно есть и files, и url — поделиться можно либо файлом, либо
+      // ссылкой. Из-за этого картинка не прикреплялась и шеринг откатывался на
+      // голый текст. Ссылка уже вшита в text (buildBrowserShareData), поэтому
+      // здесь оставляем только title + text + files.
       const dataWithFiles: ShareData & { files?: File[] } = {
-        ...shareData,
         files: [file],
       };
+      if (shareData.title) dataWithFiles.title = shareData.title;
+      if (shareData.text) dataWithFiles.text = shareData.text;
       try {
         if (
           typeof navigator.canShare === 'function' &&

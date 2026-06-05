@@ -61,7 +61,7 @@ describe('calm_anxiety_30 blueprint v5', () => {
   it('сохраняет обязательную v5-сетку действий по всем 30 шагам', async () => {
     const { blueprint, buildActions } = await loadRuntimeBlueprint();
     const expectedTypesAfterIntro: ProgramStepActionType[][] = [
-      ['micro_reflection', 'breathing', 'micro_reflection'],
+      ['guided_steps', 'micro_reflection', 'breathing', 'micro_reflection'],
       [
         'quick_help_grounding',
         'ai_reflection',
@@ -106,7 +106,13 @@ describe('calm_anxiety_30 blueprint v5', () => {
       ['breathing', 'quick_help_tension', 'journal_entry'],
       ['quick_help_grounding', 'ai_chat_session', 'structured_form'],
       ['meditation', 'structured_form'],
-      ['meditation', 'ai_chat_session', 'journal_entry', 'weekly_check'],
+      [
+        'meditation',
+        'ai_chat_session',
+        'journal_entry',
+        'guided_steps',
+        'weekly_check',
+      ],
     ];
 
     for (let index = 0; index < blueprint.length; index++) {
@@ -146,11 +152,18 @@ describe('calm_anxiety_30 blueprint v5', () => {
     expect(actions[0]?.type).toBe('guided_steps');
     expect(actions[0]?.formKind).toBe('step_intro');
     expect(actions[0]?.prompt?.length).toBeLessThan(340);
-    expect(actions[1]?.type).toBe('micro_reflection');
-    expect(actions[1]?.title).toBe('Отметка состояния');
-    expect(actions[1]?.prompt).toContain('С чего ты сейчас начинаешь');
-    expect(actions[2]?.type).toBe('breathing');
-    expect(actions[2]?.title).toBe('Первое дыхание');
+    expect(actions[1]).toMatchObject({
+      type: 'guided_steps',
+      formKind: 'assessment_prompt',
+      targetId: 'anxiety_check_v1',
+      template: 'program_baseline',
+      required: false,
+    });
+    expect(actions[2]?.type).toBe('micro_reflection');
+    expect(actions[2]?.title).toBe('Отметка состояния');
+    expect(actions[2]?.prompt).toContain('С чего ты сейчас начинаешь');
+    expect(actions[3]?.type).toBe('breathing');
+    expect(actions[3]?.title).toBe('Первое дыхание');
   });
 
   it('подключает intro-action для всех шагов и мини-статьи из v5 ТЗ', async () => {

@@ -107,8 +107,15 @@ const props = withDefaults(
      * По умолчанию true — обратная совместимость со старыми вызовами.
      */
     visible?: boolean;
+    /**
+     * Режим повторного прохождения: отчёт уже существует, но юзер заново прошёл
+     * финальный шаг. Тогда вместо polling кэша форсим пересборку отчёта по
+     * свежим данным (refresh-summary?force=1) и ждём её, иначе summary-status
+     * мгновенно вернул бы старый кэш.
+     */
+    forceRefresh?: boolean;
   }>(),
-  { visible: true }
+  { visible: true, forceRefresh: false }
 );
 const emit = defineEmits<{
   (
@@ -215,6 +222,71 @@ function startPolling() {
   pollTimer = setInterval(doPoll, 2000);
 }
 
+// Повторное прохождение: форсим пересборку отчёта по свежим данным и ждём её.
+// Polling кэша тут не подходит — он вернул бы старый отчёт мгновенно.
+function startForceRefresh() {
+  if (!props.programSlug) return;
+  isPolling.value = true;
+  elapsedSec.value = 0;
+  phaseIndex.value = 0;
+  showLongWait.value = false;
+
+  elapsedTimer = setInterval(() => {
+    elapsedSec.value += 1;
+    if (elapsedSec.value >= 15) showLongWait.value = true;
+    if (elapsedSec.value >= 60) {
+      stopAllTimers();
+      useToast(
+        'Итоговый отчёт готовится в фоне',
+        'Загляни в «Оранжерею» через минуту-другую: там будет готовый итог.',
+        'info'
+      );
+      emit('failed');
+    }
+  }, 1000);
+  phaseTimer = setInterval(() => {
+    phaseIndex.value += 1;
+  }, 3500);
+
+  const slug = props.programSlug;
+  void (async () => {
+    try {
+      await useAPI(
+        `/api/garden/plants/by-slug/${encodeURIComponent(slug)}/refresh-summary?force=1`,
+        { method: 'POST', suppressErrorToast: true }
+      );
+      // Пересборка завершилась — забираем свежий отчёт + метрики + plantId.
+      const result = await useAPI<{
+        plantId: number;
+        status: 'ready' | 'pending';
+        summaryText: string | null;
+        metrics: Metrics | null;
+      }>(
+        `/api/garden/plants/by-slug/${encodeURIComponent(slug)}/summary-status`,
+        { method: 'GET', suppressErrorToast: true }
+      );
+      if (result.summaryText) {
+        stopAllTimers();
+        emit('ready', {
+          plantId: result.plantId,
+          summaryText: result.summaryText,
+          metrics: result.metrics,
+        });
+        return;
+      }
+      stopAllTimers();
+      emit('failed');
+    } catch (error) {
+      console.error(
+        '[ProgramFinalReportPreparing] force refresh failed:',
+        error
+      );
+      stopAllTimers();
+      emit('failed');
+    }
+  })();
+}
+
 function stopAllTimers() {
   if (pollTimer) {
     clearInterval(pollTimer);
@@ -240,7 +312,11 @@ watch(
   () => [props.open, props.programSlug] as const,
   ([isOpen, slug]) => {
     if (isOpen && slug) {
-      startPolling();
+      if (props.forceRefresh) {
+        startForceRefresh();
+      } else {
+        startPolling();
+      }
     } else {
       stopAllTimers();
     }

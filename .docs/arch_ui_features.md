@@ -2,8 +2,8 @@
 
 ## Практики (хаб `/practices`)
 
-- Медитации, дыхательные практики, быстрая помощь, дневник благодарности
-- На хабе `/practices` платные медитации и дневник благодарности не закрываются заранее: карточки ведут внутрь разделов без badge/lock. Paywall показывается на потребляющем действии: запуск медитации, избранное/управление треком, сохранение записи дневника, premium-фото или кастомизация worksheet.
+- Медитации, дыхательные практики, быстрая помощь, дневник благодарности, оценка состояния
+- На хабе `/practices` платные медитации, дневник благодарности и оценка состояния не закрываются заранее: карточки ведут внутрь разделов без раннего lock. Paywall показывается на потребляющем действии: запуск медитации, избранное/управление треком, сохранение записи дневника, premium-фото или кастомизация worksheet, прохождение опросника и получение результата.
 - Дыхательные: каталог в `app/lib/breathPracticesCatalog.ts`, плеер `BreathPracticePlayer.vue` + `BreathOrb.vue`
 - Голосовые подсказки фаз из `public/breath/voice/{informal|formal}/*.mp3`
 - Web/legacy дыхательные voice/cue идут через `Howler` с `html5: true`; native iOS/Android используют отдельный `NativeBreathSessionService` поверх MediaGrid для основной практики и отдельный intro-source для prep countdown
@@ -15,6 +15,16 @@
 - Переключение voice/cue во время уже идущей практики не должно повторно озвучивать текущую фазу: toggle меняет состояние канала без немедленного дубля того же шага
 - `pause -> play` и `stop -> play` на native не перезапускают текущую фазу через JS: player вызывает `pauseSession` / `resumeSession`, а защита от stale команд делается на уровне session-service
 - Кастомные практики: 1-30 сек фазы, 2-4 фазы, хранение в localStorage/Capacitor Preferences
+
+## Оценка состояния (`/practices/assessments`)
+
+- Раздел находится внутри практик и использует продуктовую рамку самонаблюдения, а не медицинской проверки. В UI основной термин — «Оценка состояния», внутри раздела — «опросник»; не использовать формулировки про диагноз, лечение или расстройство.
+- Активные опросники: `anxiety_check_v1` / «Оценка тревоги» (валидированная шкала **GAD-7**) для сада `calm_anxiety_30` / «Спокойствие» и `self_compassion_scs_sf_v1` / «Оценка доброты к себе» (валидированная шкала **SCS-SF**) для сада `self_kindness_21` / «Доброта к себе». Вопросы и подсчёт — в исходном валидированном виде, но в UI результат подаётся как самонаблюдение: без ИИ, без клинических claims и без слов «диагноз»/«расстройство», заголовки шкал в интерфейсе не показываются. Самодельный `self_kindness_v1` удалён — сад использует SCS-SF.
+- `GET /api/assessments` и `GET /api/assessments/:slug` являются preview endpoint-ами: требуют авторизацию, но не требуют подписку. В ответе для активных опросников может приходить опциональный `lastAttempt` с id последней попытки, чтобы UI мог открыть последний результат из списка или detail-экрана. Будущие опросники отображаются как `coming_soon` с текстом «Откроется вместе с будущим садом».
+- Потребляющее действие закрывается через `assessments.full`: gated runner API, отправка ответов, результат, история, график и baseline/final-замеры сада должны проверять entitlement на сервере. Одного frontend paywall недостаточно. Gated endpoint-ы: `GET /api/assessments/:slug/run`, `POST /api/assessments/:slug/attempts`, `GET /api/assessments/:slug/attempts/:attemptId`, `GET /api/assessments/:slug/history`, `GET /api/assessments/:slug/chart`.
+- UI runner находится на `/practices/assessments/:slug/run`: intro, один вопрос на экран, крупные touch targets, progress bar, постоянный контекст периода ответа, fade-only Vue `Transition`, loading/error states. Экран результата `/practices/assessments/:slug/results/:attemptId` показывает band, deterministic explanation, сравнение с предыдущей попыткой, safety-текст и SVG-график динамики без дублирования итогового текста.
+- Попытки хранятся в `assessment_attempts`: `assessment_slug`, `assessment_version`, `source`, `linked_program_slug`, `linked_program_attempt_id`, `total_score`, `band_id`, `result_snapshot`, `answers`, `user_date`, `timezone`, `completed_at`. Для chart показывается одна точка за `user_date`: если в один день несколько попыток, берётся последняя завершённая попытка текущей версии опросника.
+- Baseline/final-замеры садов не добавляют новый Roadmap action type. Для совместимости web/iOS/Android они идут как существующий `guided_steps` с `formKind='assessment_prompt'`, `targetId=<assessmentSlug>` и `template='program_baseline' | 'program_final'`. Новый web-клиент рендерит отдельный assessment prompt и возвращается из runner с `assessmentAttemptId`; старые клиенты остаются на известном `guided_steps` fallback и могут продолжить шаг.
 
 ## Быстрая помощь (`/quick-help`)
 
@@ -216,7 +226,7 @@
 
 - `server/application/garden/garden-summary.service.ts` — финальный отчёт на 9 секций (4000-6000 знаков), используется на шаге 30. Хранится в `user_plants.user_summary` и дублируется в `user_program_checkpoint_summaries(checkpointStep=30, kind='final')`.
 - `server/application/garden/garden-checkpoint-summary.service.ts` — промежуточные отчёты на 5 секций (1500-2500 знаков) для шагов 7/14/21. Накопленный анализ: данные с начала программы, акцент на динамике с предыдущей точки.
-- `collectUserSignalsForProgram` (общая для обоих) тянет из `userProgramStepAttempts.actions[]`: `rating_scale` timeline тревоги, `weekly_check` ответы, `structured_form` цитаты, `journal_entry` + `thought_dump` фрагменты, `ai_reflection` + `micro_reflection` chips, `mood_checkins`. Фильтр `isMeaningfulText` отбрасывает странные/случайные тексты юзера (минимум 12 символов, 3 слова, 6 уникальных букв).
+- `collectUserSignalsForProgram` (общая для обоих) тянет из `userProgramStepAttempts.actions[]`: `rating_scale` timeline тревоги, `weekly_check` ответы, `structured_form` цитаты, `journal_entry` + `thought_dump` фрагменты, `ai_reflection` + `micro_reflection` chips, `mood_checkins`. Для финального отчёта дополнительно подтягиваются связанные с садом `assessment_attempts` (`linked_program_slug`, `program_baseline`/`program_final`) и передаются LLM в блоке «Опросники оценки состояния, связанные с садом». Фильтр `isMeaningfulText` отбрасывает странные/случайные тексты юзера (минимум 12 символов, 3 слова, 6 уникальных букв).
 
 API:
 

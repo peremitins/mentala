@@ -90,6 +90,10 @@ export async function chatWithFallback(params: {
     role: 'system' | 'user' | 'assistant' | 'developer';
     content: string;
   }>;
+  // Явный лимит вывода. Нужен для длинных генераций (итоговый отчёт сада),
+  // иначе берётся config.llm.openai.defaultMaxOutputTokens (800) и текст
+  // обрывается на середине.
+  maxOutputTokens?: number;
 }): Promise<{
   content: string;
   model?: string;
@@ -105,6 +109,9 @@ export async function chatWithFallback(params: {
       const result = await provider.chat({
         messages: params.messages,
         model: params.model,
+        options: params.maxOutputTokens
+          ? { maxOutputTokens: params.maxOutputTokens }
+          : undefined,
       });
       return {
         content: result.content,

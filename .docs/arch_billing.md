@@ -72,7 +72,8 @@ Template push-уведомления остаются бесплатным reten
 - `feature_access_policies` в БД, отдаются через entitlement API
 - Bootstrap: `GET /api/user/me` → `billing` (plan/trial/aiChatMode/entitlements)
 - Lock/paywall: иконка тарифа + `FeaturePaywallModal` при клике
-- Для discovery-разделов paywall ставится на потребляющее действие, а не на вход: `/practices` ведёт в медитации и дневник благодарности без раннего lock; read-only API медитации и дневника доступны как preview, запуск/сохранение остаются gated.
+- Для discovery-разделов paywall ставится на потребляющее действие, а не на вход: `/practices` ведёт в медитации, дневник благодарности и оценку состояния без раннего lock; read-only API медитации, дневника и assessment preview доступны как preview, запуск/сохранение/отправка остаются gated.
+- `assessments.full`: requiredPlan `pro`, trialUnlocked `true`, targetPlan `pro`. Preview списка и описания опросника виден без подписки, но runner API, сохранение attempt, результат, история, график и baseline/final-замеры сада обязаны проверять этот feature key на сервере через `assertAssessmentsAccess`; preview endpoint-ы остаются без подписочного gate.
 - Авто-fallback: без entitlement на AI-уведомления → сервер переводит в templates
 - `roleId=support` трактуется как premium-equivalent доступ для review/QA: полный доступ к premium-фичам без покупки, но без административного доступа к чужим данным
 - Premium-equivalent для `support` применяется независимо от текущей записи подписки (`basic/pro/premium`) при расчёте AI gate и feature access

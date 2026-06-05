@@ -119,13 +119,50 @@ useIntersectionObserver(
 );
 
 /**
- * Скролл к активному узлу. Использует scrollIntoView с `block: 'center'` —
- * браузер сам найдёт ближайший scrollable parent и поставит узел по центру.
- * Не делает ничего, если активного узла в DOM ещё нет.
+ * Ищет ближайший scrollable-предок (overflow-y: auto | scroll).
+ * НЕ использует scrollIntoView — он скроллит все предки включая window,
+ * что на iOS Capacitor WebView сбивает window.scrollY и рушит sticky-хедеры
+ * на текущей и последующих страницах.
+ */
+function findScrollContainer(): HTMLElement | null {
+  if (typeof window === 'undefined') return null;
+  let el: HTMLElement | null = containerRef.value?.parentElement ?? null;
+  while (el && el !== document.documentElement) {
+    const overflow = window.getComputedStyle(el).overflowY;
+    if (overflow === 'auto' || overflow === 'scroll') return el;
+    el = el.parentElement;
+  }
+  return null;
+}
+
+/**
+ * Скролл к активному узлу. Явно скроллит только локальный overflow-контейнер,
+ * не трогая window.scrollY — это предотвращает исчезновение sticky-хедеров.
  */
 function scrollToActive(behavior: 'auto' | 'smooth' = 'smooth') {
-  if (!activeNodeEl.value) return;
-  activeNodeEl.value.scrollIntoView({ behavior, block: 'center' });
+  const active = activeNodeEl.value;
+  if (!active) return;
+
+  const scrollContainer = findScrollContainer();
+  if (!scrollContainer) return;
+
+  const activeRect = active.getBoundingClientRect();
+  const containerRect = scrollContainer.getBoundingClientRect();
+  const activeCenterRelToContainer =
+    activeRect.top + activeRect.height / 2 - containerRect.top;
+  const targetScrollTop =
+    scrollContainer.scrollTop +
+    activeCenterRelToContainer -
+    scrollContainer.clientHeight / 2;
+
+  if (behavior === 'auto') {
+    scrollContainer.scrollTop = Math.max(0, targetScrollTop);
+  } else {
+    scrollContainer.scrollTo({
+      top: Math.max(0, targetScrollTop),
+      behavior: 'smooth',
+    });
+  }
 }
 
 defineExpose({ activeStep, activeNodeVisible, scrollToActive });
@@ -159,14 +196,8 @@ async function performInitialMount() {
       // Обновляем activeNodeEl до scroll'а на случай если предыдущий
       // watcher ещё не отработал (race).
       updateActiveNodeEl();
-      if (activeNodeEl.value) {
-        // behavior: 'auto' = instant, чтобы пользователь не видел сам
-        // scroll-процесс (он происходит пока узлы ещё opacity: 0).
-        activeNodeEl.value.scrollIntoView({
-          behavior: 'auto',
-          block: 'center',
-        });
-      }
+      // behavior: 'auto' = instant, пока узлы ещё opacity: 0 — прыжка нет.
+      scrollToActive('auto');
       // Толкаем reveal на следующий frame — даём scroll положиться.
       requestAnimationFrame(() => {
         isReady.value = true;

@@ -19,6 +19,11 @@ import {
 } from 'drizzle-orm/pg-core';
 import { sql, type SQL } from 'drizzle-orm';
 import { DEFAULT_ASSISTANT_VOICE_ID } from '../../../shared/constants/assistantVoiceCatalog';
+import type {
+  AssessmentAttemptAnswer,
+  AssessmentAttemptResultSnapshot,
+  AssessmentAttemptSource,
+} from '../../../shared/dto/assessments';
 
 // Roles table (must be defined before users references it)
 export const roles = pgTable('roles', {
@@ -759,6 +764,52 @@ export const moodCheckins = pgTable(
       table.entryDate,
       table.createdAt
     ),
+  })
+);
+
+export const assessmentAttempts = pgTable(
+  'assessment_attempts',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    assessmentSlug: varchar('assessment_slug', { length: 80 }).notNull(),
+    assessmentVersion: integer('assessment_version').notNull(),
+    source: varchar('source', { length: 40 })
+      .$type<AssessmentAttemptSource>()
+      .notNull(),
+    linkedProgramSlug: varchar('linked_program_slug', { length: 80 }),
+    linkedProgramAttemptId: integer('linked_program_attempt_id').references(
+      () => userProgramStepAttempts.id,
+      { onDelete: 'set null' }
+    ),
+    totalScore: smallint('total_score').notNull(),
+    bandId: varchar('band_id', { length: 80 }).notNull(),
+    resultSnapshot: jsonb('result_snapshot')
+      .$type<AssessmentAttemptResultSnapshot>()
+      .notNull(),
+    answers: jsonb('answers').$type<AssessmentAttemptAnswer[]>().notNull(),
+    userDate: varchar('user_date', { length: 10 }).notNull(),
+    timezone: varchar('timezone', { length: 100 }).notNull(),
+    completedAt: timestamp('completed_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    userAssessmentCompletedIdx: index(
+      'idx_assessment_attempts_user_assessment_completed'
+    ).on(table.userId, table.assessmentSlug, table.completedAt),
+    userAssessmentDateIdx: index(
+      'idx_assessment_attempts_user_assessment_date'
+    ).on(table.userId, table.assessmentSlug, table.userDate),
+    userProgramSourceIdx: index(
+      'idx_assessment_attempts_user_program_source'
+    ).on(table.userId, table.linkedProgramSlug, table.source),
   })
 );
 

@@ -240,9 +240,27 @@
         />
 
         <ProgramGuidedStepsAction
-          v-else-if="currentAction.type === 'guided_steps'"
+          v-else-if="
+            currentAction.type === 'guided_steps' &&
+            !isAssessmentPromptAction(currentAction)
+          "
           v-model="guidedStepsDraft"
           :action="currentAction"
+        />
+
+        <ProgramAssessmentPromptAction
+          v-else-if="
+            currentAction.type === 'guided_steps' &&
+            isAssessmentPromptAction(currentAction)
+          "
+          :action="currentAction"
+          :program-slug="slug"
+          :step="step"
+          :attempt-id="response.attempt.id"
+          :completed-attempt-id="returnedAssessmentAttemptId"
+          :skipped="isCurrentAssessmentPromptSkipped"
+          @skip="skipAssessmentPrompt"
+          @complete="onAssessmentPromptComplete"
         />
 
         <ProgramWeeklyCheckAction
@@ -311,6 +329,7 @@
     <ProgramFinalReportPreparing
       :open="preparingOpen"
       :visible="preparingVisible"
+      :force-refresh="finaleIsReplayRefresh"
       :program-slug="slug"
       :plant-title="completedProgram?.title || null"
       :plant-image-src="completedPlantImageSrc"
@@ -375,6 +394,7 @@ import ProgramHelpHint from '@/app/components/programs/ProgramHelpHint.vue';
 import ProgramAiChatAction from '@/app/components/programs/ProgramAiChatAction.vue';
 import ProgramStructuredFormAction from '@/app/components/programs/ProgramStructuredFormAction.vue';
 import ProgramGuidedStepsAction from '@/app/components/programs/ProgramGuidedStepsAction.vue';
+import ProgramAssessmentPromptAction from '@/app/components/programs/ProgramAssessmentPromptAction.vue';
 import ProgramWeeklyCheckAction from '@/app/components/programs/ProgramWeeklyCheckAction.vue';
 import ProgramFinalReportPreparing from '@/app/components/programs/ProgramFinalReportPreparing.vue';
 import ProgramCheckpointReportPreparing from '@/app/components/programs/ProgramCheckpointReportPreparing.vue';
@@ -424,6 +444,13 @@ const selectedRouteChoice = ref<string | null>(null);
 const structuredFormDraft = ref<Record<string, unknown>>({});
 const guidedStepsDraft = ref<string[]>([]);
 const weeklyCheckDraft = ref<Record<string, unknown>>({});
+const assessmentPromptSkippedActionIds = ref<Set<string>>(new Set());
+// attemptId пройденного встроенного опросника, по id action'а. Заполняется,
+// когда AssessmentRunner внутри шага эмитит complete (без редиректа на страницу
+// практик). Используется при завершении action'а как assessmentAttemptId.
+const assessmentCompletedAttemptByActionId = ref<Map<string, number>>(
+  new Map()
+);
 const isSaving = ref(false);
 const isCompleted = ref(false);
 const completionRewardGranted = ref(false);
@@ -459,6 +486,18 @@ const currentAction = computed<ProgramStepActionStateDto | null>(
 const currentActionCompletionDelaySeconds = computed(() => {
   return getActionCompletionDelaySeconds(currentAction.value);
 });
+const returnedAssessmentAttemptId = computed(() => {
+  const action = currentAction.value;
+  if (!action || !isAssessmentPromptAction(action)) return null;
+  return assessmentCompletedAttemptByActionId.value.get(action.id) ?? null;
+});
+const isCurrentAssessmentPromptSkipped = computed(() => {
+  const action = currentAction.value;
+  return Boolean(
+    action && assessmentPromptSkippedActionIds.value.has(action.id)
+  );
+});
+
 
 function getActionCompletionDelaySeconds(
   action: ProgramStepActionStateDto | null | undefined
@@ -503,6 +542,16 @@ const preparingOpen = ref(false);
 const preparingVisible = ref(false);
 // Анимация цветка на финале завершена (flyout доигран/пропущен).
 const finalFlyoutDone = ref(false);
+// Минимальная длительность показа оверлея «Готовится отчёт» уже прошла. Нужна,
+// чтобы юзер всегда успел увидеть фазу анализа данных, даже если отчёт
+// сгенерировался быстро (иначе sheet открывался мгновенно поверх анимации
+// цветка, и анализ визуально проскакивал).
+const finalPreparingMinElapsed = ref(false);
+const FINAL_PREPARING_MIN_MS = 2600;
+let finalPreparingMinTimer: ReturnType<typeof setTimeout> | null = null;
+// Финальный шаг пройден повторно (replay): отчёт пересобираем по свежим данным
+// через force-refresh, без анимации цветка (на replay её нет).
+const finaleIsReplayRefresh = ref(false);
 const reportSheetOpen = ref(false);
 const reportData = ref<ReportReadyPayload | null>(null);
 
@@ -648,6 +697,10 @@ const showActionIntro = computed(() => {
   if (action.type === 'guided_steps' && action.formKind === 'step_intro') {
     return false;
   }
+  // Assessment prompt имеет собственный заголовок внутри компонента
+  if (action.type === 'guided_steps' && action.formKind === 'assessment_prompt') {
+    return false;
+  }
   return !ACTION_TYPES_WITH_INTERNAL_TITLE.has(action.type);
 });
 
@@ -701,6 +754,15 @@ const nextDisabled = computed(() => {
     return !isWeeklyCheckComplete(currentAction.value, weeklyCheckDraft.value);
   }
   if (currentAction.value.type === 'guided_steps') {
+    if (isAssessmentPromptAction(currentAction.value)) {
+      // Кнопку шага держим заблокированной, пока юзер не пройдёт встроенный
+      // опросник или явно не нажмёт «Пропустить». Это не даёт случайно
+      // проскочить шаг мимо опросника нижней кнопкой во время ответов.
+      return !(
+        returnedAssessmentAttemptId.value ||
+        isCurrentAssessmentPromptSkipped.value
+      );
+    }
     return (
       currentAction.value.required !== false &&
       !isGuidedStepsComplete(currentAction.value, guidedStepsDraft.value)
@@ -765,6 +827,22 @@ const isProgramJustCompleted = computed(() => {
   const program = completedProgram.value;
   if (!program) return false;
   return program.completedSteps >= program.totalSteps;
+});
+
+// Повторно пройден ПОСЛЕДНИЙ шаг уже завершённого сада (replay). Награды нет
+// (поэтому isProgramJustCompleted=false), но данные финального шага обновились —
+// значит пересобираем итоговый отчёт по свежим данным. Только последний шаг:
+// перепрохождение средних шагов отчёт не трогает.
+const isFinalStepReplayJustCompleted = computed(() => {
+  if (!isCompleted.value) return false;
+  if (completionRewardGranted.value) return false; // первичное завершение — отдельный flow
+  const program = completedProgram.value;
+  if (!program) return false;
+  const stepNumber = response.value?.step?.step ?? 0;
+  return (
+    stepNumber >= program.totalSteps &&
+    program.completedSteps >= program.totalSteps
+  );
 });
 
 // На success-экране показываем CTA «Следующий шаг», если у программы есть
@@ -857,6 +935,14 @@ const primaryButtonLabel = computed(() => {
   }
   if (
     currentAction.value?.type === 'guided_steps' &&
+    isAssessmentPromptAction(currentAction.value)
+  ) {
+    if (returnedAssessmentAttemptId.value) return 'Сохранить результат';
+    return 'Продолжить';
+  }
+  if (
+    currentAction.value?.type === 'guided_steps' &&
+    !isAssessmentPromptAction(currentAction.value) &&
     currentAction.value.required !== false &&
     !isGuidedStepsComplete(currentAction.value, guidedStepsDraft.value)
   ) {
@@ -931,6 +1017,12 @@ function isFramelessAction(action: ProgramStepActionStateDto) {
     action.type === 'meditation' ||
     // AI-чат — embedded ChatRoom уже содержит свою glass-deep обёртку.
     action.type === 'ai_chat_session'
+  );
+}
+
+function isAssessmentPromptAction(action: ProgramStepActionStateDto) {
+  return (
+    action.type === 'guided_steps' && action.formKind === 'assessment_prompt'
   );
 }
 
@@ -1259,6 +1351,7 @@ function hydrateCurrentActionDraft() {
   }
 
   if (action.type === 'guided_steps') {
+    if (isAssessmentPromptAction(action)) return;
     guidedStepsDraft.value = getGuidedStepDraftFromOutput(
       action,
       action.output
@@ -1322,13 +1415,63 @@ function goBack() {
   void navigateTo(`/programs/${slug.value}/map`);
 }
 
-const canGoBack = computed(() => actionIndex.value > 0 && !isSaving.value);
+const canGoBack = computed(() => {
+  if (isSaving.value) return false;
+  if (actionIndex.value > 0) return true;
+  // Разрешаем «Назад» с экрана результата assessment prompt даже если это
+  // первый action (возврат к intro внутри того же action, не на предыдущий).
+  const action = currentAction.value;
+  return Boolean(
+    action &&
+      isAssessmentPromptAction(action) &&
+      returnedAssessmentAttemptId.value !== null
+  );
+});
 
 function goToPreviousAction() {
-  if (actionIndex.value <= 0) return;
-  // Прячем hint при ручной навигации — пользователь уже сориентировался.
   showResumeHint.value = false;
+  // Если смотрим результат встроенного опросника — возвращаемся к выбору
+  // (intro/quiz) внутри того же action, а не на предыдущий action шага.
+  const action = currentAction.value;
+  if (
+    action &&
+    isAssessmentPromptAction(action) &&
+    returnedAssessmentAttemptId.value !== null
+  ) {
+    const next = new Map(assessmentCompletedAttemptByActionId.value);
+    next.delete(action.id);
+    assessmentCompletedAttemptByActionId.value = next;
+    return;
+  }
+  if (actionIndex.value <= 0) return;
   actionIndex.value -= 1;
+}
+
+async function skipAssessmentPrompt() {
+  const action = currentAction.value;
+  if (!action || !isAssessmentPromptAction(action)) return;
+  assessmentPromptSkippedActionIds.value = new Set([
+    ...assessmentPromptSkippedActionIds.value,
+    action.id,
+  ]);
+  // Сразу переходим к следующему этапу: показывать отдельный экран «опросник
+  // пропущен» — лишний шаг для юзера. Флаг skipped уже выставлен, поэтому
+  // completeCurrentAction запишет output со skipped=true.
+  await completeCurrentAction();
+}
+
+function onAssessmentPromptComplete(attemptId: number) {
+  const action = currentAction.value;
+  if (!action || !isAssessmentPromptAction(action)) return;
+  const next = new Map(assessmentCompletedAttemptByActionId.value);
+  next.set(action.id, attemptId);
+  assessmentCompletedAttemptByActionId.value = next;
+  // Если ранее был помечен как пропущенный (юзер передумал) — снимаем флаг.
+  if (assessmentPromptSkippedActionIds.value.has(action.id)) {
+    const skipped = new Set(assessmentPromptSkippedActionIds.value);
+    skipped.delete(action.id);
+    assessmentPromptSkippedActionIds.value = skipped;
+  }
 }
 
 function markCurrentPracticeComplete() {
@@ -1719,21 +1862,38 @@ async function completeCurrentAction() {
         completedAt: new Date().toISOString(),
       };
     } else if (currentAction.value.type === 'guided_steps') {
-      const completedStepIds = getGuidedStepCompletedIds(
-        currentAction.value,
-        guidedStepsDraft.value
-      );
-      const scriptText =
-        currentAction.value.formKind === 'support_request_script'
-          ? getGuidedStepScriptText(guidedStepsDraft.value).trim()
-          : null;
-      output = {
-        type: 'guided_steps',
-        formKind: currentAction.value.formKind || null,
-        completedStepIds,
-        ...(scriptText ? { scriptText } : {}),
-        completedAt: new Date().toISOString(),
-      };
+      if (isAssessmentPromptAction(currentAction.value)) {
+        output = {
+          type: 'guided_steps',
+          formKind: 'assessment_prompt',
+          assessmentSlug: currentAction.value.targetId || null,
+          source:
+            currentAction.value.template === 'program_final'
+              ? 'program_final'
+              : 'program_baseline',
+          assessmentAttemptId: returnedAssessmentAttemptId.value,
+          skipped:
+            !returnedAssessmentAttemptId.value ||
+            isCurrentAssessmentPromptSkipped.value,
+          completedAt: new Date().toISOString(),
+        };
+      } else {
+        const completedStepIds = getGuidedStepCompletedIds(
+          currentAction.value,
+          guidedStepsDraft.value
+        );
+        const scriptText =
+          currentAction.value.formKind === 'support_request_script'
+            ? getGuidedStepScriptText(guidedStepsDraft.value).trim()
+            : null;
+        output = {
+          type: 'guided_steps',
+          formKind: currentAction.value.formKind || null,
+          completedStepIds,
+          ...(scriptText ? { scriptText } : {}),
+          completedAt: new Date().toISOString(),
+        };
+      }
     } else if (currentAction.value.type === 'weekly_check') {
       output = {
         type: 'weekly_check',
@@ -1931,7 +2091,22 @@ watch(isProgramJustCompleted, (isFinal) => {
     // НЕ показываем — сперва должна доиграть анимация цветка (flyout) на
     // success-экране. Оверлей/отчёт откроются в onPlantFlyoutComplete.
     finalFlyoutDone.value = false;
+    finalPreparingMinElapsed.value = false;
+    finaleIsReplayRefresh.value = false;
     preparingVisible.value = false;
+    preparingOpen.value = true;
+  }
+});
+
+// Триггер пересборки отчёта при replay последнего шага. Цветка на replay нет,
+// поэтому оверлей анализа показываем сразу (flyout/min-elapsed помечаем
+// завершёнными), а сам отчёт форсим через force-refresh в preparing-компоненте.
+watch(isFinalStepReplayJustCompleted, (isReplayFinal) => {
+  if (isReplayFinal && !preparingOpen.value && !reportSheetOpen.value) {
+    finaleIsReplayRefresh.value = true;
+    finalFlyoutDone.value = true;
+    finalPreparingMinElapsed.value = true;
+    preparingVisible.value = true;
     preparingOpen.value = true;
   }
 });
@@ -1987,17 +2162,28 @@ function onReportReady(payload: ReportReadyPayload) {
   maybeRevealFinalReport();
 }
 
+function clearFinalPreparingTimer() {
+  if (finalPreparingMinTimer) {
+    clearTimeout(finalPreparingMinTimer);
+    finalPreparingMinTimer = null;
+  }
+}
+
 function onPreparingFailed() {
+  clearFinalPreparingTimer();
   preparingOpen.value = false;
   preparingVisible.value = false;
   finalFlyoutDone.value = false;
+  finaleIsReplayRefresh.value = false;
   void navigateTo('/garden');
 }
 
 function onPreparingLeave() {
+  clearFinalPreparingTimer();
   preparingOpen.value = false;
   preparingVisible.value = false;
   finalFlyoutDone.value = false;
+  finaleIsReplayRefresh.value = false;
   void navigateTo('/garden');
 }
 
@@ -2007,6 +2193,19 @@ function onPreparingLeave() {
 function onPlantFlyoutComplete() {
   if (isProgramJustCompleted.value) {
     finalFlyoutDone.value = true;
+    // Цветок доиграл — показываем фазу анализа данных и держим её минимум
+    // FINAL_PREPARING_MIN_MS, чтобы юзер увидел формирование отчёта, даже если
+    // данные уже готовы. Только после этого открываем сам отчёт.
+    if (preparingOpen.value) {
+      preparingVisible.value = true;
+      if (!finalPreparingMinTimer) {
+        finalPreparingMinTimer = setTimeout(() => {
+          finalPreparingMinTimer = null;
+          finalPreparingMinElapsed.value = true;
+          maybeRevealFinalReport();
+        }, FINAL_PREPARING_MIN_MS);
+      }
+    }
     maybeRevealFinalReport();
   } else {
     checkpointFlyoutDone.value = true;
@@ -2014,13 +2213,13 @@ function onPlantFlyoutComplete() {
   }
 }
 
-// Показываем итог только когда анимация доиграла И отчёт готов. Если анимация
-// доиграла, а отчёт ещё нет — показываем оверлей ожидания. Если отчёт готов
-// раньше анимации — ждём её завершения (оверлей при этом скрыт).
+// Показываем итог только когда: анимация цветка доиграла, прошёл минимальный
+// показ фазы анализа И отчёт готов. Пока чего-то из этого нет — держим оверлей
+// «Готовится отчёт» видимым.
 function maybeRevealFinalReport() {
   if (!preparingOpen.value) return; // финальный flow не активен
   if (!finalFlyoutDone.value) return;
-  if (reportData.value) {
+  if (reportData.value && finalPreparingMinElapsed.value) {
     preparingOpen.value = false;
     preparingVisible.value = false;
     reportSheetOpen.value = true;
@@ -2118,6 +2317,7 @@ function onReportSheetOpenChange(value: boolean) {
 }
 
 onBeforeUnmount(() => {
+  clearFinalPreparingTimer();
   if (resumeHintTimer) {
     clearTimeout(resumeHintTimer);
     resumeHintTimer = null;

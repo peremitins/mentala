@@ -67,7 +67,7 @@
           </div>
         </div>
 
-        <!-- Подсказка тапа (за пределами stage — тапится насквозь) -->
+        <!-- Подсказка остаётся текстом: весь overlay закрывается по тапу. -->
         <p class="ach-ov__hint" aria-hidden="true">Нажмите, чтобы продолжить</p>
       </div>
     </Transition>
@@ -222,32 +222,48 @@ watch(() => props.badgeId, buildParticles, { immediate: true });
 
 const isExiting = ref(false);
 let autoTimer: ReturnType<typeof setTimeout> | null = null;
+let exitTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearAutoTimer() {
+  if (!autoTimer) return;
+  clearTimeout(autoTimer);
+  autoTimer = null;
+}
+
+function clearExitTimer() {
+  if (!exitTimer) return;
+  clearTimeout(exitTimer);
+  exitTimer = null;
+}
 
 watch(
   () => props.show,
   (v) => {
+    clearAutoTimer();
     if (v) {
       isExiting.value = false;
       buildParticles();
       autoTimer = setTimeout(() => dismiss(), 4800);
-    } else {
-      if (autoTimer) clearTimeout(autoTimer);
     }
-  }
+  },
+  { immediate: true }
 );
 
 onUnmounted(() => {
-  if (autoTimer) clearTimeout(autoTimer);
+  clearAutoTimer();
+  clearExitTimer();
 });
 
 function dismiss() {
   if (isExiting.value) return;
-  if (autoTimer) clearTimeout(autoTimer);
+  clearAutoTimer();
+  clearExitTimer();
   isExiting.value = true;
   // Ждём exit-анимацию, затем эмитируем continue
-  setTimeout(() => {
+  exitTimer = setTimeout(() => {
     emit('continue');
     isExiting.value = false;
+    exitTimer = null;
   }, 420);
 }
 </script>
@@ -633,14 +649,22 @@ function dismiss() {
 /* ─── Подсказка тапа ─── */
 .ach-ov__hint {
   position: absolute;
-  bottom: max(40px, env(safe-area-inset-bottom, 0px) + 32px);
-  font-size: 12px;
-  color: hsl(0 0% 100% / 0.35);
-  letter-spacing: 0.04em;
+  bottom: max(44px, env(safe-area-inset-bottom, 0px) + 34px);
+  padding: 9px 16px;
+  border: 1px solid hsl(0 0% 100% / 0.18);
+  border-radius: 999px;
+  background: hsl(0 0% 100% / 0.1);
+  color: hsl(0 0% 100% / 0.78);
+  box-shadow: 0 10px 32px hsl(0 0% 0% / 0.24);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0;
   animation:
     ach-hint-appear 400ms ease 1100ms both,
     ach-hint-pulse 2s ease-in-out 1100ms infinite;
   pointer-events: none;
+  backdrop-filter: blur(16px);
 }
 
 @keyframes ach-hint-appear {
@@ -655,10 +679,10 @@ function dismiss() {
 @keyframes ach-hint-pulse {
   0%,
   100% {
-    opacity: 0.35;
+    opacity: 0.78;
   }
   50% {
-    opacity: 0.65;
+    opacity: 1;
   }
 }
 

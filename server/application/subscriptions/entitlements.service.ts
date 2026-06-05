@@ -165,6 +165,17 @@ export const DEFAULT_FEATURE_ACCESS_POLICIES: FeatureAccessPolicy[] = [
     paywallTargetPlan: 'pro',
   },
   {
+    featureKey: 'assessments.full',
+    requiredPlan: 'pro',
+    trialUnlocked: true,
+    lockIcon: 'pro',
+    paywallTitle: 'Оценка состояния доступна в PRO',
+    paywallDescription:
+      'Пройди короткий опросник, сохрани результат и сравни динамику после сада.',
+    paywallCtaText: 'Выбрать тариф',
+    paywallTargetPlan: 'pro',
+  },
+  {
     featureKey: 'gratitude.worksheet.customize',
     requiredPlan: 'premium',
     trialUnlocked: true,
