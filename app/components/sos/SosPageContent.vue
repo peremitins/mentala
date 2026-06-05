@@ -1,5 +1,5 @@
 <template>
-  <div class="flex items-start justify-center min-h-0 flex-1 overflow-auto">
+  <div class="flex items-center justify-center min-h-0 flex-1 overflow-auto">
     <section
       v-if="step === 'select'"
       class="flex flex-col items-center justify-center space-y-4 w-full"

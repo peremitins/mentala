@@ -166,7 +166,7 @@ async function openNext() {
     return;
   }
   if (action.type === 'sos') {
-    await router.push('/quick-help');
+    await router.push('/practices');
     return;
   }
   await router.push('/practices');

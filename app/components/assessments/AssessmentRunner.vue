@@ -276,7 +276,7 @@ const contextText = computed(() => {
   if (props.slug === 'self_compassion_scs_sf_v1') {
     return 'Отметь, насколько это обычно похоже на тебя в трудные моменты.';
   }
-  return 'За последние 2 недели — как часто тебя беспокоило:';
+  return 'За последние две недели отметь, как часто это беспокоило:';
 });
 
 function selectOption(optionId: string) {

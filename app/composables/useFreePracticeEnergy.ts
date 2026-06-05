@@ -1,5 +1,5 @@
 import { useAPI } from '@/app/composables/useAPI';
-import { useToast } from '@/app/composables/useToast';
+import { notifyPlantWater } from '@/app/composables/usePlantWaterFeedback';
 import type {
   AwardFreePracticeEnergyRequestDto,
   AwardFreePracticeEnergyResponseDto,
@@ -17,8 +17,8 @@ import type {
  *
  * Frontend (этот composable):
  *  - вызывает endpoint без блокировки основного flow (`silent`-режим);
- *  - при `rewardGranted=true` показывает короткий toast «+1 капля»;
- *  - при `rewardGranted=false` НЕ показывает toast (это не ошибка — либо
+ *  - при `rewardGranted=true` запускает water-feedback в хедере;
+ *  - при `rewardGranted=false` НЕ показывает уведомление (это не ошибка — либо
  *    дубль, либо честно достигнутый лимит дня);
  *  - сеть-ошибки логируются в console, но не падают тостом — практика
  *    пользователя не должна выглядеть «сломанной» из-за фейла энергии.
@@ -30,13 +30,9 @@ import type {
  */
 
 export type FreePracticeAwardOptions = {
-  /** Подавить toast при rewardGranted=true (тихое начисление). */
+  /** Подавить визуальный feedback при rewardGranted=true (тихое начисление). */
   silent?: boolean;
 };
-
-// Память на сессию: показывали ли уже toast «свободные капли закончились».
-// Сбрасывается при перезагрузке страницы (новый день — новый shown).
-let rateLimitToastShown = false;
 
 export function useFreePracticeEnergy() {
   async function award(
@@ -71,22 +67,12 @@ export function useFreePracticeEnergy() {
       );
 
       if (response.rewardGranted && !options?.silent) {
-        useToast('+1 капля', 'Сегодня свободные капли копятся.');
-      } else if (
-        !response.rewardGranted &&
-        response.freePracticeDropsToday >= response.freePracticeDailyLimit &&
-        !rateLimitToastShown &&
-        !options?.silent
-      ) {
-        // Лимит свободных капель на день исчерпан (3/день по умолчанию).
-        // Показываем один раз за сессию — не на каждой завершённой практике.
-        // Сама практика всегда засчитывается, просто капля сегодня не упадёт.
-        rateLimitToastShown = true;
-        useToast(
-          'Свободные капли на сегодня закончились',
-          'Практика всё равно записана. Свежие капли утром.',
-          'info'
-        );
+        notifyPlantWater({
+          intensity: 'small',
+          source: 'free_practice',
+          energyToday: response.energyToday,
+          energyWeekly: response.energyWeekly,
+        });
       }
 
       return response;

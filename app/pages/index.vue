@@ -97,6 +97,10 @@ import FeaturePaywallModal from '@/app/components/subscription/FeaturePaywallMod
 import UnseenSummaryModal from '@/app/components/sessionSummaries/UnseenSummaryModal.vue';
 import { useAPI } from '@/app/composables/useAPI';
 import { useEntitlements } from '@/app/composables/useEntitlements';
+import {
+  notifyPlantWater,
+  setPlantWaterSnapshot,
+} from '@/app/composables/usePlantWaterFeedback';
 import { useUnseenSessionSummary } from '@/app/composables/useUnseenSessionSummary';
 import type {
   MoodCheckinMood,
@@ -129,6 +133,12 @@ function openPaywall(featureKey: string) {
 function triggerPlantWater(intensity: 'small' | 'medium' | 'large') {
   plantWaterIntensity.value = intensity;
   plantWaterSignal.value += 1;
+  notifyPlantWater({
+    intensity,
+    source: 'thought_of_the_day',
+    energyToday: today.value?.energy.today,
+    energyWeekly: today.value?.energy.weekly,
+  });
 }
 
 async function loadToday() {
@@ -149,6 +159,11 @@ async function loadToday() {
 async function refreshTodayOnly() {
   today.value = await useAPI<TodayResponseDto>('/api/today', {
     suppressErrorToast: true,
+  });
+  setPlantWaterSnapshot({
+    completedSteps: today.value.program.completedSteps,
+    totalSteps: today.value.program.totalSteps,
+    plantSetSlug: today.value.program.plantSetSlug,
   });
 }
 
@@ -172,7 +187,14 @@ async function handleMoodSelect(mood: MoodCheckinMood) {
     });
 
     if (response.rewardGranted) {
-      triggerPlantWater('medium');
+      plantWaterIntensity.value = 'medium';
+      plantWaterSignal.value += 1;
+      notifyPlantWater({
+        intensity: 'medium',
+        source: 'mood_checkin',
+        energyToday: response.energyToday,
+        energyWeekly: today.value?.energy.weekly,
+      });
     }
 
     if (today.value) {

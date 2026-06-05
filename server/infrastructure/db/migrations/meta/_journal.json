@@ -652,6 +652,13 @@
       "when": 1780483210323,
       "tag": "0095_large_namor",
       "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1780648606538,
+      "tag": "0096_aromatic_kulan_gath",
+      "breakpoints": true
     }
   ]
 }

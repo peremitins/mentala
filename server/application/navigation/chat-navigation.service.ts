@@ -39,12 +39,6 @@ const BREATH_GROUP_LABELS: Record<BreathPracticeGroupKey, string> = {
   custom: 'Своя дыхательная практика',
 };
 
-const QUICK_HELP_LABELS = {
-  panic: 'Быстрая помощь при тревоге',
-  tension: 'Снять напряжение',
-  technique_picker: 'Быстрая помощь',
-} as const;
-
 const MEDITATION_TOPIC_PATTERNS: Array<{
   pattern: RegExp;
   topicKey: 'sleep' | 'anxiety' | 'stress';
@@ -215,20 +209,6 @@ function createBreathPracticeCandidate(
     text: practice
       ? `Дыхание ${practice.title}`
       : 'Открыть дыхательную практику',
-    resolvedBy,
-  };
-}
-
-function createQuickHelpCandidate(
-  entry: 'panic' | 'tension' | 'technique_picker',
-  resolvedBy: AppNavigationResolvedBy = 'registry_rule'
-): NavigationChipCandidate {
-  return {
-    target: {
-      type: 'quick_help_entry',
-      entry,
-    },
-    text: QUICK_HELP_LABELS[entry],
     resolvedBy,
   };
 }
@@ -497,28 +477,14 @@ function buildContextCandidates(
   }
 
   if (entryContext.type === 'sos') {
-    if (entryContext.sos_entry === 'panic') {
-      return [createQuickHelpCandidate('panic')];
-    }
-    if (entryContext.sos_entry === 'tension') {
-      return [createQuickHelpCandidate('tension')];
-    }
+    // Из чата не ведём обратно в quick-help (раздел убран как точка входа).
+    // Вместо этого предлагаем спокойную дыхательную практику с длинным выдохом.
     return [
-      {
-        target: { type: 'quick_help_entry', entry: 'panic' },
-        text: 'Мне тревожно',
-        resolvedBy: 'registry_rule',
-      },
-      {
-        target: { type: 'quick_help_entry', entry: 'tension' },
-        text: 'Снять напряжение',
-        resolvedBy: 'registry_rule',
-      },
-      {
-        target: { type: 'quick_help_entry', entry: 'technique_picker' },
-        text: 'Дай короткую технику',
-        resolvedBy: 'registry_rule',
-      },
+      createBreathPracticeCandidate(
+        'long-exhale-4-6',
+        'anxiety',
+        'registry_rule'
+      ),
     ];
   }
 
@@ -577,15 +543,19 @@ async function resolveTargetsFromText(
     candidates.push(habitCandidate);
   }
 
+  // При тревоге/напряжении раньше предлагали «Быструю помощь» — больше не ведём
+  // из чата в quick-help. Вместо этого предлагаем спокойную дыхательную практику.
   const quickHelpMatch = QUICK_HELP_PATTERNS.find((rule) =>
     rule.pattern.test(text)
   );
   if (quickHelpMatch) {
-    const entry =
-      quickHelpMatch.target.type === 'quick_help_entry'
-        ? quickHelpMatch.target.entry
-        : 'technique_picker';
-    candidates.push(createQuickHelpCandidate(entry));
+    candidates.push(
+      createBreathPracticeCandidate(
+        'long-exhale-4-6',
+        'anxiety',
+        'registry_rule'
+      )
+    );
   }
 
   const breathMatch = resolveBreathPracticeFromText(text);
@@ -638,7 +608,6 @@ async function resolveTargetsFromText(
     candidates.push(
       createBreathPracticeCandidate('long-exhale-4-6', 'anxiety')
     );
-    candidates.push(createQuickHelpCandidate('technique_picker'));
   }
 
   return uniqueCandidates(candidates);
@@ -655,7 +624,13 @@ export async function buildNavigationSuggestedChips(params: {
       ? []
       : buildContextCandidates(params.entryContext);
 
-  return uniqueCandidates([...explicitCandidates, ...contextCandidates]).map(
-    buildNavigationChip
-  );
+  // Страховка: ни при каких условиях не отдаём из чата чипы в quick-help —
+  // раздел «Быстрая помощь» убран как точка входа (доступен только из «Практик»).
+  return uniqueCandidates([...explicitCandidates, ...contextCandidates])
+    .filter(
+      (candidate) =>
+        candidate.target.type !== 'quick_help' &&
+        candidate.target.type !== 'quick_help_entry'
+    )
+    .map(buildNavigationChip);
 }

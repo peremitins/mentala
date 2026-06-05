@@ -729,7 +729,7 @@ minDurationSec?: number
 
 - Добавить energy_events.source для свободных практик.
 - Backend rate-limit «3 капли/день из свободных».
-- Frontend подсветка «+1 капля» в свободных модулях.
+- Frontend water-feedback растения в хедере при начислении свободной капли.
 
 ### Этап 8. Карта пути визуально (Этап A)
 

@@ -1,6 +1,6 @@
 <template>
   <div
-    class="flex h-dvh flex-col space-y-2 overflow-y-auto rounded-lg pb-[100px]"
+    class="flex h-dvh flex-col xs:space-y-3 space-y-1 overflow-y-auto rounded-lg pb-[100px]"
   >
     <PageHeader
       title="Выгрузка мыслей"
@@ -245,7 +245,7 @@ const {
 });
 
 function handleBack() {
-  void router.push('/quick-help');
+  void router.push('/practices');
 }
 
 function openPaywall(featureKey: string) {

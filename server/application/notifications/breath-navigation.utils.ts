@@ -140,16 +140,19 @@ export function resolveNavigationTargetFromActionHint(
     return { type: 'gratitude_diary' };
   }
 
-  if (actionHint === 'grounding') {
-    return { type: 'quick_help_entry', entry: 'panic' };
-  }
-
-  if (actionHint === 'tension_release') {
-    return { type: 'quick_help_entry', entry: 'tension' };
+  // Пуши больше НЕ ведут в quick-help (раздел убран как точка входа). Заземление и
+  // снятие напряжения заменяем на спокойную дыхательную практику с длинным выдохом,
+  // выгрузку мыслей — на главный экран (типизированной цели «Практики»/«чат» нет).
+  if (actionHint === 'grounding' || actionHint === 'tension_release') {
+    return {
+      type: 'breath_practice',
+      slug: 'long-exhale-4-6',
+      groupKey: 'anxiety',
+    };
   }
 
   if (actionHint === 'thought_dump') {
-    return { type: 'quick_help_entry', entry: 'thought_dump' };
+    return { type: 'home' };
   }
 
   return { type: 'home' };

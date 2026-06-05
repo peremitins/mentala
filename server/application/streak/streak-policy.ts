@@ -1,5 +1,3 @@
-import { shiftDateKey } from '@/server/application/programs/retention-timezone';
-
 export const STREAK_REPAIR_LIMIT_PER_MONTH = 2;
 
 export type StreakStatus = 'active' | 'paused';
@@ -165,45 +163,22 @@ export function recordStreakActivity(
     };
   }
 
-  const repair = getRepairUsageForDate(state, activityDate);
-  if (missedDays <= repair.remaining) {
-    const current = state.current + 1;
-    const next = {
-      ...state,
-      best: Math.max(state.best, current),
-      current,
-      lastActivityDate: activityDate,
-      repairPeriod: repair.period,
-      repairUsed: repair.used + missedDays,
-    };
-    return {
-      event: {
-        current: next.current,
-        eventDate: activityDate,
-        missedDays,
-        previousCurrent: state.current,
-        repairedDays: missedDays,
-        type: 'repaired',
-      },
-      state: next,
-    };
-  }
-
   const next = {
     ...state,
-    pauseReason: 'auto' as const,
-    pausedSince: shiftDateKey(state.lastActivityDate, 1),
-    repairPeriod: repair.period,
-    repairUsed: repair.used,
-    status: 'paused' as const,
+    current: 1,
+    lastActivityDate: activityDate,
+    pauseReason: null,
+    pausedSince: null,
+    repairPeriod: getRepairPeriod(activityDate),
+    repairUsed: 0,
+    status: 'active' as const,
   };
   return {
     event: {
       current: next.current,
       eventDate: activityDate,
-      missedDays,
       previousCurrent: state.current,
-      type: 'paused_auto',
+      type: 'started',
     },
     state: next,
   };
@@ -223,28 +198,19 @@ export function settleStreakForDate(
     entryDate
   );
   const missedDays = Math.max(0, daysSinceLastActivity - 1);
-  const repair = getRepairUsageForDate(state, entryDate);
-  if (missedDays <= repair.remaining) {
-    return { event: null, state };
-  }
+  if (missedDays === 0) return { event: null, state };
 
-  const next = {
-    ...state,
-    pauseReason: 'auto' as const,
-    pausedSince: shiftDateKey(state.lastActivityDate, 1),
-    repairPeriod: repair.period,
-    repairUsed: repair.used,
-    status: 'paused' as const,
-  };
   return {
-    event: {
-      current: next.current,
-      eventDate: entryDate,
-      missedDays,
-      previousCurrent: state.current,
-      type: 'paused_auto',
+    event: null,
+    state: {
+      ...state,
+      current: 0,
+      pauseReason: null,
+      pausedSince: null,
+      repairPeriod: getRepairPeriod(entryDate),
+      repairUsed: 0,
+      status: 'active',
     },
-    state: next,
   };
 }
 
@@ -285,7 +251,9 @@ export function resumeStreak(
 
   const next = {
     ...state,
-    lastActivityDate: shiftDateKey(entryDate, -1),
+    // Resume фиксирует день возврата как якорь, но не создаёт
+    // несуществующую активность за вчера.
+    lastActivityDate: entryDate,
     pauseReason: null,
     pausedSince: null,
     repairPeriod: getRepairPeriod(entryDate),

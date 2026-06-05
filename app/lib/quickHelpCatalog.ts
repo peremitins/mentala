@@ -25,15 +25,6 @@ export const QUICK_HELP_CARDS: QuickHelpCard[] = [
     },
   },
   {
-    id: 'breath-box',
-    title: 'Стабилизировать дыхание',
-    subtitle: 'Квадратное дыхание 4-4-4-4',
-    action: {
-      type: 'set_step',
-      step: 'panic-breathing',
-    },
-  },
-  {
     id: 'tension-release',
     title: 'Снять напряжение в теле',
     subtitle: 'Короткая практика напряжения и расслабления',
@@ -49,15 +40,6 @@ export const QUICK_HELP_CARDS: QuickHelpCard[] = [
     action: {
       type: 'navigate',
       to: '/quick-help/thought-dump',
-    },
-  },
-  {
-    id: 'chat-vent',
-    title: 'Хочу выговориться',
-    subtitle: 'Поговорить в чате',
-    action: {
-      type: 'go_chat',
-      entry: 'vent',
     },
   },
 ];

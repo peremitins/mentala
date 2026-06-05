@@ -15,6 +15,7 @@ export * from './access-code';
 export * from './sessionSummaryUser';
 export * from './retention';
 export * from './garden';
+export * from './toolkit';
 export * from './program-checkpoint';
 export * from './assessments';
 export * from '../navigation';

@@ -21,8 +21,15 @@ import {
   userPrograms,
   userProgramStepAttempts,
   userProgramStepProgress,
+  userToolkitItems,
   type ProgramStepAction,
 } from '@/server/infrastructure/db/schema';
+import {
+  getToolkitPhraseFields,
+  resolveToolkitDestination,
+  type ToolkitDestination,
+} from '@/shared/toolkit/registry';
+import type { ToolkitItemSource } from '@/shared/dto/toolkit';
 import {
   MoodCheckinMoodEnum,
   ProgramStepActionDto,
@@ -4060,14 +4067,6 @@ const STEP_BLUEPRINTS_SELF_KINDNESS_21: StepBlueprint[] = [
           },
         ],
       }),
-      journalAction({
-        idSuffix: 'toolkit-keep',
-        title: 'Что оставляю себе',
-        prompt:
-          'Запиши 2-3 пункта набора, к которым тебе будет полезно вернуться после программы.',
-        journalFormat: 'short',
-        maxLength: 500,
-      }),
     ],
   },
   {
@@ -6978,6 +6977,156 @@ export async function updateProgramStepAction(params: {
   return applyGenderDeep({ attempt: toAttemptDto(updated) }, gender);
 }
 
+// Upsert системного элемента набора (практика/чат) с дедупом по itemKey и
+// накоплением источников. Один и тот же элемент из разных садов = одна карточка.
+async function upsertSystemToolkitItem(
+  userId: number,
+  dest: ToolkitDestination,
+  source: ToolkitItemSource
+) {
+  const [existing] = await db
+    .select()
+    .from(userToolkitItems)
+    .where(
+      and(
+        eq(userToolkitItems.userId, userId),
+        eq(userToolkitItems.itemKey, dest.itemKey)
+      )
+    )
+    .limit(1);
+
+  if (existing) {
+    const sources = Array.isArray(existing.sources) ? existing.sources : [];
+    const alreadyHasSource = sources.some(
+      (s) => s.programSlug === source.programSlug && s.stepId === source.stepId
+    );
+    if (!alreadyHasSource) {
+      await db
+        .update(userToolkitItems)
+        .set({ sources: [...sources, source], updatedAt: new Date() })
+        .where(eq(userToolkitItems.id, existing.id));
+    }
+    return;
+  }
+
+  await db
+    .insert(userToolkitItems)
+    .values({
+      userId,
+      type: dest.type,
+      title: dest.title,
+      content: null,
+      toolRef: dest.toolRef,
+      itemKey: dest.itemKey,
+      sources: [source],
+      origin: 'roadmap',
+    })
+    // Защита от гонки: партиальный unique (userId, item_key).
+    // Для partial-индекса в ON CONFLICT нужен совпадающий WHERE-предикат.
+    .onConflictDoNothing({
+      target: [userToolkitItems.userId, userToolkitItems.itemKey],
+      where: sql`${userToolkitItems.itemKey} IS NOT NULL`,
+    });
+}
+
+// Сохраняем личную фразу пользователя. Дедуп по тексту, чтобы повтор/replay шага
+// не плодил дубликаты одной и той же фразы.
+async function insertPhraseToolkitItem(
+  userId: number,
+  content: string,
+  source: ToolkitItemSource
+) {
+  const [existing] = await db
+    .select({ id: userToolkitItems.id })
+    .from(userToolkitItems)
+    .where(
+      and(
+        eq(userToolkitItems.userId, userId),
+        eq(userToolkitItems.type, 'phrase'),
+        eq(userToolkitItems.content, content)
+      )
+    )
+    .limit(1);
+
+  if (existing) {
+    return;
+  }
+
+  await db.insert(userToolkitItems).values({
+    userId,
+    type: 'phrase',
+    title: content.slice(0, 120),
+    content,
+    toolRef: null,
+    itemKey: null,
+    sources: [source],
+    origin: 'roadmap',
+  });
+}
+
+// Материализация «Моего набора» из ответов шага: проходим structured_form-экшены,
+// для choice-полей берём только опции с реальным назначением (см. registry), а
+// текстовые поля сохраняем как личные фразы. Концептуальные пункты без экрана и
+// «ничего из этого» отфильтровываются на уровне реестра.
+async function materializeToolkitFromAttempt(params: {
+  userId: number;
+  programSlug: string;
+  gardenTitle: string;
+  actions: ProgramStepActionStateDto[];
+}) {
+  for (const action of params.actions) {
+    const output = action.output as
+      | { type?: string; formKind?: string; fields?: Record<string, unknown> }
+      | undefined;
+    if (
+      !output ||
+      output.type !== 'structured_form' ||
+      !output.formKind ||
+      !output.fields
+    ) {
+      continue;
+    }
+
+    const formKind = output.formKind;
+    const fields = output.fields;
+    const source: ToolkitItemSource = {
+      programSlug: params.programSlug,
+      stepId: action.id,
+      gardenTitle: params.gardenTitle,
+    };
+
+    // Запускаемые практики/чат из мультивыбора
+    for (const [fieldId, value] of Object.entries(fields)) {
+      if (!Array.isArray(value)) {
+        continue;
+      }
+      for (const optionId of value) {
+        if (typeof optionId !== 'string') {
+          continue;
+        }
+        const dest = resolveToolkitDestination(formKind, fieldId, optionId);
+        if (!dest) {
+          continue;
+        }
+        await upsertSystemToolkitItem(params.userId, dest, source);
+      }
+    }
+
+    // Личные фразы из текстовых полей
+    for (const fieldId of getToolkitPhraseFields(formKind)) {
+      const raw = fields[fieldId];
+      if (typeof raw !== 'string') {
+        continue;
+      }
+      const content = raw.trim();
+      if (!content) {
+        continue;
+      }
+      await insertPhraseToolkitItem(params.userId, content, source);
+    }
+  }
+}
+
 export async function completeProgramStep(params: {
   userId: number;
   attemptId: number;
@@ -7203,6 +7352,24 @@ export async function completeProgramStep(params: {
         );
       }
     })();
+  }
+
+  // Материализуем «Мой набор»: запускаемые практики и личные фразы, выбранные в шаге.
+  // Идемпотентно (дедуп по itemKey/тексту), поэтому безопасно при replay. Не критично
+  // для завершения шага — ошибки логируем, но не пробрасываем.
+  try {
+    await materializeToolkitFromAttempt({
+      userId: params.userId,
+      programSlug: program.slug,
+      gardenTitle: program.title,
+      actions:
+        (updatedAttempt.actions as ProgramStepActionStateDto[] | null) || [],
+    });
+  } catch (error) {
+    console.error(
+      '[completeProgramStep] toolkit materialization failed:',
+      error
+    );
   }
 
   // Аналитика: фиксируем завершение шага, отдельно - завершение программы.

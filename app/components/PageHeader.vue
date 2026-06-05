@@ -27,6 +27,7 @@
         </h1>
       </div>
       <div class="mr-2 flex items-center gap-2">
+        <HeaderEnergyPlantIndicator />
         <slot v-if="$slots.trailing" name="trailing" />
         <template v-else>
           <button
@@ -47,6 +48,7 @@
 import IconChevronLeft from '~icons/lucide/chevron-left';
 import IconSlidersHorizontal from '~icons/lucide/sliders-horizontal';
 import { useRoute, useRouter } from 'vue-router';
+import HeaderEnergyPlantIndicator from '@/app/components/HeaderEnergyPlantIndicator.vue';
 
 const route = useRoute();
 const router = useRouter();

@@ -328,14 +328,14 @@
 
 **Зависимости:** Этап 2.6.
 
-- [x] Frontend: подсветка «+1 капля» на success-экране breath / meditation / gratitude / thought dump.
-  - Результат: 2026-05-16. `app/composables/useFreePracticeEnergy.ts` — единый wrapper над `POST /api/energy/free-practice` с toast «+1 капля» при rewardGranted=true и silent режимом при rate-limit. Подключено в 4 точках:
+- [x] Frontend: подсветка начисленной свободной капли на success-экране breath / meditation / gratitude / thought dump.
+  - Результат: 2026-05-16, обновлено 2026-06-05. `app/composables/useFreePracticeEnergy.ts` — единый wrapper над `POST /api/energy/free-practice`; при `rewardGranted=true` запускает общий `usePlantWaterFeedback`, который поливает растение в `PageHeader` через `HeaderEnergyPlantIndicator`, без toast «+1 капля». Подключено в 4 точках:
     - **Breath**: `pages/breath-practices/[slug].vue:@complete="onPracticeComplete"`, sourceId = `breath:{slug}:{localDate}`.
     - **Meditation**: `pages/meditations/index.vue` через `watch([sessionEnded, currentTrack])` — сработка только при реальном завершении трека. sourceId = `meditation:{track.id}:{localDate}`. `lastAwardedMeditationKey` защищает от двойного watch trigger.
     - **Gratitude diary**: `pages/practices/gratitude-diary/editor.vue` — только в new-path (POST), не в edit (PATCH). sourceId = `gratitude:{entry.id}` — backend идемпотентен.
     - **Thought dump**: `pages/quick-help/thought-dump.vue` — в обоих exit-сценариях (`clearThoughts` и `handoffToChat`). sourceId = `thoughtdump:{localDate}` (одна капля в день, независимо от пути выхода).
-- [x] Проверить, что rate-limit «3/день» корректно работает и UI показывает «Сегодня свободные практики капают завтра» при достижении лимита.
-  - Результат: 2026-05-16. Backend проверка работает (см. `tryAwardFreePracticeEnergy` в `server/application/energy/free-practice-energy.service.ts`). Frontend silent-режим описан там же. 2026-05-19 (сессия 20): добавлен явный toast «Свободные капли на сегодня закончились» в `useFreePracticeEnergy.ts` — показывается один раз за сессию через флаг модуля `rateLimitToastShown` (без спама на каждой завершённой практике).
+- [x] Проверить, что rate-limit «3/день» корректно работает и UI не шумит при достижении лимита.
+  - Результат: 2026-05-16, обновлено 2026-06-05. Backend проверка работает (см. `tryAwardFreePracticeEnergy` в `server/application/energy/free-practice-energy.service.ts`). Frontend при `rewardGranted=false` не показывает toast: дубль sourceId и дневной лимит свободных капель остаются тихими, практика всё равно завершается штатно.
 
 ---
 
@@ -438,4 +438,3 @@
   - Результат: 2026-05-19. Источник — `program_step_completed` events, агрегация ad-hoc по дням.
 
 ---
-

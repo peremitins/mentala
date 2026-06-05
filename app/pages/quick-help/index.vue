@@ -3,7 +3,7 @@
     class="flex flex-col xs:space-y-2 space-y-1 h-dvh overflow-y-auto pb-[100px] rounded-lg"
   >
     <PageHeader
-      title="Быстрая помощь"
+      :title="pageTitle"
       :show-back-button="true"
       @go-back="handleGoBack"
     />
@@ -13,6 +13,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import PageHeader from '@/app/components/PageHeader.vue';
 import SosPageContent from '@/app/components/sos/SosPageContent.vue';
@@ -23,7 +24,23 @@ const router = useRouter();
 const sos = useSos();
 const { step, setStep } = sos;
 
+const entry = computed(() => {
+  const e = route.query.entry;
+  return Array.isArray(e) ? e[0] : (e ?? null);
+});
+
+const pageTitle = computed(() => {
+  if (entry.value === 'panic') return 'Заземление';
+  if (entry.value === 'tension') return 'Снятие напряжения';
+  return 'Быстрая помощь';
+});
+
 function handleGoBack() {
+  // Если пришли с точкой входа (panic/tension) — возвращаемся к практикам
+  if (entry.value === 'panic' || entry.value === 'tension') {
+    void router.push('/practices');
+    return;
+  }
   if (step.value === 'select') {
     router.back();
     return;

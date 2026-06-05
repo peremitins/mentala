@@ -30,6 +30,7 @@
 
       <div class="mt-auto flex flex-wrap items-center gap-2 text-xs">
         <span
+          v-if="item.questionsCount"
           class="rounded-full border border-white/10 bg-white/[0.08] px-2.5 py-1 text-foreground/65"
         >
           {{ item.questionsCount || '—' }} вопросов

@@ -24,6 +24,10 @@ import type {
   AssessmentAttemptResultSnapshot,
   AssessmentAttemptSource,
 } from '../../../shared/dto/assessments';
+import type {
+  ToolkitItemSource,
+  ToolkitToolRef,
+} from '../../../shared/dto/toolkit';
 
 // Roles table (must be defined before users references it)
 export const roles = pgTable('roles', {
@@ -617,6 +621,59 @@ export const gratitudeDiaryFavoritePrompts = pgTable(
       sql`(${table.promptType} = 'catalog' AND ${table.catalogPromptId} IS NOT NULL AND ${table.customText} IS NULL)
           OR
           (${table.promptType} = 'custom' AND ${table.customText} IS NOT NULL AND ${table.catalogPromptId} IS NULL)`
+    ),
+  })
+);
+
+// «Мой набор» — персональная подборка пользователя в разделе «Практики».
+// Материализуется из roadmap-шагов (origin='roadmap'): запускаемые практики/чат +
+// личные фразы, которые юзер выбрал/написал. Плюс ручное добавление фраз (origin='manual').
+// Дедуп системных элементов — через partial unique на (userId, itemKey).
+export const userToolkitItems = pgTable(
+  'user_toolkit_items',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    userId: integer('user_id').notNull(),
+    // 'practice' — запускаемая практика, 'phrase' — личная фраза, 'ai_chat' — переход в чат
+    type: varchar('type', { length: 16 }).notNull(),
+    title: varchar('title', { length: 200 }).notNull(),
+    // Текст личной фразы (type='phrase'); для системных элементов — null
+    content: text('content'),
+    // Назначение для запускаемых элементов { kind, ...params }; для фраз — null
+    toolRef: jsonb('tool_ref').$type<ToolkitToolRef | null>(),
+    // Канонический ключ дедупа системных элементов (например 'sos:panic'); для фраз — null
+    itemKey: varchar('item_key', { length: 120 }),
+    // Источники [{ programSlug, stepId, gardenTitle }] — у системных при дедупе их несколько
+    sources: jsonb('sources')
+      .$type<ToolkitItemSource[]>()
+      .notNull()
+      .default([]),
+    // 'roadmap' — материализовано из шага, 'manual' — добавлено вручную
+    origin: varchar('origin', { length: 16 }).notNull(),
+    sortOrder: integer('sort_order').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    userCreatedIdx: index('idx_user_toolkit_user_created').on(
+      table.userId,
+      table.createdAt
+    ),
+    // Дедуп системных элементов: один itemKey на пользователя
+    userItemKeyUniqueIdx: uniqueIndex('uk_user_toolkit_user_item_key')
+      .on(table.userId, table.itemKey)
+      .where(sql`${table.itemKey} IS NOT NULL`),
+    typeCheck: check(
+      'chk_user_toolkit_type',
+      sql`${table.type} IN ('practice', 'phrase', 'ai_chat')`
+    ),
+    originCheck: check(
+      'chk_user_toolkit_origin',
+      sql`${table.origin} IN ('roadmap', 'manual')`
     ),
   })
 );

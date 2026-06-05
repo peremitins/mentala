@@ -97,47 +97,27 @@
       />
       <!-- Растение — визуальная часть кликабельной карточки. Сам клик
            обрабатывает корневой section (вся карточка ведёт в Оранжерею). -->
-      <div
-        class="plant-frame relative h-24 w-24 rounded-[28px] transition active:scale-[0.98]"
-        aria-hidden="true"
-      >
-        <span
-          class="plant-water-glow absolute inset-2 rounded-full"
-          :class="{ 'plant-water-glow--active': waterActive }"
-          aria-hidden="true"
-        />
-        <span
-          v-if="waterActive"
-          class="plant-water-layer absolute inset-0"
-          aria-hidden="true"
-        >
-          <span
-            v-for="drop in waterDrops"
-            :key="drop.id"
-            class="plant-water-drop absolute"
-            :style="drop.style"
-          />
-        </span>
-        <Transition name="plant-crossfade" appear>
-          <img
-            :key="plantImageKey"
-            :src="resolvedPlantSrc"
-            :alt="stageTitle"
-            class="plant-stage-image absolute inset-0 h-full w-full rounded-[28px] object-contain shadow-[0_16px_40px_-24px_rgba(110,231,183,0.8)]"
-            loading="lazy"
-            decoding="async"
-            @error="handlePlantImageError"
-          />
-        </Transition>
-      </div>
+      <RetentionPlantWaterFrame
+        :src="plantSrc"
+        :fallback-src="plantFallbackSrc"
+        :alt="stageTitle"
+        :water-signal="waterSignal"
+        :water-intensity="waterIntensity"
+        :frame-px="96"
+        frame-class="plant-frame relative h-24 w-24 rounded-[28px] transition active:scale-[0.98]"
+        glow-class="inset-2"
+        image-class="plant-stage-image absolute inset-0 h-full w-full rounded-[28px] object-contain shadow-[0_16px_40px_-24px_rgba(110,231,183,0.8)]"
+        @image-error="handlePlantImageError"
+      />
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { computed } from 'vue';
 import IconDroplets from '~icons/lucide/droplets';
 import IconArrowRight from '~icons/lucide/arrow-right';
+import RetentionPlantWaterFrame from '@/app/components/retention/RetentionPlantWaterFrame.vue';
 import {
   getRetentionPlantFallbackSrc,
   getRetentionPlantImageSrc,
@@ -156,8 +136,6 @@ const props = defineProps<{
   waterSignal?: number;
   waterIntensity?: 'small' | 'medium' | 'large';
 }>();
-const waterActive = ref(false);
-let waterTimer: number | null = null;
 
 const completedSteps = computed(() =>
   Math.max(0, Math.min(props.program.completedSteps, props.program.totalSteps))
@@ -176,30 +154,6 @@ const plantSrc = computed(() =>
 const plantFallbackSrc = computed(() =>
   getRetentionPlantFallbackSrc(stageIndex.value)
 );
-const resolvedPlantSrc = ref(plantSrc.value);
-const plantImageKey = computed(
-  () => `${stageIndex.value}-${resolvedPlantSrc.value}`
-);
-const waterDropCount = computed(() => {
-  if (props.waterIntensity === 'small') return 3;
-  if (props.waterIntensity === 'large') return 7;
-  return 5;
-});
-const waterDrops = computed(() => {
-  const count = waterDropCount.value;
-  return Array.from({ length: count }, (_, index) => {
-    const spread = index / (count - 1);
-    return {
-      id: index,
-      style: {
-        left: `${22 + spread * 56}%`,
-        '--plant-water-delay': `${index * 90}ms`,
-        '--plant-water-drift': `${index % 2 === 0 ? -8 : 8}px`,
-        '--plant-water-duration': `${980 + index * 55}ms`,
-      },
-    };
-  });
-});
 
 const stageHint = computed(() => {
   const nextThreshold = getRetentionPlantNextThreshold(
@@ -256,10 +210,8 @@ function formatDrops(value: number) {
   return 'капель';
 }
 
-function handlePlantImageError() {
-  if (resolvedPlantSrc.value === plantFallbackSrc.value) return;
-  void capturePlantAssetWarning(stageIndex.value, resolvedPlantSrc.value);
-  resolvedPlantSrc.value = plantFallbackSrc.value;
+function handlePlantImageError(src: string) {
+  void capturePlantAssetWarning(stageIndex.value, src);
 }
 
 function openGarden() {
@@ -289,224 +241,4 @@ async function capturePlantAssetWarning(stateIndex: number, src: string) {
     console.warn('[RetentionPlant] Не удалось загрузить изображение:', src);
   }
 }
-
-function clearWaterTimer() {
-  if (!waterTimer) return;
-  clearTimeout(waterTimer);
-  waterTimer = null;
-}
-
-function runInlineWater() {
-  if (typeof window === 'undefined') return;
-  if (
-    typeof window.matchMedia === 'function' &&
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  ) {
-    return;
-  }
-
-  clearWaterTimer();
-  waterActive.value = false;
-  const scheduleFrame = (callback: (time: number) => void) => {
-    if (typeof window.requestAnimationFrame === 'function') {
-      window.requestAnimationFrame(callback);
-      return;
-    }
-    window.setTimeout(() => callback(Date.now()), 16);
-  };
-
-  scheduleFrame(() => {
-    waterActive.value = true;
-    waterTimer = window.setTimeout(() => {
-      waterActive.value = false;
-      waterTimer = null;
-    }, 1500);
-  });
-}
-
-watch(
-  plantSrc,
-  (src) => {
-    resolvedPlantSrc.value = src;
-  },
-  { immediate: true }
-);
-
-watch(
-  () => props.waterSignal,
-  (signal, previousSignal) => {
-    if (!signal || signal === previousSignal) return;
-    runInlineWater();
-  }
-);
-
-onBeforeUnmount(() => {
-  clearWaterTimer();
-});
 </script>
-
-<style scoped>
-.plant-frame {
-  transform: translateZ(0);
-}
-
-.plant-water-layer,
-.plant-water-glow {
-  pointer-events: none;
-}
-
-.plant-water-glow {
-  z-index: 0;
-  background: radial-gradient(
-    circle,
-    rgba(187, 247, 208, 0.32),
-    rgba(103, 232, 249, 0.14) 48%,
-    transparent 72%
-  );
-  opacity: 0;
-  transform: scale(0.88);
-}
-
-.plant-water-glow--active {
-  animation: plant-water-card-glow 1.5s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-.plant-water-drop {
-  top: -8px;
-  width: 4px;
-  height: 7px;
-  border: 0.7px solid rgba(255, 255, 255, 0.45);
-  border-radius: 52% 48% 58% 42% / 64% 56% 44% 36%;
-  background: radial-gradient(
-      circle at 34% 26%,
-      rgba(255, 255, 255, 0.95) 0 13%,
-      transparent 15%
-    ),
-    linear-gradient(
-      150deg,
-      rgba(240, 249, 255, 0.92),
-      rgba(125, 211, 252, 0.58) 58%,
-      rgba(34, 211, 238, 0.34)
-    );
-  opacity: 0;
-  transform: translate3d(0, -12px, 0) rotate(16deg) scale(0.72);
-  animation: plant-water-card-drop var(--plant-water-duration)
-    cubic-bezier(0.16, 1, 0.3, 1) both;
-  animation-delay: var(--plant-water-delay);
-}
-
-.plant-water-layer {
-  z-index: 2;
-}
-
-.plant-stage-image {
-  z-index: 1;
-  transform-origin: center;
-  will-change: opacity, transform;
-}
-
-.plant-crossfade-enter-active,
-.plant-crossfade-leave-active {
-  pointer-events: none;
-}
-
-.plant-crossfade-enter-active {
-  animation: plant-stage-emerge 1000ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-.plant-crossfade-leave-active {
-  animation: plant-stage-dissolve 1000ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-@keyframes plant-stage-emerge {
-  0% {
-    opacity: 0;
-    transform: translate3d(0, 4px, 0) scale(0.985);
-  }
-  48% {
-    opacity: 0.58;
-    transform: translate3d(0, 1px, 0) scale(0.997);
-  }
-  72% {
-    opacity: 1;
-    transform: translate3d(0, 0, 0) scale(1.012);
-  }
-  100% {
-    opacity: 1;
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-}
-
-@keyframes plant-stage-dissolve {
-  0% {
-    opacity: 1;
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  100% {
-    opacity: 0;
-    transform: translate3d(0, -2px, 0) scale(0.985);
-  }
-}
-
-@keyframes plant-water-card-drop {
-  0% {
-    opacity: 0;
-    transform: translate3d(0, -12px, 0) rotate(16deg) scale(0.72);
-  }
-  24% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-    transform: translate3d(var(--plant-water-drift), 74px, 0) rotate(16deg)
-      scale(0.92);
-  }
-}
-
-@keyframes plant-water-card-glow {
-  0%,
-  100% {
-    opacity: 0;
-    transform: scale(0.88);
-  }
-  42%,
-  76% {
-    opacity: 1;
-    transform: scale(1.08);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .plant-crossfade-enter-active,
-  .plant-crossfade-leave-active {
-    animation: plant-stage-fade-reduced 120ms ease both;
-  }
-
-  .plant-crossfade-leave-active {
-    animation-name: plant-stage-fade-out-reduced;
-  }
-
-  .plant-water-glow--active,
-  .plant-water-drop {
-    animation: none;
-  }
-}
-
-@keyframes plant-stage-fade-reduced {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes plant-stage-fade-out-reduced {
-  from {
-    opacity: 1;
-  }
-  to {
-    opacity: 0;
-  }
-}
-</style>
