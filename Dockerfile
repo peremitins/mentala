@@ -66,7 +66,7 @@ RUN if [ "$MENTALA_REQUIRE_WEB_PUSH_BUILD_CONFIG" = "true" ]; then \
 COPY . .
 
 # Сборка Nuxt (Nitro складывает сервер в .output)
-RUN pnpm build
+RUN NODE_OPTIONS="--max-old-space-size=4096" pnpm build
 
 # --- СТАДИЯ МИГРАЦИЙ ---
 FROM build AS migrate
