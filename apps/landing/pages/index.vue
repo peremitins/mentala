@@ -21,48 +21,15 @@
             />
           </button>
 
-          <nav class="hidden lg:flex items-center gap-2 text-sm text-white/80">
+          <nav class="hidden lg:flex items-center gap-1 text-sm text-white/80">
             <button
+              v-for="link in navLinks"
+              :key="link.section"
               type="button"
               class="rounded-lg px-3 py-2 hover:bg-white/10 hover:text-white transition"
-              @click="scrollToSection('features')"
+              @click="scrollToSection(link.section)"
             >
-              {{ t('LANDING.HEADER.NAV.FEATURES') }}
-            </button>
-            <button
-              type="button"
-              class="rounded-lg px-3 py-2 hover:bg-white/10 hover:text-white transition"
-              @click="scrollToSection('scenarios')"
-            >
-              {{ t('LANDING.HEADER.NAV.SCENARIOS') }}
-            </button>
-            <button
-              type="button"
-              class="rounded-lg px-3 py-2 hover:bg-white/10 hover:text-white transition"
-              @click="scrollToSection('how-it-works')"
-            >
-              {{ t('LANDING.HEADER.NAV.HOW_IT_WORKS') }}
-            </button>
-            <button
-              type="button"
-              class="rounded-lg px-3 py-2 hover:bg-white/10 hover:text-white transition"
-              @click="scrollToSection('landing-pricing')"
-            >
-              {{ t('LANDING.HEADER.NAV.PRICING') }}
-            </button>
-            <button
-              type="button"
-              class="rounded-lg px-3 py-2 hover:bg-white/10 hover:text-white transition"
-              @click="scrollToSection('privacy')"
-            >
-              {{ t('LANDING.HEADER.NAV.PRIVACY') }}
-            </button>
-            <button
-              type="button"
-              class="rounded-lg px-3 py-2 hover:bg-white/10 hover:text-white transition"
-              @click="scrollToSection('faq')"
-            >
-              {{ t('LANDING.HEADER.NAV.FAQ') }}
+              {{ link.label }}
             </button>
           </nav>
 
@@ -110,7 +77,7 @@
               <button
                 type="button"
                 class="h-11 px-2 text-sm font-semibold text-white/80 underline-offset-4 transition hover:text-white hover:underline"
-                @click="scrollToSection('features')"
+                @click="openAssessmentCTA"
               >
                 {{ t('LANDING.HERO.SECONDARY_CTA') }}
               </button>
@@ -182,7 +149,7 @@
               "
             >
               <img
-                src="/landing/features/hero_bg.jpg"
+                src="/landing/features/hero_bg.webp"
                 :alt="t('LANDING.HERO.IMAGE_ALT')"
                 class="hero-media-image"
                 loading="lazy"
@@ -199,6 +166,251 @@
                 "
               />
             </figure>
+          </div>
+        </div>
+      </section>
+
+      <!-- Направления (сады): 9 тем продукта. Показываем все, чтобы каждый нашёл «своё». -->
+      <section id="topics" class="scroll-mt-header mt-20 lg:mt-28">
+        <div class="landing-container">
+          <div class="mb-5 max-w-2xl space-y-3">
+            <h2 class="font-display text-3xl sm:text-4xl font-bold reveal-item">
+              {{ t('LANDING.TOPICS.TITLE') }}
+            </h2>
+            <p class="text-white/75 reveal-item">
+              {{ t('LANDING.TOPICS.DESCRIPTION') }}
+            </p>
+          </div>
+
+          <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <article
+              v-for="card in topicCards"
+              :key="card.id"
+              class="reveal-item glass-panel rounded-2xl p-4 sm:p-5 h-full"
+            >
+              <div class="flex items-start gap-3">
+                <span
+                  class="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/15 bg-white/5 text-[#A8FF35]"
+                  aria-hidden="true"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M7 20h10" />
+                    <path d="M10 20c5.5-2.5.8-6.4 3-10" />
+                    <path
+                      d="M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z"
+                    />
+                    <path
+                      d="M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z"
+                    />
+                  </svg>
+                </span>
+                <div class="min-w-0">
+                  <h3 class="font-display text-base sm:text-lg font-bold mb-1">
+                    {{ card.title }}
+                  </h3>
+                  <p class="text-sm text-white/72 leading-relaxed">
+                    {{ card.text }}
+                  </p>
+                </div>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- Дифференциатор: чем Ментала больше, чем просто чат. Только наши плюсы, без конкурентов. -->
+      <section id="differentiator" class="scroll-mt-header mt-20 lg:mt-28">
+        <div class="landing-container">
+          <div
+            class="reveal-item glass-panel relative overflow-hidden rounded-3xl p-6 sm:p-8 lg:p-10"
+          >
+            <div
+              class="pointer-events-none absolute -right-16 -top-12 h-48 w-48 rounded-full bg-emerald-300/12 blur-3xl"
+              aria-hidden="true"
+            />
+            <div
+              class="pointer-events-none absolute -left-12 bottom-0 h-40 w-40 rounded-full bg-sky-300/10 blur-3xl"
+              aria-hidden="true"
+            />
+
+            <div class="relative">
+              <div class="max-w-2xl space-y-4">
+                <Badge variant="accent">
+                  {{ t('LANDING.DIFFERENTIATOR.BADGE') }}
+                </Badge>
+                <h2 class="font-display text-3xl sm:text-4xl font-bold">
+                  {{ t('LANDING.DIFFERENTIATOR.TITLE') }}
+                </h2>
+                <p class="text-white/78 leading-relaxed">
+                  {{ t('LANDING.DIFFERENTIATOR.DESCRIPTION') }}
+                </p>
+              </div>
+
+              <div class="mt-7 grid gap-4 sm:grid-cols-3">
+                <article
+                  v-for="pillar in differentiatorPillars"
+                  :key="pillar.id"
+                  class="rounded-2xl border border-white/12 bg-white/[0.04] p-5 h-full"
+                >
+                  <span
+                    class="mb-3 grid h-10 w-10 place-items-center rounded-xl border border-white/15 bg-white/5 text-[#A8FF35]"
+                    aria-hidden="true"
+                  >
+                    <svg
+                      v-if="pillar.id === 'guides'"
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <circle cx="6" cy="19" r="3" />
+                      <path
+                        d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"
+                      />
+                      <circle cx="18" cy="5" r="3" />
+                    </svg>
+                    <svg
+                      v-else-if="pillar.id === 'remembers'"
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path
+                        d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"
+                      />
+                      <path d="M3 3v5h5" />
+                      <path d="M12 7v5l4 2" />
+                    </svg>
+                    <svg
+                      v-else
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <rect width="7" height="7" x="3" y="3" rx="1" />
+                      <rect width="7" height="7" x="14" y="3" rx="1" />
+                      <rect width="7" height="7" x="14" y="14" rx="1" />
+                      <rect width="7" height="7" x="3" y="14" rx="1" />
+                    </svg>
+                  </span>
+                  <h3 class="font-display text-lg font-bold mb-2">
+                    {{ pillar.title }}
+                  </h3>
+                  <p class="text-sm text-white/72 leading-relaxed">
+                    {{ pillar.text }}
+                  </p>
+                </article>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Оценка состояния: основной вход в продукт (GAD-7). CTA ведёт на авторизацию с next. -->
+      <section id="assessment" class="scroll-mt-header mt-20 lg:mt-28">
+        <div class="landing-container">
+          <div
+            class="reveal-item glass-panel relative overflow-hidden rounded-3xl p-6 sm:p-8 lg:p-10"
+          >
+            <div
+              class="pointer-events-none absolute -right-16 -top-10 h-48 w-48 rounded-full bg-emerald-300/12 blur-3xl"
+              aria-hidden="true"
+            />
+            <div
+              class="pointer-events-none absolute -left-12 bottom-0 h-40 w-40 rounded-full bg-sky-300/10 blur-3xl"
+              aria-hidden="true"
+            />
+
+            <div
+              class="relative grid gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-center"
+            >
+              <div class="space-y-5">
+                <Badge variant="accent">
+                  {{ t('LANDING.ASSESSMENT.BADGE') }}
+                </Badge>
+                <h2 class="font-display text-2xl sm:text-3xl font-bold">
+                  {{ t('LANDING.ASSESSMENT.TITLE') }}
+                </h2>
+                <p class="text-white/78 leading-relaxed max-w-xl">
+                  {{ t('LANDING.ASSESSMENT.TEXT') }}
+                </p>
+                <div class="flex flex-wrap items-center gap-3">
+                  <Button size="lg" @click="openAssessmentCTA">
+                    {{ t('LANDING.ASSESSMENT.CTA') }}
+                  </Button>
+                </div>
+              </div>
+
+              <div class="mx-auto w-full max-w-[260px]">
+                <div
+                  class="mx-auto overflow-hidden"
+                  style="aspect-ratio: 390 / 844"
+                >
+                  <img
+                    src="/landing/features/assessment.webp"
+                    :alt="t('LANDING.ASSESSMENT.IMAGE_ALT')"
+                    class="h-full w-full object-cover"
+                    loading="lazy"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="how-it-works" class="scroll-mt-header mt-20 lg:mt-28">
+        <div class="landing-container">
+          <div class="mb-5 space-y-3">
+            <h2 class="font-display text-3xl sm:text-4xl font-bold reveal-item">
+              {{ t('LANDING.HOW_IT_WORKS.TITLE') }}
+            </h2>
+            <p class="text-white/75 reveal-item">
+              {{ t('LANDING.HOW_IT_WORKS.DESCRIPTION') }}
+            </p>
+          </div>
+
+          <div class="grid lg:grid-cols-3 gap-4">
+            <article
+              v-for="item in howItWorks"
+              :key="item.step"
+              class="reveal-item glass-panel rounded-2xl p-5"
+            >
+              <div
+                class="text-xs font-bold tracking-[0.18em] text-white/50 mb-3"
+              >
+                {{ item.step }}
+              </div>
+              <h3 class="font-semibold text-xl mb-2">{{ item.title }}</h3>
+              <p class="text-sm text-white/70">{{ item.text }}</p>
+            </article>
           </div>
         </div>
       </section>
@@ -238,8 +450,14 @@
               </div>
             </article>
 
+            <p
+              class="reveal-item text-sm text-white/65 leading-relaxed glass-panel rounded-xl px-5 py-4 border-white/15"
+            >
+              {{ t('LANDING.FEATURES.ALSO_AVAILABLE') }}
+            </p>
+
             <div
-              class="reveal-item relative max-w-3xl mx-auto w-full my-[50px]"
+              class="reveal-item relative max-w-3xl mx-auto w-full my-[40px]"
               aria-hidden="true"
             >
               <div
@@ -275,7 +493,7 @@
             </div>
 
             <div class="feature-phone lg:hidden mx-auto">
-              <!-- На мобильных даем пользователю ручной свайп по всем 5 экранам. -->
+              <!-- На мобильных даем пользователю ручной свайп по всем экранам. -->
               <Swiper
                 class="feature-phone-swiper h-full w-full"
                 :modules="swiperModules"
@@ -307,85 +525,6 @@
                 </SwiperSlide>
               </Swiper>
             </div>
-          </div>
-        </div>
-      </section>
-
-      <section id="scenarios" class="scroll-mt-header mt-20 lg:mt-28">
-        <div class="landing-container">
-          <div class="mb-5 space-y-3">
-            <h2 class="font-display text-3xl sm:text-4xl font-bold reveal-item">
-              {{ t('LANDING.SCENARIOS.TITLE') }}
-            </h2>
-            <p class="text-white/75 reveal-item">
-              {{ t('LANDING.SCENARIOS.DESCRIPTION') }}
-            </p>
-          </div>
-
-          <Swiper
-            class="reveal-item scenario-swiper"
-            :modules="swiperModules"
-            :slides-per-view="1.05"
-            :space-between="14"
-            :breakpoints="{
-              640: { slidesPerView: 1.5, spaceBetween: 16 },
-              1024: { slidesPerView: 2.3, spaceBetween: 20 },
-              1280: { slidesPerView: 3, spaceBetween: 22 },
-            }"
-            :autoplay="
-              isReducedMotion
-                ? false
-                : {
-                    delay: 3800,
-                    disableOnInteraction: false,
-                    pauseOnMouseEnter: true,
-                  }
-            "
-            :pagination="{ clickable: true }"
-            :a11y="{ enabled: true }"
-          >
-            <SwiperSlide
-              v-for="item in scenarios"
-              :key="item.id"
-              class="h-auto"
-            >
-              <article
-                class="glass-panel rounded-2xl p-5 h-full min-h-[150px] flex flex-col"
-              >
-                <span class="text-2xl mb-3">{{ item.emoji }}</span>
-                <h3 class="font-semibold text-lg mb-2">{{ item.title }}</h3>
-                <p class="text-white/75 text-sm mt-auto">{{ item.text }}</p>
-              </article>
-            </SwiperSlide>
-          </Swiper>
-        </div>
-      </section>
-
-      <section id="how-it-works" class="scroll-mt-header mt-20 lg:mt-28">
-        <div class="landing-container">
-          <div class="mb-5 space-y-3">
-            <h2 class="font-display text-3xl sm:text-4xl font-bold reveal-item">
-              {{ t('LANDING.HOW_IT_WORKS.TITLE') }}
-            </h2>
-            <p class="text-white/75 reveal-item">
-              {{ t('LANDING.HOW_IT_WORKS.DESCRIPTION') }}
-            </p>
-          </div>
-
-          <div class="grid lg:grid-cols-3 gap-4">
-            <article
-              v-for="item in howItWorks"
-              :key="item.step"
-              class="reveal-item glass-panel rounded-2xl p-5"
-            >
-              <div
-                class="text-xs font-bold tracking-[0.18em] text-white/50 mb-3"
-              >
-                {{ item.step }}
-              </div>
-              <h3 class="font-semibold text-xl mb-2">{{ item.title }}</h3>
-              <p class="text-sm text-white/70">{{ item.text }}</p>
-            </article>
           </div>
         </div>
       </section>
@@ -585,6 +724,12 @@
               </Button>
             </article>
           </div>
+
+          <p
+            class="reveal-item mt-5 text-center text-sm text-white/70 max-w-2xl mx-auto"
+          >
+            {{ t('LANDING.PRICING.TRIAL_NOTE') }}
+          </p>
         </div>
       </section>
 
@@ -613,10 +758,40 @@
             >
               <div class="flex items-start gap-3.5">
                 <div
-                  class="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/20 bg-white/5"
+                  class="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/20 bg-white/5 text-white/85"
                   aria-hidden="true"
                 >
-                  {{ item.icon }}
+                  <svg
+                    v-if="item.id === 'private-dialogs'"
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                  <svg
+                    v-else
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path
+                      d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"
+                    />
+                  </svg>
                 </div>
 
                 <div class="min-w-0">
@@ -680,9 +855,9 @@
         id="android-download"
         class="android-promo-surface reveal-item scroll-mt-header mt-20 lg:mt-28"
       >
-        <div class="landing-container flex items-center">
+        <div class="landing-container">
           <div
-            class="flex w-full justify-center reveal-item glass-panel relative overflow-hidden rounded-2xl border-white/20 p-6 sm:p-8 lg:p-10"
+            class="reveal-item glass-panel relative overflow-hidden rounded-2xl border-white/20 p-6 sm:p-8 lg:p-10"
           >
             <div
               class="pointer-events-none absolute -right-20 top-0 h-48 w-48 rounded-full bg-emerald-300/12 blur-3xl"
@@ -693,41 +868,52 @@
               aria-hidden="true"
             />
 
-            <div class="relative w-max flex flex-col gap-5">
-              <a
-                :href="androidInstallHref"
-                target="_blank"
-                class="hidden lg:flex items-center justify-center transition hover:border-white/20 hover:bg-white/[0.07]"
-                :aria-label="t('LANDING.ANDROID_PROMO.QR_LINK_ARIA')"
-                @click="trackAndroidPromoClick('bottom_qr')"
-              >
-                <div
-                  class="mx-auto overflow-hidden rounded-lg bg-white shadow-[0_20px_44px_rgba(0,0,0,0.24)]"
-                >
-                  <img
-                    src="/qr-codes/android.svg"
-                    :alt="t('LANDING.ANDROID_PROMO.QR_ALT')"
-                    class="h-[220px] w-[220px] rounded-[16px]"
-                    loading="lazy"
-                    decoding="async"
-                    width="220"
-                    height="220"
-                  />
-                </div>
-              </a>
+            <div
+              class="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between"
+            >
+              <div class="space-y-2 max-w-md">
+                <h2 class="font-display text-2xl sm:text-3xl font-bold">
+                  {{ t('LANDING.ANDROID_PROMO.DOWNLOAD_TITLE') }}
+                </h2>
+                <p class="text-white/75">
+                  {{ t('LANDING.ANDROID_PROMO.DOWNLOAD_SUBTITLE') }}
+                </p>
+              </div>
 
-              <div class="flex flex-wrap items-center gap-3 w-full">
+              <div class="flex flex-col items-center gap-5 w-max">
                 <a
                   :href="androidInstallHref"
                   target="_blank"
-                  class="w-full inline-flex transition hover:border-white/20 hover:bg-white/[0.06]"
+                  class="hidden lg:flex items-center justify-center transition hover:border-white/20 hover:bg-white/[0.07]"
+                  :aria-label="t('LANDING.ANDROID_PROMO.QR_LINK_ARIA')"
+                  @click="trackAndroidPromoClick('bottom_qr')"
+                >
+                  <div
+                    class="mx-auto overflow-hidden rounded-lg bg-white shadow-[0_20px_44px_rgba(0,0,0,0.24)]"
+                  >
+                    <img
+                      src="/qr-codes/android.svg"
+                      :alt="t('LANDING.ANDROID_PROMO.QR_ALT')"
+                      class="h-[200px] w-[200px] rounded-[16px]"
+                      loading="lazy"
+                      decoding="async"
+                      width="200"
+                      height="200"
+                    />
+                  </div>
+                </a>
+
+                <a
+                  :href="androidInstallHref"
+                  target="_blank"
+                  class="w-full inline-flex justify-center transition hover:border-white/20 hover:bg-white/[0.06]"
                   :aria-label="t('LANDING.ANDROID_PROMO.BADGE_LINK_ARIA')"
                   @click="trackAndroidPromoClick('bottom_primary')"
                 >
                   <img
                     src="/store-badges/google-play-badge.svg"
                     :alt="t('LANDING.ANDROID_PROMO.GOOGLE_PLAY_BADGE_ALT')"
-                    class="h-auto w-[220px]"
+                    class="h-auto w-[200px]"
                     loading="lazy"
                     decoding="async"
                   />
@@ -806,8 +992,6 @@
         @update:model-value="onLocaleChange"
       />
     </div>
-
-    <!-- waitlist/success модалки удалены: лендинг постоянно работает в released-режиме, лиды не собираем. -->
   </div>
 </template>
 
@@ -817,12 +1001,13 @@ import { Swiper, SwiperSlide } from 'swiper/vue';
 import { usePreferredReducedMotion } from '@vueuse/core';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import { onPrehydrate, useRuntimeConfig } from 'nuxt/app';
+import { onPrehydrate } from 'nuxt/app';
 import { useI18n } from 'vue-i18n';
 import { Badge } from '../components/ui/shadcn/badge';
 import { Button } from '../components/ui/shadcn/button';
 import LanguageSelect from '../components/ui/LanguageSelect.vue';
 import { useLandingAnalytics } from '../composables/useLandingAnalytics';
+import { useLandingAppAuthUrl } from '../composables/useLandingAppAuthUrl';
 import { useLandingLocale } from '../composables/useLandingLocale';
 import { useLandingSiteUrl } from '../composables/useLandingSiteUrl';
 import type { SupportedLocale } from '../composables/useLandingLocale';
@@ -841,6 +1026,10 @@ import {
 } from '../../../shared/utils/marketingAttribution';
 import { calculateSubscriptionPrice } from '../../../shared/utils/subscriptionPricing';
 
+// Глубинная ссылка на тест тревожности в приложении. После авторизации
+// /auth?next=... доводит нового пользователя прямо до прохождения теста (воронка B).
+const ASSESSMENT_DEEP_LINK_PATH = '/practices/assessments/anxiety_check_v1';
+
 type FeatureStep = {
   key: string;
   title: string;
@@ -849,11 +1038,16 @@ type FeatureStep = {
   image: string;
 };
 
-type ScenarioCard = {
+type TopicCard = {
   id: string;
   title: string;
   text: string;
-  emoji: string;
+};
+
+type DifferentiatorPillar = {
+  id: string;
+  title: string;
+  text: string;
 };
 
 type PricingPlan = {
@@ -873,7 +1067,6 @@ type FaqItem = {
 
 type PrivacyCard = {
   id: string;
-  icon: string;
   title: string;
   text: string;
 };
@@ -888,7 +1081,6 @@ type NavigatorWithUserAgentData = Navigator & {
 };
 
 const { t } = useI18n();
-const runtimeConfig = useRuntimeConfig();
 const route = useRoute();
 const {
   locale,
@@ -899,13 +1091,14 @@ const {
   brandLogoAlt,
 } = useLandingLocale();
 const siteUrl = useLandingSiteUrl();
+const appAuthUrl = useLandingAppAuthUrl();
 const reducedMotion = usePreferredReducedMotion();
 
 const { reachGoal, trackScrollDepth } = useLandingAnalytics();
 
 const supportEmail = 'support@mentala.app';
 const webAppUrl = computed(() =>
-  String(runtimeConfig.public.appAuthUrl || 'https://my.mentala.app/auth')
+  String(appAuthUrl.value)
     .replace(/\/auth\/?$/, '')
     .replace(/\/$/, '')
 );
@@ -936,6 +1129,19 @@ const numberFormatLocale = computed(() =>
   locale.value === 'ru' ? 'ru-RU' : 'en-US'
 );
 
+// Навигация в шапке: пункты ведут на соответствующие секции по якорю.
+const navLinks = computed(() => [
+  { section: 'topics', label: String(t('LANDING.HEADER.NAV.TOPICS')) },
+  { section: 'assessment', label: String(t('LANDING.HEADER.NAV.ASSESSMENT')) },
+  { section: 'features', label: String(t('LANDING.HEADER.NAV.FEATURES')) },
+  {
+    section: 'landing-pricing',
+    label: String(t('LANDING.HEADER.NAV.PRICING')),
+  },
+  { section: 'privacy', label: String(t('LANDING.HEADER.NAV.SECURITY')) },
+  { section: 'faq', label: String(t('LANDING.HEADER.NAV.FAQ')) },
+]);
+
 const featureSteps = computed<FeatureStep[]>(() => [
   {
     key: 'chat',
@@ -949,94 +1155,116 @@ const featureSteps = computed<FeatureStep[]>(() => [
     image: '/landing/features/chat.webp',
   },
   {
-    key: 'therapy',
-    title: String(t('LANDING.FEATURES.STEPS.THERAPY.TITLE')),
-    description: String(t('LANDING.FEATURES.STEPS.THERAPY.DESCRIPTION')),
+    key: 'roadmap',
+    title: String(t('LANDING.FEATURES.STEPS.ROADMAP.TITLE')),
+    description: String(t('LANDING.FEATURES.STEPS.ROADMAP.DESCRIPTION')),
     chips: [
-      String(t('LANDING.FEATURES.STEPS.THERAPY.CHIPS.CHIP_1')),
-      String(t('LANDING.FEATURES.STEPS.THERAPY.CHIPS.CHIP_2')),
-      String(t('LANDING.FEATURES.STEPS.THERAPY.CHIPS.CHIP_3')),
-      String(t('LANDING.FEATURES.STEPS.THERAPY.CHIPS.CHIP_4')),
+      String(t('LANDING.FEATURES.STEPS.ROADMAP.CHIPS.CHIP_1')),
+      String(t('LANDING.FEATURES.STEPS.ROADMAP.CHIPS.CHIP_2')),
+      String(t('LANDING.FEATURES.STEPS.ROADMAP.CHIPS.CHIP_3')),
     ],
-    image: '/landing/features/therapy.webp',
+    image: '/landing/features/roadmap.webp',
   },
   {
-    key: 'habits',
-    title: String(t('LANDING.FEATURES.STEPS.HABITS.TITLE')),
-    description: String(t('LANDING.FEATURES.STEPS.HABITS.DESCRIPTION')),
+    key: 'practices',
+    title: String(t('LANDING.FEATURES.STEPS.PRACTICES.TITLE')),
+    description: String(t('LANDING.FEATURES.STEPS.PRACTICES.DESCRIPTION')),
     chips: [
-      String(t('LANDING.FEATURES.STEPS.HABITS.CHIPS.CHIP_1')),
-      String(t('LANDING.FEATURES.STEPS.HABITS.CHIPS.CHIP_2')),
-      String(t('LANDING.FEATURES.STEPS.HABITS.CHIPS.CHIP_3')),
-    ],
-    image: '/landing/features/habits.webp',
-  },
-  {
-    key: 'meditations',
-    title: String(t('LANDING.FEATURES.STEPS.MEDITATIONS.TITLE')),
-    description: String(t('LANDING.FEATURES.STEPS.MEDITATIONS.DESCRIPTION')),
-    chips: [
-      String(t('LANDING.FEATURES.STEPS.MEDITATIONS.CHIPS.CHIP_1')),
-      String(t('LANDING.FEATURES.STEPS.MEDITATIONS.CHIPS.CHIP_2')),
-      String(t('LANDING.FEATURES.STEPS.MEDITATIONS.CHIPS.CHIP_3')),
-    ],
-    image: '/landing/features/meditations.webp',
-  },
-  {
-    key: 'breathing',
-    title: String(t('LANDING.FEATURES.STEPS.BREATHING.TITLE')),
-    description: String(t('LANDING.FEATURES.STEPS.BREATHING.DESCRIPTION')),
-    chips: [
-      String(t('LANDING.FEATURES.STEPS.BREATHING.CHIPS.CHIP_1')),
-      String(t('LANDING.FEATURES.STEPS.BREATHING.CHIPS.CHIP_2')),
-      String(t('LANDING.FEATURES.STEPS.BREATHING.CHIPS.CHIP_3')),
-      String(t('LANDING.FEATURES.STEPS.BREATHING.CHIPS.CHIP_4')),
+      String(t('LANDING.FEATURES.STEPS.PRACTICES.CHIPS.CHIP_1')),
+      String(t('LANDING.FEATURES.STEPS.PRACTICES.CHIPS.CHIP_2')),
+      String(t('LANDING.FEATURES.STEPS.PRACTICES.CHIPS.CHIP_3')),
     ],
     image: '/landing/features/breathing.webp',
   },
   {
-    key: 'diary',
-    title: String(t('LANDING.FEATURES.STEPS.DIARY.TITLE')),
-    description: String(t('LANDING.FEATURES.STEPS.DIARY.DESCRIPTION')),
+    key: 'assessment',
+    title: String(t('LANDING.FEATURES.STEPS.ASSESSMENT.TITLE')),
+    description: String(t('LANDING.FEATURES.STEPS.ASSESSMENT.DESCRIPTION')),
     chips: [
-      String(t('LANDING.FEATURES.STEPS.DIARY.CHIPS.CHIP_1')),
-      String(t('LANDING.FEATURES.STEPS.DIARY.CHIPS.CHIP_2')),
-      String(t('LANDING.FEATURES.STEPS.DIARY.CHIPS.CHIP_3')),
+      String(t('LANDING.FEATURES.STEPS.ASSESSMENT.CHIPS.CHIP_1')),
+      String(t('LANDING.FEATURES.STEPS.ASSESSMENT.CHIPS.CHIP_2')),
+      String(t('LANDING.FEATURES.STEPS.ASSESSMENT.CHIPS.CHIP_3')),
     ],
-    image: '/landing/features/diary.webp',
+    image: '/landing/features/assessment.webp',
+  },
+  {
+    key: 'garden',
+    title: String(t('LANDING.FEATURES.STEPS.GARDEN.TITLE')),
+    description: String(t('LANDING.FEATURES.STEPS.GARDEN.DESCRIPTION')),
+    chips: [
+      String(t('LANDING.FEATURES.STEPS.GARDEN.CHIPS.CHIP_1')),
+      String(t('LANDING.FEATURES.STEPS.GARDEN.CHIPS.CHIP_2')),
+      String(t('LANDING.FEATURES.STEPS.GARDEN.CHIPS.CHIP_3')),
+    ],
+    image: '/landing/features/plant.webp',
   },
 ]);
 
-const scenarios = computed<ScenarioCard[]>(() => [
+// Направления (сады): каждая тема ведёт пользователя к «своей» программе.
+const topicCards = computed<TopicCard[]>(() => [
   {
-    id: 'anxiety-now',
-    title: String(t('LANDING.SCENARIOS.ITEMS.ANXIETY_NOW.TITLE')),
-    text: String(t('LANDING.SCENARIOS.ITEMS.ANXIETY_NOW.TEXT')),
-    emoji: String(t('LANDING.SCENARIOS.ITEMS.ANXIETY_NOW.EMOJI')),
+    id: 'anxiety',
+    title: String(t('LANDING.TOPICS.ITEMS.ANXIETY.TITLE')),
+    text: String(t('LANDING.TOPICS.ITEMS.ANXIETY.TEXT')),
   },
   {
-    id: 'sleep-faster',
-    title: String(t('LANDING.SCENARIOS.ITEMS.SLEEP_FASTER.TITLE')),
-    text: String(t('LANDING.SCENARIOS.ITEMS.SLEEP_FASTER.TEXT')),
-    emoji: String(t('LANDING.SCENARIOS.ITEMS.SLEEP_FASTER.EMOJI')),
+    id: 'self-kindness',
+    title: String(t('LANDING.TOPICS.ITEMS.SELF_KINDNESS.TITLE')),
+    text: String(t('LANDING.TOPICS.ITEMS.SELF_KINDNESS.TEXT')),
   },
   {
-    id: 'drink-more-water',
-    title: String(t('LANDING.SCENARIOS.ITEMS.DRINK_MORE_WATER.TITLE')),
-    text: String(t('LANDING.SCENARIOS.ITEMS.DRINK_MORE_WATER.TEXT')),
-    emoji: String(t('LANDING.SCENARIOS.ITEMS.DRINK_MORE_WATER.EMOJI')),
+    id: 'relationships',
+    title: String(t('LANDING.TOPICS.ITEMS.RELATIONSHIPS.TITLE')),
+    text: String(t('LANDING.TOPICS.ITEMS.RELATIONSHIPS.TEXT')),
   },
   {
     id: 'burnout',
-    title: String(t('LANDING.SCENARIOS.ITEMS.BURNOUT.TITLE')),
-    text: String(t('LANDING.SCENARIOS.ITEMS.BURNOUT.TEXT')),
-    emoji: String(t('LANDING.SCENARIOS.ITEMS.BURNOUT.EMOJI')),
+    title: String(t('LANDING.TOPICS.ITEMS.BURNOUT.TITLE')),
+    text: String(t('LANDING.TOPICS.ITEMS.BURNOUT.TEXT')),
   },
   {
-    id: 'breathing-pause',
-    title: String(t('LANDING.SCENARIOS.ITEMS.BREATHING_PAUSE.TITLE')),
-    text: String(t('LANDING.SCENARIOS.ITEMS.BREATHING_PAUSE.TEXT')),
-    emoji: String(t('LANDING.SCENARIOS.ITEMS.BREATHING_PAUSE.EMOJI')),
+    id: 'sleep',
+    title: String(t('LANDING.TOPICS.ITEMS.SLEEP.TITLE')),
+    text: String(t('LANDING.TOPICS.ITEMS.SLEEP.TEXT')),
+  },
+  {
+    id: 'emotions',
+    title: String(t('LANDING.TOPICS.ITEMS.EMOTIONS.TITLE')),
+    text: String(t('LANDING.TOPICS.ITEMS.EMOTIONS.TEXT')),
+  },
+  {
+    id: 'habits',
+    title: String(t('LANDING.TOPICS.ITEMS.HABITS.TITLE')),
+    text: String(t('LANDING.TOPICS.ITEMS.HABITS.TEXT')),
+  },
+  {
+    id: 'joy',
+    title: String(t('LANDING.TOPICS.ITEMS.JOY.TITLE')),
+    text: String(t('LANDING.TOPICS.ITEMS.JOY.TEXT')),
+  },
+  {
+    id: 'purpose',
+    title: String(t('LANDING.TOPICS.ITEMS.PURPOSE.TITLE')),
+    text: String(t('LANDING.TOPICS.ITEMS.PURPOSE.TEXT')),
+  },
+]);
+
+// Дифференциатор «не просто чат»: три преимущества Ментала (без сравнения с конкурентами).
+const differentiatorPillars = computed<DifferentiatorPillar[]>(() => [
+  {
+    id: 'guides',
+    title: String(t('LANDING.DIFFERENTIATOR.PILLARS.GUIDES.TITLE')),
+    text: String(t('LANDING.DIFFERENTIATOR.PILLARS.GUIDES.TEXT')),
+  },
+  {
+    id: 'remembers',
+    title: String(t('LANDING.DIFFERENTIATOR.PILLARS.REMEMBERS.TITLE')),
+    text: String(t('LANDING.DIFFERENTIATOR.PILLARS.REMEMBERS.TEXT')),
+  },
+  {
+    id: 'all-in-one',
+    title: String(t('LANDING.DIFFERENTIATOR.PILLARS.ALL_IN_ONE.TITLE')),
+    text: String(t('LANDING.DIFFERENTIATOR.PILLARS.ALL_IN_ONE.TEXT')),
   },
 ]);
 
@@ -1058,7 +1286,7 @@ const howItWorks = computed(() => [
   },
 ]);
 
-// Сравнение «по-другому»: Mentala и очная консультация (без противопоставления «лучше/хуже»).
+// Сравнение «по-другому»: Mentala и приём у специалиста (без противопоставления «лучше/хуже»).
 // tooltip опционален: иконка «?» и v-tooltip (floating-vue) только у пунктов с tooltip.
 const comparisonMentalaPoints = computed<ComparisonPoint[]>(() => [
   {
@@ -1091,13 +1319,11 @@ const comparisonConsultationPoints = computed<ComparisonPoint[]>(() => [
 const privacyCards = computed<PrivacyCard[]>(() => [
   {
     id: String(t('LANDING.PRIVACY.CARDS.PRIVATE_DIALOGS.ID')),
-    icon: String(t('LANDING.PRIVACY.CARDS.PRIVATE_DIALOGS.ICON')),
     title: String(t('LANDING.PRIVACY.CARDS.PRIVATE_DIALOGS.TITLE')),
     text: String(t('LANDING.PRIVACY.CARDS.PRIVATE_DIALOGS.TEXT')),
   },
   {
     id: String(t('LANDING.PRIVACY.CARDS.DATA_PROTECTION.ID')),
-    icon: String(t('LANDING.PRIVACY.CARDS.DATA_PROTECTION.ICON')),
     title: String(t('LANDING.PRIVACY.CARDS.DATA_PROTECTION.TITLE')),
     text: String(t('LANDING.PRIVACY.CARDS.DATA_PROTECTION.TEXT')),
   },
@@ -1162,15 +1388,36 @@ const faq = computed<FaqItem[]>(() => [
 
 const swiperModules = [Autoplay, Pagination, A11y];
 
-const ctaUrl = computed(() =>
-  String(runtimeConfig.public.appAuthUrl || 'https://my.mentala.app/auth')
-);
+// С лендинга всегда ведём на вкладку регистрации (`?mode=signup`): по умолчанию
+// на странице авторизации активен вход, а новым посетителям удобнее сразу
+// попасть на регистрацию. Параметр наследуют все CTA, построенные поверх ctaUrl.
+const ctaUrl = computed(() => {
+  try {
+    const url = new URL(String(appAuthUrl.value));
+    url.searchParams.set('mode', 'signup');
+    return url.toString();
+  } catch {
+    return String(appAuthUrl.value);
+  }
+});
 const ctaUrlWithAttribution = computed(() =>
   appendMarketingAttributionToUrl(
     String(ctaUrl.value),
     landingMarketingAttribution.value
   )
 );
+
+// Воронка теста: тот же auth-URL + ?next=, чтобы после входа сразу открыть тест в приложении.
+const assessmentCtaUrl = computed(() => {
+  try {
+    const url = new URL(String(ctaUrlWithAttribution.value));
+    url.searchParams.set('next', ASSESSMENT_DEEP_LINK_PATH);
+    return url.toString();
+  } catch {
+    return String(ctaUrlWithAttribution.value);
+  }
+});
+
 const isReducedMotion = computed(() => reducedMotion.value === 'reduce');
 const androidInstallHref = LANDING_ANDROID_QR_PATH;
 const androidQrUrl = computed(() => buildLandingAndroidQrUrl(siteUrl.value));
@@ -1260,7 +1507,7 @@ const canonicalUrl = computed(() =>
   locale.value === 'en' ? enHomeUrl.value : ruHomeUrl.value
 );
 const ogImageUrl = computed(
-  () => new URL('/landing/features/hero_bg.jpg', ruHomeUrl.value).href
+  () => new URL('/landing/features/hero_bg.webp', ruHomeUrl.value).href
 );
 
 function readStoredMarketingAttribution(): MarketingAttributionDto | undefined {
@@ -1362,6 +1609,14 @@ function openPrimaryCTA() {
   reachGoal('landing_auth_redirect_click');
   if (typeof window !== 'undefined') {
     window.open(ctaUrlWithAttribution.value, '_blank', 'noopener,noreferrer');
+  }
+}
+
+function openAssessmentCTA() {
+  // Отдельная цель: видно, сколько людей зашло именно через тест.
+  reachGoal('landing_assessment_cta_click');
+  if (typeof window !== 'undefined') {
+    window.open(assessmentCtaUrl.value, '_blank', 'noopener,noreferrer');
   }
 }
 

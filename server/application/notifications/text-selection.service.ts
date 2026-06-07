@@ -114,6 +114,52 @@ function selectUnusedAiText(
 }
 
 /**
+ * Фолбэк-выбор AI-текста, когда весь пул уже использован.
+ * ВАЖНО: уведомления не должны прекращаться из-за исчерпания пула — пока рефилл
+ * догенерирует новые тексты в фоне, переиспользуем существующий, отдавая
+ * предпочтение тем, что ещё не выбраны в текущем прогоне оркестрации.
+ */
+function selectReusableAiText(
+  aiTexts: Array<string | AiNotificationText>,
+  usedTextsThisRun: Set<string>
+): {
+  text: string;
+  index: number;
+  imageTag: string | null;
+  subtype: NotificationSubtype | null;
+  actionHint: NotificationActionHint;
+} | null {
+  if (aiTexts.length === 0) {
+    return null;
+  }
+
+  const notUsedThisRun = aiTexts
+    .map((_, index) => index)
+    .filter((index) => {
+      const entry = aiTexts[index];
+      const rawText = typeof entry === 'string' ? entry : entry.text;
+      return !usedTextsThisRun.has(rawText);
+    });
+
+  const pool =
+    notUsedThisRun.length > 0
+      ? notUsedThisRun
+      : aiTexts.map((_, index) => index);
+
+  const index = pool[Math.floor(Math.random() * pool.length)];
+  const entry = aiTexts[index];
+
+  return {
+    text: typeof entry === 'string' ? entry : entry.text,
+    index,
+    imageTag: typeof entry === 'string' ? null : (entry.imageTag ?? null),
+    subtype: typeof entry === 'string' ? null : (entry.subtype ?? null),
+    actionHint:
+      typeof entry === 'string' ? 'none' : (entry.actionHint ?? 'none'),
+  };
+}
+
+/**
  * Выбирает неиспользованный шаблонный текст
  * ВАЖНО: Если все тексты использованы, начинаем заново (циклическое использование)
  * При сбросе очищаются только шаблонные тексты из usedTexts, AI-тексты остаются
@@ -231,12 +277,33 @@ function tryUseAiText(
       subtype: selectedText.subtype ?? null,
       actionHint: selectedText.actionHint ?? 'none',
     };
-  } else {
-    console.warn(
-      `[TextSelection] ❌ All AI texts already used, skipping slot: slot ${slotIndex}`
-    );
-    return null;
   }
+
+  // Пул AI-текстов исчерпан (все индексы уже использованы по БД-usage).
+  // Чтобы доставка не вставала, переиспользуем текст. Рефилл догенерирует новые в фоне.
+  const reused = selectReusableAiText(aiTexts, state.usedTexts);
+  if (reused) {
+    const text = formatNotificationText(reused.text, userGender);
+    // В рамках текущего прогона помечаем как использованный, чтобы не дублировать в один день.
+    state.usedTexts.add(reused.text);
+    console.warn(
+      `[TextSelection] ♻️ AI pool exhausted (${reason}), reusing text to keep notifications flowing: slot ${slotIndex}, index: ${reused.index}`
+    );
+    return {
+      text,
+      templateIdForSlot: 'ai_generated',
+      selectedAiTextIndex: reused.index,
+      templateIndex: null,
+      imageTag: reused.imageTag,
+      subtype: reused.subtype ?? null,
+      actionHint: reused.actionHint ?? 'none',
+    };
+  }
+
+  console.warn(
+    `[TextSelection] ❌ AI pool empty, cannot select or reuse text, skipping slot: slot ${slotIndex}`
+  );
+  return null;
 }
 
 /**

@@ -974,12 +974,24 @@ export default defineEventHandler(
           descriptionChanged ||
           missingAiTexts;
 
+        // ВАЖНО: Не тратим деньги на AI-генерацию для ВЫКЛЮЧЕННЫХ уведомлений —
+        // пользователь их всё равно не увидит. Пул будет сгенерирован при включении
+        // (enabled → true снова пройдёт эту ветку с missingAiTexts).
+        const shouldGenerateAiTexts = needsAiGeneration && updated.enabled;
+
         // ВАЖНО: Если AI-тексты генерируются и textSource === 'ai', НЕ регенерируем слоты сейчас
         // Слоты будут регенерированы после завершения AI-генерации
         // Присваиваем значение переменной, объявленной выше
-        shouldRegenerateSlotsAfterAi = needsAiGeneration && textSource === 'ai';
+        shouldRegenerateSlotsAfterAi =
+          shouldGenerateAiTexts && textSource === 'ai';
 
-        if (needsAiGeneration) {
+        if (!updated.enabled && needsAiGeneration) {
+          console.log(
+            `[NotificationPrefs] ⏭️ Skipping AI generation for disabled preference: user ${userId}, kind: ${kind}, entityKey: ${finalEntityKey}`
+          );
+        }
+
+        if (shouldGenerateAiTexts) {
           console.log(
             `[NotificationPrefs] Config hash changed or missing, generating AI texts: user ${userId}, kind: ${kind}, entityKey: ${finalEntityKey} (READABLE), oldHash: ${oldConfigHash?.substring(0, 8) || 'none'}..., newHash: ${newConfigHash.substring(0, 8)}...`
           );

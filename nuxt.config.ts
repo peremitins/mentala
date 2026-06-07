@@ -142,9 +142,16 @@ export default defineNuxtConfig({
           content:
             'width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover',
         },
+        { name: 'apple-mobile-web-app-capable', content: 'yes' },
+        { name: 'mobile-web-app-capable', content: 'yes' },
+        { name: 'apple-mobile-web-app-title', content: 'Ментала' },
+        {
+          name: 'apple-mobile-web-app-status-bar-style',
+          content: 'black-translucent',
+        },
         { name: 'msapplication-TileColor', content: '#ffffff' },
         { name: 'msapplication-TileImage', content: '/ms-icon-144x144.png' },
-        { name: 'theme-color', content: '#ffffff' },
+        { name: 'theme-color', content: '#09090b' },
         {
           name: 'robots',
           content: 'noindex, nofollow, noarchive, nosnippet, noimageindex',

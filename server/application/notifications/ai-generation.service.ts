@@ -286,6 +286,36 @@ function computeRefillLockKey(
 }
 
 /**
+ * Записывает факт использования AI-текста слотом в ai_notification_text_usage.
+ *
+ * ВАЖНО: usage привязан к slotId (FK с onDelete: cascade). Поэтому пишем его при
+ * создании слота: если planned-слот позже удаляется при регенерации, его usage-строка
+ * каскадно удаляется автоматически, а для доставленных (sent) слотов usage сохраняется.
+ * Именно на этих данных работают дедуп текстов (getUsedText*) и авто-рефилл пула.
+ *
+ * @param params - данные использования
+ * @param tx - опциональный транзакционный executor (для записи в одной транзакции со слотом)
+ */
+export async function recordAiTextUsage(
+  params: {
+    aiTextId: number;
+    slotId: string;
+    textIndex: number;
+    textHash: string;
+  },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  tx?: any
+): Promise<void> {
+  const executor = tx ?? db;
+  await executor.insert(aiNotificationTextUsage).values({
+    aiTextId: params.aiTextId,
+    slotId: params.slotId,
+    textIndex: params.textIndex,
+    textHash: params.textHash,
+  });
+}
+
+/**
  * Загружает AI-сгенерированные тексты из БД
  */
 export async function loadAiGeneratedTexts(
@@ -2173,6 +2203,16 @@ export async function refillTextPool(
 
     // 3. Определяем, сколько нужно догенерировать
     const targetCount = DEFAULT_TEXT_COUNT; // 50 текстов
+    // Рефилл запускаем только когда доступных текстов реально мало.
+    // Иначе периодический планировщик (раз в час) вызывал бы микро-генерации
+    // (по 1-2 текста) при каждом использовании — это лишние расходы на LLM.
+    const refillTriggerAvailable = Math.max(10, Math.floor(targetCount * 0.3));
+    if (availableTexts > refillTriggerAvailable) {
+      console.log(
+        `[AI Generation] ✅ Pool has enough available texts (${availableTexts} > ${refillTriggerAvailable}), skipping refill`
+      );
+      return null;
+    }
     const toGenerate = Math.max(0, targetCount - availableTexts);
 
     if (toGenerate === 0) {

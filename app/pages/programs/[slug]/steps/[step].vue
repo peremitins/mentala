@@ -404,6 +404,10 @@ import ThoughtDumpEmbeddedComposer from '@/app/components/quick-help/ThoughtDump
 import { useAPI } from '@/app/composables/useAPI';
 import { useCelebrationConfetti } from '@/app/composables/useCelebrationConfetti';
 import { useProgramDailyLimit } from '@/app/composables/useProgramDailyLimit';
+import {
+  useSceneAudioFocus,
+  type SceneAudioFocusLock,
+} from '@/app/composables/useSceneAudioFocus';
 import { useToast } from '@/app/composables/useToast';
 import {
   getRetentionPlantImageSrc,
@@ -486,6 +490,55 @@ const currentAction = computed<ProgramStepActionStateDto | null>(
 const currentActionCompletionDelaySeconds = computed(() => {
   return getActionCompletionDelaySeconds(currentAction.value);
 });
+
+// Приглушение фоновой сцены на аудио-шагах roadmap.
+// Переиспользуем глобальный scene-audio-focus (тот же механизм, что в ИИ-чате
+// и голосовой диктовке): он делает плавный fade-out фона при захвате lock и
+// fade-in при release. Медитация и realtime-голос глушат фон сами через свои
+// плееры, поэтому здесь только дыхание/quick-help, у которых своего ducking нет.
+const SCENE_DUCKING_ACTION_TYPES = new Set<ProgramStepActionStateDto['type']>([
+  'breathing',
+  'quick_help_breathing',
+  'quick_help_grounding',
+  'quick_help_tension',
+]);
+const sceneAudioFocus = useSceneAudioFocus();
+const sceneDuckingLock = ref<SceneAudioFocusLock | null>(null);
+let sceneDuckingDisposed = false;
+
+const isSceneDuckingAction = computed(() => {
+  const action = currentAction.value;
+  return Boolean(action && SCENE_DUCKING_ACTION_TYPES.has(action.type));
+});
+
+watch(
+  isSceneDuckingAction,
+  (shouldDuck) => {
+    if (shouldDuck) {
+      if (sceneDuckingLock.value) return;
+      void sceneAudioFocus
+        .acquire('roadmap-audio-step')
+        .then((lock) => {
+          // Шаг могли успеть переключить или страницу размонтировать, пока
+          // резолвился lock — тогда сразу отпускаем, иначе фон останется
+          // приглушённым на не-аудио шаге или вообще навсегда после ухода.
+          if (sceneDuckingDisposed || !isSceneDuckingAction.value) {
+            void lock.release();
+          } else {
+            sceneDuckingLock.value = lock;
+          }
+        })
+        .catch(() => {
+          /* fade фоновой сцены не критичен для прохождения шага */
+        });
+    } else {
+      const lock = sceneDuckingLock.value;
+      sceneDuckingLock.value = null;
+      void lock?.release();
+    }
+  },
+  { immediate: true }
+);
 const returnedAssessmentAttemptId = computed(() => {
   const action = currentAction.value;
   if (!action || !isAssessmentPromptAction(action)) return null;
@@ -497,7 +550,6 @@ const isCurrentAssessmentPromptSkipped = computed(() => {
     action && assessmentPromptSkippedActionIds.value.has(action.id)
   );
 });
-
 
 function getActionCompletionDelaySeconds(
   action: ProgramStepActionStateDto | null | undefined
@@ -698,7 +750,10 @@ const showActionIntro = computed(() => {
     return false;
   }
   // Assessment prompt имеет собственный заголовок внутри компонента
-  if (action.type === 'guided_steps' && action.formKind === 'assessment_prompt') {
+  if (
+    action.type === 'guided_steps' &&
+    action.formKind === 'assessment_prompt'
+  ) {
     return false;
   }
   return !ACTION_TYPES_WITH_INTERNAL_TITLE.has(action.type);
@@ -1027,12 +1082,17 @@ function isAssessmentPromptAction(action: ProgramStepActionStateDto) {
 }
 
 function requiresPracticeCompletion(action: ProgramStepActionStateDto) {
+  // Медитацию НЕ требуем «дослушать»: гайд-аудио строго зависит от звука
+  // (динамик/наушники), и юзер в офисе или транспорте без наушников иначе
+  // застревает на шаге. Поэтому кнопка продолжения для медитации всегда
+  // активна — шаг завершается штатно, без обязательного проигрывания.
+  // Дыхательные и quick-help практики остаются обязательными: они выполняются
+  // по визуальному пейсеру, молча, и доступны в любой обстановке.
   return (
     action.type === 'breathing' ||
     action.type === 'quick_help_grounding' ||
     action.type === 'quick_help_breathing' ||
-    action.type === 'quick_help_tension' ||
-    action.type === 'meditation'
+    action.type === 'quick_help_tension'
   );
 }
 
@@ -2332,6 +2392,13 @@ onBeforeUnmount(() => {
   }
   cleanupTimedPracticeRecoveryLifecycle();
   clearUnlockTimer();
+  // Снимаем приглушение фоновой сцены при уходе со страницы шага. Сам lock
+  // авто-освобождается через onScopeDispose внутри useSceneAudioFocus, но флаг
+  // нужен, чтобы отпустить ещё не дорезолвившийся acquire (см. watch выше).
+  sceneDuckingDisposed = true;
+  const pendingSceneLock = sceneDuckingLock.value;
+  sceneDuckingLock.value = null;
+  void pendingSceneLock?.release();
 });
 
 onMounted(() => {

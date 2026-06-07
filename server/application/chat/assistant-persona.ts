@@ -8,7 +8,7 @@ export type AssistantPersona = {
   voice: string;
   voiceLabel: string;
   gender: AssistantVoiceGender;
-  displayName: 'Mentala';
+  displayName: 'Ментала';
 };
 
 export function resolveAssistantPersonaFromVoice(
@@ -22,7 +22,7 @@ export function resolveAssistantPersonaFromVoice(
     voice: item.id,
     voiceLabel: presentation.label,
     gender: item.gender,
-    displayName: 'Mentala',
+    displayName: 'Ментала',
   };
 }
 
@@ -48,7 +48,7 @@ export function buildAssistantPersonaInstruction(params: {
     return '';
   }
 
-  const displayName = String(params.assistantDisplayName || 'Mentala').trim();
+  const displayName = String(params.assistantDisplayName || 'Ментала').trim();
   const genderLabel = gender === 'female' ? 'женщина' : ' мужчина';
   const selfReferenceInstruction =
     gender === 'female'

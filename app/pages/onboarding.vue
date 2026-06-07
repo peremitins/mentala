@@ -441,6 +441,7 @@ import { useToast } from '@/app/composables/useToast';
 import { useHaptics } from '@/app/composables/useHaptics';
 import { cn } from '@/app/lib/utils';
 import { getOrientationMediaCandidates } from '@/app/utils/orientationMedia';
+import { consumePostAuthRedirect } from '@/app/utils/postAuthRedirect';
 import {
   getPersistentItem,
   removePersistentItem,
@@ -1093,7 +1094,8 @@ async function completeOnboarding() {
     draftHydrated = false;
     await clearOnboardingDraft();
     await auth.me();
-    await navigateTo('/');
+    // Если пользователь пришёл из воронки (тест на тревожность), ведём на цель.
+    await navigateTo(consumePostAuthRedirect() ?? '/');
   } catch (error: any) {
     const payload = error?.data || error?.response?._data || {};
     const message = payload?.message || 'Не удалось завершить онбординг';
@@ -1136,7 +1138,7 @@ onMounted(async () => {
 
     if (auth.user.onboarding?.welcome) {
       await clearOnboardingDraft();
-      await navigateTo('/');
+      await navigateTo(consumePostAuthRedirect() ?? '/');
       return;
     }
 

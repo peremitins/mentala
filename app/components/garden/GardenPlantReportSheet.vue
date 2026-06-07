@@ -446,12 +446,12 @@ async function onShareReport() {
       ? window.location.origin
       : 'https://mentala.app';
   const shareUrl = `${origin}/share/garden/${encodeURIComponent(props.plant.programSlug)}`;
-  const text = `У меня в Mentala вырос сад «${props.plant.title}». Это мой маленький шаг к большему спокойствию и вниманию к себе. Загляни, если тебе тоже хочется попробовать.`;
+  const text = `У меня в Ментала вырос сад «${props.plant.title}». Это мой маленький шаг к большему спокойствию и вниманию к себе. Загляни, если тебе тоже хочется попробовать.`;
   const absoluteImage = imageSrc.value
     ? new URL(imageSrc.value, origin).toString()
     : undefined;
   const result = await shareContent({
-    title: `Сад «${props.plant.title}» · Mentala`,
+    title: `Сад «${props.plant.title}» · Ментала`,
     text,
     url: shareUrl,
     dialogTitle: 'Поделиться садом',

@@ -53,7 +53,7 @@ const displayTitle = computed(
 const displayMessage = computed(
   () =>
     updateInfo.value?.message ||
-    'Доступна новая версия Mentala. Пожалуйста, обновите приложение для продолжения работы.'
+    'Доступна новая версия Ментала. Пожалуйста, обновите приложение для продолжения работы.'
 );
 </script>
 

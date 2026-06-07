@@ -54,6 +54,14 @@ export function startAiTextPoolWorker() {
           throw new Error(`Preference ${preferenceId} not found`);
         }
 
+        // Не догенерируем пул для выключенных уведомлений — пользователь их не увидит.
+        if (!pref.enabled) {
+          console.log(
+            `[AI Text Pool Worker] ⏭️ Preference ${preferenceId} disabled, skipping refill`
+          );
+          return { skipped: true, reason: 'preference_disabled' };
+        }
+
         const [userProfile] = await db
           .select({
             gender: users.gender,

@@ -40,10 +40,10 @@ const config: CapacitorConfig = {
     StatusBar: {
       backgroundColor: '#000000',
       style: 'dark',
-      // Глобально держим Android/WebView ниже status bar.
-      // iOS overlay настраивается отдельно ранним native layout в MainViewController,
-      // чтобы не ломать Android нижние inset'ы.
-      overlaysWebView: false,
+      // WebView должен рисовать фон под status bar: иначе iOS показывает
+      // отдельную чёрную системную полосу вместо продолжения обоев приложения.
+      // Отступы для контента берём из CSS safe-area переменных.
+      overlaysWebView: true,
     },
     PushNotifications: {
       // Используем стандартный native foreground-показ Capacitor/iOS.

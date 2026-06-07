@@ -44,7 +44,7 @@ const isVisible = computed(
 .rt-ambient-frame {
   position: fixed;
   inset: 0;
-  z-index: 40;
+  z-index: 9;
   pointer-events: none;
 
   /* Палитра */
@@ -80,9 +80,11 @@ const isVisible = computed(
 .rt-ambient-frame__glow {
   position: absolute;
   inset: 0;
-  /* Учитываем safe-area, чтобы свечение не уходило под нотч/жесты. */
-  margin: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
-    env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+  /* Рамка идёт по всему периметру экрана до нижнего края (включая зону home indicator).
+     Слой ниже app chrome, поэтому glow не перекрывает нижний нэвбар и composer.
+     Верхний margin учитывает нотч/status bar. */
+  margin: var(--safe-area-inset-top) var(--safe-area-inset-right) 0px
+    var(--safe-area-inset-left);
 
   /* Стартовое состояние = «выдох». Анимация переключает на «вдох» и обратно. */
   box-shadow:

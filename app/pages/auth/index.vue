@@ -480,6 +480,10 @@ import { getErrorDiagnosticsLog } from '@/app/utils/errorDiagnostics';
 import { sanitizePublicErrorMessage } from '@/app/utils/errorMessage';
 import { openExternalBrowser } from '@/app/utils/openExternalBrowser';
 import {
+  isSafeInternalPath,
+  savePostAuthRedirect,
+} from '@/app/utils/postAuthRedirect';
+import {
   normalizePendingAccessCode,
   usePendingAccessCode,
 } from '@/app/composables/usePendingAccessCode';
@@ -492,7 +496,25 @@ definePageMeta({
 const auth = useAuthStore();
 const route = useRoute();
 
-const mode = ref<'signin' | 'signup'>('signin');
+// Целевой путь из воронки лендинга (`/auth?next=...`): валидный внутренний путь,
+// куда вернуть пользователя после входа/регистрации.
+const nextPath = computed<string | null>(() => {
+  const raw = route.query.next;
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  return isSafeInternalPath(value) ? value : null;
+});
+
+// Вкладка по умолчанию. С лендинга приходим с `?mode=signup`, чтобы сразу
+// открыть регистрацию (по умолчанию на странице активен вход). Поддерживаем
+// также `register` как синоним. Вычисляется на этапе setup (SSR + клиент),
+// поэтому нужная вкладка активна уже при первой отрисовке.
+function resolveInitialAuthMode(): 'signin' | 'signup' {
+  const raw = route.query.mode;
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  return value === 'signup' || value === 'register' ? 'signup' : 'signin';
+}
+
+const mode = ref<'signin' | 'signup'>(resolveInitialAuthMode());
 const step = ref<'form' | 'verify'>('form');
 const email = ref('');
 const password = ref('');
@@ -756,10 +778,16 @@ async function confirmCode() {
 
   try {
     loading.value = true;
-    await auth.verifyEmailCode({
-      email: verificationEmail.value,
-      code: cleanCode,
-    });
+    // Для вернувшихся пользователей (без онбординга) сразу ведём на цель воронки.
+    // Для новых redirect перехватит auth-middleware и отправит в онбординг,
+    // откуда цель заберётся из sessionStorage по завершении.
+    await auth.verifyEmailCode(
+      {
+        email: verificationEmail.value,
+        code: cleanCode,
+      },
+      nextPath.value ? { redirect: nextPath.value } : undefined
+    );
   } catch (e: any) {
     const payload = e?.data || e?.response?._data || {};
     attemptsLeft.value = payload?.data?.attemptsLeft ?? attemptsLeft.value;
@@ -847,6 +875,11 @@ onMounted(async () => {
       Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'ios';
   } catch {
     isIos.value = false;
+  }
+
+  // Запоминаем цель из воронки, чтобы пронести её через регистрацию и онбординг.
+  if (nextPath.value) {
+    savePostAuthRedirect(nextPath.value);
   }
 
   if (route.query.error === 'email_not_verified') {

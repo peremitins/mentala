@@ -35,6 +35,7 @@
 
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useRoute } from '#app';
 import { driver, type Driver } from 'driver.js';
 import 'driver.js/dist/driver.css';
 import { useAppTour } from '@/app/composables/useAppTour';
@@ -42,6 +43,13 @@ import AppTourBubble from './AppTourBubble.vue';
 import AppTourTapRipple from './AppTourTapRipple.vue';
 
 const tour = useAppTour();
+const route = useRoute();
+
+// Сколько пользователь должен непрерывно пробыть на подходящей странице
+// (обычно главной), прежде чем мы запустим тур. Запуск привязан к «дольке
+// спокойствия» на странице, а не к таймеру с момента входа: если юзер ушёл
+// (например, проходит тест из воронки) — отсчёт сбрасывается и тур не мешает.
+const TOUR_START_DWELL_MS = 5000;
 
 let driverInstance: Driver | null = null;
 const targetRect = ref<DOMRect | null>(null);
@@ -62,31 +70,33 @@ let pendingStartTimeout: number | null = null;
 // приложение и AppLock включился) — корректно закрываем тур, чтобы он
 // не висел поверх лок-экрана. При следующем разблоке тур запустится снова.
 // -------------------------------------------------------------------
+// Следим и за canStart, и за текущим маршрутом. Смена маршрута сбрасывает
+// отложенный запуск: dwell-таймер отсчитывает непрерывное пребывание на одной
+// странице. start() сам не активируется, пока юзер не на странице первого шага
+// (главной), поэтому на тесте/оценке тур не стартует и не дёргает навигацию.
 watch(
-  () => tour.canStart.value,
-  (canStart) => {
+  [() => tour.canStart.value, () => route.path],
+  ([canStart]) => {
+    // Любая смена условий/маршрута отменяет ранее запланированный старт.
+    if (pendingStartTimeout !== null) {
+      window.clearTimeout(pendingStartTimeout);
+      pendingStartTimeout = null;
+    }
+
     if (canStart && !tour.isActive.value) {
-      // Сбрасываем предыдущий таймаут на случай быстрых переключений
-      if (pendingStartTimeout !== null) {
-        window.clearTimeout(pendingStartTimeout);
-      }
       pendingStartTimeout = window.setTimeout(() => {
         pendingStartTimeout = null;
         // Перепроверяем условия после задержки — за это время юзер мог
-        // снова свернуть приложение или перейти на /auth.
+        // свернуть приложение, перейти на /auth или уйти со страницы.
         if (tour.canStart.value && !tour.isActive.value) {
           void tour.start();
         }
-      }, 600);
+      }, TOUR_START_DWELL_MS);
     } else if (!canStart && tour.isActive.value) {
       // Условия перестали выполняться (AppLock сработал, юзер ушёл на /auth и т.д.) —
       // закрываем тур без пометки appTour=true. При следующем удачном моменте
       // (юзер ввёл пин, вернулся на главную) — тур запустится снова с первого шага.
       tour.forceClose();
-    } else if (!canStart && pendingStartTimeout !== null) {
-      // Отменяем отложенный старт
-      window.clearTimeout(pendingStartTimeout);
-      pendingStartTimeout = null;
     }
   },
   { immediate: true }

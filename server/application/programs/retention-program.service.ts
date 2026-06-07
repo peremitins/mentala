@@ -6329,6 +6329,35 @@ export async function getOrCreateThoughtOfTheDay(params: {
   // В БД хранится сырая разметка, резолв происходит при каждом чтении.
   const gender = params.gender ?? (await getUserGender(params.userId));
 
+  const fallbackThoughtText = getThoughtTemplateForProgramStep(params);
+
+  // Upsert-паттерн: сначала INSERT ON CONFLICT DO NOTHING, потом SELECT если конфликт.
+  // Это защищает от race condition при параллельных запросах (PWA service worker + вкладка).
+  const [inserted] = await db
+    .insert(dailyThoughts)
+    .values({
+      userId: params.userId,
+      entryDate: params.entryDate,
+      text: fallbackThoughtText,
+      source: 'fallback',
+      programSlug: params.programSlug ?? DEFAULT_RETENTION_PROGRAM_SLUG,
+      step: params.step ?? null,
+      metadata: {},
+    })
+    .onConflictDoNothing()
+    .returning();
+
+  if (inserted) {
+    return {
+      id: inserted.id,
+      entryDate: inserted.entryDate,
+      text: applyGender(inserted.text, gender),
+      source: inserted.source,
+      saved: false,
+    };
+  }
+
+  // Запись уже существовала (конкурентная вставка или повторный вызов)
   const [existing] = await db
     .select()
     .from(dailyThoughts)
@@ -6340,37 +6369,12 @@ export async function getOrCreateThoughtOfTheDay(params: {
     )
     .limit(1);
 
-  if (existing) {
-    return {
-      id: existing.id,
-      entryDate: existing.entryDate,
-      text: applyGender(existing.text, gender),
-      source: existing.source,
-      saved: Boolean(existing.savedAt),
-    };
-  }
-
-  const fallbackThoughtText = getThoughtTemplateForProgramStep(params);
-
-  const [created] = await db
-    .insert(dailyThoughts)
-    .values({
-      userId: params.userId,
-      entryDate: params.entryDate,
-      text: fallbackThoughtText,
-      source: 'fallback',
-      programSlug: params.programSlug ?? DEFAULT_RETENTION_PROGRAM_SLUG,
-      step: params.step ?? null,
-      metadata: {},
-    })
-    .returning();
-
   return {
-    id: created?.id ?? null,
+    id: existing?.id ?? null,
     entryDate: params.entryDate,
-    text: applyGender(created?.text || fallbackThoughtText, gender),
-    source: created?.source || 'fallback',
-    saved: false,
+    text: applyGender(existing?.text || fallbackThoughtText, gender),
+    source: existing?.source || 'fallback',
+    saved: Boolean(existing?.savedAt),
   };
 }
 

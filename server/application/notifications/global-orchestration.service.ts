@@ -41,6 +41,8 @@ import {
   loadAiGeneratedTextsWithId,
   getUsedTextIndices,
   getUsedTextHashes,
+  hashNotificationText,
+  recordAiTextUsage,
   type AiNotificationText,
 } from './ai-generation.service';
 import { enqueueAiTextGenerationJob } from './queues/aiTextGeneration.queue';
@@ -1322,6 +1324,12 @@ export async function orchestrateAllSlotsForUser(
       payload: NotificationPayload;
       templateId: string;
       status: 'planned';
+      // Данные для записи использования AI-текста (если слот построен на AI-пуле).
+      aiUsage?: {
+        aiTextId: number;
+        textIndex: number;
+        textHash: string;
+      } | null;
     }> = [];
     let droppedPastSlotsCount = 0;
     const droppedPastSlotsSample: Array<{
@@ -1464,6 +1472,8 @@ export async function orchestrateAllSlotsForUser(
 
       // Загружаем AI-тексты если нужно
       let aiTexts: Array<string | AiNotificationText> | null = null;
+      // ID записи AI-пула — нужен для записи использования текста (ai_notification_text_usage).
+      let aiTextRecordId: number | null = null;
       let configHash: string | null = null;
       // Инициализируем used-сеты для AI (загружаются из БД если есть AI-тексты)
       let usedAiTextIndicesFromDb = new Set<number>();
@@ -1537,6 +1547,7 @@ export async function orchestrateAllSlotsForUser(
         ) {
           aiTexts = aiTextRecord.texts;
           aiTextsAvailable = true;
+          aiTextRecordId = aiTextRecord.id;
 
           // Загружаем использованные индексы и хеши из БД (для предотвращения повторений)
           usedAiTextIndicesFromDb = await getUsedTextIndices(aiTextRecord.id);
@@ -1654,6 +1665,31 @@ export async function orchestrateAllSlotsForUser(
           pickResult;
 
         const slotId = nanoid();
+
+        // Если слот построен на AI-тексте — готовим данные для записи использования.
+        // Хеш считаем от исходного текста пула (как в getUsedTextHashes), а не от
+        // отформатированного, чтобы дедуп был устойчив к форматированию.
+        let aiUsageForSlot: {
+          aiTextId: number;
+          textIndex: number;
+          textHash: string;
+        } | null = null;
+        if (
+          pickResult.selectedAiTextIndex !== null &&
+          aiTextRecordId !== null &&
+          aiTexts
+        ) {
+          const rawEntry = aiTexts[pickResult.selectedAiTextIndex];
+          if (rawEntry !== undefined) {
+            const rawText =
+              typeof rawEntry === 'string' ? rawEntry : rawEntry.text;
+            aiUsageForSlot = {
+              aiTextId: aiTextRecordId,
+              textIndex: pickResult.selectedAiTextIndex,
+              textHash: hashNotificationText(rawText),
+            };
+          }
+        }
         const effectiveSubtypeForImage =
           source.preference.subtype === 'mixed'
             ? (subtype ?? actualSubtype)
@@ -1733,6 +1769,7 @@ export async function orchestrateAllSlotsForUser(
           payload,
           templateId: templateIdForSlot,
           status: 'planned',
+          aiUsage: aiUsageForSlot,
         });
       }
     }
@@ -1803,6 +1840,19 @@ export async function orchestrateAllSlotsForUser(
             const inserted = await insertSlot(slotRow, timezone, tx as any);
             if (inserted) {
               txInsertedCount += 1;
+              // Записываем использование AI-текста только для реально вставленных слотов
+              // (insertSlot возвращает false при конфликте active-slot unique).
+              if (slotRow.aiUsage) {
+                await recordAiTextUsage(
+                  {
+                    aiTextId: slotRow.aiUsage.aiTextId,
+                    slotId: slotRow.id,
+                    textIndex: slotRow.aiUsage.textIndex,
+                    textHash: slotRow.aiUsage.textHash,
+                  },
+                  tx
+                );
+              }
             }
           }
 

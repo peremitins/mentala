@@ -1,14 +1,22 @@
 import { useAuthStore } from '@/app/stores/auth';
 import { useChatSettingsStore } from '@/app/stores/chatSettings';
 import { useSubscriptionStore } from '@/app/stores/subscription';
+import { isSafeInternalPath } from '@/app/utils/postAuthRedirect';
 import {
   buildMarketingAttributionQueryParams,
   extractMarketingAttributionFromQuery,
 } from '@/shared/utils/marketingAttribution';
 
-function buildAuthRedirectPath(query: Record<string, unknown>): string {
-  const attribution = extractMarketingAttributionFromQuery(query);
+function buildAuthRedirectPath(to: {
+  query: Record<string, unknown>;
+  fullPath: string;
+}): string {
+  const attribution = extractMarketingAttributionFromQuery(to.query);
   const params = buildMarketingAttributionQueryParams(attribution);
+  // Сохраняем исходный защищённый путь, чтобы вернуть пользователя сюда после входа.
+  if (isSafeInternalPath(to.fullPath)) {
+    params.set('next', to.fullPath);
+  }
   const search = params.toString();
   return search ? `/auth?${search}` : '/auth';
 }
@@ -68,7 +76,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
     }
   }
 
-  if (!auth.user) return navigateTo(buildAuthRedirectPath(to.query));
+  if (!auth.user) return navigateTo(buildAuthRedirectPath(to));
   if (auth.isLoggingOut) return;
 
   // App-lock инициализирует плагин app-lock.client.ts по смене userId/route.path —

@@ -72,150 +72,179 @@ export default {
   LANDING: {
     HEADER: {
       NAV: {
+        TOPICS: 'Topics',
         FEATURES: 'Features',
-        SCENARIOS: 'Scenarios',
+        ASSESSMENT: 'Assessment',
         HOW_IT_WORKS: 'How it works',
         PRICING: 'Pricing',
-        PRIVACY: 'Privacy',
+        SECURITY: 'Security',
         FAQ: 'FAQ',
       },
-      CTA_MOBILE: 'Get access',
+      CTA_MOBILE: 'Start free',
     },
     HERO: {
-      BADGE: 'Calm and clarity in your pocket',
-      TITLE_LINE_1: 'An AI assistant for support, practices, and habits.',
-      TITLE_LINE_2: 'Anytime.',
-      PRIMARY_CTA_RELEASED: 'Sign in and start',
-      PRIMARY_CTA_EARLY_ACCESS: 'Get early access',
+      BADGE: 'AI support 24/7',
+      TITLE_LINE_1: 'An AI therapist that',
+      TITLE_LINE_2: 'guides you along the way',
+      PRIMARY_CTA_RELEASED: 'Start free',
       DESCRIPTION:
-        'Helps you talk things through, exhale, and build a healthy rhythm of life. No judgment and no appointments needed.',
-      SECONDARY_CTA: 'Explore features',
-      IMAGE_ALT: 'Mentala users in everyday scenarios',
+        'Not one-off advice, but a personal program: a state check, daily practices, and support anytime. Step by step, at your own pace.',
+      SECONDARY_CTA: 'Check your state',
+      IMAGE_ALT:
+        'A person calmly looking at their phone at home in the evening, next to the Mentala app screen',
     },
-    FEATURES: {
-      TITLE: 'Mentala Features',
-      DESCRIPTION: 'From quick anxiety relief to long-term habit changes.',
-      STEPS: {
-        CHAT: {
-          TITLE: 'AI assistant',
-          DESCRIPTION:
-            'Helps you process your current state through dialogue and suggests short practices you can do right away.',
-          CHIPS: {
-            CHIP_1: 'Dialogue',
-            CHIP_2: 'Thought exploration',
-            CHIP_3: 'Always nearby',
-          },
-        },
-        THERAPY: {
-          TITLE: 'Therapy topics',
-          DESCRIPTION:
-            'Anxiety, stress, relationships, self-esteem, and more. Choose what matters now and start without extra steps.',
-          CHIPS: {
-            CHIP_1: 'Anxiety',
-            CHIP_2: 'Stress',
-            CHIP_3: 'Relationships',
-            CHIP_4: 'and more',
-          },
-        },
-        HABITS: {
-          TITLE: 'Habits',
-          DESCRIPTION:
-            'Pick ready-made habits or create your own. Set reminders your way and reinforce helpful actions step by step.',
-          CHIPS: {
-            CHIP_1: 'Reminders',
-            CHIP_2: 'Your rhythm',
-            CHIP_3: 'Any habits',
-          },
-        },
-        MEDITATIONS: {
-          TITLE: 'Meditations',
-          DESCRIPTION:
-            'Curated meditation and sound collections for sleep, recovery, and focus throughout the day.',
-          CHIPS: {
-            CHIP_1: 'Sleep',
-            CHIP_2: 'Focus',
-            CHIP_3: 'Recovery',
-          },
-        },
-        BREATHING: {
-          TITLE: 'Breathing practices',
-          DESCRIPTION:
-            'Short breathing protocols with clear rhythm help reduce tension quickly and restore stability.',
-          CHIPS: {
-            CHIP_1: '4-4-4-4',
-            CHIP_2: '4-7-8',
-            CHIP_3: '4-6',
-            CHIP_4: 'and more',
-          },
-        },
-        DIARY: {
-          TITLE: 'Gratitude Journal',
-          DESCRIPTION:
-            'Write down what you are grateful for every day. A small habit of noticing the good changes your overall mood.',
-          CHIPS: {
-            CHIP_1: 'Every day',
-            CHIP_2: 'Short entries',
-            CHIP_3: 'Positive focus',
-          },
-        },
-      },
-    },
-    SCENARIOS: {
-      TITLE: 'Scenarios',
-      DESCRIPTION: 'How Mentala helps in everyday life.',
+    TOPICS: {
+      TITLE: 'What Mentala helps with',
+      DESCRIPTION:
+        'Each topic is its own program with an AI therapist, practices, and clear steps. You move through them in order, step by step, at your own pace.',
       ITEMS: {
-        ANXIETY_NOW: {
-          TITLE: 'I feel anxious right now',
-          TEXT: 'Open the chat or an SOS practice to quickly regain a sense of control and breathe out.',
-          EMOJI: '😮‍💨',
+        ANXIETY: {
+          TITLE: 'Anxiety and stress',
+          TEXT: 'Less worry and more steadiness in an ordinary day.',
         },
-        SLEEP_FASTER: {
-          TITLE: 'I want to fall asleep faster',
-          TEXT: 'Use meditations and breathing techniques to relax and fall asleep sooner.',
-          EMOJI: '🌙',
+        SELF_KINDNESS: {
+          TITLE: 'Self-kindness',
+          TEXT: 'A gentle inner voice instead of the usual self-criticism.',
         },
-        DRINK_MORE_WATER: {
-          TITLE: 'I want to drink more water',
-          TEXT: 'Choose a ready-made topic, set reminders, and move toward your goal at your own pace.',
-          EMOJI: '💧',
+        RELATIONSHIPS: {
+          TITLE: 'Relationships',
+          TEXT: 'Boundaries and closeness without losing yourself.',
         },
         BURNOUT: {
-          TITLE: 'I feel burned out',
-          TEXT: 'Get daily support and restorative practices.',
-          EMOJI: '🔥',
+          TITLE: 'Burnout',
+          TEXT: 'Gentle recovery when there is almost nothing left in the tank.',
         },
-        BREATHING_PAUSE: {
-          TITLE: 'I need a breathing break',
-          TEXT: 'Start a 1–3 minute breathing protocol to release tension and reset.',
-          EMOJI: '🫁',
+        SLEEP: {
+          TITLE: 'Sleep',
+          TEXT: 'Evening rituals and calm, worry-free falling asleep.',
+        },
+        EMOTIONS: {
+          TITLE: 'Emotions',
+          TEXT: 'Understand anger and impulsive reactions, express them without harm.',
+        },
+        HABITS: {
+          TITLE: 'Body habits',
+          TEXT: 'Basic self-care rituals without pressure or force.',
+        },
+        JOY: {
+          TITLE: 'Joy',
+          TEXT: 'Notice the small good things and bring pleasure back into life.',
+        },
+        PURPOSE: {
+          TITLE: 'Meaning',
+          TEXT: 'Find direction without rushing or chasing the "right" answer.',
         },
       },
+    },
+    DIFFERENTIATOR: {
+      BADGE: 'What Mentala is about',
+      TITLE: 'Not just a chat, but a whole path',
+      DESCRIPTION:
+        'Mentala goes beyond messaging. It checks your state, builds a personal program, and guides you step by step. The AI remembers the context of your conversations, practices are built into the steps, and progress is visible every day.',
+      PILLARS: {
+        GUIDES: {
+          TITLE: 'Guides you through a program',
+          TEXT: 'Every day a small, clear step. You always know what to do next.',
+        },
+        REMEMBERS: {
+          TITLE: 'Remembers your path',
+          TEXT: 'The AI builds context: conversations, practices, and state checks come together into one picture.',
+        },
+        ALL_IN_ONE: {
+          TITLE: 'Everything in one place',
+          TEXT: 'Chat, practices, assessments, and a program in a single app, instead of a dozen separate services.',
+        },
+      },
+    },
+    FEATURES: {
+      TITLE: 'Everything in one app',
+      DESCRIPTION: 'Tools that work together, not in isolation.',
+      STEPS: {
+        CHAT: {
+          TITLE: 'AI therapist 24/7',
+          DESCRIPTION:
+            'Talk anytime by text or voice. The AI listens, helps you sort through your thoughts, and suggests a practice you can do right away. No appointment, no judgment.',
+          CHIPS: {
+            CHIP_1: 'Dialogue',
+            CHIP_2: 'Text and voice',
+            CHIP_3: '24/7',
+          },
+        },
+        ROADMAP: {
+          TITLE: 'Path Map',
+          DESCRIPTION:
+            'A structured program for the topic: daily steps, checkpoints, and a final report on what you have done. Each step is a concrete action of 5–15 minutes, not a "read it later" article.',
+          CHIPS: {
+            CHIP_1: 'Step by step',
+            CHIP_2: 'Every day',
+            CHIP_3: 'Visible progress',
+          },
+        },
+        PRACTICES: {
+          TITLE: 'Built-in practices',
+          DESCRIPTION:
+            'Breathing exercises, meditations, and grounding techniques appear right in the step, when you need them. Nothing to look for separately.',
+          CHIPS: {
+            CHIP_1: 'Breathing',
+            CHIP_2: 'Meditations',
+            CHIP_3: 'Grounding',
+          },
+        },
+        ASSESSMENT: {
+          TITLE: 'State assessment',
+          DESCRIPTION:
+            'See how your state changes with short psychological tests. The path from the first step to the last is visible, and you have something to lean on.',
+          CHIPS: {
+            CHIP_1: 'GAD-7',
+            CHIP_2: 'Visible change',
+            CHIP_3: 'Personal result',
+          },
+        },
+        GARDEN: {
+          TITLE: 'A garden that reflects your progress',
+          DESCRIPTION:
+            'Each completed program is a new plant in your garden. A visible trace of the path you have walked, not points for the sake of points.',
+          CHIPS: {
+            CHIP_1: 'Garden',
+            CHIP_2: 'Plants',
+            CHIP_3: 'Memory of the path',
+          },
+        },
+      },
+      ALSO_AVAILABLE:
+        'All practices are in one place: breathing exercises, meditations, grounding, tension release, mind dump, and a gratitude journal. You can add your favorites to "My set".',
+    },
+    ASSESSMENT: {
+      BADGE: 'State assessment',
+      TITLE: 'Where to start? Check your state in 2 minutes',
+      TEXT: 'It is based on the GAD-7 scale used by psychologists worldwide. A short test helps you see how much anxiety affects daily life and where to begin working on yourself.',
+      CTA: 'Take the test for free',
+      IMAGE_ALT: 'State assessment screen in the Mentala app',
     },
     HOW_IT_WORKS: {
       TITLE: 'How it works',
-      DESCRIPTION:
-        'Three steps to turn short support into a sustainable rhythm.',
+      DESCRIPTION: 'Three steps from your first check to changes that stick.',
       STEPS: {
         STEP_1: {
           NUMBER: '01',
-          TITLE: 'Choose a topic or habit',
-          TEXT: 'Start with what matters right now: anxiety, sleep, habits, or stress.',
+          TITLE: 'See where to start',
+          TEXT: 'A short assessment based on international scales shows your state right now. It is your starting point.',
         },
         STEP_2: {
           NUMBER: '02',
-          TITLE: 'Get support and practice',
-          TEXT: 'AI chat, practices, meditations, and breathing work together to help you regain balance quickly.',
+          TITLE: 'Get your Path Map',
+          TEXT: 'The program guides you through the topic step by step. One or two small actions a day, without overload or rush.',
         },
         STEP_3: {
           NUMBER: '03',
-          TITLE: 'Make it a habit',
-          TEXT: 'Repeat practices and configure reminders to stay supported throughout the day.',
+          TITLE: 'Practice and track your progress',
+          TEXT: 'The AI therapist supports you when you need it. Breathing, meditations, and reflection are built into the program, and your garden grows with you — progress is visible every day.',
         },
       },
     },
     WHY: {
       BADGE: 'Complements, does not replace',
-      TITLE: 'Why Mentala is practical in real life',
+      TITLE: 'Where Mentala helps in real life',
       DESCRIPTION:
         'Mentala does not replace a professional. It makes support accessible exactly when you need it.',
       MENTALA_TITLE: 'Mentala',
@@ -232,7 +261,7 @@ export default {
         POINT_2: {
           TEXT: 'Saves time and resources',
           TOOLTIP:
-            'A year of support in Mentala can cost less than a single consultation with a qualified specialist. You get daily support without commuting or searching for the “right” therapist.',
+            'A year of support in Mentala can cost less than a single consultation with a qualified specialist. You get daily support without commuting or searching for the "right" therapist.',
         },
         POINT_3: {
           TEXT: 'Anonymity and no judgment',
@@ -246,46 +275,47 @@ export default {
         },
       },
       CONSULTATION_POINTS: {
-        POINT_1: 'Deep work with root causes and personal dynamics.',
+        POINT_1: 'Deep work with the root causes of what troubles you.',
         POINT_2: 'Diagnosis and treatment for medical cases.',
         POINT_3: 'Suitable for severe conditions and crisis situations.',
         POINT_4: 'Individual plan from a specialist.',
       },
     },
     PRICING: {
-      TITLE: 'Pricing',
+      TITLE: 'Start with 7 days free',
       DESCRIPTION:
-        'Choose your subscription format: monthly or yearly. Annual billing includes a 30% discount.',
+        'Every new user gets 7 days of Premium. After that, choose monthly or yearly.',
       TAB_MONTH: 'Month',
       TAB_YEAR: 'Year (-30%)',
       SAVINGS_LABEL: 'Savings:',
       PERIOD_YEAR: 'per year',
       PERIOD_MONTH: 'per month',
-      CTA_RELEASED: 'Choose and start',
-      CTA_EARLY_ACCESS: 'Get early access',
+      CTA_RELEASED: 'Start free',
+      TRIAL_NOTE:
+        'That is less than a single session with a psychologist — and support is with you every day.',
       PLANS: {
         PRO: {
           TITLE: 'PRO',
-          SUBTITLE: 'For regular support',
+          SUBTITLE: 'Calm, step by step',
           FEATURES: {
-            FEATURE_1: '7 days of Premium access for new users',
+            FEATURE_1: '7 days of Premium for new users',
             FEATURE_2: 'AI sessions for regular support',
             FEATURE_3: 'Up to 100 minutes of AI sessions per week',
             FEATURE_4: 'Full meditation library',
-            FEATURE_5: 'Access to all breathing practices',
+            FEATURE_5: 'All breathing practices',
             FEATURE_6: 'AI reminders with images',
           },
         },
         PREMIUM: {
           TITLE: 'Premium',
-          SUBTITLE: 'Maximum personalization',
+          SUBTITLE: 'Maximum personalization and voice',
           FEATURES: {
             FEATURE_1: 'Everything in PRO',
             FEATURE_2: 'Unlimited AI sessions',
-            FEATURE_3: 'Real-time voice dialogue with AI',
-            FEATURE_4: 'Personal AI reminder style',
-            FEATURE_5: 'Create and manage your own practices',
-            FEATURE_6: 'Create your own habits and personal therapy',
+            FEATURE_3: 'Live voice dialogue with AI',
+            FEATURE_4: 'Your own AI reminder style',
+            FEATURE_5: 'Your own practices',
+            FEATURE_6: 'Your own habit and therapy topics',
             FEATURE_7: 'Priority support',
           },
         },
@@ -295,6 +325,9 @@ export default {
       BADGE_LINK_ARIA: 'Open Mentala in Google Play',
       GOOGLE_PLAY_BADGE_ALT: 'Open Mentala in Google Play',
       QR_LINK_ARIA: 'Open Google Play from the QR code',
+      DOWNLOAD_TITLE: 'Start your path today',
+      DOWNLOAD_SUBTITLE:
+        'First 7 days of Premium free. On Android and in the browser.',
       SECTION: {
         TITLE: 'Google Play',
       },
@@ -303,7 +336,7 @@ export default {
       },
       QR_ALT: 'QR code to install Mentala on Android',
       STRUCTURED_DESCRIPTION:
-        'Mentala for Android: AI chat, breathing practices, meditations, habits, and daily psychological support.',
+        'Mentala for Android: an AI therapist, programs for anxiety, sleep, relationships, and burnout, built-in practices, and a state assessment.',
     },
     DISCLAIMER:
       'Mentala is designed for psychological support and self-help. It is not a medical service and does not replace a doctor or psychotherapist. If you feel you need professional help, please do not delay seeing a qualified specialist.',
@@ -344,9 +377,9 @@ export default {
             'No. New users get a 7-day Premium trial. After the trial, continued access is available on Pro or Premium.',
         },
         ITEM_4: {
-          QUESTION: 'How does the AI assistant choose responses and practices?',
+          QUESTION: 'Can I cancel my subscription anytime?',
           ANSWER:
-            'The assistant relies on your request and conversation context. It suggests practices you can do right away: breathing techniques, meditations, or habit steps. You choose what fits you best and can always refine your request if you need a different type of support.',
+            'Yes. You can manage or cancel your subscription anytime in your app store or payment provider settings. After canceling, access stays active until the end of the paid period.',
         },
       },
     },
@@ -393,16 +426,16 @@ export default {
     },
     SEO: {
       HOME: {
-        TITLE: 'Mentala — AI chat, meditations, breathing, and habits',
+        TITLE: 'Mentala: an AI therapist and programs for mental health',
         DESCRIPTION:
-          'AI chat, breathing, meditations, gratitude journaling, healthy habits, and breaking harmful ones. New users get 7 days of Premium, while template reminders remain free.',
-        OG_TITLE: 'Mentala — AI support, breathing, meditations, and habits',
+          'An AI therapist 24/7, personal programs, and practices for anxiety, burnout, sleep, and relationships. Check your state and start your path. First 7 days of Premium free.',
+        OG_TITLE: 'Mentala: an AI therapist in your pocket',
         OG_DESCRIPTION:
-          '24/7 support with AI chat, SOS practices, breathing, meditations, gratitude journaling, and habit support. New users get 7 days of Premium; template reminders remain free.',
-        OG_IMAGE_ALT: 'Mentala — AI chat, meditations, breathing, and habits',
-        TWITTER_TITLE: 'Mentala — AI chat, breathing, and meditations',
+          'Personal programs, practices, and AI support for anxiety, sleep, relationships, and burnout. First 7 days free.',
+        OG_IMAGE_ALT: 'Mentala: an AI therapist and programs for mental health',
+        TWITTER_TITLE: 'Mentala: an AI therapist in your pocket',
         TWITTER_DESCRIPTION:
-          'For anxiety, stress, sleep, healthier habits, and breaking harmful ones. New users get 7 days of Premium, and template reminders remain free.',
+          'Personal programs and practices for anxiety, sleep, relationships, and burnout. AI support every day.',
         SITE_NAME: 'Mentala',
       },
     },
@@ -410,7 +443,7 @@ export default {
       ORGANIZATION_NAME: 'Mentala',
       SOFTWARE_APPLICATION_NAME: 'Mentala',
       WEBSITE_NAME: 'Mentala',
-      WEBPAGE_NAME: 'Mentala — AI chat, meditations, breathing, and habits',
+      WEBPAGE_NAME: 'Mentala: an AI therapist and programs for mental health',
     },
   },
   ACCOUNT_DELETION: {

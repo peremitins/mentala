@@ -1,5 +1,7 @@
 <template>
-  <div class="relative h-full overflow-y-auto pb-[112px]">
+  <div
+    class="relative h-full xs:space-y-3 space-y-1 overflow-y-auto pb-[112px]"
+  >
     <PageHeader
       :title="item?.shortTitle || 'Опросник'"
       show-back-button

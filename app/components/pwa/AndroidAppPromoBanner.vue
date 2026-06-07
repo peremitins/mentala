@@ -23,7 +23,7 @@
           >
             <img
               src="/brand-mark-192.png"
-              alt="Mentala"
+              alt="Ментала"
               class="h-9 w-9 rounded-[14px]"
             />
           </div>
@@ -114,7 +114,7 @@ const { isActive: isTourActive } = useAppTour();
 const title = computed(() => {
   return props.variant === 'open-app'
     ? 'Приложение уже установлено'
-    : 'Откройте Mentala в Google Play';
+    : 'Откройте Ментала в Google Play';
 });
 </script>
 

@@ -21,6 +21,7 @@ import type { NotificationPayload } from '@/shared/dto/notifications';
 import { enqueueAiTextPoolRefillForAllActivePreferences } from '@/server/application/notifications/schedulers/aiTextPool.scheduler';
 import { startNotificationSlotsSchedulerLoop } from '@/server/application/notifications/schedulers/notificationSlots.scheduler';
 import { notificationDeliveryQueue } from '@/server/application/notifications/queues/notificationDelivery.queue';
+import { enqueueSlotsGenerationJob } from '@/server/application/notifications/queues/notificationSlots.queue';
 import {
   dispatchIntegrationCriticalEvent,
   dispatchPushDeliverySampleEvent,
@@ -769,6 +770,28 @@ export async function processDueSlots(
           error
         );
         customSourceAccessMap.set(userId, { habits: true, therapy: true });
+      }
+    }
+
+    // Самовосстановление горизонта: для каждого пользователя, которому прямо сейчас
+    // доставляются слоты, ставим (дедупнутую) задачу регенерации. Это гарантирует,
+    // что активно получающий уведомления пользователь не «застрянет» на 2-дневном
+    // горизонте, даже если основной sharded-scheduler по какой-то причине не отработал.
+    // Воркер всё равно проверит needsSlotRegeneration и сделает no-op, если горизонт в норме,
+    // поэтому лишних регенераций не будет. Дедуп — по 30-минутному cycleId.
+    if (userIds.length > 0) {
+      const horizonKeeperCycleId = Math.floor(nowUTC.getTime() / (30 * 60_000));
+      for (const userId of userIds) {
+        void enqueueSlotsGenerationJob({
+          userId,
+          cycleId: horizonKeeperCycleId,
+          reason: 'below_horizon',
+        }).catch((error) => {
+          console.error(
+            `[DeliveryWorker] Failed to enqueue horizon-keeper regen for user ${userId}:`,
+            error
+          );
+        });
       }
     }
 
