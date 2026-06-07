@@ -59,36 +59,42 @@ describe('realtime voice policy', () => {
     ).toBe(true);
   });
 
-  it('глушит iOS echo-input только во время playback ассистента', () => {
-    expect(
-      shouldSuppressRealtimeInputDuringAssistantPlayback({
-        platform: 'ios',
-        isAssistantAudioPlaying: true,
-      })
-    ).toBe(true);
+  it('глушит mobile echo-input только во время playback ассистента', () => {
+    for (const platform of ['ios', 'android'] as const) {
+      expect(
+        shouldSuppressRealtimeInputDuringAssistantPlayback({
+          platform,
+          isAssistantAudioPlaying: true,
+        })
+      ).toBe(true);
 
-    expect(
-      shouldSuppressRealtimeInputDuringAssistantPlayback({
-        platform: 'ios',
-        isAssistantAudioPlaying: false,
-      })
-    ).toBe(false);
+      expect(
+        shouldSuppressRealtimeInputDuringAssistantPlayback({
+          platform,
+          isAssistantAudioPlaying: false,
+        })
+      ).toBe(false);
+    }
+  });
 
+  it('сохраняет full duplex на web — input не глушится во время playback', () => {
     expect(
       shouldSuppressRealtimeInputDuringAssistantPlayback({
-        platform: 'android',
+        platform: 'web',
         isAssistantAudioPlaying: true,
       })
     ).toBe(false);
   });
 
-  it('не глушит уже начатый user item, даже если iOS playback ассистента уже стартовал', () => {
-    expect(
-      shouldSuppressRealtimeInputDuringAssistantPlayback({
-        platform: 'ios',
-        isAssistantAudioPlaying: true,
-        isKnownUserInputItem: true,
-      })
-    ).toBe(false);
+  it('не глушит уже начатый user item, даже если mobile playback ассистента уже стартовал', () => {
+    for (const platform of ['ios', 'android'] as const) {
+      expect(
+        shouldSuppressRealtimeInputDuringAssistantPlayback({
+          platform,
+          isAssistantAudioPlaying: true,
+          isKnownUserInputItem: true,
+        })
+      ).toBe(false);
+    }
   });
 });

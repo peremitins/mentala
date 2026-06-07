@@ -277,4 +277,44 @@ describe('realtime voice transport', () => {
     expect(audioTrack.enabled).toBe(true);
     expect(audioTrack.stop).toHaveBeenCalledTimes(1);
   });
+
+  it('применяет программную громкость к remote audio и клампит её в 0..1', async () => {
+    const { RealtimeVoiceTransport } = await import(
+      '../app/services/realtime/realtimeVoiceTransport'
+    );
+
+    const transport = new RealtimeVoiceTransport();
+
+    // Громкость, выставленная ДО старта, должна примениться к первому элементу.
+    transport.setOutputVolume(0.4);
+
+    await transport.start({
+      webrtcUrl: 'https://api.openai.com/v1/realtime/calls',
+      onEvent: vi.fn(),
+    });
+
+    FakePeerConnection.lastInstance?.emit('track', {
+      track: { kind: 'audio' },
+      streams: [{ id: 'remote_stream_vol' } as unknown as MediaStream],
+    });
+    await Promise.resolve();
+
+    expect(FakeAudio.instances[0]?.volume).toBe(0.4);
+
+    // Живое изменение применяется к уже существующему элементу.
+    transport.setOutputVolume(0.75);
+    expect(FakeAudio.instances[0]?.volume).toBe(0.75);
+
+    // Кламп за границами диапазона и защита от NaN.
+    transport.setOutputVolume(2);
+    expect(FakeAudio.instances[0]?.volume).toBe(1);
+
+    transport.setOutputVolume(-0.5);
+    expect(FakeAudio.instances[0]?.volume).toBe(0);
+
+    transport.setOutputVolume(Number.NaN);
+    expect(FakeAudio.instances[0]?.volume).toBe(1);
+
+    await transport.stop();
+  });
 });

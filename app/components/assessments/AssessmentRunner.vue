@@ -161,6 +161,7 @@ import AssessmentTrendChart from '@/app/components/assessments/AssessmentTrendCh
 import ButtonLoader from '@/app/components/ui/ButtonLoader.vue';
 import { useAPI } from '@/app/composables/useAPI';
 import { useAuthStore } from '@/app/stores/auth';
+import { useAppAnalytics } from '@/app/composables/useAppAnalytics';
 import { applyGender } from '@/app/utils/genderedText';
 import type {
   AssessmentAttemptResponse,
@@ -202,6 +203,7 @@ const emit = defineEmits<{
 }>();
 
 const authStore = useAuthStore();
+const { reachGoal } = useAppAnalytics();
 
 const phase = ref<'question' | 'result'>(
   props.initialAttemptId ? 'result' : 'question'
@@ -372,6 +374,11 @@ async function goNext() {
     );
 
     emit('complete', { attemptId: result.item.id });
+    reachGoal('assessment_completed', {
+      assessmentSlug: item.value.slug,
+      source: props.source,
+      linkedProgramSlug: props.linkedProgramSlug ?? null,
+    });
     if (props.inlineResult !== false) {
       // Показываем результат СРАЗУ из ответа POST (балл, диапазон уже есть) —
       // не блокируемся на доп. запросах. Сравнение и график докидываем фоном,

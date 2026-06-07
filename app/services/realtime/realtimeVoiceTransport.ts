@@ -193,6 +193,10 @@ export class RealtimeVoiceTransport {
   private inputActivityInterval: number | null = null;
   private lastInputActivityAtMs = 0;
   private isLocalMicrophoneEnabled = true;
+  // Программная громкость воспроизведения ассистента (0..1). Применяется к
+  // remoteAudioElement.volume. Главный рычаг регулировки на Android web/PWA,
+  // где аппаратные клавиши не управляют WebRTC-аудио.
+  private outputVolume = 1;
 
   get isConnected(): boolean {
     return (
@@ -210,7 +214,7 @@ export class RealtimeVoiceTransport {
       const audioElement = new Audio();
       audioElement.autoplay = true;
       audioElement.muted = false;
-      audioElement.volume = 1;
+      audioElement.volume = this.outputVolume;
       audioElement.preload = 'auto';
       audioElement.setAttribute('playsinline', 'true');
       this.remoteAudioElement = audioElement;
@@ -227,7 +231,7 @@ export class RealtimeVoiceTransport {
 
     ensureRealtimeVoicePlaybackAudioSessionType();
     remoteAudioElement.muted = false;
-    remoteAudioElement.volume = 1;
+    remoteAudioElement.volume = this.outputVolume;
     remoteAudioElement.preload = 'auto';
     try {
       remoteAudioElement.load();
@@ -255,7 +259,7 @@ export class RealtimeVoiceTransport {
     ensureRealtimeVoicePlaybackAudioSessionType();
     remoteAudioElement.srcObject = stream;
     remoteAudioElement.muted = false;
-    remoteAudioElement.volume = 1;
+    remoteAudioElement.volume = this.outputVolume;
 
     await this.playRemoteAudioElement(remoteAudioElement);
 
@@ -544,6 +548,18 @@ export class RealtimeVoiceTransport {
     }
 
     this.dataChannel.send(JSON.stringify(event));
+  }
+
+  setOutputVolume(volume: number) {
+    const clamped = Math.min(
+      1,
+      Math.max(0, Number.isFinite(volume) ? volume : 1)
+    );
+    this.outputVolume = clamped;
+
+    if (this.remoteAudioElement) {
+      this.remoteAudioElement.volume = clamped;
+    }
   }
 
   setMicrophoneEnabled(enabled: boolean) {

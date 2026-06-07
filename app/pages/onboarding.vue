@@ -439,6 +439,7 @@ import { usePushRecovery } from '@/app/composables/usePushRecovery';
 import { useAuthStore } from '@/app/stores/auth';
 import { useToast } from '@/app/composables/useToast';
 import { useHaptics } from '@/app/composables/useHaptics';
+import { useAppAnalytics } from '@/app/composables/useAppAnalytics';
 import { cn } from '@/app/lib/utils';
 import { getOrientationMediaCandidates } from '@/app/utils/orientationMedia';
 import { consumePostAuthRedirect } from '@/app/utils/postAuthRedirect';
@@ -539,6 +540,7 @@ const BACKGROUND_INDEX_BY_STEP: Record<StepKey, number> = {
 };
 
 const auth = useAuthStore();
+const { reachGoal } = useAppAnalytics();
 const { isPortraitMode } = useViewportOrientation();
 const prefersReducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
 const pushPermissionGate = usePushPermissionGate();
@@ -1094,6 +1096,10 @@ async function completeOnboarding() {
     draftHydrated = false;
     await clearOnboardingDraft();
     await auth.me();
+    reachGoal('onboarding_completed', {
+      flow: 'welcome_setup',
+      selectedTopicsCount: selectedTopics.value.length,
+    });
     // Если пользователь пришёл из воронки (тест на тревожность), ведём на цель.
     await navigateTo(consumePostAuthRedirect() ?? '/');
   } catch (error: any) {

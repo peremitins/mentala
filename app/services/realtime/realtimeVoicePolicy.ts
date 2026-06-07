@@ -23,10 +23,12 @@ export function buildRealtimeVoiceAudioConstraints(
       ...baseConstraints,
       // На mobile WebView стараемся держать mono-вход с минимальной latency,
       // чтобы уменьшить акустическую петлю "динамик -> микрофон".
+      // latency — нестандартное, но поддерживаемое поле WebRTC на Android/iOS
+      // @ts-ignore
       latency: {
         ideal: 0,
       },
-    };
+    } as MediaTrackConstraints;
   }
 
   return baseConstraints;
@@ -61,5 +63,9 @@ export function shouldSuppressRealtimeInputDuringAssistantPlayback(params: {
     return false;
   }
 
-  return params.platform === 'ios' && params.isAssistantAudioPlaying;
+  // mobile (iOS + Android) глушит half-duplex: пока ассистент говорит, любой
+  // «новый» input-item — это почти наверняка эхо собственного playback, а не
+  // реплика пользователя. На web сохраняем full duplex с barge-in.
+  const isMobile = params.platform === 'ios' || params.platform === 'android';
+  return isMobile && params.isAssistantAudioPlaying;
 }

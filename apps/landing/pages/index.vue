@@ -8,10 +8,10 @@
         <div
           class="glass-panel rounded-2xl px-3 py-2 sm:px-4 sm:py-3 flex items-center justify-between gap-3"
         >
-          <button
+          <a
+            href="#hero"
             class="font-display text-[15px] sm:text-lg font-bold tracking-tight text-white"
-            type="button"
-            @click="scrollToSection('hero')"
+            @click.prevent="scrollToSection('hero')"
           >
             <img
               :src="brandLogoSrc"
@@ -19,29 +19,33 @@
               :alt="brandLogoAlt"
               class="w-[130px] h-10"
             />
-          </button>
+          </a>
 
           <nav class="hidden lg:flex items-center gap-1 text-sm text-white/80">
-            <button
+            <a
               v-for="link in navLinks"
               :key="link.section"
-              type="button"
+              :href="`#${link.section}`"
               class="rounded-lg px-3 py-2 hover:bg-white/10 hover:text-white transition"
-              @click="scrollToSection(link.section)"
+              @click.prevent="scrollToSection(link.section)"
             >
               {{ link.label }}
-            </button>
+            </a>
           </nav>
 
           <Button
             class="hidden sm:inline-flex"
             size="sm"
-            @click="openPrimaryCTA"
+            @click="openPrimaryCTA('header_desktop')"
           >
             {{ primaryCtaText }}
           </Button>
 
-          <Button class="sm:hidden" size="sm" @click="openPrimaryCTA">
+          <Button
+            class="sm:hidden"
+            size="sm"
+            @click="openPrimaryCTA('header_mobile')"
+          >
             {{ primaryCtaText }}
           </Button>
         </div>
@@ -71,13 +75,13 @@
             </p>
 
             <div class="reveal-item flex flex-wrap items-center gap-3">
-              <Button size="lg" @click="openPrimaryCTA">{{
+              <Button size="lg" @click="openPrimaryCTA('hero_primary')">{{
                 primaryCtaText
               }}</Button>
               <button
                 type="button"
                 class="h-11 px-2 text-sm font-semibold text-white/80 underline-offset-4 transition hover:text-white hover:underline"
-                @click="openAssessmentCTA"
+                @click="openAssessmentCTA('hero_secondary')"
               >
                 {{ t('LANDING.HERO.SECONDARY_CTA') }}
               </button>
@@ -362,7 +366,10 @@
                   {{ t('LANDING.ASSESSMENT.TEXT') }}
                 </p>
                 <div class="flex flex-wrap items-center gap-3">
-                  <Button size="lg" @click="openAssessmentCTA">
+                  <Button
+                    size="lg"
+                    @click="openAssessmentCTA('assessment_block')"
+                  >
                     {{ t('LANDING.ASSESSMENT.CTA') }}
                   </Button>
                 </div>
@@ -718,7 +725,7 @@
               <Button
                 class="mt-auto"
                 variant="secondary"
-                @click="openPrimaryCTA"
+                @click="openPrimaryCTA(`pricing_${plan.id}`)"
               >
                 {{ pricingCtaText }}
               </Button>
@@ -1002,6 +1009,7 @@ import { usePreferredReducedMotion } from '@vueuse/core';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { onPrehydrate } from 'nuxt/app';
+import { nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { Badge } from '../components/ui/shadcn/badge';
 import { Button } from '../components/ui/shadcn/button';
@@ -1074,6 +1082,12 @@ type ComparisonPoint = {
   text: string;
   tooltip?: string;
 };
+type PrimaryCtaSource =
+  | 'header_desktop'
+  | 'header_mobile'
+  | 'hero_primary'
+  | `pricing_${PricingPlan['id']}`;
+type AssessmentCtaSource = 'hero_secondary' | 'assessment_block';
 type NavigatorWithUserAgentData = Navigator & {
   userAgentData?: {
     platform?: string;
@@ -1123,6 +1137,8 @@ const featureRefs = ref<Array<HTMLElement | null>>([]);
 const featurePhoneRef = ref<HTMLElement | null>(null);
 let gsapContext: gsap.Context | null = null;
 let gsapMedia: gsap.MatchMedia | null = null;
+let hashScrollFrameIds: number[] = [];
+let hashScrollTimeoutIds: number[] = [];
 
 const currentYear = new Date().getFullYear();
 const numberFormatLocale = computed(() =>
@@ -1589,7 +1605,10 @@ function setActiveFeature(index: number) {
   }
 }
 
-function scrollToSection(sectionId: string) {
+function scrollToSection(
+  sectionId: string,
+  options?: { behavior?: ScrollBehavior; updateHash?: boolean }
+) {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     return;
   }
@@ -1599,22 +1618,124 @@ function scrollToSection(sectionId: string) {
     return;
   }
 
-  section.scrollIntoView({
-    behavior: isReducedMotion.value ? 'auto' : 'smooth',
-    block: 'start',
+  if (options?.updateHash !== false) {
+    const nextHash = `#${sectionId}`;
+    if (window.location.hash !== nextHash) {
+      window.history.pushState(null, '', nextHash);
+    }
+  }
+
+  const scrollMarginTop = Number.parseFloat(
+    window.getComputedStyle(section).scrollMarginTop || '0'
+  );
+  const top =
+    window.scrollY +
+    section.getBoundingClientRect().top -
+    (Number.isFinite(scrollMarginTop) ? scrollMarginTop : 0);
+
+  window.scrollTo({
+    top: Math.max(0, top),
+    behavior: options?.behavior ?? (isReducedMotion.value ? 'auto' : 'smooth'),
   });
 }
 
-function openPrimaryCTA() {
-  reachGoal('landing_auth_redirect_click');
+function clearScheduledHashScroll() {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  hashScrollFrameIds.forEach((frameId) => {
+    window.cancelAnimationFrame(frameId);
+  });
+  hashScrollFrameIds = [];
+
+  hashScrollTimeoutIds.forEach((timeoutId) => {
+    window.clearTimeout(timeoutId);
+  });
+  hashScrollTimeoutIds = [];
+}
+
+function runAfterFrame(callback: () => void) {
+  if (
+    typeof window === 'undefined' ||
+    typeof window.requestAnimationFrame !== 'function'
+  ) {
+    callback();
+    return;
+  }
+
+  const frameId = window.requestAnimationFrame(() => {
+    hashScrollFrameIds = hashScrollFrameIds.filter((id) => id !== frameId);
+    callback();
+  });
+  hashScrollFrameIds.push(frameId);
+}
+
+function runAfterDelay(callback: () => void, delayMs: number) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const timeoutId = window.setTimeout(() => {
+    hashScrollTimeoutIds = hashScrollTimeoutIds.filter(
+      (id) => id !== timeoutId
+    );
+    callback();
+  }, delayMs);
+  hashScrollTimeoutIds.push(timeoutId);
+}
+
+async function scrollToCurrentHash(options?: { behavior?: ScrollBehavior }) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const sectionId = window.location.hash.replace(/^#/, '');
+  if (!sectionId) {
+    return;
+  }
+
+  const scroll = () => {
+    scrollToSection(sectionId, {
+      behavior: options?.behavior ?? 'auto',
+      updateHash: false,
+    });
+  };
+
+  clearScheduledHashScroll();
+  await nextTick();
+
+  // Рекламный URL с hash приходит до hydration и до ScrollTrigger refresh.
+  // Повторяем коротко после стабилизации layout, чтобы не застревать наверху.
+  runAfterFrame(() => {
+    ScrollTrigger.refresh();
+    scroll();
+    runAfterFrame(scroll);
+  });
+  runAfterDelay(scroll, 250);
+  runAfterDelay(scroll, 650);
+}
+
+function handleHashChange() {
+  void scrollToCurrentHash();
+}
+
+function trackCtaGoal(goalName: string, source: string) {
+  // Оставляем старую общую цель и добавляем детальную цель по месту клика.
+  reachGoal(goalName, { source });
+  reachGoal(`${goalName}_${source}`, { source });
+}
+
+function openPrimaryCTA(source: PrimaryCtaSource) {
+  trackCtaGoal('landing_auth_redirect_click', source);
   if (typeof window !== 'undefined') {
     window.open(ctaUrlWithAttribution.value, '_blank', 'noopener,noreferrer');
   }
 }
 
-function openAssessmentCTA() {
+function openAssessmentCTA(source: AssessmentCtaSource) {
   // Отдельная цель: видно, сколько людей зашло именно через тест.
-  reachGoal('landing_assessment_cta_click');
+  trackCtaGoal('landing_assessment_cta_click', source);
   if (typeof window !== 'undefined') {
     window.open(assessmentCtaUrl.value, '_blank', 'noopener,noreferrer');
   }
@@ -1622,7 +1743,7 @@ function openAssessmentCTA() {
 
 function trackAndroidPromoClick(location: string) {
   // Отдельно помечаем install CTA, чтобы видеть разницу между hero и нижним блоком.
-  reachGoal('landing_android_store_click', { location });
+  trackCtaGoal('landing_android_store_click', location);
 }
 
 async function onLocaleChange(nextLocale: SupportedLocale) {
@@ -1644,6 +1765,8 @@ onMounted(() => {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     return;
   }
+
+  window.addEventListener('hashchange', handleHashChange, { passive: true });
 
   if (!isReducedMotion.value) {
     gsap.registerPlugin(ScrollTrigger);
@@ -1726,9 +1849,16 @@ onMounted(() => {
       };
     });
   }
+
+  void scrollToCurrentHash({ behavior: 'auto' });
 });
 
 onBeforeUnmount(() => {
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('hashchange', handleHashChange);
+  }
+
+  clearScheduledHashScroll();
   gsapMedia?.revert();
   gsapContext?.revert();
 });

@@ -15,6 +15,9 @@
           <h1 class="text-xl font-bold text-foreground">Ассистент</h1>
         </div>
       </template>
+      <template #actions>
+        <AssistantVolumeControl />
+      </template>
     </PageHeader>
 
     <ChatRoom mode="page" />
@@ -32,6 +35,7 @@
 import { useRouter } from 'vue-router';
 import PageHeader from '@/app/components/PageHeader.vue';
 import ChatRoom from '@/app/components/chat/ChatRoom.vue';
+import AssistantVolumeControl from '@/app/components/realtime/AssistantVolumeControl.vue';
 
 const router = useRouter();
 

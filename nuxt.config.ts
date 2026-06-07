@@ -8,6 +8,11 @@ const sceneDefaultVolumePercent = resolveSceneDefaultVolumePercent(
   process.env.NUXT_PUBLIC_SCENE_DEFAULT_VOLUME_PERCENT
 );
 const buildDir = process.env.MENTALA_NUXT_BUILD_DIR || '.nuxt';
+const yandexMetrikaId = String(
+  process.env.NUXT_PUBLIC_YANDEX_METRIKA_ID || ''
+).trim();
+const yandexMetrikaDisabled =
+  process.env.NUXT_PUBLIC_YANDEX_METRIKA_DISABLED === 'true';
 
 export default defineNuxtConfig({
   ssr: false,
@@ -27,7 +32,26 @@ export default defineNuxtConfig({
     'vue-sonner/nuxt',
     'floating-vue/nuxt',
     '@vite-pwa/nuxt',
+    ...(yandexMetrikaId && !yandexMetrikaDisabled
+      ? ['nuxt-yandex-metrika']
+      : []),
   ],
+  // Яндекс.Метрика для основного приложения: нужна для post-click целей
+  // после перехода с лендинга в регистрацию, онбординг, тест и checkout.
+  // @ts-ignore — nuxt-yandex-metrika не аугментирует NuxtConfig
+  yandexMetrika:
+    yandexMetrikaId && !yandexMetrikaDisabled
+      ? {
+          id: yandexMetrikaId,
+          cdn: true,
+          options: {
+            webvisor: true,
+            clickmap: true,
+            trackLinks: true,
+            accurateTrackBounce: true,
+          },
+        }
+      : undefined,
   plugins: ['~/i18n/plugin'],
   shadcn: {
     prefix: 'shadcn',
@@ -256,9 +280,8 @@ export default defineNuxtConfig({
         process.env.NUXT_FEATURE_NATIVE_MEDITATION_AUDIO_ENABLED !== 'false',
       // Дефолтная громкость фоновой сцены для новых пользователей задаётся через env.
       sceneDefaultVolumePercent,
-      yandexMetrikaId: process.env.NUXT_PUBLIC_YANDEX_METRIKA_ID || '',
-      yandexMetrikaDisabled:
-        process.env.NUXT_PUBLIC_YANDEX_METRIKA_DISABLED === 'true',
+      yandexMetrikaId,
+      yandexMetrikaDisabled,
     },
   },
   nitro: {

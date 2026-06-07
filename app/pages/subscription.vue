@@ -551,6 +551,7 @@ import { useIosReviewBillingUi } from '@/app/composables/useIosReviewBillingUi';
 import { useAppleIap } from '@/app/composables/useAppleIap';
 import { usePlatform } from '@/app/composables/usePlatform';
 import { useToast } from '@/app/composables/useToast';
+import { useAppAnalytics } from '@/app/composables/useAppAnalytics';
 import { getIosStorefrontCountryCode } from '@/app/lib/iosStorefront';
 import { runSubscriptionShortPolling } from '@/app/lib/subscriptionPolling';
 import { useAuthStore } from '@/app/stores/auth';
@@ -676,6 +677,7 @@ const { platform } = usePlatform();
 const { shouldHideIosReviewBillingUi } = useIosReviewBillingUi();
 const externalFlowAppUrl = useExternalFlowAppUrl();
 const appleIap = useAppleIap();
+const { reachGoal } = useAppAnalytics();
 const { $yooKassaWidget } = useNuxtApp();
 const YOOKASSA_WIDGET_CONTAINER_ID = 'yookassa-widget-container';
 const APPLE_SUBSCRIPTIONS_MANAGE_URL =
@@ -944,6 +946,7 @@ const canCancelCurrentSubscription = computed(() => {
 let widgetInstance: YooKassaWidgetInstance | null = null;
 let activePollingPromise: Promise<void> | null = null;
 let paymentReturnListener: ((event: Event) => void) | null = null;
+const trackedSubscriptionActivationIds = new Set<number>();
 
 const selectedPlan = computed(() => {
   return plans.value.find((p) => p.id === selectedPlanId.value);
@@ -1649,6 +1652,21 @@ function normalizeCheckoutStatus(
   return null;
 }
 
+function trackSubscriptionActivated(subscriptionId?: number | null) {
+  if (subscriptionId && trackedSubscriptionActivationIds.has(subscriptionId)) {
+    return;
+  }
+
+  if (subscriptionId) {
+    trackedSubscriptionActivationIds.add(subscriptionId);
+  }
+
+  reachGoal('subscription_activated', {
+    subscriptionId: subscriptionId ?? null,
+    source: 'subscription_page',
+  });
+}
+
 async function runStatusPolling(targetSubscriptionId?: number | null) {
   if (activePollingPromise) {
     return activePollingPromise;
@@ -1687,6 +1705,7 @@ async function runStatusPolling(targetSubscriptionId?: number | null) {
       pendingCheckoutSubscriptionId.value = null;
       isCheckoutWidgetDialogOpen.value = false;
       await destroyWidget();
+      trackSubscriptionActivated(pollingSubscriptionId ?? null);
       useToast('Подписка активирована', 'Оплата подтверждена.');
       return;
     }
@@ -1719,6 +1738,7 @@ async function runStatusPolling(targetSubscriptionId?: number | null) {
       pendingCheckoutSubscriptionId.value = null;
       isCheckoutWidgetDialogOpen.value = false;
       await destroyWidget();
+      trackSubscriptionActivated(pollingSubscriptionId ?? null);
       useToast('Подписка активирована', 'Оплата подтверждена.');
       return;
     }
@@ -2163,10 +2183,19 @@ async function startCheckout(): Promise<boolean> {
       return true;
     }
 
+    reachGoal('checkout_started', {
+      planId: plan.id,
+      billingPeriod,
+      checkoutAction,
+      paymentMode: response.paymentMode,
+      toPay: response.toPay,
+    });
+
     if (checkoutAction === 'activated') {
       pendingCheckoutSubscriptionId.value = null;
       await subscriptionStore.refreshSubscription();
       await refreshBillingAccessSnapshot();
+      trackSubscriptionActivated(response.subscriptionId);
       useToast('Подписка активирована', `К оплате: ${response.toPay} ₽`);
       return true;
     }
@@ -2175,6 +2204,11 @@ async function startCheckout(): Promise<boolean> {
       pendingCheckoutSubscriptionId.value = null;
       await subscriptionStore.refreshSubscription();
       await refreshBillingAccessSnapshot();
+      reachGoal('trial_started', {
+        planId: plan.id,
+        billingPeriod,
+        subscriptionId: response.subscriptionId,
+      });
       useToast(
         'Платеж запланирован',
         response.nextChargeAt

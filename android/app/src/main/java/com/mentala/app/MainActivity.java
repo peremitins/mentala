@@ -5,7 +5,6 @@ import android.util.Log;
 import android.os.Bundle;
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.view.KeyEvent;
 
 import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.Plugin;
@@ -92,15 +91,6 @@ public class MainActivity extends BridgeActivity implements ModifiedMainActivity
     registerPlugin(MentalaSafeAreaPlugin.class);
     super.onCreate(savedInstanceState);
     persistPushLaunchPayload(getIntent());
-  }
-
-  @Override
-  public boolean dispatchKeyEvent(KeyEvent event) {
-    if (MentalaRealtimeVoiceAudioPlugin.handleHardwareVolumeKey(this, event)) {
-      return true;
-    }
-
-    return super.dispatchKeyEvent(event);
   }
 
   @Override

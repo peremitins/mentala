@@ -7,9 +7,9 @@ type MentalaRealtimeVoiceAudioPlugin = {
     mode?: string;
     volumeStream?: string;
     speakerPinned?: boolean;
-    // Android: фактически выбранный communication device для realtime voice
-    // (bluetooth_sco, ble_headset, wired_headset, builtin_speaker и т.д.).
-    // Полезно для диагностики проблем с роутингом по логам.
+    // Android: media-режим (mode='media', route='system_media') — маршрут и
+    // громкость держит сама ОС через STREAM_MUSIC. iOS: AVAudioSession voiceChat.
+    // Поле полезно для диагностики по логам.
     route?: string;
   }>;
   deactivate(): Promise<void>;

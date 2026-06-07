@@ -582,6 +582,10 @@ const { pendingAccessCode, setPendingAccessCode } = usePendingAccessCode();
 const { captureFromCurrentRoute, getPendingMarketingAttribution } =
   useMarketingAttribution();
 
+const postAuthRedirectOptions = computed(() =>
+  nextPath.value ? { redirect: nextPath.value } : undefined
+);
+
 function getCurrentMarketingAttribution() {
   return captureFromCurrentRoute() ?? getPendingMarketingAttribution();
 }
@@ -711,12 +715,15 @@ async function submit() {
     setPendingAccessCode(accessCode.value);
     const marketingAttribution = getCurrentMarketingAttribution();
     if (mode.value === 'signin') {
-      await auth.loginEmail({
-        email: email.value,
-        password: password.value,
-        locale: locale.value,
-        marketingAttribution,
-      });
+      await auth.loginEmail(
+        {
+          email: email.value,
+          password: password.value,
+          locale: locale.value,
+          marketingAttribution,
+        },
+        postAuthRedirectOptions.value
+      );
     } else {
       const response = await auth.registerEmail({
         email: email.value,
@@ -833,7 +840,10 @@ async function loginWithApple() {
   try {
     appleLoading.value = true;
     oauthLoading.value = true;
-    await auth.loginWithApple(getCurrentMarketingAttribution());
+    await auth.loginWithApple(
+      getCurrentMarketingAttribution(),
+      postAuthRedirectOptions.value
+    );
   } catch (e: any) {
     const message =
       e instanceof Error && e.message
@@ -851,7 +861,11 @@ async function loginWithGoogle() {
   try {
     oauthLoading.value = true;
     setPendingAccessCode(accessCode.value);
-    await auth.loginWithGoogle(locale.value, getCurrentMarketingAttribution());
+    await auth.loginWithGoogle(
+      locale.value,
+      getCurrentMarketingAttribution(),
+      postAuthRedirectOptions.value
+    );
   } catch (e: any) {
     const message =
       e instanceof Error && e.message

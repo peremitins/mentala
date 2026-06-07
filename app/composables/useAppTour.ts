@@ -4,6 +4,7 @@ import { useAuthStore } from '@/app/stores/auth';
 import { useAppLockStore } from '@/app/stores/appLock';
 import { useEntitlements } from '@/app/composables/useEntitlements';
 import { useAPI } from '@/app/composables/useAPI';
+import { useAppAnalytics } from '@/app/composables/useAppAnalytics';
 import {
   APP_TOUR_STEPS,
   type AppTourStep,
@@ -451,6 +452,9 @@ export function useAppTour() {
         body: {},
         suppressErrorToast: true,
       } as any);
+
+      const { reachGoal } = useAppAnalytics();
+      reachGoal('app_tour_completed');
 
       // Локально обновляем стор: чтобы при перезагрузке страницы тур не запустился.
       if (auth.user?.onboarding) {

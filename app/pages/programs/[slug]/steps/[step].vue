@@ -7,7 +7,11 @@
       :title="response?.program.title || 'Шаг программы'"
       show-back-button
       @go-back="goBack"
-    />
+    >
+      <template #actions>
+        <AssistantVolumeControl />
+      </template>
+    </PageHeader>
 
     <template v-if="isCompleted && response">
       <!-- Обычный success-экран: шаг пройден, программа продолжается.
@@ -379,6 +383,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import IconArrowLeft from '~icons/lucide/arrow-left';
 import IconPartyPopper from '~icons/lucide/party-popper';
 import PageHeader from '@/app/components/PageHeader.vue';
+import AssistantVolumeControl from '@/app/components/realtime/AssistantVolumeControl.vue';
 import ButtonLoader from '@/app/components/ui/ButtonLoader.vue';
 import ProgramBreathPracticeAction from '@/app/components/programs/ProgramBreathPracticeAction.vue';
 import ProgramJournalEntryAction from '@/app/components/programs/ProgramJournalEntryAction.vue';

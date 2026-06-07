@@ -128,10 +128,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
-    <!-- Realtime voice: нужно для setSpeakerphoneOn / startBluetoothSco / setMode на API < 31 и для setCommunicationDevice на API 31+ -->
+    <!-- Realtime voice: нужно для setMode(MODE_NORMAL) / clearCommunicationDevice
+         при активации media-сессии. Bluetooth-разрешения не требуются: realtime
+         voice идёт как обычное медиа (STREAM_MUSIC), маршрутизацию в наушники
+         держит сама ОС, SCO/communication-device не используются. -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
-    <!-- Realtime voice: чтобы getAvailableCommunicationDevices() / getDevices() возвращали Bluetooth-устройства на Android 12+ -->
-    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-    <!-- Bluetooth-permissions для Android 8-11 (API < 31) — на API 31+ system игнорирует, заменяя BLUETOOTH_CONNECT -->
-    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
 </manifest>

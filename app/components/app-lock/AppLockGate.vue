@@ -66,94 +66,155 @@
           </div>
 
           <div v-else class="space-y-5">
-            <div class="flex items-center gap-3">
-              <div
-                class="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10"
-              >
-                <IconLockKeyhole class="h-5 w-5 text-primary" />
-              </div>
-              <div class="min-w-0 space-y-1">
-                <h2 class="text-lg font-semibold leading-6">Введите PIN-код</h2>
-              </div>
-            </div>
-
-            <div class="space-y-3">
-              <AppLockPinInput
-                ref="unlockPinInput"
-                v-model="unlockPin"
-                :disabled="remainingCooldownSeconds > 0"
-                @complete="handleUnlockComplete"
-              />
-              <p
-                v-if="remainingCooldownSeconds > 0"
-                class="text-sm text-muted-foreground"
-              >
-                Повторите попытку через {{ remainingCooldownSeconds }} сек.
-              </p>
-              <p
-                v-else-if="appLock.errorMessage"
-                class="text-sm text-destructive"
-              >
-                {{ appLock.errorMessage }}
-              </p>
-            </div>
-
-            <div class="space-y-2">
-              <Button
-                v-if="appLock.biometric.available"
-                type="button"
-                variant="outline"
-                class="w-full"
-                :disabled="appLock.biometricPromptInFlight"
-                @click="appLock.attemptBiometricUnlock({ force: true })"
-              >
-                <IconFingerprint class="h-4 w-4" />
-                Биометрия устройства
-              </Button>
-
-              <Button
-                v-if="appLock.shouldOfferLogout && !confirmLogoutReset"
-                type="button"
-                variant="secondary"
-                class="w-full"
-                @click="confirmLogoutReset = true"
-              >
-                Выйти из аккаунта
-              </Button>
-
-              <button
-                v-if="!confirmLogoutReset"
-                type="button"
-                class="w-full text-center text-sm text-muted-foreground transition-colors hover:text-foreground"
-                @click="confirmLogoutReset = true"
-              >
-                Забыли код?
-              </button>
-
-              <div v-else class="space-y-3 rounded-lg border border-border p-3">
-                <p class="text-sm text-muted-foreground">
-                  Для сброса кода нужно выйти из аккаунта. При следующем входе
-                  Mentala запросит новый код.
-                </p>
-                <div class="grid grid-cols-2 gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    @click="confirmLogoutReset = false"
-                  >
-                    Отмена
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    :disabled="logoutLoading"
-                    @click="logoutAndReset"
-                  >
-                    Выйти
-                  </Button>
+            <!-- Биометрический экран (первичный, если доступно) -->
+            <template v-if="appLock.biometric.available && !showPinFallback">
+              <div class="flex items-center gap-3">
+                <div
+                  class="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10"
+                >
+                  <component :is="biometricIcon" class="h-5 w-5 text-primary" />
+                </div>
+                <div class="min-w-0 space-y-1">
+                  <h2 class="text-lg font-semibold leading-6">Вход в Mentala</h2>
                 </div>
               </div>
-            </div>
+
+              <div class="flex flex-col items-center gap-4 py-2">
+                <!-- Большая кнопка-иконка биометрии -->
+                <button
+                  type="button"
+                  class="relative flex h-20 w-20 items-center justify-center rounded-full border-2 transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  :class="
+                    appLock.biometricPromptInFlight
+                      ? 'border-primary bg-primary/10 cursor-default'
+                      : 'border-white/20 bg-white/5 hover:border-primary/50 hover:bg-primary/5 active:scale-95 cursor-pointer'
+                  "
+                  :disabled="appLock.biometricPromptInFlight"
+                  @click="appLock.attemptBiometricUnlock({ force: true })"
+                >
+                  <div
+                    v-if="appLock.biometricPromptInFlight"
+                    class="absolute inset-0 animate-ping rounded-full bg-primary/20"
+                  />
+                  <component
+                    :is="biometricIcon"
+                    class="relative h-10 w-10 transition-colors duration-300"
+                    :class="
+                      appLock.biometricPromptInFlight
+                        ? 'text-primary'
+                        : 'text-foreground/60'
+                    "
+                  />
+                </button>
+
+                <p class="text-sm text-center text-muted-foreground">
+                  {{ biometricPromptLabel }}
+                </p>
+
+                <button
+                  v-if="!appLock.biometricPromptInFlight"
+                  type="button"
+                  class="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                  @click="switchToPinFallback"
+                >
+                  Ввести PIN-код
+                </button>
+              </div>
+            </template>
+
+            <!-- PIN-экран (когда биометрия недоступна или пользователь выбрал PIN) -->
+            <template v-else>
+              <div class="flex items-center gap-3">
+                <div
+                  class="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10"
+                >
+                  <IconLockKeyhole class="h-5 w-5 text-primary" />
+                </div>
+                <div class="min-w-0 space-y-1">
+                  <h2 class="text-lg font-semibold leading-6">
+                    Введите PIN-код
+                  </h2>
+                </div>
+              </div>
+
+              <div class="space-y-3">
+                <AppLockPinInput
+                  ref="unlockPinInput"
+                  v-model="unlockPin"
+                  :disabled="remainingCooldownSeconds > 0"
+                  @complete="handleUnlockComplete"
+                />
+                <p
+                  v-if="remainingCooldownSeconds > 0"
+                  class="text-sm text-muted-foreground"
+                >
+                  Повторите попытку через {{ remainingCooldownSeconds }} сек.
+                </p>
+                <p
+                  v-else-if="appLock.errorMessage"
+                  class="text-sm text-destructive"
+                >
+                  {{ appLock.errorMessage }}
+                </p>
+              </div>
+
+              <div class="space-y-2">
+                <Button
+                  v-if="appLock.biometric.available"
+                  type="button"
+                  variant="outline"
+                  class="w-full"
+                  :disabled="appLock.biometricPromptInFlight"
+                  @click="appLock.attemptBiometricUnlock({ force: true })"
+                >
+                  <component :is="biometricIcon" class="h-4 w-4" />
+                  {{ appLock.biometric.label }}
+                </Button>
+
+                <Button
+                  v-if="appLock.shouldOfferLogout && !confirmLogoutReset"
+                  type="button"
+                  variant="secondary"
+                  class="w-full"
+                  @click="confirmLogoutReset = true"
+                >
+                  Выйти из аккаунта
+                </Button>
+
+                <button
+                  v-if="!confirmLogoutReset"
+                  type="button"
+                  class="w-full text-center text-sm text-muted-foreground transition-colors hover:text-foreground"
+                  @click="confirmLogoutReset = true"
+                >
+                  Забыли код?
+                </button>
+
+                <div v-else class="space-y-3 rounded-lg border border-border p-3">
+                  <p class="text-sm text-muted-foreground">
+                    Для сброса кода нужно выйти из аккаунта. При следующем
+                    входе Mentala запросит новый код.
+                  </p>
+                  <div class="grid grid-cols-2 gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      @click="confirmLogoutReset = false"
+                    >
+                      Отмена
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      :disabled="logoutLoading"
+                      @click="logoutAndReset"
+                    >
+                      Выйти
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </template>
           </div>
         </section>
       </div>
@@ -178,6 +239,7 @@ import { getRemainingCooldownSeconds } from '@/app/utils/appLockPolicy';
 import AppLockPinInput from '@/app/components/app-lock/AppLockPinInput.vue';
 import { Button } from '@/app/components/ui/button';
 import IconFingerprint from '~icons/lucide/fingerprint';
+import IconScanFace from '~icons/lucide/scan-face';
 import IconLockKeyhole from '~icons/lucide/lock-keyhole';
 import IconShieldCheck from '~icons/lucide/shield-check';
 
@@ -192,6 +254,7 @@ const setupPin = ref('');
 const setupConfirmPin = ref('');
 const setupError = ref('');
 const unlockPin = ref('');
+const showPinFallback = ref(false);
 const confirmLogoutReset = ref(false);
 const logoutLoading = ref(false);
 const now = ref(Date.now());
@@ -231,6 +294,19 @@ const remainingCooldownSeconds = computed(() =>
   getRemainingCooldownSeconds(appLock.lockedUntil, now.value)
 );
 
+const biometricIcon = computed(() => {
+  if (appLock.biometric.type === 'face') return IconScanFace;
+  return IconFingerprint;
+});
+
+const biometricPromptLabel = computed(() => {
+  if (appLock.biometricPromptInFlight) {
+    if (appLock.biometric.type === 'face') return 'Смотрите в камеру...';
+    return 'Приложите палец к датчику...';
+  }
+  return appLock.biometric.label;
+});
+
 const setupPinModel = computed({
   get: () =>
     setupStep.value === 'enter' ? setupPin.value : setupConfirmPin.value,
@@ -255,7 +331,18 @@ watch(
     if (isLocked) {
       unlockPin.value = '';
       confirmLogoutReset.value = false;
-      void focusUnlockInput();
+      showPinFallback.value = false;
+      void attemptBiometricAndFallback();
+    }
+  }
+);
+
+// Биометрия может разрешиться позже первой блокировки (async check)
+watch(
+  () => appLock.biometric.available,
+  (available) => {
+    if (available && appLock.isLocked) {
+      void attemptBiometricAndFallback();
     }
   }
 );
@@ -264,6 +351,10 @@ onMounted(() => {
   timer = window.setInterval(() => {
     now.value = Date.now();
   }, 1000);
+  // Компонент мог смонтироваться уже в заблокированном состоянии
+  if (appLock.isLocked) {
+    void attemptBiometricAndFallback();
+  }
 });
 
 onBeforeUnmount(() => {
@@ -357,6 +448,27 @@ async function waitForPinInputPaint() {
       });
     });
   });
+}
+
+function switchToPinFallback() {
+  showPinFallback.value = true;
+  void focusUnlockInput();
+}
+
+async function attemptBiometricAndFallback() {
+  if (appLock.biometricPromptedForCurrentLock) return;
+
+  if (!appLock.biometric.available) {
+    void focusUnlockInput();
+    return;
+  }
+
+  const success = await appLock.attemptBiometricUnlock();
+  // biometricPromptedForCurrentLock=true только если диалог реально открывался
+  if (!success && appLock.isLocked && appLock.biometricPromptedForCurrentLock) {
+    showPinFallback.value = true;
+    await focusUnlockInput();
+  }
 }
 
 async function logoutAndReset() {

@@ -430,6 +430,15 @@ export function useRealtimeVoiceSession(options?: {
   onScopeDispose(() => {
     realtimeVoiceUi.reset();
   });
+  // Живое применение пользовательской громкости к активному playback ассистента.
+  // Главный рычаг на Android web/PWA, где аппаратные клавиши не управляют
+  // WebRTC-аудио (см. AssistantVolumeControl.vue и .docs/arch_audio_platforms.md).
+  watch(
+    () => realtimeVoiceUi.outputVolume,
+    (nextVolume) => {
+      transport?.setOutputVolume(nextVolume);
+    }
+  );
   const blocksTextInput = computed(
     () =>
       status.value === 'starting' ||
@@ -705,8 +714,17 @@ export function useRealtimeVoiceSession(options?: {
     });
   }
 
+  // Half-duplex мьют микрофона во время ответа ассистента — общий механизм для
+  // всех mobile-платформ (iOS и Android). На время playback вход физически
+  // выключается (track.enabled = false), поэтому модель не может услышать саму
+  // себя через динамик: это убивает самозапись/дублирование без зависимости от
+  // системного AEC. На web мьют не нужен — там полный duplex с barge-in.
+  function isMobileRealtimePlatform() {
+    return clientPlatform.value === 'ios' || clientPlatform.value === 'android';
+  }
+
   function updateAssistantMicrophoneMute() {
-    if (clientPlatform.value !== 'ios') {
+    if (!isMobileRealtimePlatform()) {
       return;
     }
 
@@ -716,7 +734,7 @@ export function useRealtimeVoiceSession(options?: {
   }
 
   function muteMicrophoneForAssistantResponse(responseId: string) {
-    if (clientPlatform.value !== 'ios' || !responseId) {
+    if (!isMobileRealtimePlatform() || !responseId) {
       return;
     }
 
@@ -725,7 +743,7 @@ export function useRealtimeVoiceSession(options?: {
   }
 
   function unmuteMicrophoneForAssistantResponse(responseId: string) {
-    if (clientPlatform.value !== 'ios' || !responseId) {
+    if (!isMobileRealtimePlatform() || !responseId) {
       return;
     }
 
@@ -1064,9 +1082,10 @@ export function useRealtimeVoiceSession(options?: {
       isRealtimeUserInputItemEvent(event) &&
       shouldSuppressIncomingInputItem(inputItemId)
     ) {
-      // iOS иногда возвращает первые слова ассистента во входной VAD как
-      // новый user-turn. На mobile barge-in отключён, поэтому такой item
-      // не должен попадать в локальный UI и метрики realtime-сессии.
+      // iOS/Android иногда возвращают первые слова ассистента во входной VAD
+      // как новый user-turn (акустическая петля динамик→микрофон). На mobile
+      // barge-in отключён, поэтому такой item не должен попадать в локальный UI
+      // и метрики realtime-сессии.
       suppressInputItem(inputItemId);
       if (isRealtimeUserInputTerminalEvent(event)) {
         suppressedInputItemIds.delete(inputItemId);
@@ -1196,11 +1215,13 @@ export function useRealtimeVoiceSession(options?: {
         }
 
         if (clientPlatform.value === 'android') {
-          // На Android Chromium/WebView может заново перехватывать audio route.
-          // На каждом assistant playback повторно закрепляем communication-mode
-          // на основном динамике, не ломая duplex-захват микрофона.
-          // На iOS этого делать нельзя: смена AVAudioSession ровно на старте
-          // output-аудио может съедать первые слова ассистента.
+          // Защитно пере-утверждаем media-режим: Chromium/WebView на Android
+          // может заново перехватывать audio route на старте playback. Новый
+          // native activate() идемпотентен и НЕ переключает маршрут (только
+          // setMode(NORMAL)/setVolumeControlStream(STREAM_MUSIC)), поэтому не
+          // съедает первые слова — в отличие от прежнего comm-режима.
+          // На iOS этого не делаем: смена AVAudioSession на старте output-аудио
+          // действительно режет первые слова.
           void activateRealtimeVoiceNativeAudioSession();
         }
         assistantAudioStartedAtMsByResponseId.set(
@@ -1409,6 +1430,9 @@ export function useRealtimeVoiceSession(options?: {
       adapter = buildChatAdapter(parsed.session.therapySessionId);
       resetRuntimeMaps();
       transport = new RealtimeVoiceTransport();
+      // Применяем сохранённую пользователем громкость до старта playback,
+      // чтобы первый ответ ассистента сразу звучал на нужном уровне.
+      transport.setOutputVolume(realtimeVoiceUi.outputVolume);
       realtimeSceneAudioLock = await sceneAudioFocus.acquire('realtime-voice', {
         // Realtime voice должен получать аудио-фокус сразу. Fade фоновой сцены
         // рядом со стартом WebRTC даёт акустическую петлю и гонки resume/suspend.

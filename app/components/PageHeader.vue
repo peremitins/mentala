@@ -27,6 +27,7 @@
         </h1>
       </div>
       <div class="mr-2 flex items-center gap-2">
+        <slot v-if="$slots.actions" name="actions" />
         <HeaderEnergyPlantIndicator />
         <slot v-if="$slots.trailing" name="trailing" />
         <template v-else>

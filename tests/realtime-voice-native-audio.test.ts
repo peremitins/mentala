@@ -17,8 +17,10 @@ afterEach(() => {
 describe('realtime voice native audio bridge', () => {
   it('на Android пытается вызвать локальный Capacitor plugin даже без PluginHeaders', async () => {
     const activateMock = vi.fn().mockResolvedValue({
-      mode: 'communication',
+      platform: 'android',
+      mode: 'media',
       volumeStream: 'music',
+      route: 'system_media',
     });
     const deactivateMock = vi.fn().mockResolvedValue(undefined);
 

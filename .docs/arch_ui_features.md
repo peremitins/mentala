@@ -179,6 +179,7 @@
 - Для RU-рынка корневой URL `/` всегда отдаёт русский контент; locale autodetect по cookie, `Accept-Language` и browser locale для SEO-страниц запрещён
 - `?lang=en` остаётся только как явный UI-режим и должен быть закрыт от индексации через `noindex`
 - Marketing attribution: `mentala.app` читает whitelisted UTM/click-id (`utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, `utm_term`, `gclid`, `yclid`, `fbclid`, `ttclid`), хранит latest touch 90 дней в localStorage и передаёт их на `my.mentala.app`; продуктовый клиент удерживает pending attribution и backend пишет append-only историю в `user_marketing_attributions`.
+- Яндекс.Метрика: лендинг отправляет детальные CTA-события по месту клика (`landing_auth_redirect_click_*`, `landing_assessment_cta_click_*`, `landing_android_store_click_*`), а продуктовый SPA — post-click цели `registration_completed`, `onboarding_completed`, `app_tour_completed`, `assessment_completed`, `checkout_started`, `trial_started`, `subscription_activated`. Автоцели Метрики не использовать как primary optimization goals для Директа.
 
 ## SEO продуктового хоста (`my.mentala.app`)
 

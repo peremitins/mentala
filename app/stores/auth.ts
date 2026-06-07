@@ -16,18 +16,37 @@ import { useTTS } from '@/app/composables/useTTS';
 import { useSpeechEngine } from '@/app/composables/useSpeechEngine';
 import { useMeditationPlayer } from '@/app/composables/useMeditationPlayer';
 import { useSceneAudio } from '@/app/composables/useSceneAudio';
+import { useAppAnalytics } from '@/app/composables/useAppAnalytics';
 import { getErrorDiagnosticsLog } from '@/app/utils/errorDiagnostics';
+import { isSafeInternalPath } from '@/app/utils/postAuthRedirect';
 import { AuthRegisterResponseDto } from '@/shared/dto/auth';
 import type { MarketingAttributionDto } from '@/shared/dto/marketing-attribution';
 import { appendMarketingAttributionToUrl } from '@/shared/utils/marketingAttribution';
 import type { UserBilling, UserMeDto } from '@/shared/dto/user';
 
 type AuthUser = NonNullable<UserMeDto['user']>;
+type PostAuthRedirectOptions = { redirect?: string | null };
 
 const SESSION_TOKEN_KEY = 'mentai.session.token';
 const GOOGLE_WEB_CLIENT_ID_REGEX = /\.apps\.googleusercontent\.com$/i;
 const GOOGLE_IOS_CLIENT_ID_REGEX = /\.apps\.googleusercontent\.com$/i;
 const LOGOUT_QUIET_WINDOW_MS = 15_000;
+
+function resolvePostAuthRedirectPath(
+  options?: PostAuthRedirectOptions
+): string {
+  return isSafeInternalPath(options?.redirect) ? options.redirect : '/';
+}
+
+function buildAbsoluteAppRedirectUrl(path: string): string {
+  if (typeof window === 'undefined') return path;
+
+  try {
+    return new URL(path, window.location.origin).toString();
+  } catch {
+    return `${window.location.origin}/`;
+  }
+}
 
 function normalizeErrorPart(value: unknown): string {
   if (typeof value === 'string') return value.trim();
@@ -172,12 +191,15 @@ export const useAuthStore = defineStore('auth', {
         throw error;
       }
     },
-    async loginEmail(payload: {
-      email: string;
-      password: string;
-      locale?: string;
-      marketingAttribution?: MarketingAttributionDto;
-    }) {
+    async loginEmail(
+      payload: {
+        email: string;
+        password: string;
+        locale?: string;
+        marketingAttribution?: MarketingAttributionDto;
+      },
+      options?: PostAuthRedirectOptions
+    ) {
       this._clearLogoutQuietPeriod();
       this.loading = true;
       try {
@@ -218,8 +240,7 @@ export const useAuthStore = defineStore('auth', {
         await this._registerPushTokenForSession();
         void this._ensureWebPushAfterLogin();
 
-        // Переходим на главную
-        await navigateTo('/');
+        await navigateTo(resolvePostAuthRedirectPath(options));
       } catch (error) {
         console.error('Ошибка входа:', getErrorDiagnosticsLog(error));
         throw error;
@@ -229,7 +250,8 @@ export const useAuthStore = defineStore('auth', {
     },
     async loginWithGoogle(
       locale?: string,
-      marketingAttribution?: MarketingAttributionDto
+      marketingAttribution?: MarketingAttributionDto,
+      options?: PostAuthRedirectOptions
     ) {
       if (typeof window === 'undefined') return;
       this._clearLogoutQuietPeriod();
@@ -239,7 +261,7 @@ export const useAuthStore = defineStore('auth', {
       const platform = Capacitor.getPlatform();
 
       if (!isCapacitor) {
-        this.oauth('google', locale, marketingAttribution);
+        this.oauth('google', locale, marketingAttribution, options);
         return;
       }
 
@@ -327,7 +349,7 @@ export const useAuthStore = defineStore('auth', {
           const params = new URLSearchParams({
             token: response.linkingToken,
             email: response.email,
-            back: '/',
+            back: resolvePostAuthRedirectPath(options),
           });
           await navigateTo(`/auth/link?${params.toString()}`);
           return response;
@@ -356,7 +378,7 @@ export const useAuthStore = defineStore('auth', {
         await this._registerPushTokenForSession();
         void this._ensureWebPushAfterLogin();
 
-        await navigateTo('/');
+        await navigateTo(resolvePostAuthRedirectPath(options));
         return response;
       } catch (error) {
         console.error(
@@ -373,7 +395,10 @@ export const useAuthStore = defineStore('auth', {
         this.loading = false;
       }
     },
-    async loginWithApple(marketingAttribution?: MarketingAttributionDto) {
+    async loginWithApple(
+      marketingAttribution?: MarketingAttributionDto,
+      options?: PostAuthRedirectOptions
+    ) {
       if (typeof window === 'undefined') return;
       this._clearLogoutQuietPeriod();
 
@@ -426,7 +451,7 @@ export const useAuthStore = defineStore('auth', {
           const params = new URLSearchParams({
             token: response.linkingToken,
             email: response.email,
-            back: '/',
+            back: resolvePostAuthRedirectPath(options),
           });
           await navigateTo(`/auth/link?${params.toString()}`);
           return response;
@@ -452,7 +477,7 @@ export const useAuthStore = defineStore('auth', {
 
         await this._registerPushTokenForSession();
         void this._ensureWebPushAfterLogin();
-        await navigateTo('/');
+        await navigateTo(resolvePostAuthRedirectPath(options));
         return response;
       } catch (error) {
         console.error(
@@ -531,6 +556,12 @@ export const useAuthStore = defineStore('auth', {
         // Перепривязываем push-токен к текущей сессии (native + PWA)
         await this._registerPushTokenForSession();
         void this._ensureWebPushAfterLogin();
+
+        const { reachGoal } = useAppAnalytics();
+        reachGoal('registration_completed', {
+          method: 'email',
+          hasRedirect: Boolean(options?.redirect),
+        });
 
         const redirectTo =
           options && 'redirect' in options ? options.redirect : '/';
@@ -1114,13 +1145,15 @@ export const useAuthStore = defineStore('auth', {
     oauth(
       provider: string,
       locale?: string,
-      marketingAttribution?: MarketingAttributionDto
+      marketingAttribution?: MarketingAttributionDto,
+      options?: PostAuthRedirectOptions
     ) {
       if (typeof window === 'undefined') return;
+      const redirectPath = resolvePostAuthRedirectPath(options);
       const back = appendMarketingAttributionToUrl(
-        `${window.location.origin}/`,
+        buildAbsoluteAppRedirectUrl(redirectPath),
         marketingAttribution
-      ); // вернёмся на главную
+      );
       const base =
         provider === 'vk' ? '/api/auth/vk/start' : '/api/auth/google/start';
       const params = new URLSearchParams({ redirect_uri: back });
