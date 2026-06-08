@@ -185,6 +185,7 @@ import { computed } from 'vue';
 import IconCheck from '~icons/lucide/check';
 import GratitudeDiaryEmbeddedComposer from '@/app/components/gratitude-diary/GratitudeDiaryEmbeddedComposer.vue';
 import ProgramFormattedPrompt from '@/app/components/programs/ProgramFormattedPrompt.vue';
+import { useHaptics } from '@/app/composables/useHaptics';
 import type { ProgramStepActionStateDto } from '@/shared/dto/retention';
 
 const props = defineProps<{
@@ -199,6 +200,7 @@ const emit = defineEmits<{
 const SCRIPT_SEP = '::';
 const SCRIPT_FINAL_TEXT_ID = '__support_request_script_text';
 const SCRIPT_TEXT_MAX_LENGTH = 500;
+const { triggerLight } = useHaptics();
 
 const steps = computed(() => props.action.steps ?? []);
 const isStepIntro = computed(() => props.action.formKind === 'step_intro');
@@ -257,6 +259,7 @@ function toggleStep(stepId: string) {
   } else {
     selected.add(stepId);
   }
+  void triggerLight();
   emit('update:modelValue', Array.from(selected));
 }
 </script>

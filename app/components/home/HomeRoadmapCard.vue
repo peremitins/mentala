@@ -138,6 +138,7 @@ import IconRoute from '~icons/lucide/route';
 import DailyLimitInfoDialog from '@/app/components/programs/DailyLimitInfoDialog.vue';
 import FeaturePaywallModal from '@/app/components/subscription/FeaturePaywallModal.vue';
 import { useEntitlements } from '@/app/composables/useEntitlements';
+import { useHaptics } from '@/app/composables/useHaptics';
 import {
   getProgramDailyLimitRefreshDelayMs,
   isProgramDailyLimitReachedAt,
@@ -185,7 +186,8 @@ const emit = defineEmits<{
 // для «через 8ч 23м», а короткий интервал нужен dev-режиму с минутным cooldown.
 const nowMs = ref(Date.now());
 let countdownTimer: ReturnType<typeof setInterval> | null = null;
-let resetRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+// window.setTimeout в браузере возвращает number, не NodeJS.Timeout
+let resetRefreshTimer: number | null = null;
 
 const isDailyLimitReached = computed(() => {
   return isProgramDailyLimitReachedAt(props.dailyLimit ?? null, nowMs.value);
@@ -207,7 +209,7 @@ function stopCountdown() {
 
 function clearResetRefreshTimer() {
   if (!resetRefreshTimer) return;
-  clearTimeout(resetRefreshTimer);
+  window.clearTimeout(resetRefreshTimer);
   resetRefreshTimer = null;
 }
 
@@ -361,6 +363,7 @@ function stepClass(status: ProgramStepStatus) {
 
 const limitDialogOpen = ref(false);
 const { getFeatureAccess } = useEntitlements();
+const { triggerLight, triggerMedium } = useHaptics();
 const paywallOpen = ref(false);
 const roadmapAccess = computed(() => getFeatureAccess('programs.roadmap.full'));
 const hasRoadmapAccess = computed(() => roadmapAccess.value.available);
@@ -377,6 +380,7 @@ function openCurrentStep() {
   // Программа завершена + есть следующий сад — отправляем в Оранжерею,
   // там GardenTransplantHandoff подхватит и покажет AI-итог + CTA.
   if (hasNextGardenAvailable.value) {
+    void triggerMedium();
     void navigateTo('/garden');
     return;
   }
@@ -387,12 +391,14 @@ function openCurrentStep() {
   }
   // Программа полностью пройдена, следующего сада нет — «Повторить» начинает с первого шага.
   if (isProgramFullyCompleted.value) {
+    void triggerMedium();
     void navigateTo({
       path: `/programs/${props.program.slug}/steps/1`,
       query: { replay: '1' },
     });
     return;
   }
+  void triggerMedium();
   void navigateTo(
     `/programs/${props.program.slug}/steps/${currentStep.value.step}`
   );
@@ -411,6 +417,7 @@ function handleStepClick(step: ProgramStepDto) {
     limitDialogOpen.value = true;
     return;
   }
+  void triggerLight();
   if (step.status === 'active') {
     void navigateTo(`/programs/${props.program.slug}/steps/${step.step}`);
     return;

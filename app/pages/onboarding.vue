@@ -545,7 +545,7 @@ const { isPortraitMode } = useViewportOrientation();
 const prefersReducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
 const pushPermissionGate = usePushPermissionGate();
 const pushRecovery = usePushRecovery();
-const { triggerLight } = useHaptics();
+const { triggerLight, triggerSuccess } = useHaptics();
 const isNativeIos = computed(
   () => Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'ios'
 );
@@ -999,12 +999,14 @@ async function restoreOnboardingDraft() {
   stepper.goTo(resolveRestorableStep(parsedDraft.step));
 }
 
-function goNext(expectedStep?: StepKey) {
+function goNext(expectedStep?: StepKey, options: { haptic?: boolean } = {}) {
   if (typeof expectedStep === 'string' && currentStep.value !== expectedStep) {
     return;
   }
 
-  void triggerLight();
+  if (options.haptic !== false) {
+    void triggerLight();
+  }
   stepper.goToNext();
 }
 
@@ -1047,11 +1049,11 @@ async function handleEnableReminders() {
     await persistOnboardingDraft('reminders');
     const enabled = await pushPermissionGate.ensureAppPushEnabled({
       onGrantedFromSettings: async () => {
-        goNext('reminders');
+        goNext('reminders', { haptic: false });
       },
     });
     if (enabled) {
-      goNext('reminders');
+      goNext('reminders', { haptic: false });
     }
   } finally {
     pushPermissionLoading.value = false;
@@ -1100,6 +1102,7 @@ async function completeOnboarding() {
       flow: 'welcome_setup',
       selectedTopicsCount: selectedTopics.value.length,
     });
+    void triggerSuccess();
     // Если пользователь пришёл из воронки (тест на тревожность), ведём на цель.
     await navigateTo(consumePostAuthRedirect() ?? '/');
   } catch (error: any) {

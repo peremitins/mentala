@@ -55,6 +55,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import GratitudeDiaryEmbeddedComposer from '@/app/components/gratitude-diary/GratitudeDiaryEmbeddedComposer.vue';
+import { useHaptics } from '@/app/composables/useHaptics';
 import ProgramFormattedPrompt from '@/app/components/programs/ProgramFormattedPrompt.vue';
 import ProgramHelpHint from '@/app/components/programs/ProgramHelpHint.vue';
 
@@ -89,6 +90,8 @@ const emit = defineEmits<{
   (e: 'input-method-change', value: 'text' | 'voice' | 'mixed'): void;
 }>();
 
+const { triggerLight } = useHaptics();
+
 const question = computed(() => props.chipQuestion || props.prompt || null);
 const chips = computed(() => props.chipOptions ?? []);
 const exclusiveNoneChips = [
@@ -99,6 +102,7 @@ const exclusiveNoneChips = [
 
 function toggleChip(chip: string) {
   if (props.chipMode !== 'multi') {
+    void triggerLight();
     emit('update:selectedChips', props.selectedChips[0] === chip ? [] : [chip]);
     return;
   }
@@ -115,6 +119,7 @@ function toggleChip(chip: string) {
     }
     selected.add(chip);
   }
+  void triggerLight();
   emit('update:selectedChips', Array.from(selected));
 }
 </script>

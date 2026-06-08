@@ -160,6 +160,7 @@ import AssessmentResultSummary from '@/app/components/assessments/AssessmentResu
 import AssessmentTrendChart from '@/app/components/assessments/AssessmentTrendChart.vue';
 import ButtonLoader from '@/app/components/ui/ButtonLoader.vue';
 import { useAPI } from '@/app/composables/useAPI';
+import { useHaptics } from '@/app/composables/useHaptics';
 import { useAuthStore } from '@/app/stores/auth';
 import { useAppAnalytics } from '@/app/composables/useAppAnalytics';
 import { applyGender } from '@/app/utils/genderedText';
@@ -204,6 +205,7 @@ const emit = defineEmits<{
 
 const authStore = useAuthStore();
 const { reachGoal } = useAppAnalytics();
+const { triggerLight, triggerSuccess } = useHaptics();
 
 const phase = ref<'question' | 'result'>(
   props.initialAttemptId ? 'result' : 'question'
@@ -284,6 +286,9 @@ const contextText = computed(() => {
 function selectOption(optionId: string) {
   const question = currentQuestion.value;
   if (!question) return;
+  if (answers.value[question.id] !== optionId) {
+    void triggerLight();
+  }
   answers.value = { ...answers.value, [question.id]: optionId };
 }
 
@@ -293,6 +298,7 @@ function goPrev() {
     return;
   }
   currentIndex.value -= 1;
+  void triggerLight();
 }
 
 function getClientTimezone(): string | null {
@@ -350,6 +356,7 @@ async function goNext() {
 
   if (!isLastQuestion.value) {
     currentIndex.value += 1;
+    void triggerLight();
     return;
   }
 
@@ -374,6 +381,7 @@ async function goNext() {
     );
 
     emit('complete', { attemptId: result.item.id });
+    void triggerSuccess();
     reachGoal('assessment_completed', {
       assessmentSlug: item.value.slug,
       source: props.source,

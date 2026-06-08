@@ -385,6 +385,7 @@ import { useEntitlements } from '@/app/composables/useEntitlements';
 import { useToast } from '@/app/composables/useToast';
 import { useBreathPracticeAudio } from '@/app/composables/useBreathPracticeAudio';
 import { useBreathPracticeHaptics } from '@/app/composables/useBreathPracticeHaptics';
+import { useHaptics } from '@/app/composables/useHaptics';
 import { isDocumentAvailable } from '@/app/utils/document';
 import {
   loadSosVoiceSettings,
@@ -427,6 +428,7 @@ const {
   setVolume: setTensionCueVolume,
 } = useBreathPracticeAudio();
 const { trigger: triggerTensionHaptic } = useBreathPracticeHaptics();
+const { triggerLight, triggerSuccess } = useHaptics();
 
 const addressing = ref<Addressing>('informal');
 
@@ -1066,14 +1068,18 @@ function startTensionExerciseLoop() {
 
 function groundingNext() {
   if (groundingIndex.value >= groundingSteps.length - 1) {
+    void triggerSuccess();
     handlePracticeComplete('panic');
     return;
   }
   groundingIndex.value += 1;
+  void triggerLight();
 }
 
 function groundingPrev() {
+  if (groundingIndex.value === 0) return;
   groundingIndex.value = Math.max(0, groundingIndex.value - 1);
+  void triggerLight();
 }
 
 function startTensionPractice() {

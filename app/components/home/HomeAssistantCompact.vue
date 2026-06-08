@@ -44,7 +44,7 @@
         v-if="chatAssistantAccess.available"
         to="/chat"
         class="inline-flex items-center gap-2 rounded-full bg-foreground/90 px-4 py-2 text-xs font-medium text-background transition hover:bg-foreground"
-        @click.stop
+        @click.stop="handleChatLinkClick"
       >
         <IconSend class="h-3.5 w-3.5" />
         <span>{{ chatButtonLabel }}</span>
@@ -87,6 +87,7 @@ import IconSend from '~icons/lucide/send';
 import IconBookOpen from '~icons/lucide/book-open';
 import UnreadSummaryIndicator from '@/app/components/sessionSummaries/UnreadSummaryIndicator.vue';
 import { useEntitlements } from '@/app/composables/useEntitlements';
+import { useHaptics } from '@/app/composables/useHaptics';
 import { useUnseenSessionSummary } from '@/app/composables/useUnseenSessionSummary';
 import { useChatStore } from '@/app/stores/chat';
 
@@ -95,6 +96,7 @@ const emit = defineEmits<{
 }>();
 
 const { getFeatureAccess } = useEntitlements();
+const { triggerLight } = useHaptics();
 const { hasUnseenSummary } = useUnseenSessionSummary();
 const chat = useChatStore();
 
@@ -117,10 +119,15 @@ function getPlanBadgeEmoji(plan: string) {
 
 function handleCardClick() {
   if (chatAssistantAccess.value.available) {
+    void triggerLight();
     void navigateTo('/chat');
   } else {
     emit('paywall', 'chat.assistant');
   }
+}
+
+function handleChatLinkClick() {
+  void triggerLight();
 }
 </script>
 

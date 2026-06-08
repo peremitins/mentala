@@ -47,7 +47,8 @@
             v-if="props.locked"
             class="absolute -right-1 -top-1 inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/25 bg-black/70 text-xs leading-none"
             aria-hidden="true"
-          >⭐</span>
+            >⭐</span
+          >
           {{ primaryLabel }}
         </button>
         <button
@@ -66,6 +67,7 @@
 import { computed } from 'vue';
 import { DialogDescription, DialogTitle } from 'radix-vue';
 import BottomSheet from '@/app/components/ui/BottomSheet.vue';
+import { useHaptics } from '@/app/composables/useHaptics';
 import type { ProgramStepDto } from '@/shared/dto/retention';
 
 const props = defineProps<{
@@ -85,6 +87,7 @@ const openModel = computed({
   get: () => props.open,
   set: (value: boolean) => emit('update:open', value),
 });
+const { triggerLight, triggerMedium } = useHaptics();
 
 const canStart = computed(
   () => props.step?.status === 'completed' || props.step?.status === 'active'
@@ -107,6 +110,11 @@ const statusLabel = computed(() => {
 
 function emitStart() {
   if (!props.step || !canStart.value) return;
+  if (props.step.status === 'completed') {
+    void triggerLight();
+  } else {
+    void triggerMedium();
+  }
   emit('start', {
     step: props.step,
     replay: props.step.status === 'completed',

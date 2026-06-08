@@ -46,6 +46,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import GratitudeDiaryEmbeddedComposer from '@/app/components/gratitude-diary/GratitudeDiaryEmbeddedComposer.vue';
+import { useHaptics } from '@/app/composables/useHaptics';
 import ProgramFormattedPrompt from '@/app/components/programs/ProgramFormattedPrompt.vue';
 import ProgramHelpHint from '@/app/components/programs/ProgramHelpHint.vue';
 
@@ -80,8 +81,12 @@ const emit = defineEmits<{
   (e: 'input-method-change', value: 'text' | 'voice' | 'mixed'): void;
 }>();
 
+const { triggerLight } = useHaptics();
+
 function applyPreparedAnswer(answer: string) {
-  emit('update:modelValue', answer.slice(0, props.maxLength));
+  const nextValue = answer.slice(0, props.maxLength);
+  if (nextValue !== props.modelValue) void triggerLight();
+  emit('update:modelValue', nextValue);
   emit('input-method-change', 'text');
 }
 

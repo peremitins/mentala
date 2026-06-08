@@ -149,6 +149,7 @@
 import { computed } from 'vue';
 import IconCheckCircle from '~icons/lucide/check-circle';
 import GratitudeDiaryEmbeddedComposer from '@/app/components/gratitude-diary/GratitudeDiaryEmbeddedComposer.vue';
+import { useHaptics } from '@/app/composables/useHaptics';
 import ProgramFormattedPrompt from '@/app/components/programs/ProgramFormattedPrompt.vue';
 import ProgramHelpHint from '@/app/components/programs/ProgramHelpHint.vue';
 import ProgramRangeScale from '@/app/components/programs/ProgramRangeScale.vue';
@@ -160,6 +161,7 @@ import { useAuthStore } from '@/app/stores/auth';
 import { applyGender } from '@/app/utils/genderedText';
 
 const authStore = useAuthStore();
+const { triggerLight } = useHaptics();
 
 const props = defineProps<{
   modelValue: Record<string, unknown>;
@@ -289,6 +291,7 @@ function toggleChoice(field: ProgramStructuredFormFieldDto, optionId: string) {
   const current = new Set(choiceValues(field.id));
 
   if (mode === 'single') {
+    void triggerLight();
     emitFieldValue(field.id, current.has(optionId) ? null : optionId);
     return;
   }
@@ -308,6 +311,7 @@ function toggleChoice(field: ProgramStructuredFormFieldDto, optionId: string) {
     current.add(optionId);
   }
 
+  void triggerLight();
   emitFieldValue(field.id, Array.from(current));
 }
 </script>

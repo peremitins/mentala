@@ -210,12 +210,14 @@ import aiImg from '@/app/assets/images/ai_terapist.webp';
 import PageHeader from '@/app/components/PageHeader.vue';
 import BottomSheet from '@/app/components/ui/BottomSheet.vue';
 import TextareaResize from '@/app/components/ui/TextareaResize.vue';
+import { useHaptics } from '@/app/composables/useHaptics';
 import { useToolkitStore } from '@/app/stores/toolkit';
 import { resolveToolkitRoute } from '@/shared/toolkit/registry';
 import type { UserToolkitItem } from '@/shared/dto/toolkit';
 
 const router = useRouter();
 const store = useToolkitStore();
+const { triggerSuccess } = useHaptics();
 
 onMounted(() => {
   // Принудительно перечитываем: набор пополняется после прохождения шагов roadmap,
@@ -309,6 +311,7 @@ async function savePhrase() {
     } else {
       await store.addPhrase(content);
     }
+    void triggerSuccess();
     sheetOpen.value = false;
   } catch {
     // тост уже показан в сторе

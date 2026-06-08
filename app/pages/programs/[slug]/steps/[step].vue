@@ -136,7 +136,7 @@
                 ? item.class
                 : 'border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/10'
             "
-            @click="selectedMood = item.value"
+            @click="selectStepMood(item.value)"
           >
             <span
               class="flex items-center justify-center pt-[4px] transition-transform duration-200"
@@ -419,6 +419,7 @@ import GardenPlantReportSheet from '@/app/components/garden/GardenPlantReportShe
 import ThoughtDumpEmbeddedComposer from '@/app/components/quick-help/ThoughtDumpEmbeddedComposer.vue';
 import { useAPI } from '@/app/composables/useAPI';
 import { useCelebrationConfetti } from '@/app/composables/useCelebrationConfetti';
+import { useHaptics } from '@/app/composables/useHaptics';
 import { useProgramDailyLimit } from '@/app/composables/useProgramDailyLimit';
 import {
   useSceneAudioFocus,
@@ -497,6 +498,7 @@ const aiChatActionRef = ref<InstanceType<typeof ProgramAiChatAction> | null>(
   null
 );
 const { launchStepCompletionConfetti } = useCelebrationConfetti();
+const { triggerLight, triggerMedium, triggerCelebration } = useHaptics();
 const { recordPracticeCompleted, checkAndShow } = useAppReviewPrompt();
 const dailyLimit = useProgramDailyLimit();
 const dailyLimitDialogOpen = ref(false);
@@ -1074,6 +1076,13 @@ const moods: Array<{
   { value: 'great', emoji: '😊', class: 'border-teal-200/50 bg-teal-300/20' },
 ];
 
+function selectStepMood(value: MoodCheckinMood) {
+  if (selectedMood.value !== value) {
+    void triggerLight();
+  }
+  selectedMood.value = value;
+}
+
 function isQuickHelpAction(action: ProgramStepActionStateDto) {
   return (
     action.type === 'quick_help_grounding' ||
@@ -1529,10 +1538,12 @@ function goToPreviousAction() {
     const next = new Map(assessmentCompletedAttemptByActionId.value);
     next.delete(action.id);
     assessmentCompletedAttemptByActionId.value = next;
+    void triggerLight();
     return;
   }
   if (actionIndex.value <= 0) return;
   actionIndex.value -= 1;
+  void triggerLight();
 }
 
 async function skipAssessmentPrompt() {
@@ -2047,6 +2058,7 @@ async function completeCurrentAction() {
     }
 
     actionIndex.value += 1;
+    void triggerLight();
   } catch (error) {
     console.error('[ProgramStep] Не удалось сохранить действие шага:', error);
   } finally {
@@ -2166,6 +2178,7 @@ watch(
 watch(isCompleted, (completed) => {
   if (!completed || confettiLaunched.value) return;
   confettiLaunched.value = true;
+  void triggerCelebration();
   void launchStepCompletionConfetti({ intensity: 'soft' });
   // Предлагаем оценить приложение после успешного завершения шага.
   // Задержка 2.5с: даём пользователю насладиться success-экраном сначала.
@@ -2426,6 +2439,7 @@ function handleTrialUpsellDismiss() {
 function goToNextStep() {
   const next = nextStepNumber.value;
   if (!next) return;
+  void triggerMedium();
   runSuccessNavigation(() => {
     // Новый шаг (не replay) учитывается в дневном лимите. Если он достигнут —
     // открываем DailyLimitInfoDialog (тот же UX, что в map.vue / HomeRoadmapCard),

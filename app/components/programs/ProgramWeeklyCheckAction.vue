@@ -99,6 +99,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import IconCheckCircle from '~icons/lucide/check-circle';
+import { useHaptics } from '@/app/composables/useHaptics';
 import ProgramFormattedPrompt from '@/app/components/programs/ProgramFormattedPrompt.vue';
 import ProgramRangeScale from '@/app/components/programs/ProgramRangeScale.vue';
 import type {
@@ -114,6 +115,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'update:modelValue', value: Record<string, unknown>): void;
 }>();
+
+const { triggerLight } = useHaptics();
 
 const defaultQuestions: ProgramWeeklyCheckQuestionDto[] = [
   {
@@ -234,6 +237,7 @@ function toggleChoice(
   const current = new Set(choiceValues(question.id));
 
   if (mode === 'single') {
+    void triggerLight();
     emitAnswer(question.id, current.has(optionId) ? null : optionId);
     return;
   }
@@ -255,6 +259,7 @@ function toggleChoice(
     current.add(optionId);
   }
 
+  void triggerLight();
   emitAnswer(question.id, Array.from(current));
 }
 </script>

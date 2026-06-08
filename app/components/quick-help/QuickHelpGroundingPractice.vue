@@ -76,6 +76,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Button } from '@/app/components/ui/button';
 import { Switch } from '@/app/components/ui/shadcn/switch';
+import { useHaptics } from '@/app/composables/useHaptics';
 import { useNotificationsSettings } from '@/app/composables/useNotificationsSettings';
 import { isDocumentAvailable } from '@/app/utils/document';
 import {
@@ -105,6 +106,7 @@ const GROUNDING_STEP_KEYS: SosGroundingStepKey[] = [
 
 const groundingSteps = SOS_GROUNDING_STEPS;
 const { fetchGlobalPreferences } = useNotificationsSettings();
+const { triggerLight, triggerSuccess } = useHaptics();
 
 const addressing = ref<Addressing>('informal');
 const groundingIndex = ref(0);
@@ -241,18 +243,23 @@ async function onVoiceChange(next: boolean) {
 function groundingNext() {
   if (groundingIndex.value >= groundingSteps.length - 1) {
     stopGroundingVoicePlayback();
+    void triggerSuccess();
     emit('complete');
     return;
   }
   groundingIndex.value += 1;
+  void triggerLight();
 }
 
 function groundingPrev() {
+  if (groundingIndex.value === 0) return;
   groundingIndex.value = Math.max(0, groundingIndex.value - 1);
+  void triggerLight();
 }
 
 async function startPractice() {
   started.value = true;
+  void triggerLight();
   // play() здесь происходит в стеке вызова user-инициированного click,
   // поэтому autoplay policy разрешает воспроизведение голоса.
   await playGroundingVoice(groundingIndex.value);

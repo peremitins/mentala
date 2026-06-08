@@ -86,6 +86,7 @@ import {
   DialogTitle,
 } from '@/app/components/ui/dialog';
 import { useAPI } from '@/app/composables/useAPI';
+import { useHaptics } from '@/app/composables/useHaptics';
 import { getRetentionPlantImageSrc } from '@/app/utils/retentionPlant';
 import type {
   GardenAvailableProgramDto,
@@ -105,6 +106,7 @@ const emit = defineEmits<{
 }>();
 
 const router = useRouter();
+const { triggerSuccess } = useHaptics();
 
 // Стадия 0 нового растения — используется только в transition-анимации.
 const nextPlantImage = computed(() => {
@@ -132,6 +134,7 @@ async function onPlantSeed() {
       body: { programSlug: props.nextProgram.programSlug },
       suppressErrorToast: true,
     });
+    void triggerSuccess();
     emit('started', props.nextProgram.programSlug);
     // Запускаем transition-анимацию и одновременно готовим переход.
     isTransitioning.value = true;

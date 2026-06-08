@@ -17,7 +17,7 @@
             ? 'border-emerald-200/45 bg-emerald-300/18 text-foreground'
             : 'border-white/14 bg-white/6 text-foreground/78 hover:border-white/25'
         "
-        @click="emit('update:modelValue', option)"
+        @click="selectOption(option)"
       >
         <IconCheckCircle
           class="h-4 w-4 shrink-0"
@@ -34,6 +34,7 @@
 import { computed } from 'vue';
 import IconCheckCircle from '~icons/lucide/check-circle';
 import ProgramFormattedPrompt from '@/app/components/programs/ProgramFormattedPrompt.vue';
+import { useHaptics } from '@/app/composables/useHaptics';
 import type { ProgramStepActionStateDto } from '@/shared/dto/retention';
 
 const props = defineProps<{
@@ -49,4 +50,12 @@ const question = computed(
   () => props.action.chipQuestion || props.action.prompt || null
 );
 const options = computed(() => props.action.chipOptions ?? []);
+const { triggerLight } = useHaptics();
+
+function selectOption(option: string) {
+  if (props.modelValue !== option) {
+    void triggerLight();
+  }
+  emit('update:modelValue', option);
+}
 </script>

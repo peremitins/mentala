@@ -48,6 +48,7 @@ import {
   type AssistantTone,
 } from '@/shared/constants/assistantTone';
 import IconInfo from '~icons/lucide/info';
+import { useHaptics } from '@/app/composables/useHaptics';
 
 interface Props {
   modelValue?: string | null;
@@ -66,6 +67,8 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   (e: 'update:modelValue', value: AssistantTone): void;
 }>();
+
+const { triggerLight } = useHaptics();
 
 const toneOptions = ASSISTANT_TONE_VALUES.map((value) => ({
   value,
@@ -90,6 +93,9 @@ function isSelected(value: AssistantTone): boolean {
 
 function handleSelect(value: AssistantTone) {
   if (props.disabled) return;
+  if (!isSelected(value)) {
+    void triggerLight();
+  }
   emit('update:modelValue', value);
 }
 

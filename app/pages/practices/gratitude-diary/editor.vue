@@ -839,7 +839,7 @@ function normalizeCalendarLocale(value: string | null | undefined): string {
 const { t, locale } = useI18n();
 const { $api } = useNuxtApp();
 const { award: awardFreePracticeEnergy } = useFreePracticeEnergy();
-const { triggerLight } = useHaptics();
+const { triggerLight, triggerSuccess } = useHaptics();
 const route = useRoute();
 const auth = useAuthStore();
 const { getFeatureAccess } = useEntitlements();
@@ -1957,6 +1957,7 @@ async function saveEntry() {
     isPhotoRemoved.value = false;
     photoLoadRetryCount.value = 0;
 
+    void triggerSuccess();
     await navigateTo('/practices/gratitude-diary');
   } catch (error: any) {
     if (cleanupStorageKey) {

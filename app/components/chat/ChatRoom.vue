@@ -246,7 +246,7 @@
               <button
                 data-tour="chat-mic"
                 type="button"
-                @click="toggleMic"
+                @click="handleMicClick"
                 class="chat-action-button relative flex items-center justify-center cursor-pointer flex-none disabled:cursor-not-allowed disabled:opacity-45"
                 :class="
                   speechStore.isListening && !isDictationMicDisabled
@@ -435,6 +435,7 @@ import { useMarkdown } from '@/app/composables/useMarkdown';
 import { useRealtimeVoiceSession } from '@/app/composables/useRealtimeVoiceSession';
 import { useRealtimeVoiceCallFeedback } from '@/app/composables/useRealtimeVoiceCallFeedback';
 import { useVoiceDictationInput } from '@/app/composables/useVoiceDictationInput';
+import { useHaptics } from '@/app/composables/useHaptics';
 import {
   useChatSession,
   type ChatSessionFinalizeReason,
@@ -726,6 +727,7 @@ async function handleFinishSession() {
     }
     const result = await chatSession.finalize({ reason: 'manual_summary' });
     if (result?.eligible && result?.triggered) {
+      void triggerSuccess();
       // Сервер подтвердил — итог запущен на генерацию.
       if (props.mode === 'embedded') {
         // Embedded-режим (Roadmap-шаг): пробрасываем done родителю —
@@ -786,6 +788,13 @@ const {
     emitSend();
   },
 });
+
+function handleMicClick() {
+  if (isDictationMicDisabled.value) return;
+  void triggerLight();
+  void toggleMic();
+}
+
 const realtimeVoice = useRealtimeVoiceSession({
   onBeforeStart: async () => {
     chat.stopChatStream();
@@ -804,6 +813,7 @@ const realtimeVoiceCallFeedback = useRealtimeVoiceCallFeedback({
   status: realtimeVoice.status,
   errorMessage: realtimeVoice.errorMessage,
 });
+const { triggerLight, triggerSuccess } = useHaptics();
 const isTextInputDisabled = computed(() => realtimeVoice.blocksTextInput.value);
 const shouldShowSuggestedChips = computed(
   () =>
@@ -1005,6 +1015,7 @@ const onSend = async () => {
   if (isSending.value) return;
   if (isUserTextOverLimit.value) return;
   if (!chat.userText?.trim()) return;
+  void triggerLight();
   await sendText(chat.userText);
 };
 
