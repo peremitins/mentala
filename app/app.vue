@@ -40,6 +40,9 @@
     <ClientOnly>
       <AppTourOverlay />
     </ClientOnly>
+    <ClientOnly>
+      <ReviewPromptModal />
+    </ClientOnly>
 
     <!-- Глобальный PageLoader -->
     <!-- <Transition name="fade">
@@ -65,6 +68,7 @@ import ForceUpdateBlocker from '@/app/components/ForceUpdateBlocker.vue';
 import AiChatConsentModal from '@/app/components/privacy/AiChatConsentModal.vue';
 import RealtimeVoiceAmbientFrame from '@/app/components/realtime/RealtimeVoiceAmbientFrame.vue';
 import AppTourOverlay from '@/app/components/app-tour/AppTourOverlay.vue';
+import ReviewPromptModal from '@/app/components/reviews/ReviewPromptModal.vue';
 import {
   DEFAULT_SCENE_ID,
   findSceneTrack,

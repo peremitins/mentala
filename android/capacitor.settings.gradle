@@ -8,6 +8,9 @@ project(':aparajita-capacitor-secure-storage').projectDir = new File('../node_mo
 include ':capacitor-community-fcm'
 project(':capacitor-community-fcm').projectDir = new File('../node_modules/.pnpm/@capacitor-community+fcm@7.3.0_@capacitor+core@7.4.3/node_modules/@capacitor-community/fcm/android')
 
+include ':capacitor-community-in-app-review'
+project(':capacitor-community-in-app-review').projectDir = new File('../node_modules/.pnpm/@capacitor-community+in-app-review@8.0.0_@capacitor+core@7.4.3/node_modules/@capacitor-community/in-app-review/android')
+
 include ':capacitor-community-speech-recognition'
 project(':capacitor-community-speech-recognition').projectDir = new File('../node_modules/.pnpm/@capacitor-community+speech-recognition@7.0.1_patch_hash=afc69579663989f198ce0aacb2fe6f_aa0345454bd13e7c2f074cf69069b65f/node_modules/@capacitor-community/speech-recognition/android')
 

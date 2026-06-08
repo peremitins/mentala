@@ -425,6 +425,7 @@ import {
   type SceneAudioFocusLock,
 } from '@/app/composables/useSceneAudioFocus';
 import { useToast } from '@/app/composables/useToast';
+import { useAppReviewPrompt } from '@/app/composables/useAppReviewPrompt';
 import {
   getRetentionPlantImageSrc,
   getRetentionPlantStateIndex,
@@ -496,6 +497,7 @@ const aiChatActionRef = ref<InstanceType<typeof ProgramAiChatAction> | null>(
   null
 );
 const { launchStepCompletionConfetti } = useCelebrationConfetti();
+const { recordPracticeCompleted, checkAndShow } = useAppReviewPrompt();
 const dailyLimit = useProgramDailyLimit();
 const dailyLimitDialogOpen = ref(false);
 
@@ -2165,6 +2167,11 @@ watch(isCompleted, (completed) => {
   if (!completed || confettiLaunched.value) return;
   confettiLaunched.value = true;
   void launchStepCompletionConfetti({ intensity: 'soft' });
+  // Предлагаем оценить приложение после успешного завершения шага.
+  // Задержка 2.5с: даём пользователю насладиться success-экраном сначала.
+  setTimeout(() => {
+    void recordPracticeCompleted().then(() => checkAndShow());
+  }, 2500);
 });
 
 // Триггер finale-flow: как только пользователь завершил весь Сад,

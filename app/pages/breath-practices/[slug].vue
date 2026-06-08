@@ -141,6 +141,7 @@ import { useToast } from '@/app/composables/useToast';
 import { useFreeTimedPracticeRecovery } from '@/app/composables/useFreeTimedPracticeRecovery';
 import { useBreathPracticesStore } from '@/app/stores/breathPractices';
 import { useEntitlements } from '@/app/composables/useEntitlements';
+import { useAppReviewPrompt } from '@/app/composables/useAppReviewPrompt';
 import {
   BREATH_PRACTICES,
   buildCustomPhases,
@@ -157,6 +158,7 @@ type TimedPracticeStartPayload = { requiredSeconds?: number };
 const route = useRoute();
 const store = useBreathPracticesStore();
 const { getFeatureAccess } = useEntitlements();
+const { recordPracticeCompleted, checkAndShow } = useAppReviewPrompt();
 
 const fullCatalogAccess = computed(() =>
   getFeatureAccess('breath.catalog.full')
@@ -325,6 +327,7 @@ function onPracticeComplete() {
   const record = buildBreathRecoveryStart({ requiredSeconds });
   if (!record) return;
   void freeTimedRecovery.complete(record);
+  void recordPracticeCompleted().then(() => checkAndShow());
 }
 
 function goToPrevPractice() {

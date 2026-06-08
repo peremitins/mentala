@@ -32,6 +32,9 @@ importers:
       '@capacitor-community/fcm':
         specifier: ^7.1.3
         version: 7.3.0(@capacitor/core@7.4.3)
+      '@capacitor-community/in-app-review':
+        specifier: ^8.0.0
+        version: 8.0.0(@capacitor/core@7.4.3)
       '@capacitor-community/speech-recognition':
         specifier: ^7.0.1
         version: 7.0.1(patch_hash=afc69579663989f198ce0aacb2fe6f015b1a331621955826b523559012dff8a3)(@capacitor/core@7.4.3)
@@ -1238,6 +1241,11 @@ packages:
     resolution: {integrity: sha512-V622d0RSsJtR11SXGw92nBVqOZfRwsBf6VzV3UeGxjiRTW46WmaNmbxPLrvRgamuYLU3Or/jZjtBCcyVXA8h0w==}
     peerDependencies:
       '@capacitor/core': '>=7.0.0'
+
+  '@capacitor-community/in-app-review@8.0.0':
+    resolution: {integrity: sha512-AYpEkIjdv27WGS3hnlc7xAQ1BhaBvD2svgQBfHF4P2Olw1N6a7MSCOQC6O4SuxmdBdJ2fM6uFeo1jyNjKLtIPw==}
+    peerDependencies:
+      '@capacitor/core': '>=8.0.0'
 
   '@capacitor-community/speech-recognition@7.0.1':
     resolution: {integrity: sha512-ykpBZziR575X0eURO5vXaD9gVrXXC/7Ra2qql/2KP6/jxWOqAFuw4eKjSPjwdAgGE6a/Z+v8FJm4SVh57MVwDA==}
@@ -13348,6 +13356,10 @@ snapshots:
   '@bufbuild/protobuf@1.10.1': {}
 
   '@capacitor-community/fcm@7.3.0(@capacitor/core@7.4.3)':
+    dependencies:
+      '@capacitor/core': 7.4.3
+
+  '@capacitor-community/in-app-review@8.0.0(@capacitor/core@7.4.3)':
     dependencies:
       '@capacitor/core': 7.4.3
 
