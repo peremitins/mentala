@@ -70,12 +70,13 @@
               >
                 Следующий шаг
               </button>
-              <NuxtLink
-                to="/"
+              <button
+                type="button"
                 class="text-sm font-medium text-foreground/65 underline-offset-4 hover:underline"
+                @click="goToHomeFromSuccess"
               >
                 На главную
-              </NuxtLink>
+              </button>
             </div>
           </div>
         </div>
@@ -375,6 +376,14 @@
     />
 
     <DailyLimitInfoDialog v-model:open="dailyLimitDialogOpen" />
+
+    <TrialUpsellModal
+      :open="showTrialUpsellModal"
+      :milestone="trialUpsellMilestone"
+      @update:open="showTrialUpsellModal = $event"
+      @confirm="handleTrialUpsellConfirm"
+      @dismiss="handleTrialUpsellDismiss"
+    />
   </div>
 </template>
 
@@ -404,6 +413,8 @@ import ProgramWeeklyCheckAction from '@/app/components/programs/ProgramWeeklyChe
 import ProgramFinalReportPreparing from '@/app/components/programs/ProgramFinalReportPreparing.vue';
 import ProgramCheckpointReportPreparing from '@/app/components/programs/ProgramCheckpointReportPreparing.vue';
 import DailyLimitInfoDialog from '@/app/components/programs/DailyLimitInfoDialog.vue';
+import TrialUpsellModal from '@/app/components/subscription/TrialUpsellModal.vue';
+import { useTrialUpsell } from '@/app/composables/useTrialUpsell';
 import GardenPlantReportSheet from '@/app/components/garden/GardenPlantReportSheet.vue';
 import ThoughtDumpEmbeddedComposer from '@/app/components/quick-help/ThoughtDumpEmbeddedComposer.vue';
 import { useAPI } from '@/app/composables/useAPI';
@@ -439,6 +450,7 @@ import type {
   ProgramStepStartResponseDto,
   ProgramStructuredFormFieldDto,
   ProgramWeeklyCheckQuestionDto,
+  TrialUpsellPromptDto,
 } from '@/shared/dto/retention';
 
 const route = useRoute();
@@ -486,6 +498,15 @@ const aiChatActionRef = ref<InstanceType<typeof ProgramAiChatAction> | null>(
 const { launchStepCompletionConfetti } = useCelebrationConfetti();
 const dailyLimit = useProgramDailyLimit();
 const dailyLimitDialogOpen = ref(false);
+
+// Промо-paywall привязки карты в триале (контрольные точки 1/5/10 шага).
+// Решение «показывать ли» приходит с бэка в ответе завершения шага.
+const trialUpsell = useTrialUpsell();
+const showTrialUpsellModal = ref(false);
+const trialUpsellPrompt = ref<TrialUpsellPromptDto | null>(null);
+const trialUpsellMilestone = ref(0);
+const upsellPendingNavigate = ref<(() => void) | null>(null);
+let upsellResolved = false;
 
 const slug = computed(() => String(route.params.slug || '').trim());
 const step = computed(() => Number(route.params.step));
@@ -1818,6 +1839,7 @@ async function completeStepAttempt() {
   );
   completionRewardGranted.value = completed.rewardGranted;
   completedProgram.value = completed.program;
+  trialUpsellPrompt.value = completed.trialUpsell ?? null;
   response.value = {
     ...response.value,
     attempt: completed.attempt,
@@ -2355,20 +2377,67 @@ function onCheckpointSheetOpenChange(value: boolean) {
   }
 }
 
+// Перехватывает уход с success-экрана: если бэк прислал промо-paywall —
+// показываем модалку, а реальную навигацию откладываем до решения пользователя.
+function runSuccessNavigation(navigate: () => void) {
+  const prompt = trialUpsellPrompt.value;
+  if (prompt?.show && !showTrialUpsellModal.value) {
+    // Показываем один раз за success-экран и сразу фиксируем точку на бэке,
+    // чтобы она не повторилась, даже если пользователь закроет приложение.
+    trialUpsellPrompt.value = null;
+    trialUpsellMilestone.value = prompt.milestone;
+    upsellPendingNavigate.value = navigate;
+    upsellResolved = false;
+    showTrialUpsellModal.value = true;
+    void trialUpsell.markShown(prompt.milestone);
+    trialUpsell.trackShown(prompt.milestone);
+    return;
+  }
+  navigate();
+}
+
+function handleTrialUpsellConfirm() {
+  if (upsellResolved) return;
+  upsellResolved = true;
+  showTrialUpsellModal.value = false;
+  // Пользователь идёт оформлять подписку — отложенную навигацию отменяем.
+  upsellPendingNavigate.value = null;
+  trialUpsell.trackCta(trialUpsellMilestone.value);
+  void navigateTo({ path: '/subscription', query: { plan: 'pro' } });
+}
+
+function handleTrialUpsellDismiss() {
+  if (upsellResolved) return;
+  upsellResolved = true;
+  showTrialUpsellModal.value = false;
+  trialUpsell.trackDismissed(trialUpsellMilestone.value);
+  const navigate = upsellPendingNavigate.value;
+  upsellPendingNavigate.value = null;
+  navigate?.();
+}
+
 function goToNextStep() {
   const next = nextStepNumber.value;
   if (!next) return;
-  // Новый шаг (не replay) учитывается в дневном лимите. Если он достигнут —
-  // открываем DailyLimitInfoDialog (тот же UX, что в map.vue / HomeRoadmapCard),
-  // вместо ловли 409 E_DAILY_LIMIT на сервере.
-  void dailyLimit.refreshIfExpired().catch(() => undefined);
-  if (!nextStepIsReplay.value && dailyLimit.isReachedNow()) {
-    dailyLimitDialogOpen.value = true;
-    return;
-  }
-  void navigateTo({
-    path: `/programs/${slug.value}/steps/${next}`,
-    query: nextStepIsReplay.value ? { replay: '1' } : undefined,
+  runSuccessNavigation(() => {
+    // Новый шаг (не replay) учитывается в дневном лимите. Если он достигнут —
+    // открываем DailyLimitInfoDialog (тот же UX, что в map.vue / HomeRoadmapCard),
+    // вместо ловли 409 E_DAILY_LIMIT на сервере.
+    void dailyLimit.refreshIfExpired().catch(() => undefined);
+    if (!nextStepIsReplay.value && dailyLimit.isReachedNow()) {
+      dailyLimitDialogOpen.value = true;
+      return;
+    }
+    void navigateTo({
+      path: `/programs/${slug.value}/steps/${next}`,
+      query: nextStepIsReplay.value ? { replay: '1' } : undefined,
+    });
+  });
+}
+
+function goToHomeFromSuccess() {
+  runSuccessNavigation(() => {
+    void navigateTo('/');
   });
 }
 

@@ -172,7 +172,7 @@
     </div>
 
     <div v-else class="space-y-2">
-      <p class="text-sm text-foreground">Текущий план: нет активной подписки</p>
+      <p class="text-sm text-foreground">Нет активной подписки</p>
       <Button
         v-if="!shouldHideIosReviewBillingUi"
         type="button"

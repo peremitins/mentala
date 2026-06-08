@@ -355,14 +355,14 @@
       </div>
     </div>
 
-    <!-- Модалка подтверждения смены тарифа -->
+    <!-- Модалка подтверждения активации / смены тарифа -->
     <AlertDialog
       :open="showConfirmDialog"
       @update:open="handleConfirmDialogOpenChange"
     >
       <AlertDialogContent class="glass-deep">
         <AlertDialogHeader>
-          <AlertDialogTitle>Подтвердите смену тарифа</AlertDialogTitle>
+          <AlertDialogTitle>{{ confirmDialogTitle }}</AlertDialogTitle>
           <AlertDialogDescription>
             {{ getConfirmDialogDescription() }}
           </AlertDialogDescription>
@@ -372,7 +372,7 @@
             :disabled="loadersStore.isButtonLoading"
             @click="handleConfirmDialogOpenChange(false)"
           >
-            Отменить
+            Отмена
           </AlertDialogCancel>
           <Button
             type="button"
@@ -382,7 +382,7 @@
           >
             <ButtonLoader v-if="loadersStore.isButtonLoading" />
             <span :class="loadersStore.isButtonLoading ? 'invisible' : ''">
-              Подтвердить
+              {{ confirmDialogActionLabel }}
             </span>
           </Button>
         </AlertDialogFooter>
@@ -952,6 +952,32 @@ const selectedPlan = computed(() => {
   return plans.value.find((p) => p.id === selectedPlanId.value);
 });
 
+const hasActivePaidSubscription = computed(() => {
+  return Boolean(
+    currentSubscription.value && currentSubscription.value.plan.name !== 'basic'
+  );
+});
+
+const isActivationScenario = computed(() => {
+  if (!pendingPlanChange.value) return true;
+  const isTrialCase =
+    trialActive.value && currentSubscription.value?.planId === 'basic';
+  return !hasActivePaidSubscription.value || isTrialCase;
+});
+
+const confirmDialogTitle = computed(() => {
+  if (!pendingPlanChange.value) return 'Оформить подписку';
+  if (isActivationScenario.value) {
+    const planName = getPlanDisplayName(pendingPlanChange.value.name);
+    return `Подключить «${planName}»`;
+  }
+  return 'Сменить тариф';
+});
+
+const confirmDialogActionLabel = computed(() => {
+  return isActivationScenario.value ? 'Продолжить' : 'Подтвердить';
+});
+
 // Используем visiblePlans из store
 
 // Реактивный countdown trial (дни + часы) с пересчетом каждую минуту.
@@ -1144,9 +1170,7 @@ function getConfirmDialogDescription(): string {
     return '';
   }
 
-  const newPlanName = getPlanDisplayName(pendingPlanChange.value.name);
   const billingPeriod = getBillingPeriod(pendingPlanChange.value.id);
-
   const price = calculateSubscriptionPrice(
     pendingPlanChange.value.basePrice,
     billingPeriod
@@ -1155,8 +1179,10 @@ function getConfirmDialogDescription(): string {
     billingPeriod === 'year'
       ? calculateAnnualSavings(pendingPlanChange.value.basePrice)
       : 0;
-
-  const priceText = `Стоимость: ${price.toLocaleString('ru-RU')} ₽/${billingPeriod === 'year' ? 'год' : 'месяц'}${savings > 0 ? ` · Экономия: ${savings.toLocaleString('ru-RU')} ₽` : ''}`;
+  const periodLabel = billingPeriod === 'year' ? 'год' : 'месяц';
+  const priceFormatted = `${price.toLocaleString('ru-RU')} ₽/${periodLabel}`;
+  const savingsText =
+    savings > 0 ? ` · Экономия ${savings.toLocaleString('ru-RU')} ₽` : '';
 
   const isTrialToPaidPlan =
     trialActive.value &&
@@ -1165,17 +1191,18 @@ function getConfirmDialogDescription(): string {
 
   if (isTrialToPaidPlan && trialEndsAt.value) {
     const trialEndsAtLabel = formatDate(trialEndsAt.value);
-    return `Сейчас у вас действует пробный период до ${trialEndsAtLabel} Сегодня списаний не будет. Первое списание произойдет после окончания пробного периода. ${priceText}`;
+    return `Пробный период действует до ${trialEndsAtLabel}. Сегодня списаний не будет. Первое списание произойдёт после его окончания. ${priceFormatted}${savingsText}.`;
   }
 
-  if (currentSubscription.value) {
+  if (hasActivePaidSubscription.value) {
     const currentPlanName = getPlanDisplayName(
-      currentSubscription.value.plan.name
+      currentSubscription.value!.plan.name
     );
-    return `Вы переходите с тарифа "${currentPlanName}" на "${newPlanName}". ${priceText}`;
-  } else {
-    return `Вы выбираете тариф "${newPlanName}". ${priceText}`;
+    const newPlanName = getPlanDisplayName(pendingPlanChange.value.name);
+    return `Вы переходите с тарифа «${currentPlanName}» на «${newPlanName}». ${priceFormatted}${savingsText}.`;
   }
+
+  return `${priceFormatted}${savingsText}. Списание произойдёт сразу после оплаты.`;
 }
 
 async function confirmPlanChange() {

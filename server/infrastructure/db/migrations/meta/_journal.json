@@ -659,6 +659,13 @@
       "when": 1780648606538,
       "tag": "0096_aromatic_kulan_gath",
       "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1780915971852,
+      "tag": "0097_giant_mauler",
+      "breakpoints": true
     }
   ]
 }

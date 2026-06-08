@@ -24,6 +24,7 @@ import {
   userToolkitItems,
   type ProgramStepAction,
 } from '@/server/infrastructure/db/schema';
+import { resolveTrialUpsellAfterStep } from '@/server/application/subscriptions/trial-upsell.service';
 import {
   getToolkitPhraseFields,
   resolveToolkitDestination,
@@ -7438,11 +7439,26 @@ export async function completeProgramStep(params: {
   }
 
   const gender = await getUserGender(params.userId);
+  // Промо-paywall привязки карты в триале считаем только при реальном завершении
+  // нового шага (не replay). Ошибки промо не должны ломать завершение шага.
+  const trialUpsell = rewardGranted
+    ? await resolveTrialUpsellAfterStep({ userId: params.userId }).catch(
+        (error) => {
+          console.error(
+            '[completeProgramStep] trial upsell resolve failed:',
+            error
+          );
+          return null;
+        }
+      )
+    : null;
+
   return applyGenderDeep(
     {
       attempt: toAttemptDto(updatedAttempt),
       program: await getOrCreateProgramOverview(params.userId, program.slug),
       rewardGranted,
+      ...(trialUpsell ? { trialUpsell } : {}),
     },
     gender
   );

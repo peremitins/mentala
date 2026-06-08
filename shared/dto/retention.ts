@@ -448,10 +448,19 @@ export const ProgramStepActionPatchResponseDto = z.object({
   attempt: ProgramStepAttemptDto,
 });
 
+// Промо-paywall привязки карты в триале, который показывается на контрольных
+// точках прогресса (после 1 / 5 / 10 пройденного шага). Поле опциональное:
+// старые клиенты его игнорируют, новые — показывают модалку.
+export const TrialUpsellPromptDto = z.object({
+  show: z.boolean(),
+  milestone: z.number().int().positive(),
+});
+
 export const ProgramStepCompleteResponseDto = z.object({
   attempt: ProgramStepAttemptDto,
   program: ProgramOverviewDto,
   rewardGranted: z.boolean(),
+  trialUpsell: TrialUpsellPromptDto.nullish(),
 });
 
 export type MoodCheckinMood = z.infer<typeof MoodCheckinMoodEnum>;
@@ -522,3 +531,4 @@ export type ProgramStepActionPatchResponseDto = z.infer<
 export type ProgramStepCompleteResponseDto = z.infer<
   typeof ProgramStepCompleteResponseDto
 >;
+export type TrialUpsellPromptDto = z.infer<typeof TrialUpsellPromptDto>;

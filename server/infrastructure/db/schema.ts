@@ -68,6 +68,11 @@ export const users = pgTable(
     hasUsedTrial: boolean('has_used_trial').default(false).notNull(),
     trialStartedAt: timestamp('trial_started_at', { withTimezone: true }),
     trialEndedAt: timestamp('trial_ended_at', { withTimezone: true }),
+    // Последняя показанная контрольная точка промо-paywall (привязка карты в триале):
+    // 0 — не показывали, далее 1 / 5 / 10 по суммарному числу пройденных шагов.
+    trialUpsellLastMilestone: integer('trial_upsell_last_milestone')
+      .default(0)
+      .notNull(),
     billingCredit: numeric('billing_credit', { precision: 10, scale: 2 })
       .default('0')
       .notNull(), // внутренний кредит в рублях
