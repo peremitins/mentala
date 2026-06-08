@@ -30,6 +30,20 @@ const INPUT_ACTIVITY_THROTTLE_MS = 1_500;
 const HANDSHAKE_RETRY_DELAY_MS = 800;
 const HANDSHAKE_MAX_ATTEMPTS = 2;
 
+// Максимальное программное усиление выходного аудио ассистента через Web Audio.
+// remoteAudioElement.volume упирается в 1.0 — выше «родного» уровня источника
+// громкость не поднять. GainNode позволяет усилить сверх него. Поверх стоит
+// brickwall-лимитер ТОЛЬКО у самого потолка (см. OUTPUT_LIMITER_THRESHOLD_DB),
+// поэтому прирост слышно почти линейно, без «пампинга» прежнего мягкого лимитера
+// (он сжимал всё выше -6 dB в 12:1 и «съедал» усиление выше ~×1.5 — из-за этого
+// смена ×1.5→×2.5 не давала разницы). См. .docs/arch_audio_platforms.md.
+const MAX_OUTPUT_GAIN = 3;
+
+// Порог brickwall-лимитера выходного усиления (dBFS). Держим у самого 0, чтобы
+// пропускать усиленный сигнал почти линейно и ловить лимитером только клиппинг
+// на пиках — иначе агрессивный лимитер нивелирует прирост громкости.
+const OUTPUT_LIMITER_THRESHOLD_DB = -1;
+
 type RealtimeHandshakeErrorPayload = {
   code?: string;
   message?: string;
@@ -193,10 +207,18 @@ export class RealtimeVoiceTransport {
   private inputActivityInterval: number | null = null;
   private lastInputActivityAtMs = 0;
   private isLocalMicrophoneEnabled = true;
-  // Программная громкость воспроизведения ассистента (0..1). Применяется к
-  // remoteAudioElement.volume. Главный рычаг регулировки на Android web/PWA,
-  // где аппаратные клавиши не управляют WebRTC-аудио.
-  private outputVolume = 1;
+  // Web Audio gain-цепочка для усиления выше 1.0 (см. MAX_OUTPUT_GAIN).
+  // Включается только там, где источник звучит тихо (Android native + web/PWA).
+  private gainBoostEnabled = false;
+  private gainBoostActive = false;
+  private outputAudioContext: AudioContext | null = null;
+  private outputSourceNode: MediaStreamAudioSourceNode | null = null;
+  private outputGainNode: GainNode | null = null;
+  private outputLimiterNode: DynamicsCompressorNode | null = null;
+  // Диагностический таймер: RMS-зонд после gain подтверждает, что усиленный
+  // сигнал реально течёт через граф, и в каком состоянии AudioContext. Помогает
+  // на устройстве отделить «граф молчит» от «громко в графе, но маршрут тихий».
+  private outputDiagnosticsTimer: number | null = null;
 
   get isConnected(): boolean {
     return (
@@ -214,7 +236,7 @@ export class RealtimeVoiceTransport {
       const audioElement = new Audio();
       audioElement.autoplay = true;
       audioElement.muted = false;
-      audioElement.volume = this.outputVolume;
+      audioElement.volume = 1;
       audioElement.preload = 'auto';
       audioElement.setAttribute('playsinline', 'true');
       this.remoteAudioElement = audioElement;
@@ -231,7 +253,7 @@ export class RealtimeVoiceTransport {
 
     ensureRealtimeVoicePlaybackAudioSessionType();
     remoteAudioElement.muted = false;
-    remoteAudioElement.volume = this.outputVolume;
+    remoteAudioElement.volume = 1;
     remoteAudioElement.preload = 'auto';
     try {
       remoteAudioElement.load();
@@ -259,9 +281,16 @@ export class RealtimeVoiceTransport {
     ensureRealtimeVoicePlaybackAudioSessionType();
     remoteAudioElement.srcObject = stream;
     remoteAudioElement.muted = false;
-    remoteAudioElement.volume = this.outputVolume;
+    remoteAudioElement.volume = 1;
 
     await this.playRemoteAudioElement(remoteAudioElement);
+
+    // Усиление выше 1.0 возможно только через Web Audio. Поднимаем цепочку
+    // gain/limiter; muted-элемент остаётся «заводилкой» пайплайна. При любой
+    // ошибке остаёмся на прямом воспроизведении — звук не пропадёт.
+    if (this.gainBoostEnabled && !this.gainBoostActive) {
+      this.trySetupOutputGainChain(stream, remoteAudioElement);
+    }
 
     for (const track of stream.getAudioTracks?.() || []) {
       track.addEventListener?.(
@@ -392,6 +421,7 @@ export class RealtimeVoiceTransport {
     onConnectionStateChange?: (state: RTCPeerConnectionState) => void;
     requestHeaders?: Record<string, string>;
     audioConstraints?: MediaTrackConstraints | boolean;
+    enableOutputGainBoost?: boolean;
   }) {
     const support = getRealtimeVoiceSupport();
     if (!support.isSecureContext) {
@@ -405,6 +435,8 @@ export class RealtimeVoiceTransport {
     }
 
     await this.stop();
+
+    this.gainBoostEnabled = params.enableOutputGainBoost === true;
 
     const PeerConnection = getRealtimeVoicePeerConnectionCtor();
     if (!PeerConnection) {
@@ -550,16 +582,236 @@ export class RealtimeVoiceTransport {
     this.dataChannel.send(JSON.stringify(event));
   }
 
-  setOutputVolume(volume: number) {
-    const clamped = Math.min(
-      1,
-      Math.max(0, Number.isFinite(volume) ? volume : 1)
-    );
-    this.outputVolume = clamped;
-
-    if (this.remoteAudioElement) {
-      this.remoteAudioElement.volume = clamped;
+  /**
+   * Поднимает Web Audio цепочку усиления: remote stream -> gain (до ×MAX) ->
+   * лимитер (защита от клиппинга) -> destination. remote-элемент глушим: он
+   * остаётся «заводилкой» WebRTC-пайплайна (обходит баг Chrome с тишиной
+   * createMediaStreamSource на remote-потоке), а слышимый звук идёт через граф.
+   * При любой ошибке откатываемся на прямое воспроизведение элемента.
+   */
+  private trySetupOutputGainChain(
+    stream: MediaStream,
+    remoteAudioElement: HTMLAudioElement
+  ) {
+    if (typeof window === 'undefined') {
+      return;
     }
+
+    const AudioContextCtor =
+      window.AudioContext ||
+      (window as RealtimeVoiceWindow).webkitAudioContext ||
+      null;
+
+    if (!AudioContextCtor) {
+      return;
+    }
+
+    try {
+      // latencyHint:'playback' просит «медиа»-путь вывода (на Android это
+      // STREAM_MUSIC → громкий динамик), а не низколатентный, который во время
+      // активной WebRTC-сессии Chrome может цеплять к тихому разговорному каналу
+      // (earpiece). Если конструктор не принимает опции — берём дефолтный.
+      let audioContext: AudioContext;
+      try {
+        audioContext = new AudioContextCtor({ latencyHint: 'playback' });
+      } catch {
+        audioContext = new AudioContextCtor();
+      }
+
+      const source = audioContext.createMediaStreamSource(stream);
+      const gainNode = audioContext.createGain();
+      // Фиксированное усиление ×MAX: живую регулировку отдаём аппаратным
+      // клавишам (звук теперь на медиа-канале STREAM_MUSIC, см. ниже).
+      gainNode.gain.value = MAX_OUTPUT_GAIN;
+
+      // Brickwall-лимитер ТОЛЬКО у самого потолка: пропускает усиленный сигнал
+      // почти линейно (прирост реально слышно) и ловит лишь клиппинг на пиках.
+      const limiter = audioContext.createDynamicsCompressor();
+      limiter.threshold.value = OUTPUT_LIMITER_THRESHOLD_DB;
+      limiter.knee.value = 0;
+      limiter.ratio.value = 20;
+      limiter.attack.value = 0.002;
+      limiter.release.value = 0.1;
+
+      source.connect(gainNode);
+      gainNode.connect(limiter);
+      limiter.connect(audioContext.destination);
+
+      const stateBeforeResume = audioContext.state;
+      void audioContext.resume?.().catch(() => {
+        // Возобновление до user gesture может не сработать — звук поднимется
+        // на следующем взаимодействии; не критично для сессии, начатой по тапу.
+      });
+
+      // Глушим прямой выход элемента: звук идёт через Web Audio destination,
+      // но muted-элемент остаётся «заводилкой» пайплайна — без него
+      // createMediaStreamSource на remote-потоке Chrome молчит (cross-origin).
+      remoteAudioElement.muted = true;
+
+      this.outputAudioContext = audioContext;
+      this.outputSourceNode = source;
+      this.outputGainNode = gainNode;
+      this.outputLimiterNode = limiter;
+      this.gainBoostActive = true;
+
+      console.info('[RealtimeVoiceTransport] Output gain boost active', {
+        gain: gainNode.gain.value,
+        maxGain: MAX_OUTPUT_GAIN,
+        stateBeforeResume,
+        sampleRate: audioContext.sampleRate,
+        sinkId:
+          'sinkId' in audioContext
+            ? (audioContext as unknown as { sinkId?: string }).sinkId
+            : undefined,
+      });
+
+      this.startOutputAudioDiagnostics(audioContext, gainNode);
+    } catch (error) {
+      console.warn(
+        '[RealtimeVoiceTransport] Output gain boost unavailable, falling back to direct playback:',
+        error
+      );
+      this.teardownOutputGainChain();
+      remoteAudioElement.muted = false;
+      remoteAudioElement.volume = 1;
+      this.gainBoostActive = false;
+    }
+  }
+
+  /**
+   * Диагностика на устройстве. RMS-зонд после gain подтверждает, что усиленный
+   * звук реально течёт через граф (а не молчит из-за cross-origin бага Chrome
+   * на remote-потоке), и логирует состояние контекста + audiooutput-устройства.
+   * Так на реальном Android можно однозначно отделить «граф молчит → нужен
+   * другой источник» от «громко в графе, но ОС-маршрут тихий (earpiece) → нужен
+   * другой выход». На само воспроизведение не влияет.
+   */
+  private startOutputAudioDiagnostics(
+    audioContext: AudioContext,
+    gainNode: GainNode
+  ) {
+    if (
+      typeof window === 'undefined' ||
+      typeof window.setInterval !== 'function' ||
+      typeof audioContext.createAnalyser !== 'function'
+    ) {
+      return;
+    }
+
+    try {
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      gainNode.connect(analyser);
+
+      const buffer = new Uint8Array(analyser.frequencyBinCount);
+      let maxRms = 0;
+      let ticks = 0;
+
+      if (this.outputDiagnosticsTimer) {
+        clearInterval(this.outputDiagnosticsTimer);
+      }
+
+      this.outputDiagnosticsTimer = window.setInterval(() => {
+        ticks += 1;
+        analyser.getByteTimeDomainData(buffer);
+
+        let sum = 0;
+        for (let index = 0; index < buffer.length; index += 1) {
+          const normalized = ((buffer[index] ?? 128) - 128) / 128;
+          sum += normalized * normalized;
+        }
+        const rms = Math.sqrt(sum / buffer.length);
+        if (rms > maxRms) {
+          maxRms = rms;
+        }
+
+        if (ticks < 12) {
+          return;
+        }
+
+        if (this.outputDiagnosticsTimer) {
+          clearInterval(this.outputDiagnosticsTimer);
+          this.outputDiagnosticsTimer = null;
+        }
+        try {
+          analyser.disconnect();
+        } catch {
+          // мог быть уже отключён
+        }
+
+        console.info('[RealtimeVoiceTransport] Output gain diagnostics', {
+          graphMaxRms: Number(maxRms.toFixed(4)),
+          // > ~0.005 означает, что граф реально звучит (не cross-origin тишина).
+          graphAudible: maxRms > 0.005,
+          contextState: audioContext.state,
+          gain: gainNode.gain.value,
+        });
+
+        void this.logAudioOutputDevices();
+      }, 250);
+    } catch (error) {
+      console.warn(
+        '[RealtimeVoiceTransport] Output diagnostics unavailable:',
+        error
+      );
+    }
+  }
+
+  private async logAudioOutputDevices() {
+    if (
+      typeof navigator === 'undefined' ||
+      !navigator.mediaDevices?.enumerateDevices
+    ) {
+      return;
+    }
+
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const outputs = devices.filter((device) => device.kind === 'audiooutput');
+      console.info('[RealtimeVoiceTransport] Audio output devices', {
+        count: outputs.length,
+        labels: outputs.map((device) => device.label || '(no-label)'),
+        // Если тут есть отдельный «speaker» — его можно форсить через
+        // AudioContext.setSinkId; иначе маршрут целиком за ОС.
+        audioContextSetSinkIdSupported:
+          typeof AudioContext !== 'undefined' &&
+          'setSinkId' in AudioContext.prototype,
+      });
+    } catch (error) {
+      console.warn('[RealtimeVoiceTransport] enumerateDevices failed:', error);
+    }
+  }
+
+  private teardownOutputGainChain() {
+    if (this.outputDiagnosticsTimer) {
+      clearInterval(this.outputDiagnosticsTimer);
+      this.outputDiagnosticsTimer = null;
+    }
+    try {
+      this.outputSourceNode?.disconnect();
+    } catch {
+      // узел мог быть не подключён
+    }
+    try {
+      this.outputGainNode?.disconnect();
+    } catch {
+      // узел мог быть не подключён
+    }
+    try {
+      this.outputLimiterNode?.disconnect();
+    } catch {
+      // узел мог быть не подключён
+    }
+    if (this.outputAudioContext) {
+      void this.outputAudioContext.close().catch(() => {
+        // контекст мог быть уже закрыт
+      });
+    }
+    this.outputSourceNode = null;
+    this.outputGainNode = null;
+    this.outputLimiterNode = null;
+    this.outputAudioContext = null;
+    this.gainBoostActive = false;
   }
 
   setMicrophoneEnabled(enabled: boolean) {
@@ -608,6 +860,7 @@ export class RealtimeVoiceTransport {
     }
 
     this.stopInputActivityMonitor();
+    this.teardownOutputGainChain();
 
     if (this.localStream) {
       this.setMicrophoneEnabled(true);

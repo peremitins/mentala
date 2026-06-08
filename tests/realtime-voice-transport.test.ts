@@ -108,6 +108,54 @@ class FakeAudio {
   }
 }
 
+class FakeGainNode {
+  gain = { value: 1, setTargetAtTime: vi.fn() };
+  connect = vi.fn();
+  disconnect = vi.fn();
+}
+
+class FakeDynamicsCompressorNode {
+  threshold = { value: 0 };
+  knee = { value: 0 };
+  ratio = { value: 0 };
+  attack = { value: 0 };
+  release = { value: 0 };
+  connect = vi.fn();
+  disconnect = vi.fn();
+}
+
+class FakeMediaStreamSourceNode {
+  connect = vi.fn();
+  disconnect = vi.fn();
+}
+
+class FakeAudioContext {
+  static instances: FakeAudioContext[] = [];
+  static failOnSource = false;
+
+  state = 'running';
+  currentTime = 0;
+  destination = {};
+  lastGain: FakeGainNode | null = null;
+  createMediaStreamSource = vi.fn(() => {
+    if (FakeAudioContext.failOnSource) {
+      throw new Error('createMediaStreamSource failed');
+    }
+    return new FakeMediaStreamSourceNode();
+  });
+  createGain = vi.fn(() => {
+    this.lastGain = new FakeGainNode();
+    return this.lastGain;
+  });
+  createDynamicsCompressor = vi.fn(() => new FakeDynamicsCompressorNode());
+  resume = vi.fn().mockResolvedValue(undefined);
+  close = vi.fn().mockResolvedValue(undefined);
+
+  constructor() {
+    FakeAudioContext.instances.push(this);
+  }
+}
+
 function setWindow(value: unknown) {
   Object.defineProperty(globalThis, 'window', {
     configurable: true,
@@ -278,43 +326,70 @@ describe('realtime voice transport', () => {
     expect(audioTrack.stop).toHaveBeenCalledTimes(1);
   });
 
-  it('применяет программную громкость к remote audio и клампит её в 0..1', async () => {
+  it('усиливает громкость через Web Audio (фиксированный gain ×3) при enableOutputGainBoost', async () => {
+    FakeAudioContext.instances = [];
+    FakeAudioContext.failOnSource = false;
+    setWindow({ setTimeout, clearTimeout, AudioContext: FakeAudioContext });
+
     const { RealtimeVoiceTransport } = await import(
       '../app/services/realtime/realtimeVoiceTransport'
     );
 
     const transport = new RealtimeVoiceTransport();
 
-    // Громкость, выставленная ДО старта, должна примениться к первому элементу.
-    transport.setOutputVolume(0.4);
-
     await transport.start({
       webrtcUrl: 'https://api.openai.com/v1/realtime/calls',
       onEvent: vi.fn(),
+      enableOutputGainBoost: true,
     });
 
     FakePeerConnection.lastInstance?.emit('track', {
       track: { kind: 'audio' },
-      streams: [{ id: 'remote_stream_vol' } as unknown as MediaStream],
+      streams: [{ id: 'remote_stream_boost' } as unknown as MediaStream],
     });
-    await Promise.resolve();
+    // Дожидаемся полного флаша: gain-цепочка ставится ПОСЛЕ await play().
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(FakeAudio.instances[0]?.volume).toBe(0.4);
+    const ctx = FakeAudioContext.instances[0];
+    expect(ctx).toBeTruthy();
+    expect(ctx?.createMediaStreamSource).toHaveBeenCalledTimes(1);
+    // Усиление фиксировано на ×MAX (×3); живую регулировку отдаём клавишам.
+    expect(ctx?.lastGain?.gain.value).toBe(3);
+    // Прямой выход элемента заглушён — звук идёт через Web Audio.
+    expect(FakeAudio.instances[0]?.muted).toBe(true);
 
-    // Живое изменение применяется к уже существующему элементу.
-    transport.setOutputVolume(0.75);
-    expect(FakeAudio.instances[0]?.volume).toBe(0.75);
+    await transport.stop();
+    expect(ctx?.close).toHaveBeenCalledTimes(1);
+  });
 
-    // Кламп за границами диапазона и защита от NaN.
-    transport.setOutputVolume(2);
+  it('откатывается на прямое воспроизведение, если Web Audio недоступна', async () => {
+    FakeAudioContext.instances = [];
+    FakeAudioContext.failOnSource = true; // createMediaStreamSource бросит
+    setWindow({ setTimeout, clearTimeout, AudioContext: FakeAudioContext });
+
+    const { RealtimeVoiceTransport } = await import(
+      '../app/services/realtime/realtimeVoiceTransport'
+    );
+
+    const transport = new RealtimeVoiceTransport();
+
+    await transport.start({
+      webrtcUrl: 'https://api.openai.com/v1/realtime/calls',
+      onEvent: vi.fn(),
+      enableOutputGainBoost: true,
+    });
+
+    FakePeerConnection.lastInstance?.emit('track', {
+      track: { kind: 'audio' },
+      streams: [{ id: 'remote_stream_fallback' } as unknown as MediaStream],
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // Fallback: элемент не заглушён, играет напрямую с потолком 1.0.
+    expect(FakeAudio.instances[0]?.muted).toBe(false);
     expect(FakeAudio.instances[0]?.volume).toBe(1);
 
-    transport.setOutputVolume(-0.5);
-    expect(FakeAudio.instances[0]?.volume).toBe(0);
-
-    transport.setOutputVolume(Number.NaN);
-    expect(FakeAudio.instances[0]?.volume).toBe(1);
-
+    FakeAudioContext.failOnSource = false;
     await transport.stop();
   });
 });

@@ -430,15 +430,6 @@ export function useRealtimeVoiceSession(options?: {
   onScopeDispose(() => {
     realtimeVoiceUi.reset();
   });
-  // Живое применение пользовательской громкости к активному playback ассистента.
-  // Главный рычаг на Android web/PWA, где аппаратные клавиши не управляют
-  // WebRTC-аудио (см. AssistantVolumeControl.vue и .docs/arch_audio_platforms.md).
-  watch(
-    () => realtimeVoiceUi.outputVolume,
-    (nextVolume) => {
-      transport?.setOutputVolume(nextVolume);
-    }
-  );
   const blocksTextInput = computed(
     () =>
       status.value === 'starting' ||
@@ -721,6 +712,20 @@ export function useRealtimeVoiceSession(options?: {
   // системного AEC. На web мьют не нужен — там полный duplex с barge-in.
   function isMobileRealtimePlatform() {
     return clientPlatform.value === 'ios' || clientPlatform.value === 'android';
+  }
+
+  // Усиление громкости через Web Audio нужно там, где «родной» уровень WebRTC
+  // тихий: Android — и нативный апп, и браузер/PWA. На native clientPlatform
+  // уже 'android'; для web/PWA на Android определяем по UA (там clientPlatform
+  // = 'web'). iOS/desktop не трогаем — там громкости хватает.
+  function shouldBoostOutputGain() {
+    if (clientPlatform.value === 'android') {
+      return true;
+    }
+    if (typeof navigator === 'undefined') {
+      return false;
+    }
+    return /android/i.test(navigator.userAgent);
   }
 
   function updateAssistantMicrophoneMute() {
@@ -1430,9 +1435,6 @@ export function useRealtimeVoiceSession(options?: {
       adapter = buildChatAdapter(parsed.session.therapySessionId);
       resetRuntimeMaps();
       transport = new RealtimeVoiceTransport();
-      // Применяем сохранённую пользователем громкость до старта playback,
-      // чтобы первый ответ ассистента сразу звучал на нужном уровне.
-      transport.setOutputVolume(realtimeVoiceUi.outputVolume);
       realtimeSceneAudioLock = await sceneAudioFocus.acquire('realtime-voice', {
         // Realtime voice должен получать аудио-фокус сразу. Fade фоновой сцены
         // рядом со стартом WebRTC даёт акустическую петлю и гонки resume/suspend.
@@ -1447,6 +1449,7 @@ export function useRealtimeVoiceSession(options?: {
         audioConstraints: buildRealtimeVoiceAudioConstraints(
           parsed.session.clientPlatform
         ),
+        enableOutputGainBoost: shouldBoostOutputGain(),
         requestHeaders: buildRealtimeAppAuthHeaders({
           includeSessionToken: getPlatform() !== 'web',
         }),
