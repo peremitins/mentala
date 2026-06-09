@@ -32,7 +32,23 @@
           </ol>
         </div>
 
-        <div>
+        <div v-else-if="isIosSafariBrowser">
+          <p class="mb-1 font-medium text-foreground">
+            Если сайт открыт в Safari на iPhone или iPad:
+          </p>
+          <ol class="list-decimal space-y-1 pl-4 text-xs">
+            <li>Нажми значок настроек на левой стороне адресной строки.</li>
+            <li>Выбери «Настройки веб-сайта»</li>
+            <li>Напротив «Микрофон» выбери «Разрешить» или «Спросить»</li>
+            <li>Обнови страницу и попробуй снова</li>
+          </ol>
+          <p class="mt-2 text-xs text-muted-foreground">
+            Если такого пункта нет, проверь доступ Safari к микрофону:
+            «Настройки» → «Приложения» → «Safari» → «Микрофон».
+          </p>
+        </div>
+
+        <div v-else>
           <p class="mb-1 font-medium text-foreground">
             Если сайт открыт в браузере:
           </p>
@@ -62,6 +78,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import {
   Dialog,
   DialogContent,
@@ -72,11 +89,31 @@ import {
 } from '@/app/components/ui/shadcn/dialog';
 import { Button } from '@/app/components/ui/button';
 
-defineProps<{
+const props = defineProps<{
   open: boolean;
   mode: 'native' | 'browser';
   isStandalonePwa?: boolean;
 }>();
+
+const isIosSafariBrowser = computed(() => {
+  if (
+    props.mode !== 'browser' ||
+    props.isStandalonePwa ||
+    typeof navigator === 'undefined'
+  ) {
+    return false;
+  }
+
+  const ua = navigator.userAgent || '';
+  const isIOS =
+    /iP(hone|ad|od)/.test(ua) ||
+    (navigator.platform === 'MacIntel' &&
+      ((navigator as Navigator & { maxTouchPoints?: number }).maxTouchPoints ??
+        0) > 1);
+
+  // Сторонние iOS-браузеры и PWA имеют другой UI разрешений.
+  return isIOS && !/(CriOS|FxiOS|EdgiOS|OPiOS|YaBrowser|DuckDuckGo)/.test(ua);
+});
 
 const emit = defineEmits<{
   (e: 'update:open', value: boolean): void;

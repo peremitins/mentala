@@ -2281,6 +2281,8 @@ function onPreparingFailed() {
   preparingVisible.value = false;
   finalFlyoutDone.value = false;
   finaleIsReplayRefresh.value = false;
+  // Сад завершён даже если отчёт не успел сгенерироваться — награду показываем.
+  triggerGardenCompletionMilestone();
   void navigateTo('/garden');
 }
 
@@ -2290,6 +2292,7 @@ function onPreparingLeave() {
   preparingVisible.value = false;
   finalFlyoutDone.value = false;
   finaleIsReplayRefresh.value = false;
+  triggerGardenCompletionMilestone();
   void navigateTo('/garden');
 }
 
@@ -2473,11 +2476,21 @@ function goToHomeFromSuccess() {
   });
 }
 
+// Награда за завершённый сад. Показываем при выходе из финального flow —
+// после того как доиграли анимация цветка, генерация и сам итоговый отчёт, и
+// пользователь закрыл отчёт (или ушёл в Оранжерею). Overlay показывается
+// глобально (default layout) уже на /garden. Бэк идемпотентен: garden_<slug>
+// выдаётся один раз. Задержка даёт навигации и входу страницы сада осесть.
+function triggerGardenCompletionMilestone() {
+  void checkMilestones('garden_completed', slug.value, 1200);
+}
+
 function onReportSheetOpenChange(value: boolean) {
   reportSheetOpen.value = value;
   if (!value) {
     // Закрытие sheet'а в финальном flow → переход в Оранжерею, где
     // пользователь видит свой новый сад в коллекции.
+    triggerGardenCompletionMilestone();
     void navigateTo('/garden');
   }
 }

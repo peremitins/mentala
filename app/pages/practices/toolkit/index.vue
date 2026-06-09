@@ -34,12 +34,15 @@
       <!-- Практики -->
       <section v-if="store.practices.length" class="glass-deep p-4 space-y-3">
         <h2 class="text-sm font-semibold text-foreground/70 px-1">Практики</h2>
-        <button
+        <div
           v-for="item in store.practices"
           :key="item.id"
-          type="button"
-          class="rounded-2xl border border-white/10 bg-white/5 p-3 w-full flex items-center gap-3 text-left transition hover:-translate-y-0.5 animate-slide-up"
+          role="button"
+          tabindex="0"
+          class="rounded-2xl border border-white/10 bg-white/5 p-3 w-full flex cursor-pointer items-center gap-3 text-left transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/20 animate-slide-up"
           @click="openItem(item)"
+          @keydown.enter="openItem(item)"
+          @keydown.space.prevent="openItem(item)"
         >
           <span
             class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/40 bg-white/55"
@@ -66,10 +69,11 @@
             class="shrink-0 rounded-lg p-1.5 text-foreground/40 transition hover:text-foreground/70"
             aria-label="Убрать из набора"
             @click.stop="removeItem(item)"
+            @keydown.stop
           >
             <IconX class="h-4 w-4" />
           </button>
-        </button>
+        </div>
       </section>
 
       <!-- ИИ-ассистент -->
@@ -77,12 +81,15 @@
         <h2 class="text-sm font-semibold text-foreground/70 px-1">
           ИИ-ассистент
         </h2>
-        <button
+        <div
           v-for="item in store.chats"
           :key="item.id"
-          type="button"
-          class="rounded-2xl border border-white/10 bg-white/5 p-3 w-full flex items-center gap-3 text-left transition hover:-translate-y-0.5 animate-slide-up"
+          role="button"
+          tabindex="0"
+          class="rounded-2xl border border-white/10 bg-white/5 p-3 w-full flex cursor-pointer items-center gap-3 text-left transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/20 animate-slide-up"
           @click="openItem(item)"
+          @keydown.enter="openItem(item)"
+          @keydown.space.prevent="openItem(item)"
         >
           <span
             class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/40 bg-white/55"
@@ -103,10 +110,11 @@
             class="shrink-0 rounded-lg p-1.5 text-foreground/40 transition hover:text-foreground/70"
             aria-label="Убрать из набора"
             @click.stop="removeItem(item)"
+            @keydown.stop
           >
             <IconX class="h-4 w-4" />
           </button>
-        </button>
+        </div>
       </section>
 
       <!-- Мои фразы -->

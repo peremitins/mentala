@@ -76,7 +76,7 @@
       <div class="plant-flyout" aria-hidden="true">
         <div class="plant-flyout__water" aria-hidden="true">
           <span
-            v-for="drop in flyoutDrops"
+            v-for="drop in renderedFlyoutDrops"
             :key="drop.id"
             class="plant-flyout__drop"
             :style="drop.style"
@@ -195,11 +195,9 @@ const rewardStyle = computed(() => ({
   '--plant-reward-flyout-duration': `${PLANT_FLYOUT_DURATION_MS}ms`,
 }));
 
-// Капли flyout-полива. Координаты в локальной системе shell (80×80, размер
-// исходной миниатюры до scale). Shell внутри Teleport-слоя скейлится в N раз
-// до целевого размера, и все absolute-дети визуально растут вместе с ним.
-// Поэтому `--plant-drop-fall` нельзя считать в экранных px — это значение
-// в локальных px shell, которое после scale × N даёт реальное смещение.
+// Капли flyout-полива. Исторически координаты были в локальной системе shell
+// (80×80, размер исходной миниатюры до scale), а shell внутри Teleport-слоя
+// скейлилась в N раз до целевого размера.
 //
 // Стартовая позиция drop.top ≈ -2..2% от shell (около верха), а landing
 // должен совпасть с линией ripples (FLYOUT_RIPPLE_ROW_TOP = 68% shell).
@@ -210,7 +208,8 @@ const rewardStyle = computed(() => ({
 // Для каждой капли есть парный ripple ниже с задержкой = `delay + duration`,
 // чтобы всплеск появлялся ровно в момент landing'а конкретной капли.
 const FLYOUT_RIPPLE_ROW_TOP = 68; // % — линия лужи на горшке
-const flyoutDrops = [
+const flyoutWaterMotionScale = ref(1);
+const flyoutDropsBase = [
   {
     id: 1,
     style: {
@@ -296,6 +295,31 @@ const flyoutDrops = [
     },
   },
 ] as const;
+
+function scaleCssPx(value: string, scale: number) {
+  const numericValue = Number.parseFloat(value);
+  if (!Number.isFinite(numericValue)) return value;
+  return `${numericValue * scale}px`;
+}
+
+const renderedFlyoutDrops = computed(() =>
+  flyoutDropsBase.map((drop) => ({
+    ...drop,
+    style: {
+      ...drop.style,
+      // После iOS-фикса сам flyout больше не апскейлится. Компенсируем только
+      // путь капель, чтобы landing снова совпадал с ripple-линией у основания.
+      '--plant-drop-drift': scaleCssPx(
+        drop.style['--plant-drop-drift'],
+        flyoutWaterMotionScale.value
+      ),
+      '--plant-drop-fall': scaleCssPx(
+        drop.style['--plant-drop-fall'],
+        flyoutWaterMotionScale.value
+      ),
+    },
+  }))
+);
 
 // Ripples синхронизированы с landing-моментом каждой капли:
 // `--plant-ripple-delay` = delay + duration соответствующей капли.
@@ -735,6 +759,10 @@ function runPlantFlyout() {
   const startScale = Math.max(
     0.1,
     Math.min(rect.width, rect.height) / targetSize
+  );
+  flyoutWaterMotionScale.value = Math.max(
+    2.2,
+    targetSize / Math.max(rect.width, rect.height)
   );
   // iOS Safari мылит img, если маленький composited layer потом апскейлится
   // через transform. Поэтому flyout сразу рендерится в целевом размере, а

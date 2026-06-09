@@ -7,7 +7,7 @@
         :style="{ opacity: 1 - dragProgress }"
         role="dialog"
         aria-modal="true"
-        :aria-label="`Клинический итог сада ${plant.title}`"
+        :aria-label="`Итог сада ${plant.title}`"
         @click.self="onClose"
       />
     </Transition>
@@ -358,9 +358,7 @@ const isWeeklyCheckpointActive = computed(
 );
 
 const heroEyebrow = computed(() =>
-  isWeeklyCheckpointActive.value
-    ? 'Промежуточная сводка'
-    : 'Клинический итог программы'
+  isWeeklyCheckpointActive.value ? 'Промежуточная сводка' : 'Итог программы'
 );
 
 // Период отрезка выбранной промежуточной точки (даты «дд месяц — дд месяц»).
@@ -612,8 +610,8 @@ async function loadTimelineForActiveProgram(programSlug: string) {
         props.initialSelectedStep != null &&
         ready.some((i) => i.checkpointStep === props.initialSelectedStep)
           ? props.initialSelectedStep
-          : ready[ready.length - 1].checkpointStep;
-      selectedCheckpointStep.value = preferred;
+          : ready[ready.length - 1]?.checkpointStep;
+      selectedCheckpointStep.value = preferred ?? 30;
     }
     // Mark-viewed для всех непросмотренных ready отчётов — юзер открыл sheet
     // и сейчас может листать timeline. Это убирает in-app модалку и

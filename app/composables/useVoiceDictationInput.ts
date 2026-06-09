@@ -165,6 +165,30 @@ export function useVoiceDictationInput(options: UseVoiceDictationInputOptions) {
    */
   function extractFinalDelta(normalizedChunk: string): string {
     if (!normalizedChunk) return '';
+
+    // Защита от повторной вставки уже принятого текста: некоторые движки
+    // присылают final, который cumulative относительно всего sessionTranscript
+    // (а не только последней фразы). Берём только новый хвост.
+    const acceptedTranscript = normalizeSpeechText(sessionTranscript.value);
+    if (acceptedTranscript) {
+      const acceptedLower = acceptedTranscript.toLowerCase();
+      const chunkLower = normalizedChunk.toLowerCase();
+
+      if (chunkLower === acceptedLower) {
+        lastFinalText.value = normalizedChunk;
+        return '';
+      }
+
+      if (
+        chunkLower.startsWith(`${acceptedLower} `) ||
+        (chunkLower.startsWith(acceptedLower) &&
+          hasSpeechBoundary(normalizedChunk, acceptedTranscript.length))
+      ) {
+        lastFinalText.value = normalizedChunk;
+        return normalizedChunk.slice(acceptedTranscript.length).trim();
+      }
+    }
+
     const prev = lastFinalText.value;
     if (!prev) {
       lastFinalText.value = normalizedChunk;

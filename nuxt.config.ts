@@ -19,6 +19,13 @@ export default defineNuxtConfig({
   // Для mobile static/release сборок используем отдельный buildDir,
   // чтобы dev-сервер не перетирал `.nuxt` и не ломал client.manifest.
   buildDir,
+  // После деплоя старые хеш-чанки исчезают вместе с docker-контейнером.
+  // 'automatic' — Nuxt сам перезагружает страницу при ошибке загрузки
+  // route-чанка во время навигации. Ручные import() (озвучка практик)
+  // дополнительно покрыты app/plugins/chunk-reload.client.ts.
+  experimental: {
+    emitRouteChunkError: 'automatic',
+  },
   compatibilityDate: '2025-07-15',
   devtools: { enabled: false },
   srcDir: '',
