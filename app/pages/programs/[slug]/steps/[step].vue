@@ -422,6 +422,7 @@ import {
 } from '@/app/composables/useSceneAudioFocus';
 import { useToast } from '@/app/composables/useToast';
 import { useAppReviewPrompt } from '@/app/composables/useAppReviewPrompt';
+import { useMilestoneBadges } from '@/app/composables/useMilestoneBadges';
 import {
   getRetentionPlantImageSrc,
   getRetentionPlantStateIndex,
@@ -495,6 +496,9 @@ const aiChatActionRef = ref<InstanceType<typeof ProgramAiChatAction> | null>(
 const { launchStepCompletionConfetti } = useCelebrationConfetti();
 const { triggerLight, triggerMedium, triggerCelebration } = useHaptics();
 const { recordPracticeCompleted, checkAndShow } = useAppReviewPrompt();
+// Достижения шага: проверяем при уходе с success-экрана. Сам overlay
+// показывается глобально в default layout уже на целевом экране.
+const { checkMilestones } = useMilestoneBadges();
 const dailyLimit = useProgramDailyLimit();
 const dailyLimitDialogOpen = ref(false);
 
@@ -2395,20 +2399,32 @@ function onCheckpointSheetOpenChange(value: boolean) {
 // Перехватывает уход с success-экрана: если бэк прислал промо-paywall —
 // показываем модалку, а реальную навигацию откладываем до решения пользователя.
 function runSuccessNavigation(navigate: () => void) {
+  // Обёртка: проверяем достижения шага ровно в момент реального ухода с
+  // success-экрана — после того как разрешились промо/биллинг-модалки
+  // (trialUpsell). Так анимация достижения не перекрывает ни цветок на
+  // success-экране, ни upsell-модалку: overlay покажется глобально (default
+  // layout) уже на целевом экране с задержкой ~900мс.
+  const navigateWithMilestoneCheck = () => {
+    if (isCompleted.value) {
+      void checkMilestones('step_completed', undefined, 900);
+    }
+    navigate();
+  };
+
   const prompt = trialUpsellPrompt.value;
   if (prompt?.show && !showTrialUpsellModal.value) {
     // Показываем один раз за success-экран и сразу фиксируем точку на бэке,
     // чтобы она не повторилась, даже если пользователь закроет приложение.
     trialUpsellPrompt.value = null;
     trialUpsellMilestone.value = prompt.milestone;
-    upsellPendingNavigate.value = navigate;
+    upsellPendingNavigate.value = navigateWithMilestoneCheck;
     upsellResolved = false;
     showTrialUpsellModal.value = true;
     void trialUpsell.markShown(prompt.milestone);
     trialUpsell.trackShown(prompt.milestone);
     return;
   }
-  navigate();
+  navigateWithMilestoneCheck();
 }
 
 function handleTrialUpsellConfirm() {

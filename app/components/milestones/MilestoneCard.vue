@@ -57,12 +57,8 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (
-    e: 'open-photo',
-    meta: MilestoneBadgeMeta,
-    width: number,
-    height: number
-  ): void;
+  // Клик по полученной награде → показать оверлей с анимацией получения.
+  (e: 'open-celebration', meta: MilestoneBadgeMeta): void;
 }>();
 
 // ─── Загрузка с auto-fallback ──────────────────────────────────────────────
@@ -273,7 +269,7 @@ const earnedDateLabel = computed(() => {
 
 function handleClick() {
   if (!props.earned) return;
-  emit('open-photo', props.meta, naturalW.value, naturalH.value);
+  emit('open-celebration', props.meta);
 }
 </script>
 

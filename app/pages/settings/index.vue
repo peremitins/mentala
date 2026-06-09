@@ -495,7 +495,7 @@
                 <AlertDialogFooter>
                   <AlertDialogCancel>Отмена</AlertDialogCancel>
                   <AlertDialogAction
-                    :class="buttonVariants({ variant: 'secondary' })"
+                    :class="buttonVariants({ variant: 'destructive' })"
                     @click="handleLogout"
                   >
                     Выйти

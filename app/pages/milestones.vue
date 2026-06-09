@@ -31,21 +31,29 @@
           :meta="badge"
           :earned="isEarned(badge.id)"
           :earned-at="getEarnedAt(badge.id)"
-          @open-photo="openBadgePhoto"
+          @open-celebration="openBadgeCelebration"
         />
       </div>
     </template>
 
-    <!-- Celebration показывается глобально через layout -->
-
+    <!-- Локальный replay-оверлей: открывается по тапу на полученную награду.
+         Не трогает pendingCelebration — это повторный просмотр, а не выдача.
+         Глобальные новые достижения по-прежнему показываются через layout. -->
+    <MilestoneAchievementOverlay
+      v-if="previewBadgeId"
+      :show="previewVisible"
+      :badge-id="previewBadgeId"
+      @continue="previewVisible = false"
+      @closed="previewBadgeId = null"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import MilestoneCard from '@/app/components/milestones/MilestoneCard.vue';
+import MilestoneAchievementOverlay from '@/app/components/milestones/MilestoneAchievementOverlay.vue';
 import { useMilestoneBadges } from '@/app/composables/useMilestoneBadges';
-import { usePhotoSwipe } from '@/app/composables/usePhotoSwipe';
 import {
   ALL_BADGES_TOTAL,
   GARDEN_BADGES,
@@ -62,8 +70,11 @@ const {
   getEarnedAt,
 } = useMilestoneBadges();
 
-const { openPhotoSwipe } = usePhotoSwipe();
 const isLoading = ref(true);
+
+// Локальный replay-оверлей при тапе по полученной награде.
+const previewBadgeId = ref<string | null>(null);
+const previewVisible = ref(false);
 
 onMounted(async () => {
   if (!isLoaded.value) {
@@ -89,20 +100,11 @@ function goBack() {
   void navigateTo('/');
 }
 
-function openBadgePhoto(
-  meta: MilestoneBadgeMeta,
-  width: number,
-  height: number
-) {
-  if (!meta.imagePath) return;
-  void openPhotoSwipe([
-    {
-      src: meta.imagePath,
-      width,
-      height,
-      alt: meta.title,
-    },
-  ]);
+function openBadgeCelebration(meta: MilestoneBadgeMeta) {
+  // Перезапуск: если оверлей уже открыт — сначала сбрасываем, чтобы анимация
+  // проиграла заново для нового бейджа.
+  previewBadgeId.value = meta.id;
+  previewVisible.value = true;
 }
 </script>
 

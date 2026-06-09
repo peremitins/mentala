@@ -67,8 +67,15 @@
           </div>
         </div>
 
-        <!-- Подсказка остаётся текстом: весь overlay закрывается по тапу. -->
-        <p class="ach-ov__hint" aria-hidden="true">Нажмите, чтобы продолжить</p>
+        <!-- Текстовая ссылка-кнопка для закрытия. Overlay сам по тайм-ауту
+             не закрывается — только по явному действию пользователя. -->
+        <button
+          type="button"
+          class="ach-ov__hint"
+          @click.stop="dismiss"
+        >
+          Нажмите, чтобы продолжить
+        </button>
       </div>
     </Transition>
   </Teleport>
@@ -221,14 +228,7 @@ watch(() => props.badgeId, buildParticles, { immediate: true });
 // ─── Dismiss логика ────────────────────────────────────────────────────────
 
 const isExiting = ref(false);
-let autoTimer: ReturnType<typeof setTimeout> | null = null;
 let exitTimer: ReturnType<typeof setTimeout> | null = null;
-
-function clearAutoTimer() {
-  if (!autoTimer) return;
-  clearTimeout(autoTimer);
-  autoTimer = null;
-}
 
 function clearExitTimer() {
   if (!exitTimer) return;
@@ -236,27 +236,25 @@ function clearExitTimer() {
   exitTimer = null;
 }
 
+// Overlay НЕ закрывается по тайм-ауту: ждём явного действия пользователя
+// (тап по подсказке или фону). Это договорённое поведение.
 watch(
   () => props.show,
   (v) => {
-    clearAutoTimer();
     if (v) {
       isExiting.value = false;
       buildParticles();
-      autoTimer = setTimeout(() => dismiss(), 4800);
     }
   },
   { immediate: true }
 );
 
 onUnmounted(() => {
-  clearAutoTimer();
   clearExitTimer();
 });
 
 function dismiss() {
   if (isExiting.value) return;
-  clearAutoTimer();
   clearExitTimer();
   isExiting.value = true;
   // Ждём exit-анимацию, затем эмитируем continue
@@ -646,7 +644,7 @@ function dismiss() {
   }
 }
 
-/* ─── Подсказка тапа ─── */
+/* ─── Подсказка тапа (кликабельная текстовая ссылка-кнопка) ─── */
 .ach-ov__hint {
   position: absolute;
   bottom: max(44px, env(safe-area-inset-bottom, 0px) + 34px);
@@ -660,11 +658,23 @@ function dismiss() {
   font-weight: 600;
   line-height: 1.2;
   letter-spacing: 0;
+  font-family: inherit;
   animation:
     ach-hint-appear 400ms ease 1100ms both,
     ach-hint-pulse 2s ease-in-out 1100ms infinite;
-  pointer-events: none;
+  pointer-events: auto;
+  cursor: pointer;
   backdrop-filter: blur(16px);
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+.ach-ov__hint:hover,
+.ach-ov__hint:active {
+  background: hsl(0 0% 100% / 0.18);
+  color: hsl(0 0% 100% / 0.95);
 }
 
 @keyframes ach-hint-appear {

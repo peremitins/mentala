@@ -290,42 +290,6 @@
                 </div>
               </div>
 
-              <div v-else-if="currentStep === 'age'" class="space-y-4">
-                <div class="space-y-2">
-                  <h2 class="text-xl font-semibold text-foreground">
-                    Сколько вам лет?
-                  </h2>
-                </div>
-
-                <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                  <button
-                    v-for="option in ageOptions"
-                    :key="option.value"
-                    type="button"
-                    :aria-pressed="ageRange === option.value"
-                    :class="
-                      getChoiceButtonClasses(ageRange === option.value, {
-                        centered: true,
-                      })
-                    "
-                    @click="selectAge(option.value)"
-                  >
-                    <span class="text-sm font-semibold text-foreground">
-                      {{ option.label }}
-                    </span>
-                  </button>
-                </div>
-
-                <Button
-                  size="lg"
-                  class="w-full"
-                  :disabled="ageRange === 'unknown'"
-                  @click="goNext"
-                >
-                  Продолжить
-                </Button>
-              </div>
-
               <div v-else-if="currentStep === 'gender'" class="space-y-4">
                 <div class="space-y-2">
                   <h2 class="text-xl font-semibold text-foreground">
@@ -449,7 +413,6 @@ import {
   setPersistentItem,
 } from '@/app/utils/persistentStorage';
 import { THERAPY_TOPICS } from '@/app/lib/therapyCatalog';
-import { HABITS_CATALOG } from '@/app/lib/habitsCatalog';
 import {
   getOnboardingTopicIdentity,
   type OnboardingSelectedTopic,
@@ -472,7 +435,6 @@ type StepKey =
   | 'name'
   | 'topics'
   | 'reminders'
-  | 'age'
   | 'gender'
   | 'tone'
   | 'final';
@@ -513,7 +475,6 @@ const INTERACTIVE_STEPS: StepKey[] = [
   'name',
   'topics',
   'reminders',
-  'age',
   'gender',
   'tone',
 ];
@@ -522,7 +483,6 @@ const ONBOARDING_STEPS: StepKey[] = [
   'name',
   'topics',
   'reminders',
-  'age',
   'gender',
   'tone',
   'final',
@@ -533,7 +493,6 @@ const BACKGROUND_INDEX_BY_STEP: Record<StepKey, number> = {
   name: 2,
   topics: 3,
   reminders: 4,
-  age: 5,
   gender: 6,
   tone: 7,
   final: 1,
@@ -580,41 +539,11 @@ const topicGroups: TopicGroup[] = [
       emoji: topic.emoji,
     })),
   },
-  {
-    title: 'Полезные привычки',
-    items: HABITS_CATALOG.filter((habit) => habit.intent === 'build').map(
-      (habit) => ({
-        kind: 'habits' as const,
-        entityKey: habit.habitKey,
-        label: habit.name,
-        description: habit.description,
-        emoji: habit.emoji,
-      })
-    ),
-  },
-  {
-    title: 'От чего хотите отказаться',
-    items: HABITS_CATALOG.filter((habit) => habit.intent === 'quit').map(
-      (habit) => ({
-        kind: 'habits' as const,
-        entityKey: habit.habitKey,
-        label: habit.name,
-        description: habit.description,
-        emoji: habit.emoji,
-      })
-    ),
-  },
 ];
 
 const genderOptions: StepOption<Gender>[] = [
   { value: 'male', label: 'Мужской' },
   { value: 'female', label: 'Женский' },
-];
-
-const ageOptions: StepOption<AgeRange>[] = [
-  { value: 'under_30', label: 'До 30' },
-  { value: '30_45', label: '30–45' },
-  { value: '45_plus', label: '45+' },
 ];
 
 const nameError = computed(() => {
@@ -881,13 +810,6 @@ function resolveRestorableStep(value: unknown): StepKey {
     return 'topics';
   }
 
-  if (
-    requestedIndex >= ONBOARDING_STEPS.indexOf('gender') &&
-    ageRange.value === 'unknown'
-  ) {
-    return 'age';
-  }
-
   if (requestedIndex >= ONBOARDING_STEPS.indexOf('tone') && !gender.value) {
     return 'gender';
   }
@@ -1014,11 +936,6 @@ function goBack() {
   stepper.goToPrevious();
 }
 
-function selectAge(value: AgeRange) {
-  void triggerLight();
-  ageRange.value = value;
-}
-
 function selectGender(value: Gender) {
   void triggerLight();
   gender.value = value;
@@ -1071,7 +988,6 @@ async function completeOnboarding() {
     !isNameValid.value ||
     !isTopicSelectionValid.value ||
     !gender.value ||
-    ageRange.value === 'unknown' ||
     tone.value === 'unknown'
   ) {
     useToast('Ошибка', 'Заполните все шаги онбординга', 'error');

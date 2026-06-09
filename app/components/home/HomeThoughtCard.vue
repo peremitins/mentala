@@ -59,6 +59,7 @@ import IconBookmarkCheck from '~icons/lucide/bookmark-check';
 import IconLoader from '~icons/lucide/loader-2';
 import IconSparkles from '~icons/lucide/sparkles';
 import { useAPI } from '@/app/composables/useAPI';
+import { useMilestoneBadges } from '@/app/composables/useMilestoneBadges';
 import type {
   ThoughtOfTheDayDto,
   ThoughtOfTheDaySaveResponseDto,
@@ -76,9 +77,16 @@ const expanded = ref(false);
 const saved = ref(props.thought.saved);
 const saving = ref(false);
 
+// Достижение «Первая опора» проверяем при первом сохранении мысли. Overlay
+// показывается глобально через MilestoneAchievementOverlay в default layout.
+const { checkMilestones } = useMilestoneBadges();
+
 async function toggleSaved() {
   if (saving.value) return;
   saving.value = true;
+
+  // Сохранение (а не снятие) — кандидат на выдачу достижения.
+  const wasSaving = !saved.value;
 
   try {
     const response = await useAPI<ThoughtOfTheDaySaveResponseDto>(
@@ -91,6 +99,12 @@ async function toggleSaved() {
     );
     saved.value = response.item.saved;
     emit('saved-change', response);
+
+    // После реального сохранения проверяем достижение. Бэк идемпотентен:
+    // first_thought_saved выдаётся только при самом первом сохранении.
+    if (wasSaving && response.item.saved) {
+      void checkMilestones('thought_saved', undefined, 500);
+    }
   } catch (error) {
     console.error('[HomeThoughtCard] Не удалось обновить мысль дня:', error);
   } finally {

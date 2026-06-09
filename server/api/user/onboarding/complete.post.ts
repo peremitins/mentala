@@ -177,10 +177,20 @@ export default defineEventHandler(async (event) => {
 
   await db.transaction(async (tx) => {
     const [current] = await tx
-      .select({ onboarding: users.onboarding, gender: users.gender })
+      .select({
+        onboarding: users.onboarding,
+        gender: users.gender,
+        ageRange: users.ageRange,
+      })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);
+
+    // Возраст больше не собирается в онбординге. Чтобы не затирать уже
+    // указанный возраст у существующих пользователей, перезаписываем колонку
+    // только когда пришёл конкретный диапазон (не 'unknown').
+    const nextAgeRange =
+      ageRange !== 'unknown' ? ageRange : (current?.ageRange ?? 'unknown');
 
     const onboarding =
       current?.onboarding && typeof current.onboarding === 'object'
@@ -201,7 +211,7 @@ export default defineEventHandler(async (event) => {
       .set({
         name,
         gender,
-        ageRange,
+        ageRange: nextAgeRange,
         onboarding,
         updatedAt: new Date(),
       })
