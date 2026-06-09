@@ -73,7 +73,7 @@
           size="lg"
           @click="goToAssessments"
         >
-          К оценке состояния
+          Все опросники
         </Button>
       </div>
     </section>

@@ -166,9 +166,9 @@ const anxietyCheckV1 = AssessmentDefinitionDto.parse({
       ...sharedAnxietyComparisonCopy,
       safetyLevel: 'support',
       nextAction: {
-        type: 'sos',
-        slug: 'quick_help',
-        label: 'Открыть быструю помощь',
+        type: 'program',
+        slug: 'calm_anxiety_30',
+        label: 'Перейти к саду «Спокойствие»',
       },
     },
   ],

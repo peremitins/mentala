@@ -32,7 +32,7 @@ const entry = computed(() => {
 const pageTitle = computed(() => {
   if (entry.value === 'panic') return 'Заземление';
   if (entry.value === 'tension') return 'Снятие напряжения';
-  return 'Быстрая помощь';
+  return 'Практики';
 });
 
 function handleGoBack() {
