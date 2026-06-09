@@ -51,6 +51,21 @@ public class MentalaSafeAreaPlugin extends Plugin {
         call.resolve(toJsObject(currentInsets));
     }
 
+    /**
+     * Форсирует свежий проход по WindowInsets и перелейаут WebView.
+     *
+     * Нужен для случаев, когда инсеты/высота вьюпорта «протухли» без
+     * полноценного onResume — например после системного BiometricPrompt,
+     * который показывается внутри той же Activity и не запускает
+     * handleOnResume(). Делает то же, что рабочий resume-путь:
+     * перечитывает rootWindowInsets и вызывает requestApplyInsets().
+     */
+    @PluginMethod
+    public void refreshInsets(PluginCall call) {
+        requestInsetsRefresh();
+        call.resolve(toJsObject(currentInsets));
+    }
+
     private void attachInsetsListener() {
         final View webView = getBridge() != null ? getBridge().getWebView() : null;
         if (webView == null) {

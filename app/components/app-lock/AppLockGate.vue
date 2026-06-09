@@ -65,65 +65,13 @@
             </div>
           </div>
 
+          <!--
+            Единый экран разблокировки: PIN-поля + кнопка «Биометрия устройства».
+            Системный BiometricPrompt запускается автоматически поверх этого
+            экрана (см. attemptBiometricAndFallback). Отдельного промежуточного
+            биометрического экрана нет — при отмене/ошибке остаётся этот PIN-экран.
+          -->
           <div v-else class="space-y-5">
-            <!-- Биометрический экран (первичный, если доступно) -->
-            <template v-if="appLock.biometric.available && !showPinFallback">
-              <div class="flex items-center gap-3">
-                <div
-                  class="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10"
-                >
-                  <component :is="biometricIcon" class="h-5 w-5 text-primary" />
-                </div>
-                <div class="min-w-0 space-y-1">
-                  <h2 class="text-lg font-semibold leading-6">Вход в Mentala</h2>
-                </div>
-              </div>
-
-              <div class="flex flex-col items-center gap-4 py-2">
-                <!-- Большая кнопка-иконка биометрии -->
-                <button
-                  type="button"
-                  class="relative flex h-20 w-20 items-center justify-center rounded-full border-2 transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                  :class="
-                    appLock.biometricPromptInFlight
-                      ? 'border-primary bg-primary/10 cursor-default'
-                      : 'border-white/20 bg-white/5 hover:border-primary/50 hover:bg-primary/5 active:scale-95 cursor-pointer'
-                  "
-                  :disabled="appLock.biometricPromptInFlight"
-                  @click="appLock.attemptBiometricUnlock({ force: true })"
-                >
-                  <div
-                    v-if="appLock.biometricPromptInFlight"
-                    class="absolute inset-0 animate-ping rounded-full bg-primary/20"
-                  />
-                  <component
-                    :is="biometricIcon"
-                    class="relative h-10 w-10 transition-colors duration-300"
-                    :class="
-                      appLock.biometricPromptInFlight
-                        ? 'text-primary'
-                        : 'text-foreground/60'
-                    "
-                  />
-                </button>
-
-                <p class="text-sm text-center text-muted-foreground">
-                  {{ biometricPromptLabel }}
-                </p>
-
-                <button
-                  v-if="!appLock.biometricPromptInFlight"
-                  type="button"
-                  class="text-sm text-muted-foreground transition-colors hover:text-foreground"
-                  @click="switchToPinFallback"
-                >
-                  Ввести PIN-код
-                </button>
-              </div>
-            </template>
-
-            <!-- PIN-экран (когда биометрия недоступна или пользователь выбрал PIN) -->
-            <template v-else>
               <div class="flex items-center gap-3">
                 <div
                   class="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10"
@@ -214,7 +162,6 @@
                   </div>
                 </div>
               </div>
-            </template>
           </div>
         </section>
       </div>
@@ -245,6 +192,10 @@ import IconShieldCheck from '~icons/lucide/shield-check';
 
 type SetupStep = 'enter' | 'confirm';
 
+// Пауза перед автозапуском биометрии после resume, чтобы Activity успела
+// дорезюмиться и системный BiometricPrompt гарантированно открылся.
+const BIOMETRIC_RESUME_DELAY_MS = 280;
+
 const appLock = useAppLockStore();
 const auth = useAuthStore();
 const route = useRoute();
@@ -254,7 +205,6 @@ const setupPin = ref('');
 const setupConfirmPin = ref('');
 const setupError = ref('');
 const unlockPin = ref('');
-const showPinFallback = ref(false);
 const confirmLogoutReset = ref(false);
 const logoutLoading = ref(false);
 const now = ref(Date.now());
@@ -299,14 +249,6 @@ const biometricIcon = computed(() => {
   return IconFingerprint;
 });
 
-const biometricPromptLabel = computed(() => {
-  if (appLock.biometricPromptInFlight) {
-    if (appLock.biometric.type === 'face') return 'Смотрите в камеру...';
-    return 'Приложите палец к датчику...';
-  }
-  return appLock.biometric.label;
-});
-
 const setupPinModel = computed({
   get: () =>
     setupStep.value === 'enter' ? setupPin.value : setupConfirmPin.value,
@@ -331,7 +273,6 @@ watch(
     if (isLocked) {
       unlockPin.value = '';
       confirmLogoutReset.value = false;
-      showPinFallback.value = false;
       void attemptBiometricAndFallback();
     }
   }
@@ -450,11 +391,33 @@ async function waitForPinInputPaint() {
   });
 }
 
-function switchToPinFallback() {
-  showPinFallback.value = true;
-  void focusUnlockInput();
+/**
+ * Ждём, пока Activity действительно дорезюмится после возврата из фона или
+ * разблокировки телефона. Если дёрнуть NativeBiometric.verifyIdentity слишком
+ * рано (прямо в обработчике resume), системный BiometricPrompt не открывается
+ * или мгновенно отменяется фокус-гонкой. На холодном старте эта задержка и так
+ * присутствует за счёт async-проверки доступности биометрии.
+ */
+async function waitForAppResumed() {
+  if (typeof window === 'undefined') return;
+  await new Promise<void>((resolve) => {
+    const settle = () => setTimeout(resolve, BIOMETRIC_RESUME_DELAY_MS);
+    if (typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(() =>
+        window.requestAnimationFrame(settle)
+      );
+    } else {
+      settle();
+    }
+  });
 }
 
+/**
+ * Автозапуск системного отпечатка/лица при блокировке. Отдельного
+ * промежуточного биометрического экрана нет: при недоступности биометрии,
+ * отмене или ошибке остаётся PIN-экран (он всегда отрисован и содержит
+ * кнопку «Биометрия устройства» для ручного повтора).
+ */
 async function attemptBiometricAndFallback() {
   if (appLock.biometricPromptedForCurrentLock) return;
 
@@ -463,12 +426,14 @@ async function attemptBiometricAndFallback() {
     return;
   }
 
-  const success = await appLock.attemptBiometricUnlock();
-  // biometricPromptedForCurrentLock=true только если диалог реально открывался
-  if (!success && appLock.isLocked && appLock.biometricPromptedForCurrentLock) {
-    showPinFallback.value = true;
-    await focusUnlockInput();
-  }
+  await waitForAppResumed();
+  // Состояние могло измениться за время ожидания (разблокировали / ушли в фон /
+  // другой обработчик уже запустил prompt).
+  if (!appLock.isLocked || appLock.biometricPromptedForCurrentLock) return;
+
+  await appLock.attemptBiometricUnlock();
+  // При отмене/ошибке prompt'а пользователь остаётся на PIN-экране.
+  if (appLock.isLocked) void focusUnlockInput();
 }
 
 async function logoutAndReset() {

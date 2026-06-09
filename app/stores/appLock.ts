@@ -220,6 +220,12 @@ export const useAppLockStore = defineStore('appLock', {
       this.backgroundedAt = null;
       this.biometricPromptedForCurrentLock = false;
       this.resetFailedAttempts();
+      // После анлока (особенно через BiometricPrompt, который не вызывает
+      // onResume) геометрия вьюпорта могла «протухнуть» — просим native
+      // safe-area плагин пересчитать инсеты и перелейаутить WebView.
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('mentala:safe-area-refresh'));
+      }
     },
 
     handleAppHidden() {
