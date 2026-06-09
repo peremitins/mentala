@@ -727,21 +727,29 @@ function runPlantFlyout() {
 
   const viewportWidth = window.innerWidth || 390;
   const viewportHeight = window.innerHeight || 780;
-  const startCenterX = rect.left + rect.width / 2;
-  const startCenterY = rect.top + rect.height / 2;
   const targetCenterX = viewportWidth / 2;
   const targetCenterY = viewportHeight * 0.43;
   const targetSize = Math.min(viewportWidth * 0.78, viewportHeight * 0.56, 460);
-  const scale = Math.max(2.2, targetSize / Math.max(rect.width, rect.height));
-  const dropWidth = Math.max(1.4, 6.4 / scale);
-  const dropHeight = Math.max(2.4, 10.8 / scale);
-  const dropBorder = Math.max(0.18, 0.7 / scale);
+  const targetLeft = targetCenterX - targetSize / 2;
+  const targetTop = targetCenterY - targetSize / 2;
+  const startScale = Math.max(
+    0.1,
+    Math.min(rect.width, rect.height) / targetSize
+  );
+  // iOS Safari мылит img, если маленький composited layer потом апскейлится
+  // через transform. Поэтому flyout сразу рендерится в целевом размере, а
+  // стартовое состояние задаётся обратным scale до размера карточки.
+  const startTranslateX = rect.left - targetLeft;
+  const startTranslateY = rect.top - targetTop;
+  const dropWidth = 6.4;
+  const dropHeight = 10.8;
+  const dropBorder = 0.7;
   // Лужица: эллипс с пропорцией ~2.4:1 (шире, чем тонкая полоска до этого).
   // Видимая лужица на горшке должна быть «капельной», не просто горизонтальной
-  // чертой. Высоту подняли с 5/scale до 10/scale, ширину сохранили.
-  const rippleWidth = Math.max(4, 22 / scale);
-  const rippleHeight = Math.max(1.8, 9 / scale);
-  const rippleBorder = Math.max(0.22, 1 / scale);
+  // чертой. Высоту подняли с 5px до 9px, ширину сохранили.
+  const rippleWidth = 22;
+  const rippleHeight = 9;
+  const rippleBorder = 1;
 
   clearFlyoutTimer();
   lockPageScroll();
@@ -750,13 +758,13 @@ function runPlantFlyout() {
     active: true,
     style: {
       '--plant-flyout-duration': `${PLANT_FLYOUT_DURATION_MS}ms`,
-      '--plant-flyout-left': `${rect.left}px`,
-      '--plant-flyout-top': `${rect.top}px`,
-      '--plant-flyout-width': `${rect.width}px`,
-      '--plant-flyout-height': `${rect.height}px`,
-      '--plant-flyout-dx': `${targetCenterX - startCenterX}px`,
-      '--plant-flyout-dy': `${targetCenterY - startCenterY}px`,
-      '--plant-flyout-scale': `${scale}`,
+      '--plant-flyout-left': `${targetLeft}px`,
+      '--plant-flyout-top': `${targetTop}px`,
+      '--plant-flyout-width': `${targetSize}px`,
+      '--plant-flyout-height': `${targetSize}px`,
+      '--plant-flyout-start-x': `${startTranslateX}px`,
+      '--plant-flyout-start-y': `${startTranslateY}px`,
+      '--plant-flyout-start-scale': `${startScale}`,
       '--plant-drop-width': `${dropWidth}px`,
       '--plant-drop-height': `${dropHeight}px`,
       '--plant-drop-border': `${dropBorder}px`,
@@ -940,7 +948,7 @@ onBeforeUnmount(() => {
   width: var(--plant-flyout-width);
   height: var(--plant-flyout-height);
   pointer-events: none;
-  transform-origin: center;
+  transform-origin: top left;
   animation: plant-flyout-travel var(--plant-flyout-duration) both;
   will-change: transform, opacity;
 }
@@ -1052,7 +1060,6 @@ onBeforeUnmount(() => {
   border-radius: inherit;
   object-fit: contain;
   transform-origin: center;
-  transform: translateZ(0);
   will-change: opacity, transform;
 }
 
@@ -1091,22 +1098,28 @@ onBeforeUnmount(() => {
 @keyframes plant-flyout-travel {
   0% {
     opacity: 1;
-    transform: translate3d(0, 0, 0) scale(1);
+    transform: translate(
+        var(--plant-flyout-start-x),
+        var(--plant-flyout-start-y)
+      )
+      scale(var(--plant-flyout-start-scale));
     animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
   }
   22% {
-    transform: translate3d(var(--plant-flyout-dx), var(--plant-flyout-dy), 0)
-      scale(var(--plant-flyout-scale));
+    transform: translate(0, 0) scale(1);
     animation-timing-function: linear;
   }
   84% {
-    transform: translate3d(var(--plant-flyout-dx), var(--plant-flyout-dy), 0)
-      scale(var(--plant-flyout-scale));
+    transform: translate(0, 0) scale(1);
     animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   }
   100% {
     opacity: 1;
-    transform: translate3d(0, 0, 0) scale(1);
+    transform: translate(
+        var(--plant-flyout-start-x),
+        var(--plant-flyout-start-y)
+      )
+      scale(var(--plant-flyout-start-scale));
   }
 }
 

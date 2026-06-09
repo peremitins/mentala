@@ -208,7 +208,9 @@ export class RealtimeVoiceTransport {
   private lastInputActivityAtMs = 0;
   private isLocalMicrophoneEnabled = true;
   // Web Audio gain-цепочка для усиления выше 1.0 (см. MAX_OUTPUT_GAIN).
-  // Включается только там, где источник звучит тихо (Android native + web/PWA).
+  // Включается ТОЛЬКО на Android web/PWA (тихий earpiece-маршрут Chrome). На
+  // нативном Android маршрут/громкость держит Java-плагин — там цепочка НЕ нужна
+  // и ломает управление клавишами (см. shouldBoostOutputGain в composable).
   private gainBoostEnabled = false;
   private gainBoostActive = false;
   private outputAudioContext: AudioContext | null = null;

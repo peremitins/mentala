@@ -714,15 +714,22 @@ export function useRealtimeVoiceSession(options?: {
     return clientPlatform.value === 'ios' || clientPlatform.value === 'android';
   }
 
-  // Усиление громкости через Web Audio нужно там, где «родной» уровень WebRTC
-  // тихий: Android — и нативный апп, и браузер/PWA. На native clientPlatform
-  // уже 'android'; для web/PWA на Android определяем по UA (там clientPlatform
-  // = 'web'). iOS/desktop не трогаем — там громкости хватает.
+  // Усиление громкости через Web Audio нужно ТОЛЬКО на Android web/PWA: там
+  // WebRTC-аудио без Web Audio уходит на тихий earpiece/voice-call канал, и
+  // аппаратные клавиши им не управляют. На НАТИВНОМ Android этого делать НЕЛЬЗЯ —
+  // маршрутом и громкостью там управляет Java-плагин (MentalaRealtimeVoiceAudio →
+  // MODE_NORMAL + setVolumeControlStream(STREAM_MUSIC)). Web Audio поверх него
+  // уводит звук с канала клавиш (нельзя ни убавить, ни заглушить), даёт
+  // неуправляемо громкий ×3 и перегружает AEC / глитчит playback — модель
+  // начинает «слышать себя». iOS/desktop тоже не трогаем. См.
+  // .docs/arch_audio_platforms.md.
   function shouldBoostOutputGain() {
-    if (clientPlatform.value === 'android') {
-      return true;
-    }
     if (typeof navigator === 'undefined') {
+      return false;
+    }
+    // Нативные платформы (Capacitor iOS/Android) исключаем — аудио-сеансом там
+    // управляет нативный слой, а не браузерный Web Audio.
+    if (getPlatform() !== 'web') {
       return false;
     }
     return /android/i.test(navigator.userAgent);

@@ -862,6 +862,11 @@ async function loadAddressing() {
 async function loadTensionVoicePreference() {
   const settings = await loadSosVoiceSettings();
   tensionVoiceEnabled.value = settings.voiceEnabled;
+  // Настройки могут загрузиться позже, чем step уже переключился на panic-grounding
+  // (race condition с onMounted страницы). Воспроизводим первый шаг здесь.
+  if (settings.voiceEnabled && step.value === 'panic-grounding') {
+    void playGroundingVoice(groundingIndex.value);
+  }
 }
 
 async function loadTensionPracticeSettings() {
