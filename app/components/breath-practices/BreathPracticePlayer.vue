@@ -348,6 +348,7 @@ const {
   setVolume,
   setScheduledStopAt,
   release: releasePhaseAudio,
+  unlockPlayback,
   isNativeSessionEnabled,
 } = useBreathPracticePhaseAudio();
 const { trigger: triggerHaptic } = useBreathPracticeHaptics();
@@ -467,6 +468,10 @@ function clampNumber(value: number, min: number, max: number) {
 async function togglePlayback() {
   if (!props.practice) return;
   if (!isRunning.value) {
+    // Синхронно разблокируем web-audio в рамках текущего тапа (iOS Safari):
+    // основной цикл стартует только через prep-отсчёт, уже вне жеста, и без
+    // этого iOS блокирует play() — практика «запускалась» лишь со 2-го тапа.
+    unlockPlayback();
     emitStart();
     await player.start();
     return;
@@ -489,6 +494,8 @@ async function stopSession() {
 }
 
 function restartSession() {
+  // «Повторить» — тоже user gesture, разблокируем web-audio синхронно.
+  unlockPlayback();
   emitStart();
   void player.start();
 }

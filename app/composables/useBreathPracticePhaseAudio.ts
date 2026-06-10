@@ -93,6 +93,13 @@ export function useBreathPracticePhaseAudio() {
     return shouldUseNativeAudio();
   }
 
+  // Синхронная разблокировка web-audio в рамках user gesture (iOS Safari).
+  // На native не нужна — там звук идёт через нативную сессию.
+  function unlockPlayback() {
+    if (shouldUseNativeAudio()) return;
+    webContinuousAudio.unlock();
+  }
+
   function hasActiveNativeSession() {
     return Boolean(nativeSessionService?.isActive());
   }
@@ -477,6 +484,7 @@ export function useBreathPracticePhaseAudio() {
     setVolume,
     setScheduledStopAt,
     release,
+    unlockPlayback,
     isNativeSessionEnabled,
     hasActiveNativeSession,
   };

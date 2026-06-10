@@ -33,7 +33,16 @@ const TARGET_SAMPLE_RATE = 44_100;
 const renderedCycleCache = new Map<string, RenderedCycleAudio>();
 
 export function useBreathPracticeContinuousAudio() {
-  let currentAudio: HTMLAudioElement | null = null;
+  // Единственный постоянный HTMLAudioElement на весь lifecycle плеера.
+  // Принципиально не пересоздаём его на каждый запуск: на iOS Safari
+  // элемент можно проигрывать программно только после того, как он хотя бы
+  // раз стартовал внутри user gesture. Реальный цикл стартует через 3с
+  // (после prep-отсчёта) — вне жеста, поэтому свежий new Audio() там бы
+  // блокировался. Переиспользуя один «разблокированный» элемент, мы
+  // подменяем ему src и зовём play() уже без жеста.
+  let audioEl: HTMLAudioElement | null = null;
+  let isPlaying = false;
+  let unlocked = false;
 
   function canUseContinuousAudio() {
     if (import.meta.server) return false;
@@ -44,6 +53,58 @@ export function useBreathPracticeContinuousAudio() {
     return Boolean(getAudioContextCtor() && getOfflineAudioContextCtor());
   }
 
+  function ensureAudioElement() {
+    if (audioEl) return audioEl;
+    if (typeof Audio === 'undefined') return null;
+    const audio = new Audio();
+    audio.preload = 'auto';
+    audioEl = audio;
+    return audio;
+  }
+
+  // Должен вызываться СИНХРОННО внутри user gesture (тап по кнопке play).
+  // Проигрываем короткий тихий WAV (нулевые сэмплы, без mute — реальное
+  // unmuted-воспроизведение надёжнее «благословляет» элемент на iOS) и сразу
+  // ставим на паузу. После этого отложенный startLoop переиспользует тот же
+  // элемент и iOS разрешает play() вне жеста.
+  function unlock() {
+    if (!canUseContinuousAudio()) return;
+    if (unlocked) return;
+    const audio = ensureAudioElement();
+    if (!audio) return;
+
+    try {
+      audio.loop = false;
+      audio.volume = 1;
+      audio.src = getSilentUnlockUrl();
+      const finalize = () => {
+        try {
+          audio.pause();
+          audio.currentTime = 0;
+        } catch {
+          // элемент мог быть уже остановлен — игнорируем
+        }
+        unlocked = true;
+      };
+      const playPromise = audio.play();
+      if (playPromise && typeof playPromise.then === 'function') {
+        playPromise.then(finalize).catch((error) => {
+          console.error(
+            '[BreathContinuousAudio] Не удалось разблокировать audio:',
+            error
+          );
+        });
+      } else {
+        finalize();
+      }
+    } catch (error) {
+      console.error(
+        '[BreathContinuousAudio] Ошибка разблокировки audio:',
+        error
+      );
+    }
+  }
+
   async function startLoop(payload: BreathContinuousAudioStart) {
     stopAll();
     if (!canUseContinuousAudio()) return null;
@@ -51,13 +112,16 @@ export function useBreathPracticeContinuousAudio() {
 
     try {
       const cycle = await getOrCreateRenderedCycle(payload);
-      const audio = new Audio(cycle.url);
-      currentAudio = audio;
+      const audio = ensureAudioElement();
+      if (!audio) return null;
+      audio.src = cycle.url;
       audio.loop = true;
       audio.preload = 'auto';
       audio.volume = 1;
+      audio.currentTime = 0;
 
       await audio.play();
+      isPlaying = true;
       return Date.now();
     } catch (error) {
       stopAll();
@@ -70,13 +134,13 @@ export function useBreathPracticeContinuousAudio() {
   }
 
   async function pauseSession() {
-    currentAudio?.pause();
+    audioEl?.pause();
   }
 
   async function resumeSession() {
-    if (!currentAudio) return;
+    if (!audioEl) return;
     try {
-      await currentAudio.play();
+      await audioEl.play();
     } catch (error) {
       console.error(
         '[BreathContinuousAudio] Не удалось возобновить continuous audio:',
@@ -86,32 +150,46 @@ export function useBreathPracticeContinuousAudio() {
   }
 
   function stopAll() {
-    if (!currentAudio) return;
+    isPlaying = false;
+    if (!audioEl) return;
 
     try {
-      currentAudio.pause();
-      currentAudio.currentTime = 0;
+      audioEl.pause();
+      audioEl.currentTime = 0;
     } catch (error) {
       console.error(
         '[BreathContinuousAudio] Не удалось остановить continuous audio:',
         error
       );
-    } finally {
-      currentAudio = null;
     }
+    // ВАЖНО: не обнуляем audioEl и не сбрасываем unlocked — сохраняем
+    // «разблокировку» iOS, иначе следующий запуск снова потребует двойного тапа.
   }
 
   function setVolume(level: number) {
-    if (!currentAudio) return;
-    currentAudio.volume = normalizeVolume(level);
+    if (!audioEl) return;
+    audioEl.volume = normalizeVolume(level);
   }
 
   function isActive() {
-    return currentAudio !== null;
+    return isPlaying;
   }
 
   function release() {
     stopAll();
+    if (audioEl) {
+      try {
+        audioEl.src = '';
+      } catch {
+        // игнорируем
+      }
+    }
+    audioEl = null;
+    unlocked = false;
+    if (silentUnlockUrl) {
+      URL.revokeObjectURL(silentUnlockUrl);
+      silentUnlockUrl = null;
+    }
     for (const rendered of renderedCycleCache.values()) {
       URL.revokeObjectURL(rendered.url);
     }
@@ -119,6 +197,7 @@ export function useBreathPracticeContinuousAudio() {
   }
 
   return {
+    unlock,
     startLoop,
     pauseSession,
     resumeSession,
@@ -127,6 +206,40 @@ export function useBreathPracticeContinuousAudio() {
     isActive,
     release,
   };
+}
+
+// Ленивая генерация короткого тихого WAV для iOS-unlock. Кэшируем url,
+// чтобы не плодить blob'ы; revoke в release().
+let silentUnlockUrl: string | null = null;
+
+function getSilentUnlockUrl() {
+  if (silentUnlockUrl) return silentUnlockUrl;
+
+  const sampleRate = 8_000;
+  const sampleCount = Math.floor(sampleRate * 0.1); // 0.1с тишины
+  const dataBytes = sampleCount * WAV_BYTES_PER_SAMPLE; // моно
+  const arrayBuffer = new ArrayBuffer(WAV_HEADER_BYTES + dataBytes);
+  const view = new DataView(arrayBuffer);
+
+  writeAscii(view, 0, 'RIFF');
+  view.setUint32(4, 36 + dataBytes, true);
+  writeAscii(view, 8, 'WAVE');
+  writeAscii(view, 12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true); // моно
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * WAV_BYTES_PER_SAMPLE, true);
+  view.setUint16(32, WAV_BYTES_PER_SAMPLE, true);
+  view.setUint16(34, 16, true);
+  writeAscii(view, 36, 'data');
+  view.setUint32(40, dataBytes, true);
+  // data-секция уже заполнена нулями = тишина.
+
+  silentUnlockUrl = URL.createObjectURL(
+    new Blob([arrayBuffer], { type: 'audio/wav' })
+  );
+  return silentUnlockUrl;
 }
 
 async function getOrCreateRenderedCycle(
