@@ -3,6 +3,7 @@ package com.mentala.app.ui;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.View;
+import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
 import androidx.core.graphics.Insets;
@@ -16,21 +17,41 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
 /**
- * Android bridge для реальных safe area inset'ов.
+ * Android bridge для safe area inset'ов + детерминированная edge-to-edge геометрия WebView.
  *
- * На части Android WebView, особенно на больших экранах и edge-to-edge режимах,
- * CSS env(safe-area-inset-*) может приходить как 0px. Поэтому берём WindowInsets
- * напрямую из native-слоя и отдаём их в JS.
+ * ИСТОРИЯ ПРОБЛЕМЫ. Раньше WebView лежал во весь экран (edge-to-edge, targetSdk 36 +
+ * StatusBar.overlaysWebView), а отступ под системную навигацию снизу зависел от
+ * ВНУТРЕННЕЙ автоматики Chromium WebView (M136+/M139+/M144+): WebView сам получает
+ * WindowInsets и сам подстраивает вьюпорт. Эта автоматика гонко-зависима: если диспатч
+ * инсетов теряется (запуск из Play Маркета через window-transition, системный
+ * BiometricPrompt поверх Activity), WebView сохраняет «ghost»-состояние вьюпорта —
+ * страница остаётся полной высоты и нижний bottom-nav обрезается системной навигацией.
+ * Google прямо описывает этот класс багов и рекомендует «zeroing approach»:
+ * https://developer.android.com/develop/ui/views/layout/webapps/understand-window-insets
  *
- * ВАЖНО: WindowInsets возвращает значения в физических пикселях, а CSS 1px = 1dp.
- * Без деления на density получим гигантский отступ на hi-DPI устройствах
- * (Pixel 8 Pro, любой телефон с density > 1). Поэтому здесь конвертируем
- * pixels → dp (CSS-px) перед отдачей в JS.
+ * ТЕКУЩАЯ СХЕМА (детерминированная, без гонок):
+ *  1. Нижний/боковые системные инсеты применяются НАТИВНО как layout-margin WebView.
+ *     Это делает системный layout-проход — он самовосстанавливается при каждом
+ *     dispatchApplyWindowInsets, и никакая гонка с BiometricPrompt/launch-transition
+ *     не может оставить WebView в неправильной геометрии.
+ *  2. Верхний инсет margin'ом НЕ применяется (WebView остаётся под статус-баром для
+ *     эффекта overlaysWebView) — он, как и раньше, отдаётся в JS как CSS-переменная.
+ *  3. Вниз по view-иерархии systemBars/displayCutout передаются ОБНУЛЁННЫМИ
+ *     (WindowInsetsCompat.Builder + Insets.NONE), чтобы внутренняя автоматика WebView
+ *     для системных баров никогда не включалась и не могла «протухнуть».
+ *     IME-инсеты (клавиатура) передаются нетронутыми — ресайз вьюпорта под клавиатуру
+ *     (Chromium M139+) продолжает работать как раньше.
+ *
+ * ВАЖНО: WindowInsets возвращает значения в физических пикселях, а CSS 1px = 1dp,
+ * поэтому в JS значения конвертируются px → dp. Margin'ы ставятся в физических px.
  */
 @CapacitorPlugin(name = "MentalaSafeArea")
 public class MentalaSafeAreaPlugin extends Plugin {
     private static final String TAG = "MentalaSafeAreaPlugin";
     private static final float DEFAULT_DENSITY = 1f;
+
+    private static final int SYSTEM_INSET_TYPES =
+        WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout();
 
     private Insets currentInsets = Insets.NONE;
 
@@ -53,12 +74,9 @@ public class MentalaSafeAreaPlugin extends Plugin {
 
     /**
      * Форсирует свежий проход по WindowInsets и перелейаут WebView.
-     *
-     * Нужен для случаев, когда инсеты/высота вьюпорта «протухли» без
-     * полноценного onResume — например после системного BiometricPrompt,
-     * который показывается внутри той же Activity и не запускает
-     * handleOnResume(). Делает то же, что рабочий resume-путь:
-     * перечитывает rootWindowInsets и вызывает requestApplyInsets().
+     * Margin-подход самовосстанавливается на каждом insets-диспатче, но метод
+     * оставлен как belt-and-suspenders: JS дёргает его после разблокировки через
+     * BiometricPrompt (который не вызывает onResume) и при возврате фокуса.
      */
     @PluginMethod
     public void refreshInsets(PluginCall call) {
@@ -75,14 +93,20 @@ public class MentalaSafeAreaPlugin extends Plugin {
 
         webView.post(() -> {
             ViewCompat.setOnApplyWindowInsetsListener(webView, (view, windowInsets) -> {
-                final Insets nextInsets = windowInsets.getInsets(
-                    WindowInsetsCompat.Type.systemBars()
-                        | WindowInsetsCompat.Type.displayCutout()
-                );
+                final Insets nextInsets = windowInsets.getInsets(SYSTEM_INSET_TYPES);
+
+                applyWebViewMargins(view, nextInsets);
                 publishInsetsIfChanged(nextInsets);
 
-                // Возвращаем исходные inset'ы, чтобы WebView не терял системную информацию.
-                return windowInsets;
+                // «Zeroing approach» из официальной доки Android: системные инсеты
+                // уже обработаны нативно (margin + CSS-переменная top), поэтому вниз
+                // передаём их обнулёнными. Нотификация при этом продолжает доходить
+                // до WebView (в отличие от CONSUMED), а IME-инсеты не трогаем —
+                // ресайз под клавиатуру остаётся на автоматике WebView.
+                return new WindowInsetsCompat.Builder(windowInsets)
+                    .setInsets(WindowInsetsCompat.Type.systemBars(), Insets.NONE)
+                    .setInsets(WindowInsetsCompat.Type.displayCutout(), Insets.NONE)
+                    .build();
             });
 
             requestInsetsRefresh();
@@ -96,18 +120,43 @@ public class MentalaSafeAreaPlugin extends Plugin {
             return;
         }
 
-        webView.post(() -> {
-            final WindowInsetsCompat rootInsets = ViewCompat.getRootWindowInsets(webView);
-            if (rootInsets != null) {
-                final Insets nextInsets = rootInsets.getInsets(
-                    WindowInsetsCompat.Type.systemBars()
-                        | WindowInsetsCompat.Type.displayCutout()
-                );
-                publishInsetsIfChanged(nextInsets);
-            }
+        // Единственный источник правды — insets-listener: он получает значения
+        // ПОСЛЕ консьюма decor'ом (важно для Android ≤ 14, где окно само
+        // подгоняется под навбар и сырые getRootWindowInsets дали бы двойной
+        // отступ). requestApplyInsets гарантированно форсирует свежий диспатч
+        // вниз по иерархии, даже если значения не менялись.
+        webView.post(() -> ViewCompat.requestApplyInsets(webView));
+    }
 
-            ViewCompat.requestApplyInsets(webView);
-        });
+    /**
+     * Применяет системные инсеты как физические margin'ы WebView: снизу и по бокам
+     * (навигационная панель, вырезы). Сверху margin не ставим — WebView остаётся
+     * под статус-баром (overlaysWebView), отступ сверху отдаётся через CSS.
+     * Идемпотентно: layout-параметры обновляются только при реальном изменении.
+     */
+    private void applyWebViewMargins(@NonNull View webView, @NonNull Insets insets) {
+        if (!(webView.getLayoutParams() instanceof ViewGroup.MarginLayoutParams)) {
+            Log.w(TAG, "WebView layout params do not support margins");
+            return;
+        }
+
+        final ViewGroup.MarginLayoutParams params =
+            (ViewGroup.MarginLayoutParams) webView.getLayoutParams();
+
+        if (
+            params.bottomMargin == insets.bottom &&
+            params.leftMargin == insets.left &&
+            params.rightMargin == insets.right &&
+            params.topMargin == 0
+        ) {
+            return;
+        }
+
+        params.bottomMargin = insets.bottom;
+        params.leftMargin = insets.left;
+        params.rightMargin = insets.right;
+        params.topMargin = 0;
+        webView.setLayoutParams(params);
     }
 
     private void publishInsetsIfChanged(@NonNull Insets nextInsets) {
@@ -122,14 +171,19 @@ public class MentalaSafeAreaPlugin extends Plugin {
         notifyListeners("safeAreaChanged", toJsObject(nextInsets), false);
     }
 
+    /**
+     * В JS отдаём только top: низ и бока теперь обработаны нативными margin'ами,
+     * поэтому для web-слоя их эффективное значение — 0. Если отдать реальные числа,
+     * CSS добавит их повторно и получится двойной отступ (double-padding).
+     */
     @NonNull
     private JSObject toJsObject(@NonNull Insets insets) {
         final float density = resolveDensity();
         final JSObject result = new JSObject();
         result.put("top", pxToDp(insets.top, density));
-        result.put("right", pxToDp(insets.right, density));
-        result.put("bottom", pxToDp(insets.bottom, density));
-        result.put("left", pxToDp(insets.left, density));
+        result.put("right", 0);
+        result.put("bottom", 0);
+        result.put("left", 0);
         return result;
     }
 

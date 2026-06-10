@@ -44,10 +44,15 @@ async function syncAppLockUser(
   routePath: string
 ) {
   try {
-    if (auth._isLogoutQuietPeriod() || isAppLockSuppressedRoute(routePath)) {
+    if (auth._isLogoutQuietPeriod()) {
       appLock.clearRuntime();
       return;
     }
+
+    // На suppressed-роутах gate скрыт через shouldShow, runtime сбрасывать
+    // не нужно: транзит через такой роут на старте (например /auth → /)
+    // иначе приводит к циклу clearRuntime → re-init и мерцанию lock-экрана.
+    if (isAppLockSuppressedRoute(routePath)) return;
 
     if (previousUserId && previousUserId !== userId) {
       // При смене пользователя очищаем только runtime-состояние. Persisted record

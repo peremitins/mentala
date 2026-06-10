@@ -1,6 +1,7 @@
 package com.mentala.app;
 
 import android.content.Intent;
+import android.graphics.Color;
 import android.util.Log;
 import android.os.Bundle;
 import android.content.Context;
@@ -90,6 +91,12 @@ public class MainActivity extends BridgeActivity implements ModifiedMainActivity
     registerPlugin(MentalaRealtimeVoiceForegroundPlugin.class);
     registerPlugin(MentalaSafeAreaPlugin.class);
     super.onCreate(savedInstanceState);
+
+    // WebView теперь не залезает под системную навигацию (см. MentalaSafeAreaPlugin:
+    // нижний инсет применяется как нативный margin). Полоса под навигацией показывает
+    // фон окна Activity — красим его в фон приложения, чтобы переход был бесшовным.
+    getWindow().getDecorView().setBackgroundColor(Color.parseColor("#090B12"));
+
     persistPushLaunchPayload(getIntent());
   }
 

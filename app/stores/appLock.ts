@@ -60,9 +60,17 @@ export const useAppLockStore = defineStore('appLock', {
     backgroundedAt: null as number | null,
     isPrivacyOverlayVisible: false,
     biometric: { ...DEFAULT_BIOMETRY_STATE } as AppLockBiometryState,
+    // Становится true после первого resolve проверки доступности биометрии.
+    // Пока false — gate показывает нейтральный спиннер вместо PIN-экрана,
+    // чтобы PIN не мелькал перед автозапуском системного отпечатка.
+    biometricChecked: false,
     biometricPromptInFlight: false,
     biometricPromptedForCurrentLock: false,
     initializationRunId: 0,
+    // userId, для которого инициализация сейчас в полёте. Защищает от
+    // повторного clearRuntime/init-цикла (и визуального мерцания gate),
+    // когда watcher срабатывает несколько раз за время async-загрузки record.
+    initializationInFlightUserId: null as number | null,
   }),
   getters: {
     shouldShowGate: (state) =>
@@ -95,11 +103,16 @@ export const useAppLockStore = defineStore('appLock', {
       }
 
       if (this.initialized && this.activeUserId === userId) return;
+      // Инициализация для этого пользователя уже идёт — не перезапускаем её,
+      // иначе каждый повторный вызов (route-watcher на старте срабатывает
+      // несколько раз) делает clearRuntime → gate мерцает.
+      if (this.initializationInFlightUserId === userId) return;
 
       this.clearRuntime();
       const runId = this.initializationRunId + 1;
       this.initializationRunId = runId;
       this.activeUserId = userId;
+      this.initializationInFlightUserId = userId;
 
       let record: AppLockRecord | null = null;
       try {
@@ -112,6 +125,7 @@ export const useAppLockStore = defineStore('appLock', {
       }
 
       if (!this.isCurrentInitialization(runId, userId)) return;
+      this.initializationInFlightUserId = null;
 
       if (!record) {
         this.initialized = true;
@@ -230,6 +244,11 @@ export const useAppLockStore = defineStore('appLock', {
 
     handleAppHidden() {
       if (!this.activeUserId) return;
+      // Системный BiometricPrompt — отдельное окно: пока он показан, Activity
+      // уходит в pause и appStateChange сообщает «hidden». Это НЕ уход в фон:
+      // если отреагировать (privacy overlay + мгновенный lock при lockAfter=0),
+      // получаем мерцание gate и цикл повторных биометрических промптов.
+      if (this.biometricPromptInFlight) return;
       this.backgroundedAt = Date.now();
       this.isPrivacyOverlayVisible = true;
       if (this.record && this.lockAfterSeconds === 0) {
@@ -238,6 +257,8 @@ export const useAppLockStore = defineStore('appLock', {
     },
 
     handleAppVisible() {
+      // Возврат фокуса после закрытия BiometricPrompt — не возврат из фона.
+      if (this.biometricPromptInFlight) return;
       const now = Date.now();
       const mustLock = shouldLockAfterBackground(
         this.backgroundedAt,
@@ -274,6 +295,8 @@ export const useAppLockStore = defineStore('appLock', {
       } catch (error) {
         console.warn('[AppLock] Не удалось проверить биометрию:', error);
         this.biometric = { ...DEFAULT_BIOMETRY_STATE };
+      } finally {
+        this.biometricChecked = true;
       }
     },
 
@@ -345,8 +368,10 @@ export const useAppLockStore = defineStore('appLock', {
       this.backgroundedAt = null;
       this.isPrivacyOverlayVisible = false;
       this.biometric = { ...DEFAULT_BIOMETRY_STATE };
+      this.biometricChecked = false;
       this.biometricPromptInFlight = false;
       this.biometricPromptedForCurrentLock = false;
+      this.initializationInFlightUserId = null;
     },
 
     resetFailedAttempts() {

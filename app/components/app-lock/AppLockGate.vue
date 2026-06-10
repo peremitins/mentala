@@ -10,7 +10,7 @@
         <section
           class="glass-deep relative w-full max-w-[22rem] m-auto rounded-2xl border border-white/12 p-5 shadow-[0_18px_60px_rgba(0,0,0,0.28)]"
         >
-          <div v-if="isInitializing" class="space-y-4 py-2 text-center">
+          <div v-if="showPreparingState" class="space-y-4 py-2 text-center">
             <div
               class="mx-auto h-9 w-9 animate-spin rounded-full border-2 border-white/20 border-t-primary"
             />
@@ -231,6 +231,14 @@ const shouldShow = computed(() =>
       (isInitializing.value || appLock.shouldShowGate)
   )
 );
+// Пока доступность биометрии не определена (async-проверка с таймаутом 1.5s),
+// держим нейтральный спиннер: если биометрия доступна, системный prompt
+// откроется сам, и PIN-экран не должен мелькать перед ним.
+const showPreparingState = computed(
+  () =>
+    isInitializing.value ||
+    (appLock.isLocked && !isSetupFlow.value && !appLock.biometricChecked)
+);
 const isSetupFlow = computed(() =>
   Boolean(appLock.setupMode || appLock.setupRequired)
 );
@@ -284,6 +292,16 @@ watch(
   (available) => {
     if (available && appLock.isLocked) {
       void attemptBiometricAndFallback();
+    }
+  }
+);
+
+// Проверка доступности завершилась, биометрии нет → показываем PIN и фокусируем.
+watch(
+  () => appLock.biometricChecked,
+  (checked) => {
+    if (checked && appLock.isLocked && !appLock.biometric.available) {
+      void focusUnlockInput();
     }
   }
 );
@@ -422,6 +440,11 @@ async function attemptBiometricAndFallback() {
   if (appLock.biometricPromptedForCurrentLock) return;
 
   if (!appLock.biometric.available) {
+    // Доступность ещё не определена — gate показывает спиннер, PIN-экран не
+    // смонтирован. Дождёмся результата проверки (watcher по biometricChecked /
+    // biometric.available перезапустит флоу), иначе клавиатура мелькнёт
+    // перед системным биометрическим prompt'ом.
+    if (!appLock.biometricChecked) return;
     void focusUnlockInput();
     return;
   }
