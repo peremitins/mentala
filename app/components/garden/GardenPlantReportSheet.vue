@@ -76,7 +76,7 @@
               :src="imageSrc"
               :alt="plant.title"
               class="report-sheet__plant"
-              loading="lazy"
+              loading="eager"
               decoding="async"
             />
           </button>

@@ -77,6 +77,7 @@
               src="/store-badges/google-play-badge.svg"
               alt="Доступно в Google Play"
               class="block h-auto w-full max-w-[210px]"
+              loading="lazy"
             />
           </button>
 

@@ -3,7 +3,7 @@
     :src="src"
     :alt="alt"
     :class="$attrs.class"
-    :style="($attrs.style as any)"
+    :style="$attrs.style as any"
     draggable="false"
   />
 </template>

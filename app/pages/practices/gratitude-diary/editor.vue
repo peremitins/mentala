@@ -204,6 +204,7 @@
             :src="photoPreviewUrl"
             :alt="t('GRATITUDE_DIARY.PHOTO_ALT')"
             class="max-h-[220px] h-full w-full cursor-zoom-in object-contain"
+            loading="lazy"
             @click="openPhotoSwipeFromImg"
             @error="handlePhotoLoadError"
           />

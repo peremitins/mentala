@@ -37,6 +37,7 @@
                 :src="meta.imagePath"
                 :alt="meta.title"
                 class="ach-ov__badge-img"
+                loading="eager"
                 draggable="false"
               />
               <div
@@ -69,11 +70,7 @@
 
         <!-- Текстовая ссылка-кнопка для закрытия. Overlay сам по тайм-ауту
              не закрывается — только по явному действию пользователя. -->
-        <button
-          type="button"
-          class="ach-ov__hint"
-          @click.stop="dismiss"
-        >
+        <button type="button" class="ach-ov__hint" @click.stop="dismiss">
           Нажмите, чтобы продолжить
         </button>
       </div>

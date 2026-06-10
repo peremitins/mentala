@@ -16,7 +16,12 @@
       <div
         class="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/40 bg-white/55"
       >
-        <img :src="toolkitImg" alt="Мой набор" class="h-7 w-7 object-contain" />
+        <img
+          :src="toolkitImg"
+          alt="Мой набор"
+          class="h-7 w-7 object-contain"
+          loading="lazy"
+        />
       </div>
       <p class="text-sm text-foreground/80 max-w-xs">
         Здесь появятся практики, фразы и действия, которые ты выберешь для себя
@@ -51,6 +56,7 @@
               :src="imageFor(item)"
               :alt="item.title"
               class="h-10 w-10 object-contain"
+              loading="lazy"
             />
           </span>
           <span class="flex-1 min-w-0">
@@ -98,6 +104,7 @@
               :src="aiImg"
               :alt="item.title"
               class="h-10 w-10 object-contain"
+              loading="lazy"
             />
           </span>
           <span class="flex-1 min-w-0">

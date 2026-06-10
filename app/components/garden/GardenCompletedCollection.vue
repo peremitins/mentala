@@ -33,7 +33,7 @@
             :src="getPlantImageSrcSafe(plant.stateIndex, plant.plantSetSlug)"
             :alt="plant.title"
             class="h-12 w-12 shrink-0 rounded-2xl bg-white/[0.04] object-contain p-0.5"
-            loading="lazy"
+            loading="eager"
             decoding="async"
             @error="onPlantImageError"
           />

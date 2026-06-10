@@ -130,6 +130,7 @@
                     :src="getEntryPhotoSrc(entry)"
                     :alt="t('GRATITUDE_DIARY.PHOTO_ALT')"
                     class="max-h-[220px] w-full rounded-xl object-contain"
+                    loading="lazy"
                     @click.stop="openPhotoSwipeFromImg"
                     @error="handleEntryPhotoLoadError(entry)"
                   />

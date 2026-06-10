@@ -66,6 +66,7 @@
             :src="nextPlantImage"
             :alt="nextProgram.title"
             class="plant-grow-overlay__image"
+            loading="eager"
           />
         </div>
         <p class="plant-grow-overlay__label">{{ nextProgram?.title }}</p>

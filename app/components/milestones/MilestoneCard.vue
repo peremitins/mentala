@@ -19,6 +19,7 @@
           :src="resolvedImagePath"
           :alt="meta.title"
           class="mc__img"
+          loading="eager"
           draggable="false"
         />
         <div v-else class="mc__placeholder" :style="placeholderStyle">

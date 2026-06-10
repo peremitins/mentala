@@ -16,6 +16,7 @@
               :src="brandLogoSrc"
               :alt="brandLogoAlt"
               class="w-[130px] h-10"
+              loading="lazy"
             />
           </a>
 
@@ -224,8 +225,8 @@ const termsOfServiceUrl = computed(
   () => `${webAppUrl.value}/legal/terms-of-service-${legalLocale.value}.html`
 );
 const siteUrl = useLandingSiteUrl();
-const accountDeletionUrl = computed(
-  () => getLocalizedPath('/account-deletion', selectedLocale.value)
+const accountDeletionUrl = computed(() =>
+  getLocalizedPath('/account-deletion', selectedLocale.value)
 );
 const homeUrl = computed(() => getLocalizedPath('/', selectedLocale.value));
 const ruSupportUrl = computed(() => `${siteUrl.value}/support`);

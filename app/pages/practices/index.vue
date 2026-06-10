@@ -36,7 +36,7 @@
           <img
             v-if="card.image"
             :src="card.image"
-            loading="lazy"
+            loading="eager"
             :alt="card.title"
             class="w-[60px]"
           />

@@ -53,7 +53,7 @@
           :src="plantImageSrc"
           :alt="plant.title"
           class="h-full w-full object-contain"
-          loading="lazy"
+          loading="eager"
           decoding="async"
           @error="onPlantImageError"
         />

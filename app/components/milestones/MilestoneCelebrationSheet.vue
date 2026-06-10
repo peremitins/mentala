@@ -23,6 +23,7 @@
             :src="badgeMeta.imagePath"
             :alt="badgeMeta.title"
             class="celebration-sheet__badge-img"
+            loading="eager"
             draggable="false"
           />
           <div
@@ -30,7 +31,9 @@
             class="celebration-sheet__badge-placeholder"
             :style="placeholderStyle"
           >
-            <span class="celebration-sheet__badge-letter">{{ titleLetter }}</span>
+            <span class="celebration-sheet__badge-letter">{{
+              titleLetter
+            }}</span>
           </div>
         </div>
       </div>
@@ -38,7 +41,9 @@
       <!-- Текст -->
       <div class="celebration-sheet__text">
         <h2 class="celebration-sheet__title">{{ badgeMeta.title }}</h2>
-        <p class="celebration-sheet__description">{{ badgeMeta.description }}</p>
+        <p class="celebration-sheet__description">
+          {{ badgeMeta.description }}
+        </p>
       </div>
 
       <!-- Кнопки -->
@@ -251,8 +256,15 @@ function handleViewMilestones() {
 }
 
 @keyframes celebration-glow-pulse {
-  0%, 100% { opacity: 0.6; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.08); }
+  0%,
+  100% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
 }
 
 .celebration-sheet__badge {
@@ -323,7 +335,8 @@ function handleViewMilestones() {
   font-weight: 600;
   cursor: pointer;
   border: none;
-  transition: transform 200ms cubic-bezier(0.32, 0.72, 0, 1),
+  transition:
+    transform 200ms cubic-bezier(0.32, 0.72, 0, 1),
     opacity 200ms ease;
 }
 

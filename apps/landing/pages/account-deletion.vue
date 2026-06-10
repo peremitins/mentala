@@ -16,6 +16,7 @@
               :src="brandLogoSrc"
               :alt="brandLogoAlt"
               class="w-[130px] h-10"
+              loading="lazy"
             />
           </a>
 
