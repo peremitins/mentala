@@ -106,7 +106,9 @@ const dailyCompletedSteps = await countCompletedStepsForUserOnDate(
   userId,
   todayLocalKey
 );
-if (dailyCompletedSteps >= DAILY_STEP_LIMIT /* = 2 */) {
+// Лимит динамический: первые два дня программы = 3, дальше = 2
+// (DAILY_STEP_LIMIT_SCHEDULE в retention-timezone.ts).
+if (dailyCompletedSteps >= dailyStepLimit /* 3 → 3 → 2 → 2 → ... */) {
   throw new HttpError(409, 'E_DAILY_LIMIT', {
     nextResetAt: nextLocalMidnight(userTimezone),
   });

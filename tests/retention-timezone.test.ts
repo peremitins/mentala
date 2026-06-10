@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  diffDateKeys,
+  getDailyStepLimitForProgramDay,
   getLocalDateKey,
   getDevDailyLimitCycleState,
   getNextDailyResetAt,
@@ -225,6 +227,42 @@ describe('retention timezone helpers', () => {
 
       expect(state.stepsDoneToday).toBe(1);
       expect(state.nextResetAt).toBeNull();
+    });
+  });
+
+  describe('diffDateKeys', () => {
+    it('считает разницу дней между датами', () => {
+      expect(diffDateKeys('2026-05-15', '2026-05-15')).toBe(0);
+      expect(diffDateKeys('2026-05-15', '2026-05-16')).toBe(1);
+      expect(diffDateKeys('2026-05-15', '2026-05-17')).toBe(2);
+    });
+
+    it('работает через границу месяца и года', () => {
+      expect(diffDateKeys('2026-05-31', '2026-06-01')).toBe(1);
+      expect(diffDateKeys('2025-12-31', '2026-01-01')).toBe(1);
+    });
+
+    it('возвращает отрицательное значение для прошлых дат', () => {
+      expect(diffDateKeys('2026-05-16', '2026-05-15')).toBe(-1);
+    });
+  });
+
+  describe('getDailyStepLimitForProgramDay', () => {
+    it('даёт 3 шага в первые два дня программы', () => {
+      expect(getDailyStepLimitForProgramDay(0)).toBe(3);
+      expect(getDailyStepLimitForProgramDay(1)).toBe(3);
+    });
+
+    it('даёт базовые 2 шага с третьего дня и далее', () => {
+      expect(getDailyStepLimitForProgramDay(2)).toBe(2);
+      expect(getDailyStepLimitForProgramDay(10)).toBe(2);
+      expect(getDailyStepLimitForProgramDay(365)).toBe(2);
+    });
+
+    it('приводит некорректные индексы к дню 0 (стартовый лимит)', () => {
+      expect(getDailyStepLimitForProgramDay(-1)).toBe(3);
+      expect(getDailyStepLimitForProgramDay(Number.NaN)).toBe(3);
+      expect(getDailyStepLimitForProgramDay(1.9)).toBe(3);
     });
   });
 });

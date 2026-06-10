@@ -43,6 +43,22 @@
     <ClientOnly>
       <ReviewPromptModal />
     </ClientOnly>
+    <ClientOnly>
+      <div
+        v-if="isPortraitFallbackActive"
+        class="portrait-only-fallback"
+        role="dialog"
+        aria-live="polite"
+        aria-label="Требуется вертикальная ориентация"
+      >
+        <div class="portrait-only-phone" aria-hidden="true"></div>
+        <div class="portrait-only-title">Поверните телефон вертикально</div>
+        <p class="portrait-only-text">
+          Ментала работает в портретном формате, чтобы сохранить удобный размер
+          практик, чата и навигации.
+        </p>
+      </div>
+    </ClientOnly>
 
     <!-- Глобальный PageLoader -->
     <!-- <Transition name="fade">
@@ -69,6 +85,7 @@ import AiChatConsentModal from '@/app/components/privacy/AiChatConsentModal.vue'
 import RealtimeVoiceAmbientFrame from '@/app/components/realtime/RealtimeVoiceAmbientFrame.vue';
 import AppTourOverlay from '@/app/components/app-tour/AppTourOverlay.vue';
 import ReviewPromptModal from '@/app/components/reviews/ReviewPromptModal.vue';
+import { usePortraitOrientationLock } from '@/app/composables/usePortraitOrientationLock';
 import {
   DEFAULT_SCENE_ID,
   findSceneTrack,
@@ -77,6 +94,8 @@ import {
 const auth = useAuthStore();
 const sceneSettings = useSceneSettingsStore();
 const uiSettings = useUiSettingsStore();
+const { isLandscapeFallbackActive: isPortraitFallbackActive } =
+  usePortraitOrientationLock();
 
 // Aurora остаётся только как глобальный fallback-слой под layout-ами.
 const showAurora = computed(() => {
@@ -185,5 +204,54 @@ watch(
     rgba(0, 0, 0, 0.35) 100%
   );
   opacity: 0.4;
+}
+
+:global(html.app-portrait-only-landscape),
+:global(body.app-portrait-only-landscape) {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+.portrait-only-fallback {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 24px;
+  color: #f8fafc;
+  text-align: center;
+  background: radial-gradient(
+      circle at 50% 20%,
+      rgba(45, 212, 191, 0.18),
+      transparent 38%
+    ),
+    linear-gradient(180deg, #09090b 0%, #18181b 100%);
+}
+
+.portrait-only-phone {
+  width: 42px;
+  height: 70px;
+  border: 3px solid rgba(248, 250, 252, 0.9);
+  border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
+}
+
+.portrait-only-title {
+  max-width: 360px;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.portrait-only-text {
+  max-width: 420px;
+  margin: 0;
+  color: rgba(248, 250, 252, 0.74);
+  font-size: 14px;
+  line-height: 1.5;
 }
 </style>

@@ -43,8 +43,11 @@ import {
 } from '@/shared/dto/retention';
 import { toIsoString } from '@/server/utils/serialize';
 import {
+  DAILY_STEP_LIMIT_BASE,
   DEFAULT_RETENTION_TIMEZONE,
+  diffDateKeys,
   getDailyLimitWindowMs,
+  getDailyStepLimitForProgramDay,
   getDevDailyLimitCycleState,
   getLocalDateKey as getLocalDateKeyPure,
   getNextDailyResetAt,
@@ -67,10 +70,12 @@ import {
 export const DEFAULT_RETENTION_PROGRAM_SLUG = 'calm_anxiety_30';
 export const RETENTION_WEEKLY_GOAL = 25;
 
-// Максимум новых завершённых шагов программы за один локальный день пользователя.
+// Базовый максимум новых завершённых шагов программы за один локальный день
+// пользователя. Первые дни программы лимит выше — см. DAILY_STEP_LIMIT_SCHEDULE
+// в retention-timezone.ts (день 0 и 1 → 3 шага, дальше → 2).
 // Replay (повтор уже завершённых шагов) лимитом не ограничен.
 // См. retention/retention_long_term_strategy.md (pacing).
-export const DAILY_STEP_LIMIT = 2;
+export const DAILY_STEP_LIMIT = DAILY_STEP_LIMIT_BASE;
 
 const DEFAULT_TIMEZONE = DEFAULT_RETENTION_TIMEZONE;
 
@@ -6103,11 +6108,46 @@ export type ProgramDailyLimitState = {
 };
 
 /**
+ * Дневной лимит шагов для пользователя с учётом дня активной программы.
+ *
+ * День считается от `startedAt` последней активной `user_programs` в локальной
+ * таймзоне пользователя: день 0 и 1 → 3 шага, дальше → 2 (см.
+ * DAILY_STEP_LIMIT_SCHEDULE). Нет активной программы — считаем это днём 0:
+ * программа создаётся при старте первого шага, и новый пользователь должен
+ * сразу видеть стартовый лимит.
+ *
+ * Лимит общий на все программы, но при старте новой программы (новое растение
+ * в Саду) onboarding-буст первых дней включается заново — это осознанно.
+ */
+async function getDailyStepLimitForUser(
+  userId: number,
+  timezone: string,
+  now: Date
+): Promise<number> {
+  const [active] = await db
+    .select({ startedAt: userPrograms.startedAt })
+    .from(userPrograms)
+    .where(
+      and(eq(userPrograms.userId, userId), eq(userPrograms.status, 'active'))
+    )
+    .orderBy(desc(userPrograms.startedAt))
+    .limit(1);
+
+  if (!active?.startedAt) {
+    return getDailyStepLimitForProgramDay(0);
+  }
+
+  const startKey = getLocalDateKeyPure(active.startedAt, timezone);
+  const nowKey = getLocalDateKeyPure(now, timezone);
+  return getDailyStepLimitForProgramDay(diffDateKeys(startKey, nowKey));
+}
+
+/**
  * Единое состояние daily-limit для Roadmap.
  *
  * Поведение:
  *  - prod (windowMs=0): окно = локальный календарный день пользователя.
- *  - dev (windowMs>0): после каждой пары завершённых шагов включается короткий
+ *  - dev (windowMs>0): после каждой нормы завершённых шагов включается короткий
  *    cooldown на N миллисекунд. Это удобнее для проверки, чем rolling-window:
  *    timed-практики часто длятся дольше 60 секунд, и события иначе успевают
  *    выпасть из окна ещё до старта следующего шага.
@@ -6119,6 +6159,7 @@ export async function getProgramDailyLimitState(
 ): Promise<ProgramDailyLimitState> {
   const windowMs = getDailyLimitWindowMs();
   const entryDate = getLocalDateKeyPure(now, timezone);
+  const dailyStepLimit = await getDailyStepLimitForUser(userId, timezone, now);
 
   if (windowMs > 0) {
     const [row] = await db
@@ -6143,12 +6184,12 @@ export async function getProgramDailyLimitState(
       completedCount: completedToday,
       latestCompletedAt,
       now,
-      dailyStepLimit: DAILY_STEP_LIMIT,
+      dailyStepLimit,
       windowMs,
     });
 
     return {
-      dailyStepLimit: DAILY_STEP_LIMIT,
+      dailyStepLimit,
       stepsDoneToday: cycleState.stepsDoneToday,
       nextResetAt: cycleState.nextResetAt,
     };
@@ -6160,10 +6201,10 @@ export async function getProgramDailyLimitState(
   );
 
   return {
-    dailyStepLimit: DAILY_STEP_LIMIT,
+    dailyStepLimit,
     stepsDoneToday,
     nextResetAt:
-      stepsDoneToday >= DAILY_STEP_LIMIT
+      stepsDoneToday >= dailyStepLimit
         ? getNextDailyResetAt(now, timezone)
         : null,
   };
@@ -6653,7 +6694,8 @@ export async function startProgramStep(params: {
     await getLatestMoodForDate(params.userId, entryDate)
   );
 
-  // Лимит «2 шага в день» применяется только к новым шагам.
+  // Дневной лимит шагов (3 в первые два дня программы, дальше 2) применяется
+  // только к новым шагам.
   // Replay (повтор завершённого) и продолжение начатого, но незавершённого шага
   // ограничениями не блокируются - см. retention/retention_long_term_strategy.md
   const [existingProgressBeforeStart] = await db

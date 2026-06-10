@@ -49,6 +49,43 @@ export function shiftDateKey(dateKey: string, deltaDays: number): string {
 }
 
 /**
+ * Базовый дневной лимит новых шагов Roadmap (с третьего дня программы и далее).
+ */
+export const DAILY_STEP_LIMIT_BASE = 2;
+
+/**
+ * Расписание дневного лимита по дням программы: индекс массива — номер дня
+ * с момента старта активной программы (0 = день старта). Первые два дня — по
+ * 3 шага (onboarding ramp: юзер на пике мотивации закрывает вводную главу),
+ * дальше — базовый темп `DAILY_STEP_LIMIT_BASE`.
+ * См. retention/retention_long_term_strategy.md (pacing).
+ */
+export const DAILY_STEP_LIMIT_SCHEDULE: readonly number[] = [3, 3];
+
+/**
+ * Лимит новых шагов для конкретного дня программы.
+ * Отрицательные/нечисловые индексы (рассинхрон часов) приводим к дню 0.
+ */
+export function getDailyStepLimitForProgramDay(dayIndex: number): number {
+  const index = Number.isFinite(dayIndex)
+    ? Math.max(0, Math.floor(dayIndex))
+    : 0;
+  return DAILY_STEP_LIMIT_SCHEDULE[index] ?? DAILY_STEP_LIMIT_BASE;
+}
+
+/**
+ * Разница в календарных днях между двумя `YYYY-MM-DD` ключами
+ * (`toKey - fromKey`). UTC-арифметика — без DST-сюрпризов.
+ */
+export function diffDateKeys(fromKey: string, toKey: string): number {
+  const parse = (key: string): number => {
+    const [year = 1970, month = 1, day = 1] = key.split('-').map(Number);
+    return Date.UTC(year, month - 1, day);
+  };
+  return Math.round((parse(toKey) - parse(fromKey)) / 86_400_000);
+}
+
+/**
  * Возвращает UTC-момент локальной полуночи следующего дня в `timezone`.
  *
  * Используется для расчёта когда пользователю откроется новый слот в daily-limit

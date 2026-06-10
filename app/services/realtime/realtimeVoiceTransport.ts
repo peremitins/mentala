@@ -24,6 +24,9 @@ type NavigatorWithAudioSession = Navigator & {
 // 'playback' конфликтует с audio capture в PWA WebKit и вызывает ошибку
 // "AudioSession category is not compatible with audio capture".
 const AUDIO_SESSION_PLAY_AND_RECORD = 'play-and-record';
+// 'auto' возвращает управление WebKit: дальше тип сессии определяется тем,
+// что реально играет (playback для медитаций/дыхательных практик).
+const AUDIO_SESSION_AUTO = 'auto';
 const INPUT_ACTIVITY_VOLUME_THRESHOLD = 4;
 const INPUT_ACTIVITY_CHECK_INTERVAL_MS = 750;
 const INPUT_ACTIVITY_THROTTLE_MS = 1_500;
@@ -79,6 +82,29 @@ function ensureRealtimeVoicePlaybackAudioSessionType() {
   try {
     if (session.type !== AUDIO_SESSION_PLAY_AND_RECORD) {
       session.type = AUDIO_SESSION_PLAY_AND_RECORD;
+    }
+  } catch {
+    // В старых WebView API может отсутствовать или быть read-only.
+  }
+}
+
+function resetRealtimeVoiceAudioSessionType() {
+  if (typeof navigator === 'undefined') {
+    return;
+  }
+
+  const session = (navigator as NavigatorWithAudioSession).audioSession;
+  if (!session) {
+    return;
+  }
+
+  try {
+    // Если оставить 'play-and-record' после завершения voice-сессии, iOS WebKit
+    // продолжает требовать запись для всего аудио WebView: HTMLAudioElement
+    // дыхательных практик и Web Audio играют через тихий разговорный маршрут
+    // или вовсе не стартуют. Возвращаем 'auto' при stop().
+    if (session.type === AUDIO_SESSION_PLAY_AND_RECORD) {
+      session.type = AUDIO_SESSION_AUTO;
     }
   } catch {
     // В старых WebView API может отсутствовать или быть read-only.
@@ -893,5 +919,10 @@ export class RealtimeVoiceTransport {
       }
       this.remoteAudioElement = null;
     }
+
+    // Возвращаем WebKit-сессии управляемый режим: иначе после voice-сессии
+    // весь звук WebView (медитации web-фоллбэк, дыхательные практики) остаётся
+    // на play-and-record маршруте с низкой громкостью.
+    resetRealtimeVoiceAudioSessionType();
   }
 }
