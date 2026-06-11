@@ -29,6 +29,7 @@
           :max-score="item.scoring.maxScore"
           :score-direction="item.scoreDirection"
           :bands="item.resultBands"
+          :subscale-scores="resultSubscaleScores"
           :active-band-id="resultBand.id"
           :embedded="embedded"
         />
@@ -226,6 +227,11 @@ const submitError = ref<string | null>(null);
 
 const resultScore = ref(0);
 const resultBandId = ref<string | null>(null);
+const resultSubscaleScores = ref<
+  NonNullable<
+    AssessmentResultResponse['item']['resultSnapshot']['subscaleScores']
+  >
+>([]);
 const comparison = ref<AssessmentResultResponse['comparison']>(null);
 const chartPoints = ref<AssessmentChartResponse['points']>([]);
 
@@ -321,6 +327,8 @@ async function loadResult(attemptId: number) {
   );
   resultScore.value = resultRes.item.totalScore;
   resultBandId.value = resultRes.item.bandId;
+  resultSubscaleScores.value =
+    resultRes.item.resultSnapshot.subscaleScores ?? [];
   comparison.value = resultRes.comparison;
   phase.value = 'result';
   void loadChart();
@@ -394,6 +402,8 @@ async function goNext() {
       // их сбой не должен мешать показать результат.
       resultScore.value = result.item.totalScore;
       resultBandId.value = result.item.bandId;
+      resultSubscaleScores.value =
+        result.item.resultSnapshot.subscaleScores ?? [];
       comparison.value = null;
       chartPoints.value = [];
       phase.value = 'result';

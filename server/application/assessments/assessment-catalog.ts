@@ -579,6 +579,279 @@ const relationshipsBoundariesV1 = AssessmentDefinitionDto.parse({
   },
 });
 
+const sharedBurnoutComparisonCopy = {
+  comparisonImprovedText:
+    'Ниже, чем в прошлый раз. Это не медицинский вывод, но по ответам видно, что истощение сейчас занимает меньше места.',
+  comparisonWorseText:
+    'Выше, чем в прошлый раз. Это не провал: на истощение могут влиять нагрузка, сон, здоровье, конфликты и события последних дней.',
+  comparisonStableText:
+    'Почти без изменений. Это тоже важное наблюдение: иногда сначала меняется не общий балл, а способность раньше замечать усталость и делать паузу.',
+};
+
+const burnoutCbiV1 = AssessmentDefinitionDto.parse({
+  slug: 'burnout_cbi_v1',
+  version: 1,
+  status: 'active',
+  title: 'Оценка выгорания и перегрузки',
+  shortTitle: 'Выгорание',
+  description:
+    'Оценка помогает заметить, насколько в последнее время были выражены усталость, истощение и перегрузка от работы, учёбы или регулярного взаимодействия с людьми. Это не диагноз и не медицинское заключение.',
+  category: 'burnout',
+  linkedProgramSlug: 'burnout_21',
+  linkedProgramTitle: 'Выгорание',
+  estimatedMinutes: 5,
+  timeframeLabel: 'в последние недели',
+  isValidatedScale: true,
+  sourceName: 'Copenhagen Burnout Inventory, CBI',
+  sourceUrl: 'https://nfa.dk/media/hl5nbers/cbi-first-edition.pdf',
+  licenseNote:
+    'Copenhagen Burnout Inventory (Kristensen T.S. et al., 2005). Используется полный CBI на 19 пунктов: Personal Burnout, Work-related Burnout и Client-related Burnout. Перед production-внедрением нужна финальная проверка выбранной русской формы.',
+  scoreDirection: 'higher_is_worse',
+  scoring: {
+    method: 'mean_with_reverse',
+    minScore: 0,
+    maxScore: 100,
+  },
+  options: [
+    { id: 'never_almost_never', label: 'Никогда или почти никогда', value: 0 },
+    { id: 'rarely', label: 'Редко', value: 25 },
+    { id: 'sometimes', label: 'Иногда', value: 50 },
+    { id: 'often', label: 'Часто', value: 75 },
+    { id: 'always', label: 'Всегда или почти всегда', value: 100 },
+  ],
+  questions: [
+    {
+      id: 'cbi_personal_tired',
+      text: 'Я чувствую себя уставшим',
+      subscale: 'personal_burnout',
+      required: true,
+    },
+    {
+      id: 'cbi_personal_physically_exhausted',
+      text: 'Я чувствую физическое истощение',
+      subscale: 'personal_burnout',
+      required: true,
+    },
+    {
+      id: 'cbi_personal_emotionally_exhausted',
+      text: 'Я чувствую эмоциональное истощение',
+      subscale: 'personal_burnout',
+      required: true,
+    },
+    {
+      id: 'cbi_personal_cannot_take_more',
+      text: 'У меня появляется мысль: «Я больше не могу»',
+      subscale: 'personal_burnout',
+      required: true,
+    },
+    {
+      id: 'cbi_personal_worn_out',
+      text: 'Я чувствую себя вымотанным',
+      subscale: 'personal_burnout',
+      required: true,
+    },
+    {
+      id: 'cbi_personal_weak_illness',
+      text: 'Я чувствую слабость и ощущаю, что организм стал уязвимее',
+      subscale: 'personal_burnout',
+      required: true,
+    },
+    {
+      id: 'cbi_work_emotionally_exhausting',
+      text: 'Работа, учёба или основная нагрузка эмоционально истощают меня',
+      subscale: 'work_burnout',
+      required: true,
+    },
+    {
+      id: 'cbi_work_burnt_out',
+      text: 'Я чувствую себя выгоревшим из-за работы, учёбы или основной нагрузки',
+      subscale: 'work_burnout',
+      required: true,
+    },
+    {
+      id: 'cbi_work_frustrating',
+      text: 'Работа, учёба или основная нагрузка часто вызывают у меня внутреннее напряжение и раздражение',
+      subscale: 'work_burnout',
+      required: true,
+    },
+    {
+      id: 'cbi_work_worn_out_end_day',
+      text: 'К концу рабочего или учебного дня я чувствую себя вымотанным',
+      subscale: 'work_burnout',
+      required: true,
+    },
+    {
+      id: 'cbi_work_morning_exhausted',
+      text: 'Перед началом рабочего или учебного дня меня истощает сама мысль о предстоящей нагрузке',
+      subscale: 'work_burnout',
+      required: true,
+    },
+    {
+      id: 'cbi_work_every_hour_tiring',
+      text: 'Каждый час работы, учёбы или основной нагрузки даётся мне тяжело',
+      subscale: 'work_burnout',
+      required: true,
+    },
+    {
+      id: 'cbi_client_hard_work',
+      text: 'Мне бывает трудно работать, учиться или регулярно взаимодействовать с людьми',
+      subscale: 'client_burnout',
+      required: true,
+    },
+    {
+      id: 'cbi_client_draining',
+      text: 'Регулярное общение, помощь или поддержка других людей забирают у меня много сил',
+      subscale: 'client_burnout',
+      required: true,
+    },
+    {
+      id: 'cbi_client_frustrating',
+      text: 'Общение с людьми, которым я помогаю или с которыми регулярно взаимодействую, вызывает у меня напряжение или раздражение',
+      subscale: 'client_burnout',
+      required: true,
+    },
+    {
+      id: 'cbi_client_gives_more_than_gets',
+      text: 'Мне кажется, что я отдаю людям больше сил, чем успеваю восстанавливать',
+      subscale: 'client_burnout',
+      required: true,
+    },
+    {
+      id: 'cbi_client_tired_of_people',
+      text: 'Я чувствую усталость от людей, с которыми регулярно взаимодействую',
+      subscale: 'client_burnout',
+      required: true,
+    },
+    {
+      id: 'cbi_client_wonder_how_long',
+      text: 'Я думаю о том, как долго ещё смогу выдерживать такую нагрузку от общения или заботы',
+      subscale: 'client_burnout',
+      required: true,
+    },
+    {
+      id: 'cbi_work_energy_for_close_people',
+      text: 'После работы, учёбы или основной нагрузки у меня остаются силы на близких и личную жизнь',
+      subscale: 'work_burnout',
+      reverseScored: true,
+      required: true,
+    },
+  ],
+  subscales: [
+    {
+      id: 'personal_burnout',
+      title: 'Общее истощение',
+      minScore: 0,
+      maxScore: 100,
+      scoreDirection: 'higher_is_worse',
+    },
+    {
+      id: 'work_burnout',
+      title: 'Работа и нагрузка',
+      minScore: 0,
+      maxScore: 100,
+      scoreDirection: 'higher_is_worse',
+    },
+    {
+      id: 'client_burnout',
+      title: 'Общение и забота о других',
+      minScore: 0,
+      maxScore: 100,
+      scoreDirection: 'higher_is_worse',
+    },
+  ],
+  resultBands: [
+    {
+      id: 'low',
+      minScore: 0,
+      maxScore: 24,
+      title: 'Перегрузка сейчас выражена слабо',
+      shortText:
+        'Ответы показывают, что истощение в последнее время было слабым или появлялось редко.',
+      description:
+        'Это не диагноз, а спокойная точка наблюдения. Даже если перегрузка сейчас выражена слабо, полезно заранее замечать первые признаки усталости и не доводить себя до режима «терпеть до последнего».',
+      recommendationText:
+        'Сад «Выгорание» можно пройти как профилактику: собрать короткие практики отдыха, восстановления и более бережного распределения сил.',
+      programReportText:
+        'Стартовая оценка показала, что перегрузка была выражена слабо. В саде можно использовать практики как профилактику и способ заранее укрепить привычку восстанавливаться до сильного истощения.',
+      ...sharedBurnoutComparisonCopy,
+      safetyLevel: 'none',
+      nextAction: {
+        type: 'program',
+        slug: 'burnout_21',
+        label: 'Перейти к саду «Выгорание»',
+      },
+    },
+    {
+      id: 'moderate',
+      minScore: 25,
+      maxScore: 49,
+      title: 'Перегрузка сейчас заметна',
+      shortText:
+        'Ответы показывают, что усталость и истощение уже заметны и могут влиять на настроение, концентрацию, работу, учёбу или личную жизнь.',
+      description:
+        'Это не диагноз. Такой результат часто означает, что сил уходит больше, чем успевает восстанавливаться. Сейчас особенно важны не резкие перемены, а маленькие шаги: паузы, сон, снижение лишней нагрузки и честная проверка своих ресурсов.',
+      recommendationText:
+        'Подойдёт мягкое прохождение сада: короткие практики восстановления, без требования делать всё идеально и быстро.',
+      programReportText:
+        'Стартовая оценка показала заметную перегрузку. В саде пользователь работал с признаками истощения, паузами, восстановлением, распределением сил и снижением лишнего давления на себя.',
+      ...sharedBurnoutComparisonCopy,
+      safetyLevel: 'none',
+      nextAction: {
+        type: 'program',
+        slug: 'burnout_21',
+        label: 'Продолжить сад «Выгорание»',
+      },
+    },
+    {
+      id: 'high',
+      minScore: 50,
+      maxScore: 74,
+      title: 'Перегрузка сейчас сильно заметна',
+      shortText:
+        'Ответы показывают, что истощение может занимать много места и заметно мешать обычному ритму жизни.',
+      description:
+        'Это не диагноз. Такой результат означает, что сейчас особенно важно не пытаться «собраться любой ценой». Когда сил мало, давление на себя часто только усиливает истощение.',
+      recommendationText:
+        'Начни с самого простого: короткая пауза, снижение необязательной нагрузки и один маленький шаг восстановления сегодня.',
+      programReportText:
+        'Стартовая оценка показала сильную перегрузку. В саде важно двигаться мягко: сначала стабилизация и восстановление сил, затем пересмотр нагрузки, границ и привычки требовать от себя слишком много.',
+      ...sharedBurnoutComparisonCopy,
+      safetyLevel: 'watch',
+      nextAction: {
+        type: 'program',
+        slug: 'burnout_21',
+        label: 'Продолжить сад мягко',
+      },
+    },
+    {
+      id: 'very_high',
+      minScore: 75,
+      maxScore: 100,
+      title: 'Истощение сейчас очень выражено',
+      shortText:
+        'Ответы показывают, что усталость и истощение в последнее время были очень сильными и могли заметно мешать повседневной жизни.',
+      description:
+        'Это не диагноз. Такой результат означает, что сейчас важно снизить давление на себя и не оставаться с тяжёлым состоянием в одиночку. Иногда сильное истощение связано не только с нагрузкой, но и со сном, здоровьем, тревогой, депрессивным состоянием или долгим стрессом.',
+      recommendationText:
+        'Начни с короткого шага восстановления. Если истощение долго не проходит, мешает спать, работать, учиться, заботиться о себе или резко усиливается, стоит обратиться за живой поддержкой к специалисту в своём регионе.',
+      programReportText:
+        'Стартовая оценка показала очень выраженное истощение. В саде важно не усиливать давление: сначала короткие практики восстановления и стабилизации, затем бережный пересмотр нагрузки, отдыха и личных границ.',
+      ...sharedBurnoutComparisonCopy,
+      safetyLevel: 'support',
+      nextAction: {
+        type: 'program',
+        slug: 'burnout_21',
+        label: 'Продолжить сад мягко',
+      },
+    },
+  ],
+  lockedCopy: {
+    title: 'Доступно в PRO',
+    description: 'Прохождение и результат доступны при активной подписке.',
+    ctaText: 'Открыть в PRO',
+  },
+});
+
 function futureAssessment(params: {
   slug: string;
   title: string;
@@ -618,16 +891,7 @@ export const ASSESSMENT_CATALOG: AssessmentDefinition[] = [
   anxietyCheckV1,
   selfCompassionScsSfV1,
   relationshipsBoundariesV1,
-  futureAssessment({
-    slug: 'stress_recovery_v1',
-    title: 'Оценка стресса и восстановления',
-    shortTitle: 'Восстановление',
-    category: 'stress',
-    linkedProgramSlug: 'burnout_recovery_21',
-    linkedProgramTitle: 'Восстановление после перегрузки',
-    description:
-      'Будущая оценка поможет мягко отслеживать нагрузку, восстановление и запас сил.',
-  }),
+  burnoutCbiV1,
   futureAssessment({
     slug: 'sleep_check_v1',
     title: 'Оценка сна',

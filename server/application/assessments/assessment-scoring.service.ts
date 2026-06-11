@@ -1,6 +1,7 @@
 import type {
   AssessmentDefinition,
   AssessmentResultBand,
+  AssessmentSubscaleScore,
 } from '@/shared/dto/assessments';
 
 export type AssessmentAnswerInput = {
@@ -12,6 +13,7 @@ export type AssessmentScoreResult = {
   totalScore: number;
   band: AssessmentResultBand;
   answers: Array<AssessmentAnswerInput & { value: number }>;
+  subscaleScores?: AssessmentSubscaleScore[];
 };
 
 export function resolveAssessmentBand(
@@ -69,19 +71,61 @@ export function scoreAssessmentAnswers(
     });
   }
 
-  const totalScore = normalizedAnswers.reduce(
+  const valueSum = normalizedAnswers.reduce(
     (sum, answer) => sum + answer.value,
     0
   );
+  const totalScore =
+    assessment.scoring.method === 'mean_with_reverse'
+      ? Math.round(valueSum / normalizedAnswers.length)
+      : valueSum;
   const band = resolveAssessmentBand(assessment, totalScore);
 
   if (!band) {
     throw new Error(`No result band for score ${totalScore}`);
   }
 
+  const subscaleScores = resolveSubscaleScores(assessment, normalizedAnswers);
+
   return {
     totalScore,
     band,
     answers: normalizedAnswers,
+    ...(subscaleScores.length > 0 ? { subscaleScores } : {}),
   };
+}
+
+function resolveSubscaleScores(
+  assessment: AssessmentDefinition,
+  normalizedAnswers: AssessmentScoreResult['answers']
+): AssessmentSubscaleScore[] {
+  if (!assessment.subscales?.length) return [];
+
+  const questionById = new Map(
+    assessment.questions.map((question) => [question.id, question])
+  );
+
+  return assessment.subscales.map((subscale) => {
+    const values = normalizedAnswers
+      .filter(
+        (answer) =>
+          questionById.get(answer.questionId)?.subscale === subscale.id
+      )
+      .map((answer) => answer.value);
+    const score =
+      values.length > 0
+        ? Math.round(
+            values.reduce((sum, value) => sum + value, 0) / values.length
+          )
+        : subscale.minScore;
+
+    return {
+      id: subscale.id,
+      title: subscale.title,
+      score,
+      minScore: subscale.minScore,
+      maxScore: subscale.maxScore,
+      scoreDirection: subscale.scoreDirection,
+    };
+  });
 }

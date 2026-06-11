@@ -11,6 +11,7 @@ export const AssessmentCategoryDto = z.enum([
   'anxiety',
   'self_kindness',
   'relationships',
+  'burnout',
   'stress',
   'sleep',
   'emotions',
@@ -38,6 +39,7 @@ export const AssessmentQuestionDto = z.object({
   text: z.string(),
   required: z.boolean(),
   reverseScored: z.boolean().optional(),
+  subscale: z.string().optional(),
 });
 
 export const AssessmentNextActionDto = z.object({
@@ -68,6 +70,23 @@ export const AssessmentLockedCopyDto = z.object({
   ctaText: z.string(),
 });
 
+export const AssessmentSubscaleDto = z.object({
+  id: z.string(),
+  title: z.string(),
+  minScore: z.number().int(),
+  maxScore: z.number().int(),
+  scoreDirection: AssessmentScoreDirectionDto,
+});
+
+export const AssessmentSubscaleScoreDto = z.object({
+  id: z.string(),
+  title: z.string(),
+  score: z.number().int(),
+  minScore: z.number().int(),
+  maxScore: z.number().int(),
+  scoreDirection: AssessmentScoreDirectionDto,
+});
+
 export const AssessmentChartPointDto = z.object({
   attemptId: z.number().int().positive(),
   userDate: z.string(),
@@ -90,15 +109,17 @@ export const AssessmentDefinitionDto = z.object({
   timeframeLabel: z.string(),
   isValidatedScale: z.boolean(),
   sourceName: z.string().nullable(),
+  sourceUrl: z.string().nullable().optional(),
   licenseNote: z.string().nullable(),
   scoreDirection: AssessmentScoreDirectionDto,
   questions: z.array(AssessmentQuestionDto),
   options: z.array(AssessmentOptionDto),
   scoring: z.object({
-    method: z.enum(['sum', 'sum_with_reverse']),
+    method: z.enum(['sum', 'sum_with_reverse', 'mean_with_reverse']),
     minScore: z.number().int(),
     maxScore: z.number().int(),
   }),
+  subscales: z.array(AssessmentSubscaleDto).optional(),
   resultBands: z.array(AssessmentResultBandDto),
   lockedCopy: AssessmentLockedCopyDto,
 });
@@ -169,6 +190,7 @@ export const AssessmentAttemptResultSnapshotDto = z.object({
   title: z.string(),
   shortText: z.string(),
   scoreDirection: AssessmentScoreDirectionDto,
+  subscaleScores: z.array(AssessmentSubscaleScoreDto).optional(),
 });
 
 export const AssessmentAttemptDto = z.object({
@@ -260,6 +282,10 @@ export type AssessmentChartResponse = z.infer<
 export type AssessmentOption = z.infer<typeof AssessmentOptionDto>;
 export type AssessmentQuestion = z.infer<typeof AssessmentQuestionDto>;
 export type AssessmentResultBand = z.infer<typeof AssessmentResultBandDto>;
+export type AssessmentSubscale = z.infer<typeof AssessmentSubscaleDto>;
+export type AssessmentSubscaleScore = z.infer<
+  typeof AssessmentSubscaleScoreDto
+>;
 export type AssessmentSafetyLevel = z.infer<typeof AssessmentSafetyLevelDto>;
 export type AssessmentScoreDirection = z.infer<
   typeof AssessmentScoreDirectionDto

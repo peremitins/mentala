@@ -29,6 +29,7 @@
         :max-score="definition.scoring.maxScore"
         :score-direction="definition.scoreDirection"
         :bands="definition.resultBands"
+        :subscale-scores="resultItem.resultSnapshot.subscaleScores"
         :active-band-id="band.id"
       />
 

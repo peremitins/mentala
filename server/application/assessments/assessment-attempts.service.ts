@@ -122,6 +122,9 @@ export async function createAssessmentAttempt(params: {
     title: score.band.title,
     shortText: score.band.shortText,
     scoreDirection: assessment.scoreDirection,
+    ...(score.subscaleScores?.length
+      ? { subscaleScores: score.subscaleScores }
+      : {}),
   };
 
   return params.repository.createAttempt({

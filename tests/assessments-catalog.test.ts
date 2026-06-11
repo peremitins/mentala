@@ -46,13 +46,24 @@ describe('assessment catalog', () => {
     const relationships = items.find(
       (item) => item.slug === 'relationships_boundaries_v1'
     );
+    const burnout = items.find((item) => item.slug === 'burnout_cbi_v1');
+    const oldBurnoutFuture = items.find(
+      (item) => item.slug === 'stress_recovery_v1'
+    );
     expect(relationships).toMatchObject({
       title: 'Оценка границ и общения',
       status: 'active',
       linkedProgramSlug: 'relationships_21',
       questionsCount: 18,
     });
-    expect(items.filter((item) => item.status === 'active')).toHaveLength(3);
+    expect(burnout).toMatchObject({
+      title: 'Оценка выгорания и перегрузки',
+      status: 'active',
+      linkedProgramSlug: 'burnout_21',
+      questionsCount: 19,
+    });
+    expect(oldBurnoutFuture).toBeUndefined();
+    expect(items.filter((item) => item.status === 'active')).toHaveLength(4);
   });
 
   it('использует GAD-7 для тревоги, но без диагностического позиционирования', () => {
@@ -163,9 +174,7 @@ describe('assessment catalog', () => {
       text: 'Когда на меня давят чувством вины, я чаще соглашаюсь, даже если не хочу',
       reverseScored: true,
     });
-    expect(pressureGuiltQuestion?.text).not.toContain(
-      'трудно не соглашаться'
-    );
+    expect(pressureGuiltQuestion?.text).not.toContain('трудно не соглашаться');
     expect(assessment.scoring).toMatchObject({
       method: 'sum_with_reverse',
       minScore: 0,
@@ -210,6 +219,82 @@ describe('assessment catalog', () => {
       /авторск|Mentala|диагностик|расстройств|созависим|токсич|абьюз|здоровые ли|опросник/i
     );
     expect(assessment.description).toContain('Это не диагноз');
+  });
+
+  it('считает полный CBI burnout_cbi_v1 как среднее 0..100 с reverse-пунктом и подшкалами', () => {
+    const assessment = getAssessmentDefinition('burnout_cbi_v1');
+    expect(assessment).toBeDefined();
+    if (!assessment) throw new Error('assessment missing');
+
+    expect(assessment.isValidatedScale).toBe(true);
+    expect(assessment.sourceName).toBe('Copenhagen Burnout Inventory, CBI');
+    expect(assessment.questions).toHaveLength(19);
+    expect(
+      assessment.questions.filter((question) => question.reverseScored)
+    ).toHaveLength(1);
+    expect(assessment.scoring).toMatchObject({
+      method: 'mean_with_reverse',
+      minScore: 0,
+      maxScore: 100,
+    });
+
+    const maxBurnout = scoreAssessmentAnswers(
+      assessment,
+      assessment.questions.map((question) => ({
+        questionId: question.id,
+        optionId: question.reverseScored ? 'never_almost_never' : 'always',
+      }))
+    );
+    expect(maxBurnout.totalScore).toBe(100);
+    expect(maxBurnout.band.id).toBe('very_high');
+    expect((maxBurnout as any).subscaleScores).toMatchObject([
+      { id: 'personal_burnout', score: 100 },
+      { id: 'work_burnout', score: 100 },
+      { id: 'client_burnout', score: 100 },
+    ]);
+
+    const mixedResult = scoreAssessmentAnswers(
+      assessment,
+      assessment.questions.map((question) => {
+        if (question.id.startsWith('cbi_personal_')) {
+          return { questionId: question.id, optionId: 'often' };
+        }
+        if (question.id.startsWith('cbi_client_')) {
+          return { questionId: question.id, optionId: 'rarely' };
+        }
+        return {
+          questionId: question.id,
+          optionId: question.reverseScored ? 'often' : 'rarely',
+        };
+      })
+    );
+    expect(mixedResult.totalScore).toBe(41);
+    expect(mixedResult.band.id).toBe('moderate');
+    expect((mixedResult as any).subscaleScores).toMatchObject([
+      { id: 'personal_burnout', score: 75 },
+      { id: 'work_burnout', score: 25 },
+      { id: 'client_burnout', score: 25 },
+    ]);
+
+    expect(resolveAssessmentBand(assessment, 24)?.id).toBe('low');
+    expect(resolveAssessmentBand(assessment, 25)?.id).toBe('moderate');
+    expect(resolveAssessmentBand(assessment, 49)?.id).toBe('moderate');
+    expect(resolveAssessmentBand(assessment, 50)?.id).toBe('high');
+    expect(resolveAssessmentBand(assessment, 74)?.id).toBe('high');
+    expect(resolveAssessmentBand(assessment, 75)?.id).toBe('very_high');
+
+    const userFacing = [
+      assessment.description,
+      ...assessment.resultBands.flatMap((band) => [
+        band.title,
+        band.shortText,
+        band.description,
+        band.recommendationText,
+      ]),
+    ].join(' ');
+    expect(userFacing).not.toMatch(
+      /диагностик|профессиональное выгорание|тебе нужно уволиться|лечение помогло/i
+    );
   });
 
   it('заводит assessments.full в server entitlements и seed', () => {

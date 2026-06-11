@@ -18,26 +18,29 @@
 
 ## 2. Текущее состояние в Mentala
 
-На момент актуализации этого ТЗ в реализации активны **3 опросника**:
+На момент актуализации этого ТЗ в реализации активны **4 опросника**:
 
 | Slug | UI-название | Основа | Статус | Связанный сад |
 | --- | --- | --- | --- | --- |
 | `anxiety_check_v1` | Оценка тревоги | GAD-7 | `active` | `calm_anxiety_30` / «Спокойствие» |
 | `self_compassion_scs_sf_v1` | Оценка доброты к себе | SCS-SF | `active` | `self_kindness_21` / «Доброта к себе» |
 | `relationships_boundaries_v1` | Оценка границ и общения | Авторский опросник Mentala | `active` | `relationships_21` / «Отношения» |
+| `burnout_cbi_v1` | Оценка выгорания и перегрузки | CBI | `active` | `burnout_21` / «Выгорание» |
 
-В каталоге также есть будущие карточки:
+В текущей реализации также есть будущие карточки:
 
 | Slug | UI-название | Статус | Связанный сад |
 | --- | --- | --- | --- |
-| `stress_recovery_v1` | Оценка стресса и восстановления | `coming_soon` | `burnout_recovery_21` / «Восстановление после перегрузки» |
 | `sleep_check_v1` | Оценка сна | `coming_soon` | `gentle_sleep_21` / «Мягкий сон» |
+
+Важно: `stress_recovery_v1` было старым рабочим названием будущей карточки для сада перегрузки. В реализации оно заменено на `burnout_cbi_v1` из `.docs/assessments/burnout_cbi_v1.md`, чтобы в каталоге не было двух конкурирующих оценок для одного и того же baseline/final-сценария.
 
 Ключевые документы и точки реализации:
 
 - `.docs/assessments/tests_practice.md` - MVP-ТЗ раздела «Оценка состояния»;
 - `.docs/assessments/anxiety_check_v1.md` - детальное ТЗ по оценке тревоги;
 - `.docs/assessments/self_compassion_scs_sf_v1.md` - детальное ТЗ по оценке доброты к себе;
+- `.docs/assessments/burnout_cbi_v1.md` - детальное ТЗ по `burnout_cbi_v1`;
 - `.docs/arch_ui_features.md` - архитектурное описание UI-раздела;
 - `.docs/arch_billing.md` - paywall и feature key `assessments.full`;
 - `server/application/assessments/assessment-catalog.ts` - текущие определения опросников;
@@ -205,11 +208,11 @@
 | 2 | `self_compassion_scs_sf_v1` | Оценка доброты к себе | `validated_free` | active | `self_kindness_21` | low | Уже реализовано на основе SCS-SF |
 | 3 | `mood_check_v1` | Оценка настроения | `mentala_original` | planned | будущий сад настроения | high | Не копировать BDI; PHQ-8/PHQ-9 рассматривать отдельно из-за safety |
 | 4 | `depression_symptoms_phq8_v1` | Оценка депрессивных симптомов | `validated_free` | research_needed | настроение | high | PHQ-8 может быть безопаснее PHQ-9, потому что без прямого suicide item; нужна проверка |
-| 5 | `stress_check_v1` | Оценка стресса | `research_needed` | planned | `burnout_recovery_21` | low | Проверить PSS-10 или сделать авторский опросник |
-| 6 | `stress_recovery_v1` | Оценка стресса и восстановления | `mentala_original` | coming_soon | `burnout_recovery_21` | low | Уже есть future-карточка |
+| 5 | `burnout_cbi_v1` | Оценка выгорания и перегрузки | `validated_free` | planned | `burnout_21` | medium | Новый целевой опросник сада на основе полного CBI: Personal Burnout, Work-related Burnout и Client-related Burnout |
+| 6 | `stress_check_v1` | Оценка стресса | `research_needed` | planned | стресс/восстановление | low | Отдельный будущий стресс-опросник; не должен дублировать `burnout_cbi_v1` |
 | 7 | `sleep_check_v1` | Оценка сна | `research_needed` | coming_soon | `gentle_sleep_21` | low | Проверить ISI или сделать авторский sleep check |
 | 8 | `recovery_capacity_v1` | Оценка восстановления | `mentala_original` | planned | восстановление | low | Фокус на отдыхе, энергии, нагрузке, границах |
-| 9 | `burnout_load_v1` | Оценка перегрузки | `mentala_original` | planned | выгорание | low | Не копировать MBI; делать авторский аналог |
+| 9 | `burnout_load_v1` | Оценка перегрузки | `mentala_original` | future | выгорание | low | Запасной авторский вариант post-MVP; не использовать как основной опросник сада `burnout_21`, пока выбран `burnout_cbi_v1` |
 | 10 | `body_anxiety_v1` | Оценка телесной тревоги | `mentala_original` | planned | тревога | medium | Не копировать BAI; обязательно medical-support текст для новых/резких симптомов |
 | 11 | `worry_loop_v1` | Оценка беспокойства | `research_needed` | planned | тревога | low | Проверить PSWQ или сделать авторский опросник о руминациях и worry loops |
 | 12 | `social_anxiety_check_v1` | Оценка социальной тревоги | `research_needed` | planned | отношения/социум | medium | Проверить свободные инструменты; не перегружать claims |
@@ -259,12 +262,12 @@
 | ---: | --- | --- | --- |
 | 1 | `anxiety_check_v1` | Оценка тревоги | Уже active |
 | 2 | `self_compassion_scs_sf_v1` | Оценка доброты к себе | Уже active |
-| 3 | `stress_recovery_v1` | Оценка стресса и восстановления | Уже есть future-карточка, связана с садом |
+| 3 | `burnout_cbi_v1` | Оценка выгорания и перегрузки | Новый целевой опросник сада `burnout_21`; заменяет старую future-карточку `stress_recovery_v1` |
 | 4 | `sleep_check_v1` | Оценка сна | Уже есть future-карточка, понятный пользовательский запрос |
 | 5 | `relationships_boundaries_v1` | Оценка границ и общения | Уже active |
 | 6 | `inner_critic_v1` | Оценка внутреннего критика | Связь с self-kindness |
 | 7 | `mood_check_v1` | Оценка настроения | Высокий спрос, но делать авторский безопасный вариант |
-| 8 | `burnout_load_v1` | Оценка перегрузки | Высокий спрос, не копировать MBI |
+| 8 | `recovery_capacity_v1` | Оценка восстановления | Дополняет тему перегрузки без дублирования CBI-опросника |
 | 9 | `body_anxiety_v1` | Оценка телесной тревоги | Хорошо дополняет GAD-7 |
 | 10 | `values_clarity_v1` | Оценка ясности ценностей | Под будущий ACT-сад |
 | 11 | `habits_readiness_v1` | Оценка готовности к изменениям | Под будущий сад привычек |
@@ -493,7 +496,7 @@ PHQ-9 содержит прямой пункт о мыслях о смерти �
 
 - создан файл `.docs/assessments/assessment_catalog_expansion_tz.md`;
 - старый файл `.docs/assessments/tests_practice.md` не переписан;
-- в документе явно указано, что сейчас активны 2 опросника;
+- в документе явно указано, что сейчас активны 4 опросника;
 - указан целевой объём 35-45;
 - есть политика по лицензируемым шкалам;
 - есть каталог кандидатов не менее чем на 35 опросников;

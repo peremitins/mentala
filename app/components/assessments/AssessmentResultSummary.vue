@@ -65,6 +65,38 @@
         {{ shortText }}
       </p>
 
+      <div v-if="subscaleScores?.length" class="space-y-2 pt-1">
+        <p
+          class="text-xs font-medium uppercase tracking-[0.12em] text-foreground/45"
+        >
+          Где больше нагрузки
+        </p>
+        <div class="grid grid-cols-1 gap-2">
+          <div
+            v-for="subscale in subscaleScores"
+            :key="subscale.id"
+            class="rounded-2xl border border-white/10 bg-white/[0.08] p-3"
+          >
+            <div class="flex items-center justify-between gap-3">
+              <span class="min-w-0 text-sm font-semibold text-foreground">
+                {{ subscale.title }}
+              </span>
+              <span
+                class="shrink-0 text-sm font-semibold tabular-nums text-foreground/80"
+              >
+                {{ subscale.score }}
+              </span>
+            </div>
+            <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
+              <div
+                class="h-full rounded-full bg-foreground/45"
+                :style="{ width: `${getSubscaleWidth(subscale)}%` }"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div
         v-if="comparisonText"
         class="rounded-2xl border border-white/10 bg-white/[0.08] p-4"
@@ -98,6 +130,7 @@ import type {
   AssessmentResultBand,
   AssessmentSafetyLevel,
   AssessmentScoreDirection,
+  AssessmentSubscaleScore,
 } from '@/shared/dto/assessments';
 
 const props = defineProps<{
@@ -112,6 +145,7 @@ const props = defineProps<{
   maxScore: number;
   scoreDirection: AssessmentScoreDirection;
   bands: Pick<AssessmentResultBand, 'id' | 'minScore' | 'maxScore'>[];
+  subscaleScores?: AssessmentSubscaleScore[] | null;
   // Активный диапазон — подсвечиваем нужный сегмент.
   activeBandId?: string | null;
   // embedded: внутри уже существующей glass-deep панели (Roadmap) — не дублируем
@@ -144,6 +178,7 @@ const markerLeft = computed(() => {
 // Подписи концов шкалы зависят от домена оценки, а не только от направления
 // баллов: у отношений и самоподдержки одинаковое higher_is_better, но разный смысл.
 const scaleStartLabel = computed(() => {
+  if (props.category === 'burnout') return 'легче';
   if (props.scoreDirection === 'higher_is_worse') return 'спокойнее';
   if (props.category === 'relationships') return 'сложнее в отношениях';
   if (props.category === 'self_kindness') return 'меньше поддержки';
@@ -151,9 +186,16 @@ const scaleStartLabel = computed(() => {
 });
 
 const scaleEndLabel = computed(() => {
+  if (props.category === 'burnout') return 'истощение выше';
   if (props.scoreDirection === 'higher_is_worse') return 'тревожнее';
   if (props.category === 'relationships') return 'устойчивее в отношениях';
   if (props.category === 'self_kindness') return 'больше поддержки';
   return 'выше результат';
 });
+
+function getSubscaleWidth(subscale: AssessmentSubscaleScore): number {
+  const range = Math.max(1, subscale.maxScore - subscale.minScore);
+  const ratio = (subscale.score - subscale.minScore) / range;
+  return Math.max(0, Math.min(100, Math.round(ratio * 100)));
+}
 </script>

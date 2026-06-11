@@ -63,6 +63,7 @@ function getAssessmentResultTone(params: {
     if (params.bandId === 'mild') return 'middle';
     if (params.bandId === 'moderate') return 'watch';
     if (params.bandId === 'high') return 'hard';
+    if (params.bandId === 'very_high') return 'hard';
   }
 
   if (params.scoreDirection === 'higher_is_better') {
@@ -91,6 +92,13 @@ function getAssessmentResultLabel(params: {
     if (params.bandId === 'high') return 'Поддержки много';
   }
 
+  if (params.category === 'burnout') {
+    if (params.bandId === 'low') return 'Перегрузки мало';
+    if (params.bandId === 'moderate') return 'Перегрузка заметна';
+    if (params.bandId === 'high') return 'Сильная перегрузка';
+    if (params.bandId === 'very_high') return 'Истощение высокое';
+  }
+
   if (params.scoreDirection === 'higher_is_worse') {
     if (params.bandId === 'low') return 'Мало тревоги';
     if (params.bandId === 'mild') return 'Лёгкая тревога';
@@ -110,20 +118,28 @@ function getAssessmentResultLabel(params: {
 function getAssessmentScaleSegments(params: {
   bandId: string;
   scoreDirection: AssessmentScoreDirection;
+  category?: AssessmentCategory;
 }): AssessmentResultScaleSegment[] {
   const palette =
-    params.scoreDirection === 'higher_is_worse'
+    params.category === 'burnout'
       ? [
           { id: 'low', activeClass: 'bg-emerald-300' },
-          { id: 'mild', activeClass: 'bg-lime-200' },
           { id: 'moderate', activeClass: 'bg-amber-300' },
-          { id: 'high', activeClass: 'bg-rose-300' },
+          { id: 'high', activeClass: 'bg-orange-300' },
+          { id: 'very_high', activeClass: 'bg-rose-300' },
         ]
-      : [
-          { id: 'low', activeClass: 'bg-rose-300' },
-          { id: 'moderate', activeClass: 'bg-amber-300' },
-          { id: 'high', activeClass: 'bg-emerald-300' },
-        ];
+      : params.scoreDirection === 'higher_is_worse'
+        ? [
+            { id: 'low', activeClass: 'bg-emerald-300' },
+            { id: 'mild', activeClass: 'bg-lime-200' },
+            { id: 'moderate', activeClass: 'bg-amber-300' },
+            { id: 'high', activeClass: 'bg-rose-300' },
+          ]
+        : [
+            { id: 'low', activeClass: 'bg-rose-300' },
+            { id: 'moderate', activeClass: 'bg-amber-300' },
+            { id: 'high', activeClass: 'bg-emerald-300' },
+          ];
 
   return palette.map((segment) => ({
     id: segment.id,

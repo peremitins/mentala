@@ -92,7 +92,7 @@ describe('assessment attempts service', () => {
     expect(attempt.userDate).toBe('2026-06-04');
     expect(attempt.resultSnapshot).toMatchObject({
       bandId: 'moderate',
-      title: 'Тревога сейчас заметна',
+      title: 'Тревога сейчас заметно мешает',
       scoreDirection: 'higher_is_worse',
     });
     expect(attempt.answers).toHaveLength(7);
@@ -247,6 +247,33 @@ describe('assessment attempts service', () => {
         direction: 'improved',
       },
     });
+  });
+
+  it('сохраняет подшкалы burnout_cbi_v1 в resultSnapshot', async () => {
+    const repository = new InMemoryAssessmentAttemptsRepository();
+    const assessment = getAssessmentDefinition('burnout_cbi_v1');
+    expect(assessment).toBeDefined();
+    if (!assessment) throw new Error('assessment missing');
+
+    const attempt = await createAssessmentAttempt({
+      repository,
+      userId: 33,
+      assessmentSlug: 'burnout_cbi_v1',
+      timezone: 'UTC',
+      completedAt: new Date('2026-06-11T12:00:00Z'),
+      answers: assessment.questions.map((question) => ({
+        questionId: question.id,
+        optionId: question.reverseScored ? 'often' : 'rarely',
+      })),
+    });
+
+    expect(attempt.totalScore).toBe(25);
+    expect(attempt.bandId).toBe('moderate');
+    expect(attempt.resultSnapshot.subscaleScores).toMatchObject([
+      { id: 'personal_burnout', score: 25 },
+      { id: 'work_burnout', score: 25 },
+      { id: 'client_burnout', score: 25 },
+    ]);
   });
 
   it('baseline reuse находит результат за 7 дней и игнорирует старый', async () => {
