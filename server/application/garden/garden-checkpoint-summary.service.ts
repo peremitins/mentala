@@ -13,7 +13,7 @@ import {
   STYLE_RULES_PROMPT_BLOCK,
   type CollectedUserSignals,
 } from '@/server/application/garden/garden-summary.service';
-import { dispatchReportReadyPush } from '@/server/application/garden/garden-report-push.service';
+import { scheduleReportReadyPush } from '@/server/application/garden/queues/gardenReportPush.queue';
 
 /**
  * Промежуточные чекпоинт-отчёты по программе (Сад).
@@ -515,10 +515,13 @@ export async function generateCheckpointSummary(params: {
 
   const reportId = inserted[0]?.id ?? 0;
 
-  // Fire-and-forget push: только для успешно сгенерированных и только если
-  // ещё не отправляли. Внутри dispatch стоит идемпотентная защита.
+  // Отложенный push (fire-and-forget): уходит через ~90 сек, и только если
+  // юзер за это время не просмотрел отчёт в приложении (mark-viewed).
+  // Это закрывает гонку: при синхронной генерации клиент видит сводку
+  // сразу, и моментальный push дублировал бы её. Идемпотентная защита
+  // (pushSentAt/viewedAt) — внутри dispatch.
   if (status === 'ready' && reportId > 0) {
-    void dispatchReportReadyPush({
+    void scheduleReportReadyPush({
       userId: params.userId,
       reportId,
       programTitle: programRow.title,

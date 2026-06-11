@@ -5,7 +5,7 @@
     <!-- Шапка с брендовым логотипом -->
     <PageHeader title="Mentala">
       <template #custom>
-        <div class="flex items-center px-4">
+        <div class="flex items-center xs:px-4 px-2">
           <BrandLogo class="h-7 w-auto select-none" />
         </div>
       </template>

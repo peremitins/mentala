@@ -32,7 +32,7 @@
         :active-band-id="band.id"
       />
 
-      <article class="glass-deep rounded-lg p-5">
+      <article class="glass-deep rounded-lg xs:p-5 p-4">
         <div class="space-y-4">
           <div class="space-y-2">
             <h2 class="text-base font-semibold text-foreground">
@@ -65,15 +65,24 @@
       />
 
       <div class="grid grid-cols-1 gap-2">
-        <Button class="w-full active:scale-[0.98]" size="lg" @click="openNext">
-          {{ band.nextAction.label }}
+        <div v-if="lockedProgramHint" class="px-1 text-center">
+          <p class="text-xs font-medium text-foreground/55">
+            {{ lockedProgramHint }}
+          </p>
+        </div>
+        <Button
+          class="h-auto min-h-10 w-full whitespace-normal py-2 text-center leading-tight active:scale-[0.98]"
+          size="lg"
+          @click="openNext"
+        >
+          {{ nextActionLabel }}
         </Button>
         <Button
-          class="w-full active:scale-[0.98]"
+          class="h-auto min-h-10 w-full whitespace-normal py-2 text-center leading-tight active:scale-[0.98]"
           size="lg"
           @click="goToAssessments"
         >
-          Все опросники
+          Все оценки
         </Button>
       </div>
     </section>
@@ -93,6 +102,8 @@ import type {
   AssessmentResultResponse,
   AssessmentRunResponse,
 } from '@/shared/dto/assessments';
+import type { ProgramListResponseDto } from '@/shared/dto/garden';
+import type { TodayResponseDto } from '@/shared/dto/retention';
 
 const route = useRoute();
 const router = useRouter();
@@ -121,11 +132,23 @@ const chartRequest = await useAPI<AssessmentChartResponse>(
     key: `assessment-chart-${slug.value}`,
   }
 );
+const programsRequest = await useAPI<ProgramListResponseDto>('/api/programs', {
+  useFetch: true,
+  key: 'assessment-result-programs',
+  suppressErrorToast: true,
+});
+const todayRequest = await useAPI<TodayResponseDto>('/api/today', {
+  useFetch: true,
+  key: 'assessment-result-today',
+  suppressErrorToast: true,
+});
 
 const resultItem = computed(() => resultRequest.data.value?.item ?? null);
 const comparison = computed(() => resultRequest.data.value?.comparison ?? null);
 const definition = computed(() => definitionRequest.data.value?.item ?? null);
 const chartPoints = computed(() => chartRequest.data.value?.points ?? []);
+const programs = computed(() => programsRequest.data.value?.items ?? []);
+const currentProgram = computed(() => todayRequest.data.value?.program ?? null);
 const band = computed(() => {
   if (!definition.value || !resultItem.value) return null;
   return (
@@ -133,6 +156,28 @@ const band = computed(() => {
       (item: any) => item.id === resultItem.value?.bandId
     ) ?? null
   );
+});
+const linkedProgram = computed(() => {
+  const action = band.value?.nextAction;
+  if (!action || action.type !== 'program') return null;
+  return (
+    programs.value.find((item) => item.programSlug === action.slug) ?? null
+  );
+});
+const isLinkedProgramLocked = computed(() => {
+  const action = band.value?.nextAction;
+  if (!action || action.type !== 'program') return false;
+  return linkedProgram.value != null && !linkedProgram.value.unlocked;
+});
+const lockedProgramHint = computed(() => {
+  if (!isLinkedProgramLocked.value || !linkedProgram.value) return '';
+  return `Сад «${linkedProgram.value.title}» откроется позже`;
+});
+const nextActionLabel = computed(() => {
+  if (isLinkedProgramLocked.value && currentProgram.value) {
+    return `Продолжить сад «${currentProgram.value.title}»`;
+  }
+  return band.value?.nextAction.label ?? 'Продолжить';
 });
 
 const isLoading = computed(
@@ -162,6 +207,11 @@ async function openNext() {
   const action = band.value?.nextAction;
   if (!action) return;
   if (action.type === 'program') {
+    if (isLinkedProgramLocked.value) {
+      const currentSlug = currentProgram.value?.slug;
+      await router.push(currentSlug ? `/programs/${currentSlug}/map` : '/');
+      return;
+    }
     await router.push(`/programs/${action.slug}/map`);
     return;
   }

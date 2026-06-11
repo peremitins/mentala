@@ -4,7 +4,7 @@
        на «Практики», первым рядом. На главной остался компактный вход
        (HomeAssistantCompact). Размер/верстка совпадают с прежним hero-блоком. -->
   <section
-    class="glass-deep relative overflow-hidden p-5 animate-slide-up cursor-pointer"
+    class="glass-deep relative overflow-hidden xs:p-5 p-4 animate-slide-up cursor-pointer"
     style="animation-delay: 0s; animation-fill-mode: both"
     role="button"
     tabindex="0"
@@ -48,7 +48,7 @@
         <NuxtLink
           v-if="chatAssistantAccess.available"
           to="/chat"
-          class="inline-flex items-center gap-2 rounded-full bg-foreground/90 px-5 py-2.5 text-sm font-medium text-background transition hover:bg-foreground"
+          class="inline-flex items-center gap-2 rounded-full bg-foreground/90 px-5 py-2.5 xs:text-sm text-xs font-medium text-background transition hover:bg-foreground"
           @click.stop
         >
           <IconSend class="h-4 w-4" />
@@ -57,7 +57,7 @@
         <button
           v-else
           type="button"
-          class="relative inline-flex items-center gap-2 rounded-full bg-foreground/90 px-5 py-2.5 text-sm font-medium text-background transition hover:bg-foreground"
+          class="relative inline-flex items-center gap-2 rounded-full bg-foreground/90 px-5 py-2.5 xs:text-sm text-xs font-medium text-background transition hover:bg-foreground"
           @click.stop="emit('paywall', 'chat.assistant')"
         >
           <span
@@ -72,7 +72,7 @@
         <NuxtLink
           to="/session-summaries-user"
           :aria-label="sessionHistoryButtonAriaLabel"
-          class="relative inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-5 py-2.5 text-sm font-medium text-foreground transition hover:border-white/30 hover:bg-white/10"
+          class="relative inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-5 py-2.5 xs:text-sm text-xs font-medium text-foreground transition hover:border-white/30 hover:bg-white/10"
           @click.stop
         >
           <UnreadSummaryIndicator

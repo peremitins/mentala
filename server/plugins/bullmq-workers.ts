@@ -70,6 +70,9 @@ export default defineNitroPlugin(async () => {
     const { startSystemNotificationsWorker } = await import(
       '@/server/application/notifications/workers/systemNotifications.worker'
     );
+    const { startGardenReportPushWorker } = await import(
+      '@/server/application/garden/workers/gardenReportPush.worker'
+    );
 
     // 1. AI Text Pool Worker
     startAiTextPoolWorker();
@@ -95,6 +98,9 @@ export default defineNitroPlugin(async () => {
 
     // 8. System Notifications Worker (summary-ready и re-engagement push).
     startSystemNotificationsWorker();
+
+    // 9. Garden Report Push Worker (отложенный push о готовом отчёте Сада).
+    startGardenReportPushWorker();
 
     console.log('[BullMQ] ✅ All workers started successfully!');
   } catch (error) {

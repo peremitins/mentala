@@ -16,6 +16,12 @@ import type { NotificationPayload } from '@/shared/dto/notifications';
  * UPDATE pushSentAt=NOW() WHERE pushSentAt IS NULL вернёт rowcount=0 на
  * втором вызове, и второй push не уйдёт.
  *
+ * ⚠️ Не вызывать напрямую из потока генерации! Использовать
+ * scheduleReportReadyPush (queues/gardenReportPush.queue.ts): push должен
+ * уходить с задержкой, чтобы активный клиент успел вызвать mark-viewed —
+ * иначе юзер, который видит сводку прямо сейчас на экране, получит
+ * дублирующее уведомление (мгновенный push всегда обгоняет mark-viewed).
+ *
  * Foreground vs background:
  *   - Если приложение у юзера в foreground — нативный fcm не покажет
  *     notification (это поведение по умолчанию foreground-listener'а).

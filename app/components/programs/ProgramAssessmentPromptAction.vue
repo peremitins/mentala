@@ -1,6 +1,6 @@
 <template>
   <div class="xs:space-y-3 space-y-1">
-    <!-- Прохождение опросника прямо внутри шага. Этот же инстанс после ответа
+    <!-- Прохождение оценки прямо внутри шага. Этот же инстанс после ответа
          показывает встроенный результат (inlineResult по умолчанию). Внешнюю
          glass-deep рамку даёт сам шаг — поэтому раннер в embedded-режиме. -->
     <AssessmentRunner
@@ -14,7 +14,7 @@
       @prev="onQuizPrev"
     />
 
-    <!-- Юзер вернулся к уже пройденному на этом шаге опроснику: показываем
+    <!-- Юзер вернулся к уже пройденной на этом шаге оценке: показываем
          сохранённый результат по attemptId. -->
     <AssessmentRunner
       v-else-if="completedAttemptId"
@@ -115,7 +115,7 @@
               class="inline-flex min-h-12 w-full items-center justify-center rounded-full bg-foreground px-5 py-2 text-sm font-semibold text-background transition hover:bg-foreground/90 active:scale-[0.99]"
               @click="startQuiz"
             >
-              Пройти опросник
+              Пройти оценку
             </button>
             <button
               type="button"
@@ -182,12 +182,12 @@ const sourceLabel = computed(() =>
 );
 const promptText = computed(() => {
   if (source.value === 'program_final') {
-    return 'Сад почти завершён. Можно пройти тот же опросник, что был в начале, и посмотреть, как изменились твои ответы за это время.';
+    return 'Сад почти завершён. Можно пройти ту же оценку, что была в начале, и посмотреть, как изменились твои ответы за это время.';
   }
-  return 'В начале сада можно пройти короткий опросник. Он покажет, с какой точки ты стартуешь, чтобы потом увидеть, что поменялось.';
+  return 'В начале сада можно пройти короткую оценку. Она покажет, с какой точки ты стартуешь, чтобы потом увидеть, что поменялось.';
 });
 const reusePromptText =
-  'Этот опросник уже был пройден недавно. Можно взять тот результат как стартовую точку сада, чтобы потом сравнить динамику. Если хочешь, пройди опросник заново.';
+  'Эта оценка уже была пройдена недавно. Можно взять тот результат как стартовую точку сада, чтобы потом сравнить динамику. Если хочешь, пройди оценку заново.';
 
 const reuseCandidateDate = computed(() => {
   if (!reuseCandidate.value) return '';
@@ -213,7 +213,7 @@ onMounted(async () => {
     reuseCandidate.value = res.reusable;
   } catch (err) {
     // Тихо игнорируем: без подсказки о переиспользовании юзер просто пройдёт
-    // опросник как обычно.
+    // оценку как обычно.
     console.warn('[AssessmentPrompt] baseline lookup failed:', err);
   } finally {
     baselineLoading.value = false;
@@ -249,7 +249,7 @@ async function useRecentResult() {
   } catch (err) {
     console.error('[AssessmentPrompt] reuse baseline failed:', err);
     reuseError.value =
-      'Не удалось сохранить стартовую точку. Попробуй ещё раз или пройди опросник заново.';
+      'Не удалось сохранить стартовую точку. Попробуй ещё раз или пройди оценку заново.';
   } finally {
     reusing.value = false;
   }

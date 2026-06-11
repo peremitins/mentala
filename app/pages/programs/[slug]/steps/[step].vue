@@ -464,7 +464,7 @@ const structuredFormDraft = ref<Record<string, unknown>>({});
 const guidedStepsDraft = ref<string[]>([]);
 const weeklyCheckDraft = ref<Record<string, unknown>>({});
 const assessmentPromptSkippedActionIds = ref<Set<string>>(new Set());
-// attemptId пройденного встроенного опросника, по id action'а. Заполняется,
+// attemptId пройденной встроенной оценки, по id action'а. Заполняется,
 // когда AssessmentRunner внутри шага эмитит complete (без редиректа на страницу
 // практик). Используется при завершении action'а как assessmentAttemptId.
 const assessmentCompletedAttemptByActionId = ref<Map<string, number>>(
@@ -840,8 +840,8 @@ const nextDisabled = computed(() => {
   if (currentAction.value.type === 'guided_steps') {
     if (isAssessmentPromptAction(currentAction.value)) {
       // Кнопку шага держим заблокированной, пока юзер не пройдёт встроенный
-      // опросник или явно не нажмёт «Пропустить». Это не даёт случайно
-      // проскочить шаг мимо опросника нижней кнопкой во время ответов.
+      // оценку или явно не нажмёт «Пропустить». Это не даёт случайно
+      // проскочить шаг мимо оценки нижней кнопкой во время ответов.
       return !(
         returnedAssessmentAttemptId.value ||
         isCurrentAssessmentPromptSkipped.value
@@ -1526,7 +1526,7 @@ const canGoBack = computed(() => {
 
 function goToPreviousAction() {
   showResumeHint.value = false;
-  // Если смотрим результат встроенного опросника — возвращаемся к выбору
+  // Если смотрим результат встроенной оценки — возвращаемся к выбору
   // (intro/quiz) внутри того же action, а не на предыдущий action шага.
   const action = currentAction.value;
   if (
@@ -1552,7 +1552,7 @@ async function skipAssessmentPrompt() {
     ...assessmentPromptSkippedActionIds.value,
     action.id,
   ]);
-  // Сразу переходим к следующему этапу: показывать отдельный экран «опросник
+  // Сразу переходим к следующему этапу: показывать отдельный экран «оценка
   // пропущен» — лишний шаг для юзера. Флаг skipped уже выставлен, поэтому
   // completeCurrentAction запишет output со skipped=true.
   await completeCurrentAction();

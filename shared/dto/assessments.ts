@@ -209,7 +209,7 @@ export const AssessmentHistoryResponseDto = z.object({
 });
 
 // Недавний результат, который сад может переиспользовать как стартовую точку,
-// чтобы не заставлять проходить опросник заново. См. ТЗ §14.
+// чтобы не заставлять проходить оценку заново. См. ТЗ §14.
 export const ProgramAssessmentBaselineResponseDto = z.object({
   assessmentSlug: z.string(),
   reuseWindowDays: z.number().int().positive(),

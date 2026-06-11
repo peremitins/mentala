@@ -1,6 +1,6 @@
 <template>
   <article
-    class="assessment-card glass-deep group relative cursor-pointer overflow-hidden rounded-lg p-5 transition duration-300 ease-out hover:-translate-y-0.5 hover:border-white/25"
+    class="assessment-card glass-deep group relative cursor-pointer overflow-hidden rounded-lg xs:p-5 p-4 transition duration-300 ease-out hover:-translate-y-0.5 hover:border-white/25"
     :style="{ animationDelay: `${index * 70}ms` }"
     role="button"
     tabindex="0"
@@ -45,16 +45,46 @@
       <button
         v-if="item.lastAttempt"
         type="button"
-        class="rounded-2xl border border-white/12 bg-white/[0.08] p-3 text-left transition hover:border-white/24 hover:bg-white/[0.12] active:scale-[0.99]"
+        class="group/result rounded-2xl border border-white/12 bg-white/[0.08] p-3 text-left transition hover:border-white/24 hover:bg-white/[0.12] active:scale-[0.99]"
+        :aria-label="lastResultButtonLabel"
         @click.stop="$emit('open-result', item)"
       >
-        <span
-          class="block text-xs font-medium uppercase tracking-[0.12em] text-foreground/45"
-        >
-          Последний результат
-        </span>
-        <span class="mt-1 block text-sm font-semibold text-foreground">
-          {{ item.lastAttempt.totalScore }} баллов · {{ lastAttemptDate }}
+        <span class="block">
+          <span class="flex items-start justify-between gap-3">
+            <span
+              class="block text-xs font-medium uppercase tracking-[0.12em] text-foreground/45"
+            >
+              Последний результат
+            </span>
+            <span class="flex shrink-0 items-center gap-1">
+              <IconChevronRight
+                class="h-4 w-4 text-foreground/45 transition group-hover/result:translate-x-0.5 group-hover/result:text-foreground/70"
+                aria-hidden="true"
+              />
+            </span>
+          </span>
+          <span class="mt-1 block text-sm font-semibold text-foreground">
+            {{ item.lastAttempt.totalScore }} баллов · {{ lastAttemptDate }}
+          </span>
+          <span class="mt-2 flex min-w-0 items-center gap-2">
+            <span
+              class="flex h-1.5 w-[58px] shrink-0 gap-0.5"
+              aria-hidden="true"
+            >
+              <span
+                v-for="segment in lastResultBadge.scaleSegments"
+                :key="segment.id"
+                class="h-full flex-1 rounded-full"
+                :class="segment.className"
+              />
+            </span>
+            <span
+              class="min-w-0 truncate text-xs font-semibold leading-none"
+              :class="lastResultBadge.textClassName"
+            >
+              {{ lastResultBadge.label }}
+            </span>
+          </span>
         </span>
       </button>
 
@@ -75,6 +105,8 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import IconChevronRight from '~icons/lucide/chevron-right';
+import { getAssessmentResultBadge } from '@/app/lib/assessmentResultBadge';
 import type { AssessmentListItem } from '@/shared/dto/assessments';
 
 const props = defineProps<{
@@ -125,6 +157,19 @@ const lastAttemptDate = computed(() => {
     day: 'numeric',
     month: 'short',
   }).format(new Date(props.item.lastAttempt.completedAt));
+});
+
+const lastResultBadge = computed(() =>
+  getAssessmentResultBadge({
+    bandId: props.item.lastAttempt?.bandId ?? '',
+    scoreDirection: props.item.scoreDirection,
+    category: props.item.category,
+  })
+);
+
+const lastResultButtonLabel = computed(() => {
+  if (!props.item.lastAttempt) return 'Открыть последний результат';
+  return `Открыть последний результат: ${props.item.lastAttempt.totalScore} баллов, ${lastResultBadge.value.label}`;
 });
 </script>
 

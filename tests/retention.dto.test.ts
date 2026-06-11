@@ -229,7 +229,7 @@ describe('retention dto', () => {
       energy: {
         today: 5,
         weekly: 12,
-        weeklyGoal: 25,
+        weeklyGoal: 50,
       },
       program: {
         id: 1,
@@ -310,7 +310,7 @@ describe('retention dto', () => {
         energy: {
           today: 5,
           weekly: 12,
-          weeklyGoal: 25,
+          weeklyGoal: 50,
         },
         program: {
           id: 1,

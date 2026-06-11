@@ -72,7 +72,7 @@ API:
 
 Цель недели:
 
-- 25 капель.
+- 50 капель.
 - Прогресс показывается на главной рядом с растением.
 - Недельный расчёт идёт по локальным датам пользователя.
 
@@ -321,7 +321,7 @@ Onboarding-вопросы про утреннее/вечернее окно push
 | Капли за свободные практики   | Готово    | Backend rate-limit «3/день» + frontend wiring во всех 4 точках + компактная анимация полива растения в хедере при начислении + silent rate-limit.                                                                                                 |
 | Мысль дня fallback            | Готово    | Canonical fallback на дату уже создаётся.                                                                                                                                                                                                         |
 | Мысль дня save/collection     | Готово    | Есть save/unsave API, начисление 1 капли за первое сохранение, экран `/thoughts`.                                                                                                                                                                 |
-| Streak и ручная Pause         | Готово    | `user_streaks`, `user_streak_events`, строгая последовательная серия без auto-repair, manual pause, `/streak`, `/api/streak`.                                                                                                                    |
+| Streak и ручная Pause         | Готово    | `user_streaks`, `user_streak_events`, строгая последовательная серия без auto-repair, manual pause, `/streak`, `/api/streak`.                                                                                                                     |
 | Push retention                | Не готово | Есть общая push-инфраструктура, нет retention-сценариев.                                                                                                                                                                                          |
 | Milestone-бейджи              | Не готово | Отдельный слой.                                                                                                                                                                                                                                   |
 | AI-персонализация             | Не готово | Отдельный слой после стабилизации базового UX.                                                                                                                                                                                                    |

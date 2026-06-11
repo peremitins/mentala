@@ -11,7 +11,7 @@
         v-else-if="error"
         class="rounded-2xl border border-destructive/20 bg-destructive/5 p-5 text-sm text-destructive"
       >
-        Не удалось загрузить опросники. Попробуй открыть раздел ещё раз.
+        Не удалось загрузить оценки. Попробуй открыть раздел ещё раз.
       </div>
 
       <div v-else class="grid grid-cols-1 xs:gap-3 gap-1">

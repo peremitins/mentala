@@ -1,5 +1,5 @@
 <template>
-  <div class="glass-deep flex flex-1 relative overflow-hidden p-5">
+  <div class="glass-deep flex flex-1 relative overflow-hidden xs:p-5 p-4">
     <section class="w-full" :style="{ borderRadius: `calc(var(--radius-lg))` }">
       <h2 class="text-lg font-semibold mb-4">Добавить пользователя</h2>
 

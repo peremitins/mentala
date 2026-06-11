@@ -84,16 +84,88 @@ const SELF_KINDNESS_TOOLKIT: Record<
   },
 };
 
+// Сад «Отношения» (relationships_21), шаг 20 «Мой кодекс отношений».
+const RELATIONSHIPS_TOOLKIT: Record<
+  string,
+  Record<string, ToolkitDestination | null>
+> = {
+  // «Что поможет перед трудным разговором?»
+  before_talk: {
+    option_1: {
+      type: 'practice',
+      title: 'Дыхание с длинным выдохом',
+      toolRef: { kind: 'breath', slug: 'long-exhale-4-6' },
+      itemKey: 'breath:long-exhale-4-6',
+    },
+    option_2: {
+      type: 'practice',
+      title: 'Квадратное дыхание',
+      toolRef: { kind: 'breath', slug: 'box-breathing' },
+      itemKey: 'breath:box-breathing',
+    },
+    option_3: {
+      type: 'practice',
+      title: 'Заземление 5-4-3-2-1',
+      toolRef: { kind: 'sos', entry: 'panic' },
+      itemKey: 'sos:panic',
+    },
+    option_4: null, // репетиция первой фразы — концепт, нет экрана
+    option_5: null, // вспомнить своё «зачем» — концепт, нет экрана
+    option_6: null, // ничего из этого
+  },
+  // «Что поможет, когда границу продавили или разговор был тяжёлым?»
+  after_pushback: {
+    option_1: {
+      type: 'practice',
+      title: 'Снятие напряжения в теле',
+      toolRef: { kind: 'sos', entry: 'tension' },
+      itemKey: 'sos:tension',
+    },
+    option_2: {
+      type: 'practice',
+      title: 'Физиологический вздох',
+      toolRef: { kind: 'breath', slug: 'physiological-sigh' },
+      itemKey: 'breath:physiological-sigh',
+    },
+    option_3: {
+      type: 'practice',
+      title: 'Выгрузка мыслей',
+      toolRef: { kind: 'thought_dump' },
+      itemKey: 'thought_dump',
+    },
+    option_4: {
+      type: 'ai_chat',
+      title: 'Поговорить с помощником',
+      toolRef: { kind: 'chat' },
+      itemKey: 'chat',
+    },
+    option_5: null, // фраза на момент вины — текст, нет экрана
+    option_6: null, // ничего из этого
+  },
+  // «Что поможет, когда хочется больше тепла и близости?» — все варианты
+  // концептуальные действия в жизни, отдельных экранов нет.
+  closeness_tool: {
+    option_1: null,
+    option_2: null,
+    option_3: null,
+    option_4: null,
+    option_5: null,
+    option_6: null,
+  },
+};
+
 const TOOLKIT_REGISTRY: Record<
   string,
   Record<string, Record<string, ToolkitDestination | null>>
 > = {
   self_kindness_toolkit: SELF_KINDNESS_TOOLKIT,
+  relationships_toolkit: RELATIONSHIPS_TOOLKIT,
 };
 
 // Текстовые поля шага, которые сохраняем как личные фразы (type='phrase').
 const TOOLKIT_PHRASE_FIELDS: Record<string, string[]> = {
   self_kindness_toolkit: ['one_phrase'],
+  relationships_toolkit: ['one_phrase'],
 };
 
 /**

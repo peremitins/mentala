@@ -1,6 +1,6 @@
 <template>
   <article
-    class="relative overflow-hidden p-5"
+    class="relative overflow-hidden xs:p-5 p-4"
     :class="
       embedded
         ? 'rounded-2xl border border-white/10 bg-white/[0.05]'
@@ -141,11 +141,19 @@ const markerLeft = computed(() => {
   return Math.max(2, Math.min(98, ratio * 100));
 });
 
-// Подписи концов шкалы: «хороший» край зависит от направления.
-const scaleStartLabel = computed(() =>
-  props.scoreDirection === 'higher_is_worse' ? 'спокойнее' : 'строже к себе'
-);
-const scaleEndLabel = computed(() =>
-  props.scoreDirection === 'higher_is_worse' ? 'тревожнее' : 'добрее к себе'
-);
+// Подписи концов шкалы зависят от домена оценки, а не только от направления
+// баллов: у отношений и самоподдержки одинаковое higher_is_better, но разный смысл.
+const scaleStartLabel = computed(() => {
+  if (props.scoreDirection === 'higher_is_worse') return 'спокойнее';
+  if (props.category === 'relationships') return 'сложнее в отношениях';
+  if (props.category === 'self_kindness') return 'меньше поддержки';
+  return 'ниже результат';
+});
+
+const scaleEndLabel = computed(() => {
+  if (props.scoreDirection === 'higher_is_worse') return 'тревожнее';
+  if (props.category === 'relationships') return 'устойчивее в отношениях';
+  if (props.category === 'self_kindness') return 'больше поддержки';
+  return 'выше результат';
+});
 </script>

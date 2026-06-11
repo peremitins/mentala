@@ -37,6 +37,7 @@
     "db:cleanup-slots-duplicates": "tsx scripts/db/cleanup-notification-slot-duplicates.ts",
     "db:sync-notification-templates": "tsx scripts/migrate-templates-to-db.ts",
     "db:reset-billing-credit-nonprod": "tsx scripts/db/reset-billing-credit-nonprod.ts",
+    "dev:garden:complete": "tsx scripts/db/dev-complete-garden.ts",
     "streak:backfill": "tsx scripts/db/backfill-user-streaks.ts",
     "db:baseline": "tsx scripts/db/baseline.ts",
     "wiki:sync-docs": "node scripts/wiki/sync-docs.mjs",

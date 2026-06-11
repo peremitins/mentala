@@ -1,4 +1,5 @@
 import { Capacitor } from '@capacitor/core';
+import { clearError, useError } from 'nuxt/app';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Preferences } from '@capacitor/preferences';
@@ -978,6 +979,36 @@ export default defineNuxtPlugin({
       await savePendingNavigation(selected);
     }
 
+    // Если приложение застряло на error.vue (фатальная ошибка Nuxt живёт до
+    // явного clearError), тап по push должен вытаскивать юзера из чёрного
+    // экрана, а не навигировать «под ним» — error-страница перекрывает всё.
+    function clearFatalErrorIfAny() {
+      try {
+        const nuxtError = useError();
+        if (nuxtError.value) {
+          console.warn(
+            '[PushPlugin] Clearing fatal Nuxt error before push navigation:',
+            nuxtError.value
+          );
+          clearError();
+        }
+      } catch (error) {
+        console.warn('[PushPlugin] Failed to clear Nuxt error state:', error);
+      }
+    }
+
+    async function logUnmatchedRoute(targetPath: string): Promise<void> {
+      try {
+        const Sentry = await import('@sentry/vue');
+        Sentry.captureMessage('Push deepLink не матчится на маршрут клиента', {
+          level: 'warning',
+          extra: { targetPath },
+        });
+      } catch {
+        console.warn('[PushPlugin] Unmatched push route:', targetPath);
+      }
+    }
+
     async function navigateToTarget(
       targetPath: string,
       target?: AppNavigationTarget | null,
@@ -988,6 +1019,7 @@ export default defineNuxtPlugin({
         if (shouldSkipNavigation(normalized, messageId)) {
           return true;
         }
+        clearFatalErrorIfAny();
         await ensureAuthReady();
         await nuxtApp.$router.isReady();
 
@@ -1016,7 +1048,17 @@ export default defineNuxtPlugin({
           return false;
         }
 
-        const expected = nuxtApp.$router.resolve(normalized);
+        let expected = nuxtApp.$router.resolve(normalized);
+
+        // Сервер может прислать deepLink на маршрут, которого нет в текущем
+        // билде (старый клиент + новый бэкенд). Навигация на несматченный
+        // путь роняет Nuxt в фатальную 404 (чёрный error.vue «Go back home»).
+        // Вместо этого уводим на главную и логируем для диагностики.
+        if (expected.matched.length === 0) {
+          void logUnmatchedRoute(normalized);
+          expected = nuxtApp.$router.resolve('/');
+        }
+
         const expectedFullPath = expected.fullPath;
         if (nuxtApp.$router.currentRoute.value.fullPath === expectedFullPath) {
           lastNavigation = {

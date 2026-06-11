@@ -3,7 +3,7 @@
     class="relative h-full xs:space-y-3 space-y-1 overflow-y-auto pb-[112px]"
   >
     <PageHeader
-      :title="item?.shortTitle || 'Опросник'"
+      :title="item?.shortTitle || 'Оценка'"
       show-back-button
       @go-back="goBack"
     />
@@ -16,7 +16,7 @@
       v-else-if="error || !item"
       class="mx-1 rounded-2xl border border-destructive/20 bg-destructive/5 p-5 text-sm text-destructive"
     >
-      Не удалось открыть опросник. Попробуй вернуться и запустить его ещё раз.
+      Не удалось открыть оценку. Попробуй вернуться и запустить её ещё раз.
     </section>
 
     <section v-else class="xs:space-y-3 space-y-1 px-1">

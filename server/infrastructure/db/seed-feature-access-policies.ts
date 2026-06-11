@@ -122,7 +122,7 @@ const policies = [
     lockIcon: 'pro',
     paywallTitle: 'Оценка состояния доступна в PRO',
     paywallDescription:
-      'Пройди короткий опросник, сохрани результат и сравни динамику после сада.',
+      'Пройди короткую оценку, сохрани результат и сравни динамику после сада.',
     paywallCtaText: 'Выбрать тариф',
     paywallTargetPlan: 'pro',
   },

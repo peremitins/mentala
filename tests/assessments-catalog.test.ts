@@ -43,7 +43,16 @@ describe('assessment catalog', () => {
       linkedProgramSlug: 'self_kindness_21',
       questionsCount: 12,
     });
-    expect(items.filter((item) => item.status === 'active')).toHaveLength(2);
+    const relationships = items.find(
+      (item) => item.slug === 'relationships_boundaries_v1'
+    );
+    expect(relationships).toMatchObject({
+      title: 'Оценка границ и общения',
+      status: 'active',
+      linkedProgramSlug: 'relationships_21',
+      questionsCount: 18,
+    });
+    expect(items.filter((item) => item.status === 'active')).toHaveLength(3);
   });
 
   it('использует GAD-7 для тревоги, но без диагностического позиционирования', () => {
@@ -136,6 +145,73 @@ describe('assessment catalog', () => {
     expect(resolveAssessmentBand(assessment, 15)?.id).toBe('high');
   });
 
+  it('считает авторскую оценку границ и общения с reverse-пунктами', () => {
+    const assessment = getAssessmentDefinition('relationships_boundaries_v1');
+    expect(assessment).toBeDefined();
+    if (!assessment) throw new Error('assessment missing');
+
+    expect(assessment.isValidatedScale).toBe(false);
+    expect(assessment.sourceName).toBeNull();
+    expect(assessment.questions).toHaveLength(18);
+    expect(
+      assessment.questions.filter((question) => question.reverseScored)
+    ).toHaveLength(4);
+    const pressureGuiltQuestion = assessment.questions.find(
+      (question) => question.id === 'rb_pressure_guilt'
+    );
+    expect(pressureGuiltQuestion).toMatchObject({
+      text: 'Когда на меня давят чувством вины, я чаще соглашаюсь, даже если не хочу',
+      reverseScored: true,
+    });
+    expect(pressureGuiltQuestion?.text).not.toContain(
+      'трудно не соглашаться'
+    );
+    expect(assessment.scoring).toMatchObject({
+      method: 'sum_with_reverse',
+      minScore: 0,
+      maxScore: 72,
+    });
+
+    const maxResult = scoreAssessmentAnswers(
+      assessment,
+      assessment.questions.map((question) => ({
+        questionId: question.id,
+        optionId: question.reverseScored ? 'almost_never' : 'almost_always',
+      }))
+    );
+    expect(maxResult.totalScore).toBe(72);
+    expect(maxResult.band.id).toBe('high');
+
+    const minResult = scoreAssessmentAnswers(
+      assessment,
+      assessment.questions.map((question) => ({
+        questionId: question.id,
+        optionId: question.reverseScored ? 'almost_always' : 'almost_never',
+      }))
+    );
+    expect(minResult.totalScore).toBe(0);
+    expect(minResult.band.id).toBe('low');
+
+    expect(resolveAssessmentBand(assessment, 23)?.id).toBe('low');
+    expect(resolveAssessmentBand(assessment, 24)?.id).toBe('moderate');
+    expect(resolveAssessmentBand(assessment, 48)?.id).toBe('moderate');
+    expect(resolveAssessmentBand(assessment, 49)?.id).toBe('high');
+
+    const userFacing = [
+      assessment.description,
+      ...assessment.resultBands.flatMap((band) => [
+        band.title,
+        band.shortText,
+        band.description,
+        band.recommendationText,
+      ]),
+    ].join(' ');
+    expect(userFacing).not.toMatch(
+      /авторск|Mentala|диагностик|расстройств|созависим|токсич|абьюз|здоровые ли|опросник/i
+    );
+    expect(assessment.description).toContain('Это не диагноз');
+  });
+
   it('заводит assessments.full в server entitlements и seed', () => {
     const entitlements = readProjectFile(
       'server/application/subscriptions/entitlements.service.ts'
@@ -154,7 +230,7 @@ describe('assessment catalog', () => {
   it('добавляет preview-вход на хаб практик без route-level paywall', () => {
     const practicesPage = readProjectFile('app/pages/practices/index.vue');
 
-    expect(practicesPage).toContain('to="/practices/assessments"');
+    expect(practicesPage).toContain("to: '/practices/assessments'");
     expect(practicesPage).toContain('Оценка состояния');
     expect(practicesPage).not.toMatch(
       /to="\/practices\/assessments"[\s\S]{0,260}@click="openPaywall/

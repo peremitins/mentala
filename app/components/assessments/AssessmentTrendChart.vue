@@ -1,6 +1,6 @@
 <template>
   <div
-    class="p-5"
+    class="xs:p-5 p-4"
     :class="
       embedded
         ? 'rounded-2xl border border-white/10 bg-white/[0.05]'
@@ -28,7 +28,7 @@
       viewBox="0 0 320 150"
       class="h-[150px] w-full overflow-visible"
       role="img"
-      aria-label="График динамики опросника"
+      aria-label="График динамики оценки состояния"
     >
       <line
         v-for="tick in ticks"

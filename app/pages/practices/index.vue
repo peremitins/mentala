@@ -13,7 +13,7 @@
         v-for="(card, index) in cards"
         :key="card.to"
         :to="card.to"
-        class="glass-deep p-5 group relative overflow-hidden transition hover:-translate-y-1 animate-slide-up"
+        class="glass-deep xs:p-5 p-4 group relative overflow-hidden transition hover:-translate-y-1 animate-slide-up"
         :style="{
           animationDelay: `${index * 0.04}s`,
           animationFillMode: 'both',
@@ -99,7 +99,7 @@ const cards: PracticeCard[] = [
   {
     to: '/practices/assessments',
     title: 'Оценка состояния',
-    subtitle: 'Короткие опросники, чтобы заметить состояние и выбрать шаг',
+    subtitle: 'Короткие оценки, чтобы заметить состояние и выбрать шаг',
     image: assessmentsImg,
     orb: 'tile-orb--slow bg-gradient-to-br from-emerald-400/35 via-cyan-400/20 to-transparent',
     orbAlt: 'bg-gradient-to-br from-teal-500/25 via-sky-500/20 to-transparent',

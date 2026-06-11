@@ -29,7 +29,7 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // assessmentSlug приходит из roadmap-action (targetId). Подстраховка: опросник
+  // assessmentSlug приходит из roadmap-action (targetId). Подстраховка: оценка
   // должен быть привязан именно к этому саду, иначе baseline не отдаём.
   const assessmentSlug = String(getQuery(event).assessmentSlug || '').trim();
   if (!assessmentSlug) {

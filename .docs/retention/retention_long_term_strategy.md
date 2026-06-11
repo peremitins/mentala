@@ -234,7 +234,7 @@ UI-сигналы для пользователя:
 | --- | ----------------------- | --------------------------------- | ----------------------------------------------------------------- | ----- | ---------------------------------- |
 | 1   | `calm_anxiety_30`       | Тревога / стресс / фобический фон | Орхидея (ассеты готовы в `public/retention/plant/states/orchid/`) | 30    | ready, sequential #1               |
 | 2   | `self_kindness_21`      | Самооценка / самокритика          | Пион (ассеты готовы в `public/retention/plant/states/peony/`)     | 21    | assets ready, sequential #2        |
-| 3   | `relationships_21`      | Отношения / границы / близость    | Цикламен персидский — _Cyclamen persicum_ (`cyclamen`)            | 21    | assets ready, content needed, sequential #3 |
+| 3   | `relationships_21`      | Отношения / границы / близость    | Цикламен персидский — _Cyclamen persicum_ (`cyclamen`)            | 21    | ready (контент в `blueprints/relationships-21.ts`), sequential #3 |
 | 4   | `burnout_21`            | Выгорание / восстановление        | Комнатная азалия — _Rhododendron simsii_ (`azalea`)              | 21    | NEW, assets needed, content needed, sequential #4 |
 | 5   | `gentle_sleep_21`       | Мягкий сон                        | Тюльпан Queen of Night (`tulip_queen_of_night`)                   | 21    | content needed, sequential #5      |
 | 6   | `emotion_regulation_21` | Злость / импульсивные реакции     | Георгин Café au Lait (`dahlia_cafe`)                              | 21    | content needed, sequential #6      |

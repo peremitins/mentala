@@ -10,12 +10,12 @@
       v-else-if="status === 'error' || !item"
       class="rounded-2xl border border-destructive/20 bg-destructive/5 p-5 text-sm text-destructive"
     >
-      Не удалось открыть опросник. Попробуй вернуться и запустить его ещё раз.
+      Не удалось открыть оценку. Попробуй вернуться и запустить её ещё раз.
     </section>
 
     <!-- Фаза результата: показываем балл, интерпретацию и динамику прямо здесь,
          без перехода на отдельную страницу. Пока resultBand грузится — скелетон,
-         чтобы не мелькали вопросы при возврате к уже пройденному опроснику. -->
+         чтобы не мелькали вопросы при возврате к уже пройденной оценке. -->
     <template v-else-if="phase === 'result'">
       <template v-if="resultBand">
         <AssessmentResultSummary
@@ -182,7 +182,7 @@ const props = withDefaults(
     linkedProgramSlug?: string | null;
     linkedProgramAttemptId?: number | null;
     // Если передан — раннер сразу показывает результат этой попытки (без вопросов).
-    // Используется, когда юзер уже прошёл опросник и возвращается к шагу.
+    // Используется, когда юзер уже прошёл оценку и возвращается к шагу.
     initialAttemptId?: number | null;
     // Показывать ли результат прямо в раннере. Roadmap — true (встроенный итог).
     // Страница практик передаёт false: она ведёт на отдельный экран результата.
@@ -229,7 +229,7 @@ const resultBandId = ref<string | null>(null);
 const comparison = ref<AssessmentResultResponse['comparison']>(null);
 const chartPoints = ref<AssessmentChartResponse['points']>([]);
 
-// Определение опросника грузим императивно (без top-level await), чтобы раннер
+// Определение оценки грузим императивно (без top-level await), чтобы раннер
 // можно было безопасно монтировать динамически внутри шага Roadmap, не запуская
 // Suspense-fallback всей страницы.
 const item = ref<AssessmentRunResponse['item'] | null>(null);
@@ -247,7 +247,7 @@ onMounted(async () => {
       await loadResult(props.initialAttemptId);
     }
   } catch (err) {
-    console.error('[AssessmentRunner] Не удалось загрузить опросник:', err);
+    console.error('[AssessmentRunner] Не удалось загрузить оценку:', err);
     status.value = 'error';
   }
 });
@@ -280,7 +280,8 @@ const contextText = computed(() => {
   if (props.slug === 'self_compassion_scs_sf_v1') {
     return 'Отметь, насколько это обычно похоже на тебя в трудные моменты.';
   }
-  return 'За последние две недели отметь, как часто это беспокоило:';
+  const timeframe = item.value?.timeframeLabel ?? 'в последнее время';
+  return `Период: ${timeframe}. Отметь, насколько это похоже на твой опыт.`;
 });
 
 function selectOption(optionId: string) {
@@ -311,7 +312,7 @@ function getClientTimezone(): string | null {
 }
 
 // Подгружает результат по attemptId (используется при возврате к уже
-// пройденному опроснику). Балл/диапазон берём из самого attempt, сравнение и
+// пройденной оценке). Балл/диапазон берём из самого attempt, сравнение и
 // график — best-effort: их сбой не должен прятать результат.
 async function loadResult(attemptId: number) {
   const resultRes = await useAPI<AssessmentResultResponse>(

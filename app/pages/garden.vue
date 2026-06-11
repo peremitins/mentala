@@ -30,6 +30,42 @@
     </section>
 
     <template v-else>
+      <!-- Ссылка на достижения — сразу под шапкой, чтобы награды не терялись
+           между коллекцией завершённых Садов и будущими силуэтами. -->
+      <NuxtLink to="/milestones" class="glass-deep garden-achievements-link">
+        <div class="garden-achievements-preview" aria-hidden="true">
+          <span
+            v-for="(badge, index) in achievementPreviewBadges"
+            :key="`${badge.key}-${index}`"
+            class="garden-achievements-mini-badge"
+            :class="{ 'garden-achievements-mini-badge--locked': badge.locked }"
+            :style="{ zIndex: achievementPreviewBadges.length - index }"
+          >
+            <img
+              v-if="badge.imagePath"
+              :src="badge.imagePath"
+              :alt="badge.title"
+              class="garden-achievements-mini-badge__image"
+              loading="eager"
+              decoding="async"
+              draggable="false"
+            />
+            <span v-else class="garden-achievements-mini-badge__placeholder">
+              ✦
+            </span>
+          </span>
+        </div>
+
+        <div class="min-w-0 flex-1">
+          <p class="text-sm font-medium">Достижения</p>
+          <p class="text-xs text-muted-foreground">
+            {{ achievementsSubtitle }}
+          </p>
+        </div>
+
+        <IconChevronRight class="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+      </NuxtLink>
+
       <GardenActiveCard
         v-if="garden.activePlant.value"
         :plant="garden.activePlant.value"
@@ -43,25 +79,6 @@
         @open-report="openLore"
         @open-map="openMap"
       />
-
-      <!-- Ссылка на достижения — после завершённых садов, перед новыми семенами -->
-      <NuxtLink
-        to="/milestones"
-        class="glass-deep flex items-center justify-between gap-3 px-4 py-3"
-      >
-        <div class="flex items-center gap-3">
-          <div class="garden-achievements-icon">
-            <span>✦</span>
-          </div>
-          <div>
-            <p class="text-sm font-medium">Достижения</p>
-            <p class="text-xs text-muted-foreground">
-              {{ achievementsSubtitle }}
-            </p>
-          </div>
-        </div>
-        <IconChevronRight class="h-4 w-4 text-muted-foreground flex-shrink-0" />
-      </NuxtLink>
 
       <GardenAvailableSeeds
         :seeds="garden.availableSeeds.value"
@@ -147,7 +164,7 @@ import type {
   GardenPlantItemDto,
 } from '@/shared/dto/garden';
 import { useMilestoneBadges } from '@/app/composables/useMilestoneBadges';
-import { ALL_BADGES_TOTAL } from '@/app/lib/milestoneBadges';
+import { ALL_BADGES_TOTAL, getBadgeMeta } from '@/app/lib/milestoneBadges';
 import IconChevronRight from '~icons/lucide/chevron-right';
 
 const route = useRoute();
@@ -159,6 +176,43 @@ const achievementsSubtitle = computed(() => {
   const earned = earnedMilestones.value.length;
   if (earned === 0) return 'Открываются по ходу пути';
   return `${earned} из ${ALL_BADGES_TOTAL} получено`;
+});
+
+type AchievementPreviewBadge = {
+  key: string;
+  title: string;
+  imagePath: string | null;
+  locked: boolean;
+};
+
+const ACHIEVEMENT_PREVIEW_SIZE = 4;
+
+const achievementPreviewBadges = computed<AchievementPreviewBadge[]>(() => {
+  const earned = [...earnedMilestones.value]
+    .sort(
+      (a, b) => new Date(b.earnedAt).getTime() - new Date(a.earnedAt).getTime()
+    )
+    .slice(0, ACHIEVEMENT_PREVIEW_SIZE)
+    .map((milestone) => {
+      const meta = getBadgeMeta(milestone.badgeId);
+      return {
+        key: milestone.badgeId,
+        title: meta?.title ?? 'Достижение',
+        imagePath: meta?.imagePath ?? null,
+        locked: false,
+      };
+    });
+
+  while (earned.length < ACHIEVEMENT_PREVIEW_SIZE) {
+    earned.push({
+      key: `locked-${earned.length}`,
+      title: 'Достижение',
+      imagePath: null,
+      locked: true,
+    });
+  }
+
+  return earned;
 });
 const startingSlug = ref<string | null>(null);
 const { getFeatureAccess } = useEntitlements();
@@ -305,20 +359,82 @@ watch(
 </script>
 
 <style scoped>
-.garden-achievements-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: linear-gradient(
-    135deg,
-    hsl(145 50% 55% / 0.25) 0%,
-    hsl(210 60% 65% / 0.2) 100%
-  );
-  border: 1px solid hsl(145 50% 65% / 0.3);
+.garden-achievements-link {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    background-color 180ms ease;
+}
+
+.garden-achievements-link:active {
+  transform: scale(0.99);
+}
+
+.garden-achievements-preview {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  min-width: 76px;
+  padding-left: 2px;
+}
+
+.garden-achievements-mini-badge {
+  position: relative;
+  display: flex;
+  width: 34px;
+  height: 34px;
+  align-items: center;
   justify-content: center;
-  font-size: 15px;
-  flex-shrink: 0;
+  overflow: hidden;
+  margin-left: -10px;
+  border: 1px solid hsl(var(--border) / 0.55);
+  border-radius: 999px;
+  background: radial-gradient(
+      circle at 35% 24%,
+      hsl(145 55% 72% / 0.3),
+      transparent 45%
+    ),
+    hsl(var(--card) / 0.86);
+  box-shadow:
+    0 8px 22px hsl(0 0% 0% / 0.22),
+    inset 0 1px 0 hsl(0 0% 100% / 0.16);
+}
+
+.garden-achievements-mini-badge:first-child {
+  margin-left: 0;
+}
+
+.garden-achievements-mini-badge--locked {
+  background: linear-gradient(
+      135deg,
+      hsl(145 35% 56% / 0.18),
+      hsl(210 40% 62% / 0.12)
+    ),
+    hsl(var(--muted) / 0.22);
+}
+
+.garden-achievements-mini-badge--locked::after {
+  position: absolute;
+  inset: 7px;
+  border: 1px dashed hsl(var(--foreground) / 0.22);
+  border-radius: inherit;
+  content: '';
+}
+
+.garden-achievements-mini-badge__image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.garden-achievements-mini-badge__placeholder {
+  color: hsl(var(--foreground) / 0.45);
+  font-size: 13px;
+  line-height: 1;
 }
 </style>

@@ -3,7 +3,7 @@
     class="relative h-full xs:space-y-3 space-y-1 overflow-y-auto pb-[100px] rounded-lg"
   >
     <PageHeader
-      :title="item?.shortTitle || 'Опросник'"
+      :title="item?.shortTitle || 'Оценка'"
       show-back-button
       @go-back="goBack"
     />
@@ -16,11 +16,11 @@
       v-else-if="error || !item"
       class="rounded-2xl border border-destructive/20 bg-destructive/5 p-5 text-sm text-destructive"
     >
-      Не удалось открыть описание опросника.
+      Не удалось открыть описание оценки.
     </section>
 
     <section v-else class="xs:space-y-3 space-y-1 px-1">
-      <div class="glass-deep relative overflow-hidden rounded-lg p-5">
+      <div class="glass-deep relative overflow-hidden rounded-lg xs:p-5 p-4">
         <div class="relative space-y-5">
           <div class="space-y-2">
             <p class="text-sm leading-relaxed text-foreground/70">
@@ -52,17 +52,47 @@
           <button
             v-if="item.lastAttempt"
             type="button"
-            class="w-full rounded-2xl border border-white/12 bg-white/[0.08] p-4 text-left transition hover:border-white/24 hover:bg-white/[0.12] active:scale-[0.99]"
+            class="group/result w-full rounded-2xl border border-white/12 bg-white/[0.08] p-4 text-left transition hover:border-white/24 hover:bg-white/[0.12] active:scale-[0.99]"
+            :aria-label="lastResultButtonLabel"
             @click="openLastResult"
           >
-            <span
-              class="block text-xs font-medium uppercase tracking-[0.12em] text-foreground/45"
-            >
-              Последний результат
-            </span>
-            <span class="mt-1 block text-sm font-semibold text-foreground">
-              {{ item.lastAttempt.totalScore }} баллов ·
-              {{ formattedLastAttemptDate }}
+            <span class="block">
+              <span class="flex items-start justify-between gap-3">
+                <span
+                  class="block text-xs font-medium uppercase tracking-[0.12em] text-foreground/45"
+                >
+                  Последний результат
+                </span>
+                <span class="flex shrink-0 items-center gap-1">
+                  <IconChevronRight
+                    class="h-4 w-4 text-foreground/45 transition group-hover/result:translate-x-0.5 group-hover/result:text-foreground/70"
+                    aria-hidden="true"
+                  />
+                </span>
+              </span>
+              <span class="mt-1 block text-sm font-semibold text-foreground">
+                {{ item.lastAttempt.totalScore }} баллов ·
+                {{ formattedLastAttemptDate }}
+              </span>
+              <span class="mt-2 flex min-w-0 items-center gap-2">
+                <span
+                  class="flex h-1.5 w-[64px] shrink-0 gap-0.5"
+                  aria-hidden="true"
+                >
+                  <span
+                    v-for="segment in lastResultBadge.scaleSegments"
+                    :key="segment.id"
+                    class="h-full flex-1 rounded-full"
+                    :class="segment.className"
+                  />
+                </span>
+                <span
+                  class="min-w-0 truncate text-xs font-semibold leading-none"
+                  :class="lastResultBadge.textClassName"
+                >
+                  {{ lastResultBadge.label }}
+                </span>
+              </span>
             </span>
           </button>
 
@@ -89,12 +119,14 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import IconChevronRight from '~icons/lucide/chevron-right';
 import PageHeader from '@/app/components/PageHeader.vue';
 import FeaturePaywallModal from '@/app/components/subscription/FeaturePaywallModal.vue';
 import Skeleton from '@/app/components/ui/Skeleton.vue';
 import { Button } from '@/app/components/ui/button';
 import { useAPI } from '@/app/composables/useAPI';
 import { useEntitlements } from '@/app/composables/useEntitlements';
+import { getAssessmentResultBadge } from '@/app/lib/assessmentResultBadge';
 import type { AssessmentDetailResponse } from '@/shared/dto/assessments';
 import { ASSESSMENTS_FEATURE_KEY } from '@/shared/constants/assessments';
 
@@ -135,6 +167,19 @@ const formattedLastAttemptDate = computed(() => {
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(item.value.lastAttempt.completedAt));
+});
+
+const lastResultBadge = computed(() =>
+  getAssessmentResultBadge({
+    bandId: item.value?.lastAttempt?.bandId ?? '',
+    scoreDirection: item.value?.scoreDirection ?? 'custom',
+    category: item.value?.category,
+  })
+);
+
+const lastResultButtonLabel = computed(() => {
+  if (!item.value?.lastAttempt) return 'Открыть последний результат';
+  return `Открыть последний результат: ${item.value.lastAttempt.totalScore} баллов, ${lastResultBadge.value.label}`;
 });
 
 function goBack() {
