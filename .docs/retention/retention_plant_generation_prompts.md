@@ -154,7 +154,7 @@ public/retention/plant/states/{plant-set-slug}/plant-15.webp
 Эмоция: щедрость, принятие себя, мягкая полнота. Огромные пышные шары лепестков размером с тарелку, ассоциация с теплом и заботой.
 Палитра: румяно-розовый, коралл, белый с румянцем, бордо в глубине.
 Редкость: 2 (по эстетике на уровне 6).
-**Ассеты × 15 стадий уже готовы** в `public/retention/plant/states/peony/`. Закреплено за Садом «Доброта к себе» (`self_kindness_21`).
+**Ассеты × 15 стадий уже готовы** в `public/retention/plant/states/peony/`. Закреплено за Садом «Внутренний критик» (`self_kindness_21`).
 
 #### 3. Тюльпан Queen of Night — _Tulipa_ "Queen of Night" (slug: `tulip_queen_of_night`)
 
@@ -382,7 +382,7 @@ Mood: optimism, warm morning, generous joy.
 
 ```
 
-### 6.2. `peony` — Пион (Сад «Доброта к себе»)
+### 6.2. `peony` — Пион (Сад «Внутренний критик»)
 
 ```
 
@@ -632,7 +632,7 @@ AI-image-генераторы плохо держат **идентичный г�
 ## 9. Очерёдность производства
 
 1. **Орхидея (`orchid`)** — ✅ готово, 15 стадий лежат в `public/retention/plant/states/orchid/`. Закреплено за Садом #1 «Спокойствие» (`calm_anxiety_30`).
-2. **Пион (`peony`)** — ✅ готово, 15 стадий лежат в `public/retention/plant/states/peony/`. Закреплено за Садом #2 «Доброта к себе» (`self_kindness_21`).
+2. **Пион (`peony`)** — ✅ готово, 15 стадий лежат в `public/retention/plant/states/peony/`. Закреплено за Садом #2 «Внутренний критик» (`self_kindness_21`).
 3. **Цикламен персидский (`cyclamen`)** — ✅ готово, 15 стадий лежат в `public/retention/plant/states/cyclamen/`. Закреплено за Садом #3 «Отношения» (`relationships_21`).
 4. **Комнатная азалия (`azalea`)** — Сад #4 «Выгорание» (`burnout_21`). Ассеты к генерации.
 5. **Тюльпан Queen of Night (`tulip_queen_of_night`)** — Сад #5 «Мягкий сон» (`gentle_sleep_21`).

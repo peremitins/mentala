@@ -18,12 +18,17 @@ import {
   AZALEA_CHAPTERS,
   STEP_BLUEPRINTS_BURNOUT_21,
 } from './burnout-21';
+import {
+  TULIP_CHAPTERS,
+  STEP_BLUEPRINTS_GENTLE_SLEEP_21,
+} from './gentle-sleep-21';
 
 export * from './builders';
 export { CALM_CHAPTERS } from './calm-anxiety-30';
 export { PEONY_CHAPTERS } from './self-kindness-21';
 export { CYCLAMEN_CHAPTERS } from './relationships-21';
 export { AZALEA_CHAPTERS } from './burnout-21';
+export { TULIP_CHAPTERS } from './gentle-sleep-21';
 
 // Map<slug, blueprints>. Экспортируется (через ре-экспорт в сервисе) для тестов
 // (tests/peony-blueprint.test.ts, tests/calm-anxiety-blueprint.test.ts).
@@ -32,6 +37,7 @@ export const STEP_BLUEPRINTS_BY_SLUG: Record<string, StepBlueprint[]> = {
   self_kindness_21: STEP_BLUEPRINTS_SELF_KINDNESS_21,
   relationships_21: STEP_BLUEPRINTS_RELATIONSHIPS_21,
   burnout_21: STEP_BLUEPRINTS_BURNOUT_21,
+  gentle_sleep_21: STEP_BLUEPRINTS_GENTLE_SLEEP_21,
 };
 
 // Главы каждого Сада для прогресс-карты.
@@ -43,6 +49,7 @@ export const PROGRAM_CHAPTERS_BY_SLUG: Record<
   self_kindness_21: PEONY_CHAPTERS,
   relationships_21: CYCLAMEN_CHAPTERS,
   burnout_21: AZALEA_CHAPTERS,
+  gentle_sleep_21: TULIP_CHAPTERS,
 };
 
 // Последний шаг глав 1-4 каждого Сада (глава 5 - всё остальное до totalSteps).
@@ -52,4 +59,5 @@ export const CHAPTER_LAST_STEPS_BY_SLUG: Record<string, readonly number[]> = {
   self_kindness_21: [3, 7, 14, 19],
   relationships_21: [4, 9, 15, 19],
   burnout_21: [4, 9, 14, 18],
+  gentle_sleep_21: [4, 9, 14, 18],
 };

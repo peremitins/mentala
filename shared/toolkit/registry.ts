@@ -154,18 +154,85 @@ const RELATIONSHIPS_TOOLKIT: Record<
   },
 };
 
+// Сад «Мягкий сон» (gentle_sleep_21), шаг 20 «Ночной набор».
+const GENTLE_SLEEP_TOOLKIT: Record<
+  string,
+  Record<string, ToolkitDestination | null>
+> = {
+  // «Что берёшь на вечер, когда голова не отпускает?»
+  evening_racing: {
+    option_1: {
+      type: 'practice',
+      title: 'Выгрузка мыслей',
+      toolRef: { kind: 'thought_dump' },
+      itemKey: 'thought_dump',
+    },
+    option_2: {
+      type: 'practice',
+      title: 'Дыхание 4-7-8',
+      toolRef: { kind: 'breath', slug: '4-7-8' },
+      itemKey: 'breath:4-7-8',
+    },
+    option_3: {
+      type: 'practice',
+      title: 'Дыхание с длинным выдохом',
+      toolRef: { kind: 'breath', slug: 'long-exhale-4-6' },
+      itemKey: 'breath:long-exhale-4-6',
+    },
+    option_4: {
+      type: 'ai_chat',
+      title: 'Поговорить с помощником',
+      toolRef: { kind: 'chat' },
+      itemKey: 'chat',
+    },
+    option_5: null, // свой порядок вечера - концепт, нет экрана
+    option_6: null, // ничего из этого
+  },
+  // «Что берёшь на ночь, когда сон не идёт?»
+  cant_sleep: {
+    option_1: null, // встать и посидеть с тихим занятием - действие в жизни, нет экрана
+    option_2: {
+      type: 'practice',
+      title: 'Ровное дыхание 6-6',
+      toolRef: { kind: 'breath', slug: 'equal-6-6' },
+      itemKey: 'breath:equal-6-6',
+    },
+    option_3: {
+      type: 'practice',
+      title: 'Снятие напряжения в теле',
+      toolRef: { kind: 'sos', entry: 'tension' },
+      itemKey: 'sos:tension',
+    },
+    option_4: null, // перестать стараться уснуть (парадоксальная интенция) - концепт
+    option_5: null, // практика «Тихая ночь» - медитация шага, deep-link'а в наборе пока нет
+    option_6: null, // ничего из этого
+  },
+  // «Что берёшь на пробуждение среди ночи?» - почти всё концептуальные ходы
+  // без отдельного экрана, в набор не материализуются.
+  night_wake: {
+    option_1: null, // не проверять время - концепт
+    option_2: null, // десять медленных выдохов - делается без экрана
+    option_3: null, // разрешить себе просто лежать - концепт
+    option_4: null, // встать, если бодрость всерьёз - действие в жизни
+    option_5: null, // практика «Тихая ночь» - см. cant_sleep.option_5
+    option_6: null, // ничего из этого
+  },
+};
+
 const TOOLKIT_REGISTRY: Record<
   string,
   Record<string, Record<string, ToolkitDestination | null>>
 > = {
   self_kindness_toolkit: SELF_KINDNESS_TOOLKIT,
   relationships_toolkit: RELATIONSHIPS_TOOLKIT,
+  gentle_sleep_21_toolkit: GENTLE_SLEEP_TOOLKIT,
 };
 
 // Текстовые поля шага, которые сохраняем как личные фразы (type='phrase').
 const TOOLKIT_PHRASE_FIELDS: Record<string, string[]> = {
   self_kindness_toolkit: ['one_phrase'],
   relationships_toolkit: ['one_phrase'],
+  gentle_sleep_21_toolkit: ['one_phrase'],
 };
 
 /**

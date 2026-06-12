@@ -114,7 +114,7 @@ function getStepBlueprintsForSlug(slug: string): StepBlueprint[] {
 // Каталог «Мысли дня». Теги определяют, в каком контексте предпочтительно
 // показывать текст:
 //   anxiety      - сад «Спокойствие» (calm_anxiety_30), CBT/ACT по тревоге
-//   self_compassion - сад «Доброта к себе» (self_kindness_21), Self-Compassion/CFT
+//   self_compassion - сад «Внутренний критик» (self_kindness_21), Self-Compassion/CFT
 //   stress       - перегрузка, ресурс, восстановление
 //   low_mood     - подавленное настроение, нормализация, движение вперёд
 //   universal    - подходит для любого контекста
@@ -261,7 +261,7 @@ const THOUGHT_CATALOG: ThoughtEntry[] = [
     tags: ['self_compassion'],
   },
   {
-    text: 'Доброта к себе - не оправдание всего подряд. Это другой способ отвечать на ошибки: через понимание, а не через атаку.',
+    text: 'После ошибки внутренний критик часто говорит жёстко. Можно ответить иначе: спокойно признать, что случилось, и выбрать следующий маленький шаг.',
     tags: ['self_compassion'],
   },
   {
@@ -1486,21 +1486,21 @@ const PROGRAM_BOOTSTRAP: Record<string, ProgramBootstrap> = {
     requiredPlan: null,
     unlockRule: { kind: 'always' },
   },
-  // Сад #2 «Доброта к себе» (Peony) - полноценная программа на 21 шаг
+  // Сад #2 «Внутренний критик» (Peony) - полноценная программа на 21 шаг
   // (см. STEP_BLUEPRINTS_SELF_KINDNESS_21 и
   // .docs/content/program_self_kindness_21.md). Методическая база:
-  // Neff: три компонента доброты к себе; Hayes: терапия принятия и
+  // Neff: три компонента самосострадания; Hayes: терапия принятия и
   // ответственности и дефузия; Salzberg: медитация доброжелательности;
   // Gilbert: терапия, сфокусированная на сострадании.
   // Открывается после завершения 1 регулярного Сада (Orchid).
   self_kindness_21: {
     slug: 'self_kindness_21',
-    title: 'Доброта к себе',
-    subtitle: '21 шаг о мягком разговоре с собой',
+    title: 'Внутренний критик',
+    subtitle: 'Меньше самокритики и говорить с собой мягче',
     plantSetSlug: 'peony',
     difficulty: 'gentle',
     summaryText:
-      'Сад Доброты к себе помогает мягче разговаривать с собой, замечать внутреннюю критику без лишней жёсткости и находить слова поддержки в трудные моменты.',
+      'Сад «Внутренний критик» помогает замечать жёсткий внутренний тон, снижать самокритику и находить слова поддержки в трудные моменты.',
     totalSteps: 21,
     themes: ['self_compassion', 'inner_critic', 'kindness'],
     requiredPlan: null,
@@ -1549,6 +1549,29 @@ const PROGRAM_BOOTSTRAP: Record<string, ProgramBootstrap> = {
     requiredPlan: null,
     unlockRule: { kind: 'after_n_completed', n: 3 },
   },
+  // Сад #5 «Мягкий сон» (Tulip Queen of Night) - полноценная программа на
+  // 21 шаг (см. STEP_BLUEPRINTS_GENTLE_SLEEP_21 в ./blueprints/gentle-sleep-21.ts).
+  // Методическая база: CBT-I (стимульный контроль Bootzin, когнитивная работа
+  // с «я не усну» и подсчётом часов, психоэдукация: двухпроцессная модель,
+  // гиперактивация); constructive worry; парадоксальная интенция (Франкл);
+  // релаксация (дыхание, PMR, body scan). Жёсткое ограничение сна сознательно
+  // не используется. Красные линии: апноэ, снотворные, хроническая бессонница,
+  // депрессия - маршрутизация к врачу (шаг 4). Открывается после завершения
+  // 4 Садов. Ассеты тюльпана (15 стадий) к публикации должны лежать в
+  // public/retention/plant/states/tulip_queen_of_night/.
+  gentle_sleep_21: {
+    slug: 'gentle_sleep_21',
+    title: 'Мягкий сон',
+    subtitle: '21 шаг к спокойным вечерам и ночам без борьбы за сон',
+    plantSetSlug: 'tulip_queen_of_night',
+    difficulty: 'standard',
+    summaryText:
+      'Сад Мягкого сна - про ночи без борьбы: вечер, в котором день успевает закончиться, кровать, которая снова значит сон, и спокойные ответы на ночные мысли и пробуждения.',
+    totalSteps: 21,
+    themes: ['sleep', 'rest'],
+    requiredPlan: null,
+    unlockRule: { kind: 'after_n_completed', n: 4 },
+  },
 };
 
 // Тизеры будущих Садов. Контента шагов у них ещё нет - в БД заводится только
@@ -1585,21 +1608,13 @@ const COMING_SOON_TEASERS: ProgramTeaser[] = [
     themes: ['burnout', 'recovery'],
     unlockRule: { kind: 'after_n_completed', n: 3 },
   },
-  {
-    // Сад #5: тюльпан Queen of Night
-    slug: 'gentle_sleep_21',
-    title: 'Мягкий сон',
-    subtitle: 'Вечерние ритуалы и спокойное засыпание без тревог',
-    plantSetSlug: null,
-    totalSteps: 21,
-    themes: ['sleep', 'rest'],
-    unlockRule: { kind: 'after_n_completed', n: 4 },
-  },
+  // Сад #5 «Мягкий сон» переведён из тизера в PROGRAM_BOOTSTRAP (контент готов).
   {
     // Сад #6: георгин Café au Lait
     slug: 'emotion_regulation_21',
     title: 'Эмоции',
-    subtitle: 'Понять злость и импульсивные реакции. И выражать их без вреда',
+    subtitle:
+      'Понимать злость, выдерживать импульсы и выражать чувства без вреда',
     plantSetSlug: null,
     totalSteps: 21,
     themes: ['anger', 'emotions', 'regulation'],
@@ -1608,7 +1623,7 @@ const COMING_SOON_TEASERS: ProgramTeaser[] = [
   {
     // Сад #7: ландыш (P2)
     slug: 'sustainable_habits_21',
-    title: 'Привычки тела',
+    title: 'Привычки',
     subtitle: 'Базовые ритуалы, которые поддерживают тело мягко и регулярно',
     plantSetSlug: null,
     totalSteps: 21,

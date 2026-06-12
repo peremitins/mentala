@@ -23,7 +23,7 @@
 | Slug | UI-название | Основа | Статус | Связанный сад |
 | --- | --- | --- | --- | --- |
 | `anxiety_check_v1` | Оценка тревоги | GAD-7 | `active` | `calm_anxiety_30` / «Спокойствие» |
-| `self_compassion_scs_sf_v1` | Оценка доброты к себе | SCS-SF | `active` | `self_kindness_21` / «Доброта к себе» |
+| `self_compassion_scs_sf_v1` | Оценка внутреннего критика | SCS-SF | `active` | `self_kindness_21` / «Внутренний критик» |
 | `relationships_boundaries_v1` | Оценка границ и общения | Авторский опросник Mentala | `active` | `relationships_21` / «Отношения» |
 | `burnout_cbi_v1` | Оценка выгорания и перегрузки | CBI | `active` | `burnout_21` / «Выгорание» |
 
@@ -39,7 +39,7 @@
 
 - `.docs/assessments/tests_practice.md` - MVP-ТЗ раздела «Оценка состояния»;
 - `.docs/assessments/anxiety_check_v1.md` - детальное ТЗ по оценке тревоги;
-- `.docs/assessments/self_compassion_scs_sf_v1.md` - детальное ТЗ по оценке доброты к себе;
+- `.docs/assessments/self_compassion_scs_sf_v1.md` - детальное ТЗ по оценке внутреннего критика;
 - `.docs/assessments/burnout_cbi_v1.md` - детальное ТЗ по `burnout_cbi_v1`;
 - `.docs/arch_ui_features.md` - архитектурное описание UI-раздела;
 - `.docs/arch_billing.md` - paywall и feature key `assessments.full`;
@@ -205,7 +205,7 @@
 | # | Slug | UI-название | Тип | Статус | Связь | Safety | Комментарий |
 | ---: | --- | --- | --- | --- | --- | --- | --- |
 | 1 | `anxiety_check_v1` | Оценка тревоги | `validated_free` | active | `calm_anxiety_30` | medium | Уже реализовано на основе GAD-7; без диагностического позиционирования |
-| 2 | `self_compassion_scs_sf_v1` | Оценка доброты к себе | `validated_free` | active | `self_kindness_21` | low | Уже реализовано на основе SCS-SF |
+| 2 | `self_compassion_scs_sf_v1` | Оценка внутреннего критика | `validated_free` | active | `self_kindness_21` | low | Уже реализовано на основе SCS-SF |
 | 3 | `mood_check_v1` | Оценка настроения | `mentala_original` | planned | будущий сад настроения | high | Не копировать BDI; PHQ-8/PHQ-9 рассматривать отдельно из-за safety |
 | 4 | `depression_symptoms_phq8_v1` | Оценка депрессивных симптомов | `validated_free` | research_needed | настроение | high | PHQ-8 может быть безопаснее PHQ-9, потому что без прямого suicide item; нужна проверка |
 | 5 | `burnout_cbi_v1` | Оценка выгорания и перегрузки | `validated_free` | planned | `burnout_21` | medium | Новый целевой опросник сада на основе полного CBI: Personal Burnout, Work-related Burnout и Client-related Burnout |
@@ -218,7 +218,7 @@
 | 12 | `social_anxiety_check_v1` | Оценка социальной тревоги | `research_needed` | planned | отношения/социум | medium | Проверить свободные инструменты; не перегружать claims |
 | 13 | `panic_signals_v1` | Оценка панических сигналов | `mentala_original` | planned | тревога | high | Только самонаблюдение; не объяснять телесные симптомы автоматически паникой |
 | 14 | `emotional_regulation_v1` | Оценка управления эмоциями | `research_needed` | planned | `emotion_regulation_21` | low | Проверить DERS/DERS-18 или делать авторский аналог |
-| 15 | `inner_critic_v1` | Оценка внутреннего критика | `mentala_original` | planned | self-kindness | low | Хорошо подходит для сада «Доброта к себе» |
+| 15 | `inner_critic_v1` | Оценка самокритики | `mentala_original` | planned | self-kindness | low | Не заводить отдельно, пока `self_compassion_scs_sf_v1` закрывает baseline/final сада «Внутренний критик» |
 | 16 | `perfectionism_check_v1` | Оценка перфекционизма | `mentala_original` | planned | self-kindness/выгорание | low | Авторский self-reflection без claims |
 | 17 | `self_esteem_check_v1` | Оценка самооценки | `research_needed` | planned | self-kindness | medium | Если использовать Rosenberg, нужна проверка условий и русской формы |
 | 18 | `values_clarity_v1` | Оценка ясности ценностей | `mentala_original` | planned | ACT/values | low | Авторский опросник под будущий ACT-сад |
@@ -261,11 +261,11 @@
 | Приоритет | Slug | UI-название | Основание |
 | ---: | --- | --- | --- |
 | 1 | `anxiety_check_v1` | Оценка тревоги | Уже active |
-| 2 | `self_compassion_scs_sf_v1` | Оценка доброты к себе | Уже active |
+| 2 | `self_compassion_scs_sf_v1` | Оценка внутреннего критика | Уже active |
 | 3 | `burnout_cbi_v1` | Оценка выгорания и перегрузки | Новый целевой опросник сада `burnout_21`; заменяет старую future-карточку `stress_recovery_v1` |
 | 4 | `sleep_check_v1` | Оценка сна | Уже есть future-карточка, понятный пользовательский запрос |
 | 5 | `relationships_boundaries_v1` | Оценка границ и общения | Уже active |
-| 6 | `inner_critic_v1` | Оценка внутреннего критика | Связь с self-kindness |
+| 6 | `inner_critic_v1` | Оценка самокритики | Запасной авторский вариант; не дублировать активный SCS-SF без отдельной причины |
 | 7 | `mood_check_v1` | Оценка настроения | Высокий спрос, но делать авторский безопасный вариант |
 | 8 | `recovery_capacity_v1` | Оценка восстановления | Дополняет тему перегрузки без дублирования CBI-опросника |
 | 9 | `body_anxiety_v1` | Оценка телесной тревоги | Хорошо дополняет GAD-7 |

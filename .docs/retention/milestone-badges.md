@@ -355,7 +355,7 @@ Mood: refined elegance, quiet control, inner peace.
 
 ⸻
 
-Сад #2 — Доброта к себе (self_kindness_21)
+Сад #2 — Внутренний критик (self_kindness_21)
 
 id: garden_self_kindness_21
 Название: Пион принятия

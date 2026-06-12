@@ -193,18 +193,18 @@ const sharedSelfCompassionComparisonCopy = {
 // шкала ответов 1..5, негативные субшкалы (Self-Judgment, Isolation,
 // Over-Identification) считаются в обратную сторону. Свободна для любого
 // использования при указании авторства (Neff, 2003). Основной тест сада
-// «Доброта к себе» — заменил продуктовый self_kindness_v1.
+// «Внутренний критик» — заменил продуктовый self_kindness_v1.
 const selfCompassionScsSfV1 = AssessmentDefinitionDto.parse({
   slug: 'self_compassion_scs_sf_v1',
   version: 1,
   status: 'active',
-  title: 'Оценка доброты к себе',
-  shortTitle: 'Доброта к себе',
+  title: 'Оценка внутреннего критика',
+  shortTitle: 'Внутренний критик',
   description:
     'Короткая оценка того, как ты обычно относишься к себе в трудные моменты: после ошибки, усталости или неудачи. Помогает заметить, насколько сейчас доступны тепло и поддержка к себе. Это не диагноз и не оценка личности.',
   category: 'self_kindness',
   linkedProgramSlug: 'self_kindness_21',
-  linkedProgramTitle: 'Доброта к себе',
+  linkedProgramTitle: 'Внутренний критик',
   estimatedMinutes: 3,
   timeframeLabel: 'в трудные моменты',
   // Формулировки и подсчёт — в исходном валидированном виде SCS-SF.
@@ -310,7 +310,7 @@ const selfCompassionScsSfV1 = AssessmentDefinitionDto.parse({
       description:
         'Это не диагноз и не оценка личности. Часто так бывает, когда долго живёшь в напряжении или привык требовать от себя слишком много. Более тёплое отношение к себе можно постепенно развивать.',
       recommendationText:
-        'В программе «Доброта к себе» начни с самого маленького: заметить внутреннего критика, сделать паузу и найти одну фразу, которая звучит хотя бы чуть мягче.',
+        'В программе «Внутренний критик» начни с самого маленького: заметить жёсткий внутренний тон, сделать паузу и найти одну фразу, которая звучит хотя бы чуть мягче.',
       programReportText:
         'На старте ответы показывали больше строгости к себе. Программа помогает сначала замечать внутреннего критика, а потом постепенно добавлять больше тепла и поддержки.',
       ...sharedSelfCompassionComparisonCopy,
@@ -318,7 +318,7 @@ const selfCompassionScsSfV1 = AssessmentDefinitionDto.parse({
       nextAction: {
         type: 'program',
         slug: 'self_kindness_21',
-        label: 'Начать сад «Доброта к себе»',
+        label: 'Начать сад «Внутренний критик»',
       },
     },
     {
@@ -331,7 +331,7 @@ const selfCompassionScsSfV1 = AssessmentDefinitionDto.parse({
       description:
         'Это хорошая точка для роста. Тёплое отношение к себе обычно складывается из маленьких моментов: остановиться, заметить свой тон и ответить себе чуть мягче.',
       recommendationText:
-        'Программа «Доброта к себе» поможет сделать поддержку к себе понятнее и устойчивее в обычной жизни.',
+        'Программа «Внутренний критик» поможет сделать поддержку к себе понятнее и устойчивее в обычной жизни.',
       programReportText:
         'По результатам оценки в трудные моменты тепло к себе появлялось не всегда. Программа помогает мягче реагировать на ошибки, усталость и напряжение.',
       ...sharedSelfCompassionComparisonCopy,
@@ -339,7 +339,7 @@ const selfCompassionScsSfV1 = AssessmentDefinitionDto.parse({
       nextAction: {
         type: 'program',
         slug: 'self_kindness_21',
-        label: 'Перейти к саду «Доброта к себе»',
+        label: 'Перейти к саду «Внутренний критик»',
       },
     },
     {
@@ -352,7 +352,7 @@ const selfCompassionScsSfV1 = AssessmentDefinitionDto.parse({
       description:
         'Это сильный результат. Он не означает, что трудных дней не бывает, но показывает: у тебя уже есть способы не превращать ошибку, усталость или неудачу в атаку на себя.',
       recommendationText:
-        'Программа «Доброта к себе» поможет закрепить этот результат и собрать личные способы поддержки для дней, когда напряжения больше.',
+        'Программа «Внутренний критик» поможет закрепить этот результат и собрать личные способы поддержки для дней, когда напряжения больше.',
       programReportText:
         'По результатам оценки тёплое отношение к себе уже хорошо выражено. Программа помогает сохранить это в дни, когда больше усталости, давления или тревоги.',
       ...sharedSelfCompassionComparisonCopy,
@@ -591,7 +591,7 @@ const sharedBurnoutComparisonCopy = {
 const burnoutCbiV1 = AssessmentDefinitionDto.parse({
   slug: 'burnout_cbi_v1',
   version: 1,
-  status: 'active',
+  status: 'coming_soon',
   title: 'Оценка выгорания и перегрузки',
   shortTitle: 'Выгорание',
   description:

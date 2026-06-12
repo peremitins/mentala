@@ -1901,6 +1901,6 @@ export const STEP_BLUEPRINTS_CALM_ANXIETY_30: StepBlueprint[] = [
   },
 ];
 
-// Сад #2 «Доброта к себе» (Peony). Runtime-версия из
+// Сад #2 «Внутренний критик» (Peony). Runtime-версия из
 // `.docs/content/program_self_kindness_21.md`: explicit actions[], intro-action
 // первым экраном, weekly-check после шагов 7/14/21.

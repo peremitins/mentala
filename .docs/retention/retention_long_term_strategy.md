@@ -236,13 +236,13 @@ UI-сигналы для пользователя:
 | 2   | `self_kindness_21`      | Самооценка / самокритика          | Пион (ассеты готовы в `public/retention/plant/states/peony/`)     | 21    | assets ready, sequential #2        |
 | 3   | `relationships_21`      | Отношения / границы / близость    | Цикламен персидский — _Cyclamen persicum_ (`cyclamen`)            | 21    | ready (контент в `blueprints/relationships-21.ts`), sequential #3 |
 | 4   | `burnout_21`            | Выгорание / восстановление        | Комнатная азалия — _Rhododendron simsii_ (`azalea`)              | 21    | NEW, assets needed, content needed, sequential #4 |
-| 5   | `gentle_sleep_21`       | Мягкий сон                        | Тюльпан Queen of Night (`tulip_queen_of_night`)                   | 21    | content needed, sequential #5      |
+| 5   | `gentle_sleep_21`       | Мягкий сон                        | Тюльпан Queen of Night (`tulip_queen_of_night`)                   | 21    | ready (контент в `blueprints/gentle-sleep-21.ts`), assets needed, sequential #5 |
 | 6   | `emotion_regulation_21` | Злость / импульсивные реакции     | Георгин Café au Lait (`dahlia_cafe`)                              | 21    | content needed, sequential #6      |
 | 7   | `sustainable_habits_21` | Базовые привычки тела             | Ландыш (`lily_of_the_valley`)                                     | 21    | content needed, P2                 |
 | 8   | `joy_practice_21`       | Практика радости                  | Подсолнух (`sunflower`)                                           | 21    | content needed, P2                 |
 | 9   | `purpose_28`            | Смысл и направление               | Король Протея (`king_protea`)                                     | 28    | content needed, P3                 |
 
-> Закреплено по итогам реальных ассетов: Сад #1 «Спокойствие» = орхидея (готов), Сад #2 «Доброта к себе» = пион (готов), Сад #3 «Отношения» = цикламен персидский — _Cyclamen persicum_ (ассеты готовы в `public/retention/plant/states/cyclamen/`). Сад #4 «Выгорание» закреплён за комнатной азалией — _Rhododendron simsii_ (ассеты к генерации). Общий план: **9 Садов × 15 стадий = 135 ассетов** для основного пути.
+> Закреплено по итогам реальных ассетов: Сад #1 «Спокойствие» = орхидея (готов), Сад #2 «Внутренний критик» = пион (готов), Сад #3 «Отношения» = цикламен персидский — _Cyclamen persicum_ (ассеты готовы в `public/retention/plant/states/cyclamen/`). Сад #4 «Выгорание» закреплён за комнатной азалией — _Rhododendron simsii_ (ассеты к генерации). Общий план: **9 Садов × 15 стадий = 135 ассетов** для основного пути.
 
 ### 3.3. Что между Садами
 
@@ -432,7 +432,7 @@ UI прогресс-индикатора (внизу embedded-чата, над C
 
 - Сад Спокойствия, шаг 17 (Разговор с тревогой) — уже есть как `reflection`, заменяем на `ai_chat_session`.
 - Сад Мягкого сна, шаг ~16 — «Разговор о том, что мешает спать».
-- Сад Доброты к себе, шаг ~10 — «Разговор о внутреннем критике».
+- Сад «Внутренний критик», шаг ~10 — «Разговор о внутреннем критике».
 - Финальный шаг каждого Сада — «Подведём итоги Сада с ассистентом».
 
 Итого: 4–6 AI-chat-шагов на программу из 21–30.
