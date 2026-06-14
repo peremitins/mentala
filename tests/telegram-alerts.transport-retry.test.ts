@@ -62,6 +62,7 @@ vi.mock('@/server/infrastructure/redis/bullmqClient', () => ({
 
 describe('telegram alerts transport retry', () => {
   beforeEach(() => {
+    vi.useRealTimers();
     vi.clearAllMocks();
     vi.resetModules();
   });
@@ -213,5 +214,74 @@ describe('telegram alerts transport retry', () => {
     expect(markSent).not.toHaveBeenCalled();
     expect(markFailed).not.toHaveBeenCalled();
     expect(markUncertain).toHaveBeenCalledTimes(1);
+  });
+
+  it('ретраит timeout для не-биллинговых алертов (регистрация) и доводит до отправки', async () => {
+    const sendTelegramMessage = vi.fn();
+    let configured = false;
+
+    // Ошибки создаём внутри фабрики через actual.TelegramApiError, чтобы
+    // класс совпадал с тем, что видит сервис (иначе instanceof не проходит).
+    const buildMock = async () => {
+      const actual = await vi.importActual<
+        typeof import('../server/application/telegram/telegram.client')
+      >('../server/application/telegram/telegram.client');
+
+      if (!configured) {
+        configured = true;
+        sendTelegramMessage
+          .mockRejectedValueOnce(
+            new actual.TelegramApiError({
+              message: 'Telegram sendMessage timed out after 5000ms',
+              transportCode: 'TIMEOUT',
+            })
+          )
+          .mockRejectedValueOnce(
+            new actual.TelegramApiError({
+              message: 'Telegram sendMessage timed out after 5000ms',
+              transportCode: 'TIMEOUT',
+            })
+          )
+          .mockResolvedValueOnce({
+            telegramMessageId: '777',
+            providerResponseCode: 200,
+          });
+      }
+
+      return { ...actual, sendTelegramMessage };
+    };
+
+    vi.doMock('@/server/application/telegram/telegram.client', buildMock);
+    vi.doMock('../server/application/telegram/telegram.client', buildMock);
+
+    vi.useFakeTimers();
+
+    const { processTelegramAlertDelivery } = await import(
+      '../server/application/telegram/telegram-alerts.service'
+    );
+
+    const processingPromise = processTelegramAlertDelivery({
+      event: {
+        type: 'user.registered',
+        dedupKey: 'users:registered:user:42',
+        source: 'auth:google',
+        createdAt: '2026-06-13T21:04:00.000Z',
+        environment: 'test',
+        payload: {
+          userId: 42,
+          method: 'google',
+          occurredAt: '2026-06-13T21:04:00.000Z',
+        },
+      },
+      attempt: 1,
+    });
+
+    await vi.runAllTimersAsync();
+    await processingPromise;
+
+    expect(sendTelegramMessage).toHaveBeenCalledTimes(3);
+    expect(markSent).toHaveBeenCalledTimes(1);
+    expect(markUncertain).not.toHaveBeenCalled();
+    expect(markFailed).not.toHaveBeenCalled();
   });
 });

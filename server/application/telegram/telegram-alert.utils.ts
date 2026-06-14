@@ -1,9 +1,24 @@
+import type { TelegramAlertType } from './telegram-alert.types';
+
 export type TelegramAlertErrorDetails = {
   message: string;
   code: string | null;
   name: string | null;
   statusCode: number | null;
 };
+
+/**
+ * Дубликат алерта опасен только для биллинга: повторное сообщение об оплате
+ * вводит в заблуждение по деньгам. Для регистраций, ошибок и devops-алертов
+ * дубль безвреден, а вот молча потерянное уведомление — нет. Поэтому
+ * «неоднозначный» таймаут (когда непонятно, дошло ли сообщение) разрешаем
+ * ретраить для всех типов, кроме биллинговых.
+ */
+export function isDuplicateSensitiveTelegramAlertType(
+  type: TelegramAlertType
+): boolean {
+  return type.startsWith('billing.');
+}
 
 const DEFAULT_TELEGRAM_ALERT_BUCKET_WINDOW_MS = 5 * 60_000;
 

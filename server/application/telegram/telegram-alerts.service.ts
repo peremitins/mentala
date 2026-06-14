@@ -10,11 +10,13 @@ import { formatTelegramAlertMessage } from './telegram.formatter';
 import { resolveTelegramAlertChannel } from './telegram-routing';
 import {
   createQueuedTelegramDelivery,
+  findRequeueableTelegramDeliveries,
   markTelegramDeliveryFailed,
   markTelegramDeliveryProcessing,
   markTelegramDeliveryQueueFailure,
   markTelegramDeliverySent,
   markTelegramDeliveryUncertain,
+  resetTelegramDeliveryToQueued,
 } from './repositories/telegram-deliveries.repository';
 import {
   buildTelegramAlertsJobId,
@@ -22,6 +24,7 @@ import {
 } from './queues/telegramAlerts.queue';
 import {
   buildTelegramAlertBucketedDedupKey,
+  isDuplicateSensitiveTelegramAlertType,
   normalizeTelegramAlertErrorDetails,
 } from './telegram-alert.utils';
 import { resolveTelegramAlertUserEmail } from './telegram-alert-user-context';
@@ -134,6 +137,63 @@ export async function enqueueTelegramAlertSafe(
   }
 }
 
+/**
+ * Переотправляет «застрявшие» доставки (failed | uncertain), которые так и не
+ * дошли до Telegram. Для каждой строки восстанавливаем конверт из сохранённых
+ * полей, сбрасываем статус в queued и ставим новый job со СВЕЖИМ jobId, чтобы
+ * BullMQ не схлопнул его с уже завершённым старым job по дедуп-ключу.
+ *
+ * Биллинговые алерты по умолчанию НЕ трогаем (дубль по деньгам опаснее потери).
+ */
+export async function requeueStuckTelegramDeliveries(params?: {
+  limit?: number;
+  includeBilling?: boolean;
+}): Promise<{ requeued: number; skipped: number; total: number }> {
+  if (!isTelegramAlertsQueueAvailable()) {
+    return { requeued: 0, skipped: 0, total: 0 };
+  }
+
+  const rows = await findRequeueableTelegramDeliveries({
+    limit: params?.limit ?? 100,
+    includeBilling: params?.includeBilling ?? false,
+  });
+
+  let requeued = 0;
+  let skipped = 0;
+
+  for (const row of rows) {
+    const event: TelegramAlertEnvelope = {
+      type: row.eventType,
+      dedupKey: row.dedupKey,
+      payload: (row.payload as Record<string, unknown>) ?? {},
+      source: row.source ?? 'telegram-alerts.requeue',
+      environment: row.environment,
+      createdAt: (row.eventCreatedAt ?? new Date()).toISOString(),
+    };
+
+    try {
+      await resetTelegramDeliveryToQueued(row.dedupKey);
+      await telegramAlertsQueue.add(
+        'telegram-alert',
+        { event },
+        {
+          // Свежий jobId: старый (по дедуп-ключу) уже завершён и заблокировал бы повтор.
+          jobId: `${buildTelegramAlertsJobId(row.dedupKey)}:requeue:${Date.now()}`,
+        }
+      );
+      requeued += 1;
+    } catch (error) {
+      skipped += 1;
+      console.error(
+        `[Telegram Alerts] Failed to requeue stuck delivery ${row.dedupKey}:`,
+        error
+      );
+    }
+  }
+
+  return { requeued, skipped, total: rows.length };
+}
+
 export async function processTelegramAlertDelivery(params: {
   event: TelegramAlertEnvelope;
   attempt: number;
@@ -163,8 +223,14 @@ export async function processTelegramAlertDelivery(params: {
         lastError = error;
 
         // Таймаут после отправки запроса не даёт понять, дошёл ли alert до Telegram.
-        // Автоповтор в этом случае создаёт дубли, что особенно опасно для billing-событий.
-        if (isAmbiguousTelegramDeliveryError(error)) {
+        // Автоповтор в этом случае может создать дубль. Для биллинга это опасно
+        // (вводит в заблуждение по деньгам), поэтому такие алерты не ретраим и
+        // помечаем uncertain. Для остальных типов (регистрации, ошибки, devops)
+        // дубль безвреден, а потерянное уведомление — нет, поэтому повторяем.
+        if (
+          isAmbiguousTelegramDeliveryError(error) &&
+          isDuplicateSensitiveTelegramAlertType(params.event.type)
+        ) {
           const errorMessage = `${error.message}; automatic retry skipped to avoid duplicate Telegram alerts`;
 
           await markTelegramDeliveryUncertain({
@@ -181,7 +247,12 @@ export async function processTelegramAlertDelivery(params: {
         }
 
         const hasAttemptsLeft = iteration < maxInlineAttempts - 1;
-        const isRetryable = isRetryableTelegramTransportError(error);
+        // Сюда «неоднозначный» таймаут попадает только для НЕ-биллинговых алертов
+        // (биллинг отсеян выше с return). Для них дубль безвреден, поэтому
+        // таймаут тоже считаем поводом повторить попытку.
+        const isRetryable =
+          isRetryableTelegramTransportError(error) ||
+          isAmbiguousTelegramDeliveryError(error);
 
         if (hasAttemptsLeft && isRetryable) {
           const delayMs =

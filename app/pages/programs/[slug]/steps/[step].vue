@@ -373,6 +373,12 @@
 
     <DailyLimitInfoDialog v-model:open="dailyLimitDialogOpen" />
 
+    <PracticeSkipConfirmDialog
+      v-model:open="practiceSkipConfirmOpen"
+      :practice-type="currentAction?.type ?? null"
+      @confirm="confirmPracticeSkip"
+    />
+
     <TrialUpsellModal
       :open="showTrialUpsellModal"
       :milestone="trialUpsellMilestone"
@@ -408,6 +414,7 @@ import ProgramWeeklyCheckAction from '@/app/components/programs/ProgramWeeklyChe
 import ProgramFinalReportPreparing from '@/app/components/programs/ProgramFinalReportPreparing.vue';
 import ProgramCheckpointReportPreparing from '@/app/components/programs/ProgramCheckpointReportPreparing.vue';
 import DailyLimitInfoDialog from '@/app/components/programs/DailyLimitInfoDialog.vue';
+import PracticeSkipConfirmDialog from '@/app/components/programs/PracticeSkipConfirmDialog.vue';
 import TrialUpsellModal from '@/app/components/subscription/TrialUpsellModal.vue';
 import { useTrialUpsell } from '@/app/composables/useTrialUpsell';
 import GardenPlantReportSheet from '@/app/components/garden/GardenPlantReportSheet.vue';
@@ -501,6 +508,13 @@ const { recordPracticeCompleted, checkAndShow } = useAppReviewPrompt();
 const { checkMilestones } = useMilestoneBadges();
 const dailyLimit = useProgramDailyLimit();
 const dailyLimitDialogOpen = ref(false);
+
+// Мягкое подтверждение пропуска практики (медитация/дыхание/quick-help).
+// practiceSkipConfirmOpen — видимость модалки. practiceSkipConfirmedActionId —
+// id action'а, для которого пользователь уже подтвердил пропуск: при повторном
+// вызове completeCurrentAction перехват пропускается и шаг идёт дальше.
+const practiceSkipConfirmOpen = ref(false);
+const practiceSkipConfirmedActionId = ref<string | null>(null);
 
 // Промо-paywall привязки карты в триале (контрольные точки 1/5/10 шага).
 // Решение «показывать ли» приходит с бэка в ответе завершения шага.
@@ -796,23 +810,6 @@ const isCurrentActionCompleted = computed(() => {
   );
 });
 
-const hasUnlockProgress = computed(() => {
-  const action = currentAction.value;
-  if (!action || unlockActionId.value !== action.id) return false;
-  return unlockAccumulatedMs.value > 0 || unlockStartedAtMs.value !== null;
-});
-
-const isUnlockTimerRunning = computed(() => {
-  const action = currentAction.value;
-  return Boolean(
-    action && unlockActionId.value === action.id && unlockStartedAtMs.value
-  );
-});
-
-const unlockRemainingLabel = computed(() =>
-  formatActionTimerLabel(unlockRemainingSeconds.value)
-);
-
 const nextDisabled = computed(() => {
   if (!currentAction.value) return true;
   // Неизвестный action-тип: рендерим fallback с deeplink в /chat. Пропустить
@@ -854,9 +851,9 @@ const nextDisabled = computed(() => {
   }
   if (isCurrentActionCompleted.value) return false;
   if (currentAction.value.type === 'mood_checkin') return !selectedMood.value;
-  if (requiresPracticeCompletion(currentAction.value)) {
-    return !isCurrentActionCompleted.value;
-  }
+  // Практики (медитация/дыхание/quick-help) кнопку НЕ блокируют — она всегда
+  // активна. Незавершённую практику перехватываем подтверждением в
+  // completeCurrentAction (isSkipConfirmPractice), а не дизейблом.
   if (currentAction.value.type === 'ai_chat_session') {
     // CTA «Дальше» залочен пока eligibility не выполнена
     // (см. retention/retention_long_term_strategy.md).
@@ -967,20 +964,9 @@ const primaryButtonLabel = computed(() => {
       ? 'Завершить шаг'
       : 'Следующий';
   }
-  if (
-    currentAction.value &&
-    requiresPracticeCompletion(currentAction.value) &&
-    !isCurrentActionCompleted.value
-  ) {
-    if (currentActionCompletionDelaySeconds.value) {
-      if (!hasUnlockProgress.value) return 'Запусти практику';
-      if (!isUnlockTimerRunning.value) {
-        return `Продолжи практику · ${unlockRemainingLabel.value}`;
-      }
-      return `Можно дальше через ${unlockRemainingLabel.value}`;
-    }
-    return 'Заверши практику';
-  }
+  // Практики кнопку не лочат: лейбл всегда обычный («Следующий» / «Завершить
+  // шаг»). Подсказок «Заверши практику» / «Можно дальше через…» больше нет —
+  // незавершённую практику мягко перехватывает модалка подтверждения.
   if (currentAction.value?.type === 'ai_chat_session') {
     // Для AI-чата CTA остаётся «Дальше / Завершить шаг» (как у других action),
     // но disabled пока eligibility не выполнена — лейбл disabled-кнопки добавляет
@@ -1117,14 +1103,16 @@ function isAssessmentPromptAction(action: ProgramStepActionStateDto) {
   );
 }
 
-function requiresPracticeCompletion(action: ProgramStepActionStateDto) {
-  // Медитацию НЕ требуем «дослушать»: гайд-аудио строго зависит от звука
-  // (динамик/наушники), и юзер в офисе или транспорте без наушников иначе
-  // застревает на шаге. Поэтому кнопка продолжения для медитации всегда
-  // активна — шаг завершается штатно, без обязательного проигрывания.
-  // Дыхательные и quick-help практики остаются обязательными: они выполняются
-  // по визуальному пейсеру, молча, и доступны в любой обстановке.
+// Практики, для которых при попытке «проскочить» мимо незавершённой практики
+// показываем мягкое подтверждение (модалку), а НЕ блокируем кнопку. Единый
+// подход для всех садов: медитация, дыхание и quick-help. Кнопка перехода у
+// них всегда активна; кто довёл практику до конца, модалку не видит, кто жмёт
+// «Дальше» раньше, подтверждает пропуск. Жёсткого гейта «дослушай до конца»
+// мы сознательно не вводим: принуждение в mental-health контексте
+// контрпродуктивно и режет retention.
+function isSkipConfirmPractice(action: ProgramStepActionStateDto) {
   return (
+    action.type === 'meditation' ||
     action.type === 'breathing' ||
     action.type === 'quick_help_grounding' ||
     action.type === 'quick_help_breathing' ||
@@ -1585,13 +1573,6 @@ function markCurrentPracticeComplete() {
   void persistCurrentActionRecovery({ completed: true });
 }
 
-function formatActionTimerLabel(seconds: number) {
-  const safe = Math.max(0, Math.ceil(seconds));
-  const minutes = Math.floor(safe / 60);
-  const remainder = safe % 60;
-  return `${minutes}:${String(remainder).padStart(2, '0')}`;
-}
-
 function clearUnlockTimer() {
   if (!unlockTimer) return;
   clearInterval(unlockTimer);
@@ -1860,8 +1841,32 @@ async function completeStepAttempt() {
   return true;
 }
 
+// Пользователь подтвердил пропуск практики в модалке. Запоминаем id action'а
+// и повторно вызываем completeCurrentAction — теперь перехват пропускается.
+function confirmPracticeSkip() {
+  const action = currentAction.value;
+  if (!action) return;
+  practiceSkipConfirmedActionId.value = action.id;
+  void completeCurrentAction();
+}
+
 async function completeCurrentAction() {
   if (!response.value || !currentAction.value || nextDisabled.value) return;
+
+  // Мягкий гейт практик: если текущий action — практика и она не завершена
+  // честно (не дослушали аудио / не довели пейсер до конца), не идём дальше
+  // сразу, а показываем подтверждение пропуска. После подтверждения сюда же
+  // возвращаемся повторно — тогда practiceSkipConfirmedActionId совпадает и
+  // перехват пропускается. Кнопка при этом всегда активна (дизейбла нет).
+  if (
+    isSkipConfirmPractice(currentAction.value) &&
+    !isCurrentActionCompleted.value &&
+    practiceSkipConfirmedActionId.value !== currentAction.value.id
+  ) {
+    practiceSkipConfirmOpen.value = true;
+    return;
+  }
+
   isSaving.value = true;
   const currentRecoveryId = getCurrentRoadmapRecoveryId();
 
@@ -1884,6 +1889,11 @@ async function completeCurrentAction() {
       output = {
         type: currentAction.value.type,
         template: currentAction.value.template || null,
+        // skipped=true, если практику не довели до конца честно и прошли через
+        // подтверждение пропуска. Нужно для аналитики (отличить пропуск от
+        // полноценного прохождения). Серверный гейт шага всё равно проходит —
+        // action помечается status='completed'.
+        skipped: !isCurrentActionCompleted.value,
         completedAt: new Date().toISOString(),
       };
     } else if (currentAction.value.type === 'journal_entry') {
@@ -2170,6 +2180,10 @@ watch(
   () => {
     resetCurrentActionUnlock();
     hydrateCurrentActionDraft();
+    // Сброс подтверждения пропуска: на новом (или вернувшемся через «назад»)
+    // action практику нужно подтверждать заново, а открытую модалку — закрыть.
+    practiceSkipConfirmOpen.value = false;
+    practiceSkipConfirmedActionId.value = null;
   },
   { immediate: true }
 );
