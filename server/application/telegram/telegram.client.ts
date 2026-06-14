@@ -72,16 +72,23 @@ export async function sendTelegramMessage(params: { text: string }): Promise<{
     disable_web_page_preview: 'true',
   }).toString();
 
+  // api.telegram.org по умолчанию, либо хост прокси (Cloudflare Worker),
+  // если Telegram заблокирован на сервере (РФ).
+  const apiHost = config.apiBaseHost;
+  const isDirectTelegramHost = apiHost === 'api.telegram.org';
+
   try {
     const response = await new Promise<{
       statusCode: number | null;
       rawBody: string;
     }>((resolve, reject) => {
-      // Явно используем IPv4: в текущей среде Node TLS до Telegram по дефолтному резолву рвётся до handshake.
       const req = request(
         {
-          hostname: 'api.telegram.org',
-          family: 4,
+          hostname: apiHost,
+          // Форсируем IPv4 только для прямого api.telegram.org: в текущей среде
+          // Node TLS до Telegram по дефолтному резолву рвётся до handshake.
+          // Для прокси (Cloudflare и пр.) пусть резолвер выбирает сам.
+          ...(isDirectTelegramHost ? { family: 4 as const } : {}),
           path: `/bot${config.botToken}/sendMessage`,
           method: 'POST',
           headers: {

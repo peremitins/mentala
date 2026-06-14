@@ -220,6 +220,9 @@ export default defineNuxtConfig({
       process.env.NUXT_TELEGRAM_REGISTRATION_MILESTONES,
     TELEGRAM_ALERTS_ENV_LABEL: process.env.NUXT_TELEGRAM_ALERTS_ENV_LABEL,
     TELEGRAM_API_TIMEOUT_MS: process.env.NUXT_TELEGRAM_API_TIMEOUT_MS,
+    // Хост Telegram Bot API. По умолчанию api.telegram.org; на серверах,
+    // где он заблокирован (РФ), указываем хост прокси (Cloudflare Worker).
+    TELEGRAM_API_BASE_HOST: process.env.NUXT_TELEGRAM_API_BASE_HOST,
     TELEGRAM_HTTP_5XX_SPIKE_THRESHOLD:
       process.env.NUXT_TELEGRAM_HTTP_5XX_SPIKE_THRESHOLD,
     TELEGRAM_HTTP_5XX_SPIKE_WINDOW_MINUTES:

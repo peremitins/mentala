@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const markProcessing = vi.fn(async () => undefined);
 const markSent = vi.fn(async () => undefined);
@@ -65,6 +65,12 @@ describe('telegram alerts transport retry', () => {
     vi.useRealTimers();
     vi.clearAllMocks();
     vi.resetModules();
+  });
+
+  // Возвращаем реальные таймеры после теста, чтобы fake timers не «протекли»
+  // в другие тест-файлы при общем прогоне.
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('ретраит transient transport error внутри одной job и завершает отправку без final fail', async () => {

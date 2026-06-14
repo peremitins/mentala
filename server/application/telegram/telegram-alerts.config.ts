@@ -6,6 +6,7 @@ export type TelegramAlertsConfig = {
   botToken: string | null;
   chatId: string | null;
   reportsTimezone: string;
+  apiBaseHost: string;
   deliveryCleanupEnabled: boolean;
   deliveryRetentionDays: number;
   envLabel: string;
@@ -20,6 +21,25 @@ export type TelegramAlertsConfig = {
 function normalizeString(value: unknown): string | null {
   const normalized = String(value || '').trim();
   return normalized ? normalized : null;
+}
+
+const DEFAULT_TELEGRAM_API_HOST = 'api.telegram.org';
+
+/**
+ * Возвращает чистый хост Telegram Bot API. Принимаем как голый хост
+ * (`proxy.example.com`), так и полный URL (`https://proxy.example.com/`) —
+ * вырезаем схему, слэши и путь. Пустое значение → дефолтный api.telegram.org,
+ * чтобы при незаданном прокси поведение не менялось.
+ */
+function normalizeTelegramApiHost(value: unknown): string {
+  const raw = String(value || '').trim();
+  if (!raw) {
+    return DEFAULT_TELEGRAM_API_HOST;
+  }
+
+  const withoutScheme = raw.replace(/^[a-z]+:\/\//i, '');
+  const host = withoutScheme.split('/')[0]?.trim();
+  return host || DEFAULT_TELEGRAM_API_HOST;
 }
 
 function normalizeNumber(value: unknown, fallback: number): number {
@@ -55,6 +75,9 @@ export function getTelegramAlertsConfig(): TelegramAlertsConfig {
     botToken,
     chatId,
     reportsTimezone,
+    apiBaseHost: normalizeTelegramApiHost(
+      runtimeConfig.TELEGRAM_API_BASE_HOST
+    ),
     deliveryCleanupEnabled:
       String(runtimeConfig.TELEGRAM_ALERTS_DELIVERY_CLEANUP_ENABLED || '')
         .trim()
