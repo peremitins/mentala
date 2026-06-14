@@ -2,10 +2,16 @@ import { ref, readonly } from 'vue';
 import {
   getPersistentItem,
   setPersistentItem,
+  removePersistentItem,
 } from '@/app/utils/persistentStorage';
+import { useIsDev } from '@/app/composables/useIsDev';
 import { usePlatform } from '@/app/composables/usePlatform';
 import { useAppAnalytics } from '@/app/composables/useAppAnalytics';
-import { GOOGLE_PLAY_WEB_URL } from '@/shared/utils/mobileAppLinks';
+import {
+  GOOGLE_PLAY_WEB_URL,
+  GOOGLE_PLAY_MARKET_URL,
+  buildGooglePlayIntentUrl,
+} from '@/shared/utils/mobileAppLinks';
 
 // =============================================================================
 // Ключи в persistentStorage
@@ -27,6 +33,9 @@ const MIN_DAYS_SINCE_FIRST = 3;    // с момента первой практ�
 const DISMISS_COOLDOWN_DAYS = 15;  // после «Позже» — следующий показ не раньше чем через 15 дней
 
 const _open = ref(false);
+
+// Чтобы dev-API в window прокидывался один раз, а не на каждый вызов composable.
+let _debugApiExposed = false;
 
 // Определяет, открыт ли сайт на Apple-устройстве в браузере (iPhone/iPad/Mac).
 // App Store ещё не готов — таким пользователям не показываем.
@@ -84,14 +93,14 @@ export function useAppReviewPrompt() {
     );
     if (practices < MIN_PRACTICES) return false;
 
-    // С момента первой практики должно пройти ≥5 дней
+    // С момента первой практики должно пройти ≥3 дней
     const firstAt = await getPersistentItem(KEY_FIRST_AT);
     if (!firstAt) return false;
     const daysSinceFirst =
       (Date.now() - new Date(firstAt).getTime()) / (1000 * 60 * 60 * 24);
     if (daysSinceFirst < MIN_DAYS_SINCE_FIRST) return false;
 
-    // Если ранее закрыл модалку («Позже») — ждём 30 дней перед следующим показом
+    // Если ранее закрыл модалку («Позже») — ждём 15 дней перед следующим показом
     if (status === 'dismissed') {
       const shownAt = await getPersistentItem(KEY_SHOWN_AT);
       if (!shownAt) return true;
@@ -123,28 +132,147 @@ export function useAppReviewPrompt() {
     await setPersistentItem(KEY_STATUS, 'dismissed');
   }
 
+  // Открывает карточку приложения в Google Play по явному клику пользователя.
+  //
+  // Раньше здесь вызывался Google Play In-App Review API
+  // (`InAppReview.requestReview()`). Это было ненадёжно и давало баг «кнопка
+  // ничего не делает»: API отрисовывает диалог только по своему усмотрению
+  // (квоты Google) и вообще ничего не показывает на debug/sideload-сборках и
+  // на сборках, установленных не из Google Play. При этом промис резолвится
+  // успешно — определить, показался диалог или нет, невозможно, поэтому
+  // fallback на магазин не срабатывал. Google прямо не рекомендует вешать
+  // In-App Review на кнопку «Оценить» — для явного действия нужен переход в
+  // карточку магазина. Это же требует ТЗ (.docs/pwa_native_modals.md, п.4):
+  // приоритет — открыть карточку в приложении Google Play, https — fallback.
   async function triggerReview(): Promise<void> {
     const platform = getPlatform();
+    reachGoal('review_store_opened');
 
     if (platform === 'android') {
-      // Нативный Android: Google Play In-App Review API (нативный диалог магазина)
-      try {
-        const { InAppReview } = await import(
-          '@capacitor-community/in-app-review'
-        );
-        await InAppReview.requestReview();
-        reachGoal('review_native_triggered');
-        return;
-      } catch {
-        // Если нативный диалог упал — fallback на открытие магазина
-      }
+      await openGooglePlayNative();
+      return;
     }
 
-    // Fallback / web Android: открываем Play Store в браузере
-    const { openExternalBrowser } = await import(
-      '@/app/utils/openExternalBrowser'
+    // По условиям isEligible() сюда попадает только Android-браузер (web).
+    openGooglePlayWeb();
+  }
+
+  // Native Android (Capacitor): отдаём ссылку системе через ACTION_VIEW.
+  // market:// открывает карточку прямо в приложении Google Play; если оно
+  // недоступно (нет Play Store / упал intent) — откатываемся на https-карточку.
+  async function openGooglePlayNative(): Promise<void> {
+    const { InAppBrowser } = await import('@capacitor/inappbrowser');
+
+    try {
+      await InAppBrowser.openInExternalBrowser({ url: GOOGLE_PLAY_MARKET_URL });
+      return;
+    } catch (error) {
+      console.warn(
+        '[useAppReviewPrompt] market:// не открылся, fallback на https:',
+        error
+      );
+    }
+
+    try {
+      await InAppBrowser.openInExternalBrowser({ url: GOOGLE_PLAY_WEB_URL });
+    } catch (error) {
+      console.warn(
+        '[useAppReviewPrompt] Не удалось открыть Google Play по https:',
+        error
+      );
+    }
+  }
+
+  // Android-браузер (web): intent:// открывает приложение Google Play, а при
+  // его отсутствии встроенный S.browser_fallback_url ведёт на https-карточку.
+  function openGooglePlayWeb(): void {
+    if (typeof window === 'undefined') return;
+
+    const intentUrl = buildGooglePlayIntentUrl(GOOGLE_PLAY_WEB_URL);
+    if (typeof window.location.assign === 'function') {
+      window.location.assign(intentUrl);
+      return;
+    }
+
+    window.location.href = intentUrl;
+  }
+
+  // ===========================================================================
+  // Dev-хелперы для тестирования.
+  //
+  // ВАЖНО: состояние review-prompt хранится ЛОКАЛЬНО на устройстве
+  // (Capacitor Preferences на Android/iOS, localStorage в web) — не в БД и не на
+  // аккаунте. После нажатия «Оценить приложение» статус становится 'rated', и
+  // модалка больше не показывается. Плюс есть пороги: ≥3 практик и ≥3 дней с
+  // первой практики. Поэтому для повторного теста состояние нужно сбросить.
+  // Все хелперы прокидываются в window.__reviewPrompt только при isDev.
+  // ===========================================================================
+
+  // Полный сброс — как будто пользователь новый.
+  async function resetForTesting(): Promise<void> {
+    await Promise.all([
+      removePersistentItem(KEY_STATUS),
+      removePersistentItem(KEY_SHOWN_AT),
+      removePersistentItem(KEY_PRACTICES),
+      removePersistentItem(KEY_FIRST_AT),
+    ]);
+  }
+
+  // Подготовить состояние так, чтобы модалка прошла реальную isEligible() при
+  // следующем checkAndShow() (или завершении практики): сбрасываем статус,
+  // ставим практики = порогу и first_at в прошлое за пределами окна.
+  async function primeForTesting(): Promise<void> {
+    await Promise.all([
+      removePersistentItem(KEY_STATUS),
+      removePersistentItem(KEY_SHOWN_AT),
+      setPersistentItem(KEY_PRACTICES, String(MIN_PRACTICES)),
+      setPersistentItem(
+        KEY_FIRST_AT,
+        new Date(
+          Date.now() - (MIN_DAYS_SINCE_FIRST + 1) * 24 * 60 * 60 * 1000
+        ).toISOString()
+      ),
+    ]);
+  }
+
+  // Принудительно показать модалку, минуя все условия — для проверки UI и
+  // редиректа в магазин без ожидания порогов.
+  function forceShow(): void {
+    _open.value = true;
+  }
+
+  // Текущее состояние хранилища (удобно смотреть из консоли).
+  async function getDebugState(): Promise<Record<string, string | null>> {
+    const [status, shownAt, practices, firstAt] = await Promise.all([
+      getPersistentItem(KEY_STATUS),
+      getPersistentItem(KEY_SHOWN_AT),
+      getPersistentItem(KEY_PRACTICES),
+      getPersistentItem(KEY_FIRST_AT),
+    ]);
+    return {
+      platform: getPlatform(),
+      status,
+      shownAt,
+      practices,
+      firstAt,
+    };
+  }
+
+  // Прокидываем dev-API в консоль (в т.ч. для chrome://inspect на Android).
+  if (typeof window !== 'undefined' && !_debugApiExposed && useIsDev().value) {
+    _debugApiExposed = true;
+    (
+      window as Window & { __reviewPrompt?: Record<string, unknown> }
+    ).__reviewPrompt = {
+      show: forceShow,
+      reset: resetForTesting,
+      prime: primeForTesting,
+      check: checkAndShow,
+      state: getDebugState,
+    };
+    console.info(
+      '[review] dev-API: window.__reviewPrompt = { show(), reset(), prime(), check(), state() }'
     );
-    await openExternalBrowser(GOOGLE_PLAY_WEB_URL);
   }
 
   return {
@@ -153,5 +281,8 @@ export function useAppReviewPrompt() {
     checkAndShow,
     onConfirm,
     onDismiss,
+    resetForTesting,
+    primeForTesting,
+    forceShow,
   };
 }
