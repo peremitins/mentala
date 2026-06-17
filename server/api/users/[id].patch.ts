@@ -18,6 +18,7 @@ import {
   requireCanEditUser,
 } from '@/server/utils/require-role';
 import { enqueueAiRegenerationForUser } from '@/server/application/notifications/ai-text-regeneration.service';
+import { regenerateGardenSummariesForUser } from '@/server/application/garden/garden-checkpoint-summary.service';
 
 export default defineEventHandler(async (event) => {
   const validRoles = new Set(['admin', 'user', 'moderator', 'support']);
@@ -186,6 +187,16 @@ export default defineEventHandler(async (event) => {
     }).catch((error) => {
       console.error(
         `[Users PATCH] ❌ Не удалось поставить регенерацию AI-текстов после смены gender:`,
+        error
+      );
+    });
+
+    // Перегенерируем закешированные AI-сводки сада: они запекли прежний род в
+    // текст обращения. Чекпоинты пересоздаются на месте (без потери таймлайна),
+    // итоговый отчёт — лениво при следующем открытии.
+    void regenerateGardenSummariesForUser(id).catch((error) => {
+      console.error(
+        `[Users PATCH] ❌ Не удалось перегенерировать AI-сводки сада после смены gender:`,
         error
       );
     });

@@ -18,6 +18,11 @@ const pendingCelebration = ref<PendingCelebrationItem[]>([]);
 const earnedMilestones = ref<EarnedMilestoneDto[]>([]);
 const isLoaded = ref(false);
 
+// Guard для автоматической проверки временных достижений (по активным дням).
+// Module-level, чтобы переживать ремаунты layout. Сбрасывается при logout.
+const activityChecked = ref(false);
+let lastActivityCheckAt = 0;
+
 export function useMilestoneBadges() {
   async function loadMilestones() {
     try {

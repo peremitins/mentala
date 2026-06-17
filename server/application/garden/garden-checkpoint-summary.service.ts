@@ -10,6 +10,7 @@ import { chatWithFallback } from '@/server/application/llm.service';
 import {
   collectUserSignalsForProgram,
   getUserGender,
+  resetPlantSummariesForUser,
   STYLE_RULES_PROMPT_BLOCK,
   type CollectedUserSignals,
 } from '@/server/application/garden/garden-summary.service';
@@ -263,7 +264,7 @@ ${CHECKPOINT_HEADINGS.next}
 
 ${STYLE_RULES_PROMPT_BLOCK}`;
 
-  const systemPrompt = `Ты — клинический психотерапевт с 15+ лет практики. Специализация — доказательная психотерапия (CBT, ACT, MBSR, CFT, Self-Compassion, IFS). Ты пишешь короткие промежуточные разборы пройденных отрезков программы ментального здоровья для своих клиентов. Стиль — структурированный markdown на 1500-2500 символов, конкретный, с цитатами из данных пользователя (только осмысленных), без коучингового пафоса и без привязки ко времени («неделя», «месяц»). Тон тёплый, но профессиональный. ВАЖНО: пиши только простым русским языком. Не используй в тексте для пользователя англоязычные термины, аббревиатуры и профжаргон (например «Loving-Kindness Meditation», «mindfulness», «CBT», «grounding»): называй практику и понятие по-русски своими словами, при необходимости коротко поясняй смысл. Пользователь — обычный человек без психологической подготовки.`;
+  const systemPrompt = `Пол пользователя — ${genderLabel}. Все родовые формы в обращении («ты сделал/сделала», «ты прошёл/прошла», «ты записал/записала») обязаны соответствовать этому полу; формы с альтернативами в скобках («сделал(а)») запрещены. Ты — клинический психотерапевт с 15+ лет практики. Специализация — доказательная психотерапия (CBT, ACT, MBSR, CFT, Self-Compassion, IFS). Ты пишешь короткие промежуточные разборы пройденных отрезков программы ментального здоровья для своих клиентов. Стиль — структурированный markdown на 1500-2500 символов, конкретный, с цитатами из данных пользователя (только осмысленных), без коучингового пафоса и без привязки ко времени («неделя», «месяц»). Тон тёплый, но профессиональный. ВАЖНО: пиши только простым русским языком. Не используй в тексте для пользователя англоязычные термины, аббревиатуры и профжаргон (например «Loving-Kindness Meditation», «mindfulness», «CBT», «grounding»): называй практику и понятие по-русски своими словами, при необходимости коротко поясняй смысл. Пользователь — обычный человек без психологической подготовки.`;
 
   return { systemPrompt, userPrompt };
 }
@@ -357,6 +358,12 @@ export async function generateCheckpointSummary(params: {
   userProgramId: number;
   checkpointStep: number;
   force?: boolean;
+  /**
+   * Не планировать push «отчёт готов». Нужно при фоновой перегенерации уже
+   * существующих сводок (например, после смены пола): отчёт пользователь уже
+   * видел, повторный push был бы спамом.
+   */
+  skipPush?: boolean;
 }): Promise<{
   id: number;
   summaryText: string;
@@ -520,7 +527,7 @@ export async function generateCheckpointSummary(params: {
   // Это закрывает гонку: при синхронной генерации клиент видит сводку
   // сразу, и моментальный push дублировал бы её. Идемпотентная защита
   // (pushSentAt/viewedAt) — внутри dispatch.
-  if (status === 'ready' && reportId > 0) {
+  if (status === 'ready' && reportId > 0 && !params.skipPush) {
     void scheduleReportReadyPush({
       userId: params.userId,
       reportId,
@@ -538,6 +545,54 @@ export async function generateCheckpointSummary(params: {
     generated: true,
     status,
   };
+}
+
+/**
+ * Перегенерация всех закешированных AI-сводок сада пользователя с актуальным
+ * полом. Вызывается фоном (fire-and-forget) после смены пола в настройках.
+ *
+ * Промежуточные чекпоинт-сводки перегенерируем НА МЕСТЕ (force + skipPush), а не
+ * удаляем: таймлайны read-only и не пересоздают удалённые записи, поэтому DELETE
+ * стёр бы прошлые недельные отчёты безвозвратно. skipPush — чтобы перегенерация
+ * не слала повторный push об уже виденном отчёте.
+ *
+ * Итоговый отчёт сада сбрасывается отдельно (`resetPlantSummariesForUser`) —
+ * он лениво пересоздаётся `summary-status`-эндпоинтом.
+ *
+ * Идемпотентно и безопасно при отсутствии данных (просто ничего не делает).
+ */
+export async function regenerateGardenSummariesForUser(
+  userId: number
+): Promise<void> {
+  // Все существующие чекпоинт-сводки пользователя (по всем его программам).
+  const rows = await db
+    .select({
+      userProgramId: userProgramCheckpointSummaries.userProgramId,
+      checkpointStep: userProgramCheckpointSummaries.checkpointStep,
+    })
+    .from(userProgramCheckpointSummaries)
+    .where(eq(userProgramCheckpointSummaries.userId, userId));
+
+  // Сбрасываем итоговые отчёты параллельно с перегенерацией чекпоинтов.
+  // Чекпоинты регенерим последовательно, чтобы не упереться в rate-limit LLM.
+  await resetPlantSummariesForUser(userId);
+  for (const row of rows) {
+    try {
+      await generateCheckpointSummary({
+        userId,
+        userProgramId: row.userProgramId,
+        checkpointStep: row.checkpointStep,
+        force: true,
+        skipPush: true,
+      });
+    } catch (error) {
+      // Один сбойный чекпоинт не должен ронять перегенерацию остальных.
+      console.error(
+        '[garden-checkpoint-summary] regenerate after gender change failed:',
+        { userId, ...row, error }
+      );
+    }
+  }
 }
 
 /**
