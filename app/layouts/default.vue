@@ -126,7 +126,13 @@ import { useViewportOrientation } from '@/app/composables/useViewportOrientation
 import { pickOrientationMediaPath } from '@/app/utils/orientationMedia';
 
 // ─── Глобальные достижения ────────────────────────────────────────────────
-const { popNextCelebration, hasReadyCelebration } = useMilestoneBadges();
+const {
+  popNextCelebration,
+  hasReadyCelebration,
+  checkActivityMilestonesOnce,
+  checkActivityMilestonesThrottled,
+  resetActivityCheck,
+} = useMilestoneBadges();
 const currentCelebrationId = ref<string | null>(null);
 const celebrationVisible = ref(false);
 
@@ -247,6 +253,10 @@ watch(
     if (loggedIn) {
       scheduleMobilePromoOffer();
       tryRequestWebPushPermission();
+      // Автопроверка временных достижений (Первая неделя, 30 дней и т.п.):
+      // начисляем и показываем анимацию без захода на страницу достижений.
+      // Задержка 2с — даём пользователю дойти до главного экрана.
+      void checkActivityMilestonesOnce(2000);
       // Если push уже включён (permission + активный флаг) — регистрируем foreground-listener.
       // Нужно при каждой загрузке страницы (не только при login/enable).
       // Без этого foreground-уведомления не показываются при data-only web push.
@@ -262,6 +272,8 @@ watch(
       clearMobilePromoTimer();
       if (webPushPermissionTimer) clearTimeout(webPushPermissionTimer);
       mobileAppPromo.hideActiveOffer();
+      // Сбрасываем guard, чтобы следующий вход (в т.ч. другой аккаунт) проверился.
+      resetActivityCheck();
     }
   },
   { immediate: true }
@@ -347,6 +359,18 @@ const showPushRecoveryDialog = computed(() => {
 const isAppActive = ref(true);
 let removeVisibilityListener: (() => void) | null = null;
 let removeAppStateListener: (() => Promise<void>) | null = null;
+
+// При возврате приложения из фона повторно проверяем временные достижения:
+// порог активных дней мог быть набран, пока приложение было открыто.
+// Троттл 60с — чтобы не дёргать API при частых переключениях.
+watch(
+  () => isAppActive.value,
+  (active, prev) => {
+    if (active && !prev && auth.isLoggedIn) {
+      void checkActivityMilestonesThrottled(60_000, 1500);
+    }
+  }
+);
 
 // Проверяем recovery push-уведомлений через 5 секунд после mount
 // (после того как push-notifications.client.ts отработает за 3 секунды)

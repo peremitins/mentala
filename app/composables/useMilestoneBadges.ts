@@ -64,6 +64,44 @@ export function useMilestoneBadges() {
     }
   }
 
+  /**
+   * Проверяет временные достижения (по активным дням) через event `activity_check`.
+   * Внутренний хелпер: всегда обновляет таймстамп последней проверки.
+   */
+  async function checkActivityMilestones(delayMs = 0) {
+    lastActivityCheckAt = Date.now();
+    await checkMilestones('activity_check', undefined, delayMs);
+  }
+
+  /**
+   * Однократная (за сессию) автопроверка временных достижений при входе в приложение.
+   * Закрывает кейс, когда «Первая неделя» / «30 дней» уже заработаны, но пользователь
+   * не открывал страницу достижений — теперь анимация всплывёт автоматически.
+   */
+  async function checkActivityMilestonesOnce(delayMs = 0) {
+    if (activityChecked.value) return;
+    activityChecked.value = true;
+    await checkActivityMilestones(delayMs);
+  }
+
+  /**
+   * Повторная проверка при возврате приложения из фона, но не чаще minIntervalMs —
+   * чтобы не дёргать API при частых переключениях.
+   */
+  async function checkActivityMilestonesThrottled(
+    minIntervalMs: number,
+    delayMs = 0
+  ) {
+    if (Date.now() - lastActivityCheckAt < minIntervalMs) return;
+    await checkActivityMilestones(delayMs);
+  }
+
+  /** Сбрасывает guard автопроверки (при logout — чтобы новый аккаунт проверился). */
+  function resetActivityCheck() {
+    activityChecked.value = false;
+    lastActivityCheckAt = 0;
+  }
+
   /** Возвращает следующее готовое к показу достижение (по showAfter). */
   function popNextCelebration(): EarnedMilestoneDto | null {
     const now = Date.now();
@@ -96,6 +134,9 @@ export function useMilestoneBadges() {
     isLoaded,
     loadMilestones,
     checkMilestones,
+    checkActivityMilestonesOnce,
+    checkActivityMilestonesThrottled,
+    resetActivityCheck,
     popNextCelebration,
     hasReadyCelebration,
     isEarned,
