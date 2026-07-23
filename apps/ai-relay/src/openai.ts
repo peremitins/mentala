@@ -20,8 +20,8 @@ export async function openaiResponsesRequest(body: unknown) {
       'content-type': 'application/json',
     }),
     body: JSON.stringify(body),
-    headersTimeout: config.openai.timeoutMs,
-    bodyTimeout: config.openai.timeoutMs,
+    headersTimeout: config.openai.responsesTimeoutMs,
+    bodyTimeout: config.openai.responsesTimeoutMs,
   });
 
   return res;

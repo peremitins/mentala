@@ -69,14 +69,25 @@ function parseRealtimeCallBody(body: unknown): RelayRealtimeCallBody {
   };
 }
 
+// Запрос к relay живёт ровно столько, сколько идёт самый долгий вызов OpenAI.
+const MAX_UPSTREAM_TIMEOUT_MS = Math.max(
+  config.openai.responsesTimeoutMs,
+  config.openai.streamTimeoutMs
+);
+
 export async function buildServer() {
   const app = Fastify({
     logger: true,
     bodyLimit: config.relay.maxBodyBytes,
     // Таймауты для клиентских соединений, чтобы не висели залипшие коннекты.
-    requestTimeout: config.openai.streamTimeoutMs + 10_000,
+    requestTimeout: MAX_UPSTREAM_TIMEOUT_MS + 10_000,
     keepAliveTimeout: 75_000,
-    connectionTimeout: 30_000,
+    // connectionTimeout — это server.timeout Node, то есть таймер простоя сокета,
+    // а не время установки соединения. Пока мы ждём ответ OpenAI, данных в сокете
+    // нет, и при 30 с Node рвал соединение с nginx до того, как relay успевал
+    // отправить свой ответ: клиент получал 502 от nginx вместо внятной ошибки.
+    // Зависшие запросы отсекает requestTimeout выше.
+    connectionTimeout: 0,
   });
 
   // Подключаем raw-body до объявления маршрутов, чтобы Fastify корректно сохранил байты запроса.
