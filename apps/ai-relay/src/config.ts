@@ -16,7 +16,14 @@ export const config = {
       /\/+$/,
       ''
     ),
+    // Обмен SDP для realtime укладывается в секунды — короткий лимит ловит зависшие соединения.
     timeoutMs: Number(process.env.OPENAI_TIMEOUT_MS || 30000),
+    // Ответ без стрима приходит целиком в самом конце, поэтому лимит здесь равен
+    // всему времени генерации. У reasoning-моделей на длинном диалоге это минуты,
+    // и общие 30 с рвали связь до того, как OpenAI успевал ответить.
+    responsesTimeoutMs: Number(
+      process.env.OPENAI_RESPONSES_TIMEOUT_MS || 150000
+    ),
     streamTimeoutMs: Number(process.env.OPENAI_STREAM_TIMEOUT_MS || 120000),
   },
 
