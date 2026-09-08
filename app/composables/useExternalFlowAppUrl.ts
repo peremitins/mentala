@@ -1,6 +1,12 @@
 import { Capacitor } from '@capacitor/core';
 import { computed } from 'vue';
 
+type ExternalFlowRuntimeConfig = {
+  isDev?: boolean;
+  deviceAppUrl?: string;
+  appUrl?: string;
+};
+
 function normalizeHttpBaseUrl(
   rawValue: string | null | undefined
 ): string | null {
@@ -31,17 +37,18 @@ function normalizeHttpBaseUrl(
  */
 export function useExternalFlowAppUrl() {
   const config = useRuntimeConfig();
+  const publicConfig = config.public as ExternalFlowRuntimeConfig;
 
   const isDev =
-    (config.public as any).isDev === true ||
+    publicConfig.isDev === true ||
     (!import.meta.env?.PROD && import.meta.env?.MODE !== 'production');
 
   return computed(() => {
     const deviceAppUrl = normalizeHttpBaseUrl(
-      String((config.public as any).deviceAppUrl || '')
+      String(publicConfig.deviceAppUrl || '')
     );
     const configuredAppUrl = normalizeHttpBaseUrl(
-      String((config.public as any).appUrl || '')
+      String(publicConfig.appUrl || '')
     );
     const currentOrigin =
       typeof window !== 'undefined'

@@ -7,6 +7,12 @@ const MEDITATION_PATH_MAP = meditationImageMap as Record<string, string>;
 
 let didWarnAboutBaseUrl = false;
 
+type CapacitorWindow = Window & {
+  Capacitor?: {
+    isNativePlatform?: () => boolean;
+  };
+};
+
 function isAbsoluteUrl(value: string) {
   return /^https?:\/\//i.test(value);
 }
@@ -48,8 +54,9 @@ export function resolveMediaUrl(path?: string | null): string {
       : '';
   const isNativeRuntime =
     typeof window !== 'undefined' &&
-    typeof (window as any).Capacitor?.isNativePlatform === 'function' &&
-    Boolean((window as any).Capacitor.isNativePlatform());
+    typeof (window as CapacitorWindow).Capacitor?.isNativePlatform ===
+      'function' &&
+    Boolean((window as CapacitorWindow).Capacitor?.isNativePlatform?.());
 
   // В native dev используем origin только если приложение реально поднято
   // с внешнего dev-server. Для локального bundle на localhost медиа должны

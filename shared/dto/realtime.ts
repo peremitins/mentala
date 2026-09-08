@@ -97,7 +97,7 @@ export const RealtimeVoiceSessionEventRequestDto = z.object({
     .partial()
     .nullable()
     .optional(),
-  meta: z.record(z.any()).optional(),
+  meta: z.record(z.unknown()).optional(),
 });
 
 export const RealtimeVoiceRuntimeCompactionReasonEnum = z.enum([
