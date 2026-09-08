@@ -4,3 +4,5 @@ cce8616e30f2869cf0432d7ecf46da30afa59b04:apps/ai-relay/.env.example:generic-api-
 3eae5f93111f2acda0f57c7760c07166351616c9:app/pages/practices/gratitude-diary/editor.vue:generic-api-key:804
 3eae5f93111f2acda0f57c7760c07166351616c9:app/pages/practices/gratitude-diary/editor.vue:generic-api-key:805
 da3a813fcf0b546a58edb5a2c6626375026401d0:server/application/promo-codes/access-code.service.ts:generic-api-key:11
+3bab05ab39824710a40f2d76b399459624d19364:apps/ai-relay/.env.example:generic-api-key:6
+40d84db50128d43bc817dfdfde646da823305519:apps/ai-relay/.env.example:generic-api-key:6
