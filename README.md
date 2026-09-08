@@ -1,5 +1,5 @@
-![AI chat](screenshots/Device%2014PM-1.png)
-![Voice session](screenshots/Device%2014PM-6.png)
+![AI chat](screenshots/screenshots-1.png)
+![Voice session](screenshots/screenshots-2.png)
 
 # Mentala
 
