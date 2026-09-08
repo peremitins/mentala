@@ -15,6 +15,23 @@
 const DISMISSED_KEY = 'mentala.pwa.install_show_after';
 const INSTALLED_KEY = 'mentala.pwa.installed';
 
+type BeforeInstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{
+    outcome: 'accepted' | 'dismissed';
+  }>;
+};
+
+type CapacitorWindow = Window & {
+  Capacitor?: {
+    isNativePlatform?: () => boolean;
+  };
+};
+
+type NavigatorWithStandaloneMode = Navigator & {
+  standalone?: boolean;
+};
+
 /**
  * Возвращает timestamp ближайшего 10:00 (сегодня или завтра).
  * Если сейчас уже ≥ 10:00 — возвращает 10:00 завтра.
@@ -36,16 +53,20 @@ function getNext10am(): number {
 // модуля, а ref внутри composable подхватывает уже сохранённое событие.
 // ==========================================
 
-let _capturedInstallPrompt: Event | null = null;
+let _capturedInstallPrompt: BeforeInstallPromptEvent | null = null;
 let _appInstalled = false;
-const _installPromptCallbacks: Array<(e: Event) => void> = [];
+const _installPromptCallbacks: Array<
+  (event: BeforeInstallPromptEvent) => void
+> = [];
 
 if (typeof window !== 'undefined') {
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
-    _capturedInstallPrompt = e;
+    _capturedInstallPrompt = e as BeforeInstallPromptEvent;
     // Оповещаем все активные экземпляры composable
-    _installPromptCallbacks.forEach((cb) => cb(e));
+    _installPromptCallbacks.forEach((callback) =>
+      callback(e as BeforeInstallPromptEvent)
+    );
   });
 
   window.addEventListener('appinstalled', () => {
@@ -61,7 +82,9 @@ if (typeof window !== 'undefined') {
  */
 function isNativeCapacitorApp(): boolean {
   if (typeof window === 'undefined') return false;
-  return !!(window as any).Capacitor?.isNativePlatform?.();
+  return Boolean(
+    (window as CapacitorWindow).Capacitor?.isNativePlatform?.()
+  );
 }
 
 export function usePwaInstall() {
@@ -85,7 +108,7 @@ export function usePwaInstall() {
   function detectStandaloneMode(): boolean {
     if (typeof window === 'undefined') return false;
     return (
-      (window.navigator as any).standalone === true ||
+      (window.navigator as NavigatorWithStandaloneMode).standalone === true ||
       window.matchMedia('(display-mode: standalone)').matches
     );
   }
@@ -153,8 +176,8 @@ export function usePwaInstall() {
       installPromptEvent.value = _capturedInstallPrompt;
 
       // Подписываемся на будущие события (например, после смены окружения или повторного визита)
-      const onPrompt = (e: Event) => {
-        installPromptEvent.value = e;
+      const onPrompt = (event: BeforeInstallPromptEvent) => {
+        installPromptEvent.value = event;
       };
       _installPromptCallbacks.push(onPrompt);
 
@@ -172,7 +195,7 @@ export function usePwaInstall() {
    */
   async function promptInstall(): Promise<boolean> {
     if (!installPromptEvent.value) return false;
-    const prompt = installPromptEvent.value as any;
+    const prompt = installPromptEvent.value as BeforeInstallPromptEvent;
     prompt.prompt();
     const { outcome } = await prompt.userChoice;
     if (outcome === 'accepted') {

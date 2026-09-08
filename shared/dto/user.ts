@@ -47,7 +47,7 @@ export const UserMeDto = z.object({
       isBlocked: z.boolean().optional(),
       emailVerifiedAt: z.string().nullable().optional(),
       hasPassword: z.boolean().optional(),
-      sceneSettings: z.record(z.any()).optional(),
+      sceneSettings: z.record(z.unknown()).optional(),
       marketingConsent: z.boolean().optional(),
       pushNotificationsEnabled: z.boolean().optional(),
       aiConsentAccepted: z.boolean().optional(),
