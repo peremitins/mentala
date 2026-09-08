@@ -1,5 +1,5 @@
-![AI chat](screenshots/Device 14PM-1.webp)
-![Voice session](screenshots/Device 14PM-6.webp)
+![AI chat](screenshots/Device%2014PM-1.png)
+![Voice session](screenshots/Device%2014PM-6.png)
 
 # Mentala
 
@@ -17,6 +17,15 @@ I created and developed Mentala as an independent product from architecture to p
 - Nitro, PostgreSQL, Drizzle ORM, Redis, BullMQ, Zod
 - Tailwind CSS, shadcn-vue, Vitest
 - Capacitor, App Store, Google Play
+
+## Architecture notes
+
+- [Product overview](.docs/PROJECT_DESCRIPTION.md)
+- [Architecture](.docs/architecture.md)
+- [AI chat memory](.docs/arch_chat_memory.md)
+- [Billing](.docs/arch_billing.md)
+- [Notifications](.docs/arch_notifications.md)
+- [Security](.docs/security_requirements.md)
 
 ## Public source policy
 

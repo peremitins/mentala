@@ -98,7 +98,7 @@ async function main() {
         'SELECT count(*)::int AS count FROM drizzle.__drizzle_migrations'
       );
       dbMigrationsCount = dbMigrations.rows[0]?.count ?? 0;
-    } catch (error: any) {
+    } catch (_error: any) {
       throw new Error(
         'Таблица drizzle.__drizzle_migrations не найдена. Миграции не применялись.'
       );
