@@ -1,3 +1,6 @@
+![AI chat](screenshots/Device 14PM-1.webp)
+![Voice session](screenshots/Device 14PM-6.webp)
+
 # Mentala
 
 Mentala is an AI-powered mental health product for web, iOS, and Android. The project includes a Vue and Nuxt application, backend API routes, real-time AI interactions, subscriptions, notifications, and mobile delivery through Capacitor.
