@@ -23,8 +23,21 @@ logs
 .env.*
 !.env.example
 
+# Local AI tool configuration and internal instructions
+.claude/
+.codex/
+.cursor/
+.cloudcode/
+CLAUDE.md
+AGENTS.md
+GEMINI.md
+CLOUDCODE.md
+project-wiki/
+
 # Firebase credentials (НЕ коммитить!)
 *firebase-adminsdk*.json
+android/**/google-services.json
+ios/**/GoogleService-Info*.plist
 
 # Cursor MCP configuration (содержит секреты)
 .cursor/mcp.json
