@@ -17,7 +17,6 @@ import {
   revokeAllUserSessions,
 } from '@/server/application/auth/session';
 import { getClientIp } from '@/server/utils/ip';
-import { getTimezoneFromRequest } from '@/server/application/notifications/timezone.utils';
 import { scheduleNotificationSlotsAfterLogin } from '@/server/application/notifications/login-slots.service';
 import { toIsoString } from '@/server/utils/serialize';
 

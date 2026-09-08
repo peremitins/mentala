@@ -1,5 +1,6 @@
 import { computed, ref } from 'vue';
 import { Capacitor } from '@capacitor/core';
+import { App } from '@capacitor/app';
 import { isDocumentAvailable } from '@/app/utils/document';
 import { resolveMediaUrl } from '@/app/utils/media';
 import { useSceneAudio } from '@/app/composables/useSceneAudio';
@@ -642,15 +643,12 @@ function checkTimerExpiredOnResume() {
 function ensureAppStateListener() {
   if (globalState.appStateBound) return;
   globalState.appStateBound = true;
-  import('@capacitor/app')
-    .then(({ App }) => {
-      App.addListener('appStateChange', ({ isActive }) => {
-        void handleAppStateChange(isActive);
-      });
-    })
-    .catch(() => {
-      // На Web fallback уже закрыт visibilitychange.
-    });
+  void App.addListener('appStateChange', ({ isActive }) => {
+    void handleAppStateChange(isActive);
+  }).catch(() => {
+    globalState.appStateBound = false;
+    // На Web fallback уже закрыт visibilitychange.
+  });
 }
 
 function ensureAudioGain(context: AudioContext): GainNode {
@@ -1859,6 +1857,7 @@ export function useMeditationPlayer() {
 
   if (globalState.nativeModeEnabled) {
     void ensureNativeService();
+    ensureAppStateListener();
   } else {
     // Регистрируем слушатель жестов заранее, чтобы автозапуск был стабильнее.
     ensureGlobalGestureUnlock();

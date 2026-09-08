@@ -106,12 +106,12 @@ const props = withDefaults(
 const emit = defineEmits<{ (e: 'update:modelValue', v: string): void }>();
 
 const open = ref(false);
-const search = ref('');
+const searchQuery = ref('');
 
 const normalized = computed<Option[]>(() => props.options ?? []);
 
 const filtered = computed<Option[]>(() => {
-  const q = search.value.trim().toLowerCase();
+  const q = searchQuery.value.trim().toLowerCase();
   if (!q) return normalized.value;
   return normalized.value.filter((o) => o.label.toLowerCase().includes(q));
 });

@@ -171,7 +171,7 @@ const toggleGroupClasses = computed(() => {
   return cn(baseClasses, props.class);
 });
 
-function getItemClasses(value: string | number) {
+function getItemClasses(_value: string | number) {
   // Получаем класс или стиль для max-width
   let maxWidthClass = '';
   let maxWidthStyle: { maxWidth: string } | undefined = undefined;

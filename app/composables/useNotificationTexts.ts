@@ -1,7 +1,6 @@
 import type {
   NotificationText,
   BatchTextsRequest,
-  ResetTextsRequest,
   NotificationSubtype,
   Directness,
 } from '@/shared/dto/notifications';

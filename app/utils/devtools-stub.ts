@@ -6,8 +6,8 @@
  */
 
 export function setupDevtoolsPlugin(
-  pluginDescriptor: any,
-  setupFn: (api: any) => void
+  _pluginDescriptor: unknown,
+  _setupFn: (api: unknown) => void
 ) {
   // Пустая функция-заглушка
   // В продакшене DevTools отключены, поэтому ничего не делаем

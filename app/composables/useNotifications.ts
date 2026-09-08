@@ -72,7 +72,9 @@ export function useNotifications() {
             lights: true,
             vibration: true,
           } as any);
-        } catch {}
+        } catch {
+          // Канал может уже существовать или быть недоступным на устройстве.
+        }
         channelPrepared = true;
       }
 

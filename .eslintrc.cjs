@@ -20,6 +20,14 @@ module.exports = {
     'vue/multi-word-component-names': 'off',
     'vue/attribute-hyphenation': ['error', 'always'],
     'prettier/prettier': 'warn',
+    '@typescript-eslint/no-unused-vars': [
+      'error',
+      {
+        argsIgnorePattern: '^_',
+        caughtErrorsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+      },
+    ],
   },
   globals: {
     APP_VERSION: 'readonly',
@@ -90,11 +98,15 @@ module.exports = {
     },
     {
       files: ['*.js'],
+      env: {
+        node: true,
+      },
       rules: {
         // Правила, специфичные для файлов .js
         '@typescript-eslint/no-explicit-any': 'off',
         '@typescript-eslint/no-implicit-any': 'off',
         '@typescript-eslint/no-var-requires': 'off',
+        '@typescript-eslint/no-require-imports': 'off',
       },
     },
   ],
@@ -106,5 +118,7 @@ module.exports = {
     '.output',
     'android',
     'ios',
+    // Эти файлы синхронизируются из shadcn-vue и не являются кодом приложения.
+    'app/components/ui/shadcn',
   ],
 };

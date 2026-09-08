@@ -20,7 +20,7 @@
 import type { CatalogCategory, CatalogItem } from '@/app/lib/promptsCatalog';
 import CatalogPromptCard from './CatalogPromptCard.vue';
 
-const props = defineProps<{
+defineProps<{
   categories: CatalogCategory[];
   isAlreadyAdded: (item: CatalogItem) => boolean;
 }>();

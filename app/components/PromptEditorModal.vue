@@ -82,7 +82,6 @@
 import { usePromptsStore } from '@/app/stores/prompts';
 import type { UserPrompt } from '@/app/types';
 import { useToast } from '@/app/composables/useToast';
-import { useChatSettingsStore } from '@/app/stores/chatSettings';
 import { Input } from '@/app/components/ui/shadcn/input';
 import TextareaResize from '@/app/components/ui/TextareaResize.vue';
 import { Checkbox } from '@/app/components/ui/shadcn/checkbox';
@@ -106,7 +105,6 @@ import {
 } from '@/app/components/ui/alert-dialog';
 import { Button } from '@/app/components/ui/button';
 
-const chatSettings = useChatSettingsStore();
 const props = defineProps<{
   open: boolean;
   initial?: Partial<UserPrompt> | null;
