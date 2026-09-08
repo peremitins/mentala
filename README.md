@@ -1,157 +1,52 @@
-# Nuxt Minimal Starter
+# Mentala
 
-Look at the [Nuxt documentation](https://nuxt.com/docs/getting-started/introduction) to learn more.
+Mentala is an AI-powered mental health product for web, iOS, and Android. The project includes a Vue and Nuxt application, backend API routes, real-time AI interactions, subscriptions, notifications, and mobile delivery through Capacitor.
 
-## Setup
+Live product: [mentala.app](https://mentala.app)
 
-Make sure to install dependencies:
+## My role
+
+I created and developed Mentala as an independent product from architecture to production release. My work includes frontend architecture, Vue 3 and Nuxt implementation, mobile delivery, API integration, subscriptions, push notifications, and application publishing for iOS and Android.
+
+## Stack
+
+- Vue 3, Nuxt 4, TypeScript, Pinia
+- Nitro, PostgreSQL, Drizzle ORM, Redis, BullMQ, Zod
+- Tailwind CSS, shadcn-vue, Vitest
+- Capacitor, App Store, Google Play
+
+## Public source policy
+
+This repository contains the application source code and its cleaned development history. Production credentials, deployment configuration, mobile signing files, provider settings, internal prompts, and operational documentation are intentionally excluded.
+
+The repository is published for review. No license is granted for copying, redistribution, or commercial use of the code.
+
+## Local setup
+
+Requirements: Node.js 20+, pnpm, PostgreSQL, and Redis for server-side functionality.
 
 ```bash
-# npm
-npm install
-
-# pnpm
 pnpm install
-
-# yarn
-yarn install
-
-# bun
-bun install
-```
-
-## Development Server
-
-Start the development server on `http://localhost:3000`:
-
-```bash
-# npm
-npm run dev
-
-# pnpm
+cp .env.example .env
 pnpm dev
-
-# yarn
-yarn dev
-
-# bun
-bun run dev
 ```
 
-## Production
+The full application requires your own local service configuration and credentials for optional integrations. Do not use production credentials in local environment files.
 
-Build the application for production:
+## Quality checks
 
 ```bash
-# npm
-npm run build
-
-# pnpm
+pnpm lint
+pnpm test
 pnpm build
-
-# yarn
-yarn build
-
-# bun
-bun run build
 ```
 
-Locally preview production build:
+## AI relay
+
+The optional AI relay has its own environment template:
 
 ```bash
-# npm
-npm run preview
-
-# pnpm
-pnpm preview
-
-# yarn
-yarn preview
-
-# bun
-bun run preview
+cp apps/ai-relay/.env.example apps/ai-relay/.env
 ```
 
-Check out the [deployment documentation](https://nuxt.com/docs/getting-started/deployment) for more information.
-
-## Миграции БД
-
-Локальная разработка (dev):
-
-```bash
-pnpm db:migrate -- --env=development
-```
-
-Локальный запуск prod-миграций (только осознанно):
-
-```bash
-MIGRATE_PROD_CONFIRM=YES pnpm db:migrate -- --env=production
-```
-
-Базовый baseline (один раз, только при первичном заведении Drizzle на prod):
-
-```bash
-MIGRATE_PROD_CONFIRM=YES pnpm db:baseline -- --env=production
-```
-
-Важно:
-
-- Для dev используется `.env.development`, для local prod — `.env.production`, на сервере prod — `.env`.
-- В env-файле должен быть указан `MENTALA_DB_ENV=development|production`.
-- Для контейнеров миграций на проде нужен доступ к `.env` (например, через `DRIZZLE_ENV_FILE=/app/.env` и volume).
-
-## Redis
-
-Локальная разработка:
-
-- локальный Redis может работать без пароля, если он слушает только `127.0.0.1`;
-- для этого проекта локальный Docker Redis поднимается именно в таком режиме.
-
-Production:
-
-- `REDIS_PASSWORD` обязателен;
-- `REDIS_HOST` должен указывать на Redis внутри docker compose сети, обычно `redis`;
-- `REDIS_PORT` по умолчанию `6379`.
-
-Пример server-side env для `/opt/mentala/prod/.env`:
-
-```bash
-REDIS_HOST=redis
-REDIS_PORT=6379
-REDIS_PASSWORD=replace_me
-```
-
-Пример `redis` сервиса в `/opt/mentala/prod/docker-compose.yml`:
-
-```yaml
-  redis:
-    image: redis:7-alpine
-    container_name: mentala-redis-prod
-    command:
-      - sh
-      - -c
-      - redis-server --appendonly yes --requirepass "$REDIS_PASSWORD"
-    environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
-    healthcheck:
-      test: ["CMD-SHELL", "REDISCLI_AUTH=$REDIS_PASSWORD redis-cli ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-```
-
-`web` контейнер должен читать тот же `REDIS_PASSWORD` через свой `env_file: .env`.
-
-## Шаблоны уведомлений
-
-После правок в `app/lib/notificationTemplates.ts` нужно синхронизировать шаблоны в БД:
-
-```bash
-# Dev
-pnpm db:sync-notification-templates
-
-# Prod
-pnpm db:sync-notification-templates -- --env=production
-```
-
-Скрипт очищает таблицы `notification_texts` и `notification_text_presets` и заполняет их заново из TS-файла.
+Supply your own provider key and relay secret locally. They are not included in this repository.
