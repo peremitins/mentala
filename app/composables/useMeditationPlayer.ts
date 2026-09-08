@@ -1859,6 +1859,7 @@ export function useMeditationPlayer() {
 
   if (globalState.nativeModeEnabled) {
     void ensureNativeService();
+    ensureAppStateListener();
   } else {
     // Регистрируем слушатель жестов заранее, чтобы автозапуск был стабильнее.
     ensureGlobalGestureUnlock();

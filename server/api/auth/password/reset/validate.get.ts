@@ -1,4 +1,3 @@
-import { createError } from 'h3';
 import {
   getAuthSecrets,
   hashPasswordResetToken,
@@ -46,4 +45,3 @@ export default defineEventHandler(async (event) => {
     reason: 'invalid' as const,
   };
 });
-

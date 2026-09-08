@@ -1,13 +1,5 @@
 <template>
-  <!-- <canvas
-    ref="canvasRef"
-    :class="
-      cn(
-        'absolute inset-0 w-full h-full pointer-events-none opacity-35',
-        props.class
-      )
-    "
-  /> -->
+  <span v-if="false" aria-hidden="true" />
 </template>
 
 <script setup lang="ts">
@@ -21,7 +13,6 @@ import {
   type HTMLAttributes,
 } from 'vue';
 import { Renderer, Camera, Transform, Program, Mesh, Plane } from 'ogl';
-import { cn } from '~/lib/utils';
 
 interface Props {
   hue?: number;

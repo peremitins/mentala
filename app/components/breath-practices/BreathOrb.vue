@@ -28,7 +28,6 @@ const props = withDefaults(
   {}
 );
 
-const phaseLabel = computed(() => props.currentPhase?.label || 'Готовимся');
 const phaseRemainingLabel = computed(() =>
   String(props.phaseRemainingSeconds || 0)
 );

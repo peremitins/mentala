@@ -7,7 +7,7 @@ import { and, eq, ne } from 'drizzle-orm';
  * Получить список доступных тарифов
  */
 
-export default defineEventHandler(async (event) => {
+export default defineEventHandler(async (_event) => {
   const plans = await db
     .select()
     .from(subscriptionPlans)

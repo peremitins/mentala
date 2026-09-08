@@ -32,7 +32,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick, computed, watch } from 'vue';
+import { ref, onMounted, nextTick, computed, watch } from 'vue';
 import { useResizeObserver } from '@vueuse/core';
 import IconChevronDown from '~icons/lucide/chevron-down';
 import {

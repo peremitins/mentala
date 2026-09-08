@@ -171,7 +171,6 @@ import { computed } from 'vue';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
