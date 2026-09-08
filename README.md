@@ -3,39 +3,33 @@
 
 # Mentala
 
-Mentala is an AI-powered mental health product for web, iOS, and Android. The project includes a Vue and Nuxt application, backend API routes, real-time AI interactions, subscriptions, notifications, and mobile delivery through Capacitor.
+Mentala: AI-продукт для поддержки психического здоровья. В репозитории находятся веб-приложение и мобильные приложения для iOS и Android, API, AI-функции в реальном времени, подписки и уведомления.
 
-Live product: [mentala.app](https://mentala.app)
+Сайт: [mentala.app](https://mentala.app)
 
-## My role
+## Моя роль
 
-I created and developed Mentala as an independent product from architecture to production release. My work includes frontend architecture, Vue 3 and Nuxt implementation, mobile delivery, API integration, subscriptions, push notifications, and application publishing for iOS and Android.
+Я создал Mentala как собственный продукт и довел его от архитектуры и разработки до production-релиза. Отвечал за frontend-архитектуру, Vue 3 и Nuxt, интеграции с API, подписки, push-уведомления, а также публикацию приложений в App Store и Google Play.
 
-## Stack
+## Стек
 
 - Vue 3, Nuxt 4, TypeScript, Pinia
 - Nitro, PostgreSQL, Drizzle ORM, Redis, BullMQ, Zod
 - Tailwind CSS, shadcn-vue, Vitest
 - Capacitor, App Store, Google Play
 
-## Architecture notes
+## Архитектура
 
-- [Product overview](.docs/PROJECT_DESCRIPTION.md)
-- [Architecture](.docs/architecture.md)
-- [AI chat memory](.docs/arch_chat_memory.md)
-- [Billing](.docs/arch_billing.md)
-- [Notifications](.docs/arch_notifications.md)
-- [Security](.docs/security_requirements.md)
+- [Описание продукта](.docs/PROJECT_DESCRIPTION.md)
+- [Общая архитектура](.docs/architecture.md)
+- [Память AI-чата](.docs/arch_chat_memory.md)
+- [Подписки](.docs/arch_billing.md)
+- [Уведомления](.docs/arch_notifications.md)
+- [Безопасность](.docs/security_requirements.md)
 
-## Public source policy
+## Локальный запуск
 
-This repository contains the application source code and its cleaned development history. Production credentials, deployment configuration, mobile signing files, provider settings, internal prompts, and operational documentation are intentionally excluded.
-
-The repository is published for review. No license is granted for copying, redistribution, or commercial use of the code.
-
-## Local setup
-
-Requirements: Node.js 20+, pnpm, PostgreSQL, and Redis for server-side functionality.
+Потребуются Node.js 20+, pnpm, PostgreSQL и Redis.
 
 ```bash
 pnpm install
@@ -43,22 +37,10 @@ cp .env.example .env
 pnpm dev
 ```
 
-The full application requires your own local service configuration and credentials for optional integrations. Do not use production credentials in local environment files.
-
-## Quality checks
+## Проверки качества
 
 ```bash
 pnpm lint
 pnpm test
 pnpm build
 ```
-
-## AI relay
-
-The optional AI relay has its own environment template:
-
-```bash
-cp apps/ai-relay/.env.example apps/ai-relay/.env
-```
-
-Supply your own provider key and relay secret locally. They are not included in this repository.
