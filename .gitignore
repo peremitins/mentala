@@ -2,9 +2,6 @@
 .output
 .data
 .nuxt
-.nuxt-capacitor-device
-.nuxt-capacitor-release
-.nuxt-capacitor-standalone
 .nitro
 .cache
 dist
@@ -20,18 +17,27 @@ logs
 .DS_Store
 .fleet
 .idea
-.claude/
 
 # Local env files
 .env
 .env.*
 !.env.example
 
-# Disk guard secrets (только *.example версия должна быть в репо)
-scripts/server/disk-guard/telegram.env
+# Local AI tool configuration and internal instructions
+.claude/
+.codex/
+.cursor/
+.cloudcode/
+CLAUDE.md
+AGENTS.md
+GEMINI.md
+CLOUDCODE.md
+project-wiki/
 
 # Firebase credentials (НЕ коммитить!)
 *firebase-adminsdk*.json
+android/**/google-services.json
+ios/**/GoogleService-Info*.plist
 
 # Cursor MCP configuration (содержит секреты)
 .cursor/mcp.json
@@ -51,6 +57,3 @@ scripts/.notification-cache/
 
 # Локальные загрузки пользователей (legacy — перенесены в Object Storage)
 public/uploads/
-
-# Playwright CLI (автогенерируемые артефакты)
-.playwright-cli/
