@@ -36,7 +36,7 @@ export async function requireAdmin(event: any) {
     if (role === 'admin') {
       return session.user;
     }
-  } catch (error) {
+  } catch (_error) {
     // Если система ролей еще не настроена, используем fallback на ADMIN_EMAILS
     const admins = getAdminEmails();
     if (admins.size > 0) {

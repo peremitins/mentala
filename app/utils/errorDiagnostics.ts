@@ -33,6 +33,7 @@ type CreateErrorDiagnosticsOptions = {
 };
 
 const DIAGNOSTIC_KEY = '__mentalaErrorDiagnostics';
+type UnknownRecord = Record<string, unknown>;
 
 function toFiniteNumber(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -47,9 +48,9 @@ function toFiniteNumber(value: unknown): number | null {
   return null;
 }
 
-function asRecord(value: unknown): Record<string, any> | null {
+function asRecord(value: unknown): UnknownRecord | null {
   if (!value || typeof value !== 'object') return null;
-  return value as Record<string, any>;
+  return value as UnknownRecord;
 }
 
 function safeStringify(value: unknown): string {
@@ -82,7 +83,7 @@ function extractRequestUrl(request: unknown): string | null {
 }
 
 function extractCode(
-  errorRecord: Record<string, any> | null
+  errorRecord: UnknownRecord | null
 ): string | number | null {
   if (!errorRecord) return null;
 
@@ -91,7 +92,7 @@ function extractCode(
     return direct;
   }
 
-  const causeCode = errorRecord.cause?.code;
+  const causeCode = asRecord(errorRecord.cause)?.code;
   if (typeof causeCode === 'string' || typeof causeCode === 'number') {
     return causeCode;
   }

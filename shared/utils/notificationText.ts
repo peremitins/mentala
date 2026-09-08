@@ -1,4 +1,3 @@
-import type { NotificationPreferenceMeta } from '../dto/notifications';
 import type { Gender } from '../dto/onboarding';
 
 const GENDER_SUFFIXES = new Set(['а', 'ая', 'ой', 'ей', 'на', 'ла', 'ась', 'лась', 'кой']);

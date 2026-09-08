@@ -1,6 +1,5 @@
 import { markRaw } from 'vue';
 import { defineStore } from 'pinia';
-import { useSpeechStore } from '@/app/stores/speech';
 import { useChatSettingsStore } from '@/app/stores/chatSettings';
 import {
   getSessionItem,
@@ -144,7 +143,6 @@ export const useHeygenStore = defineStore('heygen', {
         console.error('[HeyGen] Error checking voice settings:', e);
         return;
       }
-      const speech = useSpeechStore();
       try {
         if (this.sessionId && text) {
           await useAPI('/api/heygen/speak', {
@@ -197,7 +195,9 @@ export const useHeygenStore = defineStore('heygen', {
           if (roomInstance) {
             try {
               await roomInstance.disconnect();
-            } catch {}
+            } catch {
+              // Старая сессия могла уже завершиться на стороне провайдера.
+            }
             roomInstance = null;
           }
           // Вызываем API для завершения сессии на сервере
@@ -321,7 +321,9 @@ export const useHeygenStore = defineStore('heygen', {
         if (roomInstance) {
           try {
             await roomInstance.disconnect();
-          } catch {}
+          } catch {
+            // Соединение уже могло быть закрыто.
+          }
         }
         roomInstance = markRaw(new LK.Room({}));
         const room = roomInstance as LKRoom;
@@ -435,7 +437,9 @@ export const useHeygenStore = defineStore('heygen', {
         // Разрешаем воспроизведение аудио (политики браузера)
         try {
           await room.startAudio?.();
-        } catch {}
+        } catch {
+          // Браузер может отложить запуск аудио до пользовательского жеста.
+        }
 
         this.status = 'streaming';
 
@@ -479,11 +483,15 @@ export const useHeygenStore = defineStore('heygen', {
             body: { sessionId: this.sessionId },
           });
         }
-      } catch {}
+      } catch {
+        // Серверная сессия может уже отсутствовать.
+      }
       if (roomInstance) {
         try {
           await roomInstance.disconnect();
-        } catch {}
+        } catch {
+          // Соединение уже могло быть закрыто.
+        }
         roomInstance = null;
       }
       this.status = 'idle';

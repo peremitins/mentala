@@ -28,7 +28,7 @@ interface Props {
   text?: string;
 }
 
-const props = withDefaults(defineProps<Props>(), {
+withDefaults(defineProps<Props>(), {
   text: 'Пишу...',
 });
 </script>

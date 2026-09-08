@@ -128,7 +128,6 @@ const props = defineProps<{
 }>();
 
 const promptsStore = usePromptsStore();
-const uid = useId();
 
 // Внутреннее состояние для модального окна
 const editorOpen = ref(false);
@@ -178,7 +177,7 @@ function handleAdd() {
   editorOpen.value = true;
 }
 
-async function onSaved(item: UserPrompt) {
+async function onSaved(_item: UserPrompt) {
   // Промпт сохранён, обновляем список с фильтром по типу
   // Это важно для мобильных устройств, чтобы синхронизация работала корректно
   await promptsStore.fetch(props.type);

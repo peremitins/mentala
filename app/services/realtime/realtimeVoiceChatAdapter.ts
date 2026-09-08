@@ -1,6 +1,20 @@
 type RealtimeVoiceServerEvent = {
   type?: string;
-  [key: string]: any;
+  [key: string]: unknown;
+};
+
+type RealtimeResponsePart = {
+  transcript?: unknown;
+  text?: unknown;
+};
+
+type RealtimeResponseItem = {
+  role?: unknown;
+  content?: unknown;
+};
+
+type RealtimeResponse = {
+  output?: unknown;
 };
 
 type ChatAdapterSink = {
@@ -27,18 +41,28 @@ type ChatAdapterSink = {
   removeMessage: (messageId: string) => void;
 };
 
-function extractFinalAssistantText(response: any): string {
-  const outputItems = Array.isArray(response?.output) ? response.output : [];
+function extractFinalAssistantText(response: unknown): string {
+  const responsePayload = response as RealtimeResponse;
+  const outputItems = Array.isArray(responsePayload?.output)
+    ? responsePayload.output
+    : [];
   const chunks: string[] = [];
 
   for (const item of outputItems) {
-    if (item?.role !== 'assistant') continue;
-    const contentParts = Array.isArray(item?.content) ? item.content : [];
+    const responseItem = item as RealtimeResponseItem;
+    if (responseItem.role !== 'assistant') continue;
+    const contentParts = Array.isArray(responseItem.content)
+      ? responseItem.content
+      : [];
 
     for (const part of contentParts) {
+      const responsePart = part as RealtimeResponsePart;
       const transcript =
-        typeof part?.transcript === 'string' ? part.transcript.trim() : '';
-      const text = typeof part?.text === 'string' ? part.text.trim() : '';
+        typeof responsePart.transcript === 'string'
+          ? responsePart.transcript.trim()
+          : '';
+      const text =
+        typeof responsePart.text === 'string' ? responsePart.text.trim() : '';
       const value = transcript || text;
       if (value) {
         chunks.push(value);
