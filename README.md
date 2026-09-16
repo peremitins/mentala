@@ -1,42 +1,45 @@
-![AI chat](screenshots/screenshots-1.png)
-![Voice session](screenshots/screenshots-2.png)
-
 # Mentala
 
-Mentala: AI-продукт для поддержки психического здоровья. В репозитории находятся веб-приложение и мобильные приложения для iOS и Android, API, AI-функции в реальном времени, подписки и уведомления.
+AI-powered self-care and habit support product for web, iOS, and Android.
 
-Сайт: [mentala.app](https://mentala.app)
+[Live product](https://mentala.app)
 
-## Стек
+![Mentala Path Map screen](screenshots/screenshots-1.png)
+![Mentala home screen](screenshots/screenshots-2.png)
 
-- Vue 3, Nuxt 4, TypeScript, Pinia
-- Nitro, PostgreSQL, Drizzle ORM, Redis, BullMQ, Zod
-- Tailwind CSS, shadcn-vue, Vitest
-- Capacitor, App Store, Google Play
+## Product
 
-## Архитектура
+Mentala brings together AI-powered conversations, habit support, breathing practices, and meditation content in one cross-platform product.
 
-- [Описание продукта](.docs/PROJECT_DESCRIPTION.md)
-- [Общая архитектура](.docs/architecture.md)
-- [Память AI-чата](.docs/arch_chat_memory.md)
-- [Подписки](.docs/arch_billing.md)
-- [Уведомления](.docs/arch_notifications.md)
-- [Безопасность](.docs/security_requirements.md)
+The application is designed for web and mobile delivery, with shared product flows across the browser, iOS, and Android.
 
-## Локальный запуск
+## Main Capabilities
 
-Для полноценного запуска потребуются Node.js 20+, pnpm, PostgreSQL и Redis. Серверная часть и API находятся в этом репозитории. Для локальной работы интеграций создайте `.env` на основе `.env.example` и укажите свои тестовые значения.
+- AI-powered conversations with personalised context
+- Habit support, progress tracking, and reminders
+- Breathing practices and meditation content
+- Subscription and access-control flows
+- Web, iOS, and Android delivery from a shared codebase
 
-```bash
-pnpm install
-cp .env.example .env
-pnpm dev
+## Stack
+
+- **Frontend:** Nuxt 4, Vue 3, TypeScript, Pinia, Tailwind CSS, Vue Query
+- **Backend:** Nitro, Drizzle ORM, PostgreSQL, Redis, BullMQ
+- **Platform:** Capacitor, Docker
+- **Quality:** Vitest, ESLint, Zod
+
+## Architecture
+
+Mentala is organised as a full-stack Nuxt application:
+
+```text
+app/                    Vue application: pages, components, stores, and composables
+server/api/             Thin HTTP handlers
+server/application/     Use cases and business logic
+server/domain/          Domain models and rules
+server/infrastructure/  Database, Redis, queues, and external providers
+server/interface/       Ports and integration contracts
+shared/dto/             Shared validation schemas and API contracts
 ```
 
-## Проверки качества
-
-```bash
-pnpm lint
-pnpm test
-pnpm build
-```
+Capacitor packages the web application for iOS and Android while preserving the shared product and frontend architecture.
